@@ -11,12 +11,8 @@ import dev.ide.lang.kotlin.interp.ResolvedCallable
 import dev.ide.lang.kotlin.interp.SourceSpan
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
-import java.io.File
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -32,8 +28,6 @@ import kotlin.test.assertTrue
  */
 class ColorCopyDoubleAlphaTest {
 
-    private fun classpathJars(): List<Path> =
-        System.getProperty("java.class.path").split(File.pathSeparator).filter { it.endsWith(".jar") }.map { Paths.get(it) }
 
     /** Deterministic dispatch-level guard: a MEMBER `Color.copy` whose alpha arg is a `Double` (exactly the
      *  device diagnostic's `[Long, Double]`), dispatched against REAL Compose through the reflective path that
@@ -70,7 +64,7 @@ class ColorCopyDoubleAlphaTest {
                 return Color.White.copy(alpha = alpha)
             }
         """.trimIndent()
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(Doc(code)) as KotlinParsedFile
         val program = KotlinPreviewLowering(service).program(parsed)
         val result = Interpreter(program, ComposeDispatcher()).call(program["box/0"]!!, emptyList())

@@ -963,7 +963,13 @@ class Interpreter(
             // A source class with `operator fun invoke(...)` — dispatch to that member (RHS evaluated once there).
             if (target is SourceObject) return dispatchSourceMember(target, "invoke", call, env)
             val argv = call.args.map { eval(it.value, env) }
-            return if (target is InterpretedLambda) target.invoke(argv) else checkedDispatch(
+            // A lowered LOCAL FUNCTION knows its parameter names, so a call using NAMED arguments is reordered
+            // into declared order first (with [OmittedArg] holes its defaults fill) — without it `g(b = 1, a = 5)`
+            // bound positionally and quietly computed the wrong value. An ordinary lambda reports no names, and
+            // [reorderNamedArgs] passes the arguments through untouched.
+            return if (target is InterpretedLambda)
+                target.invoke(reorderNamedArgs(target.paramNames, call.args, argv))
+            else checkedDispatch(
                 call,
                 target,
                 argv
@@ -3095,9 +3101,14 @@ class Interpreter(
     private inner class Closure(private val node: RNode.Lambda, private val env: Env) :
         InterpretedLambda {
         override val paramCount: Int get() = node.params.size
+        override val paramNames: List<String> get() = node.params.map { it.name }
         override fun invoke(args: List<Any?>): Any? {
             val callEnv = Env(env)
-            node.params.forEachIndexed { i, p -> callEnv.define(p.slot, args.getOrNull(i)) }
+            // [bindParams] (not a positional `getOrNull` walk) so a LOCAL FUNCTION's declared defaults and
+            // `vararg` are honoured exactly as a top-level function's are — `fun g(a: Int = 3) = a` called as
+            // `g()` returned a silent null before, and a `vararg xs` slot took a single value instead of a list.
+            // For a plain lambda (no defaults, no vararg) this binds identically to the old walk.
+            bindParams(callEnv, node.params, args)
             // A local function's `return` is LOCAL — it returns from this closure, not the enclosing function. A
             // plain lambda's bare `return` is non-local (it must propagate to the enclosing function's frame).
             return if (node.isLocalFunction) {
@@ -3115,7 +3126,7 @@ class Interpreter(
             val body = node.body as? RNode.Block ?: return InterpretedLambda.NOT_TAIL_SUSPENDABLE
             val tail = tailSuspendCall(body) ?: return InterpretedLambda.NOT_TAIL_SUSPENDABLE
             val callEnv = Env(env)
-            node.params.forEachIndexed { i, p -> callEnv.define(p.slot, args.getOrNull(i)) }
+            bindParams(callEnv, node.params, args)
             // The prefix is verified suspend-free, so it runs synchronously on the caller's thread (the pointer
             // node's coroutine) without blocking it.
             for (i in 0 until body.statements.size - 1) eval(body.statements[i], callEnv)

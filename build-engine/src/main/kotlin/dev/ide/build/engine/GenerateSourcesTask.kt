@@ -32,6 +32,10 @@ class GenerateSourcesTask(
     private val generators: List<SourceGenerator>,
     private val outputDir: Path,
     private val classpath: () -> List<Path>,
+    /** Generator warning ids the user has accepted for this module (see [SourceGenRequest.acceptedWarnings]).
+     *  Supplied by the build system that builds this task, which is the layer that can read the module's
+     *  facet; the engine only forwards it. */
+    private val acceptedWarnings: Set<String> = emptySet(),
 ) : Task {
 
     /** The module's `ContentRole.SOURCE` root directories (excludes the generated root, so a generator never
@@ -62,6 +66,7 @@ class GenerateSourcesTask(
         outputDir = outputDir,
         sourceRoots = sourceRootDirs(),
         declaredDependencies = declaredDependencyCoordinates(),
+        acceptedWarnings = acceptedWarnings,
     )
 
     /** `group:name` from a `group:name[:version[:classifier]]` coordinate, or null when it isn't one. */

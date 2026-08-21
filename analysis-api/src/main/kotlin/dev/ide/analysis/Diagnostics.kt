@@ -71,4 +71,7 @@ object Codes {
     const val UNUSED_LOCAL = "unused.local"
     const val MISSING_OVERRIDE = "MISSING_OVERRIDE"
     const val CREATE_FROM_USAGE = "CREATE_FROM_USAGE"
+
+    /** A source file whose `package` directive does not match its directory under the source root. */
+    const val PACKAGE_MISMATCH = "package.mismatch"
 }

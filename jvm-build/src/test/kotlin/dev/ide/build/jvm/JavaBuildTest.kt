@@ -211,6 +211,31 @@ class JavaBuildTest {
         }
     }
 
+    @Test
+    fun daemonThreadDoesNotOutliveTheRun() {
+        testEnv("javarundaemon") { env ->
+            val dir = env.dir
+            val platform = env.platform
+            val (_, project) = buildWorkspace(dir, platform)
+            dir.writeSource("app/src/main/java/com/example/app/Daemon.java", DAEMON)
+            val app = project.modules.first { it.name == "app" }
+            val io = CapturingIo("")
+            val graph = javaBuildSystem().createInterpretRunGraph(project, app, "com.example.app.Daemon", VmProgramInterpreter(), programIo = io)
+            val exec = TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
+
+            val outcome = runBlocking { exec.execute(graph, SimpleTaskContext(), 2) }
+            assertTrue(outcome.succeeded, "run failed, out=${io.out}")
+
+            // A real JVM's exit takes the daemon threads with it, and the run is the equivalent boundary here:
+            // a daemon left running would keep interpreting against a classpath whose jars the run has closed.
+            // Cancelling the killer coroutine is what currently delivers this, as a side effect of ending the
+            // run; pinned here so a refactor of that teardown cannot quietly drop it.
+            val leftovers = Thread.getAllStackTraces().keys
+                .filter { it.isAlive && it.threadGroup?.name == "interp-run" }
+            assertTrue(leftovers.isEmpty(), "the run left threads behind: ${leftovers.map { it.name }}")
+        }
+    }
+
     /** A [ProgramIo] test double: feeds a fixed [input] string as stdin and captures the program's output. */
     private class CapturingIo(input: String) : ProgramIo {
         val out = StringBuilder()
@@ -288,6 +313,19 @@ class JavaBuildTest {
                 public static void main(String[] args) throws Exception {
                     System.out.println("looping");
                     while (true) Thread.sleep(50);
+                }
+            }
+        """
+        val DAEMON = """
+            package com.example.app;
+            public class Daemon {
+                public static void main(String[] args) throws Exception {
+                    Thread t = new Thread(() -> {
+                        try { while (true) Thread.sleep(20); } catch (InterruptedException ignored) { }
+                    });
+                    t.setDaemon(true);
+                    t.start();
+                    System.out.println("daemon started");
                 }
             }
         """

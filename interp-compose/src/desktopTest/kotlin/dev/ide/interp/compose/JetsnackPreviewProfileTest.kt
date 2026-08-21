@@ -16,7 +16,6 @@ import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
-import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -38,8 +37,6 @@ class JetsnackPreviewProfileTest {
         report.appendLine(line)
     }
 
-    private fun classpathJars(): List<Path> =
-        System.getProperty("java.class.path").split(File.pathSeparator).filter { it.endsWith(".jar") }.map { Paths.get(it) }
 
     private inline fun <T> timed(label: String, block: () -> T): T {
         val t0 = System.nanoTime()
@@ -56,7 +53,7 @@ class JetsnackPreviewProfileTest {
         if (!Files.isDirectory(root)) return
 
         val service = timed("KotlinSymbolService init") {
-            KotlinSymbolService(listOf(DiskVF(root)), classpathJars())
+            previewSymbolService(listOf(DiskVF(root)))
         }
         val lowering = KotlinPreviewLowering(service)
 

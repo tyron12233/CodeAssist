@@ -26,8 +26,8 @@ ide-android (Android launcher) → ide-core
 |---|---|---|
 | `platform-core` | `dev.ide.platform` | Extension registry, message bus, model read/write lock, activities/progress, disposer, content hashing, plugin ids. |
 | `vfs-api` | `dev.ide.vfs` | `VirtualFile`, `VirtualFileSystem`, file events, listeners. |
-| `project-model-api` | `dev.ide.model`, `.graph` | Workspace/Project/Module/SourceSet/ContentRoot, order entries + scopes, classpath snapshots, library/SDK tables, module types, variants, facets, transactions, the project/module graphs, file-icon SPI. |
-| `build-api` | `dev.ide.build` | `BuildSystem` SPI; the generic incremental task engine contracts (`Task`/`TaskInputs`/`TaskOutputs`/`TaskGraph`/`TaskExecutor`). |
+| `project-model-api` | `dev.ide.model`, `.graph`, `.sync` | Workspace/Project/Module/SourceSet/ContentRoot, order entries + scopes, classpath snapshots, library/SDK tables, module types, variants, facets, transactions, the project/module graphs, file-icon SPI, and the foreign-build-system sync SPI (`ProjectImporter` → `ExternalProjectModel`, `BuildFileWriter`). |
+| `build-api` | `dev.ide.build` | `BuildSystem` SPI; the generic incremental task engine contracts (`Task`/`TaskInputs`/`TaskOutputs`/`TaskGraph`/`TaskExecutor`); the contribution seams (`BuildPlugin`, `RunTaskProvider`/`RunAction`). |
 | `language-api` | `dev.ide.lang`, `.dom`, `.incremental`, `.resolve`, `.completion` | `LanguageBackend` SPI, source analyzer/compiler contracts, the backend-neutral DOM, incremental parsing, symbol/scope/type resolution, code completion. |
 | `deps-api` | `dev.ide.deps` | Dependency resolution SPI (Maven coordinates → jars/aars, conflict policy). |
 | `index-api` | `dev.ide.index` | Indexing SPI: index extensions, index service, shared value types. |

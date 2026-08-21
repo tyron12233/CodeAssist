@@ -4,10 +4,12 @@ import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.android.support.tools.KeystoreRegistry
 import dev.ide.build.engine.ProgramInterpreter
+import dev.ide.core.sync.ExternalProjectMarker
+import dev.ide.core.sync.ProjectSyncService
 import dev.ide.model.LanguageLevel
+import dev.ide.model.PlatformKind
 import dev.ide.model.impl.ModelPersistence
 import dev.ide.model.impl.ProjectTemplateRegistry
-import dev.ide.model.PlatformKind
 import dev.ide.model.impl.SdkData
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateArgs
@@ -161,7 +163,7 @@ class ProjectManager private constructor(
                     proj?.name ?: dir.fileName.toString(),
                     dir.toString(),
                     proj?.modules?.size ?: 0,
-                    compatibility = GradleImport.isCompatibilityMode(dir),
+                    compatibility = ExternalProjectMarker.exists(dir),
                     isAndroid = proj?.modules?.any { m -> m.facets.any { it.tomlTable == AndroidFacetCodec.tomlTable } } ?: false,
                     lastOpened = prefs.getProperty(openedKey(dir))?.toLongOrNull() ?: 0L,
                 )
@@ -228,16 +230,19 @@ class ProjectManager private constructor(
     }
 
     /**
-     * Import the Gradle project at [sourceDir] into a new workspace under [projectsRoot] (copying its
-     * sources, minus build outputs), build a best-effort compatibility-mode model from its scripts, and open
-     * it. Returns null when [sourceDir] isn't an importable Gradle project or the import fails.
+     * Import the foreign-build-system project at [sourceDir] into a new workspace under [projectsRoot]
+     * (copying its sources, minus build outputs), build the model from its build files through the
+     * [dev.ide.model.sync.ProjectImporter] that claims it, and open it. Returns null when no importer
+     * recognizes [sourceDir] or the import fails.
      */
-    fun importGradleProject(sourceDir: Path): IdeServices? {
-        if (!GradleImport.isGradleProject(sourceDir)) return null
-        val dest = uniqueProjectDir(sourceDir.fileName?.toString() ?: "gradle-project")
+    fun importExternalProject(sourceDir: Path): IdeServices? {
+        val importer = ProjectSyncService.importerFor(env.platform.extensions, sourceDir) ?: return null
+        val detection = importer.detect(sourceDir)
+        val name = detection?.name ?: sourceDir.fileName?.toString() ?: "project"
+        val dest = uniqueProjectDir(name)
         val ok = runCatching {
             copyTree(sourceDir, dest)
-            IdeServices.importGradleProjectAt(dest, sdk(), languageLevel)
+            IdeServices.importExternalProjectAt(dest, sdk(), languageLevel, env)
         }.getOrDefault(false)
         if (!ok) { runCatching { deleteTree(dest) }; return null }
         return open(dest.toString())
@@ -404,12 +409,12 @@ class ProjectManager private constructor(
                 if (runCatching { copyTree(src, dest) }.isSuccess) imported++
                 else runCatching { deleteTree(dest) } // drop a half-copied directory
             }
-            // Legacy Gradle projects (e.g. v0.2.9): copy sources, then build a compatibility-mode model.
+            // Legacy Gradle projects (e.g. v0.2.9): copy sources, then import their model from the scripts.
             for (src in legacyProjectDirs(legacy) { GradleImport.isGradleProject(it) }) {
                 val dest = uniqueProjectDir(src.fileName.toString())
                 val ok = runCatching {
                     copyTree(src, dest)
-                    IdeServices.importGradleProjectAt(dest, sdk(), languageLevel)
+                    IdeServices.importExternalProjectAt(dest, sdk(), languageLevel, env)
                 }.getOrDefault(false)
                 if (ok) imported++ else runCatching { deleteTree(dest) }
             }
@@ -544,7 +549,14 @@ class ProjectManager private constructor(
         ): ProjectManager {
 
 
-            val sdk = SdkData("android", bootClasspath, buildToolsPath = null, kind = PlatformKind.ANDROID)
+            // android.jar carries no java.awt/javax.swing, so a Swing project could not be compiled on
+            // device without the owned toolkit's API on the platform classpath (see [SwingApiStubs]).
+            val sdk = SdkData(
+                "android",
+                bootClasspath + listOfNotNull(SwingApiStubs.bundled()?.toString()),
+                buildToolsPath = null,
+                kind = PlatformKind.ANDROID,
+            )
             // android.jar is the first boot entry; later entries (the desugar stubs) join the compile platform.
             val tools = AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel,
                 desugarStubs = bootClasspath.drop(1).map { Paths.get(it) }, r8Shrinker = r8Shrinker, r8MergeDexer = r8MergeDexer,

@@ -46,14 +46,19 @@ class VmLibraryExecutor(
     /** The peer generator (ASM on the JVM, dex on Android) — exposed so the Compose bridge can reuse the SAME
      *  factory to realize a class-extending anonymous object as a real subclass (see [PeerClassProxyFactory]). */
     val peerFactory: PeerFactory = AsmPeerFactory(),
+
     private val hostLoader: ClassLoader = VmLibraryExecutor::class.java.classLoader,
+
     /** Test seam: overrides "the host can load this binary name" (a host-loadable class is bridged real). */
     private val hostLoadable: ((String) -> Boolean)? = null,
+
     /** Test seam: overrides where class bytes come from (default: the [jars]). */
     source: ClassBytesSource? = null,
+
     /** Test seam: the namespaces interpreted from the project jars even when host-loadable (see
      *  [PROJECT_PREFERRED_PREFIXES], the production default). */
     private val projectPreferredPrefixes: List<String> = PROJECT_PREFERRED_PREFIXES,
+
     /** Namespaces that stay BRIDGED even under a [projectPreferredPrefixes] match, when host-loadable: the
      *  Android platform CompositionLocals (`ui.platform.LocalContext`/`LocalConfiguration`/…) must be the SAME
      *  instances the host provides around the preview, or an interpreted read finds them "not present" (the

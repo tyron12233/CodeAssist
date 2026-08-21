@@ -8,12 +8,8 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
-import java.io.File
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -27,14 +23,12 @@ import kotlin.test.assertTrue
  * the whole preview. The ROOT composable still fails loud (onError) so a wholly-broken preview shows a clear error.
  */
 class ThrowingComposableDegradeTest {
-    private fun classpathJars(): List<Path> =
-        System.getProperty("java.class.path").split(File.pathSeparator).filter { it.endsWith(".jar") }.map { Paths.get(it) }
 
     private class Outcome(val completed: Boolean, val hardError: String?, val partials: List<String>, val thrown: String?)
 
     @OptIn(ExperimentalComposeUiApi::class)
     private fun render(code: String, entry: String): Outcome? {
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(Doc(code.trimIndent())) as KotlinParsedFile
         val lowering = KotlinPreviewLowering(service)
         val program = lowering.program(parsed)

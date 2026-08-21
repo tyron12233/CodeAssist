@@ -25,6 +25,62 @@ interface ProgramIo {
     val stdin: InputStream
     fun started() {}
     fun exited(code: Int) {}
+
+    /**
+     * One frame of a WINDOWED program's UI: raw RGBA_8888 pixels, row-major, at [path].
+     *
+     * A PATH rather than the bytes, because on device this crosses two process boundaries (the program runs in
+     * `:preview`, the run is driven from `:build`, the screen is in the IDE) and a window's worth of pixels is
+     * megabytes, well past what a Binder transaction carries. Bulk over the shared filesystem, control over
+     * IPC, the same split the Compose preview uses. The host reads and deletes the file.
+     *
+     * [seq] increases monotonically so a host drawing slower than the program repaints can drop a stale frame.
+     * A console run never calls this, hence the no-op default.
+     */
+    fun frame(path: String, width: Int, height: Int, seq: Long) {}
+
+    /**
+     * Announces that this program has a window, handing the host the way to drive it. Called once, before the
+     * first [frame]. A host that cannot show a window can ignore it and will simply receive frames nobody
+     * looks at.
+     */
+    fun windowed(window: RunWindow) {}
+}
+
+/**
+ * The handle a host drives a windowed program with. Coordinates are in the frame's own pixel space, which the
+ * host maps from wherever it drew the frame.
+ */
+interface RunWindow {
+    /** A pointer event; [action] is one of [RunPointer]'s constants. */
+    fun pointer(action: Int, x: Float, y: Float)
+
+    /** A key event; [action] is one of [RunKey]'s constants, [keyCode] an AWT `VK_` code, and [keyChar] the
+     *  character typed or [RunKey.CHAR_UNDEFINED] for a key that produces none. */
+    fun key(action: Int, keyCode: Int, keyChar: Char)
+
+    /** A wheel or two-finger scroll at ([x], [y]); [notches] is positive when the content should move down.
+     *  It reaches the deepest scrollable thing under the pointer, as it does in AWT. */
+    fun scroll(x: Float, y: Float, notches: Int)
+
+    /** The size the host will draw at, so the program's window is painted at exactly that size instead of
+     *  being scaled. Called whenever the surface resizes. */
+    fun resize(widthPx: Int, heightPx: Int)
+}
+
+/** Pointer actions, named here so neither the UI nor the toolkit has to speak Android's `MotionEvent`. */
+object RunPointer {
+    const val DOWN = 0
+    const val MOVE = 1
+    const val UP = 2
+    const val CANCEL = 3
+}
+
+/** Key actions, and the "no character" sentinel AWT spells `KeyEvent.CHAR_UNDEFINED`. */
+object RunKey {
+    const val DOWN = 0
+    const val UP = 1
+    const val CHAR_UNDEFINED = '\uFFFF'
 }
 
 /**

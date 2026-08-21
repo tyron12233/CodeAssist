@@ -2,6 +2,7 @@ package dev.ide.build.jvm
 
 import dev.ide.build.BuildConfiguration
 import dev.ide.build.BuildGoal
+import dev.ide.build.Lifecycle
 import dev.ide.build.Plugin
 import dev.ide.build.SourceGenerator
 import dev.ide.build.TaskContainer
@@ -113,9 +114,17 @@ class JavaPlugin(
         tasks.register(classes) { LifecycleTask(classes, trackedDirs = classOutputs(module) + resourcesDir(module)) }
             .configure { dependsOn(compile, procRes) }
 
-        if (withJar) {
-            val jar = TaskName(":${module.name}:jar")
-            tasks.register(jar) { JarTask(jar, classOutputs(module), jarPath(module), { mainClassFor(module) }) }.configure { dependsOn(classes) }
-        }
+        val jar = if (withJar) {
+            TaskName(":${module.name}:jar").also { jar ->
+                tasks.register(jar) { JarTask(jar, classOutputs(module), jarPath(module), { mainClassFor(module) }) }
+                    .configure { dependsOn(classes) }
+            }
+        } else null
+
+        // The module's terminal aggregate (Gradle's `assemble`): the documented anchor a contributed
+        // BuildPlugin hangs its own final task off, so it runs as part of building the module.
+        val assemble = Lifecycle.assemble(module.name)
+        tasks.register(assemble) { LifecycleTask(assemble, trackedFiles = listOfNotNull(jar?.let { jarPath(module) })) }
+            .configure { dependsOn(jar ?: classes) }
     }
 }

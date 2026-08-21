@@ -30,13 +30,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import dev.ide.ui.components.ExpressiveScaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -82,7 +76,6 @@ import dev.ide.ui.generated.resources.sdk_sources_documentation_desc
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
-import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -95,41 +88,29 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    val progress by backend.sdk.sdkManagerState.collectAsState()
-    var packages by remember { mutableStateOf<List<UiSdkPackage>>(emptyList()) }
-    var loading by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf<String?>(null) }
-    var statusIsError by remember { mutableStateOf(false) }
-    val jdk = remember { runCatching { backend.sdk.jdkInfo() }.getOrNull() }
-    val couldNotLoadMsg = stringResource(Res.string.sdk_could_not_load)
+    val state = rememberSdkManagerState(backend)
+    val progress = state.progress
+    val jdk = state.jdk
 
-    suspend fun reload() {
-        loading = true
-        status = null
-        val result = runCatching { backend.sdk.sdkPackages() }
-        packages = result.getOrDefault(emptyList())
-        statusIsError = result.isFailure
-        if (result.isFailure) status = result.exceptionOrNull()?.message ?: couldNotLoadMsg
-        loading = false
-    }
-    LaunchedEffect(Unit) { reload() }
-    // Refresh the installed/incomplete flags whenever a download finishes (it ran in the background).
-    val finishedCount = progress.downloads.count { it.status == "DONE" }
-    LaunchedEffect(finishedCount) { if (finishedCount > 0) reload() }
-
-    val activeIds = progress.downloads.filter { it.status != "DONE" && it.status != "FAILED" }.map { it.id }.toSet()
+    val activeIds = state.activeIds
     ExpressiveScaffold(
         title = stringResource(Res.string.sdk_manager_title),
         onBack = onBack,
         actions = {
-            IconButton(onClick = { scope.launch { reload() } }) {
+            IconButton(onClick = state::reload) {
                 Icon(CaIcons.refresh, stringResource(Res.string.refresh))
             }
         },
     ) { innerPadding ->
         Column(Modifier.fillMaxSize().padding(innerPadding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            status?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = if (statusIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }
+            state.status?.let { st ->
+                val failed = st is SdkStatus.LoadFailed
+                val text = when (st) {
+                    is SdkStatus.LoadFailed -> st.message ?: stringResource(Res.string.sdk_could_not_load)
+                    is SdkStatus.Message -> st.text
+                }
+                Text(text, style = MaterialTheme.typography.bodyMedium, color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+            }
             // Purpose: these downloads power editor docs, not building.
             Card {
                 Text(stringResource(Res.string.sdk_sources_documentation), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
@@ -145,14 +126,14 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SectionHeader(stringResource(Res.string.sdk_downloads), small = true)
                     Spacer(Modifier.weight(1f))
-                    if (progress.downloads.any { it.status == "DONE" || it.status == "FAILED" }) {
-                        PillButton(stringResource(Res.string.sdk_clear_finished), null, accent = false) { backend.sdk.clearSdkDownloads() }
+                    if (state.hasFinishedDownloads) {
+                        PillButton(stringResource(Res.string.sdk_clear_finished), null, accent = false) { state.clearFinished() }
                     }
                 }
                 Card {
                     progress.downloads.forEachIndexed { i, d ->
                         if (i > 0) Spacer(Modifier.height(12.dp))
-                        DownloadRow(d) { backend.sdk.cancelSdkDownload(d.id) }
+                        DownloadRow(d) { state.cancel(d.id) }
                     }
                 }
             }
@@ -188,7 +169,7 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
                                 if (downloading) stringResource(Res.string.sdk_jdk_downloading, feature) else stringResource(Res.string.sdk_jdk_sources, feature),
                                 if (downloading) null else CaIcons.download,
                                 accent = true, enabled = !downloading,
-                            ) { scope.launch { status = backend.sdk.downloadJdkSources(feature) } }
+                            ) { state.downloadJdkSources(feature) }
                         }
                     }
                 }
@@ -196,21 +177,20 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
 
             // Android platform sources (the documentation payload). Build tooling is bundled, never downloaded.
             SectionHeader(stringResource(Res.string.sdk_android_sources))
-            if (loading && packages.isEmpty()) {
+            if (state.loading && state.packages.isEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                     Text(stringResource(Res.string.sdk_loading_packages), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            } else if (packages.isEmpty()) {
+            } else if (state.packages.isEmpty()) {
                 Text(stringResource(Res.string.sdk_no_packages), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
             } else {
                 Card {
-                    val sorted = packages.sortedByDescending { it.path }
+                    val sorted = state.packages.sortedByDescending { it.path }
                     sorted.forEachIndexed { i, p ->
                         if (i > 0) { Spacer(Modifier.height(4.dp)); RowDivider(); Spacer(Modifier.height(4.dp)) }
-                        PackageRow(p, downloading = p.path in activeIds, onInstall = {
-                            scope.launch { status = backend.sdk.installSdkPackage(p.path) }
-                        }, onCancel = { backend.sdk.cancelSdkDownload(p.path) })
+                        PackageRow(p, downloading = p.path in activeIds, onInstall = { state.install(p) },
+                            onCancel = { state.cancel(p.path) })
                     }
                 }
             }

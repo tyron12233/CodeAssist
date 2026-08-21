@@ -135,6 +135,73 @@ class EditorPerformanceBenchmark {
         println(report)
     }
 
+    // ---- 4. bulk multi-line edit: single-shift resize vs the old per-line add/removeAt ----
+
+    @Test
+    fun benchmarkBulkLineResize() {
+        // A multi-line paste/delete resizes the styler's three parallel arrays at the edit point. The old code
+        // did one add(firstLine)/removeAt(firstLine) PER line — each an O(N) tail shift, so pasting K lines was
+        // O(K·N) and stalled for seconds on a big file. The fix does a single addAll(index, …) / subList.clear()
+        // = one shift, O(N + K). This isolates that resize cost (the re-tokenize walk is identical either way).
+        val report = StringBuilder("\n=== Bulk paste: parallel-array resize at the edit point (ns/op, lower is better) ===\n")
+        report.append("base lines | paste lines |   legacy(per-line add)      new(single addAll)   speedup\n")
+        for ((base, paste) in listOf(2_000 to 1_000, 8_000 to 2_000, 20_000 to 3_000)) {
+            val ref = ArrayList<Int>(base + paste).apply { repeat(base) { add(it) } }
+            val insertAt = base / 3
+
+            val legacy = bench(warmup = 1, runs = 3, ops = 2) {
+                val a = ArrayList(ref)
+                repeat(paste) { a.add(insertAt, 0) } // OLD: one tail shift per inserted line → O(paste·base)
+                a.size.toLong()
+            }
+            val neu = bench(warmup = 2, runs = 5, ops = 20) {
+                val a = ArrayList(ref)
+                a.addAll(insertAt, List(paste) { 0 }) // NEW: one tail shift → O(base + paste)
+                a.size.toLong()
+            }
+            report.append("%-10d | %-11d | %22s %23s %9.0fx\n".format(base, paste, ns(legacy), ns(neu), legacy / neu))
+            if (base >= 20_000) {
+                assertTrue(neu < legacy / 5.0, "single-shift resize ($neu ns) should dwarf per-line ($legacy ns)")
+            }
+        }
+        println(report)
+    }
+
+    // ---- 5. large-file open: lazy (viewport-only) tokenization vs eager whole-file ----
+
+    @Test
+    fun benchmarkLargeFileOpen() {
+        // Opening a file used to lex EVERY line up front (LineStyles.reset). Now reset only sizes placeholder
+        // arrays and lexing is deferred: the first paint lexes just the viewport, and lines below tokenize as
+        // they scroll in. This measures the work done before the first paint: whole-file lex vs reset + one
+        // viewport. The gap widens with file size (the whole-file cost is O(lines); the lazy cost is ~viewport).
+        val report = StringBuilder("\n=== Open a file: tokenization before first paint (ns/op, lower is better) ===\n")
+        report.append("lines     |   eager(whole-file)     lazy(reset + 1 viewport)   speedup\n")
+        val viewport = 60
+        for (lines in intArrayOf(500, 5_000, 50_000)) {
+            val text = javaDoc(lines)
+            val doc = EditorDocument.of(text)
+
+            val eager = bench(warmup = 2, runs = 5, ops = 3) {
+                legacyWholeDocTokenize(text, CodeLanguage.Java).toLong() // what reset() used to do at open
+            }
+            val lazy = bench(warmup = 3, runs = 5, ops = 20) {
+                val styles = LineStyles(CodeLanguage.Java)
+                styles.reset(doc) // O(lines) placeholder fill, no tokenization
+                var bh = 0L
+                val end = minOf(viewport, doc.lineCount)
+                var l = 0
+                while (l < end) { bh += styles.spansFor(l).size.toLong(); l++ } // only the first viewport lexes
+                bh
+            }
+            report.append("%-9d | %20s %26s %9.0fx\n".format(lines, ns(eager), ns(lazy), eager / lazy))
+            if (lines >= 50_000) {
+                assertTrue(lazy < eager / 5.0, "lazy open ($lazy ns) should dwarf eager whole-file ($eager ns)")
+            }
+        }
+        println(report)
+    }
+
     // ---- harness ----
 
     /** Min ns/op over [runs] batches of [ops] calls, after [warmup] untimed calls (JIT warm). */

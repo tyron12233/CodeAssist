@@ -2,6 +2,7 @@ package dev.ide.ui
 
 import dev.ide.ui.components.clipForClipboard
 import dev.ide.ui.editor.core.EditorDocument
+import dev.ide.ui.editor.preview.completionPrefix
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -60,5 +61,41 @@ class CrashFixesTest {
             "the redundant tab must be dropped, leaving one tab per path",
         )
         assertEquals(0, state.activeIndex, "the active tab follows its path to the tab that kept it")
+    }
+
+    @Test
+    fun tabsSharingAPathStillGetDistinctStripKeys() {
+        // Two OpenFile for one path (a re-point after rename/move, or a concurrent open on a slow device) must
+        // NOT collide on the tab strip's LazyRow key — a duplicate key hard-crashes the measure pass
+        // (`measureLazyList` precondition), the top non-native on-device crasher. The strip keys on the unique
+        // tabId, so even a transient duplicate path yields distinct keys.
+        val a = OpenFile("/p/Same.kt", "Same.kt", "class A")
+        val b = OpenFile("/p/Same.kt", "Same.kt", "class A")
+        assertTrue(a.tabId != b.tabId, "each tab gets a unique id even for the same path")
+        val keys = listOf(a, b).map { it.tabId }
+        assertEquals(keys.size, keys.toSet().size, "tab strip keys are unique (no repeated LazyRow key)")
+
+        // A re-point that reuses the id (an in-place refresh of the SAME logical tab) keeps its strip identity.
+        val refreshed = OpenFile("/p/Same.kt", "Same.kt", "class A v2", tabId = a.tabId)
+        assertEquals(a.tabId, refreshed.tabId, "an in-place tab refresh keeps the tab's strip identity")
+    }
+
+    /**
+     * The layout-attribute completion popup filters on the text between the completion's replace start and the
+     * caret. The completion pass is debounced and the caret is not, so a replace start computed for an earlier
+     * position outlives the caret moving back before it -- which used to invert the range and throw
+     * StringIndexOutOfBounds straight out of the composition.
+     */
+    @Test
+    fun completionPrefixSurvivesACaretBehindAStaleReplaceStart() {
+        assertEquals("wid", completionPrefix("android:wid", replaceStart = 8, caret = 11))
+        // The reported crash: caret moved back past the stale replace start (was start=8 > end=3).
+        assertEquals("", completionPrefix("android:wid", replaceStart = 8, caret = 3))
+        // And the same inversion after the text shrank under both offsets.
+        assertEquals("", completionPrefix("and", replaceStart = 8, caret = 1))
+        // Out-of-range ends still clamp to the text.
+        assertEquals("droid:wid", completionPrefix("android:wid", replaceStart = 2, caret = 999))
+        assertEquals("android:wid", completionPrefix("android:wid", replaceStart = -4, caret = 11))
+        assertEquals("", completionPrefix("", replaceStart = 3, caret = 7))
     }
 }

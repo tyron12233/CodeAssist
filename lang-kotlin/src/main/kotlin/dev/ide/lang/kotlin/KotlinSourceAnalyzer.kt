@@ -28,6 +28,7 @@ import dev.ide.platform.Disposable
 import dev.ide.vfs.VirtualFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
+import dev.ide.lang.kotlin.symbols.KotlinType
 import com.intellij.psi.PsiElement
 import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.folding.FoldingService
@@ -947,10 +948,34 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
                 ?.let { resolver.receiverForMembers(it, q.receiverExpression.textRange.startOffset) }
                 ?.let { recv -> service.membersNamed(recv.qualifiedName, recv.typeArguments, name).firstOrNull() }
         } else {
-            resolver.scopeSymbolsAt(psi.textRange.startOffset).firstOrNull { it.name == name }
-                ?: service.typeNamesByPrefix(name).firstOrNull { it.name == name }
+            // The exact-name probe mode: a resolution already knows the name it wants, so the top-level lookup
+            // is an exact index scan instead of materializing every top-level callable on the classpath (the
+            // empty-prefix query is uncapped) only to filter it down to one name here.
+            resolver.scopeSymbolsAt(psi.textRange.startOffset, namePrefix = name, exactName = true)
+                .firstOrNull { it.name == name }
+                ?: typeNamed(name, resolver)
         }
         return sym?.let { ResolveResult.Resolved(it) } ?: ResolveResult.Unresolved
+    }
+
+    /**
+     * The TYPE that simple [name] denotes at the use site, for a reference nothing in scope claims as a value or
+     * callable: a type reference (`StringBuilder`, an imported class) resolves to its classifier.
+     *
+     * Gated through [KotlinSymbolService.resolveTypeName], which honours the file's imports, its package and the
+     * default star imports. It is deliberately NOT a search of the classpath by simple name: such a search picks
+     * an arbitrary same-named class from anywhere on the classpath, so in a file importing
+     * `androidx.compose.material3.Text` (a top-level function, whose own declaration lives in a facade class) the
+     * name `Text` resolved to `android.jar`'s `org.w3c.dom.Text`, and every go-to navigation, hover and quick doc
+     * followed it there.
+     */
+    private fun typeNamed(name: String, resolver: KotlinResolver): KotlinSymbol? {
+        val fqn = service.resolveTypeName(name, resolver.fileContext)
+            ?.takeIf { service.isKnownType(it) } ?: return null
+        // The index page carries the real classifier kind (class/interface/enum/annotation); a type it does not
+        // hold (the page is capped) still resolves, as a plain class.
+        return service.typeNamesByPrefix(name).firstOrNull { (it.type as? KotlinType)?.qualifiedName == fqn }
+            ?: KotlinSymbol(name, SymbolKind.CLASS, type = service.typeByFqn(fqn))
     }
 
     override fun scopeAt(file: VirtualFile, offset: Int): Scope {

@@ -588,7 +588,18 @@ data class RunConsoleUi(
     val transcript: List<ConsoleChunk> = emptyList(),
     val acceptsInput: Boolean = false,
     val exitCode: Int? = null,
+    /** The latest frame of a windowed program's UI, or null for a console run (the common case). */
+    val frame: RunFrameUi? = null,
 )
+
+/**
+ * One frame of a windowed program: raw RGBA_8888 pixels, row-major, in the file at [path].
+ *
+ * A path rather than the bytes, and rather than a platform image type: the pixels come from another process
+ * over the shared filesystem, and this type crosses into multiplatform UI code. [seq] increases monotonically,
+ * so a screen redrawing slower than the program repaints can tell a new frame from the one it already drew.
+ */
+class RunFrameUi(val path: String, val width: Int, val height: Int, val seq: Long)
 
 /** Severity of a [BuildLogLine] — drives the per-line color and the Log tab's level filter. */
 enum class UiLogLevel { Debug, Info, Warn, Error }
@@ -937,6 +948,27 @@ data class UiCompilerPlugin(
 )
 
 /**
+ * A toolchain problem that will break the build for a module, surfaced as an editor banner rather than left to
+ * appear as a wall of errors in generated code.
+ *
+ * Today's only source is a bundled KSP processor whose generated code needs a newer runtime than the module
+ * declares: the IDE always runs the processor version it ships (executed code cannot be downloaded), so the
+ * two have to agree. [fixLabel] describes the version change that resolves it ("Update x to 2.60.1", or
+ * "Downgrade" when the module pins something newer than the IDE bundles) and [detail] explains why.
+ *
+ * [acceptable] means the user may choose to build anyway: the IDE stops blocking source generation and reports
+ * the problem once per build instead. That is not a fix, and the compile is still expected to fail.
+ */
+data class UiToolchainWarning(
+    val id: String,
+    val moduleName: String,
+    val title: String,
+    val detail: String,
+    val fixLabel: String? = null,
+    val acceptable: Boolean = true,
+)
+
+/**
  * A module's Android packaging options (AGP's `packaging { }`) — the merge rules the user configures for
  * how Java resources + native libraries with the same archive path are combined. Null when the module is
  * not Android. [defaultResourceExcludes]/[defaultResourceMerges] are AGP's always-applied defaults, shown
@@ -1084,9 +1116,14 @@ data class UiImportPreview(
  * Gradle scripts were read statically, not evaluated, so its model is a best-effort approximation: builds and
  * dependency resolution may fail, and versions/config the reader couldn't extract are listed in [notes].
  */
-data class UiCompatibilityInfo(val summary: String, val notes: List<String> = emptyList())
+data class UiCompatibilityInfo(
+    val summary: String,
+    val notes: List<String> = emptyList(),
+    /** True when a watched build file changed since the last sync, so the model is out of date. */
+    val syncNeeded: Boolean = false,
+)
 
-/** The result of re-syncing a compatibility-mode project from its Gradle scripts (see [ProjectService.syncGradle]). */
+/** The result of re-syncing a project from its build files (see [ProjectService.syncProject]). */
 data class UiSyncResult(val ok: Boolean, val message: String, val notes: List<String> = emptyList())
 
 /**
@@ -1567,6 +1604,8 @@ data class UiSettings(
     val wordWrap: Boolean = false,
     /** Indent wrapped continuation rows to the line's own indent (IntelliJ-style); only when [wordWrap]. */
     val wrapIndent: Boolean = true,
+    /** Draggable bar along the editor's bottom edge while a line runs past the view; none when [wordWrap]. */
+    val horizontalScrollbar: Boolean = true,
     /** Free (two-axis) touch scrolling: a single drag pans both axes (off = orientation-locked). */
     val twoAxisScroll: Boolean = true,
     /** Two-finger pinch zooms the code font. */

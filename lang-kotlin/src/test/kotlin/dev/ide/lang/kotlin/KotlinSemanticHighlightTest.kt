@@ -95,6 +95,44 @@ class KotlinSemanticHighlightTest {
     }
 
     @Test
+    fun lowercaseObjectUsesAreColoredAsObject() {
+        // A `data object` may be named in any case, and the lexer only guesses "type" from a Capitalized name —
+        // so a lowercase one's USES (declaration aside) used to read as plain text: `NavKeys.shoppingListScreen`
+        // is the singleton INSTANCE, which no member lookup resolves.
+        val code = "package demo\n" +
+            "sealed interface NavKeys {\n" +
+            "  data object shoppingListScreen : NavKeys\n" +
+            "}\n" +
+            "fun go(k: NavKeys): NavKeys {\n" +
+            "  val a = NavKeys.shoppingListScreen\n" +
+            "  when (k) {\n" +
+            "    NavKeys.shoppingListScreen -> {}\n" +
+            "  }\n" +
+            "  return a\n" +
+            "}\n"
+        val toks = tokens("NavUse.kt", code)
+        // the declaration + both `NavKeys.shoppingListScreen` reads
+        assertTrue(
+            toks.count { it.text == "shoppingListScreen" && it.kind == "object" } >= 3,
+            "a lowercase object's uses should color as an object; got $toks",
+        )
+    }
+
+    @Test
+    fun importedLowercaseObjectReadsAsObject() {
+        // The same object reached BARE through an import — no receiver to resolve it off, and no local/member
+        // of that name, so it fell off the end of the reference classifier uncolored.
+        val code = "package demo\n" +
+            "import demo.NavKeys.shoppingListScreen\n" +
+            "fun go(): NavKeys = shoppingListScreen\n"
+        val toks = tokens("NavImport.kt", code)
+        assertTrue(
+            toks.count { it.text == "shoppingListScreen" && it.kind == "object" } >= 2,
+            "an imported lowercase object should color as an object at the import AND the use; got $toks",
+        )
+    }
+
+    @Test
     fun stdlibInfixCallIsMarked() {
         val toks = tokens("Infix.kt", "package demo\nfun f() { val p = 1 to 2 }\n")
         assertTrue(
@@ -441,6 +479,10 @@ class KotlinSemanticHighlightTest {
         val srcDir: Path = tempProject(mapOf(
             "Seed.kt" to "package demo\n",
             "Money.kt" to "package demo\nclass Money\ninfix fun Money.combine(o: Money): Money = o",
+            "NavKeys.kt" to "package demo\n" +
+                "sealed interface NavKeys {\n" +
+                "  data object shoppingListScreen : NavKeys\n" +
+                "}\n",
             "Models.kt" to "package demo\n" +
                 "data class Point(val x: Int, val y: Int)\n" +
                 "enum class Hue { RED, GREEN }\n" +

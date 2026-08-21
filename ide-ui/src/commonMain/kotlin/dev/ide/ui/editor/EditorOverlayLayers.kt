@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -13,6 +14,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
@@ -20,6 +24,7 @@ import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.components.clipForClipboard
 import dev.ide.ui.editor.core.EditorSession
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
@@ -46,6 +51,7 @@ internal fun BoxScope.DiagnosticChipsLayer(
     vOffset: MutableFloatState,
     hOffset: MutableFloatState,
     onOpenSheet: (UiDiagnostic) -> Unit,
+    onChipExtent: (Float) -> Unit,
 ) {
     val doc = session.doc
     // The most-severe Error/Warning per line, memoized on (diagnostics, doc): a caret-only move leaves the
@@ -63,6 +69,37 @@ internal fun BoxScope.DiagnosticChipsLayer(
         m
     }
     val fm = session.foldModel
+    val density = LocalDensity.current
+    // Report how far the widest chip reaches past its line so the editor's horizontal scroll extent
+    // ([EditorGeometry.contentWidth]) can grow to reveal it — otherwise a chip overhanging the longest line
+    // is clipped at the viewport edge with no way to scroll to it. Measured (not just estimated) since the
+    // chip text is proportional, not the editor's monospace; recomputed only when the chips/geometry change.
+    val measurer = rememberTextMeasurer()
+    val fontSize = render.codeStyle.fontSize
+    val chipExtent = remember(chipPerLine, fontSize, wordWrap, metrics.charWidth, density, session.foldRegions) {
+        val em = with(density) { fontSize.toPx() }
+        // Icon (em*0.95) + row spacing (em*0.35) + horizontal padding (em*0.5 each side) around the message.
+        val chrome = em * (0.95f + 0.35f + 1.0f)
+        var maxRight = 0f
+        for ((ln, d) in chipPerLine) {
+            if (fm.isHidden(ln)) continue
+            val chipLayout =
+                if (fm.foldStartingAt(ln) != null) render.compositeLayoutFor(ln) else render.layoutFor(ln)
+            val lastSub = if (wordWrap) (chipLayout.lineCount - 1).coerceAtLeast(0) else 0
+            val lineWidth = if (wordWrap) chipLayout.getLineRight(lastSub) else chipLayout.size.width.toFloat()
+            val textW = measurer.measure(
+                d.message,
+                TextStyle(fontSize = fontSize, fontWeight = FontWeight.SemiBold),
+                maxLines = 1,
+            ).size.width.toFloat()
+            // Right edge in the same (gutter-excluded) frame [contentWidth] uses: padLeft + line + gap + chip.
+            val right = metrics.padLeft + lineWidth + metrics.charWidth * 3f + chrome + textW
+            if (right > maxRight) maxRight = right
+        }
+        maxRight
+    }
+    // Push after composition (contentWidth reads it in the draw/scroll phase); a same-value write is a no-op.
+    SideEffect { onChipExtent(chipExtent) }
     // Clip the chips to the code area (right of the gutter): a chip that scrolls left then slides UNDER the
     // gutter instead of overlapping it. Draw-only clip; the chips keep their absolute positions.
     Box(

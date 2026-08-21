@@ -118,6 +118,14 @@ internal fun RightToolOverlay(state: IdeUiState) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             if (shown.value > 0.5f) return@awaitEachGesture
+                            // Cooperate with the editor's horizontal scroll: if the active editor still has
+                            // content to reveal rightward (it is not at its horizontal end), this leftward
+                            // swipe belongs to it — don't grab it for the drawer. Grabbing unconditionally
+                            // stole horizontal scrolling near the right edge (issue #1493). The drawer still
+                            // opens by swipe once the editor is at its horizontal end or the file has no
+                            // horizontal overflow, and always via the top-bar button.
+                            val ed = state.active?.session
+                            if (ed != null && ed.hScrollOffsetPx < ed.hScrollMaxPx - 0.5f) return@awaitEachGesture
                             var totalX = 0f
                             var totalY = 0f
                             var claimed = false

@@ -1,6 +1,7 @@
 package dev.ide.core
 
 import dev.ide.analysis.ACTION_PROVIDER_EP
+import dev.ide.analysis.ANALYZER_EP
 import dev.ide.android.support.AndroidBuildConfigProvider
 import dev.ide.android.support.AndroidRClassProvider
 import dev.ide.android.support.AndroidSupport
@@ -10,10 +11,13 @@ import dev.ide.android.support.metadata.AndroidSdkMetadata
 import dev.ide.block.BLOCK_MAPPING_EP
 import dev.ide.block.impl.JavaBlockMapping
 import dev.ide.core.actions.BuiltInActions
+import dev.ide.core.analysis.PackageMismatchAnalyzer
 import dev.ide.core.completion.BufferWordsContributor
 import dev.ide.core.completion.CompletionStats
 import dev.ide.core.completion.PostfixContributor
 import dev.ide.core.completion.UserLiveTemplateContributor
+import dev.ide.core.gradle.GradleBuildFileWriter
+import dev.ide.core.gradle.GradleProjectImporter
 import dev.ide.core.services.AndroidResourceService
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
@@ -25,9 +29,12 @@ import dev.ide.core.services.ModuleService
 import dev.ide.core.services.RefactorService
 import dev.ide.core.services.SearchService
 import dev.ide.core.services.SigningService
+import dev.ide.core.sync.ProjectSyncService
 import dev.ide.core.templates.CalculatorSampleTemplate
 import dev.ide.core.templates.JavaConsoleAppTemplate
 import dev.ide.core.templates.JavaLibraryTemplate
+import dev.ide.core.templates.SwingAppTemplate
+import dev.ide.core.templates.SwingCanvasTemplate
 import dev.ide.core.templates.KotlinConsoleAppTemplate
 import dev.ide.core.templates.KotlinLibraryTemplate
 import dev.ide.core.templates.NotesSampleTemplate
@@ -89,6 +96,8 @@ import dev.ide.model.impl.FileIconRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.model.module
+import dev.ide.model.sync.BUILD_FILE_WRITER_EP
+import dev.ide.model.sync.PROJECT_IMPORTER_EP
 import dev.ide.platform.ServiceScopeLevel
 import dev.ide.plugin.Plugin
 import dev.ide.build.SOURCE_GENERATOR_EP
@@ -140,6 +149,7 @@ object BuiltInPlugins {
         BuiltInPlugin(JavaSupportPlugin()),
         BuiltInPlugin(KotlinSupportPlugin()),
         BuiltInPlugin(KspSupportPlugin(env)),
+        BuiltInPlugin(GradleSupportPlugin()),
         BuiltInPlugin(BlocksPlugin()),
         BuiltInPlugin(AndroidSupportPlugin(env, codecs)),
         BuiltInPlugin(SamplesPlugin()),
@@ -148,6 +158,7 @@ object BuiltInPlugins {
         BuiltInPlugin(JdtAnalysisPlugin()),
         BuiltInPlugin(JavaPsiAnalysisPlugin()),
         BuiltInPlugin(KotlinAnalysisPlugin()),
+        BuiltInPlugin(PackageMismatchPlugin()),
         BuiltInPlugin(XmlAnalysisPlugin(env)),
         BuiltInPlugin(AndroidXmlPlugin(env)),
         BuiltInPlugin(IdeCoreServicesPlugin()),
@@ -270,7 +281,27 @@ private class JavaSupportPlugin : Plugin {
             val templates = ProjectTemplateRegistry(ext)
             templates.register(JavaConsoleAppTemplate, pid)
             templates.register(JavaLibraryTemplate, pid)
+            templates.register(SwingAppTemplate, pid)
+            templates.register(SwingCanvasTemplate, pid)
         }
+    }
+}
+
+/**
+ * Gradle compatibility: the [GradleProjectImporter] that reads a Gradle project's scripts into the project
+ * model ([PROJECT_IMPORTER_EP]) and the [GradleBuildFileWriter] that writes dependency declarations back into
+ * `build.gradle(.kts)` ([BUILD_FILE_WRITER_EP]). Disabling it leaves Gradle folders unrecognized: they open
+ * as empty native workspaces instead of imported projects.
+ */
+private class GradleSupportPlugin : Plugin {
+    override val manifest = PluginManifest(
+        id = "gradle-support", name = "Gradle Support",
+        description = "Opens Gradle projects by reading their build scripts statically, and writes dependency declarations back to them.",
+    )
+
+    override fun register(reg: PluginRegistration) {
+        reg.register(PROJECT_IMPORTER_EP, GradleProjectImporter())
+        reg.register(BUILD_FILE_WRITER_EP, GradleBuildFileWriter())
     }
 }
 
@@ -361,6 +392,16 @@ private class KspSupportPlugin(private val env: ApplicationEnvironment) : Plugin
             SOURCE_GENERATOR_EP,
             KspSourceGenerator(
                 processors = { req -> catalog.classpathFor(req.classpath, req.declaredDependencies) },
+                // The IDE runs the processor version it BUNDLES, so a project pinning an older runtime gets
+                // generated sources its own runtime can't compile. Report that up front instead of letting the
+                // module fail on the symbols it produces. A mismatch the user accepted (the editor banner's
+                // "build anyway") arrives on the request and becomes a per-build warning instead.
+                preflight = { req ->
+                    catalog.preflight(req.classpath, req.declaredDependencies, req.acceptedWarnings)
+                },
+                // The processor options a library's own Gradle plugin would contribute (Hilt's
+                // `disableAndroidSuperclassValidation`), which no project build file spells out.
+                processorOptions = { req -> catalog.optionsFor(req.classpath, req.declaredDependencies) },
                 loader = loader,
                 jdkHome = jdkHome,
             ),
@@ -546,6 +587,25 @@ private class KotlinAnalysisPlugin : Plugin {
 }
 
 /**
+ * The cross-language "package does not match file location" inspection (Java + Kotlin). Host-level because it
+ * needs the file's module source roots (not just the language tree) to derive the expected package, and its
+ * fix reuses both languages' package-text rewriters. `dependsOn` both language backends so the file types are
+ * registered before it runs.
+ */
+private class PackageMismatchPlugin : Plugin {
+    override val manifest = PluginManifest(
+        id = "package-mismatch",
+        name = "Package Mismatch Inspection",
+        description = "Flags a Java/Kotlin file whose package does not match its directory, with a fix to correct it.",
+        dependsOn = listOf("jdt-language", "kotlin-language"),
+    )
+
+    override fun register(reg: PluginRegistration) {
+        reg.contributeVia { ext, pid -> ext.register(ANALYZER_EP, PackageMismatchAnalyzer(), pid) }
+    }
+}
+
+/**
  * The XML editor diagnostics, wired to the active engine's per-project resource host + Android attribute
  * schema (both resolve `env.activeEngine` lazily). Attributed to `PluginId("xml-analysis")` by the facade.
  */
@@ -653,6 +713,9 @@ private class IdeCoreServicesPlugin : Plugin {
                     ENGINE_CONTEXT
                 )
             )
+        }
+        reg.service(PROJECT_SYNC_SERVICE, ServiceScopeLevel.WORKSPACE) {
+            ProjectSyncService(getService(ENGINE_CONTEXT))
         }
         reg.service(LANGUAGE_FEATURE_SERVICE, ServiceScopeLevel.WORKSPACE) {
             LanguageFeatureService(getService(ENGINE_CONTEXT))

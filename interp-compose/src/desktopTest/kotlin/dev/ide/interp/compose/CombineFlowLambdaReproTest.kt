@@ -4,12 +4,8 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
-import java.io.File
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -23,10 +19,6 @@ import kotlin.test.assertTrue
  * "unresolved/ambiguous call `isBlank` (candidates=0)" and refused to render.
  */
 class CombineFlowLambdaReproTest {
-
-    private fun classpathJars(): List<Path> =
-        System.getProperty("java.class.path").split(File.pathSeparator)
-            .filter { it.endsWith(".jar") }.map { Paths.get(it) }
 
     @Test
     fun combineLambdaParamsInferFactoryFlowElementTypes() {
@@ -49,7 +41,7 @@ class CombineFlowLambdaReproTest {
                 }
             }
         """.trimIndent()
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(Doc(code)) as KotlinParsedFile
         val vm = KotlinPreviewLowering(service).classes(parsed).firstOrNull { it.fqn == "demo.OrderViewModel" }
         val diagnostics = vm?.diagnostics.orEmpty().map { it.reason }

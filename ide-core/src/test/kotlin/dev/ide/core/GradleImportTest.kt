@@ -1,6 +1,7 @@
 package dev.ide.core
 
 import dev.ide.testkit.withTempDir
+import kotlinx.coroutines.runBlocking
 import dev.ide.model.DependencyScope
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
@@ -302,7 +303,7 @@ class GradleImportTest {
                 lib.resolve("build.gradle").writeText("apply plugin: 'java-library'\n")
                 lib.resolve("src/main/java/com/example/lib/Lib.java").writeText("package com.example.lib; public class Lib {}")
 
-                val outcome = ide.syncGradleFromScripts()
+                val outcome = runBlocking { ide.syncFromBuildFiles() }
                 assertTrue(outcome.ok, outcome.message)
                 assertContains(ide.moduleNames().toSet(), "lib")
                 assertTrue(ide.isCompatibilityMode(), "still flagged as compatibility mode after a sync")
@@ -461,7 +462,7 @@ class GradleImportTest {
 
             // Simulate a user-added repo, then re-sync: both survive (merge, not clobber).
             reposFile.writeText(reposFile.readText() + "MyCorp\thttps://repo.mycorp.com/m2\n")
-            manager.open(dest.toString()).use { ide -> assertTrue(ide.syncGradleFromScripts().ok) }
+            manager.open(dest.toString()).use { ide -> assertTrue(runBlocking { ide.syncFromBuildFiles() }.ok) }
             val after = reposFile.readText()
             assertTrue(after.contains("https://repo.mycorp.com/m2"), "manually-added repo preserved across re-sync")
             assertTrue(after.contains("https://jitpack.io"))

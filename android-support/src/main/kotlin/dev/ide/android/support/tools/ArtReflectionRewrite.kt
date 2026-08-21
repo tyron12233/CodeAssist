@@ -52,11 +52,18 @@ object ArtReflectionRewrite {
 
     /**
      * Return an ART-safe classpath equivalent to [jars]: a jar that references [METHOD] is rewritten into
-     * [outDir] (same file name) with the call patched out; a jar that doesn't reference it is passed through
-     * as its ORIGINAL path (no copy). [outDir] is created on demand and only ever holds rewritten jars.
+     * [outDir] with the call patched out; a jar that doesn't reference it is passed through as its ORIGINAL
+     * path (no copy). [outDir] is created on demand and only ever holds rewritten jars.
+     *
+     * The rewritten name carries the classpath INDEX, because a tool classpath can hold two same-named jars
+     * (a module using two bundled KSP processors gets each closure's own `annotations-13.0.jar`), and writing
+     * both to `outDir/<name>` would have one silently overwrite the other, substituting its classes for the
+     * other's.
      */
     fun patch(jars: List<Path>, outDir: Path): List<Path> =
-        jars.map { jar -> if (references(jar)) rewriteInto(jar, outDir) else jar }
+        jars.mapIndexed { index, jar ->
+            if (references(jar)) rewriteInto(jar, outDir, "$index-${jar.fileName}") else jar
+        }
 
     /** True if any `.class` entry of [jar] mentions [METHOD] in its (decompressed) constant pool. */
     private fun references(jar: Path): Boolean {
@@ -73,11 +80,11 @@ object ArtReflectionRewrite {
         return false
     }
 
-    /** Stream [jar] into [outDir]/<name>, rewriting each `.class` entry that references [METHOD]; everything
+    /** Stream [jar] into [outDir]/[name], rewriting each `.class` entry that references [METHOD]; everything
      *  else is copied byte-for-byte. */
-    private fun rewriteInto(jar: Path, outDir: Path): Path {
+    private fun rewriteInto(jar: Path, outDir: Path, name: String): Path {
         Files.createDirectories(outDir)
-        val out = outDir.resolve(jar.fileName.toString())
+        val out = outDir.resolve(name)
         ZipInputStream(BufferedInputStream(Files.newInputStream(jar))).use { zis ->
             ZipOutputStream(BufferedOutputStream(Files.newOutputStream(out))).use { zos ->
                 var entry = zis.nextEntry

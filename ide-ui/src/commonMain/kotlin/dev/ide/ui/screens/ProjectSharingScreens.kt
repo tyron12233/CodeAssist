@@ -38,7 +38,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,7 +55,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.ProjectInfo
-import dev.ide.ui.backend.UiExportOptions
 import dev.ide.ui.backend.UiImportPreview
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.components.CenteredDialog
@@ -102,7 +100,6 @@ import dev.ide.ui.generated.resources.modules
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -125,19 +122,7 @@ fun ImportPreviewScreen(
     onCancel: () -> Unit,
     onImported: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    fun doImport() {
-        if (busy || !preview.compatible) return
-        busy = true; error = null
-        scope.launch {
-            val result = backend.projects.importPackage(archivePath)
-            busy = false
-            if (result.success) onImported() else error = result.message
-        }
-    }
+    val state = rememberImportPreviewState(backend, archivePath, preview)
 
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp),
@@ -181,7 +166,7 @@ fun ImportPreviewScreen(
                 Notice(stringResource(Res.string.import_incompatible))
             }
 
-            error?.let { Notice(it) }
+            state.error?.let { Notice(it) }
 
             // The packaged files, so the user knows exactly what lands on disk before importing.
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -220,7 +205,7 @@ fun ImportPreviewScreen(
             SharingSecondaryButton(stringResource(Res.string.cancel), Modifier.weight(1f), onClick = onCancel)
             PrimaryButton(
                 text = stringResource(Res.string.import_action),
-                onClick = ::doImport,
+                onClick = { state.import(onImported) },
                 icon = CaIcons.download,
                 modifier = Modifier.weight(1f).then(if (preview.compatible) Modifier else Modifier.alpha(0.5f)),
             )
@@ -286,13 +271,6 @@ private fun StatChip(icon: ImageVector, text: String, accent: Boolean = false) {
 }
 
 /** The stages of the full-screen export flow. */
-private sealed interface ExportPhase {
-    data object Configure : ExportPhase
-    data object Exporting : ExportPhase
-    data class Done(val path: String) : ExportPhase
-    data class Failed(val message: String) : ExportPhase
-}
-
 /**
  * Full-screen export flow for [project]: an offline-bundle toggle + optional author/description, then a
  * success view offering to reveal the file, save a copy, or share it. The `.caproj` is written by
@@ -311,42 +289,26 @@ fun ExportProjectScreen(
     onShare: ((String) -> Unit)?,
     onDone: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-    var phase by remember { mutableStateOf<ExportPhase>(ExportPhase.Configure) }
-    var bundleDeps by remember { mutableStateOf(false) }
-    var author by remember { mutableStateOf(initialAuthor) }
-    var description by remember { mutableStateOf("") }
-    val failedMessage = stringResource(Res.string.export_failed)
-
-    fun runExport() {
-        onAuthorRemembered(author.trim())
-        phase = ExportPhase.Exporting
-        scope.launch {
-            val path = backend.projects.exportProject(
-                project.rootPath, UiExportOptions(bundleDeps, author.trim(), description.trim()),
-            )
-            phase = if (path != null) ExportPhase.Done(path) else ExportPhase.Failed(failedMessage)
-        }
-    }
+    val state = rememberExportProjectState(backend, project, initialAuthor, onAuthorRemembered)
 
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         SharingHeader(stringResource(Res.string.export_title), onBack = onDone)
-        Crossfade(targetState = phase, modifier = Modifier.weight(1f).fillMaxWidth(), label = "export-phase") { p ->
+        Crossfade(targetState = state.phase, modifier = Modifier.weight(1f).fillMaxWidth(), label = "export-phase") { p ->
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 when (p) {
                     ExportPhase.Configure -> ExportConfigure(
                         project = project,
-                        bundleDeps = bundleDeps, onBundleDeps = { bundleDeps = it },
-                        author = author, onAuthor = { author = it },
-                        description = description, onDescription = { description = it },
-                        onExport = ::runExport,
+                        bundleDeps = state.bundleDeps, onBundleDeps = state::updateBundleDeps,
+                        author = state.author, onAuthor = state::updateAuthor,
+                        description = state.description, onDescription = state::updateDescription,
+                        onExport = state::export,
                     )
                     ExportPhase.Exporting -> BusyView(stringResource(Res.string.export_exporting))
                     is ExportPhase.Done -> ExportSuccess(p.path, onReveal, onSaveCopy, onShare, onDone)
-                    is ExportPhase.Failed -> ExportFailed(p.message, onRetry = { phase = ExportPhase.Configure })
+                    ExportPhase.Failed -> ExportFailed(stringResource(Res.string.export_failed), onRetry = state::backToConfigure)
                 }
             }
         }

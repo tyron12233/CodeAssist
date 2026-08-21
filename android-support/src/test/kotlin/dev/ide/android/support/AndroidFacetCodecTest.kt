@@ -38,7 +38,11 @@ class AndroidFacetCodecTest {
         ),
         r8FullMode = false,
         coreLibraryDesugaringEnabled = true,
-        buildFeatures = BuildFeatures(viewBinding = true, compose = true, parcelize = true, serialization = true, kspProcessors = setOf("room", "moshi")),
+        buildFeatures = BuildFeatures(
+            viewBinding = true, compose = true, parcelize = true, serialization = true,
+            kspProcessors = setOf("room", "moshi"),
+            kspRuntimeMismatchAccepted = setOf("hilt"),
+        ),
         packaging = AndroidPackaging(
             resources = ResourcePackaging(
                 excludes = linkedSetOf("/META-INF/extra.txt"),
@@ -84,6 +88,9 @@ class AndroidFacetCodecTest {
         assertEquals(true, values["serialization"])
         // Enabled KSP processors persist as a sorted string array.
         assertEquals(listOf("moshi", "room"), values["kspProcessors"])
+        // An accepted runtime mismatch ("build anyway") has to persist too: the build process reloads this
+        // facet, and losing the flag would put it back to refusing to generate.
+        assertEquals(listOf("hilt"), values["kspRuntimeMismatchAccepted"])
         // shrinkResources is always emitted (like minifyEnabled) so the Module Settings UI can render a
         // toggle to turn it ON — a key omitted when false would leave no control for it.
         assertEquals(false, bts[0]["shrinkResources"])
@@ -100,6 +107,7 @@ class AndroidFacetCodecTest {
         assertEquals(null, values["parcelize"])
         assertEquals(null, values["serialization"])
         assertEquals(null, values["kspProcessors"])
+        assertEquals(null, values["kspRuntimeMismatchAccepted"])
         assertEquals(BuildFeatures(), AndroidFacetCodec.decode(values).buildFeatures)
     }
 

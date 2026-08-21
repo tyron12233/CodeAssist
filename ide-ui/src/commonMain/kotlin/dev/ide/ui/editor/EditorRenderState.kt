@@ -14,6 +14,8 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.UiFileSymbol
+import dev.ide.ui.editor.core.EditorDocument
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.InlayPiece
 import dev.ide.ui.editor.core.LineRenderCache
@@ -49,6 +51,53 @@ internal class EditorRenderState(private val session: EditorSession) {
     internal lateinit var measurer: TextMeasurer
     internal lateinit var compositeCache: HashMap<Int, TextLayoutResult>
     internal lateinit var gutterNumberCache: HashMap<Int, TextLayoutResult>
+
+    /**
+     * Per-line indent-guide cache: `line -> [styleRevision, indentColumns]` (indentColumns == -1 for a blank
+     * line). The indent-guide layer in [drawEditor] used to re-walk the rope (`doc.charAt`) for every visible
+     * line — and again for the up/down neighbours it bridges blank lines with — on EVERY frame, so a fling paid
+     * that cost per frame. A line's indent is a pure function of its text, and [dev.ide.ui.editor.core.LineStyles]
+     * already stamps a unique-forever revision per line that changes exactly when the line's text does, so we
+     * validate a cached value with one int compare (identical to how [LineRenderCache] validates layouts). Stale
+     * entries after a line splice self-correct: the revision is globally unique, so a moved line's key can never
+     * hold another line's value without the compare catching it. Cleared wholesale past a size cap (indent
+     * recompute is cheap) so the map can't grow without bound on a huge file.
+     */
+    private val indentCache = HashMap<Int, IntArray>()
+
+    /** Leading-indent columns of [line] (tabs → 4 cols each, matching the guide layer), or -1 for a blank line.
+     *  Cached by the line's [dev.ide.ui.editor.core.LineStyles] revision so a fling reads it without rope walks. */
+    fun indentColsFor(line: Int): Int {
+        val doc = session.doc
+        if (line < 0 || line >= doc.lineCount) return -1
+        val rev = session.styles.revOf(line)
+        indentCache[line]?.let { if (it[0] == rev) return it[1] }
+        val cols = leadingIndentCols(doc, line, INDENT_GUIDE_TAB_WIDTH)
+        if (indentCache.size > INDENT_CACHE_MAX) indentCache.clear()
+        indentCache[line] = intArrayOf(rev, cols)
+        return cols
+    }
+
+    // Sticky-header memo: `stickyHeaderItems` filters + sorts the whole structure list, and the draw phase asked
+    // for it every frame. Cache the last result keyed on the inputs that actually change it — the top visible
+    // line, the structure list instance, and the document instance (a new doc per edit shifts line positions).
+    private var stickyKey = Int.MIN_VALUE
+    private var stickyStructure: List<UiFileSymbol> = emptyList()
+    private var stickyDoc: EditorDocument? = null
+    private var stickyResult: List<UiFileSymbol> = emptyList()
+
+    /** Declarations enclosing [firstVisibleLine], pinned as sticky headers — memoized across frames (see above). */
+    fun stickyHeadersFor(structure: List<UiFileSymbol>, firstVisibleLine: Int): List<UiFileSymbol> {
+        if (firstVisibleLine == stickyKey && structure === stickyStructure && session.doc === stickyDoc) {
+            return stickyResult
+        }
+        stickyKey = firstVisibleLine
+        stickyStructure = structure
+        stickyDoc = session.doc
+        stickyResult = if (structure.isEmpty() || firstVisibleLine <= 0) emptyList()
+        else stickyHeaderItems(structure, firstVisibleLine, session.doc, STICKY_MAX)
+        return stickyResult
+    }
 
     /** The shaped layout for [line] straight off the render cache (re-tokenizes/re-shapes only if it changed). */
     fun layoutFor(line: Int): TextLayoutResult =

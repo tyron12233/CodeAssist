@@ -57,6 +57,7 @@ import dev.ide.ui.editor.core.EditorImeHandle
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.RangeEdit
 import dev.ide.ui.editor.core.isLarge
+import dev.ide.ui.editor.core.mapOffsetThroughEdits
 import dev.ide.ui.editor.core.smartEnter
 import dev.ide.ui.editor.core.textInputCodePoint
 import dev.ide.ui.editor.core.wordRangeAt
@@ -114,9 +115,11 @@ fun CodeEditor(
     completionDelayMs: Int = 110,
     /**
      * Scroll both axes at once with a single touch drag (Settings → Editor). Off = the classic
-     * orientation-locked drag (one axis per gesture). Touch-only: desktop trackpad/wheel already pans 2D.
+     * orientation-locked drag (one axis per gesture). Touch-only, hence the default: `scrollable2D` has no
+     * mouse-wheel handling, so a desktop editor must stay on the orientation-locked pair. The host ANDs the
+     * setting with the platform; passing it explicitly is what lets a test drive the touch path.
      */
-    twoAxisScroll: Boolean = true,
+    twoAxisScroll: Boolean = isMobilePlatform,
     /** Whether a two-finger pinch zooms the code font (Settings → Editor); Ctrl-+/-/0 always works. */
     pinchZoom: Boolean = true,
     /**
@@ -128,6 +131,8 @@ fun CodeEditor(
     wordWrap: Boolean = false,
     /** Indent wrapped continuation rows to the line's own indent (Settings → Editor); only when [wordWrap]. */
     wrapIndent: Boolean = true,
+    /** Show a draggable bar along the bottom edge while a line runs past the view (Settings → Editor). */
+    horizontalScrollbar: Boolean = true,
     /** Render programming ligatures (`->`, `!=`, …) when the code font provides them (Settings → Editor; on). */
     fontLigatures: Boolean = true,
     /**
@@ -162,6 +167,7 @@ fun CodeEditor(
             softKeyboardSuggestions,
             wordWrap,
             wrapIndent,
+            horizontalScrollbar,
             fontLigatures,
             obscured,
         )
@@ -185,11 +191,12 @@ private fun CodeEditorContent(
     onPreview: (variantId: String) -> Unit = {},
     completionAutoPopup: Boolean = true,
     completionDelayMs: Int = 110,
-    twoAxisScroll: Boolean = true,
+    twoAxisScroll: Boolean = isMobilePlatform,
     pinchZoom: Boolean = true,
     softKeyboardSuggestions: Boolean = true,
     wordWrap: Boolean = false,
     wrapIndent: Boolean = true,
+    horizontalScrollbar: Boolean = true,
     fontLigatures: Boolean = true,
     obscured: Boolean = false,
 ) {
@@ -477,9 +484,7 @@ private fun CodeEditorContent(
             val st = e.start.coerceIn(0, len)
             RangeEdit(st, e.end.coerceIn(st, len), e.newText, st + e.newText.length)
         }
-        var caret = caretBefore
-        for (e in edits) if (e.start <= caret) caret += e.text.length - (e.end - e.start)
-        applyEditsKeepingViewport(edits, TextRange(caret.coerceAtLeast(0)), anchorLine)
+        applyEditsKeepingViewport(edits, TextRange(mapOffsetThroughEdits(caretBefore, edits)), anchorLine)
     }
 
     // Reformat Code: the minimal edits to reformat the whole buffer, or just the selection when
@@ -554,8 +559,12 @@ private fun CodeEditorContent(
     }
 
     // code-action availability — debounced on the selection + text revision, so the lightbulb appears when the
-    // caret rests on (or selects) something actionable.
-    LaunchedEffect(path, editorSession.selection, editorSession.textRevision) {
+    // caret rests on (or selects) something actionable. Also keyed on [diagnostics]: the daemon delivers a fresh
+    // analysis asynchronously (no selection/text change of its own), and the lightbulb is gated on the caret
+    // sitting on a diagnostic — so without this key, a fix that only materializes once analysis lands (e.g. the
+    // auto-import quick-fix) would never re-resolve after being dismissed until an unrelated caret move or edit
+    // (undo) happened to re-fire the effect.
+    LaunchedEffect(path, editorSession.selection, editorSession.textRevision, editorSession.diagnostics) {
         acts.refreshAvailability(isFocused)
     }
 
@@ -597,6 +606,29 @@ private fun CodeEditorContent(
     // ---- per-line diagnostic segments (recomputed per edit — O(diagnostics), they are few) ----
     // Keyed on the document *instance* (an edit swaps it; a caret move doesn't), so the key compare is O(1).
     val diagByLine = remember(diagnostics, doc) { mapDiagnosticsToLines(diagnostics, doc) }
+    // The draw palette depends only on the theme, so build it once per theme instead of allocating a fresh
+    // EditorDrawColors (17 fields + the alpha-blended copies) on every drawBehind frame during a fling.
+    val drawColors = remember(colors) {
+        EditorDrawColors(
+            background = colors.editorBg,
+            currentLine = colors.currentLine,
+            caret = colors.accent,
+            selection = colors.accent.copy(alpha = 0.30f),
+            gutterText = colors.gutterText,
+            gutterCurrent = colors.textSecondary,
+            gutterBorder = colors.separator,
+            error = colors.error,
+            warning = colors.warning,
+            info = colors.info,
+            muted = colors.textTertiary,
+            composing = colors.textSecondary,
+            indentGuide = colors.hairline,
+            findMatch = colors.warning.copy(alpha = 0.28f),
+            findCurrent = colors.accent.copy(alpha = 0.5f),
+            occurrence = colors.textSecondary.copy(alpha = 0.18f),
+            templateField = colors.accent.copy(alpha = 0.16f),
+        )
+    }
     val bracketPair = remember(doc, editorSession.selection) {
         matchingBracket(doc.chars, editorSession.selection.start)
     }
@@ -940,7 +972,7 @@ private fun CodeEditorContent(
                     pinchZoom = pinchZoom,
                     liveScale = liveScale,
                     onFontScaleChange = onFontScaleChange,
-                    useTwoAxisScroll = twoAxisScroll && isMobilePlatform,
+                    useTwoAxisScroll = twoAxisScroll,
                     scroll2D = geometry.scroll2D,
                     vScroll = geometry.vScroll,
                     hScroll = geometry.hScroll,
@@ -987,26 +1019,9 @@ private fun CodeEditorContent(
                         currentMatch = find.currentIndex,
                         occurrences = occurrences,
                         templateFields = snippet?.fieldRanges().orEmpty(),
-                        structure = geometry.editorStructure.value,
-                        colors = EditorDrawColors(
-                            background = colors.editorBg,
-                            currentLine = colors.currentLine,
-                            caret = colors.accent,
-                            selection = colors.accent.copy(alpha = 0.30f),
-                            gutterText = colors.gutterText,
-                            gutterCurrent = colors.textSecondary,
-                            gutterBorder = colors.separator,
-                            error = colors.error,
-                            warning = colors.warning,
-                            info = colors.info,
-                            muted = colors.textTertiary,
-                            composing = colors.textSecondary,
-                            indentGuide = colors.hairline,
-                            findMatch = colors.warning.copy(alpha = 0.28f),
-                            findCurrent = colors.accent.copy(alpha = 0.5f),
-                            occurrence = colors.textSecondary.copy(alpha = 0.18f),
-                            templateField = colors.accent.copy(alpha = 0.16f),
-                        ),
+                        indentColsFor = renderState::indentColsFor,
+                        stickyHeadersFor = { renderState.stickyHeadersFor(geometry.editorStructure.value, it) },
+                        colors = drawColors,
                         caretVisible = isFocused && (blinkOn || !editorSession.selection.collapsed),
                         caretContent = interaction.caretContent, // animated, content-space; read here → redraw per frame
                         handlesVisible = interaction.handlesVisible && interaction.lastInputWasTouch,
@@ -1015,6 +1030,15 @@ private fun CodeEditorContent(
                     )
                 },
         )
+
+        if (horizontalScrollbar) {
+            HorizontalScrollbarLayer(
+                geometry = geometry,
+                gutterWidthPx = gutterWidthPx,
+                thumbColor = colors.textTertiary,
+                trackColor = colors.separator,
+            )
+        }
 
         DiagnosticChipsLayer(
             session = editorSession,
@@ -1027,6 +1051,7 @@ private fun CodeEditorContent(
             vOffset = geometry.vOffset,
             hOffset = geometry.hOffset,
             onOpenSheet = { acts.openSheet(it) },
+            onChipExtent = { geometry.chipExtent.floatValue = it },
         )
 
         SelectionToolbarLayer(

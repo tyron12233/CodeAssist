@@ -144,11 +144,39 @@ internal object KotlinCompletionItems {
         )
     }
 
-    /** The `override fun foo(...): T` / `override val bar: T` header for an inherited member [m]. */
+    /**
+     * The `override fun foo(...): T` / `override val bar: T` header for an inherited member [m].
+     *
+     * Carries the parts of the overridden signature that an override MUST repeat, because dropping any of them
+     * doesn't compile: `suspend` ("Non-suspend function 'load' cannot override suspend function"), the
+     * type-parameter list with its bounds (a dropped `<T>` leaves `T` unresolved; a DIFFERENT bound, including
+     * none where the supertype had one, makes it override nothing), `vararg` (an override taking `Int` where
+     * the supertype takes `vararg Int` overrides nothing), and `@Composable` (part of the function's type).
+     * `operator`/`infix` are deliberately absent: those are inherited by an override, so repeating them is
+     * optional noise.
+     */
     private fun overrideHeader(m: KotlinSymbol): String {
         val ret = (m.type as? KotlinType)?.toString()?.takeIf { it.isNotBlank() && it != "Unit" }
-        return if (m.kind == SymbolKind.METHOD) "override fun ${m.name}${paramListOf(m.signature)}" + (ret?.let { ": $it" } ?: "")
-        else "override val ${m.name}" + (ret?.let { ": $it" } ?: "")
+        val tail = ret?.let { ": $it" } ?: ""
+        if (m.kind != SymbolKind.METHOD) return "override val ${m.name}$tail"
+        val annotations = if (m.isComposable) "@Composable " else ""
+        val suspend = if (m.isSuspend) "suspend " else ""
+        return annotations + "override ${suspend}fun${typeParameterListOf(m)} ${m.name}" +
+            paramListOf(m.signature, m.varargParamIndex) + tail
+    }
+
+    /** ` <T, R : Number>` for a generic member (note the leading space), or `""`. A `kotlin.Any` bound is
+     *  rendered as NO bound: the symbol model substitutes `Any` for an UNBOUNDED parameter, and `T : Any` is a
+     *  real (narrower) bound, so emitting it where the supertype left `T` unbounded is itself a mismatch. An
+     *  unbounded parameter round-trips correctly, a `T : Number` bound is kept, and the rare explicitly-`Any`
+     *  bound degrades to the unbounded form. */
+    private fun typeParameterListOf(m: KotlinSymbol): String {
+        if (m.typeParameters.isEmpty()) return ""
+        return m.typeParameters.mapIndexed { i, name ->
+            val bound = (m.typeParameterBounds.getOrNull(i) as? KotlinType)
+                ?.takeIf { it.qualifiedName != "kotlin.Any" }?.toString()
+            if (bound.isNullOrBlank()) name else "$name : $bound"
+        }.joinToString(", ", prefix = " <", postfix = ">")
     }
 
     /** The full `override` stub for an inherited member [m] — a function body / property getter that throws
@@ -234,14 +262,45 @@ internal object KotlinCompletionItems {
     }
 
     /** Extract the parameter list `(message: String)` from a `(message: String): Unit` signature. */
-    private fun paramListOf(sig: String?): String {
+    private fun paramListOf(sig: String?, varargIndex: Int = -1): String {
         if (sig.isNullOrEmpty()) return "()"
         val i = sig.lastIndexOf("): ")
-        return when {
+        val list = when {
             i >= 0 -> sig.substring(0, i + 1)
             sig.startsWith("(") -> sig // a constructor's "(params)" with no return
             else -> "()"
         }
+        if (varargIndex < 0 || !list.startsWith("(") || !list.endsWith(")")) return list
+        // A `vararg` parameter is rendered with its ELEMENT type on both paths (the source model keeps the
+        // declared text; the `@Metadata` decode reads `varargElementType`), so the keyword is the only thing
+        // missing, and without it the stub takes an `Int` where the supertype takes `vararg Int`, which
+        // overrides nothing.
+        val parts = splitParams(list.substring(1, list.length - 1))
+        if (varargIndex >= parts.size) return list
+        return parts.mapIndexed { idx, part ->
+            if (idx != varargIndex) part
+            else part.takeWhile { it.isWhitespace() } + "vararg " + part.trimStart()
+        }.joinToString(",", prefix = "(", postfix = ")")
+    }
+
+    /** Split a rendered parameter list on the commas that SEPARATE parameters, so a comma nested in a generic
+     *  argument list or a function type stays put (`a: Map<String, Int>, b: (Int, Int) -> Unit` is two
+     *  parameters, not four). The `>` of an `->` arrow is not a closing bracket. */
+    private fun splitParams(params: String): List<String> {
+        if (params.isBlank()) return emptyList()
+        val out = ArrayList<String>(4)
+        var depth = 0
+        var start = 0
+        params.forEachIndexed { i, c ->
+            when (c) {
+                '<', '(', '[' -> depth++
+                '>' -> if (depth > 0 && params.getOrNull(i - 1) != '-') depth--
+                ')', ']' -> if (depth > 0) depth--
+                ',' -> if (depth == 0) { out += params.substring(start, i); start = i + 1 }
+            }
+        }
+        out += params.substring(start)
+        return out
     }
 
     /** A short type label for the popup: `List<String>?`, `Greeter`, … (simple name + args + nullability). */

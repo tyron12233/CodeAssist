@@ -12,14 +12,10 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
 import kotlinx.coroutines.CoroutineScope
 import org.jetbrains.skia.Bitmap
-import java.io.File
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertNotNull
@@ -36,11 +32,9 @@ import kotlin.test.assertTrue
  */
 class PreviewRequiredParamTest {
 
-    private fun classpathJars(): List<Path> =
-        System.getProperty("java.class.path").split(File.pathSeparator).filter { it.endsWith(".jar") }.map { Paths.get(it) }
 
     private fun entry(code: String, keyPrefix: String): Pair<dev.ide.lang.kotlin.interp.ResolvedFunction, Map<String, dev.ide.lang.kotlin.interp.ResolvedFunction>> {
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(PDoc(code)) as KotlinParsedFile
         val program = KotlinPreviewLowering(service).program(parsed)
         val e = program.entries.first { it.key.startsWith(keyPrefix) }.value

@@ -75,6 +75,8 @@ class AndroidAdHost(
     private val onShowPrivacyOptions: () -> Unit = {},
     /** Supplies the current foreground Activity — required to SHOW the full-screen build interstitial. */
     private val activityProvider: () -> Activity? = { null },
+    /** Identity of the installed build (the package's `lastUpdateTime`) — see [AdHost.installStamp]. */
+    override val installStamp: String? = null,
 ) : AdHost {
     override val available: Boolean = !BuildConfig.DEBUG
 

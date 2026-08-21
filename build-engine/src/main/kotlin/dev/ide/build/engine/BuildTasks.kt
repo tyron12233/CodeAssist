@@ -1,6 +1,8 @@
 package dev.ide.build.engine
 
 import dev.ide.build.BuildConfiguration
+import dev.ide.build.BuildEnv
+import dev.ide.build.BuildPlugin
 import dev.ide.build.BuildRequest
 import dev.ide.build.Task
 import dev.ide.build.TaskContainer
@@ -9,6 +11,7 @@ import dev.ide.build.TaskInputs
 import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskResult
+import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
@@ -24,7 +27,40 @@ class SimpleBuildConfiguration(
     override val project: Project,
     override val request: BuildRequest,
     override val tasks: TaskContainer,
+    override val buildSystemId: BuildSystemId = BuildSystemId.NATIVE,
+    override val env: BuildEnv = BuildEnv.of(project),
 ) : BuildConfiguration
+
+/**
+ * The host's [BuildEnv]: the open workspace root, the shared cache root, and the per-module platform
+ * classpath resolver the build systems already carry (`bootClasspathFor`).
+ */
+class DefaultBuildEnv(
+    override val workspaceRoot: Path,
+    override val sharedCachesRoot: Path? = null,
+    private val bootClasspathFor: (Module) -> List<Path> = { emptyList() },
+) : BuildEnv {
+    override fun bootClasspath(module: Module): List<Path> = bootClasspathFor(module)
+}
+
+/**
+ * Apply the contributed [BuildPlugin]s that claim [config] to it, in registration order. A plugin that
+ * throws is skipped with a build-log warning rather than failing the graph: one bad extension must not make
+ * a project unbuildable. Called by each build system after its own plugins, before realizing the container.
+ */
+fun applyBuildPlugins(
+    config: BuildConfiguration,
+    plugins: List<BuildPlugin>,
+    onError: (String) -> Unit = {},
+) {
+    for (plugin in plugins) {
+        val claims = runCatching { plugin.appliesTo(config) }
+            .getOrElse { onError("build plugin '${plugin.id}' failed in appliesTo: ${it.message}"); false }
+        if (!claims) continue
+        runCatching { plugin.apply(config) }
+            .onFailure { onError("build plugin '${plugin.id}' failed to apply: ${it.message}") }
+    }
+}
 
 /** A module's compiled-class output dirs — the Java output plus, when present, the Kotlin output. Packaged
  *  together (jar/dex) and tracked together (the `classes` lifecycle). */

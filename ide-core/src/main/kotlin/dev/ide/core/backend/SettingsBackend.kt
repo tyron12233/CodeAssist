@@ -396,6 +396,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         reparseDelayMs = reparseDelayMs,
         wordWrap = wordWrap,
         wrapIndent = wrapIndent,
+        horizontalScrollbar = horizontalScrollbar,
         twoAxisScroll = twoAxisScroll,
         pinchZoom = pinchZoom,
         softKeyboardSuggestions = softKeyboardSuggestions,

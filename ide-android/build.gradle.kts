@@ -148,6 +148,20 @@ val vmSpikeMaterial3Aar: Configuration by configurations.creating {
 }
 dependencies { vmSpikeMaterial3Aar("androidx.compose.material3:material3-android:1.4.0-beta01@aar") }
 
+// --- owned java.awt/javax.swing fixture (androidTest VM interpret spike) --------------------------
+// AwtToolkitArtSpike interprets a real Swing program on ART with its java.awt/javax.swing references remapped
+// onto :awt-toolkit. The program is :awt-toolkit's own test fixture, compiled against the desktop JDK's REAL
+// Swing exactly as a user's module would be, so it is STAGED from that module's test output rather than
+// checked in: a committed .class would silently go stale the moment the fixture source changed.
+val bundleAwtFixtureAsset = tasks.register<Copy>("bundleAwtFixtureAsset") {
+    description = "Stage :awt-toolkit's compiled Swing fixture as an androidTest asset for AwtToolkitArtSpike."
+    dependsOn(":awt-toolkit:testClasses")
+    from(project(":awt-toolkit").layout.buildDirectory.dir("classes/java/test/swingfixture")) {
+        include("SwingFixture*.class")
+    }
+    into(layout.buildDirectory.dir("vm-spike-asset/awt"))
+}
+
 val bundleVmSpikeMaterial3Asset = tasks.register<Copy>("bundleVmSpikeMaterial3Asset") {
     description = "Stage the androidx material3 classes.jar as an androidTest asset for the VM Button interpret spike."
     from(vmSpikeMaterial3Aar.elements.map { zipTree(it.single().asFile) }) { include("classes.jar") }
@@ -351,8 +365,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // versionCode must exceed the last published release (the previous-codebase app reached ~29).
-        versionCode = 77
-        versionName = "3.9.4"
+        versionCode = 80
+        versionName = "3.9.7"
         // connectedAndroidTest harness (the on-device Kotlin-compiler discovery spike).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -715,7 +729,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset)
+    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's
@@ -964,6 +978,12 @@ dependencies {
     // VmViewFactory) instead of dexing them, and DexPeerFactory realizes their peers. Reaches the app
     // transitively through :interp-compose's jvmShared (api), but the real-view code uses it directly.
     implementation(project(":jvm-interp"))
+
+    // The owned java.awt/javax.swing toolkit. It has to be in the APP dex, not the test APK: an interpreted
+    // program's window class reaches ART as a peer that SUBCLASSES `dev.ide.swing.JPanel`, so the toolkit must
+    // be loadable by the app class loader the generated dex is defined against. Nothing in the IDE calls it
+    // yet (no run path is wired to it); AwtToolkitArtSpike is what exercises it on device.
+    implementation(project(":awt-toolkit"))
 
     // On-device instrumentation: the Kotlin-compiler-on-ART discovery spike.
     androidTestImplementation(libs.androidx.test.ext.junit)

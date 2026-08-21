@@ -32,12 +32,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,7 +46,6 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.ads.LocalAds
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.IdeBackend
-import dev.ide.ui.backend.UiStoreCatalog
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreItemKind
 import dev.ide.ui.backend.UiStoreSection
@@ -84,7 +78,6 @@ import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
 import dev.ide.ui.theme.resolveTint
 import dev.ide.ui.theme.Ca
-import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -112,20 +105,10 @@ fun ProjectsStoreScreen(
         return
     }
 
-    val catalog by produceState(UiStoreCatalog(), backend) {
-        value = runCatching { backend.store.catalog() }.getOrDefault(UiStoreCatalog())
-    }
-    var query by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf<String?>(null) }
-    var results by remember { mutableStateOf<List<UiStoreItem>>(emptyList()) }
-    val filtering = query.isNotBlank() || category != null
+    val state = rememberProjectsStoreState(backend)
+    val catalog = state.catalog
+    val filtering = state.filtering
     val adsActive = LocalAds.current?.adsActive == true
-
-    LaunchedEffect(query, category, filtering) {
-        if (!filtering) { results = emptyList(); return@LaunchedEffect }
-        delay(180)
-        results = runCatching { backend.store.search(query, category) }.getOrDefault(emptyList())
-    }
 
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
@@ -135,14 +118,14 @@ fun ProjectsStoreScreen(
         ) {
             item(key = "header") { StoreHeader(onOpenHub) }
             item(key = "search") {
-                SearchField(query, onChange = { query = it }, modifier = Modifier.padding(horizontal = HPAD, vertical = 8.dp))
+                SearchField(state.query, onChange = state::updateQuery, modifier = Modifier.padding(horizontal = HPAD, vertical = 8.dp))
             }
             item(key = "categories") {
-                CategoryStrip(catalog.categories, selected = category, onSelect = { category = it })
+                CategoryStrip(catalog.categories, selected = state.category, onSelect = state::selectCategory)
             }
 
             if (filtering) {
-                resultsGrid(results, onClick = onOpenItem)
+                resultsGrid(state.results, onClick = onOpenItem)
             } else {
                 if (catalog.featured.isNotEmpty()) {
                     item(key = "featured") {

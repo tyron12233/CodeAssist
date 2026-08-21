@@ -18,6 +18,27 @@ class RangeEdit(
 )
 
 /**
+ * Map a pre-edit document [offset] to where it lands after [edits] (each given in pre-edit coordinates, as a
+ * whole-buffer source transform like Reformat returns) are applied. Used to keep the caret on its logical spot
+ * across a reformat.
+ *
+ * An edit that ends at or before [offset] shifts it by that edit's length delta. An edit that *spans* [offset]
+ * (its replaced range contains the caret — at most one can, since a transform's edits don't overlap) keeps the
+ * caret its same distance into the replacement, clamped to the replacement's length — so shortening the run the
+ * caret sits in (a dedent, or a normalized indent/newline run just before the caret) lands it at that run's new
+ * end, NOT the line start. An edit starting at or after [offset] leaves it untouched. Order-independent.
+ */
+fun mapOffsetThroughEdits(offset: Int, edits: List<RangeEdit>): Int {
+    var result = offset
+    for (e in edits) when {
+        e.end <= offset -> result += e.text.length - (e.end - e.start)   // entirely before the caret
+        e.start < offset -> result += (offset - e.start).coerceAtMost(e.text.length) - (offset - e.start)
+        // e.start >= offset: the edit is at or after the caret → no shift.
+    }
+    return result.coerceAtLeast(0)
+}
+
+/**
  * A single contiguous text change in pre-edit coordinates: the [removed] chars at [start] became [added]
  * chars. The [EditorSession] emits one per mutation so consumers (diagnostic re-mapping) can shift offsets
  * in O(items) — no whole-string diff, the editor already knows exactly what changed.

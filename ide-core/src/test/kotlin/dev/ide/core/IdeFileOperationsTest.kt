@@ -15,15 +15,17 @@ import kotlin.test.assertTrue
 /**
  * File & package operations the file-tree context menu drives (issue #995): delete / rename / move / copy,
  * for both files and directories. Renaming a Java source file whose public type matches its name also renames
- * the type and every reference (reusing the symbol-rename machinery).
+ * the type and every reference (reusing the symbol-rename machinery); moving/copying a Java or Kotlin source
+ * rewrites its `package` line to match the destination directory and repoints importers.
  *
- * Test bodies are block-bodied (not `= runBlocking { … }`): an expression body would take the return type of
+ * Test bodies are block-bodied (not `= withTempDir { … }`): an expression body would take the return type of
  * its last statement, and a non-Unit return makes JUnit silently skip the method.
  */
 class IdeFileOperationsTest {
 
     @Test
-    fun deletesAFileAndReportsMissingTargets() = withTempDir("fileops-del") { dir ->
+    fun deletesAFileAndReportsMissingTargets() {
+        withTempDir("fileops-del") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val scratch = ide.sourceRoots(core).first().resolve("com/example/core/Scratch.java")
@@ -33,10 +35,12 @@ class IdeFileOperationsTest {
             assertFalse(ide.deletePath(dir.resolve("does/not/exist.java")), "deleting a missing path reports failure")
         }
         dir.toFile().deleteRecursively()
+        }
     }
 
     @Test
-    fun renamesAJavaClassAndItsReferencesAcrossFiles() = withTempDir("fileops-rename") { dir ->
+    fun renamesAJavaClassAndItsReferencesAcrossFiles() {
+        withTempDir("fileops-rename") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val greeter = ide.sourceRoots(core).first().resolve("com/example/core/Greeter.java")
@@ -57,10 +61,12 @@ class IdeFileOperationsTest {
             assertFalse("Greeter" in fmt, "the old name is gone from Formatter:\n$fmt")
         }
         dir.toFile().deleteRecursively()
+        }
     }
 
     @Test
-    fun renamesANonSourceFileInPlace() = withTempDir("fileops-rename2") { dir ->
+    fun renamesANonSourceFileInPlace() {
+        withTempDir("fileops-rename2") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val notes = ide.sourceRoots(core).first().resolveSibling("notes.txt")
@@ -71,10 +77,12 @@ class IdeFileOperationsTest {
             assertTrue(Files.exists(notes.resolveSibling("readme.txt")), "renamed in place")
         }
         dir.toFile().deleteRecursively()
+        }
     }
 
     @Test
-    fun movesAndCopiesFilesWithConflictGuards() = withTempDir("fileops-move") { dir ->
+    fun movesAndCopiesFilesWithConflictGuards() {
+        withTempDir("fileops-move") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val pkg = ide.sourceRoots(core).first().resolve("com/example/core")
@@ -97,10 +105,12 @@ class IdeFileOperationsTest {
             assertNull(ide.movePath(sub, sub.resolve("deeper")), "moving a directory into itself is refused")
         }
         dir.toFile().deleteRecursively()
+        }
     }
 
     @Test
-    fun movingAJavaFileRewritesItsPackageAndUpdatesImports() = withTempDir("fileops-pkgmove") { dir ->
+    fun movingAJavaFileRewritesItsPackageAndUpdatesImports() {
+        withTempDir("fileops-pkgmove") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val root = ide.sourceRoots(core).first()
@@ -125,10 +135,102 @@ class IdeFileOperationsTest {
             assertFalse("import com.example.core.Widget;" in userText, "the old import is gone")
         }
         dir.toFile().deleteRecursively()
+        }
     }
 
     @Test
-    fun copyingAJavaFileRewritesTheCopysPackageOnly() = withTempDir("fileops-pkgcopy") { dir ->
+    fun movingAKotlinFileRewritesItsPackageAndUpdatesImports() {
+        withTempDir("fileops-ktmove") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val core = ide.modules().first { it.name == "core" }
+            val root = ide.sourceRoots(core).first()
+            val from = root.resolve("com/example/core")
+            val to = root.resolve("com/example/core/sub"); Files.createDirectories(to)
+
+            // A moved file with both a top-level class AND a top-level function (both importable across files).
+            val moved = from.resolve("Widget.kt")
+            Files.writeString(moved, "package com.example.core\n\nclass Widget\n\nfun buildWidget() = Widget()\n")
+            // A Kotlin user importing the moved type + function; WidgetHelper must survive (boundary safety).
+            val userPkg = root.resolve("com/example/app"); Files.createDirectories(userPkg)
+            val user = userPkg.resolve("User.kt")
+            Files.writeString(
+                user,
+                "package com.example.app\n\nimport com.example.core.Widget\n" +
+                    "import com.example.core.buildWidget\nimport com.example.core.WidgetHelper\n\n" +
+                    "class User { val w: Widget = buildWidget() }\n"
+            )
+            // A Java user importing the moved Kotlin class (cross-language import rewrite).
+            val javaUser = userPkg.resolve("JavaUser.java")
+            Files.writeString(javaUser, "package com.example.app;\n\nimport com.example.core.Widget;\n\npublic class JavaUser { Widget w; }\n")
+
+            val newPath = ide.movePath(moved, to)
+            assertNotNull(newPath, "move succeeds")
+
+            val movedText = Files.readString(to.resolve("Widget.kt"))
+            val pkgLine = movedText.lineSequence().first { it.trimStart().startsWith("package ") }.trim()
+            assertEquals("package com.example.core.sub", pkgLine, "moved file's package line is rewritten (no semicolon): $movedText")
+
+            val userText = Files.readString(user)
+            assertTrue("import com.example.core.sub.Widget" in userText, "the type import is repointed: $userText")
+            assertTrue("import com.example.core.sub.buildWidget" in userText, "the function import is repointed: $userText")
+            assertFalse(userText.lineSequence().any { it.trim() == "import com.example.core.Widget" }, "the old type import is gone: $userText")
+            assertTrue("import com.example.core.WidgetHelper" in userText, "an unrelated import with a shared prefix is untouched: $userText")
+
+            val javaText = Files.readString(javaUser)
+            assertTrue("import com.example.core.sub.Widget;" in javaText, "a Java importer of the Kotlin type is updated: $javaText")
+            assertFalse("import com.example.core.Widget;" in javaText, "the old Java import is gone: $javaText")
+        }
+        dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun copyingAKotlinFileRewritesTheCopysPackageOnly() {
+        withTempDir("fileops-ktcopy") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val core = ide.modules().first { it.name == "core" }
+            val root = ide.sourceRoots(core).first()
+            val from = root.resolve("com/example/core")
+            val to = root.resolve("com/example/core/sub"); Files.createDirectories(to)
+
+            val src = from.resolve("Gadget.kt")
+            Files.writeString(src, "package com.example.core\n\nclass Gadget\n")
+
+            assertNotNull(ide.copyPath(src, to), "copy succeeds")
+            val copyLine = Files.readString(to.resolve("Gadget.kt")).lineSequence().first { it.trimStart().startsWith("package ") }.trim()
+            assertEquals("package com.example.core.sub", copyLine, "the copy's package is rewritten")
+            val origLine = Files.readString(src).lineSequence().first { it.trimStart().startsWith("package ") }.trim()
+            assertEquals("package com.example.core", origLine, "the original keeps its package")
+        }
+        dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun movingAKotlinFileFromTheDefaultPackageInsertsAPackageLineBelowFileAnnotations() {
+        withTempDir("fileops-ktdefault") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val core = ide.modules().first { it.name == "core" }
+            val root = ide.sourceRoots(core).first()
+            // A file at the source root itself → default package, carrying a file annotation that must stay first.
+            val src = root.resolve("Loose.kt")
+            Files.writeString(src, "@file:JvmName(\"Loose\")\n\nimport kotlin.math.PI\n\nval tau = 2 * PI\n")
+            val to = root.resolve("com/example/core/sub"); Files.createDirectories(to)
+
+            assertNotNull(ide.movePath(src, to), "move succeeds")
+            val text = Files.readString(to.resolve("Loose.kt"))
+            val annotationAt = text.indexOf("@file:JvmName")
+            val packageAt = text.indexOf("package com.example.core.sub")
+            assertTrue(annotationAt in 0 until packageAt, "the @file annotation stays ahead of the inserted package line:\n$text")
+            assertTrue(packageAt < text.indexOf("import kotlin.math.PI"), "the package line precedes the imports:\n$text")
+        }
+        dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun copyingAJavaFileRewritesTheCopysPackageOnly() {
+        withTempDir("fileops-pkgcopy") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val root = ide.sourceRoots(core).first()
@@ -143,6 +245,7 @@ class IdeFileOperationsTest {
             assertTrue("package com.example.core;" in Files.readString(src), "the original keeps its package")
         }
         dir.toFile().deleteRecursively()
+        }
     }
 
     // A real 1x1 PNG (its length/CRC fields carry NUL bytes, so the binary sniff catches it like any PNG).
@@ -179,7 +282,8 @@ class IdeFileOperationsTest {
     }
 
     @Test
-    fun renamesAndDeletesADirectory() = withTempDir("fileops-dir") { dir ->
+    fun renamesAndDeletesADirectory() {
+        withTempDir("fileops-dir") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val pkg = ide.sourceRoots(core).first().resolve("com/example/core")
@@ -192,5 +296,6 @@ class IdeFileOperationsTest {
             assertFalse(Files.exists(renamed), "directory removed")
         }
         dir.toFile().deleteRecursively()
+        }
     }
 }

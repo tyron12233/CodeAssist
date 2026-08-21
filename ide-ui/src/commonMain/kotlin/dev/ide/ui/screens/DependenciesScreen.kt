@@ -53,12 +53,10 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.foundation.verticalScroll
 import dev.ide.ui.backend.UiVersionConflict
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
@@ -182,27 +180,12 @@ import dev.ide.ui.generated.resources.dep_conflicts_to_review
 import dev.ide.ui.generated.resources.dep_versions_auto_resolved
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
-
-/** Top-level split: what the module DECLARES (the roots you added) vs the RESOLVED transitive closure. The
- *  Declared tab is the place a declared-but-unresolved dependency stays visible (with a red badge) instead of
- *  silently vanishing from the resolved graph. */
-private enum class DepTab(val icon: ImageVector) {
-    Declared(CaIcons.resources), Resolved(CaIcons.gitBranch)
-}
 
 @Composable
 private fun DepTab.label(): String = when (this) {
     DepTab.Declared -> stringResource(Res.string.dep_declared)
     DepTab.Resolved -> stringResource(Res.string.dep_resolved)
-}
-
-/** Sub-views of the Resolved tab: the transitive closure as an expandable tree or a flat listing. */
-private enum class DepView(val icon: ImageVector) {
-    Tree(CaIcons.layers), Graph(CaIcons.gitBranch)
 }
 
 @Composable
@@ -211,10 +194,6 @@ private fun DepView.label(): String = when (this) {
     DepView.Graph -> stringResource(Res.string.dep_graph)
 }
 
-/** The Add flow can add a library/AAR, import a BOM as a platform (Gradle `platform(...)`), depend on
- *  another module, or attach a local jar/aar file. */
-private enum class AddMode { Library, Platform, Module, Local }
-
 @Composable
 private fun AddMode.label(): String = when (this) {
     AddMode.Library -> stringResource(Res.string.dep_mode_library)
@@ -222,13 +201,6 @@ private fun AddMode.label(): String = when (this) {
     AddMode.Module -> stringResource(Res.string.dep_mode_module)
     AddMode.Local -> stringResource(Res.string.dep_mode_local)
 }
-
-/** A typed string is treated as a direct coordinate when it carries a `:` — `group:name[:version]`. */
-private fun looksLikeCoordinate(s: String): Boolean =
-    s.split(":").let { it.size in 2..3 && it.all { p -> p.isNotBlank() } }
-
-/** A transient confirmation/result toast. */
-private data class ToastMsg(val text: String, val error: Boolean)
 
 /** Width at/above which the screen uses the desktop two-pane layout (module list pane + content). */
 private val DEPS_EXPANDED_BREAKPOINT = 860.dp
@@ -249,70 +221,34 @@ fun DependenciesPane(
     fileActions: FileActions = FileActions.None,
     modifier: Modifier = Modifier,
 ) {
-    var tab by remember { mutableStateOf(DepTab.Declared) }
-    var resolvedView by remember { mutableStateOf(DepView.Tree) }
-    var deps by remember { mutableStateOf<UiModuleDeps?>(null) }
-    var loading by remember { mutableStateOf(false) }
-    var reloadKey by remember(moduleName) { mutableStateOf(0) }
-    var addOpen by remember { mutableStateOf(false) }
-    var reposOpen by remember { mutableStateOf(false) }
-    var pendingRemove by remember { mutableStateOf<String?>(null) }
-    var pendingEdit by remember { mutableStateOf<UiDependencyNode?>(null) }
-    var toast by remember { mutableStateOf<ToastMsg?>(null) }
+    val state = rememberDependenciesPaneState(backend, moduleName)
     val resolveState by backend.deps.depsState.collectAsState()
-    val coroutine = rememberCoroutineScope()
+    val resolving = state.loading || resolveState.resolving
 
-    LaunchedEffect(moduleName, reloadKey) {
-        loading = true
-        val loaded = runCatching { backend.deps.moduleDependencies(moduleName) }
-        // A cancelled load (this effect restarting, or the pane leaving composition) must leave the current
-        // model alone: swallowing it here would blank the pane to "couldn't load" on the way to a reload.
-        loaded.exceptionOrNull()?.let { if (it is CancellationException) throw it }
-        deps = loaded.getOrNull()
-        loading = false
-    }
-    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
-
-    // Exclude a transitive dependency: append its group:name to the exclusions of the direct dependency it
-    // came from, then re-resolve. Reuses the same exclusion mechanism as the per-dependency editor.
-    val onExcludeTransitive: (UiDependencyNode, UiDependencyNode) -> Unit = { root, transitive ->
-        coroutine.launch {
-            val gn = "${transitive.group}:${transitive.name}"
-            val result = backend.deps.setDependencyExclusions(moduleName, root.coordinate, (root.exclusions + gn).distinct())
-            toast = ToastMsg(if (result.success) "Excluded $gn from ${root.name}" else result.message, error = !result.success)
-            if (result.success) reloadKey++
-        }
-    }
-    // Re-include a previously-excluded entry: drop it from the direct dependency's exclusions and re-resolve.
-    val onRemoveExclusion: (UiDependencyNode, String) -> Unit = { root, excl ->
-        coroutine.launch {
-            val result = backend.deps.setDependencyExclusions(moduleName, root.coordinate, root.exclusions - excl)
-            toast = ToastMsg(if (result.success) "Re-included $excl" else result.message, error = !result.success)
-            if (result.success) reloadKey++
-        }
-    }
-
-    val resolving = loading || resolveState.resolving
     BoxWithConstraints(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val expanded = maxWidth >= DEPS_EXPANDED_BREAKPOINT
         Column(Modifier.fillMaxSize()) {
-            DepPaneToolbar(tab, { tab = it }, resolvedView, { resolvedView = it }, { addOpen = true }, { reposOpen = true },
-                { coroutine.launch { backend.deps.retryDependencyResolution(); reloadKey++ } }, resolving, resolveState.message, compact = !expanded)
+            DepPaneToolbar(
+                state.tab, state::selectTab, state.resolvedView, state::selectResolvedView,
+                state::openAdd, state::openRepositories, state::retryResolution,
+                resolving, resolveState.message, compact = !expanded,
+            )
             Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-            DepBody(deps, loading, tab, resolvedView, resolveState, codeFont, Modifier.weight(1f).fillMaxWidth(), { pendingRemove = it }, { pendingEdit = it }, onExcludeTransitive, onRemoveExclusion)
+            DepBody(
+                state.deps, state.loading, state.tab, state.resolvedView, resolveState, codeFont,
+                Modifier.weight(1f).fillMaxWidth(), state::askRemove, state::startEdit,
+                state::excludeTransitive, state::removeExclusion,
+            )
         }
 
         // ---- Add flow + Repositories: centered dialogs on desktop, bottom sheets on phone ----
-        val onResult: (UiAddResult) -> Unit = { result ->
-            if (result.success) { addOpen = false; reloadKey++; toast = ToastMsg(result.message, error = false) }
-        }
         if (expanded) {
-            DropdownOverlay(visible = addOpen, onDismiss = { addOpen = false }, topPadding = 64.dp) {
+            DropdownOverlay(visible = state.addOpen, onDismiss = state::closeAdd, topPadding = 64.dp) {
                 OverlayCard(maxWidth = 640.dp) {
-                    AddDependencyContent(backend, moduleName, codeFont, fileActions, onResult, Modifier.padding(20.dp).fillMaxWidth())
+                    AddDependencyContent(state, codeFont, fileActions, Modifier.padding(20.dp).fillMaxWidth())
                 }
             }
-            DropdownOverlay(visible = reposOpen, onDismiss = { reposOpen = false }, topPadding = 64.dp) {
+            DropdownOverlay(visible = state.reposOpen, onDismiss = state::closeRepositories, topPadding = 64.dp) {
                 OverlayCard(maxWidth = 560.dp) {
                     RepositoriesContent(backend, codeFont, Modifier.padding(20.dp).fillMaxWidth())
                 }
@@ -320,51 +256,39 @@ fun DependenciesPane(
         } else {
             // Opens near-full (the content is dense) and the sheet still drags up to true full screen; the
             // content fills the sheet (weight + fillHeight) so the results list uses the room, not empty space.
-            BottomSheet(visible = addOpen, onDismiss = { addOpen = false }, heightFraction = 0.94f) {
-                AddDependencyContent(backend, moduleName, codeFont, fileActions, onResult, Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp, vertical = 4.dp), fillHeight = true)
+            BottomSheet(visible = state.addOpen, onDismiss = state::closeAdd, heightFraction = 0.94f) {
+                AddDependencyContent(state, codeFont, fileActions, Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp, vertical = 4.dp), fillHeight = true)
             }
-            BottomSheet(visible = reposOpen, onDismiss = { reposOpen = false }, heightFraction = 0.7f) {
+            BottomSheet(visible = state.reposOpen, onDismiss = state::closeRepositories, heightFraction = 0.7f) {
                 RepositoriesContent(backend, codeFont, Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp, vertical = 4.dp), fillHeight = true)
             }
         }
 
         // ---- remove confirmation ----
         ConfirmRemoveDialog(
-            coordinate = pendingRemove,
+            coordinate = state.pendingRemove,
             moduleName = moduleName,
-            onDismiss = { pendingRemove = null },
-            onConfirm = {
-                val coord = pendingRemove
-                if (coord != null && backend.deps.removeDependency(moduleName, coord)) {
-                    toast = ToastMsg("Removed ${shortCoord(coord)}", error = false)
-                    reloadKey++
-                }
-                pendingRemove = null
-            },
+            onDismiss = state::cancelRemove,
+            onConfirm = state::confirmRemove,
         )
 
-        // ---- edit dependency (version · scope · exclusions) ----
-        pendingEdit?.let { node ->
+        // ---- edit dependency (version, scope, exclusions) ----
+        state.pendingEdit?.let { node ->
             EditDependencySheet(
                 backend = backend,
                 moduleName = moduleName,
                 node = node,
                 codeFont = codeFont,
                 expanded = expanded,
-                onDismiss = { pendingEdit = null },
-                onSave = { version, scope, exclusions ->
-                    coroutine.launch {
-                        val result = backend.deps.updateDependency(moduleName, node.coordinate, version, scope, exclusions)
-                        toast = ToastMsg(result.message, error = !result.success)
-                        if (result.success) reloadKey++
-                    }
-                    pendingEdit = null
+                onDismiss = state::cancelEdit,
+                onSave = { version, configuration, exclusions ->
+                    state.saveEdit(node, version, configuration, exclusions)
                 },
             )
         }
 
         // ---- toast ----
-        ToastHost(toast, Modifier.align(Alignment.BottomCenter))
+        ToastHost(state.toast, Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -416,16 +340,7 @@ private fun DepPaneToolbar(
 
 @Composable
 private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modifier: Modifier = Modifier, fillHeight: Boolean = false) {
-    var repos by remember { mutableStateOf(backend.deps.repositories()) }
-    var name by remember { mutableStateOf("") }
-    var url by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    val invalidRepoMsg = stringResource(Res.string.dep_repo_invalid)
-
-    val add = {
-        if (backend.deps.addRepository(name, url)) { repos = backend.deps.repositories(); name = ""; url = ""; error = null }
-        else error = invalidRepoMsg
-    }
+    val state = rememberRepositoriesState(backend)
 
     Column(modifier) {
         Text(stringResource(Res.string.dep_repositories), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
@@ -436,19 +351,19 @@ private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modif
         // above the keyboard and never squish; on the desktop card it keeps its natural, capped height.
         val listMod = if (fillHeight) Modifier.fillMaxWidth().weight(1f) else Modifier.fillMaxWidth().heightIn(max = 240.dp)
         LazyColumn(listMod) {
-            items(repos, key = { it.url }) { r -> RepoRow(r) { if (backend.deps.removeRepository(r.url)) repos = backend.deps.repositories() } }
+            items(state.repositories, key = { it.url }) { r -> RepoRow(r) { state.remove(r.url) } }
         }
         Spacer(Modifier.height(12.dp))
         // add a custom repository
-        RepoField(stringResource(Res.string.dep_repo_name_hint), name, codeFont) { name = it; error = null }
+        RepoField(stringResource(Res.string.dep_repo_name_hint), state.name, codeFont, state::updateName)
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.weight(1f)) { RepoField(stringResource(Res.string.dep_repo_url_hint), url, codeFont) { url = it; error = null } }
-            PrimaryButton(stringResource(Res.string.add), onClick = add, icon = CaIcons.plus)
+            Box(Modifier.weight(1f)) { RepoField(stringResource(Res.string.dep_repo_url_hint), state.url, codeFont, state::updateUrl) }
+            PrimaryButton(stringResource(Res.string.add), onClick = state::add, icon = CaIcons.plus)
         }
-        error?.let {
+        if (state.invalid) {
             Spacer(Modifier.height(8.dp))
-            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+            Text(stringResource(Res.string.dep_repo_invalid), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -620,7 +535,11 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
                 }
                 DepView.Graph -> {
                     if (deps.nodes.isEmpty()) item("empty") { EmptyRow(stringResource(Res.string.dep_nothing_resolved)) }
-                    val sorted = deps.nodes.sortedWith(compareByDescending<UiDependencyNode> { it.declared }.thenBy { it.coordinate })
+                    // Collapse to one row per coordinate before keying by it — the backend's resolved list can
+                    // carry a coordinate twice (e.g. merged across configurations/variants), and a duplicate
+                    // lazy key throws in the measure pass. Matches the by-coordinate `nodesByCoord` map above.
+                    val sorted = deps.nodes.distinctBy { it.coordinate }
+                        .sortedWith(compareByDescending<UiDependencyNode> { it.declared }.thenBy { it.coordinate })
                     items(sorted, key = { "graph:${it.coordinate}" }) { node -> Box(Modifier.animateItem()) { GraphRow(node, nodesByCoord, codeFont, conflictFor(node)) } }
                 }
             }
@@ -778,122 +697,61 @@ private fun RowActionMenu(contentDesc: String, itemLabel: String, itemIcon: Imag
 
 @Composable
 private fun AddDependencyContent(
-    backend: IdeBackend,
-    moduleName: String,
+    pane: DependenciesPaneState,
     codeFont: FontFamily,
     fileActions: FileActions,
-    onResult: (UiAddResult) -> Unit,
     modifier: Modifier = Modifier,
     // True in the (mobile) bottom sheet: the results area fills the sheet height instead of capping at 360dp,
     // so a near-/full-screen sheet shows more results rather than empty space. False in the desktop dialog.
     fillHeight: Boolean = false,
 ) {
-    var mode by remember { mutableStateOf(AddMode.Library) }
-    var query by remember { mutableStateOf("") }
-    var results by remember { mutableStateOf<List<UiArtifactHit>>(emptyList()) }
-    var searching by remember { mutableStateOf(false) }
-    var scope by remember { mutableStateOf("implementation") }
-    // The build variant this declaration is scoped to (null = shared / all variants → a plain `implementation`).
-    var variant by remember { mutableStateOf<String?>(null) }
-    var variants by remember { mutableStateOf<List<String>>(emptyList()) }
-    var moduleTargets by remember { mutableStateOf<List<String>>(emptyList()) }
-    var localCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
-    var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var adding by remember { mutableStateOf<String?>(null) }
+    val state = rememberAddDependencyState(pane, fileActions)
+    val backend = pane.backend
+    val moduleName = pane.moduleName
     val resolveState by backend.deps.depsState.collectAsState()
-    val scopeOptions = listOf("implementation", "api", "compileOnly", "runtimeOnly", "testImplementation")
-    val coroutine = rememberCoroutineScope()
-    LaunchedEffect(moduleName) { variants = runCatching { backend.build.listVariants(moduleName) }.getOrDefault(emptyList()) }
-
-    LaunchedEffect(query, mode) {
-        val q = query.trim()
-        if (q.length < 2 || mode == AddMode.Module || mode == AddMode.Local) { results = emptyList(); return@LaunchedEffect }
-        searching = true
-        delay(320)
-        // distinctBy coordinate: the same GAV can come back from more than one repo; duplicate keys crash the list.
-        results = runCatching { backend.deps.searchArtifacts(q, moduleName) }.getOrDefault(emptyList()).distinctBy { it.coordinate }
-        searching = false
-    }
-    // Load candidate modules / project-local jars when their tab is selected.
-    LaunchedEffect(mode) {
-        if (mode == AddMode.Module) moduleTargets = runCatching { backend.deps.moduleDependencyTargets(moduleName) }.getOrDefault(emptyList())
-        if (mode == AddMode.Local) localCandidates = runCatching { backend.deps.localLibraryCandidates(moduleName) }.getOrDefault(emptyList())
-    }
-
-    // Add a versioned library/AAR, a BOM platform, or (Module mode) a module-on-module dependency.
-    val performAdd: (String) -> Unit = { coordinate ->
-        busy = true; error = null; adding = coordinate
-        coroutine.launch {
-            val result = when (mode) {
-                AddMode.Platform -> backend.deps.addPlatform(moduleName, coordinate, variant = variant)
-                AddMode.Module -> backend.deps.addModuleDependency(moduleName, coordinate, scope, variant = variant)
-                AddMode.Local -> backend.deps.addLocalLibrary(moduleName, coordinate, scope)
-                AddMode.Library -> backend.deps.addDependency(moduleName, coordinate, scope, variant = variant)
-            }
-            busy = false; adding = null
-            if (result.success) onResult(result) else error = result.message
-        }
-    }
-
-    // Pick a jar/aar via the platform file picker; it's copied into the module's libs/ then attached.
-    val pickLocalFile = {
-        val dropDir = backend.deps.localLibraryDropDir(moduleName)
-        if (dropDir != null) fileActions.importInto(dropDir) { imported ->
-            if (imported.isNotEmpty()) {
-                busy = true; error = null; adding = imported.first().substringAfterLast('/').substringAfterLast('\\')
-                coroutine.launch {
-                    var last: UiAddResult? = null
-                    for (p in imported) { last = backend.deps.addLocalLibrary(moduleName, p, scope); if (last?.success != true) break }
-                    busy = false; adding = null
-                    last?.let { if (it.success) onResult(it) else error = it.message }
-                }
-            }
-        }
-    }
 
     Column(modifier) {
         Text(stringResource(Res.string.dep_add_dependency), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
 
-        // Library / Platform (BOM) / Module / Local toggle — scrolls horizontally so chips never squish.
+        // Library / Platform (BOM) / Module / Local toggle: scrolls horizontally so chips never squish.
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AddMode.entries.forEach { m -> ModeChip(m.label(), m == mode) { if (!busy) { mode = m; error = null } } }
+            AddMode.entries.forEach { m -> ModeChip(m.label(), m == state.mode) { state.selectMode(m) } }
         }
 
         // search field — library/platform only (Module picks project modules; Local picks files)
-        if (mode != AddMode.Module && mode != AddMode.Local) Row(
+        if (state.mode != AddMode.Module && state.mode != AddMode.Local) Row(
             Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Icon(CaIcons.search, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
             Box(Modifier.weight(1f)) {
-                val hint = if (mode == AddMode.Platform) stringResource(Res.string.dep_search_bom_hint)
+                val hint = if (state.mode == AddMode.Platform) stringResource(Res.string.dep_search_bom_hint)
                     else stringResource(Res.string.dep_search_library_hint)
-                if (query.isEmpty()) Text(hint, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                BasicTextField(query, { query = it; error = null }, singleLine = true, enabled = !busy,
+                if (state.query.isEmpty()) Text(hint, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                BasicTextField(state.query, state::updateQuery, singleLine = true, enabled = !state.busy,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = Modifier.fillMaxWidth())
             }
-            if (searching) CircularProgressIndicator(Modifier.size(14.dp), color = MaterialTheme.colorScheme.outline, strokeWidth = 2.dp)
+            if (state.searching) CircularProgressIndicator(Modifier.size(14.dp), color = MaterialTheme.colorScheme.outline, strokeWidth = 2.dp)
         }
 
         // scope selector — libraries + module deps (a platform carries no scope)
-        if (mode != AddMode.Platform) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (state.mode != AddMode.Platform) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(Res.string.dep_scope), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 4.dp))
-            scopeOptions.forEach { s -> ScopeChip(s, s == scope) { if (!busy) scope = s } }
+            DEP_CONFIGURATIONS.forEach { s -> ScopeChip(s, s == state.configuration) { state.selectConfiguration(s) } }
         } else Spacer(Modifier.height(10.dp))
 
         // variant selector — library/module/platform deps on an Android module: scope the dependency to a
         // build variant (e.g. `debug` → `debugImplementation`). "All variants" (null) is the shared default.
         // (Local file libraries aren't variant-scoped.)
-        if (mode != AddMode.Local && variants.isNotEmpty()) Row(
+        if (state.mode != AddMode.Local && state.variants.isNotEmpty()) Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(stringResource(Res.string.dep_variant), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 4.dp))
-            ScopeChip(stringResource(Res.string.dep_all_variants), variant == null) { if (!busy) variant = null }
-            variants.forEach { v -> ScopeChip(v, v == variant) { if (!busy) variant = v } }
+            ScopeChip(stringResource(Res.string.dep_all_variants), state.variant == null) { state.selectVariant(null) }
+            state.variants.forEach { v -> ScopeChip(v, v == state.variant) { state.selectVariant(v) } }
         }
 
         // Transitive exclusions aren't set here anymore — add the dependency, then exclude any transitive
@@ -902,27 +760,24 @@ private fun AddDependencyContent(
         // One-click quick-add for common Google libraries (Library mode). Firebase imports the BoM +
         // firebase-analytics (and reminds about google-services.json); Play Services adds the named artifact.
         // Each reuses the busy/error/result flow; the backend rejects them on a non-Android module.
-        if (mode == AddMode.Library) Row(
+        if (state.mode == AddMode.Library) Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(stringResource(Res.string.dep_suggested), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 4.dp))
-            val quickAdd: (String, suspend () -> UiAddResult) -> Unit = { label, action ->
-                if (!busy) {
-                    busy = true; error = null; adding = label
-                    coroutine.launch {
-                        val r = action(); busy = false; adding = null
-                        if (r.success) onResult(r) else error = r.message
-                    }
-                }
+            ModeChip("Firebase", false) { state.quickAdd("Firebase") { backend.deps.addFirebase(moduleName) } }
+            ModeChip("Play Services Auth", false) {
+                state.quickAdd("Play Services Auth") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-auth:21.2.0")) }
             }
-            ModeChip("Firebase", false) { quickAdd("Firebase") { backend.deps.addFirebase(moduleName) } }
-            ModeChip("Play Services Auth", false) { quickAdd("Play Services Auth") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-auth:21.2.0")) } }
-            ModeChip("Maps", false) { quickAdd("Maps") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-maps:19.0.0")) } }
-            ModeChip("Location", false) { quickAdd("Location") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-location:21.3.0")) } }
+            ModeChip("Maps", false) {
+                state.quickAdd("Maps") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-maps:19.0.0")) }
+            }
+            ModeChip("Location", false) {
+                state.quickAdd("Location") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-location:21.3.0")) }
+            }
         }
 
-        error?.let { msg ->
+        state.error?.let { msg ->
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).background(MaterialTheme.colorScheme.error.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.sm)).padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(CaIcons.warning, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.error)
@@ -934,43 +789,43 @@ private fun AddDependencyContent(
         val listModifier = if (fillHeight) Modifier.fillMaxWidth().fillMaxHeight() else Modifier.fillMaxWidth().heightIn(max = 360.dp)
 
         // While adding: a live download panel. Otherwise: the results / module list.
-        Crossfade(targetState = busy, animationSpec = tween(Motion.BASE), label = "addBody",
+        Crossfade(targetState = state.busy, animationSpec = tween(Motion.BASE), label = "addBody",
             modifier = if (fillHeight) Modifier.weight(1f) else Modifier) { isBusy ->
             if (isBusy) {
                 Column(Modifier.fillMaxWidth().heightIn(min = 160.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Spacer(Modifier.height(20.dp))
                     CircularProgressIndicator(Modifier.size(28.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 3.dp)
-                    Text(stringResource(Res.string.dep_adding, adding?.let(::shortCoord) ?: ""), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(Res.string.dep_adding, state.adding?.let(::shortCoord) ?: ""), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                     Text(resolveState.message.ifBlank { stringResource(Res.string.dep_resolving_transitive) }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     ResolveBar(resolveState.fraction)
                 }
-            } else if (mode == AddMode.Module) {
+            } else if (state.mode == AddMode.Module) {
                 LazyColumn(listModifier) {
-                    if (moduleTargets.isEmpty()) item { EmptyRow(stringResource(Res.string.dep_no_other_modules)) }
-                    items(moduleTargets, key = { it }) { target ->
-                        ModuleTargetRow(target, Modifier.animateItem()) { performAdd(target) }
+                    if (state.moduleTargets.isEmpty()) item { EmptyRow(stringResource(Res.string.dep_no_other_modules)) }
+                    items(state.moduleTargets, key = { it }) { target ->
+                        ModuleTargetRow(target, Modifier.animateItem()) { state.add(target) }
                     }
                 }
-            } else if (mode == AddMode.Local) {
+            } else if (state.mode == AddMode.Local) {
                 LocalLibraryBody(
-                    candidates = localCandidates,
-                    canPick = fileActions.canImport && backend.deps.localLibraryDropDir(moduleName) != null,
+                    candidates = state.localCandidates,
+                    canPick = state.canPickLocalFile,
                     codeFont = codeFont,
-                    onPick = pickLocalFile,
-                    onAttach = { path -> performAdd(path) },
+                    onPick = state::pickLocalFile,
+                    onAttach = { path -> state.add(path) },
                 )
             } else {
-                val typed = query.trim()
+                val typed = state.query.trim()
                 LazyColumn(listModifier) {
                     // Direct add of a typed coordinate — the only way to add a versionless `group:name`
                     // (resolved against the module's imported platforms) or a coordinate not in the index.
                     if (looksLikeCoordinate(typed)) item("direct:$typed") {
-                        DirectAddRow(typed, mode, codeFont, Modifier.animateItem()) { performAdd(typed) }
+                        DirectAddRow(typed, state.mode, codeFont, Modifier.animateItem()) { state.add(typed) }
                     }
-                    items(results, key = { it.coordinate }) { hit ->
-                        AddResultRow(hit, codeFont, Modifier.animateItem()) { performAdd(hit.coordinate) }
+                    items(state.results, key = { it.coordinate }) { hit ->
+                        AddResultRow(hit, codeFont, Modifier.animateItem()) { state.add(hit.coordinate) }
                     }
-                    if (typed.length >= 2 && results.isEmpty() && !searching && !looksLikeCoordinate(typed)) item { EmptyRow(stringResource(Res.string.dep_no_results)) }
+                    if (typed.length >= 2 && state.results.isEmpty() && !state.searching && !looksLikeCoordinate(typed)) item { EmptyRow(stringResource(Res.string.dep_no_results)) }
                     if (typed.length < 2) item { EmptyRow(stringResource(Res.string.dep_type_to_search)) }
                 }
             }
@@ -1158,29 +1013,7 @@ private fun EditDependencySheet(
     onDismiss: () -> Unit,
     onSave: (version: String, scope: String, exclusions: List<String>) -> Unit,
 ) {
-    var versionText by remember(node.coordinate) { mutableStateOf(node.version) }
-    var scope by remember(node.coordinate) { mutableStateOf(node.scope ?: "implementation") }
-    var exclText by remember(node.coordinate) { mutableStateOf(node.exclusions.joinToString(", ")) }
-    var versions by remember(node.coordinate) { mutableStateOf<List<String>>(emptyList()) }
-    var loadingVersions by remember(node.coordinate) { mutableStateOf(true) }
-    LaunchedEffect(node.coordinate) {
-        loadingVersions = true
-        versions = runCatching { backend.deps.availableVersions(moduleName, node.coordinate) }.getOrDefault(emptyList())
-        loadingVersions = false
-    }
-    // Versions of this artifact already downloaded to the shared cache, so old ones can be pruned to free
-    // disk. Reloaded after a delete. Only meaningful for a Maven artifact (a local jar has no coordinate).
-    val showDownloaded = node.group.isNotBlank() && node.name.isNotBlank() && !node.local
-    var cached by remember(node.coordinate) { mutableStateOf<List<UiCachedVersion>>(emptyList()) }
-    var cachedReload by remember(node.coordinate) { mutableStateOf(0) }
-    val coroutine = rememberCoroutineScope()
-    LaunchedEffect(node.coordinate, cachedReload) {
-        cached = if (showDownloaded) runCatching { backend.deps.cachedVersions(node.group, node.name) }.getOrDefault(emptyList()) else emptyList()
-    }
-    // The list is newest-first, so a newer release exists when the current version isn't at the top of it.
-    val newest = versions.firstOrNull()
-    val updateAvailable = newest != null && node.version in versions && newest != node.version
-    val scopeOptions = listOf("implementation", "api", "compileOnly", "runtimeOnly", "testImplementation")
+    val state = rememberEditDependencyState(backend, moduleName, node)
 
     val card: @Composable () -> Unit = {
         BoxWithConstraints {
@@ -1203,25 +1036,23 @@ private fun EditDependencySheet(
                     // ---- version ----
                     SheetSection(stringResource(Res.string.dep_section_version))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(Modifier.weight(1f)) { SheetField(versionText, stringResource(Res.string.dep_version_hint), codeFont, leading = CaIcons.pkg) { versionText = it } }
-                        if (loadingVersions) CircularProgressIndicator(Modifier.size(16.dp), color = MaterialTheme.colorScheme.outline, strokeWidth = 2.dp)
-                        else if (updateAvailable && newest != null) UpdateHintChip(newest) { versionText = newest }
+                        Box(Modifier.weight(1f)) { SheetField(state.versionText, stringResource(Res.string.dep_version_hint), codeFont, leading = CaIcons.pkg, onChange = state::updateVersion) }
+                        if (state.loadingVersions) CircularProgressIndicator(Modifier.size(16.dp), color = MaterialTheme.colorScheme.outline, strokeWidth = 2.dp)
+                        else state.newest?.let { newest -> if (state.updateAvailable) UpdateHintChip(newest) { state.updateVersion(newest) } }
                     }
-                    VersionList(versions, selected = versionText, loading = loadingVersions, codeFont = codeFont) { versionText = it }
+                    VersionList(state.versions, selected = state.versionText, loading = state.loadingVersions, codeFont = codeFont, onSelect = state::updateVersion)
 
                     // ---- downloaded (cached) versions ----
-                    if (showDownloaded) {
+                    if (state.showDownloaded) {
                         SheetSection(stringResource(Res.string.dep_section_downloaded))
                         Text(stringResource(Res.string.dep_downloaded_help), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
-                        DownloadedList(cached, activeVersion = node.version, codeFont = codeFont) { v ->
-                            coroutine.launch { backend.deps.deleteCachedVersion(node.group, node.name, v); cachedReload++ }
-                        }
+                        DownloadedList(state.cached, activeVersion = node.version, codeFont = codeFont, onDelete = state::deleteCached)
                     }
 
                     // ---- scope ----
                     SheetSection(stringResource(Res.string.dep_section_scope))
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        scopeOptions.forEach { s -> ScopeChip(s, s == scope) { scope = s } }
+                        DEP_CONFIGURATIONS.forEach { s -> ScopeChip(s, s == state.configuration) { state.selectConfiguration(s) } }
                     }
 
                     // ---- exclusions ----
@@ -1229,7 +1060,7 @@ private fun EditDependencySheet(
                     Text(stringResource(Res.string.dep_exclusions_help),
                         color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                     Spacer(Modifier.height(8.dp))
-                    SheetField(exclText, stringResource(Res.string.dep_exclusions_hint), codeFont, leading = CaIcons.close, singleLine = false) { exclText = it }
+                    SheetField(state.exclusionsText, stringResource(Res.string.dep_exclusions_hint), codeFont, leading = CaIcons.close, singleLine = false, onChange = state::updateExclusions)
                 }
 
                 // Pinned action row — always visible, never scrolled off a small screen.
@@ -1238,7 +1069,7 @@ private fun EditDependencySheet(
                     Spacer(Modifier.weight(1f))
                     DialogButton(stringResource(Res.string.cancel), destructive = false, onClick = onDismiss)
                     DialogButton(stringResource(Res.string.save), destructive = false, onClick = {
-                        onSave(versionText.trim(), scope, exclText.split(',', ' ', '\n', '\t').map { it.trim() }.filter { it.isNotEmpty() })
+                        onSave(state.trimmedVersion, state.configuration, state.parsedExclusions)
                     })
                 }
             }
@@ -1668,4 +1499,3 @@ private fun VersionTag(version: String, codeFont: FontFamily) {
 private fun primaryName(node: UiDependencyNode): String =
     if (node.kind == UiDepKind.Module) ":${node.name}" else node.name
 
-private fun shortCoord(coord: String): String = coord.split(":").let { if (it.size >= 3) "${it[1]}:${it[2]}" else coord }

@@ -127,6 +127,7 @@ import dev.ide.lang.java.index.JavaSourceSymbolsIndex
 import dev.ide.lang.jdt.rename.JdtRename
 import dev.ide.lang.jdt.synthetic.SyntheticJavaSource
 import dev.ide.lang.kotlin.KotlinLanguageBackend
+import dev.ide.lang.kotlin.KotlinPackageRewrite
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
 import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
 import dev.ide.lang.kotlin.compile.DefaultKotlinPluginLoader
@@ -176,7 +177,18 @@ import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
 import dev.ide.model.Project
+import dev.ide.core.sync.ExternalProjectMarker
+import dev.ide.core.sync.ExternalRepositories
+import dev.ide.core.sync.NoSyncProgress
+import dev.ide.core.sync.ProjectSyncOutcome
+import dev.ide.core.sync.ProjectSyncService
+import dev.ide.core.sync.SyncStamp
 import dev.ide.model.impl.DefaultFileIconProvider
+import dev.ide.model.impl.ExternalModelApplier
+import dev.ide.model.sync.ModelOwnership
+import dev.ide.model.sync.SyncReason
+import dev.ide.model.sync.SyncRequest
+import dev.ide.model.sync.SyncSeverity
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.FileIconRegistry
 import dev.ide.model.impl.ModelPersistence
@@ -404,6 +416,7 @@ internal val ACTION_MANAGER = ServiceKey<ActionManager>("ide.service.actions")
 internal val DEPENDENCY_SERVICE = ServiceKey<DependencyService>("ide.service.dependencies")
 internal val MODULE_SERVICE = ServiceKey<ModuleService>("ide.service.modules")
 internal val BUILD_SERVICE = ServiceKey<BuildService>("ide.service.build")
+internal val PROJECT_SYNC_SERVICE = ServiceKey<ProjectSyncService>("ide.service.projectSync")
 internal val LANGUAGE_FEATURE_SERVICE =
     ServiceKey<LanguageFeatureService>("ide.service.languageFeatures")
 internal val ANDROID_RESOURCE_SERVICE =
@@ -1685,39 +1698,25 @@ class IdeServices private constructor(
         store.workspace.projects.firstOrNull()?.name ?: (workspaceRoot.fileName?.toString()
             ?: "workspace")
 
-    /** True when this project was imported from Gradle and runs in compatibility mode. */
-    fun isCompatibilityMode(): Boolean = GradleImport.isCompatibilityMode(workspaceRoot)
+    /** WORKSPACE-scoped sync driver for a project whose model comes from a foreign build system. */
+    internal val projectSync: ProjectSyncService
+        get() = store.workspaceContainer.getService(PROJECT_SYNC_SERVICE)
 
-    /** The reader notes recorded at import/sync time (what the tolerant Gradle reader couldn't fully extract). */
-    fun compatibilityNotes(): List<String> = GradleImport.readNotes(workspaceRoot)
+    /** True when this project's model comes from a foreign build system's files (Gradle compatibility mode). */
+    fun isCompatibilityMode(): Boolean = projectSync.isExternal()
+
+    /** The notes recorded at import/sync time (what the importer couldn't fully extract). */
+    fun compatibilityNotes(): List<String> = projectSync.marker()?.notes ?: emptyList()
+
+    /** True when a watched build file changed since the last sync, so the model is out of date. */
+    fun isSyncStale(): Boolean = projectSync.isStale()
 
     /**
-     * Re-read the Gradle build scripts still present at [workspaceRoot] into the OPEN model: add any new
-     * modules, and refresh each module's declared dependencies + Android facet from the scripts (the scripts
-     * are the source of truth in compatibility mode, so a user-added dependency not in the scripts is
-     * dropped). Model + persistence only — the caller re-resolves dependencies and re-indexes afterwards.
+     * Re-read the build files still present at [workspaceRoot] into the OPEN model: add the modules they
+     * declare, refresh each module's dependencies and facets from them, and drop the modules they no longer
+     * declare. Model + persistence only; the caller re-resolves dependencies and re-indexes afterwards.
      */
-    internal fun syncGradleFromScripts(): GradleSyncOutcome {
-        val spec = GradleImport.parse(workspaceRoot)
-            ?: return GradleSyncOutcome(
-                false,
-                "No Gradle build scripts were found to sync from.",
-                emptyList()
-            )
-        val level = store.workspace.projects.firstOrNull()?.modules?.firstOrNull()?.languageLevel
-            ?: LanguageLevel.JAVA_17
-        val (added, updated) = GradleImport.reconcile(store, spec, level)
-        store.save()
-        // Merge (not clobber) any settings-declared repositories so a manually-added one survives the sync.
-        GradleImport.writeRepositories(workspaceRoot, spec.customRepos)
-        GradleImport.markCompatibilityMode(workspaceRoot, spec.report.notes)
-        val message = buildString {
-            append("Synced from Gradle")
-            if (added > 0) append(" · $added module${if (added == 1) "" else "s"} added")
-            if (updated > 0) append(" · $updated module${if (updated == 1) "" else "s"} updated")
-        }
-        return GradleSyncOutcome(true, message, spec.report.notes)
-    }
+    internal suspend fun syncFromBuildFiles(): ProjectSyncOutcome = projectSync.sync(SyncReason.MANUAL)
 
     /** Convert this compatibility-mode project to a native CodeAssist project (see [GradleImport.convertToNative]).
      *  Pure disk operation — the model is already the source of truth, so nothing needs re-resolving. */
@@ -1890,12 +1889,14 @@ class IdeServices private constructor(
                     // Synthetic "light" classes (Android R/BuildConfig, …), minus the Kotlin file facades.
                     it.syntheticClassProvider = { kotlinSyntheticClasses(module) }
                     // Real parameter names + javadoc/KDoc from attached sources: the persistent source-doc
-                    // index, with the module's JDT resolver (project dirs + -sources.jars + JDK src.zip +
-                    // Android sources) as the live parse fallback before the index has built.
-                    val jdtFallback =
-                        (analyzerFor(module) as? JdtSourceAnalyzer)?.sourceMethodResolver
-                            ?: SourceDocProvider.NONE
-                    it.sourceDocProvider = IndexBackedSourceDocs(indexService, jdtFallback)
+                    // index, with a live parse over the module's source roots (project dirs + -sources.jars +
+                    // JDK src.zip + Android sources) for what the index can't answer. Read through the neutral
+                    // JvmIndexScopeProvider. This used to cast to JdtSourceAnalyzer, which stopped matching
+                    // when the IntelliJ-PSI backend took over `.java`, silently leaving every Java parameter
+                    // named `p0` in Kotlin (the index covers LIBRARY_SOURCE only, never project sources).
+                    val liveFallback = (analyzerFor(module) as? JvmIndexScopeProvider)
+                        ?.let { a -> AnalyzerSourceDocs(a) } ?: SourceDocProvider.NONE
+                    it.sourceDocProvider = IndexBackedSourceDocs(indexService, liveFallback)
                     // Live editor buffers (path → text) so cross-file completion/resolution/diagnostics see
                     // unsaved edits in OTHER open .kt files before they're saved + reindexed.
                     it.liveOverlayProvider = ::kotlinOverlay
@@ -2610,22 +2611,23 @@ class IdeServices private constructor(
     }
 
     /**
-     * After a `.java` file (or a directory of them) lands at [dest], rewrite each moved file's `package`
+     * After a `.java`/`.kt` file (or a directory of them) lands at [dest], rewrite each moved file's `package`
      * declaration to match its new source-root-relative location, and — when [updateReferences] (a move, not a
-     * copy) — rewrite explicit `import old.Type;` / `import static old.Type.…;` statements across the project to
-     * the new package. A file outside any source root, or already in the right package, is left untouched.
-     * Fully-qualified usages and same-package (un-imported) references are not rewritten — the compiler flags
-     * those for the import quick-fix. Touches disk and the live overlay together; callers do the reindex.
+     * copy) — rewrite explicit imports of the moved top-level declarations across the project to the new
+     * package (`import old.Type;` for Java, `import old.Type` for Kotlin, including member/`as` suffixes). A
+     * file outside any source root, or already in the right package, is left untouched. Fully-qualified usages
+     * and same-package (un-imported) references are not rewritten — the compiler flags those for the import
+     * quick-fix. Touches disk and the live overlay together; callers do the reindex.
      */
     private fun fixPackagesAfterRelocation(dest: Path, updateReferences: Boolean) {
         val movedFiles = when {
             Files.isDirectory(dest) -> runCatching {
                 Files.walk(dest).use { s ->
-                    s.filter { it.toString().endsWith(".java") }.collect(Collectors.toList())
+                    s.filter { isRelocatableSource(it) }.collect(Collectors.toList())
                 }
             }.getOrDefault(emptyList())
 
-            dest.toString().endsWith(".java") -> listOf(dest)
+            isRelocatableSource(dest) -> listOf(dest)
             else -> return
         }
         val typeRenames = LinkedHashMap<String, String>() // old FQN → new FQN, for the import sweep
@@ -2637,13 +2639,12 @@ class IdeServices private constructor(
             val key = normPath(f)
             movedKeys.add(key)
             val text = openDocuments[key] ?: runCatching { f.readText() }.getOrNull() ?: continue
-            val oldPkg = PACKAGE_DECL.find(text)?.groupValues?.get(1) ?: ""
-            if (oldPkg == newPkg) continue
-            val updated = withPackageDeclaration(text, newPkg) ?: continue
-            openDocuments[key] = updated
-            runCatching { f.writeText(updated) }
-            if (updateReferences) for (type in topLevelTypeNames(text, f)) {
-                val oldFqn = if (oldPkg.isEmpty()) type else "$oldPkg.$type"
+            val rewrite = (if (isKotlinSource(f)) rewriteKotlinPackage(f, text, newPkg)
+            else rewriteJavaPackage(f, text, newPkg)) ?: continue
+            openDocuments[key] = rewrite.updated
+            runCatching { f.writeText(rewrite.updated) }
+            if (updateReferences) for (type in rewrite.topLevelNames) {
+                val oldFqn = if (rewrite.oldPkg.isEmpty()) type else "${rewrite.oldPkg}.$type"
                 val newFqn = if (newPkg.isEmpty()) type else "$newPkg.$type"
                 typeRenames[oldFqn] = newFqn
             }
@@ -2651,6 +2652,35 @@ class IdeServices private constructor(
         if (updateReferences && typeRenames.isNotEmpty()) updateImportsForMovedTypes(
             typeRenames, movedKeys
         )
+    }
+
+    /** A moved file whose `package` line tracks its directory: Java and Kotlin sources (not `.kts` scripts). */
+    private fun isRelocatableSource(p: Path): Boolean =
+        p.toString().let { it.endsWith(".java") || it.endsWith(".kt") }
+
+    private fun isKotlinSource(p: Path): Boolean = p.toString().endsWith(".kt")
+
+    /** A moved file's new package line and the top-level names it declares (for the reference sweep). */
+    private class PackageRewrite(
+        val updated: String, val oldPkg: String, val topLevelNames: List<String>
+    )
+
+    /** [PackageRewrite] for a moved `.java` file, or null when its package already matches [newPkg]. */
+    private fun rewriteJavaPackage(file: Path, text: String, newPkg: String): PackageRewrite? {
+        val oldPkg = PACKAGE_DECL.find(text)?.groupValues?.get(1) ?: ""
+        if (oldPkg == newPkg) return null
+        val updated = withPackageDeclaration(text, newPkg) ?: return null
+        return PackageRewrite(updated, oldPkg, topLevelTypeNames(text, file))
+    }
+
+    /**
+     * [PackageRewrite] for a moved `.kt` file, or null when its package already matches [newPkg]. The actual
+     * parse + directive edit lives in [KotlinPackageRewrite] (in `:lang-kotlin`, which owns the Kotlin PSI);
+     * this only adapts its plain-data result to the shared [PackageRewrite] shape.
+     */
+    private fun rewriteKotlinPackage(file: Path, text: String, newPkg: String): PackageRewrite? {
+        val r = KotlinPackageRewrite.rewrite(file.fileName.toString(), text, newPkg) ?: return null
+        return PackageRewrite(r.updatedText, r.oldPackage, r.topLevelNames)
     }
 
     /** Top-level type names declared in [text] (binding-free JDT parse), falling back to the file-name type. */
@@ -2663,20 +2693,42 @@ class IdeServices private constructor(
 
     /** Rewrite explicit imports of the moved types ([renames]: old FQN → new FQN) across the project. */
     private fun updateImportsForMovedTypes(renames: Map<String, String>, skip: Set<Path>) {
-        for (file in projectJavaFiles()) {
+        for (file in projectSourceFiles()) {
             val key = normPath(file)
             if (key in skip) continue
             val text = openDocuments[key] ?: runCatching { file.readText() }.getOrNull() ?: continue
-            var updated = text
-            for ((oldFqn, newFqn) in renames) {
-                updated = updated.replace("import $oldFqn;", "import $newFqn;")
-                    .replace("import static $oldFqn.", "import static $newFqn.")
-            }
+            val updated =
+                if (isKotlinSource(file)) rewriteKotlinImports(text, renames)
+                else rewriteJavaImports(text, renames)
             if (updated != text) {
                 openDocuments[key] = updated
                 runCatching { file.writeText(updated) }
             }
         }
+    }
+
+    /** [text] with each `import old;` / `import static old.…;` (Java syntax) repointed to its new FQN. */
+    private fun rewriteJavaImports(text: String, renames: Map<String, String>): String {
+        var updated = text
+        for ((oldFqn, newFqn) in renames) {
+            updated = updated.replace("import $oldFqn;", "import $newFqn;")
+                .replace("import static $oldFqn.", "import static $newFqn.")
+        }
+        return updated
+    }
+
+    /**
+     * [text] with each Kotlin `import old…` repointed to its new FQN. Boundary-aware: `import a.b.Widget` is
+     * rewritten but `import a.b.WidgetFactory` is not, and an `as` alias or a `.member` suffix is preserved
+     * because only the matched FQN prefix is replaced.
+     */
+    private fun rewriteKotlinImports(text: String, renames: Map<String, String>): String {
+        var updated = text
+        for ((oldFqn, newFqn) in renames) {
+            updated = Regex("(?m)^([ \\t]*import[ \\t]+)" + Regex.escape(oldFqn) + "(?![A-Za-z0-9_])")
+                .replace(updated) { m -> m.groupValues[1] + newFqn }
+        }
+        return updated
     }
 
     /**
@@ -2790,6 +2842,20 @@ class IdeServices private constructor(
             runCatching {
                 Files.walk(root).use { s ->
                     s.filter { it.toString().endsWith(".java") }.forEach { out.add(it) }
+                }
+            }
+        }
+        return out
+    }
+
+    /** Every `.java`/`.kt` file across the workspace's modules (for the move-time import sweep). */
+    private fun projectSourceFiles(): List<Path> {
+        val out = ArrayList<Path>()
+        for (m in modules()) for (root in sourceRoots(m)) {
+            if (!Files.isDirectory(root)) continue
+            runCatching {
+                Files.walk(root).use { s ->
+                    s.filter { isRelocatableSource(it) }.forEach { out.add(it) }
                 }
             }
         }
@@ -4343,10 +4409,14 @@ class IdeServices private constructor(
             // android.jar omits java.lang.invoke.StringConcatFactory / LambdaMetafactory; ship the build-tools
             // desugar stubs alongside it on the boot classpath so Java ≥ 9 string-concat (`"a" + b`) and
             // lambdas resolve during analysis (and compilation). Compile-only — see AndroidSdk.coreLambdaStubs.
+            // android.jar has no java.awt/javax.swing either, and the IDE prefers this SDK over the JDK
+            // whenever one is installed — so a Swing project would not compile on a desktop that happens to
+            // have the Android SDK. The owned toolkit's API (see [SwingApiStubs]) fills that in.
             val boot =
-                listOf(sdk.androidJar.toString()) + listOfNotNull(sdk.coreLambdaStubs.takeIf {
-                    Files.exists(it)
-                }?.toString())
+                listOf(sdk.androidJar.toString()) + listOfNotNull(
+                    sdk.coreLambdaStubs.takeIf { Files.exists(it) }?.toString(),
+                    SwingApiStubs.bundled()?.toString(),
+                )
             return SdkData(
                 "android",
                 boot,
@@ -4496,20 +4566,38 @@ class IdeServices private constructor(
         }
 
         /**
-         * Best-effort import of the Gradle project at [root] into the native model, writing a workspace there
-         * (so it lists/opens like any project) flagged as **compatibility mode**. Reads the Gradle scripts
-         * tolerantly (see [GradleImport]) — the result may have unresolved dependencies and may not build
-         * without adjustment. Returns false (writing nothing) if [root] isn't an importable Gradle project.
+         * Import the foreign-build-system project at [root] into a workspace written there (so it lists and
+         * opens like any project), owned by the [dev.ide.model.sync.ProjectImporter] that claims it. The
+         * import reads the build files without executing them, so the result may have unresolved
+         * dependencies and may not build without adjustment. Returns false (writing nothing) when no
+         * importer claims [root].
          */
-        fun importGradleProjectAt(root: Path, sdk: SdkData, languageLevel: LanguageLevel): Boolean {
-            val spec = GradleImport.parse(root) ?: return false
-            val (_, store) = openStore(root)
+        fun importExternalProjectAt(
+            root: Path,
+            sdk: SdkData,
+            languageLevel: LanguageLevel,
+            env: ApplicationEnvironment = ApplicationEnvironment(),
+        ): Boolean {
+            // Detect before opening a store, so a folder no importer claims is left untouched on disk.
+            val importer = ProjectSyncService.importerFor(env.platform.extensions, root) ?: return false
+            val (_, store) = openStore(root, env)
             ensureSdks(store, sdk, root)
-            GradleImport.populate(store, spec, languageLevel)
+            val outcome = runSync { importer.resolve(SyncRequest(root, NoSyncProgress, SyncReason.IMPORT)) }
+            val model = outcome.model ?: return false
+            ExternalModelApplier(store).apply(model, languageLevel, removeAbsent = false)
             store.save()
-            // Custom Maven repositories captured from settings.gradle → the format DependencyService reads.
-            GradleImport.writeRepositories(root, spec.customRepos)
-            GradleImport.markCompatibilityMode(root, spec.report.notes)
+            // Custom Maven repositories captured from the build files → the format DependencyService reads.
+            ExternalRepositories.merge(root, model.repositories)
+            if (importer.ownership == ModelOwnership.EXTERNAL) {
+                ExternalProjectMarker.write(
+                    root,
+                    importer.id.value,
+                    "Imported from ${importer.displayName}. The build files were read statically, not executed, " +
+                        "so dependencies and versions are extracted as far as they can be read.",
+                    outcome.messages.filter { it.severity != SyncSeverity.INFO }.map { it.text },
+                )
+            }
+            SyncStamp.write(root, importer.id.value, SyncStamp.match(root, importer.syncFiles()))
             return true
         }
     }

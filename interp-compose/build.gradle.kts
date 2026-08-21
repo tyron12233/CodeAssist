@@ -78,3 +78,15 @@ kotlin {
         }
     }
 }
+
+// Every preview fixture lowers against the whole Compose test classpath, and a `KotlinSymbolService` scans
+// each Kotlin jar on its classpath for extensions/top-level callables. The scan result is content-keyed per
+// jar, so the fixtures share one cache directory (see `InterpTestFixtures.kt`) and the scan becomes a
+// once-per-classpath cost instead of a per-test one. It lives outside the test task's own output dir, so
+// `cleanDesktopTest` (which forces a re-run) doesn't throw it away.
+tasks.withType<Test>().configureEach {
+    systemProperty(
+        "interp.test.scanCache",
+        layout.buildDirectory.dir("tmp/classpath-scan-cache").get().asFile.absolutePath,
+    )
+}

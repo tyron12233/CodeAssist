@@ -18,8 +18,19 @@ class D8Dexer(
     private val toolClasspath: List<Path>,
     private val javaLauncher: Path,
     private val vmArgs: List<String> = emptyList(),
+    /**
+     * Whether this D8 understands the global-synthetics options (see [DexGlobalSynthetics]). Null probes
+     * [toolClasspath] for its R8 version, which is what the desktop wiring wants: `d8.jar` comes from whichever
+     * build-tools the machine has. The on-device wiring passes `true` instead, its tool classpath being dex
+     * extracted from the bundled R8 rather than a jar carrying a version marker.
+     */
+    supportsGlobalSynthetics: Boolean? = null,
 ) : Dexer {
     private val toolCp: String get() = toolClasspath.joinToString(File.pathSeparator) { it.toString() }
+
+    private val globalSynthetics: Boolean by lazy {
+        supportsGlobalSynthetics ?: DexGlobalSynthetics.supportedBy(toolClasspath)
+    }
 
     override fun dex(
         inputs: List<Path>,
@@ -70,6 +81,14 @@ class D8Dexer(
             if (archive) {
                 add("--file-per-class-file");
                 add("--intermediate")
+                // Somewhere to park the desugaring helpers that belong to the whole program rather than to one
+                // input class (a Java record's stand-in for java.lang.Record below API 34): D8 writes them as
+                // `<class>.globals` beside that class's `.dex`, and the merge below takes them back. Without it
+                // D8 fails the build on such a class. See [DexGlobalSynthetics].
+                if (globalSynthetics) { add("--globals-output"); add(outDir.toString()) }
+            } else if (globalSynthetics) {
+                // Merging intermediates: return the global synthetics the archive step parked next to them.
+                DexGlobalSynthetics.accompanying(existing).forEach { add("--globals"); add(it.toString()) }
             }
             // Desugaring classpath for an incremental subset (types not (re-)dexed but needed to desugar).
             classpath.filter { Files.exists(it) }.forEach {

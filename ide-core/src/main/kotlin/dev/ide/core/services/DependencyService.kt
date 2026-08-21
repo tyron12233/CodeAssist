@@ -19,6 +19,7 @@ import dev.ide.deps.impl.MavenDependencyResolver
 import dev.ide.deps.impl.ResolverCache
 import dev.ide.deps.impl.VariantRequest
 import dev.ide.lang.jdt.JdtSourceAnalyzer
+import dev.ide.model.BuildSystemId
 import dev.ide.model.Coordinate
 import dev.ide.model.DependencyScope
 import dev.ide.model.Exclusion
@@ -32,6 +33,9 @@ import dev.ide.model.PlatformDependency
 import dev.ide.model.Project
 import dev.ide.model.SdkDependency
 import dev.ide.model.module
+import dev.ide.model.sync.BUILD_FILE_WRITER_EP
+import dev.ide.model.sync.BuildFileWriter
+import dev.ide.model.sync.WriteOutcome
 import dev.ide.platform.Disposable
 import dev.ide.platform.ProgressReporter
 import dev.ide.platform.log.Log
@@ -987,7 +991,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             log = listOf("Resolving $coordinate…")
         )
         return try {
-            resolveAndAttach(
+            val added = resolveAndAttach(
                 moduleName,
                 coordinate,
                 scope,
@@ -995,6 +999,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                 exclusions = exclusions.mapNotNull(Exclusion::parse),
                 variant = variant,
             )
+            if (added.success) declareInBuildFiles(moduleName, coordinate, scope, added) else added
         } finally {
             // resolveAndAttach → assembleModuleClasspath already stamped reasons; refresh the error state.
             _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved()) }
@@ -1231,6 +1236,49 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         return GoogleServices.findJson(moduleDir, variant) != null
     }
 
+    /**
+     * Mirror a just-added dependency into the project's build files when a foreign build system owns the
+     * model, so the declaration survives the next sync instead of being re-derived away. Native projects have
+     * no writer and no build files to mirror into, so this is a pass-through for them.
+     *
+     * The model edit has already happened, so a failed write is reported in the result rather than rolled
+     * back: the classpath works now, and the message says where the declaration still has to be made.
+     */
+    private fun declareInBuildFiles(
+        moduleName: String,
+        coordinate: String,
+        scope: String,
+        result: UiAddResult,
+    ): UiAddResult {
+        if (!ctx.store.workspace.projects.any { isExternallyOwned(it) }) return result
+        val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return result
+        val parsed = parseInputCoordinate(coordinate) ?: return result
+        val writer = buildFileWriter()
+            ?: return result.copy(
+                message = result.message +
+                    ". The build files declare this project's dependencies, so add it there too or it will be " +
+                    "dropped on the next sync."
+            )
+        val outcome = runCatching { writer.addDependency(module, parsed, parseScope(scope)) }
+            .getOrElse { WriteOutcome.failed(it.message ?: it.javaClass.simpleName) }
+        if (!outcome.ok) {
+            depsLog.warn("Couldn't declare $coordinate in the build files: ${outcome.message}")
+            return result.copy(message = result.message + ". Couldn't update the build files: ${outcome.message}")
+        }
+        return result
+    }
+
+    /** True when [project] is bound to a build system whose files own the model (an imported project). */
+    private fun isExternallyOwned(project: Project): Boolean =
+        project.buildSystemId != BuildSystemId.NATIVE
+
+    /** The writer for the build system this workspace is bound to, or null when nothing can be written back. */
+    private fun buildFileWriter(): BuildFileWriter? {
+        val bound = ctx.store.workspace.projects.map { it.buildSystemId }.filter { it != BuildSystemId.NATIVE }
+        if (bound.isEmpty()) return null
+        return ctx.platform.extensions.extensions(BUILD_FILE_WRITER_EP).lastOrNull { it.id in bound }
+    }
+
     /** Remove the declared library dependency or platform BOM [coordinate] from [moduleName] (false if absent). */
     fun removeDependency(moduleName: String, coordinate: String): Boolean {
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return false
@@ -1238,6 +1286,17 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             (it is LibraryDependency && it.library.name == coordinate) || (it is PlatformDependency && it.bom.toString() == coordinate) || (it is ModuleDependency && it.target.value == coordinate)
         } ?: return false
         val project = ctx.projectOf(module) ?: return false
+        // For a project whose build files own the model, drop the declaration there too; otherwise the next
+        // sync re-derives it from those files and the dependency comes back.
+        if (entry is LibraryDependency) {
+            parseCoordinate(coordinate)?.let { parsed ->
+                buildFileWriter()?.let { writer ->
+                    runCatching { writer.removeDependency(module, parsed) }.getOrNull()
+                        ?.takeIf { !it.ok }
+                        ?.let { depsLog.warn("Couldn't remove $coordinate from the build files: ${it.message}") }
+                }
+            }
+        }
         project.beginModification().apply {
             module(module.id).removeDependency(entry)
             commit()

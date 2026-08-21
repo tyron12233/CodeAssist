@@ -112,6 +112,14 @@ class AndroidRealViewRuntime(
         renderHandler.post {
             try {
                 holder[0] = block()
+            } catch (t: Throwable) {
+                // The render thread is OURS and has no uncaught handler of its own, so anything escaping here
+                // takes the process down instead of failing one preview. [render] already wraps the render in
+                // runCatching, yet crash reports still show an inflate-time IllegalStateException arriving
+                // uncaught through this frame -- so the guard sits at the thread boundary, where the
+                // consequence is fatal, rather than only at the call it was expected to come from.
+                log.warn("real-view render thread: ${t.stackTraceToString()}")
+                holder[0] = RealViewResult(null, error = causeChain(t))
             } finally {
                 latch.countDown()
             }

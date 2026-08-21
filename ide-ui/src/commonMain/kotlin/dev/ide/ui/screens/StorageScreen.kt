@@ -28,11 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -85,7 +81,6 @@ import dev.ide.ui.generated.resources.storage_total_used
 import dev.ide.ui.generated.resources.storage_unavailable
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
 
@@ -99,68 +94,13 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun StorageScreen(backend: IdeBackend, onBack: () -> Unit) {
-    var report by remember { mutableStateOf<UiStorageReport?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var refreshKey by remember { mutableStateOf(0) }
-    var busy by remember { mutableStateOf(false) }
-    var toast by remember { mutableStateOf<String?>(null) }
-    // Destructive confirmations, held until the user commits.
-    var pendingSdk by remember { mutableStateOf<UiStorageCategory?>(null) }
-    var pendingProject by remember { mutableStateOf<UiStorageProject?>(null) }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(refreshKey) {
-        loading = true
-        report = backend.projects.storageReport()
-        loading = false
-    }
-
-    val freedTemplate = stringResource(Res.string.storage_freed)
-    // Clear a category, show how much was freed, then recompute.
-    fun clear(cat: UiStorageCategory) {
-        if (busy) return
-        scope.launch {
-            busy = true
-            val before = cat.bytes
-            backend.projects.clearStorageCategory(cat.id)
-            toast = freedTemplate.replace("%1\$s", formatBytes(before))
-            refreshKey++
-            busy = false
-        }
-    }
-
-    fun clearAllCaches() {
-        val r = report ?: return
-        if (busy) return
-        scope.launch {
-            busy = true
-            var freed = 0L
-            // The non-destructive clearable caches (everything except the SDK).
-            r.categories.filter { it.clearable && !it.destructive }.forEach { c ->
-                freed += c.bytes
-                backend.projects.clearStorageCategory(c.id)
-            }
-            toast = freedTemplate.replace("%1\$s", formatBytes(freed))
-            refreshKey++
-            busy = false
-        }
-    }
-
-    fun deleteProject(p: UiStorageProject) {
-        if (busy) return
-        scope.launch {
-            busy = true
-            backend.projects.deleteProject(p.rootPath)
-            refreshKey++
-            busy = false
-        }
-    }
+    val state = rememberStorageScreenState(backend)
 
     ExpressiveScaffold(title = stringResource(Res.string.settings_storage), onBack = onBack) { innerPadding ->
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
-            val r = report
+            val r = state.report
             when {
-                loading && r == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                state.loading && r == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceContainerHigh)
                 }
                 r == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -168,35 +108,40 @@ fun StorageScreen(backend: IdeBackend, onBack: () -> Unit) {
                 }
                 else -> StorageContent(
                     report = r,
-                    busy = busy,
-                    onClear = ::clear,
-                    onClearAllCaches = ::clearAllCaches,
-                    onRequestSdkClear = { pendingSdk = it },
-                    onRequestDeleteProject = { pendingProject = it },
+                    busy = state.busy,
+                    onClear = state::clear,
+                    onClearAllCaches = state::clearAllCaches,
+                    onRequestSdkClear = state::askClearSdk,
+                    onRequestDeleteProject = state::askDeleteProject,
                 )
             }
-            StorageToast(toast, Modifier.align(Alignment.BottomCenter)) { toast = null }
+            val freed = state.freedBytes
+            StorageToast(
+                freed?.let { stringResource(Res.string.storage_freed, formatBytes(it)) },
+                Modifier.align(Alignment.BottomCenter),
+                state::dismissFreedToast,
+            )
         }
     }
 
     // ---- confirmations ----
-    val sdk = pendingSdk
+    val sdk = state.pendingSdkClear
     ConfirmDialog(
         visible = sdk != null,
         title = stringResource(Res.string.storage_clear_sdk_title),
         body = stringResource(Res.string.storage_clear_sdk_body, sdk?.let { formatBytes(it.bytes) } ?: ""),
         confirmLabel = stringResource(Res.string.storage_clear),
-        onCancel = { pendingSdk = null },
-        onConfirm = { pendingSdk = null; sdk?.let(::clear) },
+        onCancel = state::cancelClearSdk,
+        onConfirm = state::confirmClearSdk,
     )
-    val proj = pendingProject
+    val proj = state.pendingProjectDelete
     ConfirmDialog(
         visible = proj != null,
         title = stringResource(Res.string.delete_project),
         body = stringResource(Res.string.delete_project_content, proj?.name ?: ""),
         confirmLabel = stringResource(Res.string.delete),
-        onCancel = { pendingProject = null },
-        onConfirm = { pendingProject = null; proj?.let(::deleteProject) },
+        onCancel = state::cancelDeleteProject,
+        onConfirm = state::confirmDeleteProject,
     )
 }
 

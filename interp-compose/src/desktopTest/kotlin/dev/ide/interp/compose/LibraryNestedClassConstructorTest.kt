@@ -7,12 +7,8 @@ import dev.ide.lang.kotlin.interp.RNode
 import dev.ide.lang.kotlin.interp.walk
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
-import java.io.File
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -25,10 +21,6 @@ import kotlin.test.assertTrue
  */
 class LibraryNestedClassConstructorTest {
 
-    private fun classpathJars(): List<Path> =
-        System.getProperty("java.class.path").split(File.pathSeparator)
-            .filter { it.endsWith(".jar") }.map { Paths.get(it) }
-
     @Test
     fun gridCellsFixedLowersToAConstructorCall() {
         val code = """
@@ -40,7 +32,7 @@ class LibraryNestedClassConstructorTest {
             @Preview @Composable
             fun P() { LazyVerticalGrid(columns = GridCells.Fixed(2)) {} }
         """.trimIndent()
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(Doc(code)) as KotlinParsedFile
         val program = KotlinPreviewLowering(service).program(parsed)
         val entry = assertNotNull(program["P/0"], "the preview function must lower; keys=${program.keys}")
@@ -72,7 +64,7 @@ class LibraryNestedClassConstructorTest {
             import androidx.compose.foundation.lazy.grid.GridCells.Fixed
             fun cells() = Fixed(2)
         """.trimIndent()
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(Doc(code)) as KotlinParsedFile
         val program = KotlinPreviewLowering(service).program(parsed)
         val entry = assertNotNull(program["cells/0"], "the function must lower; keys=${program.keys}")

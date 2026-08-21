@@ -45,6 +45,7 @@ import dev.ide.ui.editor.preview.isPreviewable
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.ext.ToolWindowRegistry
 import dev.ide.ui.ext.UiPluginHost
+import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
 
@@ -206,6 +207,12 @@ internal fun EditorCenter(
                     onClose = { showConvertDialog = false },
                 )
             }
+            // A toolchain problem that will break a module's build (a bundled KSP processor whose generated code
+            // needs a newer runtime than the module declares): said here, with its fix, rather than left to
+            // appear as unresolved symbols in generated code after a build. Project-scoped and above the tabs,
+            // so it shows on open even with no file open, and even when the offending module (typically a `di/`
+            // one) is never opened at all.
+            ToolchainWarningBanner(state, compact)
             TabsStrip(
                 openFiles = state.openFiles,
                 activeIndex = state.activeIndex,
@@ -247,11 +254,13 @@ internal fun EditorCenter(
                         onFontScaleChange = { state.editorFontScale = it },
                         completionAutoPopup = state.completionAutoPopup,
                         completionDelayMs = state.completionDelayMs,
-                        twoAxisScroll = state.twoAxisScrollEnabled,
+                        // scrollable2D has no wheel handling, so the free-pan mode is touch-only.
+                        twoAxisScroll = state.twoAxisScrollEnabled && isMobilePlatform,
                         pinchZoom = state.pinchZoomEnabled,
                         softKeyboardSuggestions = state.softKeyboardSuggestions,
                         wordWrap = state.wordWrapEnabled,
                         wrapIndent = state.wrapIndentEnabled,
+                        horizontalScrollbar = state.horizontalScrollbarEnabled,
                         fontLigatures = state.fontLigaturesEnabled,
                         // Tapping a @Preview gutter icon switches this tab to the Preview surface, rendering that
                         // specific composable. The editor tools (incl. the Code/Blocks/Preview switch) are pinned

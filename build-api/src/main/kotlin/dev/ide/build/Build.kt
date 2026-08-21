@@ -4,8 +4,10 @@ import dev.ide.model.ClasspathSnapshot
 import dev.ide.model.Module
 import dev.ide.model.ModuleId
 import dev.ide.model.Project
+import dev.ide.model.sync.SyncMessage
 import dev.ide.platform.ContentHash
 import dev.ide.platform.ExtensionPoint
+import dev.ide.platform.ExtensionRegistry
 import dev.ide.platform.ProgressReporter
 import dev.ide.vfs.VirtualFile
 
@@ -15,9 +17,13 @@ import dev.ide.vfs.VirtualFile
  * The design separates three concerns Gradle bundles together:
  *  - the [BuildSystem] SPI (this file),
  *  - the generic, reusable incremental [Task]/[TaskGraph] engine (this file),
- *  - the implementations (native + gradle-compat), which live in plugin modules.
+ *  - the implementations (the native Java/Android pipelines, plus whatever a plugin contributes through
+ *    [BUILD_SYSTEM_EP] or [BUILD_PLUGIN_EP]), which live in their own modules.
  *
  * It mirrors Gradle's model->task-graph->incremental-execution pipeline without hosting Gradle.
+ *
+ * Reading a foreign build system's project model is a separate SPI
+ * ([dev.ide.model.sync.ProjectImporter]), so a build system only builds.
  */
 
 // ---------------------------------------------------------------------------
@@ -27,18 +33,54 @@ import dev.ide.vfs.VirtualFile
 interface BuildSystem {
     val id: dev.ide.model.BuildSystemId
 
-    /** Read build files / native manifests and refresh the project model. */
-    suspend fun sync(project: Project, progress: ProgressReporter): SyncResult
-
     /** True if this build system can build the given module type. */
     fun supports(moduleType: dev.ide.model.ModuleType): Boolean
 
     /** Turn a build request into an executable task DAG over the module graph. */
     fun createBuildGraph(project: Project, request: BuildRequest): TaskGraph
 
+    /**
+     * Turn a build request into a task DAG with the host's [BuildContext]: the [BuildPlugin]s contributed
+     * through [BUILD_PLUGIN_EP] (to apply after this system's own plugins, before realizing the container)
+     * plus the host paths and per-module platform classpath in [BuildContext.env]. The default ignores the
+     * context and delegates, so a build system that contributes no extension seam needs no change.
+     */
+    fun createBuildGraph(project: Project, request: BuildRequest, ctx: BuildContext): TaskGraph =
+        createBuildGraph(project, request)
+
     /** Named, runnable tasks (assemble, test, lint, clean) for UI/CLI. */
     fun tasks(project: Project): List<TaskDescriptor>
+
+    /**
+     * Run-picker rows this build system offers for [project]. The host lists these for the build system the
+     * project is bound to ([Project.buildSystemId]) and dispatches a chosen row back through [actionFor], so
+     * a build system's own tasks are runnable without the host knowing their ids.
+     */
+    fun runTasks(project: Project): List<RunTaskSpec> = emptyList()
+
+    /** The executable form of one of this system's [runTasks] rows; null when [spec] isn't one of its own. */
+    fun actionFor(spec: RunTaskSpec, project: Project, ctx: BuildContext): RunAction? = null
+
+    /** Read build files / native manifests and refresh the project model. */
+    @Deprecated(
+        "Model sync moved to the ProjectImporter SPI (platform.projectImporter); a BuildSystem only builds.",
+        level = DeprecationLevel.WARNING,
+    )
+    suspend fun sync(project: Project, progress: ProgressReporter): SyncResult = SyncResult(true, emptyList())
 }
+
+/**
+ * What the host hands a [BuildSystem] when it realizes a graph: the contributed [BuildPlugin]s and the
+ * environment their tasks need. Passing this rather than widening [BuildRequest] keeps the request a pure
+ * description of *what* to build while the context carries *who else contributes* and *where things live*.
+ */
+class BuildContext(
+    /** Applied after the build system's own plugins, in registration order, gated by [BuildPlugin.appliesTo]. */
+    val plugins: List<BuildPlugin> = emptyList(),
+    val env: BuildEnv,
+    /** The registry the graph was realized against, for a plugin that needs to read another extension point. */
+    val extensions: ExtensionRegistry? = null,
+)
 
 data class BuildRequest(
     val targets: List<ModuleId>,
@@ -57,9 +99,8 @@ enum class BuildGoal {
 
 data class TaskDescriptor(val name: String, val group: String, val description: String)
 
+/** Outcome of the deprecated [BuildSystem.sync]; new code reads [dev.ide.model.sync.SyncOutcome]. */
 data class SyncResult(val success: Boolean, val messages: List<SyncMessage>)
-data class SyncMessage(val severity: SyncSeverity, val text: String, val file: VirtualFile? = null)
-enum class SyncSeverity { INFO, WARNING, ERROR }
 
 // ---------------------------------------------------------------------------
 // BuildSystem / run-task extension points
@@ -67,24 +108,48 @@ enum class SyncSeverity { INFO, WARNING, ERROR }
 
 /**
  * Plugin-contributed build systems. The IDE's own Java/Android build systems are per-project, context-heavy
- * objects the engine constructs and holds directly — they capture per-project state and the Android one defers
- * SDK detection, so they are not modelled as application extensions. This point is the seam through which a
- * *plugin* adds a [BuildSystem] for a new module type: the engine selects a module's build system by
- * [BuildSystem.supports] — its own built-ins first, then this point.
+ * objects the engine constructs and holds directly (they capture per-project state and the Android one defers
+ * SDK detection), so they are not modelled as application extensions. This point is the seam through which a
+ * plugin adds a [BuildSystem]. The engine selects one two ways:
+ *  - by project: a contributed system whose [BuildSystem.id] matches [Project.buildSystemId] owns that
+ *    project's builds outright, ahead of the built-ins. This is how a foreign build system takes over a
+ *    project its [dev.ide.model.sync.ProjectImporter] imported.
+ *  - by module type: otherwise the built-ins are tried first, then this point, by [BuildSystem.supports],
+ *    so a plugin can add support for a new module type inside an otherwise native project.
  */
 val BUILD_SYSTEM_EP = ExtensionPoint<BuildSystem>("platform.buildSystem")
 
 /**
- * A Run-picker option a [RunTaskProvider] offers for a module — the neutral form of the host's Run-picker row.
- * [id] is dispatched by the host; reuse a built-in prefix (`build:`/`run:`/`assemble:`/…) to run through the
- * existing pipeline. [group] is a coarse icon/category key (e.g. `build`, `run`, `android`).
+ * A Run-picker option a [RunTaskProvider] or [BuildSystem] offers: the neutral form of the host's row.
+ * [group] is a coarse icon/category key (e.g. `build`, `run`, `android`). The host dispatches [id] to its
+ * built-in pipeline when it carries a built-in prefix (`build:`/`run:`/`assemble:`), otherwise back to the
+ * contributor's [RunTaskProvider.actionFor] / [BuildSystem.actionFor], so an id may be anything.
  */
 data class RunTaskSpec(val id: String, val label: String, val group: String)
 
-/** Contributes extra Run-picker options for a module. The enumeration seam — the host keeps id dispatch, so a
- *  provider reuses a built-in id prefix to execute through the existing task pipeline. */
+/**
+ * An executable Run-picker row: the [graph] to run, the console [header] to print, an optional [banner]
+ * notice, and an optional [onSuccess] step for work that follows a successful build (install and launch an
+ * APK, report an artifact path). The host streams the graph through the same executor, console, and
+ * cancellation path as a built-in task.
+ */
+class RunAction(
+    val header: String,
+    val graph: TaskGraph,
+    val banner: String? = null,
+    val onSuccess: (suspend (log: (String) -> Unit) -> Unit)? = null,
+)
+
+/**
+ * Contributes Run-picker options for a module, and executes the ones it owns. [tasksFor] enumerates;
+ * [actionFor] turns a chosen row back into something runnable. A provider that reuses a built-in id prefix
+ * (`build:`/`run:`/`assemble:`) is dispatched by the host's own pipeline and needs no [actionFor].
+ */
 interface RunTaskProvider {
     fun tasksFor(module: Module): List<RunTaskSpec>
+
+    /** The executable form of [spec] for [module]; null when [spec] is not this provider's own. */
+    fun actionFor(spec: RunTaskSpec, project: Project, module: Module, ctx: BuildContext): RunAction? = null
 }
 
 /** Plugin-contributed Run-picker options, merged into the host's built-in enumeration ([RunTaskProvider]). */

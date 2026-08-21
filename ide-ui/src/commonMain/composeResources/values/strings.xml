@@ -161,6 +161,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="performance_analytics">Performance analytics</string>
     <string name="sharing_performance_data">Sharing anonymous performance data</string>
     <string name="not_sharing_performance_data">Not sharing performance data</string>
+    <string name="ftp_server">FTP server</string>
+    <string name="ftp_server_running">Running on 127.0.0.1:8021 · uploads go to assets/, writable by any app on this device</string>
+    <string name="ftp_server_stopped">Stopped · local asset upload server</string>
     <string name="compatibility">Compatibility</string>
     <plurals name="recovered_projects">
         <item quantity="one">Recovered %1$d project from an older version</item>
@@ -425,6 +428,7 @@ We never collect your code, file or project names, which features you use, or an
     <!-- app/banners/editor-screen -->
     <string name="gradle_mode_title">Gradle compatibility mode</string>
     <string name="gradle_resync">Re-sync</string>
+    <string name="gradle_sync_needed">The build files changed since the last sync. Re-sync to update the project.</string>
     <string name="gradle_syncing">Syncing from Gradle…</string>
     <string name="gradle_convert">Convert</string>
     <string name="gradle_convert_title">Convert to a CodeAssist project?</string>
@@ -436,6 +440,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="gradle_convert_failed">Couldn\'t convert this project.</string>
     <string name="gradle_convert_undo">Undo</string>
     <string name="gradle_convert_done">Done</string>
+    <string name="toolchain_warning_build_anyway">Build anyway</string>
+    <string name="toolchain_warning_many">%1$d modules have a runtime out of step with a bundled processor</string>
+    <string name="toolchain_warning_accept_note">Builds of this module will keep failing until the versions match.</string>
+    <string name="toolchain_warning_working">Working…</string>
     <string name="sources_not_installed">Android platform sources (%1$s) aren't installed. It is needed for android.* parameter names &amp; docs.</string>
     <string name="sources_download">Download</string>
     <string name="sources_downloading">Downloading…</string>
@@ -1170,6 +1178,8 @@ We never collect your code, file or project names, which features you use, or an
     <string name="set_editor_wrap_desc">Soft-wrap long lines at the viewport edge instead of scrolling horizontally</string>
     <string name="set_editor_wrap_indent">Indent wrapped lines</string>
     <string name="set_editor_wrap_indent_desc">Align a wrapped line\'s continuation rows to its indentation (when word wrap is on)</string>
+    <string name="set_editor_hscrollbar">Horizontal scrollbar</string>
+    <string name="set_editor_hscrollbar_desc">Show a draggable bar along the bottom edge while a line runs past the view (word wrap leaves nothing to scroll)</string>
     <string name="set_editor_two_axis">Two-axis scrolling</string>
     <string name="set_editor_two_axis_desc">Drag in any direction to scroll both axes at once (touch)</string>
     <string name="set_editor_pinch">Pinch to zoom</string>

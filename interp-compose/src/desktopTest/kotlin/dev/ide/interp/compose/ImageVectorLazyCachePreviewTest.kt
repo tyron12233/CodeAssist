@@ -6,12 +6,8 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
-import java.io.File
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -27,12 +23,10 @@ import kotlin.test.assertEquals
  */
 class ImageVectorLazyCachePreviewTest {
 
-    private fun classpathJars(): List<Path> =
-        System.getProperty("java.class.path").split(File.pathSeparator).filter { it.endsWith(".jar") }.map { Paths.get(it) }
 
     private fun run(code: String): Any? {
         val trimmed = code.trimIndent()
-        val service = KotlinSymbolService(listOf(MemDir(listOf(MemFile("Main.kt", trimmed)))), classpathJars())
+        val service = previewSymbolService(listOf(MemDir(listOf(MemFile("Main.kt", trimmed)))))
         val parsed = KotlinIncrementalParser().parseFull(Doc(trimmed)) as KotlinParsedFile
         val program = KotlinPreviewLowering(service).program(parsed)
         return Interpreter(program, ComposeDispatcher()).call(program["box/0"]!!, emptyList())

@@ -17,6 +17,9 @@ sealed interface ProjectModelEvent
 data class ProjectAdded(val project: ProjectId) : ProjectModelEvent
 data class ProjectRemoved(val project: ProjectId) : ProjectModelEvent
 
+/** Project-level metadata changed (which build system owns it, its settings) with no module-level change. */
+data class ProjectSettingsChanged(val project: ProjectId) : ProjectModelEvent
+
 data class ModuleAdded(val project: ProjectId, val module: ModuleId) : ProjectModelEvent
 data class ModuleRemoved(val project: ProjectId, val module: ModuleId) : ProjectModelEvent
 
