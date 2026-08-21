@@ -253,6 +253,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             )
         }
         // A synthetic "Custom gateway" entry (OpenAI-compatible endpoint); its client is the OpenAI provider.
+        // FIXED: Keep the list of available models empty for custom gateway since users will enter model names manually.
         val gateway = UiAgentProvider(GATEWAY, "Custom gateway", emptyList(), "", apiKey = pref("gatewayKey").orEmpty())
         val configured = !cfg.apiKey.isNullOrBlank() && (cfg.selectedId != GATEWAY || !cfg.baseUrl.isNullOrBlank())
         return UiAgentConfig(
@@ -380,7 +381,17 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             return
         }
 
-        val model = cfg.model.ifBlank { provider.defaultModel }
+        // FIXED: For custom gateway, require model to be set explicitly
+        val model = if (cfg.selectedId == GATEWAY) {
+            if (cfg.model.isBlank()) {
+                appendError("Enter a model name for the custom gateway (e.g., 'deepseek-chat' for Deepseek).")
+                return
+            }
+            cfg.model
+        } else {
+            cfg.model.ifBlank { provider.defaultModel }
+        }
+
         val maxIterations = prefInt("maxIterations") ?: DEFAULT_MAX_ITERATIONS
         val maxTokens = prefInt("maxTokens") ?: DEFAULT_MAX_TOKENS
         val thinkingBudget = prefInt("thinkingBudget")
