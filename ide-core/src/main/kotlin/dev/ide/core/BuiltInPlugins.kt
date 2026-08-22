@@ -607,25 +607,33 @@ private class PackageMismatchPlugin : Plugin {
 
 /**
  * The XML editor diagnostics, wired to the active engine's per-project resource host + Android attribute
- * schema (both resolve `env.activeEngine` lazily). Attributed to `PluginId("xml-analysis")` by the facade.
+ * schema + element catalog (all three resolve `env.activeEngine` lazily). Attributed to
+ * `PluginId("xml-analysis")` by the facade.
  */
 private class XmlAnalysisPlugin(private val env: ApplicationEnvironment) : Plugin {
     override val manifest =
         PluginManifest(
             id = "xml-analysis",
             name = "XML Analysis",
-            description = "XML/Android resource diagnostics and quick-fixes (unresolved references, hardcoded strings, missing attributes).",
+            description = "XML/Android resource diagnostics and quick-fixes (unresolved references and elements, hardcoded strings, missing attributes).",
             dependsOn = listOf("xml-language"),
         )
 
     override fun register(reg: PluginRegistration) {
         reg.contributeVia { ext, _ ->
+            val metadata = { env.activeEngine?.sdkLayoutMetadata() ?: AndroidSdkMetadata.bundled() }
             XmlAnalysisSupport.register(
                 ext,
                 ActiveEngineXmlResourceHost(env),
-                AndroidXmlChecker(layout = {
-                    env.activeEngine?.sdkLayoutMetadata() ?: AndroidSdkMetadata.bundled()
-                }),
+                AndroidXmlChecker(layout = metadata),
+                AndroidXmlTagChecker(
+                    layout = metadata,
+                    // Null (no active engine / cold index) keeps the unknown-element check silent.
+                    projectViews = { path -> env.activeEngine?.layoutViewCatalog(Paths.get(path)) },
+                    classExists = { path, fqn ->
+                        env.activeEngine?.layoutClassExists(Paths.get(path), fqn) ?: true
+                    },
+                ),
             )
         }
     }

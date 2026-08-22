@@ -80,11 +80,14 @@ import dev.ide.core.templates.KotlinLibraryTemplate
 import dev.ide.core.templates.NotesSampleTemplate
 import dev.ide.core.templates.WeatherSampleTemplate
 import dev.ide.deps.ConflictPolicy
+import dev.ide.index.ClassNameIndex
+import dev.ide.index.ClassNameValue
 import dev.ide.index.INDEX_EP
 import dev.ide.index.IndexItemState
 import dev.ide.index.IndexScope
 import dev.ide.index.IndexService
 import dev.ide.index.MemberValue
+import dev.ide.index.exactAll
 import dev.ide.index.impl.IndexServiceImpl
 import dev.ide.lang.AnalysisResult
 import dev.ide.lang.FILE_TYPE_EP
@@ -164,6 +167,7 @@ import dev.ide.lang.xml.XmlParsedFile
 import dev.ide.lang.xml.XmlSourceAnalyzer
 import dev.ide.lang.xml.completion.XmlCompletion
 import dev.ide.lang.xml.completion.XmlContextScanner
+import dev.ide.lang.xml.edit.XmlAttributeInsert
 import dev.ide.lang.xml.hints.XmlResourceValueResolver
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -3605,7 +3609,11 @@ class IdeServices private constructor(
         }
         val edits = ArrayList<TextEdit>()
         val at = attributeInsertOffset(tag)
-        edits.add(TextEdit(TextRange(at, at), " $attrName=\"$escaped\""))
+        // Land the new attribute the way the element already writes them: on its own line, at its siblings'
+        // indent, when the element is written one-attribute-per-line (the Android convention). Appending it
+        // to the last attribute's line would grow one unreadable line as the panel is used.
+        val separator = XmlAttributeInsert.separatorForAppend(text, tag)
+        edits.add(TextEdit(TextRange(at, at), "$separator$attrName=\"$escaped\""))
         namespaceDeclarationEdit(attrName, parsed)?.let { edits.add(it) }
         return edits
     }
@@ -3629,6 +3637,49 @@ class IdeServices private constructor(
     private fun androidXmlContributor(module: Module): AndroidXmlContributor? =
         (analyzerFor(module, LanguageId("xml")) as? XmlSourceAnalyzer)?.contributors
             ?.filterIsInstance<AndroidXmlContributor>()?.firstOrNull()
+
+    /**
+     * The non-framework `View` classes a layout in [file] may name (FQN → is-it-a-ViewGroup) for the
+     * unknown-element diagnostic ([AndroidXmlTagChecker]) - the SAME library/AAR + project-source set the XML
+     * completion contributor offers as tags, so analysis can never call a suggestible view missing.
+     *
+     * Null means "not known yet", which suppresses the diagnostic entirely: before the index is `ready` the
+     * project's own source `View` subclasses are invisible (the subtype index is still building), and flagging
+     * then would mark every custom view in the file red until indexing finished.
+     */
+    internal fun layoutViewCatalog(file: Path): Map<String, Boolean>? {
+        if (!indexService.status.ready) return null
+        val module = moduleForResourceFile(file) ?: return null
+        // Memoized per (module, source-index generation): the diagnostic asks once PER ELEMENT, and a big
+        // dependency set holds thousands of library views, so rebuilding the map per tag would dominate the pass.
+        val gen = sourceIndexGeneration.get()
+        layoutViewCatalogMemo.get()?.let { if (it.first == module.id.value && it.second == gen) return it.third }
+        val contributor = androidXmlContributor(module) ?: return null
+        val catalog = runCatching { contributor.customViewTags().associate { it.tag to it.isViewGroup } }
+            .getOrNull() ?: return null
+        layoutViewCatalogMemo.set(Triple(module.id.value, gen, catalog))
+        return catalog
+    }
+
+    /** The single-entry [layoutViewCatalog] memo: (module id, source-index generation) → catalog. */
+    private val layoutViewCatalogMemo =
+        java.util.concurrent.atomic.AtomicReference<Triple<String, Long, Map<String, Boolean>>?>(null)
+
+    /**
+     * Does a class named [fqn] exist for [file]'s project (project source or classpath)? The last word before
+     * the unknown-element diagnostic calls a layout tag missing: the View catalogs above only contain classes
+     * whose `View` ancestry they could walk, so a class they missed (e.g. a project view extending an AAR
+     * view) must still resolve. Answered from the class-name index, which covers project source AND binaries.
+     */
+    internal fun layoutClassExists(file: Path, fqn: String): Boolean {
+        if (!indexService.status.ready) return true    // unknown → assume it exists (never flag while cold)
+        if (moduleForResourceFile(file) == null) return true          // not a project resource → don't judge
+        val simple = fqn.substringAfterLast('.')
+        return runCatching {
+            indexService.exactAll<ClassNameValue>(ClassNameIndex.ALL, simple)
+                .any { it.fqn == fqn }
+        }.getOrDefault(true)
+    }
 
     /**
      * The element the editor is anchored to in the freshly-parsed [parsed] — located by [id] when the view has
@@ -3664,11 +3715,9 @@ class IdeServices private constructor(
             ?.substringAfterLast('/')?.ifEmpty { null }
 
     /** Where a new attribute is spliced into [tag]'s start tag — after the last attribute, else after the
-     *  tag name (always before the closing `>`/`/>`). */
-    private fun attributeInsertOffset(tag: XmlNode): Int {
-        tag.attributes.maxByOrNull { it.endOffset }?.let { return it.endOffset }
-        return tag.startOffset + 1 + (tag.name?.length ?: 0)
-    }
+     *  tag name (always before the closing `>`/`/>`). The whitespace written in front of it comes from
+     *  [XmlAttributeInsert.separatorForAppend], so the editor and the XML quick-fixes agree on the style. */
+    private fun attributeInsertOffset(tag: XmlNode): Int = XmlAttributeInsert.offsetAfterAttributes(tag)
 
     /** Splice [fieldText] into [attrName]'s value on [tag] in a synthetic copy of [text] (adding the attribute
      *  when absent), returning the new text + the offset where the value begins. Null when it can't be placed. */
@@ -3701,8 +3750,10 @@ class IdeServices private constructor(
         val declared = root.attributes.mapNotNull { it.name }.filter { it.startsWith("xmlns:") }
             .mapTo(HashSet()) { it.removePrefix("xmlns:") }
         if (prefix in declared) return null
-        val at = root.startOffset + 1 + (root.name?.length ?: 0)
-        return TextEdit(TextRange(at, at), " xmlns:$prefix=\"$uri\"")
+        val at = XmlAttributeInsert.offsetAfterName(root)
+        // A declaration goes before the root's other attributes, on its own line when they are written that way.
+        val separator = XmlAttributeInsert.separatorForPrepend(parsed.text(), root)
+        return TextEdit(TextRange(at, at), "${separator}xmlns:$prefix=\"$uri\"")
     }
 
     private fun rootTagOf(parsed: XmlParsedFile): XmlNode? {

@@ -12,11 +12,12 @@ import dev.ide.lang.xml.XmlLanguageBackend
 import dev.ide.lang.xml.lint.XmlLintRules.AttributeProblem
 
 /**
- * The XML editor diagnostics, unified onto the analysis pipeline. Three concerns, each delegated:
+ * The XML editor diagnostics, unified onto the analysis pipeline. Four concerns, each delegated:
  *  - **well-formedness** - straight from the tolerant parser's own diagnostics;
- *  - **lint rules** - pure detection in [XmlLintRules] (namespaces, hardcoded text, missing size, and the
- *    wrong-attribute / wrong-value checks), with the Android *schema* questions answered by the injected
- *    [XmlAttributeChecker];
+ *  - **lint rules** - pure detection in [XmlLintRules] (namespaces, hardcoded text, missing size, duplicate
+ *    ids, inflater structure rules, `<resources>` entries, and the wrong-attribute / wrong-value checks);
+ *  - **schema questions** - which attributes an element allows ([XmlAttributeChecker]) and whether an element
+ *    tag names anything that exists ([XmlTagChecker]), both injected and both conservative;
  *  - **resource resolution** - the unresolved-`@type/name` check, with lookups + the resource-creating fixes'
  *    filesystem I/O behind [XmlResourceHost].
  *
@@ -27,6 +28,7 @@ import dev.ide.lang.xml.lint.XmlLintRules.AttributeProblem
 class XmlDiagnosticProvider(
     private val host: XmlResourceHost,
     private val attributes: XmlAttributeChecker = XmlAttributeChecker.NONE,
+    private val tags: XmlTagChecker = XmlTagChecker.NONE,
     override val id: String = "xml",
 ) : DiagnosticProvider {
     override val languages = setOf(XmlLanguageBackend.LANGUAGE_ID)
@@ -37,6 +39,7 @@ class XmlDiagnosticProvider(
         val text = parsed.text().toString()
         val path = file.path.replace('\\', '/')
         val isLayout = path.contains("/res/layout")
+        val isValues = path.contains("/res/values")
         // `res/raw/` holds verbatim assets (aapt2 copies them, it never compiles them as resources), so an XML
         // file there is arbitrary data rather than Android markup: only the generic XML checks apply to it.
         val isRawAsset = path.contains("/res/raw")
@@ -59,7 +62,8 @@ class XmlDiagnosticProvider(
         for (hit in XmlLintRules.missingNamespaces(parsed)) {
             out += finding(
                 hit.range, Severity.ERROR, "Missing xmlns:${hit.prefix} namespace declaration",
-                "android.missingNamespace", listOf(XmlQuickFixes.addNamespace(hit.prefix, hit.uri, hit.insertAt)),
+                "android.missingNamespace",
+                listOf(XmlQuickFixes.addNamespace(hit.prefix, hit.uri, hit.insertAt, hit.separator)),
             )
         }
 
@@ -75,7 +79,44 @@ class XmlDiagnosticProvider(
             for (m in XmlLintRules.missingSize(parsed, host::isViewLike)) {
                 out += finding(
                     m.range, Severity.WARNING, "<${m.tag}> is missing android:${m.dim}",
-                    "android.missingSize", listOf(XmlQuickFixes.addSize(m.dim, m.insertAt)),
+                    "android.missingSize", listOf(XmlQuickFixes.addSize(m.dim, m.insertAt, m.separator)),
+                )
+            }
+            // C1) An element naming a class that doesn't exist, and children under something that can't hold
+            //     any: the two element-level checks (both silent unless the tag checker is certain).
+            for (p in XmlLintRules.tagProblems(parsed, path, tags)) when (p) {
+                is XmlLintRules.TagProblem.Unresolved -> out += finding(
+                    p.range, Severity.ERROR, "Cannot resolve element <${p.tag}>${didYouMean(p.suggestions)}",
+                    "android.unknownTag",
+                    p.suggestions.take(2).map { XmlQuickFixes.renameTag(it, p.nameRanges) },
+                )
+                is XmlLintRules.TagProblem.IllegalChild -> out += finding(
+                    p.range, Severity.ERROR,
+                    "<${p.tag}> is not a ViewGroup, so it cannot contain <${p.child}>",
+                    "android.illegalChild", emptyList(),
+                )
+            }
+            // C2) Inflater structure rules (<include> with nothing to include, a non-root <merge>, …).
+            for (s in XmlLintRules.structureProblems(parsed)) out += finding(
+                s.range, Severity.ERROR, structureMessage(s), structureCode(s), emptyList(),
+            )
+            // C3) The same @+id declared twice: findViewById would resolve to whichever inflated first.
+            for (d in XmlLintRules.duplicateIds(parsed)) out += finding(
+                d.range, Severity.WARNING, "Duplicate id @+id/${d.id} in this layout",
+                "android.duplicateId", emptyList(),
+            )
+        }
+
+        if (isValues) {
+            // A `res/values` declaration aapt2 would reject: no name, or a name used twice in this file.
+            for (e in XmlLintRules.resourceEntries(parsed)) when (e.kind) {
+                XmlLintRules.ResourceEntryProblem.Kind.MISSING_NAME -> out += finding(
+                    e.range, Severity.ERROR, "<${e.tag}> requires a name attribute",
+                    "android.resourceMissingName", emptyList(),
+                )
+                XmlLintRules.ResourceEntryProblem.Kind.DUPLICATE -> out += finding(
+                    e.range, Severity.ERROR, "Duplicate <${e.tag}> resource \"${e.name}\" in this file",
+                    "android.duplicateResource", emptyList(),
                 )
             }
         }
@@ -114,6 +155,23 @@ class XmlDiagnosticProvider(
 
     private fun finding(range: TextRange, severity: Severity, message: String, code: String, fixes: List<QuickFix>): Diagnostic =
         Diagnostic(range, severity, message, DiagnosticSource.Analyzer(AnalyzerId("android.xml")), code, fixes)
+
+    /** The "did you mean" tail of an unresolved-element message (empty when nothing is close enough). */
+    private fun didYouMean(suggestions: List<String>): String =
+        if (suggestions.isEmpty()) "" else " (did you mean ${suggestions.first()}?)"
+
+    private fun structureMessage(p: XmlLintRules.StructureProblem): String = when (p.kind) {
+        XmlLintRules.StructureProblem.Kind.INCLUDE_WITHOUT_LAYOUT -> "<include> requires a layout attribute"
+        XmlLintRules.StructureProblem.Kind.MERGE_NOT_ROOT -> "<merge> is only valid as the root element"
+        XmlLintRules.StructureProblem.Kind.FRAGMENT_WITHOUT_CLASS ->
+            "<fragment> requires an android:name or class attribute"
+    }
+
+    private fun structureCode(p: XmlLintRules.StructureProblem): String = when (p.kind) {
+        XmlLintRules.StructureProblem.Kind.INCLUDE_WITHOUT_LAYOUT -> "android.includeWithoutLayout"
+        XmlLintRules.StructureProblem.Kind.MERGE_NOT_ROOT -> "android.mergeNotRoot"
+        XmlLintRules.StructureProblem.Kind.FRAGMENT_WITHOUT_CLASS -> "android.fragmentWithoutClass"
+    }
 
     /** The allowed-values hint for an invalid-value message, capped so a big flag set doesn't flood the message. */
     private fun expectedList(allowed: Set<String>): String {

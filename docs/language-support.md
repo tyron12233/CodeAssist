@@ -46,6 +46,16 @@ injected contributors — the host supplies what belongs where. Android-specific
 hierarchy, attribute inheritance, resource references) lives in a contributor driven by SDK-derived
 metadata and a resource index, not in the parser.
 
+The inspections follow the same split: the *rules* are pure functions over the DOM (missing namespace,
+hardcoded string, missing `layout_width`/`layout_height`, duplicate attribute, duplicate `@+id`,
+`<include>` with no layout, a non-root `<merge>`, a `<fragment>` naming no class, and `res/values`
+entries with no `name` or a name declared twice), while the two *schema* questions are host seams:
+which attributes an element allows, and whether an element tag names a class that exists. Both seams
+are conservative by construction: a host that isn't sure answers "indeterminate" and nothing is
+flagged. So an unresolved-element diagnostic (with its "did you mean" rename fix) only appears for a
+tag the Android side positively knows is neither a framework widget, nor a project/library `View`, nor
+any class on the classpath, and never while the index is still cold.
+
 ### Kotlin
 
 An editor-time Kotlin backend that uses the Kotlin compiler only to parse. A resolution-free standalone
