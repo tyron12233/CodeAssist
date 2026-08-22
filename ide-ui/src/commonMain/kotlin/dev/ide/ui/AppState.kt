@@ -21,6 +21,7 @@ import dev.ide.ui.backend.UiNewFileTemplate
 import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiSettings
+import dev.ide.ui.backend.UiTextEdit
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.RangeEdit
 import dev.ide.ui.editor.core.mapOffsetThroughEdits
@@ -47,7 +48,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * Top-level screens, ordered by depth so the transition helper can infer direction: a move to a
  * higher-ordinal screen animates "forward" (deeper), a lower one "back".
  */
-enum class Screen { Projects, CreateProject, ImportProject, ExportProject, Editor, Hub, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, Settings, CodeStyle, EditorSymbols, Plugins, Storage, LessonTrack, LessonPlayer, StoreItem }
+enum class Screen { Projects, CreateProject, ImportProject, ExportProject, Editor, Hub, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, IconManager, AppIconStudio, Settings, CodeStyle, EditorSymbols, Plugins, Storage, LessonTrack, LessonPlayer, StoreItem }
 
 /**
  * The home screen's bottom-navigation destinations (the landing surface shown on [Screen.Projects]): the
@@ -644,6 +645,31 @@ class IdeUiState(
     }
 
     /** Open [path] and move the caret to 1-based [line]/[column] — the build console's jump-to-diagnostic. */
+    /**
+     * Apply [edits] to the active tab, returning false when there is no editable tab. This is how a
+     * full-screen tool (the Icon Manager) contributes source to the editor: it drives the same session the
+     * editor is showing, so undo and the caret behave as if the text had been typed.
+     *
+     * Edits land back to front so an earlier one cannot shift a later one's offsets, and the caret ends up
+     * after the highest-offset insertion (the snippet at the cursor) rather than after whichever import was
+     * written last.
+     */
+    fun applyEdits(edits: List<UiTextEdit>): Boolean {
+        val session = active?.session ?: return false
+        val ordered = edits.filter { it.newText.isNotEmpty() || it.end > it.start }.sortedByDescending { it.start }
+        if (ordered.isEmpty()) return false
+
+        var caret = ordered.first().let { it.start + it.newText.length }
+        ordered.forEachIndexed { index, edit ->
+            val end = edit.end.coerceAtLeast(edit.start)
+            session.replaceRange(edit.start, end, edit.newText, TextRange(edit.start + edit.newText.length))
+            // Every edit after the first sits earlier in the file, so it shifts the caret by its own delta.
+            if (index > 0) caret += edit.newText.length - (end - edit.start)
+        }
+        session.setCaret(caret)
+        return true
+    }
+
     fun openAtLine(path: String, line: Int, column: Int) {
         val name = path.substringAfterLast('/').substringAfterLast('\\')
         scope.launch {

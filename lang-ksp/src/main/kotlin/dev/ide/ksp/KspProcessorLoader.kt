@@ -26,7 +26,8 @@ import java.nio.file.Path
  * lives only in the child, so it can never clash with the IDE's own compiler platform.
  *
  * Parent-first has one exception, [dev.ide.platform.ToolClassIsolation]: a package the app carries for its own
- * reasons at an incompatible version (`dagger.*`, via bundletool) comes from the processor's own jars.
+ * reasons at a version the processor cannot use (`dagger.*` and guava, both via bundletool) comes from the
+ * processor's own jars.
  */
 fun interface KspProcessorLoader {
     fun load(classpath: List<Path>): ClassLoader

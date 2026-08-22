@@ -45,7 +45,13 @@ import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpenHub: () -> Unit, onOpenDependencies: (String?) -> Unit) {
+internal fun PaletteOverlay(
+    state: IdeUiState,
+    onToggleTheme: () -> Unit,
+    onOpenHub: () -> Unit,
+    onOpenIconManager: () -> Unit,
+    onOpenDependencies: (String?) -> Unit,
+) {
     // The palette's UI-navigation commands come from UiActionRegistry; this host bridges them to the app's
     // navigation callbacks (the same pattern as the More menu). Global settings + SDK/keystore managers all
     // live behind the Settings & Tools hub now, so they route through one HUB destination.
@@ -56,6 +62,7 @@ internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpen
             when (destination) {
                 UiDestinations.HUB -> onOpenHub()
                 UiDestinations.DEPENDENCIES -> onOpenDependencies(null)
+                UiDestinations.ICONS -> onOpenIconManager()
                 UiDestinations.LOGS -> state.logsOpen = true
             }
         }
@@ -88,6 +95,7 @@ internal fun DestinationSheets(
     onOpenModuleConfig: (String?) -> Unit,
     onToggleTheme: () -> Unit,
     onOpenHub: () -> Unit,
+    onOpenIconManager: () -> Unit,
     onCloseProject: () -> Unit,
     fileActions: FileActions,
 ) {
@@ -102,6 +110,7 @@ internal fun DestinationSheets(
                     when (destination) {
                         UiDestinations.HUB -> onOpenHub()
                         UiDestinations.MODULES -> onOpenModuleConfig(null)
+                        UiDestinations.ICONS -> onOpenIconManager()
                         UiDestinations.LOGS -> state.logsOpen = true
                         UiDestinations.PROJECTS -> onCloseProject()
                     }

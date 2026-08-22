@@ -33,6 +33,18 @@ interface ExtensionRegistry {
 | `platform.projectTemplate` | Create-Project templates (`ProjectTemplate`) with data-driven parameters. | `java-console`, `java-library`, `android-app`, `android-library`. |
 | `platform.blockMapping` | Block mappings (`BlockMapping`) for the projectional editor. | The Java block mapping. |
 | `platform.kotlinCompilerPlugin` | Kotlin compiler plugins (`KotlinCompilerPlugin`) the build's `compileKotlin` tasks apply per module. | Compose (`ComposeCompilerPlugin`). |
+| `platform.iconRepository` | Icon libraries (`IconRepository`) the Icon Manager browses: search, list, and fetch an icon's geometry. | Bundled Material Symbols, remote Material Symbols. |
+
+## Icon repository SPI
+
+`platform.iconRepository` lets a plugin contribute an icon library to the Icon Manager. An `IconRepository`
+answers three things: the icons it offers (`entries`), how to fetch one icon's geometry in a given style and
+fill (`artwork`), and whether listing them needs the network (`requiresNetwork`, which gates downloading
+behind an explicit user action). Search ranking is not the repository's job: `IconSearch` ranks every
+repository's entries identically, so a contributed library behaves exactly like the built-in ones.
+
+Geometry is returned as the same `VectorSpec` the drawable parser produces, so a contributed icon previews,
+imports and rasterises through the paths already in place. See [icon-manager.md](icon-manager.md).
 
 ## Language backend SPI
 

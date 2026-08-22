@@ -27,6 +27,7 @@ import dev.ide.core.backend.BlockBackend
 import dev.ide.core.backend.BuildBackend
 import dev.ide.core.backend.CustomizationBackend
 import dev.ide.core.backend.DependencyBackend
+import dev.ide.core.backend.IconBackend
 import dev.ide.core.backend.DiagnosticsBackend
 import dev.ide.core.backend.EditorBackend
 import dev.ide.core.backend.stackTraceString
@@ -326,6 +327,7 @@ class IdeServicesBackend(
     override val settings: SettingsService = SettingsBackend(this)
     override val customize: dev.ide.ui.backend.CustomizationService = CustomizationBackend(this)
     override val actions: ActionService = ActionBackend(this)
+    override val icons: dev.ide.ui.backend.IconService = IconBackend(this)
     // The AI agent is a disablable, non-essential plugin ([AgentPlugin.ID]). When the user turns it off in
     // Settings > Plugins the plugin isn't loaded, so we hand the UI the no-op service — the chat panel, the
     // sparkle toggle, and the agent loop all disappear (the UI keys these surfaces off this being Unsupported).

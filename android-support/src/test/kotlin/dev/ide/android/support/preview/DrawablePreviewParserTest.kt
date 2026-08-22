@@ -116,6 +116,69 @@ class DrawablePreviewParserTest {
     }
 
     @Test
+    fun parsesGroupTransformsClipPathAndFillRule() {
+        val xml = """
+            <vector xmlns:android="http://schemas.android.com/apk/res/android"
+                android:width="24dp" android:height="24dp"
+                android:viewportWidth="960" android:viewportHeight="960">
+              <group android:translateY="960" android:scaleX="0.5" android:scaleY="2"
+                  android:rotation="45" android:pivotX="480" android:pivotY="12">
+                <clip-path android:pathData="M0,0h960v960h-960z"/>
+                <path android:pathData="M12,2L2,22h20z" android:fillColor="#FF000000"
+                    android:fillType="evenOdd" android:strokeColor="#FFFF0000" android:strokeWidth="2"
+                    android:strokeLineCap="round" android:strokeLineJoin="bevel" android:strokeMiterLimit="8"/>
+              </group>
+            </vector>
+        """.trimIndent()
+        val v = (DrawablePreviewParser.parse(xml) as DrawablePreview.Vector).spec
+
+        val group = v.nodes.single() as VectorGroup
+        assertEquals(960f, group.translateY)
+        assertEquals(0.5f, group.scaleX)
+        assertEquals(2f, group.scaleY)
+        assertEquals(45f, group.rotation)
+        assertEquals(480f, group.pivotX)
+        assertEquals(12f, group.pivotY)
+        assertEquals("M0,0h960v960h-960z", group.clipPathData)
+
+        val path = group.children.single() as VectorPath
+        assertEquals(FillRule.EVEN_ODD, path.fillRule)
+        assertEquals(StrokeCap.ROUND, path.strokeCap)
+        assertEquals(StrokeJoin.BEVEL, path.strokeJoin)
+        assertEquals(8f, path.strokeMiter)
+        // `paths` still flattens the tree for callers that only want the geometry.
+        assertEquals(listOf("M12,2L2,22h20z"), v.paths.map { it.pathData })
+    }
+
+    @Test
+    fun aClipPathDirectlyUnderVectorWrapsEveryNode() {
+        val xml = """
+            <vector xmlns:android="http://schemas.android.com/apk/res/android"
+                android:width="24dp" android:height="24dp"
+                android:viewportWidth="24" android:viewportHeight="24">
+              <clip-path android:pathData="M0,0h12v24h-12z"/>
+              <path android:pathData="M0,0h24v24h-24z" android:fillColor="#FF000000"/>
+            </vector>
+        """.trimIndent()
+        val v = (DrawablePreviewParser.parse(xml) as DrawablePreview.Vector).spec
+        val root = v.nodes.single() as VectorGroup
+        assertEquals("M0,0h12v24h-12z", root.clipPathData)
+        assertEquals(1, root.children.size)
+    }
+
+    @Test
+    fun aPathWithNoFillRuleDefaultsToNonZero() {
+        val xml = """
+            <vector xmlns:android="http://schemas.android.com/apk/res/android"
+                android:viewportWidth="24" android:viewportHeight="24">
+              <path android:pathData="M0,0h24v24h-24z"/>
+            </vector>
+        """.trimIndent()
+        val v = (DrawablePreviewParser.parse(xml) as DrawablePreview.Vector).spec
+        assertEquals(FillRule.NON_ZERO, (v.nodes.single() as VectorPath).fillRule)
+    }
+
+    @Test
     fun parsesSelectorPicksDefaultAndResolvesNestedDrawableRef() {
         val xml = """
             <selector xmlns:android="http://schemas.android.com/apk/res/android">

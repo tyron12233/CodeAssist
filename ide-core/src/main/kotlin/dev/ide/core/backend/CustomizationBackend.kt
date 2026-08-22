@@ -17,7 +17,7 @@ import dev.ide.ui.backend.CustomizationService
 import dev.ide.ui.backend.UiMacro
 import dev.ide.ui.backend.UiSymbolKey
 import dev.ide.vfs.VirtualFile
-import java.nio.file.Path
+import java.nio.file.Paths
 import java.time.LocalDate
 import kotlin.io.path.exists
 import kotlin.io.path.readText
@@ -68,7 +68,7 @@ internal class CustomizationBackend(private val ctx: BackendContext) : Customiza
      *  already on the bar. Reads the saved file (best-effort) — unsaved edits aren't reflected, which is fine
      *  for a suggestion. */
     override fun suggestSymbols(filePath: String, existing: List<UiSymbolKey>): List<UiSymbolKey> {
-        val text = runCatching { Path.of(filePath).takeIf { it.exists() }?.readText() }.getOrNull() ?: return emptyList()
+        val text = runCatching { Paths.get(filePath).takeIf { it.exists() }?.readText() }.getOrNull() ?: return emptyList()
         val have = existing.mapTo(HashSet()) { it.insert }
         val counts = HashMap<Char, Int>()
         for (c in text) if (c in CANDIDATES) counts[c] = (counts[c] ?: 0) + 1

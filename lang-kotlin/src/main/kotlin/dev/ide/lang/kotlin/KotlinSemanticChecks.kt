@@ -209,6 +209,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 report(assignmentTypeMismatch(psi, resolver))
                 report(senselessNullComparison(psi, resolver))
                 if (resolveReady) report(incomparableEquality(psi, resolver))
+                if (resolveReady) report(unresolvedInfixOperator(psi, resolver))
             }
         },
         KotlinChecker(KtWhenExpression::class.java) { psi ->
@@ -2115,7 +2116,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      *  false-positives; the caller already excluded a functional [t]. */
     private fun isConcreteNonFunction(t: KotlinType): Boolean =
         !t.isTypeParameter && t.qualifiedName != "kotlin.Nothing" &&
-            service.isKnownType(canonicalForCheck(t).qualifiedName)
+            service.isKnownType(canonicalTypeForCheck(t).qualifiedName)
 
     /**
      * An assignment (`x = expr`) whose right-hand side type isn't assignable to the target's declared type
@@ -2497,8 +2498,8 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         // A type read from Java bytecode keeps its JVM name (`java.lang.String`); it IS the Kotlin type it maps
         // to. Canonicalize both sides so a `java.lang.String` target accepts a `kotlin.String` value (and is
         // `isKnownType`), matching the mapping member/supertype lookup already applies (`Builtins.kotlinTypeFor`).
-        val d = canonicalForCheck(declared)
-        val a = canonicalForCheck(actual)
+        val d = canonicalTypeForCheck(declared)
+        val a = canonicalTypeForCheck(actual)
         if (!service.isKnownType(d.qualifiedName) || !service.isKnownType(a.qualifiedName)) return false
         // Base types compatible — but a generic TYPE ARGUMENT may still definitely clash (`List<String>` vs
         // `List<Int>`). No variance can bridge two unrelated final argument types, so that is a real mismatch.
@@ -2527,14 +2528,6 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         }
     }
 
-    /** Canonicalize a JVM scalar/value type to its Kotlin classifier for the mismatch comparison. The flexible
-     *  platform COLLECTION types (a Java `List`/`Map` is assignable to both `List` and `MutableList`) are left
-     *  as their JVM name on purpose, so [isMismatch] backs off rather than falsely flag `javaListField = listOf(…)`. */
-    private fun canonicalForCheck(t: KotlinType): KotlinType {
-        val mapped = Builtins.kotlinTypeFor(t.qualifiedName) ?: return t
-        return if (mapped.startsWith("kotlin.collections")) t else t.withClassifier(mapped)
-    }
-
     /**
      * The `null` literal assigned where a known NON-nullable type is expected — Kotlin's NULL_FOR_NONNULL_TYPE
      * (`var s: String = null`, `s = null`, `return null` in a non-null function). The `null` literal has no
@@ -2545,7 +2538,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
     private fun nullForNonNull(target: KotlinType?, value: KtExpression?): Diagnostic? {
         if (target == null || value == null || !isNullLiteral(value)) return null
         if (target.nullable || target.isTypeParameter) return null
-        if (!service.isKnownType(canonicalForCheck(target).qualifiedName)) return null
+        if (!service.isKnownType(canonicalTypeForCheck(target).qualifiedName)) return null
         val r = value.textRange
         return Diagnostic(
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
@@ -2683,6 +2676,56 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      * implicit lambda `it`, a property accessor's `field`, and a name that resolves through a companion object
      * in scope ([KotlinResolver.companionMemberInScope]).
      */
+    /**
+     * An infix call `left name right` whose function is not in scope: a missing import for an infix EXTENSION
+     * (`enter togetherWith exit` without `import androidx.compose.animation.togetherWith`), or a name that
+     * names nothing at all.
+     *
+     * The dotted spelling of the very same call is checked by [unresolvedMember], but an infix operation
+     * reference is a `KtOperationReferenceExpression`, a SIBLING of `KtNameReferenceExpression` rather than a
+     * subclass, so the name-reference checker never visited one and every infix call read as resolved.
+     *
+     * Conservative in the same places [unresolvedMember] is: an unknown or type-parameter receiver, or a name
+     * that resolves to anything in scope, backs off. A same-named callable that is in scope but NOT declared
+     * `infix` backs off too: Kotlin reports that as a missing `infix` modifier, a different problem from an
+     * unresolved name.
+     */
+    private fun unresolvedInfixOperator(e: KtBinaryExpression, resolver: KotlinResolver): Diagnostic? {
+        if (e.operationToken != KtTokens.IDENTIFIER) return null // a real operator token, not an infix call
+        e.right ?: return null // `a foo` half typed: a syntax error, not an unresolved name
+        val ref = e.operationReference
+        val name = ref.getReferencedName()
+        if (name.isEmpty()) return null
+        // An ALIASED import renames the callable (`import a.b.togetherWith as combine`), so the name written
+        // here is not the declared one and no lookup by it can find the function. Back off rather than flag a
+        // call that resolves.
+        if (resolver.fileContext.imports.any { it.alias == name }) return null
+        val left = e.left ?: return null
+        val inferred = resolver.inferType(left) ?: return null // unknown receiver, cannot judge
+        val recvType = resolver.receiverForMembers(inferred, left.textRange.startOffset) ?: return null
+        if (recvType.isTypeParameter) return null
+        // A plain member resolves outright; an extension only when it is actually imported / same-package /
+        // default-imported, which is the whole point of the check. Probed FIRST because it is the memoized
+        // lookup: an in-scope infix (`to`, `until`, a member) then costs one cached query and returns, and the
+        // scope walk below runs only for a name that is going nowhere.
+        val ctx = resolver.fileContext
+        val matching = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name)
+            .filter { it.name == name }
+        if (matching.any { !it.isExtension || extensionInScope(it, ctx) }) return null
+        // A member extension needs no import: it is in scope through its own dispatch receiver (an enclosing
+        // class or companion), or through an import of its singleton container.
+        if (resolver.scopeMemberExtensions(ref.textRange.startOffset, recvType, name).any { it.name == name })
+            return null
+        // Only flag when the receiver type is enumerable: an unknown type yields an empty member set and would
+        // produce a false "unresolved" (mirrors [unresolvedMember]).
+        if (!service.isKnownType(recvType.qualifiedName)) return null
+        val r = ref.textRange
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Unresolved reference: $name", KotlinDiagnosticCodes.UNRESOLVED,
+        )
+    }
+
     private fun unresolvedBareReference(expr: KtNameReferenceExpression, resolver: KotlinResolver): Diagnostic? {
         val parent = expr.parent
         // `a.b` selector, or the callee `b` of `a.b()` — a member, resolved by unresolvedMember (not here).

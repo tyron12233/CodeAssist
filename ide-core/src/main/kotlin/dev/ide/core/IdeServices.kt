@@ -60,6 +60,7 @@ import dev.ide.core.event.AnalysisEvent
 import dev.ide.core.event.IdeEventTopics
 import dev.ide.core.event.IndexEvent
 import dev.ide.core.services.AndroidResourceService
+import dev.ide.core.services.IconManagerService
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
 import dev.ide.core.services.ComposePreviewService
@@ -428,6 +429,7 @@ internal val ANDROID_RESOURCE_SERVICE =
 internal val REFACTOR_SERVICE = ServiceKey<RefactorService>("ide.service.refactor")
 internal val KOTLIN_EDITOR_SERVICE = ServiceKey<KotlinEditorService>("ide.service.kotlinEditor")
 internal val COMPOSE_PREVIEW_SERVICE = ServiceKey<ComposePreviewService>("ide.service.composePreview")
+internal val ICON_MANAGER_SERVICE = ServiceKey<IconManagerService>("ide.service.icons")
 
 /**
  * APPLICATION-scoped shared toolchain services — reachable with no project open (the picker's Settings &
@@ -798,6 +800,10 @@ class IdeServices private constructor(
     /** WORKSPACE-scoped Compose @Preview interpreter (lower / diagnostics / run / readiness). */
     internal val composePreview: ComposePreviewService
         get() = store.workspaceContainer.getService(COMPOSE_PREVIEW_SERVICE)
+
+    /** WORKSPACE-scoped icon browsing, the drawable/mipmap catalogue, and asset writing. */
+    internal val icons: IconManagerService
+        get() = store.workspaceContainer.getService(ICON_MANAGER_SERVICE)
 
     /** Set the Maven version-conflict policy (delegates to the dependency service). Kept here so the settings
      *  surface can reach it through the engine without depending on the service type. */

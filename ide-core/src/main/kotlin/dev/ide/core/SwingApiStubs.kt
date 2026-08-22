@@ -3,6 +3,7 @@ package dev.ide.core
 import dev.ide.platform.log.Log
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 
 /**
@@ -35,7 +36,7 @@ object SwingApiStubs {
      * write at startup.
      */
     @Synchronized
-    fun bundled(): Path? = extracted ?: extractTo(Path.of(System.getProperty("java.io.tmpdir"), "codeassist-swing-api"))
+    fun bundled(): Path? = extracted ?: extractTo(Paths.get(System.getProperty("java.io.tmpdir"), "codeassist-swing-api"))
         ?.also { extracted = it }
 
     /** Write the bundled jar into [cachesRoot], replacing whatever was there. */

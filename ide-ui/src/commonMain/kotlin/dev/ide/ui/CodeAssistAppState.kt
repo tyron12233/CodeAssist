@@ -101,6 +101,21 @@ class CodeAssistAppState(
     var keystoreInProject: Boolean by mutableStateOf(false)
         private set
 
+    /** Where the Icon Manager returns on Back: the editor, or a module's config when opened from there. */
+    var iconManagerReturn: Screen by mutableStateOf(Screen.Editor)
+        private set
+
+    /** A `res/` directory the Icon Manager should preselect, set when it was opened from a file-tree node. */
+    var iconManagerResDir: String? by mutableStateOf(null)
+        private set
+
+    /** The icon the app-icon studio should open with as its foreground, when one was picked for it. */
+    var appIconSeedRepoId: String? by mutableStateOf(null)
+        private set
+
+    var appIconSeedName: String? by mutableStateOf(null)
+        private set
+
     // ---- per-screen arguments ----
 
     /** A template id to pre-select in the Create-Project flow when it is opened from a Store item (null = the
@@ -298,6 +313,26 @@ class CodeAssistAppState(
 
     /** Open the hub's Keystore Manager entry: a project context only when the hub itself came from the editor. */
     fun openKeystoreManagerFromHub() = openKeystoreManager(Screen.Hub, inProject = hubReturn == Screen.Editor)
+
+    /**
+     * Open the Icon Manager, remembering where Back goes. [resDir] preselects an import target, which is how
+     * the file tree's "New Image Asset" entry scopes the screen to the folder that was tapped.
+     */
+    fun openIconManager(returnTo: Screen = Screen.Editor, resDir: String? = null) {
+        iconManagerReturn = returnTo
+        iconManagerResDir = resDir
+        screen = Screen.IconManager
+    }
+
+    /**
+     * Open the app-icon studio, optionally seeded with the icon the user picked in the Icon Manager. Back from
+     * the studio returns to the manager, so choosing a different icon is a round trip rather than a dead end.
+     */
+    fun openAppIconStudio(repoId: String? = null, iconName: String? = null) {
+        appIconSeedRepoId = repoId
+        appIconSeedName = iconName
+        screen = Screen.AppIconStudio
+    }
 
     fun openKeystoreImport(path: String) {
         keystoreImportPath = path
@@ -514,6 +549,8 @@ class CodeAssistAppState(
                 screen == Screen.EditorSymbols || screen == Screen.Plugins || screen == Screen.Storage ->
                 screen = Screen.Hub
             screen == Screen.KeystoreManager -> screen = keystoreReturn
+            screen == Screen.AppIconStudio -> screen = Screen.IconManager
+            screen == Screen.IconManager -> screen = iconManagerReturn
             // The hub returns to wherever it was opened from (picker or editor).
             screen == Screen.Hub -> screen = hubReturn
 
