@@ -229,6 +229,11 @@ class AndroidXmlContributor(
         return listOf(CompletionItem(uri, uri, CompletionItemKind.FIELD, detail = "namespace URI"))
     }
 
+    /** The non-framework `View` classes this contributor offers as element tags (library/AAR + project
+     *  source, fully-qualified). Shared with the unknown-element diagnostic so what completion suggests and
+     *  what analysis accepts can't drift apart. */
+    fun customViewTags(): List<Widget> = customViews()
+
     private fun tagItems(pos: XmlCompletionPosition): List<CompletionItem> {
         // Framework widgets (simple names, from the SDK metadata) + custom views from the library classpath
         // (fully-qualified names — a layout must spell a non-framework view with its FQN). Deduped by tag.

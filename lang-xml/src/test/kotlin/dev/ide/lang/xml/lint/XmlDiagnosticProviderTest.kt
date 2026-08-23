@@ -99,9 +99,74 @@ class XmlDiagnosticProviderTest {
         assertTrue(d.fixes.isEmpty())
     }
 
+    @Test
+    fun flagsUnresolvedElementWithADidYouMeanRenameFix() = runTest {
+        val xml = "<LinearLayout><TextVeiw/></LinearLayout>"
+        val host = FakeHost(refs = emptyList(), valueTypes = emptySet(), present = emptySet())
+        val tags = XmlTagChecker { _, tag, _ ->
+            if (tag == "TextVeiw") TagInfo.Unresolved(listOf("TextView")) else TagInfo.Recognized(container = true)
+        }
+        val d = XmlDiagnosticProvider(host, tags = tags).diagnose(target(xml))
+            .single { it.code == "android.unknownTag" }
+        assertTrue("TextVeiw" in d.message && "TextView" in d.message, d.message)
+        val fix = d.fixes.single()
+        assertEquals("Change tag to TextView", fix.title)
+        val edits = fix.computeEdits(FixCtx(target(xml))).edits.values.single()
+        assertEquals(1, edits.size, "a self-closing element has one name to rewrite")
+        assertEquals(xml.indexOf("TextVeiw"), edits[0].offset)
+        assertEquals("TextView", edits[0].newText.toString())
+    }
+
+    @Test
+    fun flagsAChildUnderANonContainer() = runTest {
+        val host = FakeHost(refs = emptyList(), valueTypes = emptySet(), present = emptySet())
+        val tags = XmlTagChecker { _, tag, _ -> TagInfo.Recognized(container = tag == "LinearLayout") }
+        val d = XmlDiagnosticProvider(host, tags = tags)
+            .diagnose(target("<LinearLayout><TextView><Button/></TextView></LinearLayout>"))
+            .single { it.code == "android.illegalChild" }
+        assertTrue("TextView" in d.message && "Button" in d.message, d.message)
+    }
+
+    @Test
+    fun flagsInflaterStructureAndDuplicateIds() = runTest {
+        val host = FakeHost(refs = emptyList(), valueTypes = emptySet(), present = emptySet())
+        val xml = """
+            <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android">
+                <include/>
+                <TextView android:id="@+id/x"/>
+                <TextView android:id="@+id/x"/>
+            </FrameLayout>
+        """.trimIndent()
+        val codes = XmlDiagnosticProvider(host).diagnose(target(xml)).map { it.code }
+        assertTrue("android.includeWithoutLayout" in codes, codes.toString())
+        assertEquals(1, codes.count { it == "android.duplicateId" }, codes.toString())
+    }
+
+    @Test
+    fun valuesFileEntryProblemsAreFlaggedInValuesFilesOnly() = runTest {
+        val xml = """
+            <resources>
+                <string name="a">1</string>
+                <string name="a">2</string>
+                <color>#fff</color>
+            </resources>
+        """.trimIndent()
+        val host = FakeHost(refs = emptyList(), valueTypes = emptySet(), present = emptySet())
+        val provider = XmlDiagnosticProvider(host)
+        val inValues = provider.diagnose(target(xml, "/p/res/values/strings.xml")).map { it.code }
+        assertTrue("android.duplicateResource" in inValues && "android.resourceMissingName" in inValues, inValues.toString())
+        // The same content under res/layout is not a values file, so the entry rules don't apply there.
+        val inLayout = provider.diagnose(target(xml)).map { it.code }
+        assertTrue(inLayout.none { it == "android.duplicateResource" || it == "android.resourceMissingName" })
+    }
+
     // ---- fakes ----
 
-    private fun target(xml: String): AnalysisTarget = FakeTarget(XmlIncrementalParser().parseFull(Doc(xml)))
+    /** An analysis target for [xml] as a file at [path] (the provider switches checks by res/ folder). */
+    private fun target(xml: String, path: String = "/p/res/layout/a.xml"): AnalysisTarget {
+        val file = FileAt(path)
+        return FakeTarget(XmlIncrementalParser().parseFull(Doc(xml, file)), file)
+    }
 
     private class FakeHost(
         private val refs: List<XmlResourceRef>,
@@ -125,8 +190,7 @@ class XmlDiagnosticProviderTest {
         }
     }
 
-    private class FakeTarget(override val parsed: ParsedFile) : AnalysisTarget {
-        override val file: VirtualFile = Fake
+    private class FakeTarget(override val parsed: ParsedFile, override val file: VirtualFile) : AnalysisTarget {
         override val documentVersion = 1L
         override val resolver: SourceAnalyzer get() = error("unused by XmlDiagnosticProvider")
         override val index: IndexService get() = error("unused by XmlDiagnosticProvider")
@@ -138,14 +202,14 @@ class XmlDiagnosticProviderTest {
         override fun checkCanceled() {}
     }
 
-    private class Doc(override val text: CharSequence) : DocumentSnapshot {
-        override val file: VirtualFile = Fake
+    private class Doc(override val text: CharSequence, override val file: VirtualFile = FileAt("/p/res/layout/a.xml")) :
+        DocumentSnapshot {
         override val version = 1L
         override fun length() = text.length
     }
 
-    private object Fake : VirtualFile {
-        override val path = "res/layout/a.xml"; override val name = "a.xml"
+    private class FileAt(override val path: String) : VirtualFile {
+        override val name = path.substringAfterLast('/')
         override val isDirectory = false; override val exists = true; override val length = 0L
         override fun parent(): VirtualFile? = null
         override fun children(): List<VirtualFile> = emptyList()

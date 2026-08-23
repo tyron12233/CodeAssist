@@ -79,7 +79,23 @@ data class ShapeSpec(
     val thicknessFraction: Float = 0.22f,
 )
 
-/** One `<path>` of a `<vector>`. Stroke width is in viewport units (matched to the `pathData` coordinates). */
+/** How a path's interior is decided where its outline self-intersects (`android:fillType`). */
+enum class FillRule { NON_ZERO, EVEN_ODD }
+
+/** A stroke's end shape (`android:strokeLineCap`). */
+enum class StrokeCap { BUTT, ROUND, SQUARE }
+
+/** A stroke's corner shape (`android:strokeLineJoin`). */
+enum class StrokeJoin { MITER, ROUND, BEVEL }
+
+/**
+ * A node in a `<vector>`'s tree: a drawn [VectorPath], or a [VectorGroup] that transforms and optionally
+ * clips its children. Real icons (and anything converted from SVG) nest transforms, so flattening the tree
+ * to a path list draws those paths in the wrong place at the wrong size.
+ */
+sealed interface VectorNode
+
+/** One `<path>`. Stroke width is in viewport units (matched to the `pathData` coordinates). */
 data class VectorPath(
     val pathData: String,
     val fillColor: Long? = null,
@@ -87,11 +103,32 @@ data class VectorPath(
     val strokeWidthVp: Float = 0f,
     val fillAlpha: Float = 1f,
     val strokeAlpha: Float = 1f,
-)
+    val fillRule: FillRule = FillRule.NON_ZERO,
+    val strokeCap: StrokeCap = StrokeCap.BUTT,
+    val strokeJoin: StrokeJoin = StrokeJoin.MITER,
+    val strokeMiter: Float = 4f,
+) : VectorNode
+
+/**
+ * A `<group>`: a transform over its [children], composed in Android's order (scale, then rotate, then
+ * translate), with scale/rotate about the pivot ([pivotX], [pivotY]); all values are in viewport units.
+ * [clipPathData] is the group's `<clip-path>`: its children draw only inside that outline.
+ */
+data class VectorGroup(
+    val children: List<VectorNode>,
+    val translateX: Float = 0f,
+    val translateY: Float = 0f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val rotation: Float = 0f,
+    val pivotX: Float = 0f,
+    val pivotY: Float = 0f,
+    val clipPathData: String? = null,
+) : VectorNode
 
 /**
  * A `<vector>`. [widthDp]/[heightDp] are the intrinsic size; the [viewportWidth]/[viewportHeight] define the
- * coordinate space the [paths] are drawn in (the renderer scales viewport → bounds). [rootAlpha] is the
+ * coordinate space the [nodes] are drawn in (the renderer scales viewport → bounds). [rootAlpha] is the
  * whole-drawable alpha.
  */
 data class VectorSpec(
@@ -100,8 +137,18 @@ data class VectorSpec(
     val viewportWidth: Float,
     val viewportHeight: Float,
     val rootAlpha: Float = 1f,
-    val paths: List<VectorPath>,
-)
+    val nodes: List<VectorNode>,
+) {
+    /** Every [VectorPath] in the tree, depth-first, for callers that only want geometry and not transforms. */
+    val paths: List<VectorPath> get() = ArrayList<VectorPath>().also { collectPaths(nodes, it) }
+
+    private fun collectPaths(src: List<VectorNode>, out: MutableList<VectorPath>) {
+        for (node in src) when (node) {
+            is VectorPath -> out += node
+            is VectorGroup -> collectPaths(node.children, out)
+        }
+    }
+}
 
 /** A `<layer-list>` item: its drawable + optional insets (dp). */
 data class Layer(

@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin.resolve
 
+import dev.ide.lang.kotlin.symbols.Builtins
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
@@ -179,6 +180,16 @@ internal fun KotlinResolver.arithmeticOperatorReturn(
         } == true
     }
     return chosen?.type as? KotlinType
+}
+
+/** Canonicalize a JVM scalar/value type to its Kotlin classifier before comparing two types: a type read from
+ *  bytecode keeps its JVM name (`java.lang.String`) and IS the Kotlin type it maps to, so without this a
+ *  `java.lang.String` parameter looks unrelated to a `kotlin.String` argument. The flexible platform COLLECTION
+ *  types are left as their JVM name on purpose (a Java `List` is assignable to both `List` and `MutableList`),
+ *  so a caller sees an unmodeled name there and backs off rather than concluding a clash. */
+internal fun canonicalTypeForCheck(t: KotlinType): KotlinType {
+    val mapped = Builtins.kotlinTypeFor(t.qualifiedName) ?: return t
+    return if (mapped.startsWith("kotlin.collections")) t else t.withClassifier(mapped)
 }
 
 /** Whether a parameter of type [param] accepts an argument of type [arg] — an assignable/same type, a generic

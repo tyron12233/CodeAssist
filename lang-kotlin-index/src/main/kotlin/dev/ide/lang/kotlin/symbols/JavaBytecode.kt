@@ -303,7 +303,7 @@ object JavaBytecode {
 
     /**
      * Builds one [KotlinType] from a type-signature position and reports it to [sink]. A type variable
-     * becomes an `isTypeParameter` type keyed by its name (`T`); an array nests under `kotlin.Array`; a
+     * becomes an `isTypeParameter` type keyed by its name (`T`); an array goes through [arrayType]; a
      * wildcard contributes its bound (`? extends X` / `? super X` → `X`, unbounded `?` → `Any`); a class
      * type accumulates its arguments and reports on [visitEnd].
      */
@@ -320,11 +320,7 @@ object JavaBytecode {
             sink(KotlinType(name, isTypeParameter = true, context = ctx))
 
         override fun visitArrayType(): SignatureVisitor = TypeSigVisitor(ctx) { el ->
-            sink(
-                KotlinType(
-                    "kotlin.Array", listOf(el), context = ctx
-                )
-            )
+            sink(arrayType(el, ctx))
         }
 
         override fun visitClassType(name: String) {
@@ -354,7 +350,7 @@ object JavaBytecode {
     }
 
     /** An erased ASM [Type] (the no-generic-signature path) as a [KotlinType]: JVM primitives mapped to their
-     *  Kotlin classifier (`int`→`kotlin.Int`), arrays to `kotlin.Array<elem>`, references by FQN. */
+     *  Kotlin classifier (`int`→`kotlin.Int`), arrays through [arrayType], references by FQN. */
     private fun erased(t: Type, ctx: KotlinTypeContext?): KotlinType = when (t.sort) {
         Type.VOID -> KotlinType("kotlin.Unit", context = ctx)
         Type.BOOLEAN -> KotlinType("kotlin.Boolean", context = ctx)
@@ -365,7 +361,9 @@ object JavaBytecode {
         Type.FLOAT -> KotlinType("kotlin.Float", context = ctx)
         Type.LONG -> KotlinType("kotlin.Long", context = ctx)
         Type.DOUBLE -> KotlinType("kotlin.Double", context = ctx)
-        Type.ARRAY -> KotlinType("kotlin.Array", listOf(erased(t.elementType, ctx)), context = ctx)
+        // `Type.elementType` strips EVERY dimension (`[[B` → `byte`), so re-wrap once per dimension: a
+        // `byte[][]` is `Array<ByteArray>`, not the single-level type a bare elementType would produce.
+        Type.ARRAY -> (1..t.dimensions).fold(erased(t.elementType, ctx)) { el, _ -> arrayType(el, ctx) }
         // ASM's `Type.className` keeps the binary `$` nested separator (`android.view.ViewGroup$LayoutParams`),
         // but every other type FQN in the model is dot-form: the class self-FQN (`selfName.replace('$', '.')`),
         // the generic-signature path ([TypeSigVisitor]), and `typeFromText`. A nested library type reached
@@ -374,6 +372,29 @@ object JavaBytecode {
         // false-flagged a mismatch (both resolve, so the check didn't back off). Normalize to dot-form to match.
         else -> KotlinType(t.className.replace('$', '.'), context = ctx)
     }
+
+    /**
+     * The Kotlin type of a JVM array whose element decoded to [el]. A PRIMITIVE element maps to Kotlin's
+     * SPECIALISED array class (`byte[]` → `ByteArray`, `int[]` → `IntArray`), never `Array<Byte>`/`Array<Int>`:
+     * that specialised class IS the Kotlin type of the parameter, so `outputStream.write(byteArray)` type-checks
+     * instead of the argument check reporting "inferred type is ByteArray but Array<Byte> was expected" (and the
+     * mismatch quick-fix then offering an unrelated same-named extension to import). Everything else — a
+     * reference element, a type variable (`T[]` → `Array<T>`), a nested array (`byte[][]` → `Array<ByteArray>`)
+     * — nests under `kotlin.Array<E>`.
+     */
+    private fun arrayType(el: KotlinType, ctx: KotlinTypeContext?): KotlinType {
+        val specialised = if (el.isTypeParameter || el.nullable) null else PRIMITIVE_ARRAYS[el.qualifiedName]
+        return if (specialised != null) KotlinType(specialised, context = ctx)
+        else KotlinType("kotlin.Array", listOf(el), context = ctx)
+    }
+
+    /** A Kotlin primitive classifier → the specialised array class a JVM array of it maps to (see [arrayType]). */
+    private val PRIMITIVE_ARRAYS = mapOf(
+        "kotlin.Int" to "kotlin.IntArray", "kotlin.Long" to "kotlin.LongArray",
+        "kotlin.Short" to "kotlin.ShortArray", "kotlin.Byte" to "kotlin.ByteArray",
+        "kotlin.Char" to "kotlin.CharArray", "kotlin.Boolean" to "kotlin.BooleanArray",
+        "kotlin.Float" to "kotlin.FloatArray", "kotlin.Double" to "kotlin.DoubleArray",
+    )
 
     private fun primitive(descriptor: Char, ctx: KotlinTypeContext?): KotlinType = KotlinType(
         when (descriptor) {

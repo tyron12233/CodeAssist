@@ -1,14 +1,19 @@
 package dev.ide.core.backend
 
 import dev.ide.android.support.preview.DrawablePreview
+import dev.ide.android.support.preview.FillRule
 import dev.ide.android.support.preview.GradientSpec
 import dev.ide.android.support.preview.Layer
 import dev.ide.android.support.preview.StateLayer
+import dev.ide.android.support.preview.VectorGroup
+import dev.ide.android.support.preview.VectorNode
 import dev.ide.android.support.preview.VectorPath
 import dev.ide.ui.backend.UiDrawable
 import dev.ide.ui.backend.UiGradient
 import dev.ide.ui.backend.UiLayer
 import dev.ide.ui.backend.UiStateLayer
+import dev.ide.ui.backend.UiVectorGroup
+import dev.ide.ui.backend.UiVectorNode
 import dev.ide.ui.backend.UiVectorPath
 
 /** Maps the engine's [DrawablePreview] model onto the neutral [UiDrawable] DTO the Compose canvas renders.
@@ -43,7 +48,7 @@ object DrawableMapping {
                 widthDp = v.widthDp, heightDp = v.heightDp,
                 viewportWidth = v.viewportWidth, viewportHeight = v.viewportHeight,
                 rootAlpha = v.rootAlpha,
-                paths = v.paths.map(::toUiVectorPath),
+                nodes = v.nodes.map(::toUiVectorNode),
             )
         }
 
@@ -68,10 +73,24 @@ object DrawableMapping {
         radiusFraction = g.radiusFraction,
     )
 
-    private fun toUiVectorPath(p: VectorPath) = UiVectorPath(
-        pathData = p.pathData, fillColor = p.fillColor, strokeColor = p.strokeColor,
-        strokeWidthVp = p.strokeWidthVp, fillAlpha = p.fillAlpha, strokeAlpha = p.strokeAlpha,
-    )
+    private fun toUiVectorNode(n: VectorNode): UiVectorNode = when (n) {
+        is VectorPath -> UiVectorPath(
+            pathData = n.pathData, fillColor = n.fillColor, strokeColor = n.strokeColor,
+            strokeWidthVp = n.strokeWidthVp, fillAlpha = n.fillAlpha, strokeAlpha = n.strokeAlpha,
+            fillRule = if (n.fillRule == FillRule.EVEN_ODD) "evenOdd" else "nonZero",
+            strokeCap = n.strokeCap.name.lowercase(),
+            strokeJoin = n.strokeJoin.name.lowercase(),
+            strokeMiter = n.strokeMiter,
+        )
+
+        is VectorGroup -> UiVectorGroup(
+            children = n.children.map(::toUiVectorNode),
+            translateX = n.translateX, translateY = n.translateY,
+            scaleX = n.scaleX, scaleY = n.scaleY,
+            rotation = n.rotation, pivotX = n.pivotX, pivotY = n.pivotY,
+            clipPathData = n.clipPathData,
+        )
+    }
 
     private fun toUiLayer(l: Layer) = UiLayer(
         drawable = toUi(l.drawable),

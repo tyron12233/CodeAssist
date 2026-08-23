@@ -75,6 +75,9 @@ interface IdeBackend {
      *  Optional — a backend that wires no store inherits [CustomizationService.Unsupported]. */
     val customize: CustomizationService get() = CustomizationService.Unsupported
 
+    /** Icon browsing, import, and the app-icon studio. */
+    val icons: IconService get() = IconService.Unsupported
+
     /**
      * The Compose UI facets (tool windows, actions, screens) contributed by the currently-ENABLED plugins. The
      * shell registers these into `UiPluginHost` at startup — a plugin's UI is thus governed by the same

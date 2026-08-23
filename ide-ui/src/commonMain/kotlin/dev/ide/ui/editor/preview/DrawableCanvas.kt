@@ -9,14 +9,21 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiDrawable
 import dev.ide.ui.backend.UiGradient
+import dev.ide.ui.backend.UiVectorGroup
+import dev.ide.ui.backend.UiVectorNode
+import dev.ide.ui.backend.UiVectorPath
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
@@ -134,16 +141,59 @@ private fun DrawScope.drawVector(v: UiDrawable.Vector, topLeft: Offset, size: Si
     val oy = topLeft.y + (size.height - drawnH) / 2f
     translate(ox, oy) {
         scale(scaleF, scaleF, pivot = Offset.Zero) {
-            for (p in v.paths) {
-                val path = AndroidPathParser.parse(p.pathData)
-                p.fillColor?.let { drawPath(path, argbColor(it), alpha = (p.fillAlpha * v.rootAlpha).coerceIn(0f, 1f), style = Fill) }
-                if (p.strokeColor != null && p.strokeWidthVp > 0f) {
-                    drawPath(
-                        path, argbColor(p.strokeColor!!),
-                        alpha = (p.strokeAlpha * v.rootAlpha).coerceIn(0f, 1f),
-                        style = Stroke(width = p.strokeWidthVp),
-                    )
-                }
+            drawVectorNodes(v.nodes, v.rootAlpha)
+        }
+    }
+}
+
+/**
+ * Draws a `<vector>`'s node tree in viewport coordinates. The enclosing scope has already mapped the
+ * viewport onto the target bounds, so a group's translate/scale/rotate values apply as written.
+ */
+private fun DrawScope.drawVectorNodes(nodes: List<UiVectorNode>, rootAlpha: Float) {
+    for (node in nodes) when (node) {
+        is UiVectorPath -> drawVectorPath(node, rootAlpha)
+        is UiVectorGroup -> drawVectorGroup(node, rootAlpha)
+    }
+}
+
+private fun DrawScope.drawVectorPath(p: UiVectorPath, rootAlpha: Float) {
+    val path = AndroidPathParser.parse(p.pathData, fillEvenOdd = p.fillRule == "evenOdd")
+    p.fillColor?.let {
+        drawPath(path, argbColor(it), alpha = (p.fillAlpha * rootAlpha).coerceIn(0f, 1f), style = Fill)
+    }
+    val stroke = p.strokeColor
+    if (stroke != null && p.strokeWidthVp > 0f) {
+        drawPath(
+            path, argbColor(stroke),
+            alpha = (p.strokeAlpha * rootAlpha).coerceIn(0f, 1f),
+            style = Stroke(
+                width = p.strokeWidthVp,
+                miter = p.strokeMiter,
+                cap = when (p.strokeCap) {
+                    "round" -> StrokeCap.Round
+                    "square" -> StrokeCap.Square
+                    else -> StrokeCap.Butt
+                },
+                join = when (p.strokeJoin) {
+                    "round" -> StrokeJoin.Round
+                    "bevel" -> StrokeJoin.Bevel
+                    else -> StrokeJoin.Miter
+                },
+            ),
+        )
+    }
+}
+
+/** Android composes a group's transform as scale, then rotate, then translate, all about the pivot. */
+private fun DrawScope.drawVectorGroup(g: UiVectorGroup, rootAlpha: Float) {
+    val pivot = Offset(g.pivotX, g.pivotY)
+    translate(g.translateX, g.translateY) {
+        rotate(g.rotation, pivot) {
+            scale(g.scaleX, g.scaleY, pivot) {
+                val clip = g.clipPathData
+                if (clip == null) drawVectorNodes(g.children, rootAlpha)
+                else clipPath(AndroidPathParser.parse(clip)) { drawVectorNodes(g.children, rootAlpha) }
             }
         }
     }

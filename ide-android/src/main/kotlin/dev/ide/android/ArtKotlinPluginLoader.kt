@@ -109,6 +109,8 @@ class ArtKotlinPluginLoader(
      * app's), except for [ToolClassIsolation.CHILD_FIRST_PACKAGES], which the tool's own dex must supply.
      * Without this, the app's bundletool-provided Dagger ~2.2x shadowed the bundled Hilt processor's Dagger
      * 2.6x and the processor died with `NoSuchMethodError` on `DoubleCheck.provider(dagger.internal.Provider)`.
+     * The same list carries guava, which additionally has to stay on one side of the boundary because the
+     * lambda synthetics D8 generates here are numbered independently of the app's build-time dexing.
      */
     private class ToolDexClassLoader(dexPath: String, odex: String, parent: ClassLoader?) :
         DexClassLoader(dexPath, odex, null, parent) {

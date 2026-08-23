@@ -23,7 +23,8 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * The shared Material 3 Expressive screen frame: a [Scaffold] with a collapsing [LargeTopAppBar] (a big
  * title that shrinks on scroll), an optional back navigation icon, a trailing [actions] cluster, and an
- * optional FAB. Every redesigned screen wraps its content in this so the whole app reads as one system.
+ * optional FAB and [snackbarHost]. Every redesigned screen wraps its content in this so the whole app
+ * reads as one system.
  * The [content] receives the top-bar inset as [PaddingValues] — apply it (or pass it to a LazyColumn's
  * `contentPadding`) so content scrolls under the collapsing bar.
  *
@@ -37,6 +38,8 @@ fun ExpressiveScaffold(
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     floatingActionButton: @Composable () -> Unit = {},
+    /** Snackbar host, for a screen that reports the outcome of an action. */
+    snackbarHost: @Composable () -> Unit = {},
     large: Boolean = true,
     content: @Composable (PaddingValues) -> Unit,
 ) {
@@ -58,6 +61,7 @@ fun ExpressiveScaffold(
             }
         },
         floatingActionButton = floatingActionButton,
+        snackbarHost = snackbarHost,
         content = content,
     )
 }

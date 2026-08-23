@@ -5,6 +5,7 @@ import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.xml.XmlNode
 import dev.ide.lang.xml.XmlNodeKinds
+import dev.ide.lang.xml.edit.XmlAttributeInsert
 
 /**
  * Pure (I/O-free, index-free) Android XML lint rules over the tolerant DOM (the detection half).
@@ -16,6 +17,20 @@ object XmlLintRules {
     private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
     private val TEXT_ATTRS = setOf("android:text", "android:hint", "android:contentDescription")
     private val SIZELESS_TAGS = setOf("merge", "include", "ViewStub", "requestFocus", "tag")
+
+    /** Elements the inflater accepts inside ANY view (not just a `ViewGroup`), so they are never an
+     *  illegal child: `<requestFocus/>` and `<tag/>` are handled by `LayoutInflater` itself. */
+    private val VIEW_META_CHILDREN = setOf("requestFocus", "tag")
+
+    /** The data-binding wrapper elements a `<merge>` may sit inside while still being the layout's root. */
+    private val DATA_BINDING_WRAPPERS = setOf("layout")
+
+    /** `<resources>` children that DECLARE a resource, so each needs a `name` that is unique per R class.
+     *  Anything else (`<eat-comment/>`, `<skip/>`, `<public-group>`, an unknown element) is left alone. */
+    private val VALUE_TAGS = setOf(
+        "string", "string-array", "integer-array", "array", "color", "dimen", "bool", "integer",
+        "fraction", "style", "plurals", "declare-styleable", "attr", "item", "drawable", "id",
+    )
 
     /** Standard Android namespace URIs by conventional prefix — the ones a missing declaration is offered for. */
     private val KNOWN_NAMESPACES = linkedMapOf(
@@ -30,17 +45,66 @@ object XmlLintRules {
     private val UNCHECKED_ATTR_PREFIXES = setOf("xmlns", "tools")
 
     /** A namespace [prefix] (`android`/`app`/`tools`) used in attributes but not declared on the root.
-     *  [insertAt] is where to splice ` xmlns:prefix="uri"` (just after the root tag name). */
-    data class MissingNamespace(val prefix: String, val uri: String, val range: TextRange, val insertAt: Int)
+     *  [insertAt] is where to splice `xmlns:prefix="uri"` (just after the root tag name), [separator] the
+     *  whitespace it is written behind (a space, or a newline + indent when the root writes one per line). */
+    data class MissingNamespace(
+        val prefix: String, val uri: String, val range: TextRange, val insertAt: Int, val separator: String = " ",
+    )
 
     /** A hardcoded user-facing string in [attrName]; [value] occupies [range] (text between the quotes). */
     data class HardcodedText(val range: TextRange, val attrName: String, val value: String)
 
-    /** A view [tag] missing `android:[dim]`; the attribute would be spliced at [insertAt]. [range] underlines the tag. */
-    data class MissingSize(val range: TextRange, val tag: String, val dim: String, val insertAt: Int)
+    /** A view [tag] missing `android:[dim]`; the attribute would be spliced at [insertAt] behind [separator]
+     *  (see [XmlAttributeInsert]). [range] underlines the tag. */
+    data class MissingSize(
+        val range: TextRange, val tag: String, val dim: String, val insertAt: Int, val separator: String = " ",
+    )
 
     /** A second (or later) occurrence of [attribute] on [tag]; [range] underlines the duplicate's name. */
     data class DuplicateAttr(val range: TextRange, val tag: String, val attribute: String)
+
+    /** A repeated `@+id/name` declaration in one file; [range] underlines the duplicate's value. */
+    data class DuplicateId(val range: TextRange, val id: String)
+
+    /** A problem with an element occurrence found by [tagProblems]. [range] is what to underline. */
+    sealed interface TagProblem {
+        val range: TextRange
+        val tag: String
+
+        /** [tag] names nothing that exists here (an unknown widget, or a class that isn't on the classpath).
+         *  [nameRanges] are the tag-name spans a rename fix rewrites (the start tag, plus the end tag when the
+         *  element has one); [suggestions] are the closest known names, best first. */
+        data class Unresolved(
+            override val range: TextRange, override val tag: String,
+            val suggestions: List<String>, val nameRanges: List<TextRange>,
+        ) : TagProblem
+
+        /** [tag] cannot contain child elements, yet [child] is nested in it ([range] underlines the child). */
+        data class IllegalChild(
+            override val range: TextRange, override val tag: String, val child: String,
+        ) : TagProblem
+    }
+
+    /** A layout element that breaks an inflater rule (as opposed to an XML or schema rule); [range] underlines
+     *  the element's name. */
+    data class StructureProblem(val range: TextRange, val kind: Kind, val tag: String) {
+        enum class Kind {
+            /** `<include>` with no `layout` attribute: the inflater has nothing to include. */
+            INCLUDE_WITHOUT_LAYOUT,
+
+            /** `<merge>` somewhere other than the layout's root, where it cannot be flattened. */
+            MERGE_NOT_ROOT,
+
+            /** `<fragment>` with neither `android:name` nor `class`: no fragment to instantiate. */
+            FRAGMENT_WITHOUT_CLASS,
+        }
+    }
+
+    /** A `<resources>` entry aapt2 would refuse: no `name`, or a name already declared in the same file.
+     *  [range] underlines the element's name (missing) or the duplicated value (duplicate). */
+    data class ResourceEntryProblem(val range: TextRange, val kind: Kind, val tag: String, val name: String) {
+        enum class Kind { MISSING_NAME, DUPLICATE }
+    }
 
     /** A problem with an attribute occurrence found by [attributeProblems]. [range] is what to underline. */
     sealed interface AttributeProblem {
@@ -96,12 +160,13 @@ object XmlLintRules {
         val root = tags.firstOrNull() ?: return emptyList()
         val declared = root.attributes.mapNotNull { it.name }
             .filter { it.startsWith("xmlns:") }.mapTo(HashSet()) { it.removePrefix("xmlns:") }
-        val at = root.startOffset + 1 + (root.name?.length ?: 0)
+        val at = XmlAttributeInsert.offsetAfterName(root)
+        val separator = XmlAttributeInsert.separatorForPrepend(parsed.text(), root)
         val range = TextRange(root.startOffset, at)
         return KNOWN_NAMESPACES.mapNotNull { (prefix, uri) ->
             if (prefix in declared) return@mapNotNull null
             val used = tags.any { t -> t.attributes.any { it.name?.startsWith("$prefix:") == true } }
-            if (used) MissingNamespace(prefix, uri, range, at) else null
+            if (used) MissingNamespace(prefix, uri, range, at, separator) else null
         }
     }
 
@@ -119,18 +184,130 @@ object XmlLintRules {
     }
 
     fun missingSize(parsed: ParsedFile, isViewLike: (String) -> Boolean): List<MissingSize> {
+        val src = parsed.text()
         val out = ArrayList<MissingSize>()
         for (tag in allTags(parsed)) {
             val name = tag.name ?: continue
             if (name in SIZELESS_TAGS || !isViewLike(name)) continue
             val attrs = tag.attributes.mapNotNull { it.name }.toSet()
-            val range = TextRange(tag.startOffset + 1, tag.startOffset + 1 + name.length)
-            val insertAt = tag.startOffset + 1 + name.length
+            val range = tagNameRange(tag, name)
+            val insertAt = XmlAttributeInsert.offsetAfterAttributes(tag)
+            val separator = XmlAttributeInsert.separatorForAppend(src, tag)
             for (dim in listOf("layout_width", "layout_height")) {
-                if ("android:$dim" !in attrs) out += MissingSize(range, name, dim, insertAt)
+                if ("android:$dim" !in attrs) out += MissingSize(range, name, dim, insertAt, separator)
             }
         }
         return out
+    }
+
+    /**
+     * Elements whose tag doesn't resolve, and elements nested in something that can't hold children: the
+     * "non-existent view tag" check. Which occurrences are eligible is this rule's business (every element
+     * with a name, minus the inflater's own `<requestFocus>`/`<tag>` children when judging containment);
+     * whether a tag *exists* is the injected [checker]'s (see [XmlTagChecker], which is conservative by
+     * construction, so custom views and cold indexes surface as [TagInfo.Indeterminate] and are not flagged).
+     */
+    fun tagProblems(parsed: ParsedFile, filePath: String, checker: XmlTagChecker): List<TagProblem> {
+        val out = ArrayList<TagProblem>()
+        for (tag in allTags(parsed)) {
+            val name = tag.name?.takeIf { it.isNotEmpty() } ?: continue
+            when (val info = checker.describe(filePath, name, enclosingTagName(tag))) {
+                TagInfo.Indeterminate -> {}
+                is TagInfo.Unresolved ->
+                    out += TagProblem.Unresolved(tagNameRange(tag, name), name, info.suggestions, tagNameRanges(tag, name))
+                is TagInfo.Recognized -> {
+                    if (info.container != false) continue
+                    for (child in tag.childTags) {
+                        val childName = child.name?.takeIf { it.isNotEmpty() } ?: continue
+                        if (childName in VIEW_META_CHILDREN) continue
+                        out += TagProblem.IllegalChild(tagNameRange(child, childName), name, childName)
+                    }
+                }
+            }
+        }
+        return out
+    }
+
+    /**
+     * Layout elements that break a `LayoutInflater` rule the XML schema can't express: an `<include>` with
+     * nothing to include, a `<merge>` that isn't the root (so there is no parent to merge into), and a
+     * `<fragment>` naming no class. Pure structure: no schema or classpath knowledge needed.
+     */
+    fun structureProblems(parsed: ParsedFile): List<StructureProblem> {
+        val out = ArrayList<StructureProblem>()
+        for (tag in allTags(parsed)) {
+            val name = tag.name ?: continue
+            val attrs = tag.attributes.mapNotNull { it.name }.toSet()
+            val range = tagNameRange(tag, name)
+            when (name) {
+                "include" -> if ("layout" !in attrs)
+                    out += StructureProblem(range, StructureProblem.Kind.INCLUDE_WITHOUT_LAYOUT, name)
+                "merge" -> {
+                    val parent = enclosingTagName(tag)
+                    if (parent != null && parent !in DATA_BINDING_WRAPPERS)
+                        out += StructureProblem(range, StructureProblem.Kind.MERGE_NOT_ROOT, name)
+                }
+                "fragment" -> if ("android:name" !in attrs && "class" !in attrs)
+                    out += StructureProblem(range, StructureProblem.Kind.FRAGMENT_WITHOUT_CLASS, name)
+            }
+        }
+        return out
+    }
+
+    /**
+     * The same `@+id/name` declared on two elements of one file. `findViewById` then returns whichever the
+     * inflater reached first, which is virtually never what was meant. Only `@+id/` *declarations* count: a
+     * `@id/` reference (a constraint target, a label-for) legitimately repeats.
+     */
+    fun duplicateIds(parsed: ParsedFile): List<DuplicateId> {
+        val seen = HashSet<String>()
+        val out = ArrayList<DuplicateId>()
+        for (tag in allTags(parsed)) {
+            val value = tag.attributes.firstOrNull { it.name == "android:id" }?.valueNode ?: continue
+            val raw = value.text().toString().trim()
+            if (!raw.startsWith("@+id/")) continue
+            val id = raw.removePrefix("@+id/")
+            if (id.isEmpty()) continue
+            if (!seen.add(id)) out += DuplicateId(value.range, id)
+        }
+        return out
+    }
+
+    /**
+     * `<resources>` entries aapt2 would reject: a declaration with no `name` attribute, and a name already
+     * declared for the same R class in this file. Only DIRECT children of `<resources>` are declarations, so
+     * a `<item>` inside a `<style>` or an `<attr>` inside a `<declare-styleable>` is never touched. The array
+     * family (`array`/`string-array`/`integer-array`) shares one R class, and an `<item>` is keyed by its
+     * `type`, so the duplicate check matches what aapt2 actually collides.
+     */
+    fun resourceEntries(parsed: ParsedFile): List<ResourceEntryProblem> {
+        val root = allTags(parsed).firstOrNull()?.takeIf { it.name == "resources" } ?: return emptyList()
+        val out = ArrayList<ResourceEntryProblem>()
+        val seen = HashSet<String>()
+        for (entry in root.childTags) {
+            val tag = entry.name ?: continue
+            if (tag !in VALUE_TAGS) continue
+            val nameValue = entry.attributes.firstOrNull { it.name == "name" }?.valueNode
+            val name = nameValue?.text()?.toString()?.trim()
+            if (name.isNullOrEmpty()) {
+                out += ResourceEntryProblem(
+                    tagNameRange(entry, tag), ResourceEntryProblem.Kind.MISSING_NAME, tag, "",
+                )
+                continue
+            }
+            if (!seen.add("${resourceKindOf(entry, tag)}/$name")) {
+                out += ResourceEntryProblem(nameValue.range, ResourceEntryProblem.Kind.DUPLICATE, tag, name)
+            }
+        }
+        return out
+    }
+
+    /** The R class a `<resources>` entry lands in, for duplicate detection. */
+    private fun resourceKindOf(entry: XmlNode, tag: String): String = when (tag) {
+        "string-array", "integer-array", "array" -> "array"
+        "item" -> entry.attributes.firstOrNull { it.name == "type" }?.valueNode?.text()?.toString()?.trim()
+            ?.ifEmpty { null } ?: "item"
+        else -> tag
     }
 
     /**
@@ -186,6 +363,28 @@ object XmlLintRules {
     /** The span of an attribute's *name* (the [XmlNode] starts at the name, before `=`). */
     private fun attrNameRange(attr: XmlNode, name: String): TextRange =
         TextRange(attr.startOffset, attr.startOffset + name.length)
+
+    /** The span of an element's *name* in its start tag (an element's range starts at `<`). */
+    private fun tagNameRange(tag: XmlNode, name: String): TextRange =
+        TextRange(tag.startOffset + 1, tag.startOffset + 1 + name.length)
+
+    /** Every span of [tag]'s name that a rename must rewrite: the start tag, plus the end tag when the
+     *  element is closed by one (`</name>` at its tail). */
+    private fun tagNameRanges(tag: XmlNode, name: String): List<TextRange> {
+        val open = tagNameRange(tag, name)
+        if (tag.selfClosed) return listOf(open)
+        val text = tag.text()
+        val at = text.lastIndexOf("</$name")
+        if (at < 0) return listOf(open)
+        val start = tag.startOffset + at + 2
+        // Guard against `</TextViewX>` matching the prefix of a longer name.
+        val after = text.getOrNull(at + 2 + name.length)
+        if (after != null && after != '>' && !after.isWhitespace()) return listOf(open)
+        // On malformed input (an unclosed element that swallowed a same-named sibling) the match can be a
+        // CHILD's end tag; only a tag that closes after every child is this element's own.
+        if (start < (tag.childTags.maxOfOrNull { it.endOffset } ?: tag.startOffset)) return listOf(open)
+        return listOf(open, TextRange(start, start + name.length))
+    }
 
     /** The whole `name="value"` span plus one preceding whitespace char (so removing it leaves no double space). */
     private fun removalRange(attr: XmlNode, src: CharSequence): TextRange {

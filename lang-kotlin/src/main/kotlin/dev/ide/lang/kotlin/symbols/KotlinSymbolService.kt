@@ -2171,14 +2171,37 @@ class KotlinSymbolService(
     }
 
     /**
-     * Fully-qualified names worth importing for an unresolved simple [name]: top-level callables
-     * (functions/properties — `androidx.compose.runtime.remember`, `…mutableStateOf`) plus types
-     * (classes/objects/interfaces). De-duplicated and sorted; powers the "Import …" quick-fix on a
-     * `kt.unresolved` reference. Best-effort — a candidate without a derivable package is dropped.
+     * Fully-qualified names worth importing for an unresolved simple [name]: the importable callables
+     * ([importableCallablesNamed] — functions/properties, `androidx.compose.runtime.remember`,
+     * `…mutableStateOf`) plus types (classes/objects/interfaces). De-duplicated and sorted; powers the
+     * "Import …" quick-fix on a `kt.unresolved` reference. Best-effort — a candidate without a derivable
+     * package is dropped.
      */
     fun importCandidates(name: String): List<String> {
         if (name.isEmpty()) return emptyList()
         val out = LinkedHashSet<String>()
+        importableCallablesNamed(name).forEach { (fqn, _) -> out += fqn }
+        typeNamesByPrefix(name).forEach { s ->
+            val fqn = s.type?.qualifiedName
+            if (fqn != null && '.' in fqn && fqn.substringAfterLast('.') == name) out += fqn
+        }
+        return out.sorted()
+    }
+
+    /**
+     * The CALLABLE half of [importCandidates], each candidate paired with its [KotlinSymbol]: every importable
+     * function/property named exactly [name] (top-level, extension, or singleton member), with the FQN an
+     * `import` line would spell.
+     *
+     * The symbol is the point. A caller that must judge whether importing a candidate could ACTUALLY fix the
+     * code — the argument-mismatch fix asking "would this overload's receiver and parameters accept this
+     * call?" — cannot answer that from an FQN string. [importCandidates] itself only needs the names, so it
+     * keeps returning them (sorted + de-duplicated, types included). Not de-duplicated here: two overloads
+     * share one FQN and must stay separately judgeable.
+     */
+    fun importableCallablesNamed(name: String): List<Pair<String, KotlinSymbol>> {
+        if (name.isEmpty()) return emptyList()
+        val out = ArrayList<Pair<String, KotlinSymbol>>()
         topLevelByName(name).forEach { s ->
             // A `private` top-level is file-scoped: it can't be imported (or qualified) from another file, so
             // never offer it as an import candidate. [topLevelByName] deliberately keeps private for same-file
@@ -2187,7 +2210,14 @@ class KotlinSymbolService(
             if (Modifier.PRIVATE in s.modifiers) return@forEach
             val pkg =
                 s.packageName ?: s.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null }
-            if (pkg != null) out += "$pkg.$name"
+            if (pkg != null) out += "$pkg.$name" to s
+        }
+        // Project-source EXTENSIONS: receiver-keyed in the model, so [topLevelByName]'s `top:`-only view never
+        // holds one, and the `name:` index keys below only answer once the file has been re-indexed. Without
+        // this, the Import fix on an unresolved use of a just-written extension had nothing to offer.
+        model().extensions.forEach { rc ->
+            if (rc.name == name && rc.visibility != "private")
+                rc.ctx.packageName.ifEmpty { null }?.let { out += "$it.$name" to toSymbol(rc, null) }
         }
         // Extensions named [name] regardless of receiver (the receiver-blind `name:` keys) — so an
         // unresolved `x.shout()` can offer `import demo.shout` even though extensions are receiver-keyed.
@@ -2197,11 +2227,9 @@ class KotlinSymbolService(
                         KotlinSourceCallableIndex.id,
                         KotlinCallableIndex.nameKey(name)
                     ))
-                .forEach { shape -> shape.packageName?.let { out += "$it.$name" } }
-        }
-        typeNamesByPrefix(name).forEach { s ->
-            val fqn = s.type?.qualifiedName
-            if (fqn != null && '.' in fqn && fqn.substringAfterLast('.') == name) out += fqn
+                .forEach { shape ->
+                    shape.packageName?.let { out += "$it.$name" to shape.toSymbol(this) }
+                }
         }
         // Members of a project SINGLETON, a `companion object` (`import …MainActivity.Companion.TAG`) or a
         // plain `object` (`import util.Config.DEBUG`, `import util.StringUtils.twice`), are importable by
@@ -2210,9 +2238,12 @@ class KotlinSymbolService(
         // singleton is the only way to reach it (the "extensions namespaced in an object" idiom).
         model().classByFqn.values.forEach { rc ->
             if (!rc.isObject || rc.isLocal || rc.isPrivate) return@forEach
-            if (rc.members.any { it.name == name && it.visibility != "private" }) out += "${rc.fqn}.$name"
+            rc.members.forEach { mem ->
+                if (mem.name == name && mem.visibility != "private")
+                    out += "${rc.fqn}.$name" to toSymbol(mem, rc.fqn, rc.typeParameterNames, declaringFqn = rc.fqn)
+            }
         }
-        return out.sorted()
+        return out
     }
 
     /**

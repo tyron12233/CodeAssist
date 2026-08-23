@@ -25,6 +25,7 @@ import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDiagnostic
 import kotlinx.coroutines.flow.MutableStateFlow
+import dev.ide.ui.backend.IconService
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -34,7 +35,7 @@ import kotlinx.coroutines.flow.StateFlow
 internal open class StubBackend : IdeBackend,
     FileService, EditorService, BlockService, PreviewService, SearchService, BuildService,
     DependencyService, ModuleService, SigningService, ProjectService, SdkService, SettingsService, ActionService,
-    DiagnosticsService {
+    DiagnosticsService, IconService {
 
     override val files: FileService get() = this
     override val editor: EditorService get() = this
@@ -50,6 +51,7 @@ internal open class StubBackend : IdeBackend,
     override val settings: SettingsService get() = this
     override val actions: ActionService get() = this
     override val diagnostics: DiagnosticsService get() = this
+    override val icons: IconService get() = this
 
     override val project: ProjectInfo = ProjectInfo("stub", "/stub", 0)
 

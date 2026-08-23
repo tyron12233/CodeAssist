@@ -59,6 +59,7 @@ import org.jetbrains.kotlin.psi.KtEnumEntry
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtLambdaArgument
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
@@ -713,14 +714,75 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         // For a call-argument mismatch, offer the importable same-named callables of the ENCLOSING call's callee
         // (an unimported extension overload that would fit). An ordinary non-call mismatch (`val x: Int = "s"`)
         // has no callee name → nothing offered; a callee with no importable same-named overload → no candidates.
-        for (d in callMismatches) {
-            val el = parsed.ktFile.findElementAt(d.range.start) ?: continue
-            val call = PsiTreeUtil.getParentOfType(el, KtCallExpression::class.java) ?: continue
-            val calleeName =
-                (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: continue
-            service.importCandidates(calleeName).forEach(::offer)
+        // Only candidates that COULD take this call are offered ([couldFixCall]) — an import that cannot fix
+        // anything is worse than no lightbulb, since accepting it leaves the error and adds a bogus line.
+        if (callMismatches.isNotEmpty()) {
+            val resolver = KotlinResolver(parsed.ktFile, parsed, service)
+            for (d in callMismatches) {
+                val el = parsed.ktFile.findElementAt(d.range.start) ?: continue
+                val call = PsiTreeUtil.getParentOfType(el, KtCallExpression::class.java) ?: continue
+                val calleeName =
+                    (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: continue
+                for ((fqn, cand) in service.importableCallablesNamed(calleeName)) {
+                    if (couldFixCall(cand, call, resolver)) offer(fqn)
+                }
+            }
         }
         return out.take(12)
+    }
+
+    /**
+     * Whether importing [cand] could plausibly make [call] resolve — the gate on the argument-mismatch import
+     * fix. The diagnostic means the arguments fit nothing currently in scope, so a same-NAMED declaration is
+     * only worth offering when it could actually take them.
+     *
+     * Rejects on PROOF only, never on missing information — an un-inferred argument, an unmodeled parameter
+     * type or an unknown receiver leaves the candidate offered, the same conservative posture the mismatch
+     * check itself takes before reporting. What it does rule out:
+     *  - a non-function candidate: a property or type can never accept an argument list;
+     *  - a candidate unreachable the way the call is written. With an explicit receiver (`out.write(b)`) only
+     *    an EXTENSION applies, and only one whose receiver type that receiver satisfies. A bare call
+     *    (`items(list)`) can land on a top-level function OR on an extension of an implicit receiver the
+     *    parse-only model cannot pin, so no receiver test runs there;
+     *  - more positional arguments than the candidate has parameters (a vararg absorbs any number, so a
+     *    vararg candidate is never rejected on count);
+     *  - a positionally-typed argument its parameter provably cannot hold — the `write(text: String)` that
+     *    used to be offered for `write(byteArray)`.
+     */
+    private fun couldFixCall(cand: KotlinSymbol, call: KtCallExpression, resolver: KotlinResolver): Boolean {
+        if (cand.kind != SymbolKind.METHOD) return false
+        val qualified = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === call }
+        val receiverType = qualified?.receiverExpression?.let { resolver.inferType(it) }
+        if (receiverType != null && !receiverType.isTypeParameter) {
+            val candReceiver = cand.receiverTypeFqn ?: return false // a member/top-level can't take `x.` here
+            if (!accepts(resolver, KotlinType(candReceiver), receiverType)) return false
+        }
+        val args = call.valueArguments
+        val vararg = cand.varargParamIndex
+        val paramCount = maxOf(cand.paramTypes.size, cand.paramNames.size)
+        if (vararg < 0 && args.size > paramCount) return false
+        args.forEachIndexed { i, a ->
+            // A named argument's slot isn't `i`, a lambda lands on the last parameter, and anything folding
+            // into a vararg is open-typed — all left to the real overload resolution the import triggers.
+            if (a is KtLambdaArgument || a.getArgumentName() != null) return@forEachIndexed
+            if (vararg in 0..i) return@forEachIndexed
+            val pt = cand.paramTypes.getOrNull(i) as? KotlinType ?: return@forEachIndexed
+            val at = a.getArgumentExpression()?.let { resolver.inferType(it) } ?: return@forEachIndexed
+            if (!accepts(resolver, pt, at)) return false
+        }
+        return true
+    }
+
+    /** [paramAcceptsArg] over JVM-canonicalized types ([canonicalTypeForCheck]), and only where both sides are
+     *  modeled: an unknown classifier, a type parameter or `Nothing` is no evidence of a clash, so it accepts.
+     *  Deliberately the same comparison the mismatch check makes, so the fix never contradicts the diagnostic. */
+    private fun accepts(resolver: KotlinResolver, param: KotlinType, arg: KotlinType): Boolean {
+        if (param.isTypeParameter || arg.isTypeParameter) return true
+        if (arg.qualifiedName == "kotlin.Nothing") return true
+        val p = canonicalTypeForCheck(param)
+        val a = canonicalTypeForCheck(arg)
+        if (!service.isKnownType(p.qualifiedName) || !service.isKnownType(a.qualifiedName)) return true
+        return with(resolver) { paramAcceptsArg(p, a) }
     }
 
     /**
