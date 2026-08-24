@@ -2205,6 +2205,18 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (resolver.constructorTypeFqn(callee.getReferencedName(), callee.textRange.startOffset) != null) return null
         val callable = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
         if (callable.any { it.kind == SymbolKind.METHOD || it.kind == SymbolKind.CONSTRUCTOR }) return null
+        // A namesake FUNCTION reachable through an implicit `this` but UNIMPORTED (`itemsIndexed` inside
+        // `LazyColumn { }` is an extension on the implicit `LazyListScope` the file never imports) is not a
+        // value: [KotlinResolver.callTargets] refuses it (the compiler cannot bind it either), while
+        // `inferType` answers with its RETURN type, so the call read "Expression 'itemsIndexed' of type Unit
+        // cannot be invoked as a function" on top of the unresolved-reference error. One error, not two
+        // contradictory ones. A local/parameter of that name still wins, since it IS a value and is where
+        // `inferType` typed it from, so `val f = 5; f()` stays flagged.
+        val name = callee.getReferencedName()
+        val calleeOffset = callee.textRange.startOffset
+        if (resolver.localsAt(calleeOffset).none { it.name == name } &&
+            resolver.implicitReceiverMember(name, calleeOffset)?.kind == SymbolKind.METHOD
+        ) return null
         val type = resolver.inferType(callee) ?: return null // unknown → unresolvedBareReference handles it
         if (type.isTypeParameter || isInvocable(type) || !service.isKnownType(type.qualifiedName)) return null
         val r = callee.textRange
