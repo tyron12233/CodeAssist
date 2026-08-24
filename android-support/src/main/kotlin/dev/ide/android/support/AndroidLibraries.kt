@@ -13,6 +13,13 @@ import java.nio.file.Paths
 /** A dependency AAR's `aar-metadata.properties` (AGP's `minCompileSdk` etc.), tagged with a display [name]. */
 data class AarMetadataRef(val name: String, val propertiesFile: Path)
 
+/**
+ * A dependency AAR's `R` identity: its manifest [packageName] and the `R.txt` symbol table listing the
+ * resources that package's `R` declares. An AAR ships no `R` classes of its own — the consumer generates
+ * them — so this pair is what makes `com.google.android.material.R.attr.x` resolvable.
+ */
+data class AarSymbolTable(val packageName: String, val rTxt: Path)
+
 /** A module's resolved library dependencies, split into the forms the Android pipeline consumes. */
 class ResolvedLibraries(
     val compileJars: List<Path>,   // on the compileJava classpath (JARs; AAR `classes.jar` + `libs/*.jar`)
@@ -25,6 +32,7 @@ class ResolvedLibraries(
     val consumerProguardFiles: List<Path>, // AAR `proguard.txt` consumer keep rules, applied by the app's R8
     val aarManifests: List<Path>,  // AAR `AndroidManifest.xml` files → merged into the app manifest
     val aarMetadata: List<AarMetadataRef>, // compile-scope AAR `aar-metadata.properties` → checkAarMetadata
+    val aarSymbols: List<AarSymbolTable>,  // AAR package + `R.txt` → the R classes a LIBRARY module compiles against
 )
 
 /**
@@ -53,23 +61,31 @@ object AndroidLibraries {
         val consumerProguardFiles = ArrayList<Path>()
         val aarManifests = ArrayList<Path>()
         val aarMetadata = ArrayList<AarMetadataRef>()
+        val aarSymbols = ArrayList<AarSymbolTable>()
 
         val cache = HashMap<Path, AarExtractor.Exploded>()
         fun explode(aar: Path) = cache.getOrPut(aar) { AarExtractor.explode(aar, explodeRoot.resolve(dirNameOf(aar))) }
 
-        fun addAarParts(classesJars: List<Path>, res: Path?, assets: Path?, jni: Path?, aidl: Path?, manifest: Path?, proguard: Path?, metadata: Path?, name: String) {
+        fun addAarParts(classesJars: List<Path>, res: Path?, assets: Path?, jni: Path?, aidl: Path?, manifest: Path?, proguard: Path?, metadata: Path?, rTxt: Path?, name: String) {
             compileJars.addAll(classesJars)
             res?.let { resDirs.add(it) }
             assets?.let { assetsDirs.add(it) }
             jni?.let { jniLibDirs.add(it) }
             aidl?.let { aidlDirs.add(it) }
-            manifest?.let { manifestPackage(it)?.let(aarPackages::add); aarManifests.add(it) }
+            manifest?.let { m ->
+                manifestPackage(m)?.let { pkg ->
+                    aarPackages.add(pkg)
+                    // An AAR with no `R.txt` declares no resources, so there is no R worth generating for it.
+                    rTxt?.let { aarSymbols.add(AarSymbolTable(pkg, it)) }
+                }
+                aarManifests.add(m)
+            }
             proguard?.let { consumerProguardFiles.add(it) }
             metadata?.let { aarMetadata.add(AarMetadataRef(name, it)) }
         }
 
         for (root in compileRoots) when {
-            isAar(root) -> explode(root).let { addAarParts(it.classesJars, it.resDir, it.assetsDir, it.jniDir, it.aidlDir, it.manifest, it.proguardTxt, it.aarMetadata, root.fileName.toString()) }
+            isAar(root) -> explode(root).let { addAarParts(it.classesJars, it.resDir, it.assetsDir, it.jniDir, it.aidlDir, it.manifest, it.proguardTxt, it.aarMetadata, it.rTxt, root.fileName.toString()) }
             // A Maven-resolved AAR is stored as its exploded `classes.jar`; its res/assets/jni/manifest/proguard are siblings.
             isExplodedAar(root) -> root.parent.let { dir ->
                 addAarParts(listOf(root), dirOrNull(dir, "res"), dirOrNull(dir, "assets"), dirOrNull(dir, "jni"),
@@ -77,6 +93,7 @@ object AndroidLibraries {
                     dir.resolve("AndroidManifest.xml").takeIf { Files.isRegularFile(it) },
                     dir.resolve("proguard.txt").takeIf { Files.isRegularFile(it) },
                     dir.resolve(AarMetadata.ENTRY_PATH).takeIf { Files.isRegularFile(it) },
+                    dir.resolve("R.txt").takeIf { Files.isRegularFile(it) },
                     dir.fileName?.toString() ?: root.toString())
             }
             isJar(root) -> compileJars.add(root)
@@ -98,7 +115,7 @@ object AndroidLibraries {
             MavenClasspath.dedupeForAndroidDex(dexJars.distinct()),
             resDirs.distinct(), assetsDirs.distinct(),
             jniLibDirs.distinct(), aidlDirs.distinct(), aarPackages.distinct(), consumerProguardFiles.distinct(),
-            aarManifests.distinct(), aarMetadata.distinct(),
+            aarManifests.distinct(), aarMetadata.distinct(), aarSymbols.distinct(),
         )
     }
 

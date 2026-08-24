@@ -1428,16 +1428,31 @@ class IdeServices private constructor(
      * ViewBinding, etc. — but NOT the Kotlin `<File>Kt` facades: those are Java-visible shapes of this
      * module's own Kotlin source, and a Kotlin file references its top-level declarations directly (seeing the
      * facade would be wrong and duplicate). Excludes the [KotlinSyntheticClassProvider] for exactly that reason.
+     *
+     * Covers [module]'s whole build closure, not just [module]: a dependency module's generated code — its
+     * `<dep namespace>.R`, `BuildConfig`, ViewBinding classes — is on the consumer's compile classpath, and
+     * with AGP's non-transitive R classes a consumer MUST name it (`com.example.feature.R.string.title`) to
+     * read a library's resource. Contributed per module and deduped by FQ name with [module]'s own winning,
+     * so two modules sharing a namespace can't shadow the one being edited. (The Java side gets the same
+     * reach from [syntheticOverlay], which is workspace-wide.)
      */
     private fun kotlinSyntheticClasses(module: Module): List<SyntheticClass> =
         kotlinSyntheticCache.getOrPut(module.id.value) {
-            val ctx = object : SyntheticClassContext {
-                override val module = module
-                override val workspace = store.workspace
-            }
-            platform.extensions.extensions(SYNTHETIC_CLASS_EP)
+            val providers = platform.extensions.extensions(SYNTHETIC_CLASS_EP)
                 .filterNot { it is KotlinSyntheticClassProvider }
-                .flatMap { runCatching { it.classesFor(ctx) }.getOrDefault(emptyList()) }
+            val byName = LinkedHashMap<String, SyntheticClass>()
+            for (m in moduleBuildClosure(module)) {
+                val ctx = object : SyntheticClassContext {
+                    override val module = m
+                    override val workspace = store.workspace
+                }
+                for (provider in providers) {
+                    for (sc in runCatching { provider.classesFor(ctx) }.getOrDefault(emptyList())) {
+                        byName.putIfAbsent(sc.fqName, sc)
+                    }
+                }
+            }
+            byName.values.toList()
         }
 
     /** Drop the cached synthetic classes so the next analyze/complete regenerates them (e.g. after a res edit). */

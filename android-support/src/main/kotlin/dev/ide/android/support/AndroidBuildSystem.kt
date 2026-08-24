@@ -11,6 +11,7 @@ import dev.ide.android.support.tasks.ConvertResourcesTask
 import dev.ide.android.support.tasks.DexArchiveBuilderTask
 import dev.ide.android.support.tasks.DexExternalLibsTask
 import dev.ide.android.support.tasks.DexMergeTask
+import dev.ide.android.support.tasks.GenerateAarRJarTask
 import dev.ide.android.support.tasks.GenerateLibraryRTask
 import dev.ide.android.support.tasks.GenerateRJarTask
 import dev.ide.android.support.tasks.PackageAarTask
@@ -765,8 +766,16 @@ class AndroidBuildSystem(
         val facet = m.facets.get(AndroidFacet.KEY)!!
         // Upstream modules' Kotlin output (sibling of their Java output) joins this lib's compile classpath.
         val upstreamKotlin = moduleOutputs.map { it.resolveSibling("kotlin-classes") }
-        val classpath = ArrayList(compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin)
-        val compileDeps = directModuleDeps(m, byId).map { TaskName(":${it.name}:compileJava") }.toMutableList()
+        // Non-transitive R: a library's own `R` holds only its own resources, so reading a DEPENDENCY
+        // library's resource means naming that module's package (`com.example.base.R.string.x`). Each
+        // dependency lib's compile-only R.jar therefore joins this classpath — the artifact AGP puts on a
+        // library's compile classpath for exactly this. Compile-only like the module's own R: never dexed
+        // here, because the app regenerates every package's final R when it links (`--extra-packages`).
+        val depAndroidLibs = moduleClosure(m, byId).filter { it.facets.get(AndroidFacet.KEY) != null }
+        val depRJars = depAndroidLibs.map { rJarOf(it) }
+        val depRTasks = depAndroidLibs.map { TaskName(":${it.name}:compileR") }
+        val classpath = ArrayList(compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin + depRJars)
+        val compileDeps = (directModuleDeps(m, byId).map { TaskName(":${it.name}:compileJava") } + depRTasks).toMutableList()
         val sourceRoots = srcRoots(ContentRole.SOURCE)
 
         val rRoot = buildDir.resolve("intermediates").resolve("r")
@@ -793,6 +802,18 @@ class AndroidBuildSystem(
         val rJar = rRoot.resolve("R.jar")
         tasks.task(compileR, listOf(generateR)) { GenerateRJarTask(compileR, rRoot.resolve("gen"), rJar) }
         classpath.add(rJar); compileDeps.add(compileR)
+
+        // The same problem one level out: an AAR ships no `R` either, so a library reading
+        // `com.google.android.material.R.attr.x` needs one generated from that AAR's `R.txt`. An app gets these
+        // free from its own link (`--extra-packages`); a library links only its own resources, so it doesn't.
+        // Dormant when no dependency AAR declares resources — no task, no classpath entry.
+        val aarSymbols = libs.aarSymbols.map { it.packageName to it.rTxt }
+        val aarRJar = if (aarSymbols.isEmpty()) null else rRoot.resolve("aar-R.jar")
+        if (aarRJar != null) {
+            val generateAarR = TaskName(":${m.name}:generateAarR")
+            tasks.task(generateAarR) { GenerateAarRJarTask(generateAarR, aarSymbols, aarRJar) }
+            classpath.add(aarRJar); compileDeps.add(generateAarR)
+        }
 
         // buildFeatures { viewBinding }: a lib generates bindings from its OWN layouts (against its own R) and,
         // unlike R, they are real code — compiled into the lib's output, so they dex into the AAR/jar.
@@ -847,7 +868,8 @@ class AndroidBuildSystem(
         if (libHasKotlin) {
             val compileKotlin = TaskName(":${m.name}:compileKotlin")
             val depKotlin = directModuleDeps(m, byId).filter { moduleHasKotlin(it) }.map { TaskName(":${it.name}:compileKotlin") }
-            val kotlinCp = compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin + listOf(rJar)
+            val kotlinCp = compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin +
+                depRJars + listOfNotNull(aarRJar) + listOf(rJar)
             tasks.task(compileKotlin, listOf(compileR) + compileDeps.filter { it != compileR } + depKotlin) {
                 AndroidKotlinCompileTask(m, compileKotlin, libGenSourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, bootClasspath, kotlin, plugins, extraGenDirs = libVbGenDirs + libAidlGenDirs)
             }
@@ -934,6 +956,10 @@ class AndroidBuildSystem(
 
     private fun directModuleDeps(m: Module, byId: Map<ModuleId, Module>): List<Module> =
         m.dependencies.filterIsInstance<ModuleDependency>().mapNotNull { byId[it.target] }
+
+    /** Where [registerAndroidLibrary] writes an android-lib's compile-only `R.jar` (see its `rRoot`). */
+    private fun rJarOf(m: Module): Path =
+        Paths.get(m.outputDir.path).parent.resolve("intermediates").resolve("r").resolve("R.jar")
 
     /**
      * Source-generator warnings [m] has accepted, for [dev.ide.build.SourceGenRequest.acceptedWarnings]: the
