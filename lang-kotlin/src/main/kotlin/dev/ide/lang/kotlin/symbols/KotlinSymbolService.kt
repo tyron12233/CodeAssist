@@ -1181,7 +1181,13 @@ class KotlinSymbolService(
             val syntheticPlugin = syntheticInstanceMembers(rc)
             val inherited = rc.superTypeTexts.mapNotNull { resolveTypeName(it, rc.ctx) }
                 .flatMap { ownAndInherited(it, emptyList(), visited) }
-            return own + synthetic + syntheticPlugin + inherited
+            // …and the supertypes the compiler adds that source never writes down ([implicitSupertypes]).
+            // LAST, so an explicit supertype's override (or the class's own member) is found before the
+            // inherited default — the enumeration is order-sensitive, first match wins.
+            val implicit = implicitSupertypes(rc, fqn).flatMap { (superFqn, args) ->
+                ownAndInherited(superFqn, args, visited)
+            }
+            return own + synthetic + syntheticPlugin + inherited + implicit
         }
         // `kotlin.Throwable` is a mapped built-in whose `.kotlin_builtins` shape is intentionally minimal
         // (`message`, `cause`); the rest of its API — `stackTrace`, `printStackTrace`, `localizedMessage`,
@@ -1254,6 +1260,22 @@ class KotlinSymbolService(
         return index?.exact<ClassNameValue>(JAVA_CLASS_NAMES, fqn.substringAfterLast('.'))
             ?.any { it.fqn == fqn && it.origin == IndexOrigin.SOURCE } == true
     }
+
+    /**
+     * The supertypes a source declaration has WITHOUT writing them — as (fqn, type arguments) pairs, to walk
+     * alongside its declared ones. A classpath binary carries these explicitly (a Kotlin `@Metadata` enum lists
+     * `kotlin.Enum<E>`, every JVM class lists `java.lang.Object`), which is why a LIBRARY enum's `name`
+     * resolved all along while a source `enum class` reported "Unresolved reference: name":
+     *  - an `enum class` extends `kotlin.Enum<Self>` — `name`, `ordinal`, `compareTo(other: E)`. The self type
+     *    is passed as the argument so `compareTo` binds to the enum rather than staying an unbound `E`.
+     *  - every classifier extends `kotlin.Any` — `equals`, `hashCode`, `toString`. Interfaces and objects
+     *    included: `Any`'s members are callable on any reference.
+     * The shared `visited` set makes this idempotent — a class that already reaches `Any` through a declared
+     * supertype (or an enum, which reaches it through `Enum`) enumerates it once.
+     */
+    private fun implicitSupertypes(rc: RawClass, fqn: String): List<Pair<String, List<TypeRef>>> =
+        if (rc.isEnum) listOf("kotlin.Enum" to listOf(typeByFqn(fqn)), "kotlin.Any" to emptyList())
+        else listOf("kotlin.Any" to emptyList())
 
     /** The compiler-synthesized static members of a (source) enum [fqn]: `values(): Array<E>`,
      *  `valueOf(value: String): E`, and `entries: List<E>` (the `EnumEntries<E>`, modeled as a `List` for member

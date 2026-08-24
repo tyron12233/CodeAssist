@@ -76,6 +76,38 @@ class KotlinCompanionImportTest {
     }
 
     @Test
+    fun importAfterCompanionOffersItsMembers() {
+        // The reported gap: `import …Duration.Companion.<caret>` suggested NOTHING, while
+        // `import …Duration.<caret>` worked. An explicitly spelled `X.Companion` receiver was classified as a
+        // TYPE receiver (`isObject` reports false for a companion by design), so completion filtered the
+        // candidates down to statics — and a companion's members are INSTANCE members of the singleton, so
+        // every one was dropped.
+        val items = names(project(), "import demo.MainActivity.Companion.|")
+        assertTrue("TAG" in items, "`import …Companion.` should offer the companion's members; got $items")
+
+        // The library case from the report, verbatim.
+        val stdlib = names(project(), "import kotlin.time.Duration.Companion.|")
+        assertTrue("seconds" in stdlib && "parse" in stdlib,
+            "`import kotlin.time.Duration.Companion.` should offer its members; got $stdlib")
+    }
+
+    @Test
+    fun companionReceiverCompletesOutsideImportsToo() {
+        // Same root cause, nothing to do with imports: the receiver was misclassified everywhere.
+        val items = names(project(), "package demo\nfun f() { val s = MainActivity.Companion.| }")
+        assertTrue("TAG" in items, "a `X.Companion.` receiver should complete in expression position; got $items")
+    }
+
+    @Test
+    fun bareClassReceiverStillCompletesStatically() {
+        // The guard on the fix: a bare `X.` must STAY a type receiver — it denotes the class, not the
+        // companion — so it keeps offering the companion's members hoisted onto it plus `Companion` itself.
+        val items = names(project(), "package demo\nfun f() { val s = MainActivity.| }")
+        assertTrue("TAG" in items, "a bare class receiver still offers companion members; got $items")
+        assertTrue("Companion" in items, "a bare class receiver still offers `Companion`; got $items")
+    }
+
+    @Test
     fun importedCompanionMemberChainNotFlagged() {
         val diags = diagnose(
             project(),
