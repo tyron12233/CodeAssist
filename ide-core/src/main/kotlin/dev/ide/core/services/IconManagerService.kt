@@ -38,6 +38,7 @@ import dev.ide.model.Module
 import dev.ide.platform.PluginId
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import kotlin.io.path.createParentDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.extension
@@ -381,7 +382,7 @@ internal class IconManagerService(private val ctx: EngineContext) {
         }
 
         is LayerSource.Resource -> {
-            val path = Path.of(source.path)
+            val path = Paths.get(source.path)
             if (isRaster(path)) {
                 val bytes = resourceBytes(path)
                 if (bytes == null) {
@@ -402,7 +403,7 @@ internal class IconManagerService(private val ctx: EngineContext) {
         }
 
         is LayerSource.ImageFile -> {
-            val path = Path.of(source.path)
+            val path = Paths.get(source.path)
             val bytes = runCatching { path.readBytes() }.getOrNull()
             if (bytes == null) {
                 warnings += "Could not read ${path.name}"
@@ -544,7 +545,7 @@ internal class IconManagerService(private val ctx: EngineContext) {
 
     /** A content root's path, which the model may store relative to the module. */
     private fun resolveRoot(moduleDir: Path, rootPath: String): Path {
-        val p = Path.of(rootPath)
+        val p = Paths.get(rootPath)
         return if (p.isAbsolute) p else moduleDir.resolve(p)
     }
 
