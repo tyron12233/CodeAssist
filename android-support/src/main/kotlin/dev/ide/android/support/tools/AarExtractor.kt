@@ -11,8 +11,9 @@ import kotlin.io.path.writeText
 /**
  * Explodes an Android `.aar` (a zip) into its parts. An AAR
  * bundles compiled code (`classes.jar` plus optional jars under `libs/`), Android resources (`res/`),
- * `assets/`, a library `AndroidManifest.xml`, and native libs under `jni/`. The build feeds the code to
- * compile + dex, the resources to aapt2, and the assets/jni to packaging. Extraction is idempotent —
+ * `assets/`, a library `AndroidManifest.xml`, native libs under `jni/`, and any `.aidl` the library wants
+ * consumers to be able to import. The build feeds the code to compile + dex, the resources to aapt2, the
+ * assets/jni to packaging, and the `aidl/` folder to the consumer's AIDL import path. Extraction is idempotent:
  * an AAR's content is immutable per coordinate, so an already-exploded dir is reused.
  */
 object AarExtractor {
@@ -23,6 +24,7 @@ object AarExtractor {
         val assetsDir: Path?,
         val manifest: Path?,
         val jniDir: Path?,
+        val aidlDir: Path?,            // the AAR's `aidl/`: parcelable/interface declarations consumers may import
         val proguardTxt: Path?,        // the AAR's consumer keep rules (root `proguard.txt`), applied by the app's R8
         val aarMetadata: Path?,        // META-INF/.../aar-metadata.properties (AGP's minCompileSdk etc.); null if absent
     )
@@ -42,6 +44,7 @@ object AarExtractor {
             assetsDir = into.resolve("assets").takeIf { Files.isDirectory(it) },
             manifest = into.resolve("AndroidManifest.xml").takeIf { Files.isRegularFile(it) },
             jniDir = into.resolve("jni").takeIf { Files.isDirectory(it) },
+            aidlDir = into.resolve("aidl").takeIf { Files.isDirectory(it) },
             proguardTxt = into.resolve("proguard.txt").takeIf { Files.isRegularFile(it) },
             aarMetadata = into.resolve(AarMetadata.ENTRY_PATH).takeIf { Files.isRegularFile(it) },
         )

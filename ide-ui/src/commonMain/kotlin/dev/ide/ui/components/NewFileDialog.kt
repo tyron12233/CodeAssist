@@ -68,11 +68,13 @@ import dev.ide.ui.generated.resources.newfile_kind_enum
 import dev.ide.ui.generated.resources.newfile_kind_file
 import dev.ide.ui.generated.resources.newfile_kind_interface
 import dev.ide.ui.generated.resources.newfile_kind_object
+import dev.ide.ui.generated.resources.newfile_kind_parcelable
 import dev.ide.ui.generated.resources.newfile_mode_directory
 import dev.ide.ui.generated.resources.newfile_mode_resource_file
 import dev.ide.ui.generated.resources.newfile_name
 import dev.ide.ui.generated.resources.newfile_new_folder
 import dev.ide.ui.generated.resources.newfile_new_java_class
+import dev.ide.ui.generated.resources.newfile_new_aidl_file
 import dev.ide.ui.generated.resources.newfile_new_kotlin_file
 import dev.ide.ui.generated.resources.newfile_new_resource_directory
 import dev.ide.ui.generated.resources.newfile_new_resource_title
@@ -96,6 +98,7 @@ import dev.ide.ui.generated.resources.newfile_role_sources
 import dev.ide.ui.generated.resources.newfile_root_element
 import dev.ide.ui.generated.resources.newfile_set_name_hint
 import dev.ide.ui.generated.resources.newfile_source_java_hint
+import dev.ide.ui.generated.resources.newfile_source_aidl_hint
 import dev.ide.ui.generated.resources.newfile_source_kotlin_hint
 import dev.ide.ui.generated.resources.newfile_source_set
 import dev.ide.ui.generated.resources.newfile_title
@@ -212,7 +215,7 @@ private fun NewEntryPanel(
 
 /** Which language a typed "New …" action scaffolds, and where. [dirLabel] is a short path shown to the user.
  *  [packages] mirrors [NewEntryRequest.packages]: the package chain so the dialog can target a middle level. */
-enum class NewSourceLang { Java, Kotlin }
+enum class NewSourceLang { Java, Kotlin, Aidl }
 data class NewSourceRequest(
     val dirPath: String,
     val lang: NewSourceLang,
@@ -251,11 +254,26 @@ private enum class SourceKind(val label: StringResource, val template: UiNewFile
     KData(Res.string.newfile_kind_data_class, UiNewFileTemplate.KotlinDataClass),
     KEnum(Res.string.newfile_kind_enum, UiNewFileTemplate.KotlinEnum),
     KObject(Res.string.newfile_kind_object, UiNewFileTemplate.KotlinObject),
+    AInterface(Res.string.newfile_kind_interface, UiNewFileTemplate.AidlInterface),
+    AParcelable(Res.string.newfile_kind_parcelable, UiNewFileTemplate.AidlParcelable),
+}
+
+private fun newSourceTitle(lang: NewSourceLang): StringResource = when (lang) {
+    NewSourceLang.Java -> Res.string.newfile_new_java_class
+    NewSourceLang.Kotlin -> Res.string.newfile_new_kotlin_file
+    NewSourceLang.Aidl -> Res.string.newfile_new_aidl_file
+}
+
+private fun newSourceHint(lang: NewSourceLang): StringResource = when (lang) {
+    NewSourceLang.Java -> Res.string.newfile_source_java_hint
+    NewSourceLang.Kotlin -> Res.string.newfile_source_kotlin_hint
+    NewSourceLang.Aidl -> Res.string.newfile_source_aidl_hint
 }
 
 private fun kindsFor(lang: NewSourceLang): List<SourceKind> = when (lang) {
     NewSourceLang.Java -> listOf(SourceKind.JClass, SourceKind.JInterface, SourceKind.JEnum, SourceKind.JAbstract, SourceKind.JAnnotation)
     NewSourceLang.Kotlin -> listOf(SourceKind.KClass, SourceKind.KFile, SourceKind.KInterface, SourceKind.KData, SourceKind.KEnum, SourceKind.KObject)
+    NewSourceLang.Aidl -> listOf(SourceKind.AInterface, SourceKind.AParcelable)
 }
 
 /**
@@ -311,7 +329,7 @@ private fun NewSourcePanel(
             .padding(20.dp),
     ) {
         Text(
-            stringResource(if (req.lang == NewSourceLang.Java) Res.string.newfile_new_java_class else Res.string.newfile_new_kotlin_file),
+            stringResource(newSourceTitle(req.lang)),
             color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(4.dp))
@@ -331,7 +349,7 @@ private fun NewSourcePanel(
         DialogField(
             value = name,
             onValueChange = { name = it },
-            placeholder = stringResource(if (req.lang == NewSourceLang.Java) Res.string.newfile_source_java_hint else Res.string.newfile_source_kotlin_hint),
+            placeholder = stringResource(newSourceHint(req.lang)),
             focusRequester = focus,
             onSubmit = ::submit,
             onCancel = onDismiss,

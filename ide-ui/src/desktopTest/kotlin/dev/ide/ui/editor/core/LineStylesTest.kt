@@ -94,6 +94,36 @@ class LineStylesTest {
     private fun typeAt(line: String, col: Int, language: CodeLanguage): TokenType? =
         styleLine(line, LexState.CODE, language).spans.firstOrNull { col >= it.start && col < it.end }?.type
 
+    /**
+     * AIDL reuses the Java scanner with its own keyword set, so the words that differ are what needs
+     * pinning: `oneway`/`parcelable`/`in`/`out`/`inout` colour as keywords, while a Java-only word like
+     * `class` does not.
+     */
+    @Test
+    fun aidlKeywordsColourOverTheSharedScanner() {
+        val line = "    oneway void send(in Payload p, out int[] sizes, inout String s);"
+        fun at(word: String) = typeAt(line, line.indexOf(word), CodeLanguage.Aidl)
+        assertEquals(TokenType.KEYWORD, at("oneway"))
+        assertEquals(TokenType.KEYWORD, at("void"))
+        assertEquals(TokenType.KEYWORD, at("in "))
+        assertEquals(TokenType.KEYWORD, at("out "))
+        assertEquals(TokenType.KEYWORD, at("inout"))
+        assertEquals(TokenType.TYPE, at("Payload"), "a declared type colours as a type")
+        assertEquals(TokenType.FUNC, at("send"), "a name before `(` colours as a call")
+        assertEquals(TokenType.KEYWORD, typeAt("parcelable Config;", 0, CodeLanguage.Aidl))
+        assertEquals(null, typeAt("class Nope;", 0, CodeLanguage.Aidl), "`class` is not an AIDL keyword")
+    }
+
+    /** AIDL block comments span lines, so the carried lexer state has to behave as it does for Java. */
+    @Test
+    fun aidlBlockCommentsCarryAcrossLines() {
+        val open = styleLine("/** Sends a payload.", LexState.CODE, CodeLanguage.Aidl)
+        assertEquals(LexState.BLOCK_COMMENT, open.exitState)
+        val close = styleLine(" */ oneway void send();", LexState.BLOCK_COMMENT, CodeLanguage.Aidl)
+        assertEquals(LexState.CODE, close.exitState)
+        assertEquals(TokenType.COMMENT, close.spans.first().type)
+    }
+
     @Test
     fun kotlinStringInterpolationHighlightsNestedCode() {
         // The reported bug: keywords + nested strings inside `${…}` were swallowed into the outer string.

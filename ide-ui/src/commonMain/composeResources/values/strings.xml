@@ -250,6 +250,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="filetree_delete">Delete</string>
     <string name="filetree_java_class">Java Class</string>
     <string name="filetree_kotlin_file">Kotlin File</string>
+    <string name="filetree_aidl_file">AIDL File</string>
     <string name="filetree_resource_file">Resource File</string>
     <string name="filetree_file">File</string>
     <string name="filetree_directory">Directory</string>
@@ -664,10 +665,13 @@ We never collect your code, file or project names, which features you use, or an
     <string name="newfile_kind_file">File</string>
     <string name="newfile_kind_data_class">Data Class</string>
     <string name="newfile_kind_object">Object</string>
+    <string name="newfile_kind_parcelable">Parcelable</string>
     <string name="newfile_new_java_class">New Java class</string>
     <string name="newfile_new_kotlin_file">New Kotlin file</string>
     <string name="newfile_source_java_hint">MyClass</string>
     <string name="newfile_source_kotlin_hint">MyFile</string>
+    <string name="newfile_new_aidl_file">New AIDL file</string>
+    <string name="newfile_source_aidl_hint">IMyService</string>
     <string name="newfile_reskind_layout">Layout</string>
     <string name="newfile_reskind_values">Values</string>
     <string name="newfile_reskind_drawable">Drawable</string>

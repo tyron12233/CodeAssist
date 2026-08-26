@@ -66,6 +66,25 @@ from their metadata, plain Java/Android types read from bytecode). Kotlin-to-byt
 separate track wired into the build, with per-file ABI-aware incremental compilation. For the full
 approach, see [kotlin-completion.md](kotlin-completion.md).
 
+### AIDL
+
+`.aidl` files are mapped to their own language id, so they are never analysed as Java, and are colored by
+the shared C-family line lexer over the AIDL keyword set. There is no `LanguageBackend` for them: an AIDL
+file is a declaration, and what a developer needs resolved is the Java it produces, not the `.aidl` itself.
+
+Problems in the file itself are reported by an analyzer that runs the same parser and generator the build
+does, so a syntax slip, a parameter missing its `in`/`out`/`inout`, a `oneway` method with a return value, or
+an unresolved type is flagged as it is typed rather than at the next build, and the editor and the build
+cannot drift apart. It runs at the SEMANTIC tier, since resolving a type reference needs the module's other
+`.aidl` files.
+
+Resolution of the generated Java arrives as synthetic classes. `AndroidAidlProvider` parses a module's `.aidl` files and
+contributes the same shapes the build will generate (the interface and its methods, `Stub` with
+`asInterface`/`DESCRIPTOR`/`setDefaultImpl`, `Default`, and structured parcelables/enums), so a `Service`
+that extends `IFoo.Stub` resolves before any build has run and nothing appears or disappears once one has.
+The generator itself lives in `android-support`; see [build-system.md](build-system.md) for how
+`compileAidl` fits into the Android pipeline.
+
 ## Indexing
 
 The indexing engine has two sides:

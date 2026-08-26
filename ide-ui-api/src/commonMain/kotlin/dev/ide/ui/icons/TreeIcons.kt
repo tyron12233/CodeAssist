@@ -58,6 +58,7 @@ object TreeIcons {
         register("sourceset.resources", TreeIcon.Glyph(CaIcons.resources, IconTint.Info))
         register("sourceset.android-res", TreeIcon.Glyph(CaIcons.image, IconTint.Fixed(androidGreen)))
         register("sourceset.assets", TreeIcon.Glyph(CaIcons.box, IconTint.Warning))
+        register("sourceset.aidl", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Fixed(androidGreen)))
         register("sourceset.generated", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Tertiary))
         // Derived build output (the curated "build outputs" node + the raw `build/` dir) — IntelliJ marks
         // excluded/output dirs with a warm tint; the row text is additionally muted via `styleHint`.
@@ -71,6 +72,8 @@ object TreeIcons {
         register("xml", TreeIcon.Badge("‹›", Color(0xFF61AFEF)))
         // ProGuard/R8 keep-rule files (`proguard-rules.pro`, `consumer-rules.pro`) — the shrinker config.
         register("proguard", TreeIcon.Badge("R8", Color(0xFF56B6C2)))
+        // AIDL interface definitions: Binder IPC, so the android-green family.
+        register("aidl", TreeIcon.Badge("AI", androidGreen))
         // Data / config formats — colored letter badges, JSON as the braces glyph (it fits perfectly).
         register("json", TreeIcon.Glyph(CaIcons.braces, IconTint.Fixed(Color(0xFFC9A227))))
         register("toml", TreeIcon.Badge("T", Color(0xFFB0703A)))
@@ -102,6 +105,7 @@ fun fileIconId(fileName: String): String = when {
     fileName == ".gitignore" || fileName == ".gitattributes" || fileName == ".gitmodules" || fileName == ".gitkeep" -> "git"
     fileName == ".editorconfig" -> "editorconfig"
     fileName.endsWith(".pro") -> "proguard"
+    fileName.endsWith(".aidl") -> "aidl"
     fileName.endsWith(".java") -> "java"
     fileName.endsWith(".kt") || fileName.endsWith(".kts") -> "kotlin"
     fileName.endsWith(".gradle") -> "gradle"

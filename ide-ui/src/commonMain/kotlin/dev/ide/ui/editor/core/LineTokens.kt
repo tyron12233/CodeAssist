@@ -61,6 +61,17 @@ private val KOTLIN_KEYWORDS = setOf(
     "tailrec", "vararg",
 )
 
+/**
+ * AIDL keywords. The type names it also predefines (`String`, `List`, `IBinder`, …) are deliberately left
+ * out: they start with a capital, so the shared scanner already colors them as types, the same way `String`
+ * reads in a Java file.
+ */
+private val AIDL_KEYWORDS = setOf(
+    "package", "import", "interface", "parcelable", "enum", "union", "oneway", "const",
+    "in", "out", "inout", "cpp_header",
+    "void", "boolean", "byte", "char", "int", "long", "float", "double", "true", "false",
+)
+
 private fun isPunct(c: Char) = c in "{}()[];,.<>=+-*\\/%&|!?:^~@"
 
 fun styleLine(line: String, entryState: Int, language: CodeLanguage): StyledLine = when (language) {
@@ -69,6 +80,9 @@ fun styleLine(line: String, entryState: Int, language: CodeLanguage): StyledLine
     CodeLanguage.Proguard -> styleProguardLine(line)
     CodeLanguage.Markdown -> styleMarkdownLine(line, entryState)
     CodeLanguage.Kotlin -> styleKotlinLine(line, entryState)
+    // AIDL shares Java's lexical shape (line/block comments, strings, numbers, `@annotations`, braces) and
+    // differs only in which words are keywords, so it reuses the scanner with its own set.
+    CodeLanguage.Aidl -> styleCodeLine(line, entryState, AIDL_KEYWORDS)
     CodeLanguage.Java -> styleCodeLine(line, entryState)
 }
 
@@ -205,7 +219,7 @@ private fun styleProguardLine(line: String): StyledLine {
     return StyledLine(spans, LexState.CODE)
 }
 
-private fun styleCodeLine(line: String, entryState: Int): StyledLine {
+private fun styleCodeLine(line: String, entryState: Int, keywords: Set<String> = JAVA_KEYWORDS): StyledLine {
     val n = line.length
     val spans = ArrayList<LineSpan>(8)
     var i = 0
@@ -255,7 +269,7 @@ private fun styleCodeLine(line: String, entryState: Int): StyledLine {
                 while (i < n && (line[i].isLetterOrDigit() || line[i] == '_' || line[i] == '$')) i++
                 val word = line.substring(start, i)
                 val type = when {
-                    word in JAVA_KEYWORDS -> TokenType.KEYWORD
+                    word in keywords -> TokenType.KEYWORD
                     else -> {
                         var j = i
                         while (j < n && (line[j] == ' ' || line[j] == '\t')) j++

@@ -26,6 +26,15 @@ class AndroidSdk(
     /** The `zipalign` native binary; overridden on-device to `nativeLibraryDir/libzipalign.so` (see [forDevice]). */
     val zipalign: Path = buildToolsDir.resolve(exe("zipalign")),
 ) {
+    /**
+     * `platforms/android-<level>/framework.aidl`: the SDK's preprocessed list of framework AIDL types
+     * (`parcelable android.os.Bundle;` …), the sibling of [androidJar]. It is what tells the AIDL compiler
+     * whether `Bundle` marshals as a parcel payload or a binder. Absent on-device, where `android.jar` ships
+     * as a bundled asset on its own; the compiler falls back to reading the jar's bytecode there, so callers
+     * pass this path whether or not it exists.
+     */
+    val frameworkAidl: Path get() = androidJar.resolveSibling("framework.aidl")
+
     val d8Jar: Path get() = buildToolsDir.resolve("lib").resolve("d8.jar")
     val apksignerJar: Path get() = buildToolsDir.resolve("lib").resolve("apksigner.jar")
 
