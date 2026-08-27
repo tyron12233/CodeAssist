@@ -393,7 +393,7 @@ class AndroidBuildSystem(
         // (AGP's checkAarMetadata). Gates processManifest so a violation stops the build with a clear message.
         val checkAarMeta = step("checkAarMetadata")
         tasks.task(checkAarMeta) {
-            CheckAarMetadataTask(checkAarMeta, libs.aarMetadata, facet.compileSdk, layout.aarMetadataCheck)
+            CheckAarMetadataTask(checkAarMeta, libs.aarMetadata, facet.compileSdk, layout.aarMetadataCheck, sdk.androidJar)
         }
         // Merge dependency-library + AAR manifests into the app manifest (so their components/permissions
         // land in the APK), substituting ${applicationId} etc. The linked manifest is the merged one.

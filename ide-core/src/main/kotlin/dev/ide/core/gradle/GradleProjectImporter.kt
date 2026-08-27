@@ -1,5 +1,6 @@
 package dev.ide.core.gradle
 
+import dev.ide.android.support.AndroidApiLevels
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.BuildFeatures
@@ -172,7 +173,9 @@ class GradleProjectImporter : ProjectImporter {
     }
 
     private companion object {
-        const val DEFAULT_COMPILE_SDK = 34
+        /** Only a fallback: it applies when the scripts declare no `compileSdk` at all (an unreadable
+         *  convention plugin), so it tracks the newest level the IDE supports rather than lagging it. */
+        const val DEFAULT_COMPILE_SDK = AndroidApiLevels.LATEST
         const val DEFAULT_MIN_SDK = 21
     }
 }

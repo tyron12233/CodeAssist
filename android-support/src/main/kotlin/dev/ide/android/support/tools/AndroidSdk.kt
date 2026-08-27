@@ -161,7 +161,7 @@ class AndroidSdk(
         }
 
         /** `android-34` -> 34, `android-36.1` -> 36 (preview/extension minor ignored for ordering). */
-        private fun apiLevelOf(name: String): Int =
+        internal fun apiLevelOf(name: String): Int =
             name.removePrefix("android-").substringBefore('.').toIntOrNull() ?: -1
 
         /** Order `36.1.0` > `36.0.0` > `33.0.2` by numeric components, as a single comparable key. */
