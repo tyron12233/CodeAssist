@@ -19,6 +19,10 @@ class AndroidFacetCodecTest {
         manifest = "src/main/AndroidManifest.xml",
         versionCode = 12,
         versionName = "3.4.1",
+        manifestPlaceholders = mapOf(
+            "marketApplicationId" to "ir.mservices.market",
+            "marketBindAddress" to "ir.mservices.market.InAppBillingService.BIND",
+        ),
         isApplication = true,
         flavorDimensions = listOf("tier"),
         buildTypes = listOf(
@@ -29,12 +33,16 @@ class AndroidFacetCodecTest {
                 consumerProguardFiles = listOf("consumer-rules.pro"),
                 proguardRules = listOf("-dontwarn com.example.**", "-keep class com.example.Api { *; }"),
                 versionNameSuffix = "-rel",
+                manifestPlaceholders = mapOf("marketApplicationId" to "ir.mservices.market.release"),
                 signingConfig = "release",
             ),
         ),
         productFlavors = listOf(
             ProductFlavor("free", dimension = "tier", applicationIdSuffix = ".free"),
-            ProductFlavor("paid", dimension = "tier", applicationId = "com.example.paid"),
+            ProductFlavor(
+                "paid", dimension = "tier", applicationId = "com.example.paid",
+                manifestPlaceholders = mapOf("tierName" to "paid"),
+            ),
         ),
         r8FullMode = false,
         coreLibraryDesugaringEnabled = true,
@@ -96,6 +104,17 @@ class AndroidFacetCodecTest {
         assertEquals(false, bts[0]["shrinkResources"])
         // Other defaults are still omitted (no rules): absent keys, not empty.
         assertEquals(null, bts[0]["proguardFiles"])
+        // Manifest placeholders persist as `key=value` strings, not as an inline table: the Module Settings tab
+        // renders a string list as an editable list but a nested map as a raw text box it would then corrupt.
+        assertEquals(
+            listOf(
+                "marketApplicationId=ir.mservices.market",
+                "marketBindAddress=ir.mservices.market.InAppBillingService.BIND",
+            ),
+            values["manifestPlaceholders"],
+        )
+        assertEquals(listOf("marketApplicationId=ir.mservices.market.release"), bts[1]["manifestPlaceholders"])
+        assertEquals(null, bts[0]["manifestPlaceholders"], "a build type that declares none has no key")
     }
 
     @Test

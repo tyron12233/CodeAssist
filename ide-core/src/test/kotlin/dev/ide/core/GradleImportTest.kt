@@ -1,8 +1,12 @@
 package dev.ide.core
 
+import dev.ide.core.gradle.GradleProjectImporter
+import dev.ide.platform.ProgressReporter
 import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 import dev.ide.model.DependencyScope
+import dev.ide.model.sync.SyncReason
+import dev.ide.model.sync.SyncRequest
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
@@ -528,6 +532,109 @@ class GradleImportTest {
             assertEquals("-dev", debug.versionNameSuffix)
             assertTrue(spec.report.notes.any { "buildConfigField" in it }, "unmodeled buildConfigField noted")
         }
+    }
+
+    /**
+     * `manifestPlaceholders`, in every form the two DSLs write them, all the way to the encoded Android facet.
+     *
+     * Reported against 3.9.9: `com.github.myketstore:myket-billing-client`'s manifest names
+     * `${marketPermission}`/`${marketApplicationId}`/`${marketBindAddress}`, and the setup its docs give is
+     * `defaultConfig.manifestPlaceholders`. The reader used to skip the block with a note, so the values never
+     * reached the manifest merge and aapt2 rejected the merged manifest of an otherwise-valid project.
+     */
+    @Test
+    fun parsesManifestPlaceholders() {
+        withTempDir("gradle-placeholders") { tmp ->
+            val proj = tmp.resolve("Placeholders")
+            fun w(rel: String, text: String) {
+                val f = proj.resolve(rel); Files.createDirectories(f.parent); f.writeText(text.trimIndent())
+            }
+            w("settings.gradle", "rootProject.name = 'Placeholders'\ninclude ':app', ':kts'")
+            // Groovy: the map literal, spread over lines, with a `$var` value and a build-type override.
+            w("app/build.gradle", """
+                apply plugin: 'com.android.application'
+                ext.marketId = 'ir.mservices.market'
+                android {
+                    namespace 'com.example.app'
+                    compileSdk 34
+                    defaultConfig {
+                        minSdk 24
+                        manifestPlaceholders = [
+                            marketApplicationId: "${'$'}{marketId}",
+                            marketPermission   : 'ir.mservices.market.BILLING',
+                            marketBindAddress  : "ir.mservices.market.InAppBillingService.BIND"
+                        ]
+                    }
+                    buildTypes {
+                        release {
+                            manifestPlaceholders = [marketApplicationId: "ir.mservices.market.release"]
+                        }
+                    }
+                }
+            """)
+            w("app/src/main/AndroidManifest.xml", """<manifest package="com.example.app"/>""")
+            // Kotlin DSL: the per-key assignment and `+= mapOf(...)`, the forms modern KTS uses.
+            w("kts/build.gradle.kts", """
+                plugins { id("com.android.library") }
+                android {
+                    namespace = "com.example.kts"
+                    compileSdk = 34
+                    defaultConfig {
+                        manifestPlaceholders["host"] = "example.com"
+                        manifestPlaceholders += mapOf("scheme" to "https")
+                    }
+                }
+            """)
+            w("kts/src/main/AndroidManifest.xml", """<manifest package="com.example.kts"/>""")
+
+            val spec = GradleImport.parse(proj)
+            assertNotNull(spec)
+            val app = spec.modules.first { it.name == "app" }
+            assertEquals(
+                mapOf(
+                    "marketApplicationId" to "ir.mservices.market",
+                    "marketPermission" to "ir.mservices.market.BILLING",
+                    "marketBindAddress" to "ir.mservices.market.InAppBillingService.BIND",
+                ),
+                app.manifestPlaceholders,
+                "defaultConfig placeholders (with \$var interpolated) must be read",
+            )
+            assertEquals(
+                mapOf("marketApplicationId" to "ir.mservices.market.release"),
+                app.buildTypes.first { it.name == "release" }.manifestPlaceholders,
+                "a build type's own placeholders override defaultConfig's at build time",
+            )
+            assertEquals(
+                mapOf("host" to "example.com", "scheme" to "https"),
+                spec.modules.first { it.name == "kts" }.manifestPlaceholders,
+                "the Kotlin DSL's per-key and += forms must be read too",
+            )
+            assertFalse(
+                spec.report.notes.any { "manifestPlaceholders" in it },
+                "nothing to warn about: they were all read (${spec.report.notes})",
+            )
+
+            // …and they cross into the model as the Android facet's own, which is what reaches the merge.
+            val outcome = runBlocking {
+                GradleProjectImporter().resolve(SyncRequest(proj, NoProgress, SyncReason.IMPORT))
+            }
+            val facet = outcome.model!!.modules.first { it.name == "app" }.facets.first { it.table == "android" }
+            assertEquals(
+                listOf(
+                    "marketApplicationId=ir.mservices.market",
+                    "marketPermission=ir.mservices.market.BILLING",
+                    "marketBindAddress=ir.mservices.market.InAppBillingService.BIND",
+                ),
+                facet.values["manifestPlaceholders"],
+                "the facet carries them as `key=value` entries",
+            )
+        }
+    }
+
+    private object NoProgress : ProgressReporter {
+        override fun report(fraction: Double, message: String?) {}
+        override fun checkCanceled() {}
+        override val isCanceled = false
     }
 
     /** Convert moves the Gradle files to a backup dir, drops the compat marker, and keeps the native model;

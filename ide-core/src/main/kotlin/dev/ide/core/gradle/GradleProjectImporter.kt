@@ -134,6 +134,7 @@ class GradleProjectImporter : ProjectImporter {
         // manifest (AndroidFacet's DSL-wins rule).
         versionCode = spec.versionCode ?: AndroidFacet.DEFAULT_VERSION_CODE,
         versionName = spec.versionName ?: AndroidFacet.DEFAULT_VERSION_NAME,
+        manifestPlaceholders = spec.manifestPlaceholders,
         isApplication = spec.kind == GradleImport.Kind.ANDROID_APP,
         flavorDimensions = spec.flavorDimensions,
         buildTypes = if (spec.buildTypes.isEmpty()) AndroidFacet.DEFAULT_BUILD_TYPES
@@ -146,9 +147,12 @@ class GradleProjectImporter : ProjectImporter {
                 proguardFiles = it.proguardFiles,
                 applicationIdSuffix = it.applicationIdSuffix,
                 versionNameSuffix = it.versionNameSuffix,
+                manifestPlaceholders = it.manifestPlaceholders,
             )
         },
-        productFlavors = spec.productFlavors.map { ProductFlavor(it.name, dimension = it.dimension) },
+        productFlavors = spec.productFlavors.map {
+            ProductFlavor(it.name, dimension = it.dimension, manifestPlaceholders = it.manifestPlaceholders)
+        },
         buildFeatures = BuildFeatures(
             viewBinding = spec.viewBinding,
             compose = spec.isCompose,

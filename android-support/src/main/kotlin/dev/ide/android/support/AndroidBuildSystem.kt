@@ -303,7 +303,11 @@ class AndroidBuildSystem(
         // the ${applicationId} manifest placeholder Firebase/Play Services authorities depend on. Same
         // computation the run/launch + app-log-capture paths use (AndroidVariants.applicationId), one source.
         val applicationId = AndroidVariants.applicationId(facet, variant)
-        val manifestPlaceholders = mapOf("applicationId" to applicationId, "packageName" to facet.namespace)
+        // The built-in applicationId/packageName plus the placeholders the module declares (defaultConfig +
+        // flavors + build type). A dependency's manifest routinely REQUIRES one of the module's: the Myket
+        // billing client names `${marketApplicationId}`/`${marketPermission}`, and an unresolved placeholder
+        // fails the aapt2 link, so a declared value has to reach the merge.
+        val manifestPlaceholders = AndroidVariants.manifestPlaceholders(facet, variant)
         // Library manifests to merge, in decreasing priority: local android-lib modules, then external AARs.
         val depLibManifests = depAndroidLibs.mapNotNull { lib ->
             val libFacet = lib.facets.get(AndroidFacet.KEY) ?: return@mapNotNull null
