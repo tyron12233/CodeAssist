@@ -71,7 +71,7 @@ class VmProgramInterpreter(
         // program's own `class MyFrame extends JFrame`) or through the bridge (a plain `new JFrame()`), so both
         // producers report into the same tracker.
         val windows = ProgramWindows()
-        val bridge = RunBridge(javaClass.classLoader, windows)
+        val bridge = RunBridge(javaClass.classLoader, windows, request.classpath)
         val vm = Vm(source, InterpretPolicy.DEFAULT, bridge, WindowTrackingPeers(peerFactory, windows), SPAWNED_STACK_BYTES)
         val outcome = Outcome()
         // A dedicated group so every Thread the program starts (a real host thread, created by the creating

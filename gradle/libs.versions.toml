@@ -6,7 +6,7 @@ kotlin = "2.4.0"
 # (`p/ij/intellij-dependencies`), NOT Maven Central.
 kotlinForIde = "2.4.20-dev-6138"
 intellijPlatform = "251.27812.49"
-coroutines = "1.10.2"
+coroutines = "1.11.0"
 junit = "5.11.4"
 jdt = "3.40.0"
 compose = "1.11.1"

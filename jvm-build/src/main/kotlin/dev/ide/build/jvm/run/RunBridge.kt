@@ -5,12 +5,16 @@ import dev.ide.build.engine.GuardCategory
 import dev.ide.build.engine.Guards
 import dev.ide.jvm.NativeBridge
 import dev.ide.jvm.ReflectiveBridge
+import dev.ide.jvm.VmUnsupportedException
 import java.lang.reflect.AccessibleObject
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 import java.net.InetAddress
 import java.net.Socket
 import java.net.URL
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.jar.JarFile
 
 /**
  * The [NativeBridge] a console run interprets against. It forwards to a [ReflectiveBridge] (the real platform +
@@ -24,14 +28,19 @@ import java.net.URL
  *  - **Windows**: a top-level window the program constructs is recorded in [windows], so a GUI run ends when
  *    the last one closes rather than when `main` returns, and `EXIT_ON_CLOSE` is clamped (see
  *    [clampedCloseOperation]) so closing that window cannot take the IDE with it.
+ *  - **Version skew** (diagnostics only): a member missing from a bridged class the PROJECT also ships is
+ *    explained rather than reported as a bare "no such method" (see [explained]).
  *
  * Standard I/O is NOT handled here: the interpreter redirects the process-global `System.out`/`err`/`in` to
  * the run console for the duration of the run, so both interpreted code and bridged standard-library I/O
  * (e.g. Kotlin's `readln`, which reads the real `System.in`) observe it.
  */
 internal class RunBridge(
-    loader: ClassLoader,
+    private val loader: ClassLoader,
     private val windows: ProgramWindows = ProgramWindows(),
+    /** The run's own classpath. Read ONLY to explain a failure (see [explained]); nothing is ever loaded from
+     *  it here, which is the whole point of interpreting the program instead. */
+    private val classpath: List<Path> = emptyList(),
 ) : NativeBridge {
     // A console run propagates lambda failures (no proxyExceptionSink) — unlike a preview, which degrades them.
     private val delegate = ReflectiveBridge(loader)
@@ -39,18 +48,20 @@ internal class RunBridge(
     override fun invokeStatic(owner: String, name: String, descriptor: String, args: List<Any?>): Any? {
         if (owner == "java/lang/System" && name == "exit" && descriptor == "(I)V") throw ControlledExit(args[0] as Int)
         enforceStatic(owner, name, args)
-        return delegate.invokeStatic(owner, name, descriptor, args)
+        return explained(owner) { delegate.invokeStatic(owner, name, descriptor, args) }
     }
 
     override fun invokeVirtual(receiver: Any, name: String, descriptor: String, args: List<Any?>): Any? {
         if (receiver is Runtime && (name == "exit" || name == "halt") && descriptor == "(I)V") throw ControlledExit(args[0] as Int)
         enforceVirtual(receiver, name)
         val callArgs = clampedCloseOperation(receiver.javaClass, name, descriptor, args) ?: args
-        return delegate.invokeVirtual(receiver, name, descriptor, callArgs)
+        return explained(receiver.javaClass.name.replace('.', '/')) {
+            delegate.invokeVirtual(receiver, name, descriptor, callArgs)
+        }
     }
 
     override fun getStatic(owner: String, name: String, descriptor: String): Any? =
-        delegate.getStatic(owner, name, descriptor)
+        explained(owner) { delegate.getStatic(owner, name, descriptor) }
 
     override fun putStatic(owner: String, name: String, descriptor: String, value: Any?) =
         delegate.putStatic(owner, name, descriptor, value)
@@ -63,8 +74,71 @@ internal class RunBridge(
 
     override fun construct(owner: String, descriptor: String, args: List<Any?>): Any? {
         enforceConstruct(owner, args)
-        return delegate.construct(owner, descriptor, args).also { windows.record(it) }
+        return explained(owner) { delegate.construct(owner, descriptor, args) }.also { windows.record(it) }
     }
+
+    // ---- version skew (diagnostics) ----------------------------------------------------------------
+
+    /**
+     * Run [call], and when the member it needs is missing from a class the PROJECT also ships, say why.
+     *
+     * `kotlin/`, `kotlinx/`, `org/jetbrains/` and the platform namespaces are BRIDGED (`InterpretPolicy
+     * .DEFAULT`): a console run executes them as the real classes the IDE itself runs on, NOT the versions on
+     * the project's classpath. So a project depending on a newer library than the IDE ships compiles happily
+     * against its own jar and then dies on the first call the IDE's copy has no name for. Reported:
+     * `runBlocking { }` compiled against kotlinx-coroutines 1.11.0 emits `BuildersKt.runBlockingK$default`
+     * (1.11.0 put the Kotlin-facing builder behind a `@JvmName`), which the 1.10.2 the IDE shipped never had.
+     * The bare "no static method" pointed at nothing; naming both artifacts turns it into one obvious fix.
+     */
+    private fun <T> explained(owner: String, call: () -> T): T =
+        try {
+            call()
+        } catch (e: VmUnsupportedException) {
+            val project = projectArtifact(owner) ?: throw e
+            val host = hostVersion(owner)
+            // The same version on both sides is not skew: the member is simply absent everywhere, and blaming
+            // the library version would send the user off to change something that is already right.
+            if (host != null && host == project.version) throw e
+            throw VmUnsupportedException(
+                "${e.message}. ${project.description} is on the project's classpath, but a console run executes " +
+                    "${owner.replace('/', '.')} with the copy CodeAssist ships${host?.let { " ($it)" }.orEmpty()}, " +
+                    "not the project's, so a member added after that version is not there. " +
+                    "Pin a version whose API it has.",
+            )
+        }
+
+    /** A library the project ships: how to name it, and its version when its manifest states one. */
+    private class Supplier(val description: String, val version: String?)
+
+    /** The classpath jar that provides [owner], described by its manifest ("kotlinx-coroutines-core 1.11.0")
+     *  or else its file name. Null when the project ships no such class: the failure is then about a platform
+     *  class and there is no second copy to blame. */
+    private fun projectArtifact(owner: String): Supplier? {
+        val entry = "$owner.class"
+        for (path in classpath) {
+            if (!Files.isRegularFile(path)) continue // a directory is the project's own output, never a library
+            val supplier = runCatching {
+                JarFile(path.toFile()).use { jar ->
+                    if (jar.getEntry(entry) == null) return@use null
+                    val attrs = jar.manifest?.mainAttributes
+                    val title = attrs?.getValue("Implementation-Title")
+                    val version = attrs?.getValue("Implementation-Version")
+                    Supplier(
+                        description = if (title != null && version != null) "$title $version" else path.fileName.toString(),
+                        version = version,
+                    )
+                }
+            }.getOrNull()
+            if (supplier != null) return supplier
+        }
+        return null
+    }
+
+    /** The version the IDE's own copy of [owner] declares, or null: on device its classes are dexed and carry
+     *  no manifest, so there is nothing to read. */
+    private fun hostVersion(owner: String): String? =
+        runCatching { Class.forName(owner.replace('/', '.'), false, loader) }.getOrNull()
+            ?.`package`?.implementationVersion
 
     // ---- sandbox (mirrors the curated set the old SandboxGuard bytecode rewrite covered) ----
 
