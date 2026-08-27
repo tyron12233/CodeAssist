@@ -24,7 +24,10 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         put("versionCode", facet.versionCode.toLong())
         put("versionName", facet.versionName)
         put("isApplication", facet.isApplication)
-        if (facet.manifestPlaceholders.isNotEmpty()) put(PLACEHOLDERS_KEY, encodePlaceholders(facet.manifestPlaceholders))
+        // Always emitted, even empty (like a build type's shrinkResources): the Module Settings tab derives its
+        // editable fields from this map, and a key that appears only once it has a value would leave a module
+        // with no placeholders yet no field to add the first one in.
+        put(PLACEHOLDERS_KEY, encodePlaceholders(facet.manifestPlaceholders))
         if (facet.flavorDimensions.isNotEmpty()) put("flavorDimensions", facet.flavorDimensions)
         put("buildTypes", facet.buildTypes.map { encodeBuildType(it) })
         if (facet.productFlavors.isNotEmpty()) put("productFlavors", facet.productFlavors.map { encodeFlavor(it) })

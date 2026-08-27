@@ -115,6 +115,12 @@ class AndroidFacetCodecTest {
         )
         assertEquals(listOf("marketApplicationId=ir.mservices.market.release"), bts[1]["manifestPlaceholders"])
         assertEquals(null, bts[0]["manifestPlaceholders"], "a build type that declares none has no key")
+        // The module-level key is always present, though, so Module Settings has a list to add the first
+        // entry to (a placeholder a dependency needs is otherwise unaddable without editing module.toml).
+        assertEquals(
+            emptyList<String>(),
+            AndroidFacetCodec.encode(AndroidFacet(namespace = "com.example.app", compileSdk = 34))["manifestPlaceholders"],
+        )
     }
 
     @Test
