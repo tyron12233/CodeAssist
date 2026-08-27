@@ -26,6 +26,7 @@ import java.io.OutputStream
 import java.io.PrintStream
 import java.io.PrintWriter
 import java.io.StringWriter
+import java.lang.reflect.UndeclaredThrowableException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.jar.JarFile
@@ -51,7 +52,9 @@ import java.util.jar.JarFile
  * program still has outstanding when `main` returns, since it lives on afterwards on the AWT event thread,
  * which belongs to the host rather than to this group. Cancellation disposes those windows, asks the VM to
  * stop (its loop unwinds even a tight compute loop), and interrupts the whole group (to break a blocked stdin
- * read, `sleep`, `wait`, or `join` on any thread).
+ * read, `sleep`, `wait`, or `join` on any thread). What those threads THROW is the group's business too: an
+ * exception escaping one of them is printed to the run console and the program carries on, as on a real JVM,
+ * rather than reaching the process-wide handler (see [ProgramThreadGroup]).
  *
  * [peerFactory] produces the real subclasses that let platform code invoke an interpreted object's overrides
  * (e.g. a `Comparator` handed to `Collections.sort`). Desktop uses the default ASM factory; a device host
@@ -72,13 +75,14 @@ class VmProgramInterpreter(
         val vm = Vm(source, InterpretPolicy.DEFAULT, bridge, WindowTrackingPeers(peerFactory, windows), SPAWNED_STACK_BYTES)
         val outcome = Outcome()
         // A dedicated group so every Thread the program starts (a real host thread, created by the creating
-        // thread) inherits it and can be interrupted together on Stop.
-        val group = ThreadGroup("interp-run")
+        // thread) inherits it and can be interrupted together on Stop, and so what those threads throw is
+        // handled by the run rather than by the process (see [ProgramThreadGroup]).
+        val group = ProgramThreadGroup(vm, windows, outcome, io)
         val thread = Thread(group, {
             try {
                 runMain(vm, request.mainClass.replace('.', '/'), request.args)
             } catch (t: Throwable) {
-                outcome.error = t
+                outcome.record(t)
             }
         }, "program-main", STACK_BYTES).apply { isDaemon = true }
 
@@ -97,6 +101,9 @@ class VmProgramInterpreter(
                     try {
                         awaitCancellation()
                     } finally {
+                        // Ahead of the interrupt, so the InterruptedExceptions it raises on the program's
+                        // threads read as the run ending rather than as program failures to report.
+                        group.cancelling = true
                         windows.disposeAll()
                         vm.requestCancel()
                         group.interrupt()
@@ -219,13 +226,7 @@ class VmProgramInterpreter(
         is VmInterruptedException -> 130 // cancelled mid-run
         is StackOverflowError -> { io.stdout("\nStackOverflowError: the program recursed too deeply.\n"); 1 }
         is OutOfMemoryError -> { io.stdout("\nOutOfMemoryError: the program ran out of memory.\n"); 1 }
-        else -> { report(e, io); 1 }
-    }
-
-    private fun report(t: Throwable, io: ProgramIo) {
-        val sw = StringWriter()
-        t.printStackTrace(PrintWriter(sw))
-        io.stdout("\nException in thread \"main\" $sw")
+        else -> { report("main", e, io); 1 }
     }
 
     /** Reads `.class` bytes from the run's classpath: directories first (the module's own output), then the
@@ -241,9 +242,53 @@ class VmProgramInterpreter(
         }
     }
 
-    /** The thrown outcome of the program thread, published to the run coroutine by `Thread.join`. */
+    /** The thrown outcome of the program, published to the run coroutine by `Thread.join`. Written by `main`
+     *  and, for a `System.exit` off it, by [ProgramThreadGroup], hence volatile. */
     private class Outcome {
-        @JvmField var error: Throwable? = null
+        @Volatile @JvmField var error: Throwable? = null
+
+        /** Keep the FIRST failure: the teardown a `System.exit` on a worker triggers interrupts `main`, and the
+         *  InterruptedException that raises there must not displace the exit code the program asked for. */
+        @Synchronized fun record(t: Throwable) { if (error == null) error = t }
+    }
+
+    /**
+     * The program's thread group, which also decides what happens when one of its threads throws.
+     *
+     * A `Thread` the program starts is a REAL host thread, so an exception escaping its `run` goes to the
+     * process-wide handler (on Android the system killer), which takes the IDE's build process down with the
+     * user's bug (reported: a program whose `thread { Thread.sleep(...) }` was interrupted as the run ended
+     * killed `com.tyron.code:build`). A real JVM prints the trace and lets the rest of the program carry on,
+     * which is what this does, into the run console instead of the IDE's log.
+     */
+    private class ProgramThreadGroup(
+        private val vm: Vm,
+        private val windows: ProgramWindows,
+        private val outcome: Outcome,
+        private val io: ProgramIo,
+    ) : ThreadGroup("interp-run") {
+
+        /** Set before the group is interrupted, so the interrupt the run itself causes is not reported as a
+         *  program failure. */
+        @Volatile var cancelling = false
+
+        override fun uncaughtException(t: Thread, e: Throwable) {
+            when (val error = surfaced(e)) {
+                // `System.exit` off the main thread ends the whole program on a real JVM, not just the thread
+                // that called it: record the code, then unwind everything the way Stop does.
+                is ControlledExit -> {
+                    outcome.record(error)
+                    cancelling = true
+                    windows.disposeAll()
+                    vm.requestCancel()
+                    interrupt()
+                }
+                // The run's own cancellation reaching a program thread: the Stop the user asked for.
+                is VmInterruptedException -> {}
+                is InterruptedException -> if (!cancelling) report(t.name, error, io)
+                else -> report(t.name, error, io)
+            }
+        }
     }
 
     /** Turns the program's raw output bytes into text and forwards it to the run console; the decoder carries
@@ -292,3 +337,17 @@ class VmProgramInterpreter(
         const val SPAWNED_STACK_BYTES = 8L * 1024 * 1024
     }
 }
+
+/** Print an uncaught program exception to the run console, in the form a JVM prints it. */
+private fun report(threadName: String, t: Throwable, io: ProgramIo) {
+    val sw = StringWriter()
+    t.printStackTrace(PrintWriter(sw))
+    io.stdout("\nException in thread \"$threadName\" $sw")
+}
+
+/** What a program thread actually threw. An interpreted lambda or peer reaches platform code as a
+ *  [java.lang.reflect.Proxy], whose generated method wraps a checked throwable its interface does not declare;
+ *  that wrapper is an artifact of how the VM hands interpreted code to the platform, so it is stripped before
+ *  the throwable is reported or acted on. */
+private fun surfaced(e: Throwable): Throwable =
+    if (e is UndeclaredThrowableException) e.undeclaredThrowable ?: e else e
