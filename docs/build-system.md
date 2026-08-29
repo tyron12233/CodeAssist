@@ -245,7 +245,7 @@ The Android build expresses the APK build as an incremental task DAG, faithful t
 plugin's shape:
 
 ```
-mergeResources → aapt2Compile → aapt2Link (+R) → [compileKotlin →] compileJava
+[compileAidl →] mergeResources → aapt2Compile → aapt2Link (+R) → [compileKotlin →] compileJava
   → dexBuilder → {mergeProjectDex, mergeLibDex, mergeExtDex} → packageApk → sign   (debug / no minify)
   → minify<Variant>WithR8 (shrink+optimize+obfuscate+dex, +resource shrink) → [shrinkResources →] packageApk → sign   (release / minify)
 mergeNativeLibs, mergeJavaResource ⇒ packageApk    (run alongside dexing; feed the packager)
@@ -322,6 +322,17 @@ mergeNativeLibs, mergeJavaResource ⇒ packageApk    (run alongside dexing; feed
   whole, since L8 release-shrinking against R8's emitted keep rules drops internal helper classes). The
   desugar runtime + config jars are an injected host artifact; when a host ships none the flag is a no-op.
   The config folds into the dex cache key only when enabled, so a no-desugaring build's cache is unchanged.
+- **AIDL.** A module whose `aidl/` source root holds `.aidl` files gets a `compileAidl<Variant>` step that
+  generates the Binder `IInterface`/`Stub`/`Proxy` Java into a generated source root, which then joins the
+  Java and Kotlin compile source paths. There is no `buildFeatures` flag: the task exists exactly when
+  `.aidl` files do, and a module without any registers no task. AGP shells this step out to the SDK's `aidl`
+  binary, which ships only as a linux-x86_64 executable; the compiler here is a Kotlin implementation
+  (`android-support`'s `aidl` package), so the same code serves the desktop build, the on-device build, and
+  the editor's pre-build resolution. Dependency modules' and AAR `aidl/` folders are import roots,
+  contributing type declarations without being generated a second time, and a library's own `aidl/` is
+  packaged into its `.aar`. Framework types are classified from `platforms/android-NN/framework.aidl` when
+  the host has one, and otherwise by reading `android.jar` for an `android.os.Parcelable` or
+  `android.os.IInterface` supertype.
 - **Library-aware.** JAR and AAR dependencies are routed: code to compile/dex, AAR resources into the
   merged app R, AAR assets and JNI into the package.
 - **Packaging: native libs + Java resources (AGP-faithful).** Two merge tasks feed the packager, mirroring

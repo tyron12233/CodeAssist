@@ -2,6 +2,7 @@ package dev.ide.core
 
 import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ANALYZER_EP
+import dev.ide.android.support.AndroidAidlProvider
 import dev.ide.android.support.AndroidBuildConfigProvider
 import dev.ide.android.support.AndroidRClassProvider
 import dev.ide.android.support.AndroidSupport
@@ -11,6 +12,7 @@ import dev.ide.android.support.metadata.AndroidSdkMetadata
 import dev.ide.block.BLOCK_MAPPING_EP
 import dev.ide.block.impl.JavaBlockMapping
 import dev.ide.core.actions.BuiltInActions
+import dev.ide.core.analysis.AidlAnalyzer
 import dev.ide.core.analysis.PackageMismatchAnalyzer
 import dev.ide.core.completion.BufferWordsContributor
 import dev.ide.core.completion.CompletionStats
@@ -422,7 +424,7 @@ private class AndroidSupportPlugin(
 ) : Plugin {
     override val manifest = PluginManifest(
         id = "android-support", name = "Android Support",
-        description = "Android module types, the AndroidFacet + its module.toml codec, variants, resource icons, templates, and synthetic R / BuildConfig / ViewBinding classes.",
+        description = "Android module types, the AndroidFacet + its module.toml codec, variants, resource icons, templates, and synthetic R / BuildConfig / ViewBinding / AIDL classes.",
     )
     override fun register(reg: PluginRegistration) {
         reg.contributeVia { ext, _ ->
@@ -436,8 +438,15 @@ private class AndroidSupportPlugin(
         reg.register(
             SYNTHETIC_CLASS_EP,
             AndroidRClassProvider { m, _ -> env.activeEngine?.resourceRepo(m) })
+        reg.register(SYNTHETIC_CLASS_EP, AndroidAidlProvider())
+        // Editor diagnostics for `.aidl`, through the same parser and generator the build runs, so an
+        // invalid interface is flagged as it is typed rather than at the next build.
+        reg.contributeVia { ext, pid -> ext.register(ANALYZER_EP, AidlAnalyzer(), pid) }
         // ProGuard/R8 keep-rule files: routed off Java so JDT never flags them as broken Java.
         reg.register(FILE_TYPE_EP, FileTypeMapping(listOf(".pro"), LanguageId("proguard")))
+        // AIDL: its own language id (no backend yet, so it edits as plain text with AIDL syntax colors),
+        // which keeps JDT from analysing an interface definition as broken Java.
+        reg.register(FILE_TYPE_EP, FileTypeMapping(listOf(".aidl"), LanguageId("aidl")))
     }
 }
 

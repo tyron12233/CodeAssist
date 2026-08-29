@@ -5,6 +5,7 @@ import dev.ide.model.DependencyScope
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.zip.ZipFile
 import kotlin.io.path.exists
 import kotlin.io.path.extension
@@ -44,7 +45,7 @@ internal object ComposeIconIndex {
         val found = HashMap<String, MutableSet<String>>()
         for (entry in module.classpath(DependencyScope.IMPLEMENTATION).entries) {
             if (entry.kind == ClasspathEntryKind.SDK_BOOTCLASSPATH) continue
-            val root = runCatching { Path.of(entry.root.path) }.getOrNull() ?: continue
+            val root = runCatching { Paths.get(entry.root.path) }.getOrNull() ?: continue
             if (!root.exists()) continue
             if (root.isDirectory()) scanDirectory(root, found) else scanArchive(root, found)
         }

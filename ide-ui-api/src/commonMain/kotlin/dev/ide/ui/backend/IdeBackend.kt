@@ -1149,6 +1149,7 @@ enum class UiSourceRootRole { Source, Resource, AndroidRes, Assets, Aidl }
 enum class UiNewFileTemplate {
     JavaClass, JavaInterface, JavaEnum, JavaAbstractClass, JavaAnnotation,
     KotlinFile, KotlinClass, KotlinInterface, KotlinDataClass, KotlinEnum, KotlinObject,
+    AidlInterface, AidlParcelable,
 }
 
 /** Structural role of a tree node. The *icon* is chosen separately via [TreeNode.iconId]. */
@@ -1179,6 +1180,12 @@ data class TreeNode(
      * created in. Non-null marks an XML new-file target — the counterpart to [sourceRootPath] for Java.
      */
     val resDirPath: String? = null,
+    /**
+     * For a node inside an `aidl/` source root (the root, a package under it, or a file beside one): the
+     * root itself. AIDL is package-structured like Java, so those nodes also carry [sourceRootPath]; this
+     * is what tells the "New ▸" menu to offer an AIDL interface rather than a Java class.
+     */
+    val aidlRootPath: String? = null,
     /**
      * When non-null, opening this node opens the Module Settings editor for the named module instead of a
      * text editor — set on a `module.toml` file (and the module node itself). The host only sets it for a

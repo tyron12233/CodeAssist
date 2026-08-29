@@ -959,7 +959,7 @@ class EditorSession(
     private class CommentSyntax(val line: String?, val blockOpen: String?, val blockClose: String?)
 
     private fun commentSyntax(): CommentSyntax = when (language) {
-        CodeLanguage.Java, CodeLanguage.Kotlin -> CommentSyntax("//", "/*", "*/")
+        CodeLanguage.Java, CodeLanguage.Kotlin, CodeLanguage.Aidl -> CommentSyntax("//", "/*", "*/")
         CodeLanguage.Xml, CodeLanguage.Markdown -> CommentSyntax(null, "<!--", "-->")
         CodeLanguage.Proguard -> CommentSyntax("#", null, null)
         CodeLanguage.Plain -> CommentSyntax(null, null, null)

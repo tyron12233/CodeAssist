@@ -22,8 +22,8 @@ import kotlin.io.path.readText
  * (no external zip tool). The AAR is the interchange format an `android-lib` publishes for consumers:
  * a `classes.jar` of the library's code (Java + Kotlin, WITHOUT the compile-only R), the library
  * `AndroidManifest.xml`, its RAW `res/` and `assets/`, the R symbol table `R.txt`, native libs under
- * `jni/<abi>/`, an optional `proguard.txt` of consumer keep rules, and the `aar-metadata.properties`
- * AGP consumers read. The layout matches what [dev.ide.android.support.tools.AarExtractor] consumes.
+ * `jni/<abi>/`, its `.aidl` declarations under `aidl/`, an optional `proguard.txt` of consumer keep rules,
+ * and the `aar-metadata.properties` AGP consumers read. The layout matches what [dev.ide.android.support.tools.AarExtractor] consumes.
  */
 internal object AarPackaging {
 
@@ -38,6 +38,7 @@ internal object AarPackaging {
         rTxt: Path,
         assetsDirs: List<Path>,
         jniLibDirs: List<Path>,
+        aidlDirs: List<Path>,
         proguardText: String,
         compileSdk: Int,
         outAar: Path,
@@ -63,6 +64,9 @@ internal object AarPackaging {
             assetsDirs.forEach { putTree(zos, "assets", it, written) }
             // jni/<abi>/…  (jniLibs are already laid out <abi>/lib*.so)
             jniLibDirs.forEach { putTree(zos, "jni", it, written) }
+            // aidl/: the library's `.aidl` sources verbatim, so a consuming module's own AIDL compilation can
+            // import the parcelables and interfaces this library declares (AGP ships the same folder).
+            aidlDirs.forEach { putTree(zos, "aidl", it, written) }
             // proguard.txt — consumer keep rules applied by the app's R8 (omitted when there are none).
             if (proguardText.isNotBlank()) putBytes(zos, "proguard.txt", proguardText.toByteArray(Charsets.UTF_8), written)
             // The AGP metadata consumers read (minCompileSdk gate + format versions).
@@ -110,8 +114,9 @@ internal object AarPackaging {
 
 /**
  * The `bundleAar` step: package [outAar] from the library's compiled [classesJar], [manifest], raw
- * [resDirs]/[assetsDirs], the [rTxt] symbol table, native libs under [jniLibDirs], and consumer keep
- * rules (the readable files in [consumerProguardFiles] plus [inlineProguardRules]).
+ * [resDirs]/[assetsDirs], the [rTxt] symbol table, native libs under [jniLibDirs], the `.aidl` under
+ * [aidlDirs], and consumer keep rules (the readable files in [consumerProguardFiles] plus
+ * [inlineProguardRules]).
  */
 internal class PackageAarTask(
     override val name: TaskName,
@@ -122,6 +127,7 @@ internal class PackageAarTask(
     private val rTxt: Path,
     private val assetsDirs: List<Path>,
     private val jniLibDirs: List<Path>,
+    private val aidlDirs: List<Path>,
     private val consumerProguardFiles: List<Path>,
     private val inlineProguardRules: List<String>,
     private val compileSdk: Int,
@@ -134,6 +140,7 @@ internal class PackageAarTask(
             dirPaths("res", resDirs)
             dirPaths("assets", assetsDirs)
             dirPaths("jni", jniLibDirs)
+            dirPaths("aidl", aidlDirs)
             if (Files.isRegularFile(rTxt)) filePaths("rTxt", listOf(rTxt))
             filePaths("consumerProguard", consumerProguardFiles.filter { Files.isRegularFile(it) })
             property("package", packageName)
@@ -149,7 +156,7 @@ internal class PackageAarTask(
             inlineProguardRules.forEach { append(it).append('\n') }
         }
         val entries = AarPackaging.assembleAar(
-            classesJar, manifest, packageName, resDirs, rTxt, assetsDirs, jniLibDirs, proguard, compileSdk, outAar,
+            classesJar, manifest, packageName, resDirs, rTxt, assetsDirs, jniLibDirs, aidlDirs, proguard, compileSdk, outAar,
         )
         ctx.logger()("Packaged ${entries.size} entries into ${outAar.fileName}")
         return TaskResult.Success

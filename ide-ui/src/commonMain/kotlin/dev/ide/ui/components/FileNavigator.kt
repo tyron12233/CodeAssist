@@ -91,6 +91,7 @@ import dev.ide.ui.generated.resources.filetree_rename
 import dev.ide.ui.generated.resources.filetree_move
 import dev.ide.ui.generated.resources.filetree_copy
 import dev.ide.ui.generated.resources.filetree_delete
+import dev.ide.ui.generated.resources.filetree_aidl_file
 import dev.ide.ui.generated.resources.filetree_java_class
 import dev.ide.ui.generated.resources.filetree_kotlin_file
 import dev.ide.ui.generated.resources.filetree_image_asset
@@ -862,19 +863,27 @@ private fun NewActionItems(
     // plain folder / res context.
     val segs = node.packageSegments
     if (isSourceContext && targetDir != null) {
-        FileActionItem(CaIcons.code, stringResource(Res.string.filetree_java_class)) {
-            close(); onNewSource(
-            targetDir,
-            NewSourceLang.Java,
-            segs
-        )
-        }
-        FileActionItem(CaIcons.code, stringResource(Res.string.filetree_kotlin_file)) {
-            close(); onNewSource(
-            targetDir,
-            NewSourceLang.Kotlin,
-            segs
-        )
+        // An `aidl/` root is a package context too, but a Java class does not belong in one, so it offers
+        // the AIDL templates instead.
+        if (node.aidlRootPath != null) {
+            FileActionItem(CaIcons.code, stringResource(Res.string.filetree_aidl_file)) {
+                close(); onNewSource(targetDir, NewSourceLang.Aidl, segs)
+            }
+        } else {
+            FileActionItem(CaIcons.code, stringResource(Res.string.filetree_java_class)) {
+                close(); onNewSource(
+                targetDir,
+                NewSourceLang.Java,
+                segs
+            )
+            }
+            FileActionItem(CaIcons.code, stringResource(Res.string.filetree_kotlin_file)) {
+                close(); onNewSource(
+                targetDir,
+                NewSourceLang.Kotlin,
+                segs
+            )
+            }
         }
     }
     if (canNewResource) {

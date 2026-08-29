@@ -58,7 +58,7 @@ ide-android (Android launcher) → ide-core
 
 | Module | Responsibility |
 |---|---|
-| `android-support` | The Android plugin: `AndroidFacet`, app/library module types, variants, and the native APK pipeline (resource merge, aapt2, R generation, D8 dexing, packaging, signing). Invokes SDK tools behind injected ports. |
+| `android-support` | The Android plugin: `AndroidFacet`, app/library module types, variants, the AIDL compiler, and the native APK pipeline (resource merge, aapt2, R generation, D8 dexing, packaging, signing). Invokes SDK tools behind injected ports. |
 | `android-sdk-metadata` | A build-time generator that produces the bundled SDK metadata asset from `attrs.xml` + `android.jar`. |
 
 ## UI and launchers

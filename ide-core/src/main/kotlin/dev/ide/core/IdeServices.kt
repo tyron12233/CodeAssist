@@ -530,6 +530,13 @@ class IdeServices private constructor(
     private fun hasLanguageBackend(language: LanguageId): Boolean =
         languageBackends.any { language in it.languages }
 
+    /** Languages some registered [dev.ide.analysis.Analyzer] claims. A language can have inspections without
+     *  having a backend: an `.aidl` file is a declaration whose diagnostics come from the AIDL compiler, not
+     *  from parsing it into the shared DOM. Keeps such a file analysable while a plain `.txt` stays inert. */
+    private val analyzedLanguages: Set<LanguageId> by lazy {
+        platform.extensions.extensions(ANALYZER_EP).flatMapTo(HashSet()) { it.languages }
+    }
+
     /** File-name-suffix → [LanguageId] mappings contributed via [FILE_TYPE_EP] (built-ins in [BuiltInPlugins]),
      *  priority-sorted and cached. Every built-in plugin registers before any engine is built, so the lazy
      *  snapshot is complete. This replaces the old hardcoded extension `when`: a language's file association is
@@ -1775,11 +1782,14 @@ class IdeServices private constructor(
     /**
      * The dotted package a [dir] corresponds to — its path relative to the enclosing source root — or null
      * when [dir] isn't under any module's source root. Returns "" for a source root itself (default package).
-     * Used to scaffold a `package` line when a new `.java`/`.kt` file is created in the tree.
+     * Used to scaffold a `package` line when a new `.java`/`.kt`/`.aidl` file is created in the tree.
+     *
+     * `aidl/` roots count: AIDL is package-structured the same way, and its imports resolve through that
+     * layout, so a new `.aidl` needs the same `package` line a Java file in the same position would get.
      */
     fun packageOf(dir: Path): String? {
         val d = dir.toAbsolutePath().normalize()
-        for (m in modules()) for (root in sourceRoots(m)) {
+        for (m in modules()) for (root in sourceRoots(m) + aidlRoots(m)) {
             val r = root.toAbsolutePath().normalize()
             if (d == r) return ""
             if (d.startsWith(r)) return r.relativize(d).toString().replace('/', '.')
@@ -1787,6 +1797,12 @@ class IdeServices private constructor(
         }
         return null
     }
+
+    /** A module's `aidl/` content roots: package contexts for the tree and for [packageOf], but not
+     *  compiled as Java/Kotlin sources, so they stay out of [sourceRoots]. */
+    fun aidlRoots(module: Module): List<Path> = module.sourceSets.flatMap { it.contentRoots }
+        .filter { ContentRole.AIDL in it.roles }
+        .map { Paths.get(it.dir.path) }
 
     /** The module that owns [file] (its source root is a prefix), or null if outside the project. */
     fun moduleForFile(file: Path): Module? {
@@ -1997,7 +2013,7 @@ class IdeServices private constructor(
      * matches source roots, so XML files under `res/` and the manifest resolve to their module.
      */
     fun moduleForEditableFile(file: Path): Module? =
-        moduleForFile(file) ?: moduleForResourceFile(file) ?: moduleForManifestFile(file)
+        moduleForFile(file) ?: moduleForResourceFile(file) ?: moduleForAidlFile(file) ?: moduleForManifestFile(file)
 
     /** The module whose [AndroidFacet] manifest path is [file], or null. */
     private fun moduleForManifestFile(file: Path): Module? {
@@ -4187,6 +4203,15 @@ class IdeServices private constructor(
         m.sourceSets.flatMap { it.contentRoots }.filter { ContentRole.ANDROID_RES in it.roles }
             .map { Paths.get(it.dir.path) }
 
+    /** The module whose `aidl/` tree contains [file], or null. AIDL roots are deliberately not source roots
+     *  (nothing there compiles as Java or Kotlin), so a `.aidl` needs its own way back to its module. */
+    private fun moduleForAidlFile(file: Path): Module? {
+        val target = file.toAbsolutePath().normalize()
+        return modules().firstOrNull { m ->
+            aidlRoots(m).any { target.startsWith(it.toAbsolutePath().normalize()) }
+        }
+    }
+
     /** The Android module whose `res/` tree contains [file] (an XML resource), or null. */
     private fun moduleForResourceFile(file: Path): Module? {
         val target = file.toAbsolutePath().normalize()
@@ -4204,10 +4229,11 @@ class IdeServices private constructor(
         override suspend fun targetFor(file: VirtualFile, needsBindings: Boolean): AnalysisTarget? {
             val path = Paths.get(file.path)
             val language = languageFor(path)
-            // Nothing to analyze when no backend claims the file's language (a `res/raw/` data file, a `.txt`,
-            // Markdown, ProGuard keep rules): bail before building a target, so such a file is never parsed,
-            // and in particular never parsed as Java.
-            if (!hasLanguageBackend(language)) return null
+            // Nothing to analyze when neither a backend nor an analyzer claims the file's language (a
+            // `res/raw/` data file, a `.txt`, Markdown, ProGuard keep rules): bail before building a target,
+            // so such a file is never parsed, and in particular never parsed as Java. A backend-less language
+            // that does have analyzers (AIDL) gets a plain-text target, which carries the buffer they read.
+            if (!hasLanguageBackend(language) && language !in analyzedLanguages) return null
             // `moduleForEditableFile` (not `moduleForFile`) so XML resource files + the manifest, which sit
             // outside the source roots, still resolve to a module and get analyzed.
             val module = moduleForEditableFile(path) ?: return null
@@ -4698,13 +4724,14 @@ internal class ActiveEngineXmlResourceHost(private val env: ApplicationEnvironme
         host?.createResourceFile(file, rClass, name)
 }
 
-/** Content roles surfaced in the project tree (code + resources + assets); see [IdeServices.treeRoots]. */
+/** Content roles surfaced in the project tree (code + resources + assets + AIDL); see [IdeServices.treeRoots]. */
 private val TREE_ROOT_ROLES = setOf(
     ContentRole.SOURCE,
     ContentRole.GENERATED,
     ContentRole.RESOURCE,
     ContentRole.ANDROID_RES,
     ContentRole.ASSETS,
+    ContentRole.AIDL,
 )
 
 /** The per-file analysis context the engine consumes: live DOM + the module's resolver (Java/Kotlin/XML)

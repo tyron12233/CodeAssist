@@ -55,6 +55,7 @@ sealed class AndroidModuleType(
             "src/$name/assets" to setOf(ContentRole.ASSETS),
             "src/$name/resources" to setOf(ContentRole.RESOURCE),  // Java resources → merged into the APK root
             "src/$name/jniLibs" to setOf(ContentRole.JNI_LIBS),    // prebuilt `<abi>/*.so` → packaged under lib/
+            "src/$name/aidl" to setOf(ContentRole.AIDL),           // `.aidl` → Binder stubs via compileAidl
         ),
     )
 

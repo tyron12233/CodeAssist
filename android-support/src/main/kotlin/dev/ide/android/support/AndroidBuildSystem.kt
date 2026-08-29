@@ -5,6 +5,8 @@ import dev.ide.android.support.tasks.Aapt2LinkTask
 import dev.ide.android.support.tasks.AndroidCompileTask
 import dev.ide.android.support.tasks.AndroidKotlinCompileTask
 import dev.ide.android.support.tasks.CheckAarMetadataTask
+import dev.ide.android.support.aidl.AidlCompiler
+import dev.ide.android.support.tasks.CompileAidlTask
 import dev.ide.android.support.tasks.ConvertResourcesTask
 import dev.ide.android.support.tasks.DexArchiveBuilderTask
 import dev.ide.android.support.tasks.DexExternalLibsTask
@@ -354,6 +356,26 @@ class AndroidBuildSystem(
         val vbGenDirs = listOfNotNull(viewBinding).map { layout.viewBindingGen }
         val vbDep = listOfNotNull(viewBinding)
 
+        // AIDL: `.aidl` under the variant's aidl roots becomes the Binder interface/Stub/Proxy Java, in a
+        // generated root both compile tasks read. There is no `buildFeatures` flag to turn this on (AGP has
+        // one; a mobile IDE where a silently-skipped file is hard to diagnose is better served by just
+        // compiling what is there): a module with no `.aidl` registers no task and builds byte-identically.
+        // Dependency modules' and AARs' aidl folders are IMPORT roots: they contribute the parcelable and
+        // interface declarations this module's files may reference, without being generated a second time.
+        val aidlSourceRoots = roots(variant, ContentRole.AIDL)
+        val aidlImportRoots = depAndroidLibs.flatMap { depRoots(it, ContentRole.AIDL) } + libs.aidlDirs
+        val compileAidl = if (hasAidlSources(aidlSourceRoots)) step("compileAidl") else null
+        if (compileAidl != null) {
+            val aidlClasspath = compileBootclasspath + libs.compileJars
+            tasks.task(compileAidl) {
+                CompileAidlTask(
+                    compileAidl, aidlSourceRoots, aidlImportRoots, sdk.frameworkAidl, { aidlClasspath }, layout.aidlGen,
+                )
+            }
+        }
+        val aidlGenDirs = listOfNotNull(compileAidl).map { layout.aidlGen }
+        val aidlDep = listOfNotNull(compileAidl)
+
         // google-services.json (when present) generates res that the merge consumes, so it runs first.
         val mergeResDeps = if (gmsJson != null) {
             val processGms = step("processGoogleServices")
@@ -419,7 +441,7 @@ class AndroidBuildSystem(
         // Package the generated R.java (app + every --extra-package) as R.jar bytecode instead of compiling it.
         tasks.task(generateRFile, listOf(aapt2Link)) { GenerateRJarTask(generateRFile, layout.genJava, layout.rJar) }
         if (appHasKotlin) {
-            tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin + vbDep + listOfNotNull(generateSources)) {
+            tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin + vbDep + aidlDep + listOfNotNull(generateSources)) {
                 AndroidKotlinCompileTask(
                     app,
                     compileKotlin,
@@ -431,7 +453,7 @@ class AndroidBuildSystem(
                     bootClasspath,
                     kotlin,
                     plugins,
-                    extraGenDirs = vbGenDirs,
+                    extraGenDirs = vbGenDirs + aidlGenDirs,
                 )
             }
         }
@@ -440,7 +462,7 @@ class AndroidBuildSystem(
         // classpath, not as compiled source. Non-R generated files (e.g. Manifest.java) are still compiled.
         tasks.task(
             compile,
-            listOf(aapt2Link, generateRFile) + directDepCompiles + (if (appHasKotlin) listOf(compileKotlin) else emptyList()) + vbDep + listOfNotNull(generateSources)
+            listOf(aapt2Link, generateRFile) + directDepCompiles + (if (appHasKotlin) listOf(compileKotlin) else emptyList()) + vbDep + aidlDep + listOfNotNull(generateSources)
         ) {
             AndroidCompileTask(
                 compile,
@@ -450,7 +472,7 @@ class AndroidBuildSystem(
                 layout.classes,
                 level,
                 bootClasspath,
-                extraGenDirs = vbGenDirs,
+                extraGenDirs = vbGenDirs + aidlGenDirs,
             )
         }
         // The app's project-scope dex covers both the Java and (when present) the Kotlin output.
@@ -780,6 +802,24 @@ class AndroidBuildSystem(
         }
         val libVbGenDirs = listOfNotNull(libViewBinding).map { vbDir }
 
+        // AIDL for a library: same generation as an app's, and the result is real code. It compiles into the
+        // library's own output, so the stubs dex into the AAR/jar. The library's `aidl/` folder is ALSO
+        // packaged into its AAR (see [appendAar]) so a consumer can import its declarations.
+        val aidlSourceRoots = srcRoots(ContentRole.AIDL)
+        val aidlGen = buildDir.resolve("intermediates").resolve("aidl")
+        val libCompileAidl = if (hasAidlSources(aidlSourceRoots)) TaskName(":${m.name}:compileAidl") else null
+        if (libCompileAidl != null) {
+            val aidlImportRoots = directModuleDeps(m, byId).flatMap { moduleRoots(it, ContentRole.AIDL) } + libs.aidlDirs
+            val aidlClasspath = compileBootclasspath + libs.compileJars
+            tasks.task(libCompileAidl) {
+                CompileAidlTask(
+                    libCompileAidl, aidlSourceRoots, aidlImportRoots, sdk.frameworkAidl, { aidlClasspath }, aidlGen,
+                )
+            }
+            compileDeps.add(libCompileAidl)
+        }
+        val libAidlGenDirs = listOfNotNull(libCompileAidl).map { aidlGen }
+
         // generateSources (KSP etc.) for the lib: emit into its variant `generated/ksp` root ahead of compile;
         // that root joins the compile source roots so generated code compiles into the AAR/jar. KSP `libraries`
         // = the lib's base compile classpath (snapshot now; R/kotlin-classes are added later and aren't needed).
@@ -805,7 +845,7 @@ class AndroidBuildSystem(
             val depKotlin = directModuleDeps(m, byId).filter { moduleHasKotlin(it) }.map { TaskName(":${it.name}:compileKotlin") }
             val kotlinCp = compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin + listOf(rJar)
             tasks.task(compileKotlin, listOf(compileR) + compileDeps.filter { it != compileR } + depKotlin) {
-                AndroidKotlinCompileTask(m, compileKotlin, libGenSourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, bootClasspath, kotlin, plugins, extraGenDirs = libVbGenDirs)
+                AndroidKotlinCompileTask(m, compileKotlin, libGenSourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, bootClasspath, kotlin, plugins, extraGenDirs = libVbGenDirs + libAidlGenDirs)
             }
             classpath.add(libKotlin); compileDeps.add(compileKotlin)
         }
@@ -820,7 +860,7 @@ class AndroidBuildSystem(
                 classesOut,
                 level,
                 bootClasspath,
-                extraGenDirs = libVbGenDirs,
+                extraGenDirs = libVbGenDirs + libAidlGenDirs,
             )
         }
         val procRes = TaskName(":${m.name}:processResources")
@@ -875,6 +915,7 @@ class AndroidBuildSystem(
                 rTxt = rRoot.resolve("R.txt"),
                 assetsDirs = srcRoots(ContentRole.ASSETS),
                 jniLibDirs = srcRoots(ContentRole.JNI_LIBS),
+                aidlDirs = srcRoots(ContentRole.AIDL),
                 consumerProguardFiles = consumerProguard,
                 inlineProguardRules = inlineProguard,
                 compileSdk = facet.compileSdk,
@@ -924,6 +965,14 @@ class AndroidBuildSystem(
         .any { it.library.name.split(':').take(2).joinToString(":") == HILT_ANDROID_COORDINATE }
 
     /** A module's content roots tagged with [role], across its non-test source sets. */
+    /**
+     * True when any of [roots] actually holds a `.aidl` file. AIDL generation is auto-detected rather than
+     * flag-gated, so this is what decides whether the task exists at all. An empty (or absent) `aidl/`
+     * folder must leave the graph exactly as it was.
+     */
+    private fun hasAidlSources(roots: List<Path>): Boolean =
+        roots.any { AidlCompiler.aidlFilesUnder(it).isNotEmpty() }
+
     private fun moduleRoots(m: Module, role: ContentRole): List<Path> =
         m.sourceSets.filter { it.scope != DependencyScope.TEST_IMPLEMENTATION }
             .flatMap { it.contentRoots }
@@ -1036,6 +1085,7 @@ class AndroidBuildSystem(
         // AGP's compile_and_runtime_not_namespaced_r_class_jar: the R classes as bytecode, not compiled R.java.
         val rJar: Path = inter.resolve("compile_and_runtime_not_namespaced_r_class_jar").resolve("R.jar")
         val viewBindingGen: Path = inter.resolve("gen-view-binding")  // ViewBinding <Layout>Binding.java
+        val aidlGen: Path = inter.resolve("gen-aidl")  // compileAidl output: the Binder interface/Stub/Proxy .java
         // KSP source-generation output root (AGP's build/generated/ksp/<variant>); KSP emits kotlin/ + java/
         // under it, added to the compile source roots so both are compiled + indexed like hand-written code.
         val kspGen: Path = moduleDirField.resolve("build").resolve("generated").resolve("ksp").resolve(variantName)

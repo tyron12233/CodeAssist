@@ -18,7 +18,8 @@ fun interface NewlineHandler {
 
 /** The Enter handler for [language]. Brace languages (Java/Kotlin) get the IntelliJ-style smart indent. */
 fun newlineHandlerFor(language: CodeLanguage): NewlineHandler = when (language) {
-    CodeLanguage.Java -> JavaNewlineHandler
+    // AIDL is brace-and-semicolon shaped, so Java's smart indent is exactly right for it.
+    CodeLanguage.Java, CodeLanguage.Aidl -> JavaNewlineHandler
     CodeLanguage.Kotlin -> KotlinNewlineHandler
     CodeLanguage.Xml -> XmlNewlineHandler
     else -> DefaultNewlineHandler

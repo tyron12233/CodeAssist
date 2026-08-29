@@ -6,12 +6,14 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import dev.ide.ui.theme.SyntaxColors
 
-enum class CodeLanguage { Java, Kotlin, Xml, Proguard, Markdown, Plain }
+enum class CodeLanguage { Java, Kotlin, Xml, Aidl, Proguard, Markdown, Plain }
 
 fun languageFor(fileName: String): CodeLanguage = when {
     fileName.endsWith(".java") -> CodeLanguage.Java
     fileName.endsWith(".kt") || fileName.endsWith(".kts") -> CodeLanguage.Kotlin
     fileName.endsWith(".xml") -> CodeLanguage.Xml
+    // AIDL: a C-family brace language, styled by the shared code scanner over its own keyword set.
+    fileName.endsWith(".aidl") -> CodeLanguage.Aidl
     // ProGuard/R8 keep-rule files: `proguard-rules.pro`, `consumer-rules.pro`, any `*.pro`.
     fileName.endsWith(".pro") -> CodeLanguage.Proguard
     fileName.endsWith(".md") || fileName.endsWith(".markdown") -> CodeLanguage.Markdown
