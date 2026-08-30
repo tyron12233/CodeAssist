@@ -31,7 +31,7 @@ import java.io.File
  * The Android host. Bootstraps the real on-device engine ([AndroidIde]) off the main thread, then renders the
  * shared Compose IDE UI ([CodeAssistApp]) over the resulting [IdeBackend] — the same path the desktop runs.
  * The SAF/FileProvider plumbing lives in [AndroidFileOps]; the small host helpers (splash, "Save As" contract,
- * ad init, source-root search) in AndroidHostUi. This activity is just lifecycle + the Compose host + the SAF
+ * source-root search) in AndroidHostUi. This activity is just lifecycle + the Compose host + the SAF
  * launchers (which must be remembered in composition). A splash shows while the engine starts.
  */
 class MainActivity : ComponentActivity() {
@@ -44,9 +44,6 @@ class MainActivity : ComponentActivity() {
     /** Android file/SAF/FileProvider plumbing (byte-level import / share / export / install / reveal). */
     private val fileOps by lazy { AndroidFileOps(this) }
 
-    /** UMP consent flow (gathers ad consent before AdMob init; drives the "Manage ad consent" Settings entry). */
-    private val adConsent by lazy { AdConsentManager(this) }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         // Edge-to-edge with default (auto) bar styles; the system-bar ICON appearance is then driven reactively
         // by the app theme via `PlatformSystemBars` (light icons in dark mode, dark icons in light mode) — a fixed
@@ -54,9 +51,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         inbound.value = extractStream(intent)
-        // Gather UMP consent BEFORE initializing the Ads SDK (mediation + EEA/UK requirement); only initialize
-        // once consent allows ad requests. Failure resolves too, so a consent hiccup never blocks the IDE.
-        adConsent.gather(this) { if (adConsent.canRequestAds) initAds(applicationContext) }
 
         setContent {
             var backend by remember { mutableStateOf<IdeBackend?>(null) }
@@ -176,23 +170,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Android advertising bridge (native ads via AdMob + mediation). The consent hooks drive the
-            // Settings "Manage ad consent" entry (UMP privacy options) and reopen the form on request.
-            val adHost = remember {
-                AndroidAdHost(
-                    openUrl = { url -> fileOps.openInBrowser(url) },
-                    privacyOptionsRequiredProvider = { adConsent.privacyOptionsRequired },
-                    onShowPrivacyOptions = { adConsent.showPrivacyOptions(this@MainActivity) },
-                    // The full-screen build interstitial needs the foreground Activity to show().
-                    activityProvider = { this@MainActivity },
-                    // `lastUpdateTime` changes on a fresh install and on every update, and is identical across
-                    // launches in between — the shared AdController turns ads back on once per new value.
-                    installStamp = runCatching {
-                        packageManager.getPackageInfo(packageName, 0).lastUpdateTime.toString()
-                    }.getOrNull(),
-                )
-            }
-
             // A `.caproj` package handed in via "Open with" opens the import preview (see the branch below); any
             // other inbound file is copied into the open project's first source root as before.
             var importPackagePath by remember { mutableStateOf<String?>(null) }
@@ -223,7 +200,6 @@ class MainActivity : ComponentActivity() {
                 b != null -> CodeAssistApp(
                     b,
                     fileActions = fileActions,
-                    adHost = adHost,
                     // On-device Compose preview: render @Preview composables through the interpreter. The backend
                     // instance is stable across project switches (it swaps services internally), so one host suffices.
                     composePreviewHost = (b as? IdeServicesBackend)?.let { AndroidComposePreviewHost(it) },
