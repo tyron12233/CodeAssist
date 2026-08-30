@@ -56,6 +56,7 @@ object CaprojFormat {
             "packageName" to manifest.packageName,
             "moduleCount" to manifest.moduleCount,
             "modules" to manifest.modules,
+            "moduleInfos" to manifest.moduleInfos.map { moduleToJson(it) },
             "fileCount" to manifest.fileCount,
             "uncompressedSize" to manifest.uncompressedSize,
             "hasBundledDeps" to manifest.hasBundledDeps,
@@ -63,6 +64,25 @@ object CaprojFormat {
             "store" to manifest.store?.let { storeToJson(it) },
         ),
     )
+
+    private fun moduleToJson(m: CaprojModuleInfo): Map<String, Any?> = linkedMapOf(
+        "name" to m.name,
+        "path" to m.path,
+        "type" to m.typeId,
+        "files" to m.fileCount,
+        "size" to m.sizeBytes,
+    )
+
+    private fun moduleFromJson(map: Map<*, *>): CaprojModuleInfo? {
+        val name = map["name"] as? String ?: return null
+        return CaprojModuleInfo(
+            name = name,
+            path = map["path"] as? String ?: "",
+            typeId = map["type"] as? String ?: "",
+            fileCount = (map["files"] as? Number)?.toInt() ?: 0,
+            sizeBytes = (map["size"] as? Number)?.toLong() ?: 0L,
+        )
+    }
 
     private fun storeToJson(store: CaprojStoreInfo): Map<String, Any?> = linkedMapOf(
         "summary" to store.summary,
@@ -107,6 +127,7 @@ object CaprojFormat {
             packageName = map["packageName"] as? String,
             moduleCount = int("moduleCount"),
             modules = modules,
+            moduleInfos = (map["moduleInfos"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::moduleFromJson) } ?: emptyList(),
             fileCount = int("fileCount"),
             uncompressedSize = long("uncompressedSize"),
             hasBundledDeps = bool("hasBundledDeps"),
@@ -136,6 +157,12 @@ data class CaprojManifest(
     val packageName: String?,
     val moduleCount: Int,
     val modules: List<String>,
+    /**
+     * Per-module detail behind [modules], for the import preview's contents summary. Added after the first
+     * packages shipped, so it is empty for anything exported by an older build — a reader that needs it
+     * falls back to [modules] (names only). Always the same modules as [modules], in the same order.
+     */
+    val moduleInfos: List<CaprojModuleInfo> = emptyList(),
     /** Number of regular files under `project/`. */
     val fileCount: Int,
     /** Total uncompressed size of the `project/` files, in bytes. */
@@ -145,6 +172,20 @@ data class CaprojManifest(
     val iconEntry: String?,
     /** Optional Explore/Store metadata (screenshots, tags, ...); null for a plain project package. */
     val store: CaprojStoreInfo? = null,
+)
+
+/**
+ * One module inside a packaged project, as the import preview describes it: the module's [name], its [path]
+ * relative to the project root (`""` for a module at the root), its [typeId] (`android-app`, `java-lib`, ...)
+ * and how much of the package it accounts for. [fileCount]/[sizeBytes] count only the files that were
+ * actually packaged, so they match what lands on disk.
+ */
+data class CaprojModuleInfo(
+    val name: String,
+    val path: String,
+    val typeId: String,
+    val fileCount: Int,
+    val sizeBytes: Long,
 )
 
 /**

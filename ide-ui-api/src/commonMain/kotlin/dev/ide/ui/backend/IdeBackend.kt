@@ -1075,7 +1075,7 @@ data class ProjectInfo(
     val lastOpened: Long = 0L,
 )
 
-/** Options chosen in the Export-project dialog (see [ProjectService.exportProject]). */
+/** Options chosen in the Export-project screen (see [ProjectService.exportProject]). */
 data class UiExportOptions(
     /** Bundle the resolved dependencies into the package so the recipient can build offline. */
     val bundleDependencies: Boolean = false,
@@ -1083,10 +1083,51 @@ data class UiExportOptions(
     val author: String = "",
     /** Optional description shown in the recipient's import preview. */
     val description: String = "",
+    /** The modules to package, by name; null (the default) packages all of them. The screen keeps this
+     *  dependency-closed — see [UiExportModule.dependsOn]. */
+    val includedModules: Set<String>? = null,
+    /** Image files to embed as preview screenshots, in display order. */
+    val screenshotPaths: List<String> = emptyList(),
+)
+
+/**
+ * One module the export screen offers to include, with the share of the package it accounts for and the
+ * modules it needs. Dropping a module from an export has to drop everything in [dependsOn]'s reverse
+ * direction too, or the recipient imports a project that can't build.
+ */
+data class UiExportModule(
+    val name: String,
+    /** Module type id (`android-app`, `java-lib`, ...); the screen maps it to a label. */
+    val typeId: String,
+    /** Directory relative to the project root (`""` at the root). */
+    val path: String,
+    val fileCount: Int,
+    val sizeBytes: Long,
+    /** Names of the modules this one depends on. */
+    val dependsOn: List<String> = emptyList(),
+)
+
+/** What the export screen shows before packaging (see [ProjectService.exportPlan]): the project's modules
+ *  and the extra bytes bundling the resolved dependencies would add. */
+data class UiExportPlan(
+    val modules: List<UiExportModule> = emptyList(),
+    val bundledDepsBytes: Long = 0L,
 )
 
 /** One file listed in an import preview's peek (path relative to the project root). */
 data class UiPackagedEntry(val path: String, val sizeBytes: Long)
+
+/**
+ * One module inside a package being previewed for import: what it is and how much of the package it is.
+ * [fileCount]/[sizeBytes] are 0 when the package predates the manifest carrying them and its layout didn't
+ * let them be reconstructed — the screen then shows the module without numbers.
+ */
+data class UiPackagedModule(
+    val name: String,
+    val typeId: String,
+    val fileCount: Int,
+    val sizeBytes: Long,
+)
 
 /**
  * What a `.caproj` package contains, read for the import preview before it is extracted (see
@@ -1102,7 +1143,7 @@ data class UiImportPreview(
     val isAndroid: Boolean,
     val packageName: String?,
     val moduleCount: Int,
-    val modules: List<String>,
+    val modules: List<UiPackagedModule>,
     val fileCount: Int,
     val uncompressedSizeBytes: Long,
     val hasBundledDeps: Boolean,

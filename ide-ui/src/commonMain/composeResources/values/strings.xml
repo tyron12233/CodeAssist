@@ -63,6 +63,11 @@ We never collect your code, file or project names, which features you use, or an
     <string name="import_failed">Couldn\'t import the project package.</string>
     <string name="import_unrecognized_title">Can\'t import this file</string>
     <string name="import_unrecognized">CodeAssist doesn\'t recognize this file. Choose a .caproj project package to import.</string>
+    <string name="import_as_title">Import as</string>
+    <string name="import_as_hint">Project name</string>
+    <string name="import_destination">Lands in %1$s</string>
+    <string name="import_show_files">Show all %1$d files</string>
+    <string name="import_hide_files">Hide files</string>
     <!-- Gradle project import (best-effort compatibility mode) -->
     <string name="import_gradle_title">Import Gradle project</string>
     <string name="import_gradle_subtitle">Open an existing Gradle build (best effort)</string>
@@ -97,6 +102,21 @@ We never collect your code, file or project names, which features you use, or an
     <string name="export_save_copy">Save a copy…</string>
     <string name="export_done">Done</string>
     <string name="export_retry">Try again</string>
+    <string name="export_details_title">Details</string>
+    <string name="export_modules_title">Modules</string>
+    <string name="export_modules_desc">Leaving a module out takes everything that depends on it too.</string>
+    <string name="export_options_title">Options</string>
+    <string name="export_bundle_deps_cost">+%1$s</string>
+    <string name="export_excluded_note">Build outputs, caches and SDKs are never packaged.</string>
+    <string name="export_size_estimate">About %1$s</string>
+    <string name="export_screenshots_title">Screenshots</string>
+    <string name="export_screenshots_desc">Shown to whoever imports the package.</string>
+    <string name="export_screenshot_add">Add image</string>
+    <string name="export_screenshot_remove">Remove screenshot</string>
+    <!-- Module type names, shown under a module in the export and import screens -->
+    <string name="share_type_android_app">Android app</string>
+    <string name="share_type_android_lib">Android library</string>
+    <string name="share_type_java_lib">Java library</string>
     <string name="join_the_community">Join the community</string>
     <string name="join_the_community_content">Chat, get help, and share what you build on Discord.</string>
     <string name="support_title">Support CodeAssist</string>

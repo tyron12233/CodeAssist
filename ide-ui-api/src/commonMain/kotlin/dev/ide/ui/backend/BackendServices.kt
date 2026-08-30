@@ -699,17 +699,34 @@ interface ProjectService {
     suspend fun exportProject(rootPath: String, options: UiExportOptions): String? = null
 
     /**
-     * Read the `.caproj` at [archivePath] for the import preview (manifest, file peek, icon) without
+     * What the export screen can offer for the project at [rootPath]: its modules (with the share of the
+     * package each accounts for) and what bundling the resolved dependencies would cost. Walks the project
+     * tree, so it suspends. Null when [rootPath] holds no readable project.
+     */
+    suspend fun exportPlan(rootPath: String): UiExportPlan? = null
+
+    /**
+     * Read the `.caproj` at [archivePath] for the import preview (manifest, contents, icon) without
      * extracting it. Returns null when the file isn't a readable package.
      */
     suspend fun previewImportPackage(archivePath: String): UiImportPreview? = null
 
     /**
-     * Import the `.caproj` at [archivePath] into a new workspace and open it (bumps [projectEpoch]). Returns a
-     * failure result when the package is invalid or its format is unsupported.
+     * Import the `.caproj` at [archivePath] into a new workspace and open it (bumps [projectEpoch]). A
+     * non-blank [projectName] overrides the name in the package, for both the project and the directory it
+     * lands in. Returns a failure result when the package is invalid or its format is unsupported.
      */
-    suspend fun importPackage(archivePath: String): UiProjectResult =
+    suspend fun importPackage(archivePath: String, projectName: String? = null): UiProjectResult =
         UiProjectResult(false, "Project import not supported by this backend")
+
+    /** Where [importPackage] would put a project imported under [projectName], so the import preview can show
+     *  the destination before committing. Checks the projects directory for name collisions, so it suspends.
+     *  Null when this backend has no projects directory. */
+    suspend fun importDestination(projectName: String): String? = null
+
+    /** Raw bytes of the image at [path], for previewing a file the user picked outside any project (the
+     *  export screen's screenshots). Null when it isn't a readable image of a sane size. */
+    suspend fun imageBytes(path: String): ByteArray? = null
 }
 
 /**

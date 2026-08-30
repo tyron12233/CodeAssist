@@ -3,6 +3,7 @@ package dev.ide.ui
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.UiImportPreview
+import dev.ide.ui.backend.UiPackagedModule
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.screens.ModulesTab
@@ -228,7 +229,8 @@ class CodeAssistAppStateTest {
     fun readablePackageOpensTheImportPreview() = runTest {
         val preview = UiImportPreview(
             name = "Sample", description = "", author = "", createdBy = "", isAndroid = false,
-            packageName = null, moduleCount = 1, modules = listOf("app"), fileCount = 3,
+            packageName = null, moduleCount = 1,
+            modules = listOf(UiPackagedModule("app", "android-app", fileCount = 3, sizeBytes = 128)), fileCount = 3,
             uncompressedSizeBytes = 128, hasBundledDeps = false, icon = null, files = emptyList(),
             compatible = true,
         )

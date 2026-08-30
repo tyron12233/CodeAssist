@@ -7,8 +7,10 @@ import dev.ide.build.engine.ProgramInterpreter
 import dev.ide.core.sync.ExternalProjectMarker
 import dev.ide.core.sync.ProjectSyncService
 import dev.ide.model.LanguageLevel
+import dev.ide.model.ModuleDependency
 import dev.ide.model.PlatformKind
 import dev.ide.model.impl.ModelPersistence
+import dev.ide.model.impl.ProjectData
 import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.model.impl.SdkData
 import dev.ide.model.template.ProjectTemplate
@@ -26,6 +28,28 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import java.nio.file.Paths
 
+
+/** Cap on screenshots embedded in an exported package, and on the size of each one. */
+private const val MAX_EXPORT_SCREENSHOTS = 8
+private const val MAX_SCREENSHOT_BYTES = 8L * 1024 * 1024
+
+/**
+ * One module offered by the export screen: what it is ([typeId]), where it lives ([path], relative to the
+ * workspace root), the share of the package it accounts for, and the modules it depends on. [dependsOn] is
+ * what lets the screen keep a partial export coherent — dropping a module has to drop its dependents too.
+ */
+data class ExportModule(
+    val name: String,
+    val typeId: String,
+    val path: String,
+    val fileCount: Int,
+    val sizeBytes: Long,
+    val dependsOn: List<String>,
+)
+
+/** What the export screen shows before packaging: the project's modules and what bundling the resolved
+ *  dependencies would cost. */
+data class ExportPlan(val modules: List<ExportModule>, val bundledDepsBytes: Long)
 
 /** A project listed in the picker, read cheaply from disk without opening the full engine. */
 data class ProjectSummary(
@@ -347,7 +371,51 @@ class ProjectManager private constructor(
         var out = exportsDir.resolve("$base.${CaprojFormat.EXTENSION}")
         var n = 2
         while (Files.exists(out)) { out = exportsDir.resolve("$base-$n.${CaprojFormat.EXTENSION}"); n++ }
-        return ProjectPackaging.export(projectDir, out, options, exportIcon(projectDir), meta)
+        return ProjectPackaging.export(projectDir, out, options, exportIcon(projectDir), meta, storeContent(options))
+    }
+
+    /**
+     * What the export screen needs to offer choices before packaging the project at [rootPath]: every module
+     * with the share of the package it accounts for and the modules it depends on, plus the extra bytes
+     * "bundle dependencies" would add. Null when [rootPath] holds no readable project model.
+     */
+    internal fun exportPlan(rootPath: String): ExportPlan? {
+        val projectDir = Paths.get(rootPath)
+        val project = runCatching { ModelPersistence.load(projectDir) }.getOrNull()?.projects?.firstOrNull() ?: return null
+        val specs = moduleSpecs(project)
+        val measured = ProjectPackaging.measure(projectDir, specs).associateBy { it.name }
+        val byId = project.modules.associate { it.id to it.name }
+        val modules = project.modules.mapIndexed { i, m ->
+            val stats = measured[m.name]
+            ExportModule(
+                name = m.name,
+                typeId = m.typeId,
+                path = specs[i].path,
+                fileCount = stats?.fileCount ?: 0,
+                sizeBytes = stats?.sizeBytes ?: 0L,
+                dependsOn = m.dependencies.filterIsInstance<ModuleDependency>()
+                    .map { byId[it.target.value] ?: it.target.value }
+                    .filter { it != m.name }
+                    .distinct(),
+            )
+        }
+        return ExportPlan(modules, ProjectPackaging.bundledDepsSize(projectDir))
+    }
+
+    /** The screenshots picked in the export screen, read as store content (the packager's carrier for them),
+     *  or null when none were attached. Unreadable or oversized images are dropped. */
+    private fun storeContent(options: ProjectPackaging.ExportOptions): ProjectPackaging.StoreContent? {
+        val shots = options.screenshotPaths.take(MAX_EXPORT_SCREENSHOTS).mapNotNull { path ->
+            runCatching {
+                val file = Paths.get(path)
+                if (Files.size(file) > MAX_SCREENSHOT_BYTES) null else Files.readAllBytes(file)
+            }.getOrNull()
+        }
+        if (shots.isEmpty()) return null
+        return ProjectPackaging.StoreContent(
+            summary = options.description.trim(), category = "", tags = emptyList(),
+            highlights = emptyList(), language = null, screenshots = shots,
+        )
     }
 
     /** Read a `.caproj`'s manifest, file peek, and icon for the import preview, without extracting it. */
@@ -359,15 +427,21 @@ class ProjectManager private constructor(
      * null when the archive isn't a valid package, its format is newer than this build understands, or the
      * extracted tree isn't a loadable workspace (the half-written directory is cleaned up).
      */
-    fun importProject(archivePath: String): IdeServices? {
+    fun importProject(archivePath: String, projectName: String? = null): IdeServices? {
         val archive = Paths.get(archivePath)
         val preview = ProjectPackaging.readPreview(archive) ?: return null
         if (preview.manifest.format > CaprojFormat.FORMAT_VERSION) return null
-        val dest = uniqueProjectDir(preview.manifest.name)
+        val name = projectName?.trim()?.takeIf { it.isNotEmpty() } ?: preview.manifest.name
+        val dest = uniqueProjectDir(name)
         val ok = runCatching { ProjectPackaging.unpack(archive, dest) }.isSuccess && ModelPersistence.exists(dest)
         if (!ok) { runCatching { deleteTree(dest) }; return null }
+        if (name != preview.manifest.name) ProjectPackaging.renameProject(dest, name)
         return open(dest.toString())
     }
+
+    /** Where [importProject] would put a package imported under [name] — what the import preview shows as the
+     *  destination. Computes the path without creating anything. */
+    internal fun plannedImportDir(name: String): Path = uniqueProjectDir(name)
 
     /** Project-derived package metadata: name, module list, and Android app namespace read cheaply from the model. */
     private fun exportMeta(projectDir: Path): ProjectPackaging.ExportMeta {
@@ -380,11 +454,21 @@ class ProjectManager private constructor(
             name = project?.name ?: projectDir.fileName?.toString() ?: "project",
             isAndroid = androidFacets.isNotEmpty(),
             packageName = appFacet?.namespace,
-            modules = project?.modules?.map { it.name } ?: emptyList(),
+            modules = project?.let { moduleSpecs(it) } ?: emptyList(),
             createdBy = CaprojFormat.APP_NAME,
             exportedAt = System.currentTimeMillis(),
         )
     }
+
+    /** Each module of [project] with its directory relative to the WORKSPACE root — the project root and the
+     *  module dir joined, since the packager walks from the workspace root. */
+    private fun moduleSpecs(project: ProjectData): List<ProjectPackaging.ModuleSpec> =
+        project.modules.map { m ->
+            val path = listOf(project.rootRelPath, m.dirRelPath)
+                .filter { it.isNotBlank() && it != "." }
+                .joinToString("/") { it.trim('/') }
+            ProjectPackaging.ModuleSpec(m.name, path, m.typeId)
+        }
 
     /** The Android launcher icon's raster bytes for the package preview, or null (non-raster icons fall back
      *  to the initial-letter tile in the importer, matching the picker). */
