@@ -82,6 +82,7 @@ private const val MAX_PREVIEW_PX = 2400
 private const val REMOTE_FIRST_FRAME_TIMEOUT_MS = 6_000L
 
 private val inProcessLog = Log.logger("AndroidComposePreviewHost")
+private val remoteLog = Log.logger("ComposePreviewRemote")
 
 /**
  * The on-device Compose preview host (the editor's live-pixel renderer). Lowers the open file's `@Preview`
@@ -143,13 +144,20 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         // while the settings read is in flight); the configured one replaces it only when the project
         // actually relaxes a category (else the instance — and its findings — stays stable).
         val defaultSandbox = remember(path) { PreviewSandboxPolicy(SandboxCategory.entries.toSet()) }
+        // The restricted category IDS, kept alongside the policy: the in-process renderer takes the policy
+        // object, but `:preview` can only be handed the ids over AIDL and builds its own policy from them.
+        var sandboxIds by remember(path) { mutableStateOf(SandboxCategory.entries.map { it.id }) }
         val sandbox by produceState(defaultSandbox, path) {
-            val cats = runCatching { backend.composePreviewSandbox() }.getOrNull()
-                ?.mapNotNullTo(HashSet()) { SandboxCategory.fromId(it) } ?: return@produceState
+            val ids = runCatching { backend.composePreviewSandbox() }.getOrNull() ?: return@produceState
+            val cats = ids.mapNotNullTo(HashSet()) { SandboxCategory.fromId(it) }
+            sandboxIds = cats.map { it.id }
             if (cats != SandboxCategory.entries.toSet()) value = PreviewSandboxPolicy(cats)
         }
         var renderError by remember(path, preview.variantId, text) { mutableStateOf<Throwable?>(null) }
         var partialError by remember(path, preview.variantId, text) { mutableStateOf<Throwable?>(null) }
+        // The same thing as [partialError] but reported over AIDL by `:preview`, which can only send a message.
+        // Kept separate rather than fabricating a Throwable, and reset on a buffer edit like the rest.
+        var remotePartial by remember(path, preview.variantId, text) { mutableStateOf<String?>(null) }
         var sandboxFindings by remember(path, preview.variantId, text) { mutableStateOf(listOf<SandboxFinding>()) }
         // A buffer edit resets the recorded findings so the chip reflects the current text — a still-present
         // blocked call re-records on the next render pass.
@@ -169,12 +177,16 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         // so the details live in the tappable chip rather than covering the device frame.
         // renderError = top-level failure (preview replaced by error view); partialError = content-lambda error
         // (preview still shows, but lazy content like LazyColumn items may be incomplete).
-        LaunchedEffect(state, renderError, partialError, sandboxFindings) {
+        LaunchedEffect(state, renderError, partialError, remotePartial, sandboxFindings) {
             val err = renderError
-            val partial = partialError
+            // Whichever renderer is live reports through its own channel: in-process hands over the Throwable,
+            // `:preview` sends the message over AIDL. Both mean the same thing to the user, so both produce the
+            // same warning — the isolated path used to produce nothing at all.
+            val partialMsg = partialError?.let { it.message ?: it::class.simpleName ?: "Unknown error" }
+                ?: remotePartial
             val issues = when {
                 err != null -> listOf(PreviewIssue(PreviewIssueLevel.ERROR, "Preview failed to render", err.message ?: err::class.simpleName ?: "Unknown error"))
-                partial != null -> listOf(PreviewIssue(PreviewIssueLevel.WARNING, "Preview partially rendered", partial.message ?: partial::class.simpleName ?: "Unknown error"))
+                partialMsg != null -> listOf(PreviewIssue(PreviewIssueLevel.WARNING, "Preview partially rendered", partialMsg))
                 state is PreviewState.NotInterpretable -> (state as PreviewState.NotInterpretable).reasons.map { PreviewIssue(PreviewIssueLevel.WARNING, "Preview not interpretable", it) }
                 else -> emptyList()
             }
@@ -265,7 +277,11 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                                 resRoots = remoteRes?.first ?: emptyArray(), namespace = remoteRes?.second ?: "",
                                 widthPx = widthPx, heightPx = heightPx, density = density, night = night,
                                 wrapContent = wrapContent,
-                                onUnavailable = { useRemote = false }, modifier = Modifier.fillMaxWidth(),
+                                onUnavailable = { useRemote = false },
+                                onPartialError = { remotePartial = it },
+                                sandbox = sandboxIds,
+                                onSandboxFindings = { if (it != sandboxFindings) sandboxFindings = it },
+                                modifier = Modifier.fillMaxWidth(),
                             )
                         }
                     } else {
@@ -501,9 +517,14 @@ private fun RemoteComposePreview(
     night: Boolean,
     wrapContent: Boolean,
     onUnavailable: () -> Unit,
+    onPartialError: (String?) -> Unit,
+    sandbox: List<String>,
+    onSandboxFindings: (List<SandboxFinding>) -> Unit,
     modifier: Modifier,
 ) {
     val main = remember { Handler(Looper.getMainLooper()) }
+    val partial by rememberUpdatedState(onPartialError)
+    val findings by rememberUpdatedState(onSandboxFindings)
     // A new session is needed only when the classpath or resource roots change (they drive `:preview`'s executor +
     // resource rebuild). Size / night are pushed to the LIVE session via resize() instead, so they must NOT re-key
     // the session/frame state — that would tear the session down and flash a spinner. Keeping the last frame
@@ -528,11 +549,23 @@ private fun RemoteComposePreview(
         var disposed = false
         val sink = object : ComposePreviewRemoteClient.FrameSink {
             override fun onFrame(bitmap: Bitmap, seq: Long) { main.post { frame = bitmap } }
-            override fun onError(message: String) { main.post { fallback() } }
+            override fun onError(message: String) {
+                // The fallback is deliberate — a fatal remote failure may be remote-only, and in-process may well
+                // render it fine, so this is a recovery path rather than something to report. But the message
+                // used to vanish entirely, which made an isolated-render failure impossible to diagnose; if the
+                // in-process attempt fails too, IT reports the problem through the usual chip.
+                remoteLog.warn("isolated preview render failed, falling back in-process: $message")
+                main.post { fallback() }
+            }
             override fun onContentSize(widthPx: Int, heightPx: Int) { main.post { contentSize = IntSize(widthPx, heightPx) } }
+            override fun onPartialError(message: String?) { main.post { partial(message) } }
+            override fun onSandboxFindings(findings2: List<SandboxFinding>) { main.post { findings(findings2) } }
         }
         Thread {
-            val s = client.openSession(openLowered, widthPx, heightPx, density, night, sink, jars, resRoots, namespace, wrapContent = wrapContent)
+            val s = client.openSession(
+                openLowered, widthPx, heightPx, density, night, sink, jars, resRoots, namespace,
+                wrapContent = wrapContent, sandbox = sandbox.toTypedArray(),
+            )
             main.post {
                 if (disposed) { s?.close() }
                 else { sessionBox[0] = s; sessionEpoch++; if (s == null) fallback() }
