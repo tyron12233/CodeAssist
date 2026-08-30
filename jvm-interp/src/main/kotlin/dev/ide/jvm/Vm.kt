@@ -686,12 +686,22 @@ class Vm(
         }
         // The class chain is walked before the interfaces, so a final class method is recorded before the same
         // signature is seen abstract on an interface.
+        // Its interfaces are collected as we go: an ABSTRACT superclass can leave an interface method
+        // unimplemented, and that method is still the peer's to satisfy even though the interpreted class does
+        // not name the interface itself. `GoogleFontImpl : AndroidFont(…)` is the case that surfaced it —
+        // `AndroidFont` implements `Font` but declares neither `weight` nor `style`, so with only the class
+        // chain and the class's OWN interfaces in scope, `Font.getWeight()` reached neither `methods` nor
+        // `abstractStubs` and the peer inherited it still abstract: `AbstractMethodError` the first time
+        // Compose's `FontMatcher` asked a downloadable font for its weight.
+        val inheritedIfaces = ArrayList<Class<*>>()
         var c: Class<*>? = superClass
         while (c != null) {
-            c.declaredMethods.forEach(::consider); c = c.superclass
+            c.declaredMethods.forEach(::consider)
+            inheritedIfaces.addAll(c.interfaces)
+            c = c.superclass
         }
         val seenIfaces = HashSet<Class<*>>()
-        val queue = ArrayDeque(interfaces)
+        val queue = ArrayDeque(interfaces + inheritedIfaces)
         while (queue.isNotEmpty()) {
             val iface = queue.removeFirst()
             if (!seenIfaces.add(iface)) continue
