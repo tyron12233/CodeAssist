@@ -119,6 +119,19 @@ We never collect your code, file or project names, which features you use, or an
     <string name="export_screenshots_desc">Shown to whoever imports the package.</string>
     <string name="export_screenshot_add">Add image</string>
     <string name="export_screenshot_remove">Remove screenshot</string>
+    <string name="export_intro_gradle">Write this project out as a Gradle build, so you can open it in Android Studio or build it with gradle.</string>
+    <string name="export_format_title">Format</string>
+    <string name="export_format_package">CodeAssist package</string>
+    <string name="export_format_package_desc">A .caproj file anyone with CodeAssist can import, exactly as it is here.</string>
+    <string name="export_format_gradle">Gradle project</string>
+    <string name="export_format_gradle_desc">A .zip holding your sources plus generated Gradle build files, for Android Studio or a gradle build.</string>
+    <string name="export_gradle_title">What gets generated</string>
+    <string name="export_gradle_contents">settings.gradle.kts, a build.gradle.kts per module, gradle.properties, and the Gradle wrapper settings, all written from your project: modules, dependencies, SDK levels, build types, flavors and build features.</string>
+    <string name="export_gradle_caveat">Best effort. The build files are generated from the project model rather than from a build that ran, so read them before you rely on them. Dependencies are declared as Maven coordinates and Gradle downloads them on the first sync, so that sync needs a connection.</string>
+    <string name="export_gradle_wrapper_note">The gradlew scripts are not included: Android Studio adds them on the first sync, or run gradle wrapper once.</string>
+    <string name="export_success_subtitle_gradle">Your Gradle project is ready.</string>
+    <string name="export_notes_title">Worth checking</string>
+    <string name="export_notes_desc">These are also in GRADLE-EXPORT.md inside the archive.</string>
     <!-- Module type names, shown under a module in the export and import screens -->
     <string name="share_type_android_app">Android app</string>
     <string name="share_type_android_lib">Android library</string>

@@ -1121,6 +1121,16 @@ data class UiExportPlan(
     val bundledDepsBytes: Long = 0L,
 )
 
+/**
+ * A finished Gradle export (see [ProjectService.exportGradleProject]): the archive that was written, and
+ * the best-effort [notes] the render collected. A note names something the project model holds that Gradle
+ * expresses differently or not at all (a signing config kept in the app keystore registry, a bundled
+ * annotation processor, a library with no Maven coordinate), so the user learns what to finish by hand
+ * instead of discovering it at the first sync. The same notes are written into the archive's
+ * `GRADLE-EXPORT.md`.
+ */
+data class UiGradleExport(val path: String, val notes: List<String> = emptyList())
+
 /** One file listed in an import preview's peek (path relative to the project root). */
 data class UiPackagedEntry(val path: String, val sizeBytes: Long)
 

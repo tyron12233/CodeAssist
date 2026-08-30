@@ -4,6 +4,7 @@ import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.android.support.tools.KeystoreRegistry
 import dev.ide.build.engine.ProgramInterpreter
+import dev.ide.core.gradle.GradleProjectExport
 import dev.ide.core.sync.ExternalProjectMarker
 import dev.ide.core.sync.ProjectSyncService
 import dev.ide.model.LanguageLevel
@@ -414,6 +415,24 @@ class ProjectManager private constructor(
         var n = 2
         while (Files.exists(out)) { out = exportsDir.resolve("$base-$n.${CaprojFormat.EXTENSION}"); n++ }
         return ProjectPackaging.export(projectDir, out, options, exportIcon(projectDir), meta, storeContent(options))
+    }
+
+    /**
+     * Export the project at [rootPath] as a best-effort Gradle project: the sources plus generated build
+     * scripts, zipped under `<home>/exports` next to the `.caproj` exports. The build files are derived from
+     * the project model, so what has no Gradle equivalent comes back in [GradleProjectExport.Outcome.notes]
+     * rather than being silently dropped. See [GradleProjectExport].
+     */
+    internal fun exportGradleProject(rootPath: String): GradleProjectExport.Outcome {
+        val projectDir = Paths.get(rootPath)
+        val name = runCatching { ModelPersistence.load(projectDir) }.getOrNull()?.projects?.firstOrNull()?.name
+            ?: projectDir.fileName?.toString().orEmpty()
+        val folder = slug(name).ifEmpty { "project" }
+        val exportsDir = homeDir.resolve("exports").also { Files.createDirectories(it) }
+        var out = exportsDir.resolve("$folder-gradle.zip")
+        var n = 2
+        while (Files.exists(out)) { out = exportsDir.resolve("$folder-gradle-$n.zip"); n++ }
+        return GradleProjectExport.exportZip(projectDir, out, folder)
     }
 
     /**

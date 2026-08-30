@@ -17,15 +17,24 @@ import dev.ide.ui.backend.UiImportPreview
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** Where the export flow is: configuring, packaging, done (with the written package), or failed. */
+/** Where the export flow is: configuring, packaging, done (with the written file), or failed. */
 internal sealed interface ExportPhase {
     data object Configure : ExportPhase
     data object Exporting : ExportPhase
-    data class Done(val path: String) : ExportPhase
+
+    /** Written: [path] is the file, [notes] what a best-effort export could not carry (Gradle only). */
+    data class Done(val path: String, val notes: List<String> = emptyList()) : ExportPhase
 
     /** Packaging failed; the host renders the reason (there is one). */
     data object Failed : ExportPhase
 }
+
+/**
+ * What the export writes. A `.caproj` is the lossless form another CodeAssist reads back; a Gradle project
+ * is the way out to Android Studio or a `gradle` build, generated from the project model and therefore best
+ * effort (see [dev.ide.ui.backend.UiGradleExport]).
+ */
+internal enum class ExportFormat { Package, Gradle }
 
 /** Cap on the screenshots one export can carry (the packager drops anything past this too). */
 internal const val MAX_EXPORT_SCREENSHOTS = 8
@@ -123,6 +132,10 @@ internal class ExportProjectState(
 ) {
     var phase: ExportPhase by mutableStateOf(ExportPhase.Configure)
         private set
+
+    /** What to write. The metadata, module, and screenshot choices below only apply to a `.caproj`. */
+    var format: ExportFormat by mutableStateOf(ExportFormat.Package)
+        private set
     var bundleDeps: Boolean by mutableStateOf(false)
         private set
     var author: String by mutableStateOf(initialAuthor)
@@ -143,6 +156,8 @@ internal class ExportProjectState(
     init {
         scope.launch { plan = backend.projects.exportPlan(project.rootPath) }
     }
+
+    fun updateFormat(value: ExportFormat) { format = value }
 
     fun updateBundleDeps(value: Boolean) { bundleDeps = value }
 
@@ -189,8 +204,12 @@ internal class ExportProjectState(
 
     fun backToConfigure() { phase = ExportPhase.Configure }
 
-    /** Package the project, remembering the author for the next export. */
+    /** Write the project in the chosen [format], remembering the author for the next package export. */
     fun export() {
+        if (format == ExportFormat.Gradle) {
+            exportGradle()
+            return
+        }
         onAuthorRemembered(author.trim())
         phase = ExportPhase.Exporting
         scope.launch {
@@ -205,6 +224,15 @@ internal class ExportProjectState(
                 ),
             )
             phase = if (path != null) ExportPhase.Done(path) else ExportPhase.Failed
+        }
+    }
+
+    /** Generate the Gradle build files and zip them with the sources; its notes ride to the done screen. */
+    private fun exportGradle() {
+        phase = ExportPhase.Exporting
+        scope.launch {
+            val result = backend.projects.exportGradleProject(project.rootPath)
+            phase = if (result != null) ExportPhase.Done(result.path, result.notes) else ExportPhase.Failed
         }
     }
 }

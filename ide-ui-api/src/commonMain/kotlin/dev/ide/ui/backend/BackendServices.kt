@@ -707,6 +707,14 @@ interface ProjectService {
     suspend fun exportProject(rootPath: String, options: UiExportOptions): String? = null
 
     /**
+     * Export the project at [rootPath] as a Gradle project (sources plus generated build scripts, zipped
+     * under the app exports dir) so it can be opened in Android Studio or built with `gradle`. Best effort:
+     * the scripts are derived from the project model, and whatever has no Gradle equivalent comes back in
+     * [UiGradleExport.notes]. Null when the export failed. Runs off the main thread.
+     */
+    suspend fun exportGradleProject(rootPath: String): UiGradleExport? = null
+
+    /**
      * What the export screen can offer for the project at [rootPath]: its modules (with the share of the
      * package each accounts for) and what bundling the resolved dependencies would cost. Walks the project
      * tree, so it suspends. Null when [rootPath] holds no readable project.

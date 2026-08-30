@@ -39,6 +39,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -89,7 +92,19 @@ import dev.ide.ui.generated.resources.export_done
 import dev.ide.ui.generated.resources.export_excluded_note
 import dev.ide.ui.generated.resources.export_exporting
 import dev.ide.ui.generated.resources.export_failed
+import dev.ide.ui.generated.resources.export_format_gradle
+import dev.ide.ui.generated.resources.export_format_gradle_desc
+import dev.ide.ui.generated.resources.export_format_package
+import dev.ide.ui.generated.resources.export_format_package_desc
+import dev.ide.ui.generated.resources.export_format_title
+import dev.ide.ui.generated.resources.export_gradle_caveat
+import dev.ide.ui.generated.resources.export_gradle_contents
+import dev.ide.ui.generated.resources.export_gradle_title
+import dev.ide.ui.generated.resources.export_gradle_wrapper_note
+import dev.ide.ui.generated.resources.export_notes_desc
+import dev.ide.ui.generated.resources.export_notes_title
 import dev.ide.ui.generated.resources.export_intro
+import dev.ide.ui.generated.resources.export_intro_gradle
 import dev.ide.ui.generated.resources.export_locate
 import dev.ide.ui.generated.resources.export_modules_desc
 import dev.ide.ui.generated.resources.export_modules_title
@@ -103,6 +118,7 @@ import dev.ide.ui.generated.resources.export_screenshots_title
 import dev.ide.ui.generated.resources.export_share
 import dev.ide.ui.generated.resources.export_size_estimate
 import dev.ide.ui.generated.resources.export_success_subtitle
+import dev.ide.ui.generated.resources.export_success_subtitle_gradle
 import dev.ide.ui.generated.resources.export_success_title
 import dev.ide.ui.generated.resources.export_title
 import dev.ide.ui.generated.resources.got_it
@@ -432,7 +448,7 @@ fun ExportProjectScreen(
             when (p) {
                 ExportPhase.Configure -> ExportConfigure(backend, project, fileActions, state)
                 ExportPhase.Exporting -> BusyView(stringResource(Res.string.export_exporting))
-                is ExportPhase.Done -> ExportSuccess(p.path, onReveal, onSaveCopy, onShare)
+                is ExportPhase.Done -> ExportSuccess(p.path, p.notes, state.format, onReveal, onSaveCopy, onShare)
                 ExportPhase.Failed -> Column(
                     Modifier.fillMaxSize().padding(horizontal = Ca.spacing.s4),
                     verticalArrangement = Arrangement.spacedBy(Ca.spacing.s4),
@@ -477,10 +493,19 @@ private fun ExportConfigure(
             }
         }
         Text(
-            stringResource(Res.string.export_intro),
+            stringResource(
+                if (state.format == ExportFormat.Gradle) Res.string.export_intro_gradle
+                else Res.string.export_intro
+            ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        ExportFormatCard(state)
+        if (state.format == ExportFormat.Gradle) {
+            GradleExportCard()
+            return@Column
+        }
 
         SharingCard {
             CardTitle(stringResource(Res.string.export_details_title))
@@ -544,6 +569,58 @@ private fun ExportConfigure(
         }
 
         if (fileActions.canPickFile) ScreenshotsCard(backend, fileActions, state)
+    }
+}
+
+/** Which of the two things the export writes: the lossless package, or a Gradle project to take elsewhere. */
+@Composable
+private fun ExportFormatCard(state: ExportProjectState) {
+    SharingCard {
+        CardTitle(stringResource(Res.string.export_format_title))
+        val formats = listOf(
+            ExportFormat.Package to stringResource(Res.string.export_format_package),
+            ExportFormat.Gradle to stringResource(Res.string.export_format_gradle),
+        )
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            formats.forEachIndexed { index, (format, label) ->
+                SegmentedButton(
+                    selected = state.format == format,
+                    onClick = { state.updateFormat(format) },
+                    shape = SegmentedButtonDefaults.itemShape(index, formats.size),
+                ) { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            }
+        }
+        Text(
+            stringResource(
+                if (state.format == ExportFormat.Gradle) Res.string.export_format_gradle_desc
+                else Res.string.export_format_package_desc
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+        )
+    }
+}
+
+/** What a Gradle export contains, and the honest limits of generating a build nobody has run. */
+@Composable
+private fun GradleExportCard() {
+    SharingCard {
+        CardTitle(stringResource(Res.string.export_gradle_title))
+        Text(
+            stringResource(Res.string.export_gradle_contents),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            stringResource(Res.string.export_gradle_caveat),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+        )
+        Text(
+            stringResource(Res.string.export_gradle_wrapper_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+        )
     }
 }
 
@@ -654,6 +731,8 @@ private fun ScreenshotThumb(backend: IdeBackend, path: String, onRemove: () -> U
 @Composable
 private fun ExportSuccess(
     path: String,
+    notes: List<String>,
+    format: ExportFormat,
     onReveal: ((String) -> Unit)?,
     onSaveCopy: ((String) -> Unit)?,
     onShare: ((String) -> Unit)?,
@@ -681,7 +760,10 @@ private fun ExportSuccess(
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
-            stringResource(Res.string.export_success_subtitle),
+            stringResource(
+                if (format == ExportFormat.Gradle) Res.string.export_success_subtitle_gradle
+                else Res.string.export_success_subtitle
+            ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -707,6 +789,32 @@ private fun ExportSuccess(
                 ExportActionRow(icon, label) { action(path) }
             }
         }
+        // What a best-effort export could not carry. Shown here rather than buried in the archive, because
+        // it is the difference between a project that syncs and one that puzzles the user in Android Studio.
+        if (notes.isNotEmpty()) ExportNotesCard(notes)
+    }
+}
+
+/** The best-effort notes from a Gradle export: what to finish by hand, listed before the user opens it. */
+@Composable
+private fun ExportNotesCard(notes: List<String>) {
+    SharingCard {
+        CardTitle(stringResource(Res.string.export_notes_title))
+        notes.forEach { note ->
+            Row(horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
+                Text("\u2022", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+                Text(
+                    note,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Text(
+            stringResource(Res.string.export_notes_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+        )
     }
 }
 

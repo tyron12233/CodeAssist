@@ -17,6 +17,7 @@ import dev.ide.ui.backend.UiCompatibilityInfo
 import dev.ide.ui.backend.UiExportModule
 import dev.ide.ui.backend.UiExportOptions
 import dev.ide.ui.backend.UiExportPlan
+import dev.ide.ui.backend.UiGradleExport
 import dev.ide.ui.backend.UiImportPreview
 import dev.ide.ui.backend.UiPackagedEntry
 import dev.ide.ui.backend.UiPackagedModule
@@ -287,6 +288,16 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
                     ),
                 ).toString()
             }.getOrElse { e -> log.error("Couldn't export the project at $rootPath", e); null }
+        }
+    }
+
+    override suspend fun exportGradleProject(rootPath: String): UiGradleExport? {
+        val mgr = ctx.manager ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val outcome = mgr.exportGradleProject(rootPath)
+                UiGradleExport(outcome.zip.toString(), outcome.notes)
+            }.getOrElse { e -> log.error("Couldn't export $rootPath as a Gradle project", e); null }
         }
     }
 
