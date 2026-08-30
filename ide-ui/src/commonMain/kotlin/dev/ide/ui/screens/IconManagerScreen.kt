@@ -531,8 +531,11 @@ private fun IconArt(drawable: UiDrawable?, raster: ByteArray?, modifier: Modifie
             bitmap?.let { Image(it, null, modifier, contentScale = ContentScale.Fit) } ?: Box(modifier)
         }
 
-        drawable != null -> Canvas(modifier) {
-            drawUiDrawable(recolorForSurface(drawable, onSurface), androidx.compose.ui.geometry.Offset.Zero, size)
+        drawable != null -> {
+            // Recolouring walks the node tree and COPIES it. Inside the draw lambda that ran per tile per
+            // frame; it depends only on the artwork and the surface colour, so it belongs in a remember.
+            val art = remember(drawable, onSurface) { recolorForSurface(drawable, onSurface) }
+            Canvas(modifier) { drawUiDrawable(art, androidx.compose.ui.geometry.Offset.Zero, size) }
         }
 
         else -> Box(modifier)

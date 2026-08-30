@@ -9,6 +9,8 @@ import dev.ide.android.support.icons.IconVariant
 import dev.ide.android.support.preview.DrawablePreview
 import dev.ide.android.support.resources.ResourceType
 import dev.ide.core.BackendContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import dev.ide.core.services.ComposeIconIndex
 import dev.ide.core.services.IconManagerService
 import dev.ide.ui.backend.IconService
@@ -80,7 +82,12 @@ internal class IconBackend(private val ctx: BackendContext) : IconService {
 
     override suspend fun iconArtwork(repoId: String, name: String, variant: UiIconVariant): UiIconArtwork? {
         val service = icons ?: return null
-        return ctx.background("icons.artwork") {
+        // NOT ctx.background: that lane is the editor's SINGLE serialized engine worker, shared with completion
+        // and analysis. One artwork call per icon meant a 300-icon catalogue queued 300 round trips through one
+        // thread — no parallelism however many the caller had in flight — and each one was cancellable by a
+        // keystroke, which the caller reads as "no artwork" and never retries, so tiles stayed blank. Resolving
+        // an icon is a repository map lookup plus building a vector spec: it touches no engine state.
+        return withContext(Dispatchers.Default) {
             service.artwork(repoId, name, variant.toEngine())?.let {
                 UiIconArtwork(DrawableMapping.toUi(DrawablePreview.Vector(it.spec)), it.warnings)
             }
@@ -107,14 +114,15 @@ internal class IconBackend(private val ctx: BackendContext) : IconService {
 
     override suspend fun resourceArtwork(path: String): UiIconArtwork? {
         val service = icons ?: return null
-        return ctx.background("icons.resourceArtwork") {
+        return withContext(Dispatchers.IO) {
             service.resourceArtwork(Paths.get(path))?.let { UiIconArtwork(DrawableMapping.toUi(it)) }
         }
     }
 
     override suspend fun resourceBytes(path: String): ByteArray? {
         val service = icons ?: return null
-        return ctx.background("icons.resourceBytes") { service.resourceBytes(Paths.get(path)) }
+        // Per-tile like the artwork calls above, and a plain file read — off the engine worker.
+        return withContext(Dispatchers.IO) { service.resourceBytes(Paths.get(path)) }
     }
 
     // --- importing -----------------------------------------------------------------------------------
@@ -226,7 +234,7 @@ internal class IconBackend(private val ctx: BackendContext) : IconService {
 
     override suspend fun composeIconArtwork(name: String, variant: UiIconVariant): UiIconArtwork? {
         val service = icons ?: return null
-        return ctx.background("icons.composeArtwork") {
+        return withContext(Dispatchers.Default) {
             service.composeIconArtwork(name, variant.toEngine())?.let {
                 UiIconArtwork(DrawableMapping.toUi(DrawablePreview.Vector(it.spec)), it.warnings)
             }
