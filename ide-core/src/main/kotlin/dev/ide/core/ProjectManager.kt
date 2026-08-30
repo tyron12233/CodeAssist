@@ -75,6 +75,9 @@ class ProjectManager private constructor(
     /** On-device Kotlin compiler-plugin loader (from :ide-android): D8-dex + DexClassLoader, so runtime
      *  (non-bundled) Kotlin compiler plugins can be applied on ART. Null on desktop (URLClassLoader default). */
     private val kotlinPluginLoader: dev.ide.lang.kotlin.compile.KotlinPluginLoader? = null,
+    /** On-device Kotlin compiler backend (from :ide-android): a persistent forked VM whose heap is not bound
+     *  by the app's cap. Null on desktop → the engine's in-process K2 compiler. */
+    private val kotlinCompiler: dev.ide.lang.kotlin.compile.KotlinCompilerBackend? = null,
 ) {
     init {
         Files.createDirectories(projectsRoot)
@@ -98,6 +101,7 @@ class ProjectManager private constructor(
         appLogChannel?.let { c -> env.container.registerServiceIfAbsent(APP_LOG_CHANNEL) { c } }
         customViewRuntime?.let { c -> env.container.registerServiceIfAbsent(CUSTOM_VIEW_RUNTIME) { c } }
         kotlinPluginLoader?.let { l -> env.container.registerServiceIfAbsent(KOTLIN_PLUGIN_LOADER) { l } }
+        kotlinCompiler?.let { c -> env.container.registerServiceIfAbsent(KOTLIN_COMPILER_BACKEND) { c } }
         realViewRuntime?.let { rv -> env.container.registerServiceIfAbsent(REAL_VIEW_RUNTIME) { rv } }
     }
 
@@ -532,6 +536,9 @@ class ProjectManager private constructor(
             /** The host's ART Kotlin compiler-plugin loader (D8-dex + DexClassLoader), so runtime Kotlin
              *  compiler plugins can be applied on device. */
             kotlinPluginLoader: dev.ide.lang.kotlin.compile.KotlinPluginLoader? = null,
+            /** The host's persistent forked-VM Kotlin compiler, so `compileKotlin` runs off the app heap with
+             *  a heap above the app cap. Null → in-process K2 (the forked one also self-falls-back). */
+            kotlinCompiler: dev.ide.lang.kotlin.compile.KotlinCompilerBackend? = null,
             /** The host's forked-VM R8 shrinker (`dalvikvm64 -Xmx…`), so the release/minify R8 pass gets a heap
              *  above the app cap. Null → in-process R8 (the shrinker also self-falls-back if forking fails). */
             r8Shrinker: dev.ide.android.support.tools.Shrinker? = null,
@@ -575,6 +582,7 @@ class ProjectManager private constructor(
                 customViewRuntime = customViewRuntime,
                 realViewRuntime = realViewRuntime,
                 kotlinPluginLoader = kotlinPluginLoader,
+                kotlinCompiler = kotlinCompiler,
             )
         }
     }

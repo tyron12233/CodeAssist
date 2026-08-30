@@ -135,6 +135,7 @@ import dev.ide.lang.kotlin.KotlinPackageRewrite
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
 import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
 import dev.ide.lang.kotlin.compile.DefaultKotlinPluginLoader
+import dev.ide.lang.kotlin.compile.KotlinCompilerBackend
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.lang.kotlin.compile.KotlinPluginLoader
 import dev.ide.lang.kotlin.completion.KotlinPostfixTemplates
@@ -406,7 +407,7 @@ interface ComposePreviewRunner {
 internal val ENGINE_CONTEXT = ServiceKey<EngineContext>("ide.engineContext")
 
 /** APPLICATION-scoped: the warm K2 compiler shared across every opened project. */
-private val KOTLIN_JVM_COMPILER = ServiceKey<KotlinJvmCompiler>("ide.kotlin.jvmCompiler")
+private val KOTLIN_JVM_COMPILER = ServiceKey<KotlinCompilerBackend>("ide.kotlin.jvmCompiler")
 
 /** MODULE-scoped: the per-module source analyzer for each language. */
 internal val ANALYZER_JAVA = ServiceKey<SourceAnalyzer>("ide.analyzer.java")
@@ -489,6 +490,10 @@ class IdeServices private constructor(
     private val appLogChannel: AppLogChannel? = env.container.getServiceOrNull(APP_LOG_CHANNEL)
     private val customViewRuntime: CustomViewRuntime? = env.container.getServiceOrNull(CUSTOM_VIEW_RUNTIME)
     private val kotlinPluginLoader: KotlinPluginLoader? = env.container.getServiceOrNull(KOTLIN_PLUGIN_LOADER)
+
+    /** The host's Kotlin compiler backend (on device: the persistent forked VM). Absent → in-process. */
+    private val kotlinCompilerBackend: KotlinCompilerBackend? =
+        env.container.getServiceOrNull(KOTLIN_COMPILER_BACKEND)
     private val realViewRuntime: RealViewRuntime? = env.container.getServiceOrNull(REAL_VIEW_RUNTIME)
 
     /** The build/run seam ([BuildRunner]): today an in-process runner; a future remote runner swaps in for
@@ -1019,10 +1024,12 @@ class IdeServices private constructor(
      * (registered once in [registerStaticPlugins]) resolve the per-project engine through the scope.
      */
     private fun registerScopedServices() {
-        // The app-scoped K2 compiler gets the host's plugin loader: on device the injected D8/dex one (so a
-        // runtime Kotlin compiler plugin loads on ART), else the desktop URLClassLoader default.
+        // The host's compiler backend when it registered one (on device: the persistent forked VM, which
+        // carries its own in-process fallback), else the app-scoped in-process K2 compiler with the host's
+        // plugin loader — on device the injected D8/dex one (so a runtime Kotlin compiler plugin loads on
+        // ART), else the desktop URLClassLoader default.
         store.appContainer.registerServiceIfAbsent(KOTLIN_JVM_COMPILER) {
-            KotlinJvmCompiler(pluginLoader = kotlinPluginLoader ?: DefaultKotlinPluginLoader)
+            kotlinCompilerBackend ?: KotlinJvmCompiler(pluginLoader = kotlinPluginLoader ?: DefaultKotlinPluginLoader)
         }
         // Publish this engine's [EngineContext] on its OWN workspace container, so the app-global service
         // factories (registered once on the app registry) resolve the per-project engine through the scope
@@ -1230,12 +1237,16 @@ class IdeServices private constructor(
             }
 
     /**
-     * The Kotlin compiler: K2 in-process (`:lang-kotlin`'s [KotlinJvmCompiler]). APPLICATION-scoped — one
-     * warm compiler shared across every opened project (its environment/jar filesystem is reused
-     * build-to-build; the boot classpath is passed per compile, so one instance serves all projects).
-     * Registered idempotently on the shared application container in init.
+     * The Kotlin compiler that the build's codegen runs on. APPLICATION-scoped — one warm compiler shared
+     * across every opened project (its environment/jar filesystem is reused build-to-build; the boot
+     * classpath is passed per compile, so one instance serves all projects). Registered idempotently on the
+     * shared application container in init.
+     *
+     * Normally `:lang-kotlin`'s in-process [KotlinJvmCompiler]. A host may register a
+     * [KOTLIN_COMPILER_BACKEND] port instead: on device that is a persistent forked VM, whose heap is not
+     * bound by the app's `dalvik.vm.heapsize` cap and whose working set is off the editor's heap.
      */
-    private val kotlinJvmCompiler: KotlinJvmCompiler
+    private val kotlinJvmCompiler: KotlinCompilerBackend
         get() = store.appContainer.getService(
             KOTLIN_JVM_COMPILER
         )

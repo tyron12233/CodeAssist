@@ -267,10 +267,20 @@ val bundleKotlincResourcesAsset = tasks.register<Copy>("bundleKotlincResourcesAs
 // --- R8 tool dexed as an asset (forked-VM R8 for the release/minify OOM fix) ---------------------
 // R8's whole-program pass needs more heap than an app process's `largeHeap` cap (576MB on the test device);
 // a command-line VM (dalvikvm) forked from the app is NOT a zygote app process, so its `-Xmx` can exceed
-// that cap (measured ceiling ~1.5GB). To run R8 there it needs its classes as a loadable dex — the app's own
-// copy is buried in secondary dexes a bare `dalvikvm -cp base.apk` won't load. D8-dex the r8 tool jar into a
-// standalone r8.dex.zip asset; `dev.ide.android.ForkedR8Shrinker` extracts it and runs
-// `dalvikvm64 -Xmx<n>m -cp <dexes> com.android.tools.r8.R8 …`. (Mirrors what AGP already does to r8 for the app.)
+// that cap (measured ceiling ~1.5GB). To run R8 there it needs its classes as a loadable dex, so the r8 tool
+// jar is D8-dexed into a standalone r8.dex.zip asset that `dev.ide.android.R8ForkSupport` extracts and puts
+// on `dalvikvm64 -Xmx<n>m -cp <asset> com.android.tools.r8.R8 …`.
+//
+// A fork CAN load the app's own APK instead (the persistent Kotlin compiler VM in `dev.ide.android.fork`
+// does exactly that), which would make this asset unnecessary. It is kept because R8/D8 fork PER INVOCATION
+// and a 180MB APK classpath costs ~800ms of class loading per fork against ~130ms for this asset, which the
+// dex merge would pay several times a build.
+//
+// The zip carries the jar's RESOURCES as well as its dex. D8 emits `classes*.dex` only, so dexing alone
+// silently drops `resources/new_api_database.ser` (R8's API-level database), the `META-INF/services` entry
+// and `r8-version.properties`. R8 then warns "Could not find the api database at
+// resources/new_api_database.ser" and emits different code than the same version run from the jar. With the
+// resources folded back in, a forked run reproduces a host `java -cp r8.jar` run byte for byte.
 val r8DexTool: Configuration by configurations.creating {
     isCanBeConsumed = false
     isCanBeResolved = true
@@ -278,8 +288,9 @@ val r8DexTool: Configuration by configurations.creating {
 dependencies { r8DexTool(libs.android.r8) { isTransitive = false } }
 
 val bundleR8DexAsset = tasks.register<JavaExec>("bundleR8DexAsset") {
-    description = "D8-dex the R8 tool jar into a forked-VM-loadable r8.dex.zip asset."
+    description = "D8-dex the R8 tool jar, with its resources, into a forked-VM-loadable r8.dex.zip asset."
     val outZip = layout.buildDirectory.file("r8-dex-asset/r8.dex.zip")
+    val dexOnlyZip = layout.buildDirectory.file("r8-dex-asset/r8-dex-only.zip")
     classpath = r8DexTool                       // r8.jar contains D8 — self-dex it
     mainClass.set("com.android.tools.r8.D8")
     inputs.files(r8DexTool)
@@ -287,14 +298,40 @@ val bundleR8DexAsset = tasks.register<JavaExec>("bundleR8DexAsset") {
     // min-api 26 = the app's minSdk; the forked VM runs on the device's ART (>= 26), and a higher min-api
     // minimises desugaring (r8 is plain Java 8 bytecode), so no `--lib` platform is needed to dex it.
     doFirst {
-        val out = outZip.get().asFile
-        out.parentFile.mkdirs(); out.delete()
+        val dexOnly = dexOnlyZip.get().asFile
+        dexOnly.parentFile.mkdirs(); dexOnly.delete()
         args = listOf(
             "--release",
             "--min-api", "26",
-            "--output", out.absolutePath,
+            "--output", dexOnly.absolutePath,
             r8DexTool.singleFile.absolutePath,
         )
+    }
+    // Combine D8's `classes*.dex` with every non-class entry of the source jar into one zip. A classloader
+    // built over it then sees both the code and the resources, exactly as one built over the jar does.
+    doLast {
+        val dexOnly = dexOnlyZip.get().asFile
+        val out = outZip.get().asFile
+        out.delete()
+        val written = HashSet<String>()
+        ZipOutputStream(out.outputStream().buffered()).use { zos ->
+            fun copyEntries(from: File, keep: (ZipEntry) -> Boolean) {
+                ZipFile(from).use { zf ->
+                    zf.entries().asSequence().filter { !it.isDirectory && keep(it) }.forEach { e ->
+                        if (!written.add(e.name)) return@forEach
+                        zos.putNextEntry(ZipEntry(e.name))
+                        zf.getInputStream(e).use { it.copyTo(zos) }
+                        zos.closeEntry()
+                    }
+                }
+            }
+            copyEntries(dexOnly) { it.name.endsWith(".dex") }
+            // Everything the jar carries that is not code. The MANIFEST is dropped: it describes the jar, and
+            // an inaccurate one on a dex classpath is worse than none.
+            copyEntries(r8DexTool.singleFile) { !it.name.endsWith(".class") && it.name != "META-INF/MANIFEST.MF" }
+        }
+        dexOnly.delete()
+        logger.lifecycle("bundleR8DexAsset: ${out.name} = ${out.length() / (1024 * 1024)}MB (dex + jar resources)")
     }
 }
 
