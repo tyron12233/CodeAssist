@@ -1724,6 +1724,33 @@ class KotlinTreeResolver(
                         val callee = ResolvedCallable.Source(callName, "$typeFqn/$arity", emptyList(), isConstructor = true)
                         return RNode.Call(callee, DispatchKind.CONSTRUCTOR, null, lowerArgs(call), csk(call.textRange.startOffset), span(call))
                     }
+                    // A name that resolves to a type the runtime CANNOT instantiate — an `interface`, or an
+                    // `abstract`/`sealed` class — and that a top-level FACTORY function of the same name RETURNS
+                    // is a call to that factory, however the overload resolution above tied out. Compose ships a
+                    // family of these: `FontFamily(vararg Font)` over the sealed `FontFamily`, `PaddingValues(all:
+                    // Dp)` over the `PaddingValues` interface. Fabricating the constructor instead is what
+                    // rendered `FontFamily(Font(googleFont = …))` as `InstantiationException: Can't instantiate
+                    // abstract class …FontFamily` mid-composition. The reflective dispatcher re-resolves the
+                    // overload from the ACTUAL argument values, so picking by arity here is enough. A
+                    // non-instantiable name WITHOUT such a factory keeps the constructor path: that is how a
+                    // `fun interface` SAM constructor (`BoundsTransform { _, _ -> … }`) is encoded, and the
+                    // interpreter realizes it as a proxy over the single abstract method.
+                    if (service.isNonInstantiableType(typeFqn) == true) {
+                        val factories = runCatching { service.topLevelByName(callName) }.getOrDefault(emptyList())
+                            .filter {
+                                it.kind == SymbolKind.METHOD && !it.origin.fromSource &&
+                                    it.declaringClassFqn != null &&
+                                    (it.type as? KotlinType)?.qualifiedName == typeFqn
+                            }
+                        val byArity = factories.filter { it.paramTypes.size == arity || it.varargParamIndex in 0..arity }
+                            .ifEmpty { factories.filter { it.paramTypes.size >= arity } }
+                        byArity.firstOrNull()?.let { factory ->
+                            return RNode.Call(
+                                toCallable(factory), DispatchKind.TOP_LEVEL, null, lowerArgs(call),
+                                csk(call.textRange.startOffset), span(call),
+                            )
+                        }
+                    }
                     // Only fabricate a reflective constructor when there's POSITIVE evidence the name is a
                     // constructible type: a known/loadable type, or a name being THROWN
                     // (`throw IllegalArgumentException("x")` — a stdlib exception the resolver couldn't qualify,

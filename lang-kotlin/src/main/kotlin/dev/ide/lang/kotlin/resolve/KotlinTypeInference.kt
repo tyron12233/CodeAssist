@@ -469,16 +469,25 @@ internal fun KotlinResolver.typeOfCall(
         }
         service.resolveTypeName(name, fileContext)?.let { typeFqn ->
             // A capitalized no-receiver call on a name that resolves to a TYPE is normally a constructor
-            // (`Box("s")` → `Box<String>`). But an INTERFACE has no constructor: a call on its name is either a
-            // SAM / `fun interface` constructor (`Comparator { … }`, whose result IS the interface type) or a
-            // same-named top-level FACTORY function that returns it (`fun <T> MutableStateFlow(value: T):
-            // MutableStateFlow<T>`, which shadows the `MutableStateFlow` interface). Route to the factory
-            // function — falling through to the function path below — ONLY when one actually exists, so its type
-            // parameters infer from the arguments (`T = TextFieldValue`) instead of `constructorResultType`
-            // returning the bare, un-parameterized interface type. Absent a factory it's the SAM case, so keep
-            // the constructor path.
-            val factoryFunction = service.isInterfaceType(typeFqn) == true &&
-                service.topLevelByName(name).any { it.kind == SymbolKind.METHOD }
+            // (`Box("s")` → `Box<String>`). Two cases are NOT, and both route to a same-named top-level FACTORY
+            // function instead — falling through to the function path below, but ONLY when one actually exists:
+            //
+            //  * The name resolves to a type that CANNOT be constructed — an `interface`, or an
+            //    `abstract`/`sealed` class. The call is then either a SAM / `fun interface` constructor
+            //    (`Comparator { … }`, whose result IS the interface type) or a factory shadowing the type
+            //    (`fun <T> MutableStateFlow(value: T): MutableStateFlow<T>`; Compose's `FontFamily(vararg Font)`
+            //    over the sealed `FontFamily`). Taking the factory also lets its type parameters infer from the
+            //    arguments (`T = TextFieldValue`) instead of `constructorResultType` returning the bare,
+            //    un-parameterized type. Absent a factory it's the SAM case, so keep the constructor path.
+            //  * The name doesn't resolve to a type AT ALL. `resolveTypeName` import-qualifies a bare name
+            //    against the file's imports, and a Kotlin import names both classifiers and CALLABLES — so
+            //    `import androidx.compose.ui.text.googlefonts.Font` (a package with a top-level `Font(…)` and no
+            //    `Font` class) yields a `…googlefonts.Font` that names nothing. Constructing it typed the call as
+            //    a non-existent type, which then bound to no parameter anywhere: `FontFamily(Font(googleFont =
+            //    …))` lost every `FontFamily` overload and fell back to instantiating the abstract class.
+            val known = service.isKnownType(typeFqn)
+            val factoryFunction = service.topLevelByName(name).any { it.kind == SymbolKind.METHOD } &&
+                (!known || service.isNonInstantiableType(typeFqn) == true)
             if (!factoryFunction) return constructorResultType(typeFqn, call)
         }
     }
