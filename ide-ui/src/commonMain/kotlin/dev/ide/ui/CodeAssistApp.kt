@@ -30,6 +30,7 @@ import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.platform.PlatformSystemBars
 import dev.ide.ui.screens.GradleImportModeDialog
+import dev.ide.ui.screens.ImportSourceDialog
 import dev.ide.ui.theme.CodeAssistTheme
 import dev.ide.ui.theme.rememberJetBrainsMono
 import org.jetbrains.compose.resources.stringResource
@@ -154,6 +155,14 @@ fun CodeAssistApp(
                     importError = importErrorMessage,
                     onDismissImportError = app::dismissImportError,
                     importBusy = app.importBusy,
+                )
+                ImportSourceDialog(
+                    visible = app.showImportSourceChoice,
+                    canPickFolder = fileActions.canPickDirectory,
+                    canPickPackage = fileActions.canPickFile,
+                    onFolder = app::chooseFolderImport,
+                    onPackage = app::choosePackageImport,
+                    onDismiss = app::dismissImportSourceChoice,
                 )
                 GradleImportModeDialog(
                     visible = app.showImportModeChoice,

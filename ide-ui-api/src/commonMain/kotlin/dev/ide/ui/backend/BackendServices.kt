@@ -684,9 +684,17 @@ interface ProjectService {
     suspend fun revertToGradle(): UiConvertResult = UiConvertResult(false, "Nothing to revert")
 
     /**
-     * Import the foreign-build-system project at [sourceRootPath] (a Gradle folder today) into a new workspace
-     * under the projects root and open it in compatibility mode (bumps [projectEpoch]). Returns a failure
-     * result when no importer recognizes the folder or no project manager is available.
+     * What kind of project, if any, the folder at [path] holds — so the picker can ask the questions that
+     * actually apply to it. A CodeAssist workspace is adopted as-is and has no compatibility/convert choice
+     * to make; only a foreign build system does.
+     */
+    suspend fun inspectProjectFolder(path: String): UiProjectFolderKind = UiProjectFolderKind.UNKNOWN
+
+    /**
+     * Import the project at [sourceRootPath] into a new workspace under the projects root and open it (bumps
+     * [projectEpoch]). A CodeAssist workspace is copied verbatim; a foreign build system (Gradle today) is
+     * read statically and opened in compatibility mode. Returns a failure result when the folder is neither,
+     * or when no project manager is available.
      */
     suspend fun importExternalProject(sourceRootPath: String): UiProjectResult =
         UiProjectResult(false, "Project import not supported by this backend")

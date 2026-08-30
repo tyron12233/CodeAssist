@@ -329,7 +329,8 @@ private fun ProjectPickerRoute(
         onNewProject = { app.createProject() },
         onDeleteProject = app::deleteProject,
         onImportProject = if (fileActions.canPickFile) app::pickProjectPackage else null,
-        onImportGradle = if (fileActions.canPickDirectory) app::requestGradleImport else null,
+        // One "Import project" entry for both sources; it asks which when the host can do both.
+        onImportGradle = if (fileActions.canPickDirectory || fileActions.canPickFile) app::requestProjectImport else null,
         onExportProject = if (fileActions.canShare || fileActions.canExport || fileActions.canReveal) {
             app::startExport
         } else null,

@@ -188,6 +188,13 @@ sealed interface UiTemplateParam {
 /** Outcome of a create: [success] + a human message (the reason on failure) + the new project's root path. */
 data class UiProjectResult(val success: Boolean, val message: String, val rootPath: String? = null)
 
+/**
+ * What an "Import project" folder pick turned out to be. Drives which follow-up question the picker asks:
+ * a [CODE_ASSIST] workspace is adopted as-is, a [GRADLE] folder still has to choose compatibility vs convert,
+ * and [UNKNOWN] is reported rather than silently doing nothing.
+ */
+enum class UiProjectFolderKind { CODE_ASSIST, GRADLE, UNKNOWN }
+
 // ---- Projects Store DTOs ----
 
 /**

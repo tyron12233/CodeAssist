@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
 import dev.ide.ui.ads.AdController
+import dev.ide.ui.backend.UiProjectFolderKind
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
@@ -183,6 +184,11 @@ class CodeAssistAppState(
 
     /** True while a picked Gradle folder is being copied and imported (a blocking, non-cancellable operation). */
     var importBusy: Boolean by mutableStateOf(false)
+        private set
+
+    /** The "which source?" chooser for Import project: a project folder, or a `.caproj` package. Shown only
+     *  when the host can service BOTH — with one available there is nothing to ask. */
+    var showImportSourceChoice: Boolean by mutableStateOf(false)
         private set
 
     /** The import-time "compatibility mode vs convert" chooser (shown after the folder pick request), and a
@@ -425,38 +431,94 @@ class CodeAssistAppState(
         screen = next
     }
 
-    // ---- Gradle import ----
+    // ---- project import ----
 
-    /** The picker's "Import Gradle project" action: ask which mode first (compatibility vs convert). */
-    fun requestGradleImport() {
-        showImportModeChoice = true
+    /** The folder the user picked, held while the compatibility/convert question is answered for it. */
+    private var pendingImportPath: String? = null
+
+    /**
+     * The picker's "Import project" action. Picks the folder FIRST and asks what it is, because the only
+     * follow-up question -- compatibility vs convert -- applies to a foreign build system and not to a
+     * CodeAssist workspace. Asking first (as this did) meant a CodeAssist project folder had to answer a
+     * question about Gradle conversion that meant nothing for it, before being rejected anyway.
+     */
+    fun requestProjectImport() {
+        // The two sources sit behind different host APIs (pickDirectory vs pickFile), so which picker to
+        // launch has to be answered first. With only one available, don't ask — go straight to it.
+        val folder = fileActions.canPickDirectory
+        val pkg = fileActions.canPickFile
+        when {
+            folder && pkg -> showImportSourceChoice = true
+            folder -> pickProjectFolder()
+            pkg -> pickProjectPackage()
+        }
+    }
+
+    fun dismissImportSourceChoice() {
+        showImportSourceChoice = false
+    }
+
+    /** Chose "Project folder" at the source prompt. */
+    fun chooseFolderImport() {
+        showImportSourceChoice = false
+        pickProjectFolder()
+    }
+
+    /** Chose "Project package" at the source prompt — hands off to the existing `.caproj` preview flow. */
+    fun choosePackageImport() {
+        showImportSourceChoice = false
+        pickProjectPackage()
+    }
+
+    private fun pickProjectFolder() {
+        fileActions.pickDirectory { path ->
+            if (path.isNullOrBlank()) return@pickDirectory
+            importBusy = true
+            scope.launch {
+                when (backend.projects.inspectProjectFolder(path)) {
+                    // Nothing to translate: adopt it and open it.
+                    UiProjectFolderKind.CODE_ASSIST -> runImport(path, convert = false)
+                    // Foreign build system: it still has a mode to choose.
+                    // The question is the user's to answer, so drop the overlay while it is on screen.
+                    UiProjectFolderKind.GRADLE -> {
+                        importBusy = false
+                        pendingImportPath = path
+                        showImportModeChoice = true
+                    }
+                    UiProjectFolderKind.UNKNOWN -> {
+                        importBusy = false
+                        importError = ImportError.GradleFailed("")
+                    }
+                }
+            }
+        }
     }
 
     fun dismissImportModeChoice() {
         showImportModeChoice = false
+        pendingImportPath = null
     }
 
-    /**
-     * Pick a Gradle folder and import it (always in compatibility mode first). When [convert] was chosen at the
-     * mode prompt, flag the freshly-opened editor to run the convert flow once it is up (see EditorCenter).
-     */
+    /** Answer to the compatibility/convert prompt, for the folder already picked. */
     fun importGradleProject(convert: Boolean) {
+        val path = pendingImportPath
         showImportModeChoice = false
-        doImportGradle(
-            fileActions = fileActions,
-            scope = scope,
-            onBusy = { importBusy = true },
-            import = { path -> backend.projects.importExternalProject(path) },
-        ) { result ->
-            importBusy = false
-            when {
-                result == null -> {} // cancelled, stay on the picker
-                result.success -> {
-                    if (convert) pendingGradleConvert = true
-                    screen = Screen.Editor
-                }
-                else -> importError = ImportError.GradleFailed(result.message)
-            }
+        pendingImportPath = null
+        if (path != null) {
+            importBusy = true
+            scope.launch { runImport(path, convert) }
+        }
+    }
+
+    /** Import [path] and open it; [convert] flags the freshly-opened editor to run the Gradle convert flow. */
+    private suspend fun runImport(path: String, convert: Boolean) {
+        val result = backend.projects.importExternalProject(path)
+        importBusy = false
+        if (result.success) {
+            if (convert) pendingGradleConvert = true
+            screen = Screen.Editor
+        } else {
+            importError = ImportError.GradleFailed(result.message)
         }
     }
 

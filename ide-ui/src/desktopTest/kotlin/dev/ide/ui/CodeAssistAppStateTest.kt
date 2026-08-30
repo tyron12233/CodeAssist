@@ -4,6 +4,7 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.UiImportPreview
 import dev.ide.ui.backend.UiPackagedModule
+import dev.ide.ui.backend.UiProjectFolderKind
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.screens.ModulesTab
@@ -34,6 +35,8 @@ class CodeAssistAppStateTest {
         prefs: Map<String, String> = emptyMap(),
         val importPreview: UiImportPreview? = null,
         val importResult: UiProjectResult = UiProjectResult(true, ""),
+        /** What the picked folder turns out to be — drives which follow-up the import flow asks for. */
+        val folderKind: UiProjectFolderKind = UiProjectFolderKind.GRADLE,
     ) : StubBackend() {
         val prefs = HashMap(prefs)
         val epochFlow = MutableStateFlow(0)
@@ -46,6 +49,7 @@ class CodeAssistAppStateTest {
         override fun setPreference(key: String, value: String) { prefs[key] = value }
         override fun settings(): UiSettings = UiSettings()
         override fun projects(): List<ProjectInfo> = listOf(ProjectInfo("app", "/ws/app", 1))
+        override suspend fun inspectProjectFolder(path: String): UiProjectFolderKind = folderKind
         override suspend fun openProject(rootPath: String): Boolean {
             opened += rootPath
             epochFlow.value++
@@ -73,7 +77,8 @@ class CodeAssistAppStateTest {
     private fun settled(
         importPreview: UiImportPreview? = null,
         importResult: UiProjectResult = UiProjectResult(true, ""),
-    ) = AppBackend(settledPrefs(), importPreview, importResult).apply { analyticsConsent = false }
+        folderKind: UiProjectFolderKind = UiProjectFolderKind.GRADLE,
+    ) = AppBackend(settledPrefs(), importPreview, importResult, folderKind).apply { analyticsConsent = false }
 
     private val scopes = ArrayList<CoroutineScope>()
 
@@ -250,13 +255,19 @@ class CodeAssistAppStateTest {
     }
 
     /** A host that always "picks" the same Gradle folder. */
-    private class PickingActions(private val path: String?) : FileActions {
+    private class PickingActions(
+        private val path: String?,
+        private val pickDir: Boolean = true,
+        private val pickFile: Boolean = false,
+    ) : FileActions {
         override val canImport = false
         override fun importInto(targetDir: String, onImported: (List<String>) -> Unit) = Unit
         override val canShare = false
         override fun share(path: String) = Unit
-        override val canPickDirectory = true
+        override val canPickDirectory = pickDir
         override fun pickDirectory(onPicked: (String?) -> Unit) = onPicked(path)
+        override val canPickFile = pickFile
+        override fun pickFile(extensions: List<String>, onPicked: (String?) -> Unit) = onPicked(path)
     }
 
     @Test
@@ -265,8 +276,9 @@ class CodeAssistAppStateTest {
         val app = appState(backend, PickingActions("/external/gradle-app"))
         advanceUntilIdle()
 
-        app.requestGradleImport()
-        assertTrue(app.showImportModeChoice)
+        app.requestProjectImport()
+        advanceUntilIdle()
+        assertTrue(app.showImportModeChoice, "a Gradle folder still has a compatibility/convert choice to make")
         app.importGradleProject(convert = true)
         assertFalse(app.showImportModeChoice)
         assertTrue(app.importBusy) // blocking overlay is up while the copy + import runs
@@ -280,12 +292,104 @@ class CodeAssistAppStateTest {
         assertFalse(app.pendingGradleConvert)
     }
 
+    /**
+     * A CodeAssist workspace is adopted as-is: no importer translates it, and the compatibility/convert
+     * question is meaningless for it. Before this it was rejected as "not an importable Gradle project", so a
+     * project folder that had dropped out of the picker could not be brought back.
+     */
+    @Test
+    fun importingACodeAssistFolderSkipsTheGradleModeQuestion() = runTest {
+        val backend = settled(folderKind = UiProjectFolderKind.CODE_ASSIST)
+        val app = appState(backend, PickingActions("/external/my-project"))
+        advanceUntilIdle()
+
+        app.requestProjectImport()
+        advanceUntilIdle()
+
+        assertFalse(app.showImportModeChoice, "nothing to convert — the mode prompt must not appear")
+        assertFalse(app.pendingGradleConvert)
+        assertFalse(app.importBusy)
+        assertEquals(Screen.Editor, app.screen)
+    }
+
+    /** A folder that is neither says so, rather than the flow quietly doing nothing. */
+    @Test
+    fun importingAnUnrecognisedFolderReportsIt() = runTest {
+        val backend = settled(folderKind = UiProjectFolderKind.UNKNOWN)
+        val app = appState(backend, PickingActions("/external/random"))
+        advanceUntilIdle()
+
+        app.requestProjectImport()
+        advanceUntilIdle()
+
+        assertFalse(app.showImportModeChoice)
+        assertEquals(Screen.Projects, app.screen)
+        assertTrue(app.importError != null, "an unrecognised folder must be reported")
+    }
+
+    /**
+     * With both sources available the entry has to ask which one — a folder and a `.caproj` sit behind
+     * different host APIs, so no picker can be launched until that is answered.
+     */
+    @Test
+    fun importAsksWhichSourceWhenTheHostCanDoBoth() = runTest {
+        val backend = settled(folderKind = UiProjectFolderKind.CODE_ASSIST)
+        val app = appState(backend, PickingActions("/external/my-project", pickDir = true, pickFile = true))
+        advanceUntilIdle()
+
+        app.requestProjectImport()
+        assertTrue(app.showImportSourceChoice, "both sources available — the entry must ask which")
+        assertEquals(Screen.Projects, app.screen, "nothing is picked until the question is answered")
+
+        app.chooseFolderImport()
+        advanceUntilIdle()
+        assertFalse(app.showImportSourceChoice)
+        assertEquals(Screen.Editor, app.screen)
+    }
+
+    /** With only one source there is nothing to ask, so the entry goes straight to that picker. */
+    @Test
+    fun importSkipsTheSourceQuestionWhenOnlyOneIsAvailable() = runTest {
+        val backend = settled(folderKind = UiProjectFolderKind.CODE_ASSIST)
+        val app = appState(backend, PickingActions("/external/my-project", pickDir = true, pickFile = false))
+        advanceUntilIdle()
+
+        app.requestProjectImport()
+        advanceUntilIdle()
+        assertFalse(app.showImportSourceChoice, "only folders available — don't ask")
+        assertEquals(Screen.Editor, app.screen)
+    }
+
+    /** Choosing the package route hands off to the existing `.caproj` preview screen. */
+    @Test
+    fun importCanTakeACaprojPackage() = runTest {
+        val preview = UiImportPreview(
+            name = "Shared", description = "", author = "", createdBy = "", isAndroid = false,
+            packageName = null, moduleCount = 0, modules = emptyList(), fileCount = 0,
+            uncompressedSizeBytes = 0, hasBundledDeps = false, icon = null, files = emptyList(),
+            compatible = true,
+        )
+        val backend = settled(importPreview = preview)
+        val app = appState(backend, PickingActions("/external/Shared.caproj", pickDir = true, pickFile = true))
+        advanceUntilIdle()
+
+        app.requestProjectImport()
+        assertTrue(app.showImportSourceChoice)
+        app.choosePackageImport()
+        advanceUntilIdle()
+
+        assertFalse(app.showImportSourceChoice)
+        assertEquals(Screen.ImportProject, app.screen, "a .caproj opens the import preview")
+    }
+
     @Test
     fun failedGradleImportReportsTheEngineReason() = runTest {
         val backend = settled(importResult = UiProjectResult(false, "No settings.gradle"))
         val app = appState(backend, PickingActions("/external/not-gradle"))
         advanceUntilIdle()
 
+        app.requestProjectImport()
+        advanceUntilIdle()
         app.importGradleProject(convert = false)
         advanceUntilIdle()
         assertFalse(app.importBusy)

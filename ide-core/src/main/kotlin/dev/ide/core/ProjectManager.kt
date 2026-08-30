@@ -65,6 +65,19 @@ data class ProjectSummary(
     val lastOpened: Long = 0L,
 )
 
+/** What [ProjectManager.inspectFolder] found in a folder offered for import. */
+enum class ImportableKind {
+    /** A CodeAssist workspace (`.platform/workspace.json`) -- adopted verbatim, nothing to translate. */
+    CODE_ASSIST,
+
+    /** A foreign build system some [dev.ide.model.sync.ProjectImporter] claims (Gradle today) -- read
+     *  statically into a native workspace, so it opens in compatibility mode. */
+    EXTERNAL,
+
+    /** Neither -- the caller should say so rather than silently doing nothing. */
+    NONE,
+}
+
 /**
  * Owns the on-disk set of projects (one workspace dir per project under [projectsRoot]) and the
  * app-global preferences file (onboarding flag, and similar). Creates/opens projects into a fresh
@@ -263,7 +276,36 @@ class ProjectManager private constructor(
      * [dev.ide.model.sync.ProjectImporter] that claims it, and open it. Returns null when no importer
      * recognizes [sourceDir] or the import fails.
      */
+    /**
+     * What [dir] holds, for a caller that must ask a different follow-up question per kind (the picker's
+     * import flow). Detection only — nothing is copied or opened. Mirrors the branching in
+     * [importExternalProject], so the two can't disagree about what a folder is.
+     */
+    fun inspectFolder(dir: Path): ImportableKind = when {
+        !Files.isDirectory(dir) -> ImportableKind.NONE
+        ModelPersistence.exists(dir) -> ImportableKind.CODE_ASSIST
+        ProjectSyncService.importerFor(env.platform.extensions, dir) != null -> ImportableKind.EXTERNAL
+        else -> ImportableKind.NONE
+    }
+
     fun importExternalProject(sourceDir: Path): IdeServices? {
+        // Already a CodeAssist workspace: adopt it verbatim. No importer claims such a folder -- there is no
+        // foreign build system to translate, the workspace IS the model -- so before this it was rejected as
+        // "not an importable Gradle project", and a project folder that had dropped out of the picker (moved
+        // in from another device, restored from a backup, or orphaned when its parent app data went) could
+        // not be brought back at all. Copied like every other import, since [list] only surfaces direct
+        // children of [projectsRoot].
+        if (ModelPersistence.exists(sourceDir)) {
+            val here = sourceDir.toAbsolutePath().normalize()
+            // Already in place (an orphan whose model failed to load once): open it rather than clone it.
+            if (here.parent == projectsRoot.toAbsolutePath().normalize()) return open(here.toString())
+            val dest = uniqueProjectDir(sourceDir.fileName?.toString() ?: "project")
+            if (runCatching { copyTree(sourceDir, dest) }.isFailure) {
+                runCatching { deleteTree(dest) }
+                return null
+            }
+            return open(dest.toString())
+        }
         val importer = ProjectSyncService.importerFor(env.platform.extensions, sourceDir) ?: return null
         val detection = importer.detect(sourceDir)
         val name = detection?.name ?: sourceDir.fileName?.toString() ?: "project"

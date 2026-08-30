@@ -2,6 +2,7 @@ package dev.ide.core.backend
 
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.core.BackendContext
+import dev.ide.core.ImportableKind
 import dev.ide.core.CaprojFormat
 import dev.ide.core.ProjectIconLocator
 import dev.ide.core.ProjectPackaging
@@ -23,6 +24,7 @@ import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiConvertResult
+import dev.ide.ui.backend.UiProjectFolderKind
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.UiProjectTemplate
 import dev.ide.ui.backend.UiStorageCategory
@@ -244,12 +246,21 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         }
     }
 
+    override suspend fun inspectProjectFolder(path: String): UiProjectFolderKind = withContext(Dispatchers.IO) {
+        val mgr = ctx.manager ?: return@withContext UiProjectFolderKind.UNKNOWN
+        when (runCatching { mgr.inspectFolder(Paths.get(path)) }.getOrDefault(ImportableKind.NONE)) {
+            ImportableKind.CODE_ASSIST -> UiProjectFolderKind.CODE_ASSIST
+            ImportableKind.EXTERNAL -> UiProjectFolderKind.GRADLE
+            ImportableKind.NONE -> UiProjectFolderKind.UNKNOWN
+        }
+    }
+
     override suspend fun importExternalProject(sourceRootPath: String): UiProjectResult {
         val mgr = ctx.manager ?: return UiProjectResult(false, "Project import not supported by this backend")
         return withContext(Dispatchers.IO) {
             runCatching {
                 val next = mgr.importExternalProject(Paths.get(sourceRootPath))
-                    ?: return@runCatching UiProjectResult(false, "That folder isn't an importable Gradle project.")
+                    ?: return@runCatching UiProjectResult(false, "That folder isn't a CodeAssist or Gradle project.")
                 ctx.swapEngine(next)
                 UiProjectResult(true, "Imported ${next.projectDisplayName()}", next.workspaceRoot.toString())
             }.getOrElse { e ->

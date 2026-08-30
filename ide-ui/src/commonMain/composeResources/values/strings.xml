@@ -69,11 +69,17 @@ We never collect your code, file or project names, which features you use, or an
     <string name="import_show_files">Show all %1$d files</string>
     <string name="import_hide_files">Hide files</string>
     <!-- Gradle project import (best-effort compatibility mode) -->
-    <string name="import_gradle_title">Import Gradle project</string>
-    <string name="import_gradle_subtitle">Open an existing Gradle build (best effort)</string>
+    <string name="import_gradle_title">Import project</string>
+    <string name="import_gradle_subtitle">Open a CodeAssist project folder, or an existing Gradle build</string>
     <string name="import_gradle_busy">Importing Gradle project…</string>
-    <string name="import_gradle_failed">That folder isn't an importable Gradle project.</string>
+    <string name="import_gradle_failed">That folder isn't a CodeAssist project or a Gradle build.</string>
     <!-- Import-time choice: keep Gradle (compatibility) vs convert to the native module system -->
+    <string name="import_source_title">Import project</string>
+    <string name="import_source_message">Where is the project?</string>
+    <string name="import_source_folder">Project folder</string>
+    <string name="import_source_folder_desc">A CodeAssist project, or an existing Gradle build</string>
+    <string name="import_source_package">Project package</string>
+    <string name="import_source_package_desc">A .caproj file shared or exported from CodeAssist</string>
     <string name="import_gradle_mode_title">Import Gradle project</string>
     <string name="import_gradle_mode_message">How should CodeAssist open this project?</string>
     <string name="import_gradle_mode_compat">Compatibility mode</string>
