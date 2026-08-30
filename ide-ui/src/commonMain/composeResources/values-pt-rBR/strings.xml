@@ -731,12 +731,9 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="dep_remove_exclusion">Remover exclusão</string>
     <string name="dep_excluded">excluída</string>
     <string name="dep_add_dependency">Adicionar dependência</string>
-    <string name="dep_search_bom_hint">Pesquise um BOM ou digite group:name:version, ex.: androidx.compose:compose-bom:…</string>
-    <string name="dep_search_library_hint">Pesquise no Maven Central ou digite group:name[:version]…</string>
     <string name="dep_scope">escopo</string>
     <string name="dep_variant">variante</string>
     <string name="dep_all_variants">Todas as variantes</string>
-    <string name="dep_suggested">sugerida</string>
     <string name="dep_adding">Adicionando %1$s</string>
     <string name="dep_resolving_transitive">Resolvendo dependências transitivas…</string>
     <string name="dep_no_other_modules">Nenhum outro módulo disponível como dependência.</string>

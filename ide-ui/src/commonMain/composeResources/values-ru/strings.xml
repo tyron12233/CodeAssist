@@ -659,12 +659,9 @@
     <string name="dep_remove_exclusion">Убрать исключение</string>
     <string name="dep_excluded">исключено</string>
     <string name="dep_add_dependency">Добавить зависимость</string>
-    <string name="dep_search_bom_hint">Найдите BOM или введите group:name:version, например androidx.compose:compose-bom:…</string>
-    <string name="dep_search_library_hint">Поиск в Maven Central или введите group:name[:version]…</string>
     <string name="dep_scope">область</string>
     <string name="dep_variant">вариант</string>
     <string name="dep_all_variants">Все варианты</string>
-    <string name="dep_suggested">рекомендуется</string>
     <string name="dep_adding">Добавление %1$s</string>
     <string name="dep_resolving_transitive">Разрешение транзитивных зависимостей…</string>
     <string name="dep_no_other_modules">Нет других модулей, от которых можно зависеть.</string>

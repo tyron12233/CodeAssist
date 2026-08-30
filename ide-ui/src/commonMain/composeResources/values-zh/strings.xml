@@ -867,12 +867,9 @@
     <string name="dep_remove_exclusion">移除排除项</string>
     <string name="dep_excluded">已排除</string>
     <string name="dep_add_dependency">添加依赖</string>
-    <string name="dep_search_bom_hint">搜索 BOM，或输入 group:name:version，例如 androidx.compose:compose-bom:…</string>
-    <string name="dep_search_library_hint">搜索 Maven Central，或输入 group:name[:version]…</string>
     <string name="dep_scope">作用域</string>
     <string name="dep_variant">变体</string>
     <string name="dep_all_variants">所有变体</string>
-    <string name="dep_suggested">建议</string>
     <string name="dep_adding">正在添加 %1$s</string>
     <string name="dep_resolving_transitive">正在解析传递依赖…</string>
     <string name="dep_no_other_modules">没有可供依赖的其他模块。</string>

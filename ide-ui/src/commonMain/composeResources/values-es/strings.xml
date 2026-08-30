@@ -775,12 +775,9 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="dep_remove_exclusion">Quitar exclusión</string>
     <string name="dep_excluded">excluida</string>
     <string name="dep_add_dependency">Agregar dependencia</string>
-    <string name="dep_search_bom_hint">Busca un BOM, o escribe group:name:version, p. ej. androidx.compose:compose-bom:…</string>
-    <string name="dep_search_library_hint">Busca en Maven Central, o escribe group:name[:version]…</string>
     <string name="dep_scope">ámbito</string>
     <string name="dep_variant">variante</string>
     <string name="dep_all_variants">Todas las variantes</string>
-    <string name="dep_suggested">sugerida</string>
     <string name="dep_adding">Agregando %1$s</string>
     <string name="dep_resolving_transitive">Resolviendo dependencias transitivas…</string>
     <string name="dep_no_other_modules">No hay otros módulos disponibles de los que depender.</string>

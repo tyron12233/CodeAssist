@@ -807,12 +807,9 @@
     <string name="dep_remove_exclusion">إزالة الاستبعاد</string>
     <string name="dep_excluded">مستبعدة</string>
     <string name="dep_add_dependency">إضافة تبعية</string>
-    <string name="dep_search_bom_hint">ابحث عن BOM، أو اكتب group:name:version، مثل androidx.compose:compose-bom:…</string>
-    <string name="dep_search_library_hint">ابحث في Maven Central، أو اكتب group:name[:version]…</string>
     <string name="dep_scope">النطاق</string>
     <string name="dep_variant">المتغيّر</string>
     <string name="dep_all_variants">جميع المتغيرات</string>
-    <string name="dep_suggested">مقترحة</string>
     <string name="dep_adding">جاري إضافة %1$s</string>
     <string name="dep_resolving_transitive">جاري حل التبعيات المتعدية…</string>
     <string name="dep_no_other_modules">لا توجد وحدات أخرى يمكن الاعتماد عليها.</string>

@@ -695,12 +695,9 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="dep_remove_exclusion">Hapus pengecualian</string>
     <string name="dep_excluded">dikecualikan</string>
     <string name="dep_add_dependency">Tambah dependensi</string>
-    <string name="dep_search_bom_hint">Cari BOM, atau ketik group:name:version, mis. androidx.compose:compose-bom:…</string>
-    <string name="dep_search_library_hint">Cari Maven Central, atau ketik group:name[:version]…</string>
     <string name="dep_scope">cakupan</string>
     <string name="dep_variant">varian</string>
     <string name="dep_all_variants">Semua varian</string>
-    <string name="dep_suggested">disarankan</string>
     <string name="dep_adding">Menambahkan %1$s</string>
     <string name="dep_resolving_transitive">Menyelesaikan dependensi transitif…</string>
     <string name="dep_no_other_modules">Tidak ada modul lain untuk dijadikan dependensi.</string>
