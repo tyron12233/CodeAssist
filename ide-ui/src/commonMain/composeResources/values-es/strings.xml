@@ -1052,7 +1052,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="set_editor_pinch">Pellizcar para hacer zoom</string>
     <string name="set_editor_pinch_desc">Pellizca con dos dedos para cambiar el tamaño de la fuente del código</string>
     <string name="set_editor_kbd_suggest">Sugerencias del teclado</string>
-    <string name="set_editor_kbd_suggest_desc">Permite que el teclado en pantalla autocorrija, sugiera y agregue espacios automáticamente (un teclado normal). Desactívalo para introducir código sin procesar, de modo que un \'.\' escrito no reciba un espacio automático, a costa de la barra de sugerencias.</string>
+    <string name="set_editor_kbd_suggest_desc">Permite que el teclado en pantalla autocorrija, sugiera y agregue espacios automáticamente (un teclado normal). Desactívalo para introducir código sin procesar, de modo que un '.' escrito no reciba un espacio automático, a costa de la barra de sugerencias.</string>
     <string name="set_completion_auto">Mostrar sugerencias automáticamente</string>
     <string name="set_completion_auto_desc">Muestra la lista mientras escribes (desactivado = solo con Ctrl-Space)</string>
     <string name="set_completion_postfix">Plantillas postfix</string>

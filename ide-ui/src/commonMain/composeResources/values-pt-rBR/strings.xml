@@ -1006,7 +1006,7 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="set_editor_pinch">Pinçar para ampliar</string>
     <string name="set_editor_pinch_desc">Pince com dois dedos para alterar o tamanho da fonte do código</string>
     <string name="set_editor_kbd_suggest">Sugestões do teclado</string>
-    <string name="set_editor_kbd_suggest_desc">Permita que o teclado virtual faça autocorreção, sugestões e espaçamento automático (um teclado normal). Desative para entrada de código bruto, para que um \'.\' digitado não receba um espaço inserido automaticamente, ao custo da barra de sugestões.</string>
+    <string name="set_editor_kbd_suggest_desc">Permita que o teclado virtual faça autocorreção, sugestões e espaçamento automático (um teclado normal). Desative para entrada de código bruto, para que um '.' digitado não receba um espaço inserido automaticamente, ao custo da barra de sugestões.</string>
     <string name="set_completion_auto">Mostrar sugestões automaticamente</string>
     <string name="set_completion_auto_desc">Abrir a lista enquanto você digita (desativado = apenas Ctrl-Space)</string>
     <string name="set_completion_postfix">Templates postfix</string>
