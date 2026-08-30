@@ -20,33 +20,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.ide.platform.log.Log
 import dev.ide.ui.backend.TreeNode
 
 /**
- * Small, self-contained host helpers split out of [MainActivity]: the AdMob initializer, the "Save As"
- * document contract, the source-root search, and the boot splash. None of them belong to the activity's
- * lifecycle, so they live here to keep [MainActivity] to bootstrap + the Compose host.
+ * Small, self-contained host helpers split out of [MainActivity]: the "Save As" document contract,
+ * the source-root search, and the boot splash. None of them belong to the activity's lifecycle,
+ * so they live here to keep [MainActivity] to bootstrap + the Compose host.
  */
-
-/**
- * Initialize the AdMob SDK once (idempotent, async). Called AFTER the UMP consent flow resolves and only when
- * consent allows ad requests (see [AdConsentManager] / [MainActivity]). Registering the SDK here also brings up
- * the mediation adapters (Meta/Pangle/Mintegral) — the logged `adapterStatusMap` is how you verify each one
- * initialized. Ads only render if the user hasn't turned them off; the app-id is declared in the manifest.
- * Guarded: `play-services-ads` reads the WebView user-agent during `initialize()`, which throws on an image with
- * no WebView — ads are optional, so a failed init must never take down the IDE.
- */
-internal fun initAds(context: Context) {
-    runCatching {
-        com.google.android.gms.ads.MobileAds.initialize(context) { status ->
-            val adapters = status.adapterStatusMap.entries.joinToString { (name, s) ->
-                "$name=${s.initializationState}(${s.description})"
-            }
-            Log.logger("ide.ads").info("MobileAds initialized: $adapters")
-        }
-    }.onFailure { e -> Log.logger("ide.ads").warn("MobileAds init skipped: ${e.message}", e) }
-}
 
 /** Depth-first search for the first source root (a node carrying a source-root path) in the tree. */
 internal fun firstSourceRoot(root: TreeNode): String? {
