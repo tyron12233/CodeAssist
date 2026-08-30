@@ -199,10 +199,17 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
      *  its `res/`) invalidates every marker → a one-time reconcile re-resolves on the next open, re-extracting
      *  any stale exploded dir that predates the change (which would otherwise be reused missing its resources). */
     private fun reconcileFingerprint(mods: List<Module>): String =
-        "v=${dev.ide.deps.impl.AAR_EXPLODE_VERSION}\n" + mods.flatMap { m ->
-            m.dependencies.filterIsInstance<LibraryDependency>()
-                .map { "${m.id.value}|${it.library.name}|${it.variant ?: ""}" }
-        }.sorted().joinToString("\n")
+        "v=${dev.ide.deps.impl.AAR_EXPLODE_VERSION}\n" +
+            // WHERE a dependency resolves from is as much a part of the resolved picture as WHAT is declared:
+            // the same coordinate against a different repository set is a different resolve. Without this, a
+            // project whose declared set hadn't changed kept its "already reconciled" marker after a repo was
+            // added, so the re-walk was skipped and the new repository was never consulted. Order is included,
+            // not sorted — repositories are searched in order, so a reorder is a real change.
+            "repos=${currentRepositories().joinToString(",") { it.url.trimEnd('/') }}\n" +
+            mods.flatMap { m ->
+                m.dependencies.filterIsInstance<LibraryDependency>()
+                    .map { "${m.id.value}|${it.library.name}|${it.variant ?: ""}" }
+            }.sorted().joinToString("\n")
 
     /** Record that the current declared set has been fully resolved, so the next open skips the re-walk. */
     private fun markReconciled(fingerprint: String) = runCatching {
@@ -597,10 +604,11 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
      * back, without reopening. Always runs (unlike the once-per-open background paths).
      */
     suspend fun retryDependencyResolution() {
-        runCatching { java.nio.file.Files.deleteIfExists(reconcileMarker) }
-        // Explicit user retry: forget the recorded 404s so known-missing artifacts (and absent sources) are
-        // re-probed — the user may have just added the repo that carries them, or come back online.
-        depsCache.clearMisses()
+        // Explicit user retry: forget every recorded absence so known-missing artifacts (and absent sources)
+        // are re-probed — the user may have just added the repo that carries them, or come back online. This
+        // used to clear only the on-disk 404s, leaving the resolvers' in-memory "no POM" memos to keep the
+        // retry off the network for the rest of the session.
+        forgetNegativeResolutionCaches()
         val mods = mavenDepModules()
         depsLog.info("retryDependencyResolution: ${mods.size} module(s) with Maven deps")
         if (mods.isEmpty()) {
@@ -1621,7 +1629,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         if (!(u.startsWith("http://") || u.startsWith("https://"))) return false
         if (currentRepositories().any { it.url.trimEnd('/') == u.trimEnd('/') }) return false
         val next = userRepositories() + Repository(name.trim().ifEmpty { u }, u)
-        return writeRepositories(next)
+        return writeRepositories(next).also { if (it) forgetNegativeResolutionCaches() }
     }
 
     /** Remove a user-added repository by URL (built-ins can't be removed). */
@@ -1630,7 +1638,31 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         val current = userRepositories()
         val remaining = current.filterNot { it.url.trimEnd('/') == u }
         if (remaining.size == current.size) return false
-        return writeRepositories(remaining)
+        return writeRepositories(remaining).also { if (it) forgetNegativeResolutionCaches() }
+    }
+
+    /**
+     * Drop every memoized "couldn't resolve this" verdict, so the next resolve genuinely re-probes. Three
+     * caches record such a verdict keyed by coordinate ALONE, none of them knowing which repositories — or
+     * which network conditions — produced it:
+     *
+     *  * the resolvers' in-memory effective-POM / Gradle-module memos hold `Optional.empty()` for a coordinate
+     *    whose POM was absent — session-lived, so this one bites IMMEDIATELY, with no restart needed;
+     *  * the on-disk negative cache remembers a confirmed 404 for a week, so the artifact is skipped without
+     *    touching the network at all;
+     *  * the reconcile marker says "this declared set is fully resolved", so with the declared set unchanged
+     *    the whole re-walk is skipped.
+     *
+     * Called on the two events that invalidate all three: an explicit Retry, and a repository add/remove.
+     * Leaving them stale on a repository edit is what made "add the repository, then re-add the dependency"
+     * a no-op — the report that motivated this. Positive results are untouched (a released POM is immutable),
+     * so this costs nothing beyond re-probing what genuinely wasn't found.
+     */
+    private fun forgetNegativeResolutionCaches() {
+        depsResolver.forgetAbsentArtifacts()
+        jvmDepsResolver.forgetAbsentArtifacts()
+        depsCache.clearMisses()
+        runCatching { java.nio.file.Files.deleteIfExists(reconcileMarker) }
     }
 
     private fun writeRepositories(repos: List<Repository>): Boolean = runCatching {
