@@ -328,13 +328,16 @@ internal fun KotlinResolver.isNullBranch(e: KtExpression): Boolean =
     e is KtConstantExpression && e.text.trim() == "null"
 
 /** `xs[i]` → the element type: the (substituted) return type of the receiver's `get(index)` operator
- *  (`List<String>.get` → `String`, `Map<K,V>.get` → `V?`). Null when the receiver type or `get` is unknown. */
+ *  (`List<String>.get` → `String`, `Map<K,V>.get` → `V?`). The receiver's type arguments come from its type;
+ *  `get`'s OWN type parameters are inferred from the index expressions ([operatorResultType]), which is what
+ *  types `coroutineContext[CoroutineName]` — `get(key: Key<E>): E?` — as `CoroutineName?`. Null when the
+ *  receiver type or `get` is unknown. */
 internal fun KotlinResolver.inferArrayGet(e: KtArrayAccessExpression): KotlinType? {
     val recv = inferType(e.arrayExpression) ?: return null
     val arity = e.indexExpressions.size
-    return service.membersNamed(recv.qualifiedName, recv.typeArguments, "get")
-        .firstOrNull { it.kind == SymbolKind.METHOD && it.paramTypes.size == arity }
-        ?.type as? KotlinType
+    val get = service.membersNamed(recv.qualifiedName, recv.typeArguments, "get")
+        .firstOrNull { it.kind == SymbolKind.METHOD && it.paramTypes.size == arity } ?: return null
+    return operatorResultType(get, e.indexExpressions)
 }
 
 /** `this` (optionally `this@Label`) → the matching implicit receiver in scope (innermost when unlabeled). */
@@ -646,8 +649,8 @@ internal fun KotlinResolver.invokeReturnType(call: KtCallExpression): KotlinType
     val n = call.valueArguments.size
     val invokes = service.membersNamed(calleeType.qualifiedName, calleeType.typeArguments, "invoke")
         .filter { it.kind == SymbolKind.METHOD }
-    return (invokes.firstOrNull { it.paramTypes.size == n }
-        ?: invokes.firstOrNull())?.type as? KotlinType
+    val invoke = invokes.firstOrNull { it.paramTypes.size == n } ?: invokes.firstOrNull() ?: return null
+    return operatorResultType(invoke, call.valueArguments.map { it.getArgumentExpression() })
 }
 
 internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {

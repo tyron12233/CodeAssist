@@ -1636,8 +1636,10 @@ class KotlinSymbolService(
         return outer.isNotEmpty() && companionObjectFqn(outer) == fqn
     }
 
-    /** The companion object's FQN (`androidx…Color.Companion`) for [typeFqnRaw], or null if it has none. */
-    private fun companionObjectFqn(typeFqnRaw: String): String? {
+    /** The companion object's FQN for [typeFqnRaw] (`androidx…Color` → `androidx…Color.Companion`, a
+     *  named one `kotlinx.coroutines.CoroutineName` → `kotlinx.coroutines.CoroutineName.Key`), or null if it
+     *  has none. */
+    internal fun companionObjectFqn(typeFqnRaw: String): String? {
         val fqn = Builtins.kotlinTypeFor(typeFqnRaw) ?: typeFqnRaw
         model().classByFqn[fqn]?.let { return it.companionObjectName?.let { name -> "$fqn.$name" } }
         return typeShape(fqn)?.companionObjectName?.let { "$fqn.$it" }
