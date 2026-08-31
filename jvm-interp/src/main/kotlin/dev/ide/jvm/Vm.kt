@@ -258,14 +258,19 @@ class Vm(
     }
 
     /** Run [body], turning an interpreted exception that reached the top of the call into a real throwable: a
-     *  thrown real [Throwable] is rethrown as-is; a thrown interpreted [VmObject] is wrapped so callers still
-     *  get a failure rather than an opaque internal signal. */
+     *  thrown real [Throwable] is rethrown as-is, and an interpreted one ([VmObject], necessarily over a real
+     *  `Throwable` supertype) surfaces as its peer, which IS that real throwable — so the caller sees the
+     *  program's own exception type and message. Anything else is wrapped so callers still get a failure rather
+     *  than an opaque internal signal. */
     private inline fun <T> surfacing(body: () -> T): T =
         try {
             body()
         } catch (ve: VmException) {
             when (val v = ve.value) {
                 is Throwable -> throw v
+                is VmObject -> throw (peerOf(v) as? Throwable
+                    ?: RuntimeException("uninterpreted exception escaped: ${v.vmClass.name}"))
+
                 else -> throw RuntimeException("uninterpreted exception escaped: $v")
             }
         }

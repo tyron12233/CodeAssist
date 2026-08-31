@@ -45,6 +45,29 @@ class CoroutineRunTest {
         assertTrue("Hello World" in io.text(), "the coroutine body must have run: ${io.text()}")
     }
 
+    /**
+     * An exception the PROGRAM declares, delivered through `Continuation.resumeWithException` inside
+     * `suspendCoroutine`, must reach the `catch` that names it. The resume is synchronous, so the stdlib's real
+     * `SafeContinuation.getOrThrow()` throws it back into the interpreted frame as the program class's generated
+     * peer; matching the `catch` against the peer's own name found nothing, so the reported program printed no
+     * "Caught" and died with an uncaught `…MyException_Peer3: just an exception`.
+     */
+    @Test fun anInterpretedExceptionResumedIntoASuspendPointIsCaught() {
+        val io = Recorder()
+        val code = runBlocking {
+            VmProgramInterpreter().run(
+                InterpretRunRequest(
+                    listOf(programClasses()),
+                    "dev.ide.build.jvm.run.programs.ResumeWithExceptionKt",
+                ),
+                io,
+            )
+        }
+
+        assertEquals(0, code, "the run failed:\n${io.text()}")
+        assertTrue("Caught" in io.text(), "the catch must have run: ${io.text()}")
+    }
+
     /** The test's own Kotlin class output, which holds the compiled program. */
     private fun programClasses(): Path =
         System.getProperty("java.class.path").split(File.pathSeparator)
