@@ -34,6 +34,7 @@ ide-android (Android launcher) → ide-core
 | `index-api` | `dev.ide.index` | Indexing SPI: index extensions, index service, shared value types. |
 | `analysis-api` | `dev.ide.analysis` | Diagnostics/analyzer/quick-fix SPI: one diagnostic model and one pipeline; compiler errors and analyzer findings merge into the same stream. |
 | `block-api` | `dev.ide.block` | Projectional (block) editor SPI: block tree, block mappings, block edits, the projection service. |
+| `plugin-api` | `dev.ide.plugin`, `.action`, `.external` | The plugin SPI (`Plugin`/`PluginManifest`/`PluginRegistration`), the lean action model (`IdeAction`/`ActionGroup` + named places), and the discovery SPI for plugins the user installed separately (`PluginSource`/`DiscoveredPlugin`/`PluginOrigin`). |
 
 ## Implementation modules
 
@@ -45,6 +46,7 @@ ide-android (Android launcher) → ide-core
 | `index-impl` | The indexing engine: disk-backed segments for static (SDK/library) indices, in-memory incremental data for source. |
 | `analysis-impl` | The analysis engine behind `analysis-api` (analyzers, the compiler as a diagnostic provider, profiles, suppression, debounce/cancellation). |
 | `block-impl` | The block projection engine and the Java block mapping. |
+| `plugin-impl` | The plugin engine: `PluginManager` (topological load, per-plugin unload, fault-tolerant load for plugins the IDE did not write), `PluginCatalog` (enable/disable/dependencies over any manifest set), `ExternalPluginLoader` (compatibility gates + entry-point instantiation), and `ActionManager`. |
 | `deps-impl` | The dependency resolver implementation. |
 | `vcs-impl` | The Git engine: a JGit-backed working copy (status, staging, commit, branches, diff, stash, fetch/pull/push, clone), the GitHub REST + device-flow client, and the encrypted account store. |
 
@@ -71,4 +73,4 @@ ide-android (Android launcher) → ide-core
 | `ide-core` | The shared engine → UI bridge: the `IdeServices` façade over the implementations, and `IdeServicesBackend` implementing `IdeBackend`. |
 | `vcs-ui` | The version-control Compose UI as a self-contained plugin: the Git tool window plus the branches, history, diff, sign-in, clone, and GitHub screens. |
 | `ide-desktop` | The JVM Compose launcher. |
-| `ide-android` | The Android Compose launcher; supplies the on-device ports (dex run, APK install/launch). |
+| `ide-android` | The Android Compose launcher; supplies the on-device ports (dex run, APK install/launch) and the installed-plugin source (`ApkPluginSource`: package-manager discovery, then a `PathClassLoader` over the plugin app's installed APK). |

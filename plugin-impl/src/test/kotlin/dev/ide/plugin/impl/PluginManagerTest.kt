@@ -133,4 +133,42 @@ class PluginManagerTest {
             PluginManager(ExtensionRegistryImpl()).loadAll(listOf(FakePlugin("a"), FakePlugin("a")))
         }
     }
+
+    @Test
+    fun `a plugin whose register throws leaves nothing registered`() {
+        val reg = ExtensionRegistryImpl()
+        val mgr = PluginManager(reg)
+        assertFailsWith<IllegalStateException> { mgr.load(HalfRegisteringPlugin("bad")) }
+        // The contribution it made before throwing must not survive as an untracked registration.
+        assertTrue(reg.extensions(EP).isEmpty(), "expected no leftovers, got ${reg.extensions(EP)}")
+        assertTrue(mgr.loadedIds.isEmpty())
+    }
+
+    @Test
+    fun `the tolerant load reports a failure and skips its dependents`() {
+        val reg = ExtensionRegistryImpl()
+        val mgr = PluginManager(reg)
+        val failures = mutableListOf<String>()
+        mgr.loadAll(
+            listOf(
+                FakePlugin("ok"),
+                HalfRegisteringPlugin("bad"),
+                FakePlugin("needs-bad", dependsOn = listOf("bad")),
+            )
+        ) { plugin, _ -> failures += plugin.manifest.id }
+
+        assertEquals(listOf("bad", "needs-bad"), failures)
+        assertEquals(listOf(PluginId("ok")), mgr.loadedIds)
+        assertEquals(listOf("ok-impl"), reg.extensions(EP))
+    }
+}
+
+/** Contributes, then throws: the shape of a third-party plugin that fails part-way through `register`. */
+private class HalfRegisteringPlugin(id: String) : Plugin {
+    override val manifest = PluginManifest(id = id, name = id)
+
+    override fun register(reg: PluginRegistration) {
+        reg.register(EP, "$manifest-partial")
+        throw IllegalStateException("register failed")
+    }
 }

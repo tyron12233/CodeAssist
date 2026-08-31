@@ -3,7 +3,8 @@
 All domain-specific behavior plugs into the framework through a minimal, IntelliJ-style extension-point
 registry. The core knows what a *module type*, a *build system*, and a *language backend* are; it does
 not know what "Android" is. Bundled features (Android support, the build systems, language backends)
-are contributed through the same mechanism a third-party plugin would use.
+are contributed through the same mechanism a third-party plugin uses, including one the user installs as a
+separate app (see [plugin-system.md](plugin-system.md)).
 
 ```kotlin
 class ExtensionPoint<T>(val id: String)              // e.g. "platform.buildSystem"

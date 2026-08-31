@@ -13,6 +13,12 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- Installed plugin apps: the marker activity a CodeAssist plugin declares. Package visibility on
+             API 30+ hides packages this app has no declared interest in, so without this the plugin apps the
+             user installed would not be enumerable. -->
+        <intent>
+            <action android:name="dev.ide.codeassist.action.PLUGIN" />
+        </intent>
     </queries>
 
     <!-- The android "Run" builds a debug APK and installs it via PackageInstaller; the OS shows its own

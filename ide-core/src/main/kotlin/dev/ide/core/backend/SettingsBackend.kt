@@ -43,11 +43,17 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         val manager = ctx.manager ?: return emptyList()
         val catalog = manager.env.pluginCatalog
         val disabled = manager.disabledPlugins()
+        val installed = manager.env.installedPlugins.associateBy { it.manifest.id }
         return catalog.all
             .map { m ->
+                val fromSource = installed[m.id]
+                val essential = catalog.isEssential(m.id)
                 UiPluginInfo(
                     id = m.id, name = m.name, version = m.version, description = m.description,
-                    essential = m.essential, enabled = m.essential || m.id !in disabled, dependsOn = m.dependsOn,
+                    essential = essential, enabled = essential || m.id !in disabled, dependsOn = m.dependsOn,
+                    builtIn = fromSource == null,
+                    origin = fromSource?.origin?.label ?: "",
+                    error = fromSource?.error,
                 )
             }
             .sortedWith(compareByDescending<UiPluginInfo> { it.essential }.thenBy { it.name.lowercase() })

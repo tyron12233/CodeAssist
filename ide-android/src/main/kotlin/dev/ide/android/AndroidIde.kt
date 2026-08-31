@@ -10,6 +10,7 @@ import dev.ide.analytics.EventCategory
 import dev.ide.analytics.Events
 import dev.ide.android.fork.ForkedKotlinCompiler
 import dev.ide.android.fork.ProcessIdentity
+import dev.ide.android.plugins.ApkPluginSource
 import dev.ide.android.preview.SwingAwareProgramInterpreter
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.build.jvm.run.VmProgramInterpreter
@@ -309,6 +310,11 @@ object AndroidIde {
             r8Shrinker = r8Shrinker,
             r8MergeDexer = r8MergeDexer,
             mergeChunkProvider = dexMergeChunkProvider,
+            // Plugins the user installed as separate apps. Discovery reads each plugin app's packaged
+            // manifest through the package manager; only a plugin the user leaves enabled is loaded, off the
+            // read-only APK the system already installed and optimised.
+            pluginSources = listOf(ApkPluginSource(context)),
+            hostVersion = BuildConfig.VERSION_NAME,
         ).also { managerRef.set(it) }
     }
 

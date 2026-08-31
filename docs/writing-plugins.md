@@ -6,9 +6,8 @@ each is a plugin that registers through the same SPI available to you. This guid
 to end and builds up to two complete, shipping examples you can read in the repository.
 
 Everything described here is the **internal (one-classpath) tier**: a plugin is a Gradle module compiled into
-the app, declared in code. The externally packaged, class-loader-isolated tier is future work and is described
-in [Roadmap: externally packaged plugins](#15-roadmap-externally-packaged-plugins). The SPI you write against
-today is the SPI that tier will load, so nothing in this guide is throwaway.
+the app, declared in code. The same `Plugin` can instead ship as a separate app the user installs, which is
+packaging rather than a different SPI; see [Ship your plugin as its own app](#15-ship-your-plugin-as-its-own-app).
 
 **Contents**
 
@@ -26,7 +25,7 @@ today is the SPI that tier will load, so nothing in this guide is throwaway.
 12. [Case study: the AI Agent plugin](#12-case-study-the-ai-agent-plugin)
 13. [Enable, disable, and dependencies](#13-enable-disable-and-dependencies)
 14. [Test your plugin](#14-test-your-plugin)
-15. [Roadmap: externally packaged plugins](#15-roadmap-externally-packaged-plugins)
+15. [Ship your plugin as its own app](#15-ship-your-plugin-as-its-own-app)
 16. [Appendix A: extension point index](#appendix-a-extension-point-index)
 17. [Appendix B: class index](#appendix-b-class-index)
 
@@ -198,7 +197,7 @@ data class PluginManifest(
     val dependsOn: List<String> = emptyList(),
     val description: String = "",
     val essential: Boolean = false,
-    // inert until the external tier:
+    // installed plugins only (unused for built-ins, where the class is the entry point):
     val entryPoints: List<String> = emptyList(),
     val capabilities: List<String> = emptyList(),
     val minHostVersion: String? = null,
@@ -210,20 +209,22 @@ data class PluginManifest(
 | --- | --- | --- |
 | `id` | Attribution key, `dependsOn` node id, persisted in the user's disabled set | Lowercase, hyphenated, stable forever, because renaming it silently re-enables a plugin the user disabled |
 | `name` | Shown in **Settings → Plugins** | Human title case, e.g. `Version Control` |
-| `version` | Displayed; the external tier will match it against dependency ranges | Semantic version |
-| `apiVersion` | Host SPI/ABI compatibility floor, bumped when this SPI changes incompatibly | Leave at the default |
+| `version` | Displayed on the plugin's row | Semantic version |
+| `apiVersion` | Host SPI/ABI compatibility floor, bumped when this SPI changes incompatibly | Leave at the default; an installed plugin declaring another value is rejected at load |
 | `dependsOn` | Drives the **topological load order**, and drops dependents when a dependency is disabled | Declare an edge whenever your contribution must land after another's |
 | `description` | One line under the name in **Settings → Plugins** | Say what the user gets, not how it is implemented |
-| `essential` | The plugin cannot be disabled; it and everything it transitively depends on stay loaded | Only for things the IDE genuinely cannot run without |
-| `entryPoints` | FQCNs a future external loader instantiates | Unused for built-ins, where the class is the entry point |
-| `capabilities` | Declared, prompted, and enforced for untrusted code | Carried now, enforced by the external tier |
-| `minHostVersion`, `trusted` | External-tier gating | Built-ins are trusted |
+| `essential` | The plugin cannot be disabled; it and everything it transitively depends on stay loaded | Only for things the IDE genuinely cannot run without; ignored for an installed plugin |
+| `entryPoints` | FQCNs the loader instantiates for an installed plugin | Unused for built-ins, where the class is the entry point |
+| `capabilities` | Declared for the trust model | Parsed and carried; nothing reads it yet |
+| `minHostVersion` | Rejects an installed plugin on an IDE older than it needs | Set it if you use a recently added SPI |
+| `trusted` | Follows from the origin's signature | The host's to decide; ignored for an installed plugin |
 
 `manifest.pluginId` derives the `dev.ide.platform.PluginId` used for attribution, so you never construct one
 by hand.
 
-The manifest is a Kotlin literal for built-ins ("manifest + entry point"), and the same shape round-trips
-through TOML, which is why the external tier needs no SPI change.
+The manifest is a Kotlin literal for built-ins ("manifest + entry point"). An installed plugin ships the same
+shape as TOML, which is why the two tiers share one SPI. See
+[Ship your plugin as its own app](#15-ship-your-plugin-as-its-own-app).
 
 ### 3.3 `PluginRegistration`
 
@@ -662,8 +663,8 @@ Design notes:
 - **`advanced = true` collapses a control** into the page's Advanced group. Use it for anything a normal user
   should not have to read past.
 - **`controls()` is re-queried when the page is shown**, so it can depend on current state.
-- **`onChanged` runs host code.** In the future external tier this is exactly the kind of hook the trust model
-  gates. Keep it cheap and side-effect-obvious.
+- **`onChanged` runs host code.** This is exactly the kind of hook the trust model will gate once capabilities
+  are enforced. Keep it cheap and side-effect-obvious.
 
 `VcsSettingsPage` in [`VcsPlugin.kt`](../ide-core/src/main/kotlin/dev/ide/core/VcsPlugin.kt) is a short,
 production example: three text fields, one of them `advanced`, persisting under `settings.vcs.*`.
@@ -772,11 +773,18 @@ interface UiContributionScope {
     fun viewMode(mode: EditorViewModeContribution): Registration
     fun overlay(overlay: OverlayContribution): Registration
     fun treeIcon(iconId: String, icon: TreeIcon): Registration
+    fun editorLanguage(profile: EditorLanguageProfile): Registration
 }
 ```
 
-One scope covers all five process-global UI registries, so there is a single place to look for what a plugin
-can add to the UI. Each method returns a `Registration` that the plugin's unload disposes.
+One scope covers the process-global UI registries, so there is a single place to look for what a plugin can
+add to the UI. Each method returns a `Registration` that the plugin's unload disposes.
+
+`editorLanguage` is the text layer: an
+[`EditorLanguageProfile`](../ide-ui-api/src/commonMain/kotlin/dev/ide/ui/ext/EditorLanguages.kt) teaching the
+editor a language's keywords, comment markers, and lexical family, which gives it coloring, Toggle Comment,
+and brace-aware Enter. See [custom-language-support.md](custom-language-support.md) for the whole language
+surface.
 
 ### 10.2 How a UI facet gets loaded
 
@@ -1210,15 +1218,19 @@ drawer rendering nothing at all, because the host has no chat-specific chrome to
 
 ### 13.1 What the user sees
 
-**Settings → Plugins** lists every plugin with its name, version, description, and a toggle. Essential plugins
-show a locked "Required" pill. Changing a toggle shows a restart hint, because enable/disable is applied on
-the next launch.
+**Settings → Plugins** lists every plugin with its name, version, description, and a toggle, under two tabs.
+**Built-in** plugins ship inside the IDE; **Installed** plugins came from a separate app the user installed,
+and each of those rows also carries the package it came from and, if it did not load this launch, why. Each
+tab label carries its count, so an installed plugin is visible without switching tabs.
+Essential plugins show a locked "Required" pill, which never applies to an installed plugin. Changing a toggle
+shows a restart hint, because enable/disable is applied on the next launch.
 
 The state flows: `PluginsScreen` → `SettingsService.setPluginEnabled(id, enabled)` →
 [`SettingsBackend`](../ide-core/src/main/kotlin/dev/ide/core/backend/SettingsBackend.kt) →
 `ProjectManager.setDisabledPlugins(...)`, persisted app-globally in `prefs.properties` under the key
-`plugins.disabled`. At the next launch `ApplicationEnvironment(disabledPluginIds)` builds the catalog and
-loads only the enabled subset.
+`plugins.disabled`. At the next launch `ApplicationEnvironment` builds the catalog over the built-in manifests
+plus whatever its `PluginSource`s discovered, and loads only the enabled subset. A disabled plugin is dropped
+before its code is touched at all, so an installed one never even gets a classloader.
 
 ### 13.2 Making your plugin disable cleanly
 
@@ -1354,22 +1366,64 @@ For rendering, `:ide-ui` desktop tests snapshot composables headlessly with `Ima
 
 ---
 
-## 15. Roadmap: externally packaged plugins
+## 15. Ship your plugin as its own app
 
-Everything above is the internal tier. The external tier (a plugin shipped as its own artifact, discovered at
-runtime and loaded in an isolated class loader) is planned, and the SPI already carries its shape:
+Everything above is the internal tier, where a plugin is a module inside the IDE. A plugin can instead be a
+**separate Android app the user installs**: the IDE finds it through the package manager, reads its manifest,
+and loads its classes off the installed APK. The `Plugin` you wrote does not change; only its packaging does.
 
-| Piece | Status |
-| --- | --- |
-| Manifest format | `PluginManifest` round-trips through TOML; `entryPoints` names the FQCNs a loader instantiates |
-| Trust and permissions | `trusted` and `capabilities` are carried and will be declared, prompted, and enforced for untrusted code |
-| Class loading | `URLClassLoader` on desktop; a D8-dexed `DexClassLoader` on ART, reusing the existing Kotlin compiler-plugin loading machinery |
-| Catalog and lifecycle | `PluginCatalog` already models enable/disable/dependencies for any manifest set |
+Three things go into the plugin app.
 
-What this means for you today: **write against this SPI and your plugin is forward-compatible.** The two known
-gaps to keep in mind are that the lifecycle-event payloads currently live in `:ide-core`
-(`dev.ide.core.event`) and will be promoted to the relevant `*-api` modules, and that a permission-gated host
-facade will be added to `ActionContext` for untrusted actions.
+**1. The plugin manifest**, as `res/raw/codeassist_plugin.toml`. This is `PluginManifest` in TOML, and it is
+what the IDE reads to build its catalogue, so it must agree with what your entry point contributes:
+
+```toml
+[plugin]
+id = "com.example.hello"
+name = "Hello"
+version = "1.0.0"
+apiVersion = 1
+description = "Adds a Hello tool window."
+entryPoints = ["com.example.hello.HelloPlugin"]
+dependsOn = ["kotlin-language"]
+capabilities = ["ui.toolWindow"]
+minHostVersion = "3.11.0"
+```
+
+`apiVersion` must match the IDE's `PLUGIN_API_VERSION`, and `minHostVersion` is compared against the running
+IDE's version; a mismatch is reported on the plugin's row in the Plugins screen rather than failing silently.
+`essential` and `trusted` are ignored here: those are the IDE's to decide.
+
+**2. A marker activity** in the app's `AndroidManifest.xml`, which is how the IDE finds the app at all, and
+which doubles as your app's own screen:
+
+```xml
+<activity android:name=".PluginInfoActivity" android:exported="true">
+    <intent-filter>
+        <action android:name="dev.ide.codeassist.action.PLUGIN" />
+        <category android:name="android.intent.category.DEFAULT" />
+    </intent-filter>
+    <meta-data android:name="dev.ide.codeassist.plugin.manifest"
+               android:resource="@raw/codeassist_plugin" />
+</activity>
+```
+
+**3. Your plugin classes**, compiled against the plugin SPI as `compileOnly`. The IDE's classloader is the
+parent of your plugin's, so the SPI, the Kotlin stdlib, and the Compose runtime resolve to the IDE's copies.
+Bundling your own copy of any of them does nothing: the parent wins, and shipping a mismatched version is how
+you get a linkage error reported against your plugin.
+
+What to expect at runtime:
+
+- Your plugin loads in the IDE's process, under its UID and its granted permissions. Class loading isolates
+  versions, not privileges.
+- Changing your plugin's enabled state takes effect on the IDE's next launch; the manager loads once at
+  startup and does not hot-swap.
+- If your entry point throws, your plugin is rolled back and skipped with the reason shown on its row. The
+  IDE still starts, and so does every other plugin that does not depend on yours.
+
+The trust half of the design is not built yet: `capabilities` is parsed and carried but nothing reads it, and
+there is no install-time consent prompt. Declare it accurately anyway, since enforcement is what it is for.
 
 The design discussion is in [ui-extensibility-and-plugin-api.md](ui-extensibility-and-plugin-api.md), and the
 model as built is summarised in [plugin-system.md](plugin-system.md).

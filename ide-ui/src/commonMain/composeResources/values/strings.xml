@@ -815,7 +815,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="settings_keystore_manager">Keystore Manager</string>
     <string name="settings_keystore_manager_subtitle">Create, import &amp; manage signing keystores</string>
     <string name="settings_plugins">Plugins</string>
-    <string name="settings_plugins_subtitle">Enable or disable built-in plugins</string>
+    <string name="settings_plugins_subtitle">Enable or disable built-in and installed plugins</string>
     <string name="settings_storage">Storage</string>
     <string name="settings_storage_subtitle">See what's using space and free it up</string>
     <string name="storage_total_used">Total used</string>
@@ -846,6 +846,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="plugins_restart_hint">Restart to apply your plugin changes.</string>
     <string name="plugins_required">Required</string>
     <string name="plugins_requires">Requires %1$s</string>
+    <string name="plugins_tab_builtin">Built-in</string>
+    <string name="plugins_tab_installed">Installed</string>
+    <string name="plugins_installed_empty">Nothing installed yet. A CodeAssist plugin you install from your app store appears here.</string>
+    <string name="plugins_failed">Did not load: %1$s</string>
 
     <!-- keystore (KeystoreManagerScreen) -->
     <string name="keystore_manager_title">Keystore Manager</string>

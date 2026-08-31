@@ -116,6 +116,11 @@ class ProjectManager private constructor(
     /** On-device Kotlin compiler backend (from :ide-android): a persistent forked VM whose heap is not bound
      *  by the app's cap. Null on desktop → the engine's in-process K2 compiler. */
     private val kotlinCompiler: dev.ide.lang.kotlin.compile.KotlinCompilerBackend? = null,
+    /** Where installed (non built-in) plugins come from (on device: the installed plugin APKs). Empty on
+     *  desktop, so the environment loads exactly the IDE's own built-ins. */
+    private val pluginSources: List<dev.ide.plugin.external.PluginSource> = emptyList(),
+    /** The running IDE's version, checked against an installed plugin's `minHostVersion`. */
+    private val hostVersion: String? = null,
 ) {
     init {
         Files.createDirectories(projectsRoot)
@@ -127,7 +132,11 @@ class ProjectManager private constructor(
      * project's workspace container), and the host plugin registrations. All application *bootstrap* lives in
      * [ApplicationEnvironment], so this manager is purely about *managing* projects. Disposed by [dispose].
      */
-    val env: ApplicationEnvironment = ApplicationEnvironment(disabledPluginIds = readDisabledPlugins())
+    val env: ApplicationEnvironment = ApplicationEnvironment(
+        disabledPluginIds = readDisabledPlugins(),
+        pluginSources = pluginSources,
+        hostVersion = hostVersion,
+    )
 
     init {
         // The launcher-supplied platform ports become APPLICATION services on the shared container, so every
@@ -698,6 +707,10 @@ class ProjectManager private constructor(
             appLogChannel: AppLogChannel? = null,
             /** Whether app-log forwarding is enabled (the "Forward app logs" setting; read per build). Default on. */
             appLogEnabledProvider: () -> Boolean = { true },
+            /** The host's installed-plugin sources (on device: the installed plugin APKs). */
+            pluginSources: List<dev.ide.plugin.external.PluginSource> = emptyList(),
+            /** The running IDE's version, checked against an installed plugin's `minHostVersion`. */
+            hostVersion: String? = null,
         ): ProjectManager {
 
 
@@ -728,6 +741,8 @@ class ProjectManager private constructor(
                 realViewRuntime = realViewRuntime,
                 kotlinPluginLoader = kotlinPluginLoader,
                 kotlinCompiler = kotlinCompiler,
+                pluginSources = pluginSources,
+                hostVersion = hostVersion,
             )
         }
     }

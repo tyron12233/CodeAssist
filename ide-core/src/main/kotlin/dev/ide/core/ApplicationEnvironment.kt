@@ -5,9 +5,29 @@ import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.impl.ApplicationContainer
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.core.plugins.PluginManifestToml
+import dev.ide.platform.log.Log
+import dev.ide.plugin.Plugin
+import dev.ide.plugin.PluginManifest
+import dev.ide.plugin.external.DiscoveredPlugin
+import dev.ide.plugin.external.PluginOrigin
+import dev.ide.plugin.external.PluginSource
+import dev.ide.plugin.PLUGIN_API_VERSION
+import dev.ide.plugin.impl.ExternalPluginLoader
 import dev.ide.plugin.impl.PluginCatalog
 import dev.ide.plugin.impl.PluginManager
 import dev.ide.ui.ext.UiPlugin
+
+/**
+ * An installed plugin as the host saw it this launch: the manifest its package declared, where it came from,
+ * and why it did not load, if it did not. A row with a non-null [error] is still listed (the user installed
+ * something, and silence about it would be worse than a reason).
+ */
+data class InstalledPlugin(
+    val manifest: PluginManifest,
+    val origin: PluginOrigin,
+    val error: String? = null,
+)
 
 /** APPLICATION-scoped Create-Project template registry key (resolved from [ApplicationEnvironment.container]
  *  so the picker can enumerate templates with no project open). */
@@ -31,7 +51,15 @@ internal val PROJECT_TEMPLATES = ServiceKey<ProjectTemplateRegistry>("ide.projec
  *
  * This is the home for application bootstrap, so [ProjectManager] can be purely about *managing* projects.
  */
-class ApplicationEnvironment(disabledPluginIds: Set<String> = emptySet()) : AutoCloseable {
+class ApplicationEnvironment(
+    disabledPluginIds: Set<String> = emptySet(),
+    /** Where installed (non built-in) plugins come from. Empty on desktop and in tests, so the environment
+     *  loads exactly the built-ins and nothing a third party wrote. */
+    pluginSources: List<PluginSource> = emptyList(),
+    /** The running IDE's version, checked against an installed plugin's `minHostVersion`. Null skips
+     *  that check (the host did not supply a version). */
+    hostVersion: String? = null,
+) : AutoCloseable {
 
     /** The app substrate: app-global extension registry + message bus + model lock. */
     val platform: PlatformCore = PlatformCore()
@@ -62,6 +90,13 @@ class ApplicationEnvironment(disabledPluginIds: Set<String> = emptySet()) : Auto
     val pluginCatalog: PluginCatalog
 
     /**
+     * Every plugin a [PluginSource] found this launch, whether or not it loaded. The Plugins settings screen
+     * lists these under Installed, separately from the built-ins, and shows [InstalledPlugin.error] against
+     * one that did not load.
+     */
+    val installedPlugins: List<InstalledPlugin>
+
+    /**
      * The Compose UI facets ([dev.ide.ui.ext.UiPlugin]) of the ENABLED built-in plugins, in load order. The
      * Compose shell reads these (through `IdeBackend.uiPlugins`) and registers them into `UiPluginHost`, so a
      * plugin's tool windows / actions / screens are governed by the SAME enable/disable decision as its engine
@@ -74,13 +109,92 @@ class ApplicationEnvironment(disabledPluginIds: Set<String> = emptySet()) : Auto
         // keeps essentials (and their transitive dependencies) on regardless of the disabled set, and drops a
         // disabled plugin's dependents so the load graph stays valid. The capturing plugins (command actions,
         // synthetic-R, the XML resource host) resolve the open project lazily through [activeEngine] at callback
-        // time — safe to pass `this` mid-construction (it is dereferenced only later, never during register()).
-        val allPlugins = BuiltInPlugins.assemble(this, codecs)
-        pluginCatalog = PluginCatalog(allPlugins.map { it.engine.manifest }, disabledPluginIds)
-        val enabled = allPlugins.filter { pluginCatalog.isEnabled(it.engine.manifest.id) }
-        pluginManager.loadAll(enabled.map { it.engine })
-        enabledUiPlugins = enabled.mapNotNull { it.ui }
+        // time: safe to pass `this` mid-construction (it is dereferenced only later, never during register()).
+        val builtIns = BuiltInPlugins.assemble(this, codecs)
+        val builtInIds = builtIns.mapTo(HashSet()) { it.engine.manifest.id }
+
+        // Discovery reads manifests only. Nothing a source found runs before the catalog has applied the
+        // user's disabled set, so a plugin the user turned off never gets a classloader, let alone a
+        // register() call.
+        val discovered = discover(pluginSources, builtInIds)
+        val failures = LinkedHashMap<String, String>()
+        pluginCatalog = PluginCatalog(
+            all = builtIns.map { it.engine.manifest } + discovered.map { it.manifest },
+            disabledIds = disabledPluginIds,
+            externalIds = discovered.mapTo(HashSet()) { it.manifest.id },
+        )
+
+        val enabledBuiltIns = builtIns.filter { pluginCatalog.isEnabled(it.engine.manifest.id) }
+        val builtInLoadIds = enabledBuiltIns.mapTo(HashSet()) { it.engine.manifest.id }
+        val loader = ExternalPluginLoader(hostApiVersion = PLUGIN_API_VERSION, hostVersion = hostVersion)
+        val external = LinkedHashMap<String, Plugin>()
+        for (d in discovered.filter { pluginCatalog.isEnabled(it.manifest.id) }) {
+            when (val r = loader.load(d)) {
+                is ExternalPluginLoader.Result.Loaded -> external[r.manifest.id] = r.plugin
+                is ExternalPluginLoader.Result.Failed -> failures[r.manifest.id] = r.reason
+            }
+        }
+        // An edge onto a plugin that is not in the load set (it failed to instantiate, or its id is not
+        // installed at all) would make the whole topological sort throw. Prune those to a fixpoint instead, so
+        // the reason lands on the plugin that declared the edge and its dependents are dropped in turn. The
+        // catalog has already dropped anything depending on a plugin the user disabled.
+        var pruned = true
+        while (pruned) {
+            pruned = false
+            for ((id, plugin) in external.entries.toList()) {
+                val missing = plugin.manifest.dependsOn
+                    .firstOrNull { it !in builtInLoadIds && it !in external } ?: continue
+                external.remove(id)
+                failures[id] = "requires plugin '$missing', which is not available"
+                pruned = true
+            }
+        }
+
+        // One ordered load over both tiers, so an installed plugin's dependency on a built-in is a real edge.
+        // A built-in that throws is the IDE's own bug and still fails the launch; an installed one is recorded
+        // against its row in the Plugins screen and skipped.
+        pluginManager.loadAll(enabledBuiltIns.map { it.engine } + external.values) { plugin, error ->
+            val id = plugin.manifest.id
+            if (id in builtInIds) throw error
+            failures[id] = error.message ?: error.toString()
+            log.warn("installed plugin '$id' failed to load", error)
+        }
+
+        installedPlugins = discovered.map {
+            InstalledPlugin(it.manifest, it.origin, error = failures[it.manifest.id])
+        }
+        enabledUiPlugins = enabledBuiltIns.mapNotNull { it.ui }
         container.registerServiceIfAbsent(PROJECT_TEMPLATES) { ProjectTemplateRegistry(platform.extensions) }
+    }
+
+    /**
+     * Every source's plugins, with anything unusable dropped before it can reach the catalog: a source that
+     * throws, a manifest that claims a built-in's id, and a second plugin claiming an id already taken.
+     */
+    private fun discover(sources: List<PluginSource>, builtInIds: Set<String>): List<DiscoveredPlugin> {
+        if (sources.isEmpty()) return emptyList()
+        val seen = HashSet(builtInIds)
+        val out = ArrayList<DiscoveredPlugin>()
+        for (source in sources) {
+            val found = try {
+                source.discover()
+            } catch (t: Throwable) {
+                log.warn("plugin source '${source.id}' failed to enumerate installed plugins", t)
+                continue
+            }
+            for (plugin in found) {
+                if (!seen.add(plugin.manifest.id)) {
+                    log.warn("ignoring plugin from ${plugin.origin.label}: id '${plugin.manifest.id}' is taken")
+                    continue
+                }
+                out += plugin
+            }
+        }
+        return out
+    }
+
+    private companion object {
+        val log = Log.logger("ApplicationEnvironment")
     }
 
     override fun close() {

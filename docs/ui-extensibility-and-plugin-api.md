@@ -4,10 +4,12 @@
 > SPI + `PluginManager`, with the built-ins as its first consumers. See [`plugin-system.md`](plugin-system.md)
 > for what ships. The UI-extensibility model this document specifies is delivered as `UiPlugin` /
 > `UiContributionScope` in `:ide-ui-api` (tool windows, screens, view modes, tree icons, and data-driven
-> actions all plug in through the one model). What remains **future** is the *external tier* this document also
-> designs: dex-loaded, separately-built, trust-gated third-party plugins (on-disk manifest discovery,
-> `DexClassLoader` isolation, a permission model). Read the sections below as the design for that external tier;
-> read `plugin-system.md` for the internal model in use today.
+> actions all plug in through the one model). The *external tier* this document also designs now loads too: on
+> Android a plugin is a separate app the user installs, discovered through `PluginSource` and loaded off the
+> installed APK with a `PathClassLoader`. See the "Installed plugins" section of
+> [`plugin-system.md`](plugin-system.md) for what ships. What remains **future** from the design below is the
+> trust half: capabilities are parsed and carried but nothing reads them, and there is no install-time consent
+> or permission broker yet.
 
 This document specifies how the IDE's **UI** becomes extensible the same way its **engine** already is: through
 the IntelliJ-style extension-point registry in `platform-core`. Today the engine is a plugin platform (language
@@ -29,10 +31,10 @@ These were chosen up front and constrain everything below:
 2. **Action model: lean.** `IdeAction { id, text, icon, isEnabled(ctx), perform(ctx) }` + `ActionGroup` +
    named **places** (`mainToolbar`, `moreMenu`, `fileContext`, `editorTab`, `commandPalette`, ...). No
    `DataContext`/`Presentation`/`update()` machinery and no keymap in the first cut; both can layer on later.
-3. **Plugin target: third-party, dex-loaded, from day one.** Contracts are designed for an untrusted,
-   separately-built plugin loaded through a `DexClassLoader` on ART (a `URLClassLoader` on desktop), reusing
-   the `KotlinPluginLoader` machinery that already exists. This forces data-friendly contracts, a manifest,
-   classloader isolation, and a permission/trust model now rather than retrofitting them.
+3. **Plugin target: third-party, separately built, from day one.** Contracts are designed for an untrusted
+   plugin the IDE loads in its own classloader rather than compiles in. This forces data-friendly contracts, a
+   manifest, classloader isolation, and a permission/trust model now rather than retrofitting them. As built,
+   that plugin is a separate app on Android, loaded off its installed APK with a `PathClassLoader`.
 4. **First surfaces:** actions (toolbar + menus), tool windows & panels, and screens & view modes. (The
    command palette comes almost for free once actions exist, so it is folded in opportunistically.)
 
@@ -47,11 +49,12 @@ The relevant existing machinery, all reused rather than replaced:
   registers a `SettingsPage`; the UI renders typed controls from DTOs and never sees the plugin object. Its doc
   already states "gate third-party pages behind the plugin trust model." This is the exact shape the action
   and menu APIs follow.
-- The **dex-plugin loader**: `KotlinPluginLoader` (interface) with `DefaultKotlinPluginLoader`
+- The **compiler-plugin loader**: `KotlinPluginLoader` (interface) with `DefaultKotlinPluginLoader`
   (`URLClassLoader`, desktop) and `ArtKotlinPluginLoader` (D8-in-process + `DexClassLoader`, ART). The loader's
   classloader parent is the app classloader, so a plugin's references to the Kotlin compiler, Compose runtime,
   and our own API modules resolve through parent delegation. `KotlinPluginLoading.RUNTIME_REGISTRAR` is already
-  the "load a separately-built plugin at runtime and register it programmatically" path.
+  the "load a separately-built plugin at runtime and register it programmatically" path. The IDE-plugin loader
+  follows the same parent-delegation rule; it needs no D8 step, because an installed app's APK is already dexed.
 - The **only** already-extensible UI piece: `TreeIcons`, a live `mutableStateMapOf` registry. The Compose
   registries below follow its pattern.
 
@@ -63,16 +66,18 @@ direction follow the repo convention (deps point downward only).
 ```
 platform-core
   └─ plugin-api        (pure Kotlin) lean action model, plugin descriptor/manifest,
-       │               Plugin SPI, capability/permission model, the data-driven UI EPs
-       ├─ plugin-impl  (pure Kotlin) ActionManager, plugin lifecycle, permission broker;
-       │               the dex/URL loader split lives in the launchers (like ArtKotlinPluginLoader)
+       │               Plugin SPI, the PluginSource/DiscoveredPlugin discovery SPI,
+       │               capability/permission model, the data-driven UI EPs
+       ├─ plugin-impl  (pure Kotlin) ActionManager, plugin lifecycle, ExternalPluginLoader,
+       │               permission broker; a host-specific PluginSource lives in the launchers
        └─ ide-ui-api   (Compose Multiplatform commonMain) the Compose-bearing contracts
                        + live registries (ToolWindowRegistry / ScreenRegistry / ViewModeRegistry)
 
 ide-ui      → ide-ui-api      (gains the registries; still no engine/framework deps beyond the API)
-ide-core    → plugin-impl, ide-ui-api   (wires built-ins onto the new EPs; exposes them over IdeBackend)
-ide-android → plugin-impl     (ArtPluginLoader: D8 + DexClassLoader, mirrors ArtKotlinPluginLoader)
-ide-desktop → plugin-impl     (DefaultPluginLoader: URLClassLoader)
+ide-core    → plugin-impl, ide-ui-api   (wires built-ins onto the new EPs; exposes them over IdeBackend;
+                                         PluginManifestToml reads an installed plugin's manifest)
+ide-android → plugin-api      (ApkPluginSource: package-manager discovery + PathClassLoader over the APK)
+ide-desktop → plugin-api      (a plugins-directory source over a URLClassLoader; not built yet)
 ```
 
 Why the split into two API modules: the lean action and menu contracts are pure data and pure Kotlin, so they
@@ -249,19 +254,19 @@ interface PluginRegistration {
 }
 ```
 
-**Loading reuses the proven path.** A `PluginLoader` interface with two implementations:
+**Loading, as built.** Discovery and classloading split into a host-specific `PluginSource` and a shared
+`ExternalPluginLoader`. The Android source (`ApkPluginSource`) enumerates installed plugin apps through the
+package manager and loads each off its installed APK with a `PathClassLoader`, parent = app classloader; the
+APK is already dexed, so the D8 step this design originally called for is not needed. A desktop source over a
+plugins directory (`URLClassLoader`) is still to come.
 
-- `DefaultPluginLoader` (desktop): `URLClassLoader` over the plugin's jars, parent = app classloader. Mirrors
-  `DefaultKotlinPluginLoader`.
-- `ArtPluginLoader` (Android): D8-in-process dex of the plugin jars (content-addressed cache), then a
-  `DexClassLoader`, parent = app classloader. A near-copy of `ArtKotlinPluginLoader`; that class already proves
-  every step (dex, package `classes*.dex`, load, parent-delegate to bundled Compose/Kotlin).
-
-The loader discovers descriptors, checks `apiVersion`/`minHostVersion`, builds the isolated classloader,
-instantiates each entry point, and calls `register`. Every contribution returns a `Disposable`; unload disposes
-the lot and the registry drops the plugin's `PluginId` in bulk (already supported by `unregisterAll`). A
-**Plugins** settings page (dogfooding `SETTINGS_PAGE_EP`) lists installed plugins with enable / disable /
-uninstall and surfaces declared capabilities.
+The loader checks `apiVersion`/`minHostVersion`, builds the isolated classloader, and instantiates each entry
+point; `PluginManager` then calls `register`. Every contribution returns a `Disposable`; unload disposes the
+lot and the registry drops the plugin's `PluginId` in bulk (already supported by `unregisterAll`). The
+**Plugins** settings screen lists built-in and installed plugins under two tabs, each labelled with its
+count, with enable / disable,
+each installed row carrying the package it came from and the reason it did not load, if it did not. Uninstall
+and the display of declared capabilities are still to come.
 
 ## Trust and permissions
 
@@ -359,12 +364,12 @@ wiring `ToolWindowRegistry` LEFT into the side rail, and moving the stateful top
 registry (these need a richer presentation contract for toggle/enabled state). Each is an app-shell or
 core-editor change best done as its own visually-verified pass.
 
-**Phase C: the plugin unit.** Define the descriptor + `Plugin` SPI; build `DefaultPluginLoader` (desktop) and
-`ArtPluginLoader` (device, cloning `ArtKotlinPluginLoader`); add lifecycle (load/enable/disable/uninstall), the
-`PluginPermissionBroker` + install consent, and the Plugins settings page. Ship one sample plugin that
-contributes a toolbar action (Tier 1) and a Logcat tool window (Tier 2). *Exit test:* the sample is discovered,
-loaded, contributes both, can be disabled (contributions vanish) and uninstalled; the dex path is verified on
-device.
+**Phase C: the plugin unit.** *Mostly delivered.* The descriptor + `Plugin` SPI, the discovery SPI
+(`PluginSource`/`DiscoveredPlugin`), `ExternalPluginLoader`, the Android source (`ApkPluginSource`: a plugin is
+a separate installed app, loaded off its APK with a `PathClassLoader`), load/enable/disable, and the Plugins
+settings page with its Built-in and Installed tabs. *Remaining:* the `PluginPermissionBroker` + install
+consent, uninstall, a desktop plugins-directory source, UI facets (`UiPlugin`) from an installed plugin, and a
+sample plugin app contributing a toolbar action (Tier 1) and a Logcat tool window (Tier 2).
 
 **Phase D (later, behind these contracts):** keymap + user-rebindable shortcuts on actions; palette categories;
 a plugin marketplace/install-from-URL flow.
@@ -375,7 +380,7 @@ plugin id, filterable in the Logs viewer). The IDE publishes a lifecycle event s
 `dev.ide.core.event.IdeEventTopics` — editor (open/close/active/selection), build, run, analysis diagnostics,
 project open/close, indexing — so plugins react to what the IDE is doing. See `docs/plugin-system.md` (Events and
 logging). Consumed by the built-ins today; promoting the topic payloads to their owning `*-api` modules is the
-follow-up for the external tier.
+follow-up for plugins built outside the app, which should not have to depend on `ide-core` to subscribe.
 
 ## IdeBackend decomposition
 

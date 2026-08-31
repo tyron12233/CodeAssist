@@ -946,6 +946,13 @@ data class UiPluginInfo(
     val essential: Boolean,
     val enabled: Boolean,
     val dependsOn: List<String> = emptyList(),
+    /** True for a plugin shipped inside the IDE, false for one the user installed separately. The Plugins
+     *  screen lists the two under separate tabs. */
+    val builtIn: Boolean = true,
+    /** Where an installed plugin came from (its package name), shown on its row. Empty for a built-in. */
+    val origin: String = "",
+    /** Why an installed plugin did not load this launch, or null if it loaded. */
+    val error: String? = null,
 )
 
 /** IDE settings, the extensible settings pages, the inspection catalogue, and app preferences. */

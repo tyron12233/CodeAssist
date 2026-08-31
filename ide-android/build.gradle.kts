@@ -936,6 +936,9 @@ dependencies {
     // The logging facade (Log) — used directly here for the main-thread guard + the analytics log sink. It
     // reaches :ide-core only as `implementation` (not transitive), so depend on it explicitly.
     implementation(project(":platform-core"))
+    // The plugin SPI: ApkPluginSource implements PluginSource/DiscoveredPlugin so the engine can load plugins
+    // the user installed as separate apps. Reaches :ide-core only as `implementation`, hence explicit here.
+    implementation(project(":plugin-api"))
     implementation(files(relocateEcjForArt.flatMap { it.outputJar }))
     // The StackWalker-relocated Eclipse runtime jars (replacing the stock ones excluded from :ide-core above).
     implementation(files(relocateCoreRuntimeForArt.flatMap { it.outputJar }))

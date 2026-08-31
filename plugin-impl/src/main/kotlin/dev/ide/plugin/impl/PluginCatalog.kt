@@ -16,11 +16,16 @@ import dev.ide.plugin.PluginManifest
 class PluginCatalog(
     val all: List<PluginManifest>,
     disabledIds: Set<String>,
+    /** Ids that came from a [dev.ide.plugin.external.PluginSource] rather than from the IDE's own built-in
+     *  set. Presentation and trust only: an installed plugin is enabled and ordered by the same rules. */
+    val externalIds: Set<String> = emptySet(),
 ) {
     private val byId: Map<String, PluginManifest> = all.associateBy { it.id }
 
-    /** Ids of plugins that can never be disabled. */
-    val essentialIds: Set<String> = all.filter { it.essential }.mapTo(HashSet()) { it.id }
+    /** Ids of plugins that can never be disabled. Restricted to built-ins: an `essential` flag in an
+     *  installed plugin's own manifest is ignored, so a third party cannot make itself undisablable. */
+    val essentialIds: Set<String> =
+        all.filter { it.essential && it.id !in externalIds }.mapTo(HashSet()) { it.id }
 
     /** The user's disabled ids, restricted to known, non-essential plugins (an essential/unknown id is ignored). */
     val disabledIds: Set<String> = disabledIds.filterTo(HashSet()) { it in byId && it !in essentialIds }
@@ -30,6 +35,9 @@ class PluginCatalog(
 
     fun isEnabled(id: String): Boolean = id in enabledIds
     fun isEssential(id: String): Boolean = id in essentialIds
+
+    /** True for a plugin the host discovered through a source (an installed plugin), false for a built-in. */
+    fun isExternal(id: String): Boolean = id in externalIds
     fun manifest(id: String): PluginManifest? = byId[id]
 
     private fun computeEnabled(): Set<String> {

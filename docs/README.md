@@ -9,9 +9,11 @@ and follow the links into each subsystem.
   with the acyclic dependency direction.
 - [writing-plugins.md](writing-plugins.md) — the step-by-step guide to writing a plugin: the `Plugin`
   SPI, extension points, scoped services, events and logging, settings pages, actions, Compose UI
-  contributions (tool windows, screens, overlays), and the Git and AI-agent plugins as worked examples.
+  contributions (tool windows, screens, overlays), shipping a plugin as its own installable app, and the
+  Git and AI-agent plugins as worked examples.
 - [plugin-system.md](plugin-system.md) — the delivered plugin model itself: the substrate, the manifest +
-  entry-point contract, the loader, and how the IDE's own built-ins run through it.
+  entry-point contract, the loader, how the IDE's own built-ins run through it, and how a plugin the user
+  installs as a separate app is discovered and loaded.
 - [extension-points.md](extension-points.md) — the extension-point registry and every published
   extension point (module types, build systems, language backends, indexing, analysis, icons,
   templates, block mappings), plus the language-backend SPI.

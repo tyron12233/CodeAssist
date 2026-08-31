@@ -38,13 +38,51 @@ class PluginManager(
         for (p in topoSort(plugins)) load(p)
     }
 
-    /** Load one plugin now (its `dependsOn` are assumed already loaded). */
+    /**
+     * Load [plugins] in dependency order, routing a plugin whose `register` throws to [onError] instead of
+     * failing the whole load. The failed plugin's partial registration is rolled back and everything that
+     * transitively depends on it is skipped (also through [onError]), so the rest of the set still loads.
+     *
+     * This is the path for plugins the IDE did not write: a third-party plugin that throws on load must cost
+     * the user that plugin, not the launch. [onError] can still rethrow for a set that must not fail, which
+     * is how the host keeps its own built-ins strict while tolerating installed ones.
+     */
+    fun loadAll(plugins: List<Plugin>, onError: (Plugin, Throwable) -> Unit) {
+        val failed = HashSet<String>()
+        for (p in topoSort(plugins)) {
+            val blocker = p.manifest.dependsOn.firstOrNull { it in failed }
+            if (blocker != null) {
+                failed.add(p.manifest.id)
+                onError(p, IllegalStateException("plugin '$blocker' it depends on failed to load"))
+                continue
+            }
+            try {
+                load(p)
+            } catch (t: Throwable) {
+                failed.add(p.manifest.id)
+                onError(p, t)
+            }
+        }
+    }
+
+    /**
+     * Load one plugin now (its `dependsOn` are assumed already loaded). If `register` throws, whatever the
+     * plugin managed to contribute first is unregistered before the throw propagates, so a half-registered
+     * plugin never survives as an untracked contribution on the registry.
+     */
     fun load(plugin: Plugin) {
         val id = plugin.manifest.pluginId
         require(id !in loaded) { "plugin '${id.value}' already loaded" }
         val teardown = CompositeDisposable()
-        plugin.register(PluginRegistrationImpl(id, registry, teardown, bus))
+        // Recorded before register(), not after: a throw part-way through leaves contributions on the
+        // registry that only unload() can sweep, and unload() needs the entry to find them.
         loaded[id] = Loaded(plugin, teardown)
+        try {
+            plugin.register(PluginRegistrationImpl(id, registry, teardown, bus))
+        } catch (t: Throwable) {
+            unload(id)
+            throw t
+        }
     }
 
     /** Unload one plugin: dispose its tracked contributions, sweep any facade contributions by id, then
