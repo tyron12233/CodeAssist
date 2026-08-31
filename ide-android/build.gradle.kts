@@ -442,6 +442,7 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-fonts-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-strings-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("agent-ui-strings-asset").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("vcs-ui-strings-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-drawables-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("r8-dex-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("applog-runtime-asset").get().asFile)
@@ -766,7 +767,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
+    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleVcsUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's
@@ -796,6 +797,59 @@ val bundleAgentUiComposeStringAsset = tasks.register<Copy>("bundleAgentUiCompose
         include("values*/**/*.cvr")
     }
     into(layout.buildDirectory.dir("agent-ui-strings-asset/composeResources/dev.ide.agent.ui.generated.resources"))
+}
+
+// The SAME Android packaging gap, for :vcs-ui's OWN compose-resource strings (the vcs_* i18n keys, under
+// package dev.ide.vcs.ui.generated.resources). Without this the Git panel crashes on device the moment it
+// renders, with `MissingResourceException: composeResources/dev.ide.vcs.ui.generated.resources/values/
+// strings.commonMain.cvr`. Mirrors bundleAgentUiComposeStringAsset.
+val bundleVcsUiComposeStringAsset = tasks.register<Copy>("bundleVcsUiComposeStringAsset") {
+    description = "Stage :vcs-ui's i18n compose-resource strings into the APK assets (Android packaging gap)."
+    dependsOn(":vcs-ui:desktopProcessResources")
+    from(project(":vcs-ui").layout.buildDirectory.dir("processedResources/desktop/main/composeResources/dev.ide.vcs.ui.generated.resources")) {
+        include("values*/**/*.cvr")
+    }
+    into(layout.buildDirectory.dir("vcs-ui-strings-asset/composeResources/dev.ide.vcs.ui.generated.resources"))
+}
+
+// The staging tasks above are easy to forget, and forgetting one is invisible until the app runs on a device:
+// desktop and unit tests load composeResources through the normal JVM resources route, so a module whose
+// strings never reach the APK assets compiles and tests green, then throws MissingResourceException on the
+// first render of the UI that reads them. That has shipped before. Assert the invariant during the assets
+// merge instead: every module carrying its own string resources must land its compiled `.cvr` under its own
+// resClass package. The expected packages are read from each module's `packageOfResClass`, so a new UI module
+// is covered without touching this check.
+val composeStringPackages: Map<String, String> = rootProject.subprojects
+    .filter { it.file("src/commonMain/composeResources/values/strings.xml").exists() }
+    .mapNotNull { module ->
+        val script = module.file("build.gradle.kts").takeIf { it.exists() } ?: return@mapNotNull null
+        val declared = Regex("packageOfResClass\\s*=\\s*\"([^\"]+)\"").find(script.readText())
+        declared?.let { module.path to it.groupValues[1] }
+    }
+    .toMap()
+
+tasks.matching { it.name.matches(Regex("merge(Debug|Profile|Release|Minified)Assets")) }.configureEach {
+    val expected = composeStringPackages
+    doLast {
+        val merged = outputs.files.files.firstOrNull() ?: return@doLast
+        val missing = expected.filterValues { pkg ->
+            !File(merged, "composeResources/$pkg/values/strings.commonMain.cvr").exists()
+        }
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("Compose string resources never reached the APK assets:")
+                    missing.forEach { (module, pkg) -> appendLine("  $module -> composeResources/$pkg") }
+                    append(
+                        "Each Compose Multiplatform module with its own composeResources needs a staging Copy " +
+                            "task here (see bundleVcsUiComposeStringAsset), an assets.srcDir for its output " +
+                            "directory, and an entry in preBuild's dependsOn. Without one the module's UI " +
+                            "throws MissingResourceException on device.",
+                    )
+                },
+            )
+        }
+    }
 }
 
 // The stock Eclipse jars we relocate for ART (ecj, core.runtime, equinox.common) reach the app's runtime

@@ -90,6 +90,8 @@ include(
     ":jvm-interp", // PoC: standalone .class bytecode-interpreting VM + Android/native bridge seam (Play dynamic-code compliance spike)
     ":deps-api",
     ":deps-impl",
+    ":vcs-api",  // version-control SPI: repository/branch/commit/status model, the provider EP, accounts + forge ports
+    ":vcs-impl", // the Git engine: JGit-backed repository, the GitHub REST/device-flow client, the account store
     ":analytics-api", // opt-in usage-analytics SPI (event model + AnalyticsService/AnalyticsSink ports)
     ":analytics-impl", // the engine: durable batch buffer + Supabase PostgREST sink + scrubbed crash reporter
     ":block-api",
@@ -117,6 +119,7 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":ide-ui-api", // neutral IdeBackend port + DTOs + UI-contribution model, shared by :ide-ui and :ide-core
         ":ide-ui",
         ":agent-ui", // the AI agent's Compose UI as a self-contained plugin module (chat panel + provider sheet + permission overlay)
+        ":vcs-ui", // the version-control Compose UI as a self-contained plugin module (Git panel, branches, history, sign-in, clone)
         ":ide-core",
         ":ide-desktop",
         ":ide-android",

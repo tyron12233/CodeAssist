@@ -54,6 +54,12 @@
 -keep class kotlinx.serialization.** { *; }
 -keep class okhttp3.** { *; }
 -keep class okio.** { *; }
+# JGit (:vcs-impl): the transport layer registers protocols through
+# ServiceLoader and resolves SystemReader/FS implementations by name, neither of
+# which R8 can trace from a static reference.
+-keep class org.eclipse.jgit.** { *; }
+-keep class com.googlecode.javaewah.** { *; }
+
 # NOTE: JNA is deliberately NOT kept. It arrives only via Eclipse core.filesystem
 # (JDT); the native path is unused on ART (no libjnidispatch.so shipped, pure-Java
 # fallback), and the JNA classes the kept Eclipse code references are retained

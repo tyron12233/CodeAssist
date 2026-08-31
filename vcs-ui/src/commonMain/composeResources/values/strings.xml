@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Panel chrome -->
+    <string name="vcs_title">Git</string>
+    <string name="vcs_refresh">Refresh</string>
+    <string name="vcs_cancel">Cancel</string>
+    <string name="vcs_copy">Copy</string>
+    <string name="vcs_copied">Copied</string>
+    <string name="vcs_open_in_browser">Open in browser</string>
+
+    <!-- Empty and error states -->
+    <string name="vcs_not_a_repo_title">Not under version control</string>
+    <string name="vcs_not_a_repo_body">Track this project with Git to keep a history of your changes, work on branches, and push to GitHub.</string>
+    <string name="vcs_init">Create repository</string>
+    <string name="vcs_clone">Clone a repository</string>
+    <string name="vcs_no_project">Open a project to use version control.</string>
+    <string name="vcs_clean_title">Nothing to commit</string>
+    <string name="vcs_clean_body">Your working tree matches the last commit.</string>
+
+    <!-- Branch header -->
+    <string name="vcs_branch">Branch</string>
+    <string name="vcs_detached">Detached HEAD</string>
+    <string name="vcs_no_commits">No commits yet</string>
+    <string name="vcs_up_to_date">Up to date</string>
+    <string name="vcs_fetch">Fetch</string>
+    <string name="vcs_pull">Pull</string>
+    <string name="vcs_push">Push</string>
+    <string name="vcs_history">History</string>
+    <string name="vcs_file_history">History of this file</string>
+
+    <!-- Change sections -->
+    <string name="vcs_section_conflicts">Conflicts</string>
+    <string name="vcs_section_staged">Staged</string>
+    <string name="vcs_section_changes">Changes</string>
+    <string name="vcs_stage">Stage</string>
+    <string name="vcs_unstage">Unstage</string>
+    <string name="vcs_stage_all">Stage all</string>
+    <string name="vcs_unstage_all">Unstage all</string>
+    <string name="vcs_discard">Discard</string>
+    <string name="vcs_discard_title">Discard changes?</string>
+    <string name="vcs_discard_body">The edits to %1$s will be thrown away. This cannot be undone.</string>
+    <string name="vcs_mark_resolved">Mark resolved</string>
+    <string name="vcs_abort_merge">Abort merge</string>
+    <string name="vcs_merge_in_progress">Merge in progress</string>
+    <string name="vcs_rebase_in_progress">Rebase in progress</string>
+    <string name="vcs_cherry_pick_in_progress">Cherry-pick in progress</string>
+    <string name="vcs_revert_in_progress">Revert in progress</string>
+    <string name="vcs_bisect_in_progress">Bisect in progress</string>
+
+    <!-- File status labels -->
+    <string name="vcs_status_added">Added</string>
+    <string name="vcs_status_modified">Modified</string>
+    <string name="vcs_status_deleted">Deleted</string>
+    <string name="vcs_status_renamed">Renamed</string>
+    <string name="vcs_status_copied">Copied</string>
+    <string name="vcs_status_untracked">New</string>
+    <string name="vcs_status_conflicted">Conflict</string>
+
+    <!-- Commit -->
+    <string name="vcs_commit_hint">Commit message</string>
+    <string name="vcs_commit">Commit</string>
+    <string name="vcs_commit_and_push">Commit and push</string>
+    <string name="vcs_amend">Amend last commit</string>
+    <string name="vcs_nothing_staged">Stage a file to commit it.</string>
+    <string name="vcs_identity_missing">Set your name and email before committing.</string>
+    <string name="vcs_set_identity">Set identity</string>
+    <string name="vcs_name">Name</string>
+    <string name="vcs_email">Email</string>
+    <string name="vcs_save">Save</string>
+
+    <!-- Branches screen -->
+    <string name="vcs_branches">Branches</string>
+    <string name="vcs_branches_search">Search branches</string>
+    <string name="vcs_branches_local">Local</string>
+    <string name="vcs_branches_remote">Remote</string>
+    <string name="vcs_branches_none">No branches match.</string>
+    <string name="vcs_new_branch">New branch</string>
+    <string name="vcs_new_branch_hint">Branch name</string>
+    <string name="vcs_create">Create</string>
+    <string name="vcs_current_branch">Current</string>
+    <string name="vcs_merge_into">Merge into %1$s</string>
+    <string name="vcs_delete">Delete</string>
+    <string name="vcs_delete_branch_title">Delete %1$s?</string>
+    <string name="vcs_delete_branch_body">The branch is removed locally. Commits only on this branch may be lost.</string>
+    <string name="vcs_force_delete">Delete anyway</string>
+
+    <!-- History screen -->
+    <string name="vcs_history_empty">No commits yet.</string>
+    <string name="vcs_load_more">Load more</string>
+    <string name="vcs_commit_files">%1$d file(s) changed</string>
+    <string name="vcs_insertions">+%1$d</string>
+    <string name="vcs_deletions">-%1$d</string>
+    <string name="vcs_merge_commit">Merge</string>
+
+    <!-- Diff -->
+    <string name="vcs_diff">Diff</string>
+    <string name="vcs_diff_empty">No textual difference.</string>
+    <string name="vcs_diff_binary">Binary file. No text diff to show.</string>
+
+    <!-- Stash -->
+    <string name="vcs_stash">Stash</string>
+    <string name="vcs_stashes">Stashes</string>
+    <string name="vcs_stash_changes">Stash changes</string>
+    <string name="vcs_stash_hint">Description (optional)</string>
+    <string name="vcs_stash_untracked">Include untracked files</string>
+    <string name="vcs_stash_apply">Apply</string>
+    <string name="vcs_stash_drop">Drop</string>
+    <string name="vcs_stash_empty">Nothing stashed.</string>
+
+    <!-- Ignore -->
+    <string name="vcs_add_ignores">Add default .gitignore entries</string>
+
+    <!-- Accounts -->
+    <string name="vcs_accounts">Accounts</string>
+    <string name="vcs_sign_in_github">Sign in with GitHub</string>
+    <string name="vcs_sign_in_intro">Sign in to clone your private repositories, push over HTTPS without a password, and open pull requests.</string>
+    <string name="vcs_sign_out">Sign out</string>
+    <string name="vcs_active_account">Used for Git operations</string>
+    <string name="vcs_use_account">Use this account</string>
+    <string name="vcs_device_code_title">Enter this code on GitHub</string>
+    <string name="vcs_device_code_body">Open %1$s and enter the code. This screen updates as soon as you approve.</string>
+    <string name="vcs_signing_in">Waiting for approval…</string>
+    <string name="vcs_sign_in_token">Use an access token</string>
+    <string name="vcs_token_hint">Personal access token</string>
+    <string name="vcs_token_help">Create a token with the "repo" scope in GitHub under Settings, Developer settings, Personal access tokens.</string>
+    <string name="vcs_sign_in">Sign in</string>
+    <string name="vcs_other_servers">Other Git servers</string>
+    <string name="vcs_other_servers_body">Save a username and password for a server without account sign-in, such as a self-hosted GitLab or Gitea.</string>
+    <string name="vcs_host">Host</string>
+    <string name="vcs_host_hint">git.example.com</string>
+    <string name="vcs_username">Username</string>
+    <string name="vcs_password">Password or token</string>
+    <string name="vcs_saved_hosts">Saved servers</string>
+    <string name="vcs_remove">Remove</string>
+
+    <!-- Clone -->
+    <string name="vcs_clone_title">Clone repository</string>
+    <string name="vcs_clone_url">Repository URL</string>
+    <string name="vcs_clone_folder">Folder name</string>
+    <string name="vcs_clone_action">Clone</string>
+    <string name="vcs_clone_yours">Your repositories</string>
+    <string name="vcs_clone_search">Search repositories</string>
+    <string name="vcs_clone_sign_in">Sign in to browse your repositories.</string>
+    <string name="vcs_clone_none">No repositories found.</string>
+    <string name="vcs_private">Private</string>
+    <string name="vcs_fork">Fork</string>
+
+    <!-- GitHub screen -->
+    <string name="vcs_github">GitHub</string>
+    <string name="vcs_publish_title">Publish to GitHub</string>
+    <string name="vcs_publish_body">Create a repository for this project and push the current branch to it.</string>
+    <string name="vcs_publish_name">Repository name</string>
+    <string name="vcs_publish_description">Description (optional)</string>
+    <string name="vcs_publish_private">Private repository</string>
+    <string name="vcs_publish">Publish</string>
+    <string name="vcs_publish_needs_commit">Make a commit before publishing.</string>
+    <string name="vcs_pull_requests">Pull requests</string>
+    <string name="vcs_pull_requests_empty">No open pull requests.</string>
+    <string name="vcs_new_pull_request">New pull request</string>
+    <string name="vcs_pr_title">Title</string>
+    <string name="vcs_pr_body">Description</string>
+    <string name="vcs_pr_base">Merge into</string>
+    <string name="vcs_pr_create">Create pull request</string>
+    <string name="vcs_pr_from">from %1$s</string>
+    <string name="vcs_draft">Draft</string>
+
+    <!-- Remotes -->
+    <string name="vcs_remotes">Remotes</string>
+    <string name="vcs_add_remote">Add remote</string>
+    <string name="vcs_remote_name">Remote name</string>
+    <string name="vcs_remote_url">Remote URL</string>
+    <string name="vcs_no_remote">This project has no remote yet.</string>
+
+    <!-- Plain-language hints and menu wording. Git's own vocabulary is the main thing newcomers trip on, so
+         each group of files says what it is and every occasional action is a worded menu row. -->
+    <string name="vcs_hint_conflicts">Both sides changed these. Fix each file, then mark it resolved.</string>
+    <string name="vcs_hint_staged">Ready to commit. These files go into your next commit.</string>
+    <string name="vcs_hint_changes">Edited but not included yet. Stage a file to add it to the next commit.</string>
+    <string name="vcs_hint_commit">A commit saves a snapshot of the staged files, on this device only.</string>
+    <string name="vcs_hint_push">Push sends your commits to the remote so others can see them.</string>
+
+    <string name="vcs_menu_more">More actions</string>
+    <string name="vcs_menu_repository">Repository</string>
+    <string name="vcs_menu_file">This file</string>
+    <string name="vcs_menu_view_changes">View changes</string>
+    <string name="vcs_menu_file_history">File history</string>
+    <string name="vcs_menu_sync">Sync</string>
+    <string name="vcs_tooltip_refresh">Re-read the status of your files</string>
+    <string name="vcs_tooltip_history">Browse past commits</string>
+    <string name="vcs_tooltip_fetch">Check the remote for new commits without changing your files</string>
+    <string name="vcs_tooltip_pull">Bring the remote's commits into your branch</string>
+    <string name="vcs_tooltip_push">Send your commits to the remote</string>
+    <string name="vcs_tooltip_github">Your GitHub account, publishing, and pull requests</string>
+    <string name="vcs_tooltip_stage">Add this file to the next commit</string>
+    <string name="vcs_tooltip_unstage">Take this file out of the next commit</string>
+    <string name="vcs_tooltip_stage_all">Add every changed file to the next commit</string>
+    <string name="vcs_tooltip_unstage_all">Take every file out of the next commit</string>
+    <string name="vcs_tooltip_discard">Throw away your edits to this file</string>
+    <string name="vcs_tooltip_resolved">Accept this file as it now stands</string>
+    <string name="vcs_tooltip_branch">%1$s. Tap to switch or create a branch.</string>
+    <string name="vcs_push_after_commit">Push after committing</string>
+    <string name="vcs_no_remote_short">No remote set up</string>
+    <string name="vcs_set_up_remote">Connect to GitHub</string>
+    <string name="vcs_sign_out_of">Sign out of %1$s</string>
+    <string name="vcs_checkout_branch">Switch to this branch</string>
+    <string name="vcs_delete_branch">Delete branch</string>
+    <string name="vcs_merge_into_current">Merge into the current branch</string>
+</resources>

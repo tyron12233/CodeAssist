@@ -114,6 +114,7 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import dev.ide.plugin.impl.ActionManager
 import dev.ide.agent.ui.AgentUiPlugin
+import dev.ide.vcs.ui.VcsUiPlugin
 import dev.ide.ui.ext.UiPlugin
 
 /**
@@ -168,6 +169,8 @@ object BuiltInPlugins {
         BuiltInPlugin(IdeCoreActionsPlugin(env)),
         // The AI agent: engine facet (settings page + AgentBackend wiring) + its Compose chat UI, one entry.
         BuiltInPlugin(AgentPlugin(), ui = AgentUiPlugin),
+        // Version control: engine facet (settings page + VcsBackend wiring) + its Compose Git UI.
+        BuiltInPlugin(VcsPlugin(), ui = VcsUiPlugin),
     )
 }
 
