@@ -78,7 +78,6 @@ import dev.ide.ui.generated.resources.import_gradle_subtitle
 import dev.ide.ui.generated.resources.clone_repository_subtitle
 import dev.ide.ui.generated.resources.clone_repository_title
 import dev.ide.ui.generated.resources.import_gradle_title
-import dev.ide.ui.generated.resources.import_project
 import dev.ide.ui.generated.resources.join_the_community
 import dev.ide.ui.generated.resources.join_the_community_content
 import dev.ide.ui.generated.resources.modules
@@ -119,10 +118,8 @@ fun ProjectPickerScreen(
     onOpen: (ProjectInfo) -> Unit,
     onNewProject: () -> Unit,
     onDeleteProject: ((ProjectInfo) -> Unit)? = null,
-    /** Import a shared `.caproj` package (shows the top-bar Import action). Null hides it. */
+    /** Import an existing project (folder or `.caproj` package). Shows a secondary card; null hides it. */
     onImportProject: (() -> Unit)? = null,
-    /** Import an external Gradle project folder (best effort). Shows a secondary card; null hides it. */
-    onImportGradle: (() -> Unit)? = null,
     /** Clone a Git repository into a new project. Shows a secondary card; null hides it (no VCS engine). */
     onCloneRepository: (() -> Unit)? = null,
     /** Export a project as a shareable `.caproj` (shows a per-card Share action). Null hides it. */
@@ -152,9 +149,6 @@ fun ProjectPickerScreen(
             LargeTopAppBar(
                 title = { Text(stringResource(Res.string.projects)) },
                 actions = {
-                    if (onImportProject != null) IconButton(onClick = onImportProject) {
-                        Icon(CaIcons.download, stringResource(Res.string.import_project))
-                    }
                     if (onBackup != null) IconButton(onClick = onBackup) {
                         Icon(CaIcons.box, stringResource(Res.string.backup))
                     }
@@ -178,8 +172,8 @@ fun ProjectPickerScreen(
                 // The primary action leads: a prominent New-Project card (no floating button).
                 NewProjectCard(onNewProject)
 
-                // A secondary path: import an existing Gradle project (best-effort compatibility mode).
-                if (onImportGradle != null) ImportGradleCard(onImportGradle)
+                // A secondary path: import an existing project (a folder, or a shared `.caproj` package).
+                if (onImportProject != null) ImportProjectCard(onImportProject)
 
                 // The other way in: clone a repository. Reachable here because a user with no projects yet
                 // has nowhere else to start a clone from.
@@ -319,9 +313,9 @@ private fun NewProjectCard(onClick: () -> Unit) {
     }
 }
 
-/** A secondary, outlined card opening the host folder picker to import an existing Gradle build. */
+/** A secondary, outlined card opening the import flow: a project folder, or a shared `.caproj` package. */
 @Composable
-private fun ImportGradleCard(onClick: () -> Unit) {
+private fun ImportProjectCard(onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier

@@ -361,9 +361,8 @@ private fun ProjectPickerRoute(
         onOpen = app::openProject,
         onNewProject = { app.createProject() },
         onDeleteProject = app::deleteProject,
-        onImportProject = if (fileActions.canPickFile) app::pickProjectPackage else null,
         // One "Import project" entry for both sources; it asks which when the host can do both.
-        onImportGradle = if (fileActions.canPickDirectory || fileActions.canPickFile) app::requestProjectImport else null,
+        onImportProject = if (fileActions.canPickDirectory || fileActions.canPickFile) app::requestProjectImport else null,
         // Cloning is the other way into a project, and it is the only one a user with no projects yet can
         // reach: the Git panel lives in the editor, which needs a project open. Hidden when the version-control
         // plugin is disabled or this build carries no engine.
