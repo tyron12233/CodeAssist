@@ -87,6 +87,36 @@ class KotlinGenericOperatorInferenceTest {
         )
     }
 
+    // ---- projecting the operand onto the parameter's generic classifier ----
+
+    @Test fun aSourceObjectKeyProjectsThroughItsSupertypeArguments() {
+        // `object TagKey : Key<Tag>` is not itself a `Key<E>` positionally — it has no type arguments of its
+        // own — so E binds only by projecting it onto `Key`. A classpath type carries its supertypes with
+        // their arguments already resolved; a SOURCE type records them as declaration text.
+        assertTrue(
+            "label" in labels("package demo\nfun f() { val c: Ctx = ctx(); c[TagKey]?.| }"),
+            "E must bind from `TagKey`'s instantiation of Key",
+        )
+    }
+
+    @Test fun aSourceSubtypeArgumentProjectsOntoTheParametersClassifier() {
+        // The same projection outside any operator: `SubBox : BoxBase<Tag>` passed for a `BoxBase<T>` parameter.
+        assertTrue(
+            "label" in labels("package demo\nfun f() { unwrapSub(SubBox())?.| }"),
+            "T must bind from `SubBox`'s instantiation of BoxBase",
+        )
+    }
+
+    @Test fun aGenericInvokeOnASamInterfaceInfersItsTypeParameter() {
+        // A SAM interface has a functional shape, so `p(k)` took the function-type shortcut and returned the
+        // abstract method's declared `E?` verbatim. Its E is the METHOD's own parameter, so it must go through
+        // the member path that binds it from the argument.
+        assertTrue(
+            "label" in labels("package demo\nfun f(p: SamPicker, k: Key<Tag>) { p(k)?.| }"),
+            "`invoke(key: Key<E>): E?` on an interface-typed value must infer E = Tag",
+        )
+    }
+
     // ---- control: an operator whose type arguments come from the RECEIVER is unchanged ----
 
     @Test fun receiverTypeArgumentsStillDriveGet() {
@@ -104,8 +134,13 @@ class KotlinGenericOperatorInferenceTest {
                     interface El
                     class Tag(val label: String) : El
                     interface Key<E : El>
+                    object TagKey : Key<Tag>
                     interface Ctx { operator fun <E : El> get(key: Key<E>): E? }
                     class Picker { operator fun <E : El> invoke(key: Key<E>): E? = null }
+                    interface SamPicker { operator fun <E : El> invoke(key: Key<E>): E? }
+                    open class BoxBase<T>
+                    class SubBox : BoxBase<Tag>()
+                    fun <T> unwrapSub(b: BoxBase<T>): T? = null
                     fun ctx(): Ctx = TODO()
                 """.trimIndent(),
             ),

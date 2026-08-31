@@ -202,6 +202,12 @@ class KotlinSymbolService(
     // only carries extensions whose declared receiver IS a supertype). Powers [receiverSupertypeArgs].
     private val supertypeArgTemplateMemo = ConcurrentHashMap<String, List<TypeRef>>()
 
+    // The same template memo for a SOURCE sub type, dropped with the other source memos: its chain — and the
+    // arguments it passes up — changes on edit. A classpath sub type cannot reach project source (the classpath
+    // can't extend your code), so its template stays in the session-stable map above.
+    @Volatile
+    private var sourceSupertypeArgTemplateMemo = ConcurrentHashMap<String, List<TypeRef>>()
+
     // Per-(receiver-target, name-prefix) memo of the classpath extension-index query. Like the classpath
     // supertype memo, this is session-stable: the persistent `kotlin.callables` index can't gain a project
     // extension (the classpath can't extend your code), and any re-index rebuilds this whole service. The
@@ -396,6 +402,7 @@ class KotlinSymbolService(
             cachedModel = null
             sourceSupertypeMemo =
                 ConcurrentHashMap() // only SOURCE chains can change; classpath memo stays warm
+            sourceSupertypeArgTemplateMemo = ConcurrentHashMap()
             sourceOwnMembersMemo =
                 ConcurrentHashMap() // a source type's members change on edit; classpath memo stays warm
         }
@@ -418,6 +425,7 @@ class KotlinSymbolService(
             cachedModel = null
             sourceSupertypeMemo =
                 ConcurrentHashMap() // only SOURCE chains can change; classpath memo stays warm
+            sourceSupertypeArgTemplateMemo = ConcurrentHashMap()
             sourceOwnMembersMemo =
                 ConcurrentHashMap() // a source type's members change on edit; classpath memo stays warm
         }
@@ -1979,8 +1987,12 @@ class KotlinSymbolService(
         subArgs: List<TypeRef>,
         superFqn: String
     ): List<TypeRef>? {
-        val params = (builtinShape(subFqn) ?: typeShape(subFqn))?.typeParameters ?: return null
-        val template = supertypeArgTemplateMemo.getOrPut("$subFqn $superFqn") {
+        val sourceClass = model().classByFqn[subFqn]
+        val params = (builtinShape(subFqn) ?: typeShape(subFqn))?.typeParameters
+            ?: sourceClass?.typeParameterNames
+            ?: return null
+        val memo = if (sourceClass != null) sourceSupertypeArgTemplateMemo else supertypeArgTemplateMemo
+        val template = memo.getOrPut("$subFqn $superFqn") {
             val paramRefs = params.map { KotlinType(it, isTypeParameter = true, context = this) }
             walkSupertypeArgs(subFqn, paramRefs, superFqn, HashSet())
                 ?: return null // don't cache a non-supertype
@@ -2000,10 +2012,15 @@ class KotlinSymbolService(
     ): List<TypeRef>? {
         if (subFqn == superFqn) return subArgs
         if (!visited.add(subFqn)) return null
-        val shape = builtinShape(subFqn) ?: typeShape(subFqn) ?: return null
-        val subst = if (subArgs.isEmpty() || shape.typeParameters.isEmpty()) emptyMap()
-        else shape.typeParameters.zip(subArgs).toMap()
-        for (sup in shape.supertypes) {
+        // A classpath/builtin type carries its supertypes pre-resolved WITH their arguments; a SOURCE type
+        // records them as declaration text, so resolve those here — otherwise a project `object K : Key<Tag>`
+        // projected onto nothing and a `Key<E>` parameter never bound E.
+        val shape = builtinShape(subFqn) ?: typeShape(subFqn)
+        val params = shape?.typeParameters ?: model().classByFqn[subFqn]?.typeParameterNames ?: return null
+        val supertypes = shape?.supertypes ?: sourceSupertypeRefs(subFqn)
+        val subst = if (subArgs.isEmpty() || params.isEmpty()) emptyMap()
+        else params.zip(subArgs).toMap()
+        for (sup in supertypes) {
             val supK = sup as? KotlinType ?: continue
             val supFqn = Builtins.kotlinTypeFor(supK.qualifiedName) ?: supK.qualifiedName
             val supArgs = if (subst.isEmpty()) supK.typeArguments else supK.typeArguments.map {
@@ -2015,6 +2032,17 @@ class KotlinSymbolService(
             walkSupertypeArgs(supFqn, supArgs, superFqn, visited)?.let { return it }
         }
         return null
+    }
+
+    /** A SOURCE class's supertypes as resolved refs, keeping their type ARGUMENTS (`: Key<Tag>` →
+     *  `demo.Key<demo.Tag>`). The source model records a supertype as its declaration TEXT — the type-reference
+     *  text only, so there is no constructor-argument list to strip. An argument naming one of the class's OWN
+     *  type parameters is marked as such (`interface MutableStateFlow<T> : Flow<T>` → `Flow<T-as-parameter>`),
+     *  which is what lets the walk substitute the receiver's arguments through it. */
+    private fun sourceSupertypeRefs(fqn: String): List<TypeRef> {
+        val rc = model().classByFqn[fqn] ?: return emptyList()
+        val tps = rc.typeParameterNames.toHashSet()
+        return rc.superTypeTexts.mapNotNull { markTypeParameters(typeFromText(it, rc.ctx, fqn), tps) }
     }
 
     /** Apply type-parameter [bindings] to a symbol's return/param/receiver-arg types. */

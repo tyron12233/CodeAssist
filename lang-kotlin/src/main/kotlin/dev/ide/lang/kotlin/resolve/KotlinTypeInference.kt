@@ -645,7 +645,11 @@ internal fun KotlinResolver.invokeReturnType(call: KtCallExpression): KotlinType
     val calleeType = inferType(call.calleeExpression)?.takeIf { !it.isTypeParameter } ?: return null
     // A directly function-typed value (`val f = fun(x: Int) = x; f(3)`, a lambda held in a var) — its result is
     // the function type's `R`, which the `kotlin.FunctionN` classifier carries as its last type argument.
-    service.functionalShape(calleeType)?.returnType?.let { return it as? KotlinType }
+    // A SAM interface has a functional shape too, and when its single abstract method is a GENERIC `invoke`
+    // that `R` is the METHOD's own type parameter — unbound here. Fall through to the member path below, which
+    // binds it from the arguments; a function type whose `R` is a type parameter reaches the same answer there.
+    (service.functionalShape(calleeType)?.returnType as? KotlinType)
+        ?.takeIf { !it.isTypeParameter }?.let { return it }
     val n = call.valueArguments.size
     val invokes = service.membersNamed(calleeType.qualifiedName, calleeType.typeArguments, "invoke")
         .filter { it.kind == SymbolKind.METHOD }
