@@ -958,12 +958,13 @@ class EditorSession(
 
     private class CommentSyntax(val line: String?, val blockOpen: String?, val blockClose: String?)
 
-    private fun commentSyntax(): CommentSyntax = when (language) {
-        CodeLanguage.Java, CodeLanguage.Kotlin, CodeLanguage.Aidl -> CommentSyntax("//", "/*", "*/")
-        CodeLanguage.Xml, CodeLanguage.Markdown -> CommentSyntax(null, "<!--", "-->")
-        CodeLanguage.Proguard -> CommentSyntax("#", null, null)
-        CodeLanguage.Plain -> CommentSyntax(null, null, null)
-    }
+    /** Straight off the language's profile, so a contributed language comments like any built-in. */
+    private fun commentSyntax(): CommentSyntax =
+        CommentSyntax(
+            language.profile.lineComment,
+            language.profile.blockCommentOpen,
+            language.profile.blockCommentClose,
+        )
 
     /** Toggle comments on the touched line(s): line comments by default, block comments when [preferBlock]
      *  (or when the language has no line comment, e.g. XML). Already-commented lines are uncommented. */

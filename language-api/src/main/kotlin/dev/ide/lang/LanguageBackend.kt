@@ -34,9 +34,12 @@ import dev.ide.vfs.VirtualFile
  * Recommended wiring: JDT is the default analyzer + completion backend (error recovery, working-copy
  * reconcile, a built-in completion engine, light on ART); a custom parser slots into the same interfaces.
  */
-interface LanguageBackend {
+interface LanguageBackend : LanguageScoped {
     val id: String                          // "jdt" | "kotlin" | "xml" | "custom"
-    val languages: Set<LanguageId>
+
+    /** The languages this backend claims. Unlike a cross-cutting [LanguageScoped] extension, a backend
+     *  claiming nothing is never selected: it must name what it parses. */
+    override val languages: Set<LanguageId>
     val capabilities: Set<BackendCapability>
 
     /** Editor-time: tolerant parsing, resolution, completion. */
@@ -166,6 +169,19 @@ interface SourceAnalyzer {
     fun expectedTypeAt(file: VirtualFile, offset: Int): TypeRef?
 
     /**
+     * Drop resolution state this analyzer caches beyond its own parse trees, because something it resolved
+     * against changed underneath it. [reason] says what: the host calls this rather than reaching for a
+     * concrete analyzer type, so a backend it has never heard of participates in invalidation like the
+     * built-ins do.
+     *
+     * A backend that caches nothing beyond its trees needs no override. A backend that holds a live
+     * compiler environment (a name environment, a PSI facade, a binding cache) must drop the matching part:
+     * such an environment is deliberately NOT disposed on these events, so that the warm classpath survives,
+     * and it will otherwise keep resolving a stale answer.
+     */
+    fun invalidateCaches(reason: CacheInvalidation) {}
+
+    /**
      * The type an expression [node] *produces* — e.g. a method call's return type, a `new`'s class, a
      * literal's type. Distinct from [expectedTypeAt], which is the type the *context* wants. Returns null
      * when [node] isn't a resolvable expression. Used by refactorings such as "introduce variable" to name
@@ -175,3 +191,22 @@ interface SourceAnalyzer {
 }
 
 data class AnalysisResult(val file: VirtualFile, val diagnostics: List<Diagnostic>)
+
+/**
+ * Why the host is asking an analyzer to drop cached resolution state (see [SourceAnalyzer.invalidateCaches]).
+ * An open set in spirit: a backend ignores a reason it has no cache for.
+ */
+enum class CacheInvalidation {
+    /**
+     * The set of synthetic ("light") classes changed, so anything resolved from them is stale. Raised when a
+     * [dev.ide.lang.synthetic.SyntheticClassProvider]'s answer changes: an Android resource edit regenerating
+     * `R`, a new ViewBinding, a declaration a generator's output depends on.
+     */
+    SYNTHETIC_CLASSES,
+
+    /**
+     * Cross-file bindings are stale: a file this analyzer resolved against was created, deleted, moved, or
+     * changed on disk outside the editor. Trees stay valid; what they resolved TO may not.
+     */
+    BINDINGS,
+}

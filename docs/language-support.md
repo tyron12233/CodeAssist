@@ -1,5 +1,8 @@
 # Language support, completion, and analysis
 
+> **Adding a language?** This page is the conceptual overview. For the task-oriented, step-by-step guide,
+> see [custom-language-support.md](custom-language-support.md).
+
 Editor intelligence is built on a backend-neutral DOM and a small set of SPIs. A language backend
 parses source into a tolerant DOM, resolves symbols, and offers completion; the analysis pipeline
 merges compiler errors and analyzer findings into one diagnostic stream. See

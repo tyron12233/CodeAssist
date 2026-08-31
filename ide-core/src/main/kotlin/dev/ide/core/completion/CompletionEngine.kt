@@ -1,5 +1,8 @@
 package dev.ide.core.completion
 
+import dev.ide.lang.LanguageExtensionIndex
+import dev.ide.lang.LanguageId
+import dev.ide.lang.appliesTo
 import dev.ide.lang.completion.BasicCompletionResultSet
 import dev.ide.lang.completion.COMPLETION_CONTRIBUTOR_EP
 import dev.ide.lang.completion.COMPLETION_WEIGHER_EP
@@ -41,8 +44,10 @@ class CompletionEngine(private val extensions: ExtensionRegistry) {
     ): CompletionResult {
         val sink = BasicCompletionResultSet(params)
 
-        val runList = (extensions.extensions(COMPLETION_CONTRIBUTOR_EP) + perCall)
-            .filter { it.appliesTo(params.language) }
+        // Language routing goes through the keyed index rather than a scan: this runs on nearly every
+        // keystroke, and the registered set is the same from one completion to the next, so the index is
+        // built once and reused until the registry actually changes.
+        val runList = (contributorsFor(params.language) + perCall.filter { it.appliesTo(params.language) })
             .filter { params.position == null || it.pattern.accepts(params.position) }
             .filter { options.allows(it.contributor.id) }
             .sortedBy { it.order }
@@ -72,6 +77,24 @@ class CompletionEngine(private val extensions: ExtensionRegistry) {
             replacementRange = sink.replacementRange ?: params.replacementRange,
         )
     }
+
+    /**
+     * The EP contributors applying to [language], through a memoized [LanguageExtensionIndex]. The registry
+     * hands back a fresh list each call, so the memo is keyed on that list's CONTENTS: an element-wise
+     * identity compare over a handful of registrations, which is far cheaper than rebuilding the index and
+     * is exact — a plugin loading or unloading changes the list, so the index rebuilds.
+     */
+    private fun contributorsFor(language: LanguageId): List<CompletionContribution> {
+        val all = extensions.extensions(COMPLETION_CONTRIBUTOR_EP)
+        val memo = indexMemo
+        val index = if (memo != null && memo.first == all) memo.second else {
+            LanguageExtensionIndex(all).also { indexMemo = all to it }
+        }
+        return index.forLanguage(language)
+    }
+
+    @Volatile
+    private var indexMemo: Pair<List<CompletionContribution>, LanguageExtensionIndex<CompletionContribution>>? = null
 
     /** Stable-sort by every weigher (built-ins + contributed), comparing in ascending order, higher first. */
     private fun rank(items: List<CompletionItem>, params: CompletionParams): List<CompletionItem> {

@@ -26,6 +26,10 @@ interface UiContributionScope {
     /** Register (or override) the file-tree icon for [iconId]. Tree icons are a persistent lookup, so the
      *  returned handle is a no-op today (nothing unregisters an icon). */
     fun treeIcon(iconId: String, icon: TreeIcon): Registration
+
+    /** Teach the editor how to color, comment, and indent a language ([EditorLanguageProfile]). This is the
+     *  text-level layer; a language wanting parsing and resolution also registers a `LanguageBackend`. */
+    fun editorLanguage(profile: EditorLanguageProfile): Registration
 }
 
 /**
@@ -80,5 +84,8 @@ object UiPluginHost {
             TreeIcons.register(iconId, icon)
             return Registration {}
         }
+
+        override fun editorLanguage(profile: EditorLanguageProfile): Registration =
+            EditorLanguageRegistry.register(profile)
     }
 }

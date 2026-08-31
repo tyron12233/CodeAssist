@@ -111,11 +111,9 @@ interface CompletionResultSet {
 class CompletionContribution(
     val contributor: CompletionContributor,
     val pattern: ElementPattern<DomNode> = DomPatterns.anyNode(),
-    val languages: Set<LanguageId> = emptySet(),
+    override val languages: Set<LanguageId> = emptySet(),
     val order: Int = 0,
-) {
-    fun appliesTo(language: LanguageId): Boolean = languages.isEmpty() || language in languages
-}
+) : dev.ide.lang.LanguageScoped
 
 /** The extension point through which completion contributors are contributed (cf. `platform.languageBackend`). */
 val COMPLETION_CONTRIBUTOR_EP = ExtensionPoint<CompletionContribution>("platform.completionContributor")

@@ -60,7 +60,10 @@ class BuiltInParityTest {
     @Test
     fun `engine scoped services are registered at the expected scopes`() {
         val byId = ext.extensions(SERVICE_EP).associateBy { it.key.id }
-        val moduleAnalyzers = setOf("ide.analyzer.java", "ide.analyzer.kotlin", "ide.analyzer.xml")
+        // ONE module-scoped analyzer service, keyed by language inside (see [ModuleAnalyzers]) rather than one
+        // service per language: what a module can analyze is decided by the registered language backends, so
+        // adding a language contributes no service here.
+        val moduleAnalyzers = setOf("ide.analyzers")
         val workspaceServices = setOf(
             "ide.service.signing", "ide.service.search", "ide.service.blocks", "ide.service.actions",
             "ide.service.dependencies", "ide.service.modules", "ide.service.build",
@@ -68,7 +71,7 @@ class BuiltInParityTest {
             "ide.service.refactor", "ide.service.kotlinEditor", "ide.service.composePreview",
             "ide.service.icons",
         )
-        assertEquals(moduleAnalyzers + workspaceServices, byId.keys, "exactly the 17 engine services")
+        assertEquals(moduleAnalyzers + workspaceServices, byId.keys, "exactly the 15 engine services")
         moduleAnalyzers.forEach { assertEquals(ServiceScopeLevel.MODULE, byId.getValue(it).level, it) }
         workspaceServices.forEach { assertEquals(ServiceScopeLevel.WORKSPACE, byId.getValue(it).level, it) }
     }

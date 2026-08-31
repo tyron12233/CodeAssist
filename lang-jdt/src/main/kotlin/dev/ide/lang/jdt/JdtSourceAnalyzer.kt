@@ -1,6 +1,7 @@
 package dev.ide.lang.jdt
 
 import dev.ide.lang.AnalysisResult
+import dev.ide.lang.CacheInvalidation
 import dev.ide.lang.CompilationContext
 import dev.ide.lang.JvmIndexScopeProvider
 import dev.ide.lang.JvmSourceAttachments
@@ -264,6 +265,13 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable, J
 
     @Volatile
     private var problemsCache: ProblemsCacheEntry? = null
+
+    /** The neutral host hook ([SourceAnalyzer.invalidateCaches]). This analyzer's cross-file resolution is
+     *  the binding parse, so BINDINGS drops it; its synthetic classes arrive through `syntheticProvider`,
+     *  which the host re-reads on the next parse, so SYNTHETIC_CLASSES needs nothing extra here. */
+    override fun invalidateCaches(reason: CacheInvalidation) {
+        if (reason == CacheInvalidation.BINDINGS) invalidateBindingCache()
+    }
 
     /** Drop the cached binding parse — call when disk changed under us (a save of this or any dependency). */
     fun invalidateBindingCache() {

@@ -1,6 +1,7 @@
 package dev.ide.ui.editor.core
 
 import dev.ide.ui.editor.CodeLanguage
+import dev.ide.ui.ext.SyntaxFamily
 
 /**
  * Per-language Enter handling: given the raw buffer and the collapsed caret [pos] where a newline is being
@@ -17,11 +18,13 @@ fun interface NewlineHandler {
 }
 
 /** The Enter handler for [language]. Brace languages (Java/Kotlin) get the IntelliJ-style smart indent. */
-fun newlineHandlerFor(language: CodeLanguage): NewlineHandler = when (language) {
-    // AIDL is brace-and-semicolon shaped, so Java's smart indent is exactly right for it.
-    CodeLanguage.Java, CodeLanguage.Aidl -> JavaNewlineHandler
-    CodeLanguage.Kotlin -> KotlinNewlineHandler
-    CodeLanguage.Xml -> XmlNewlineHandler
+fun newlineHandlerFor(language: CodeLanguage): NewlineHandler = when {
+    // Kotlin's handler knows constructs the Java one doesn't (a trailing `->` opening a lambda body).
+    language == CodeLanguage.Kotlin -> KotlinNewlineHandler
+    // Every other brace language gets Java's smart indent: it keys off braces and semicolons, which is
+    // exactly the shape SyntaxFamily.C_FAMILY describes (AIDL was the first language to prove this out).
+    language.profile.syntax == SyntaxFamily.C_FAMILY -> JavaNewlineHandler
+    language.profile.syntax == SyntaxFamily.XML -> XmlNewlineHandler
     else -> DefaultNewlineHandler
 }
 

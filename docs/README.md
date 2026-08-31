@@ -19,6 +19,9 @@ and follow the links into each subsystem.
   templates, block mappings), plus the language-backend SPI.
 - [language-support.md](language-support.md) — the backend-neutral DOM, code completion, the Java/XML/
   Kotlin backends, indexing, analysis/diagnostics/quick-fixes, and block editing.
+- [custom-language-support.md](custom-language-support.md) — the step-by-step guide to adding a language:
+  file types, the `LanguageBackend` and the error-tolerant DOM, resolution, completion contributors,
+  indexing, diagnostics and quick-fixes, synthetic classes, build tasks, module types, and templates.
 - [kotlin-completion.md](kotlin-completion.md) — how on-device Kotlin completion works: parse-only PSI,
   the framework's own symbols/inference, and classpath metadata decoding.
 - [block-editing.md](block-editing.md) — how the projectional (block) editor projects the shared DOM and

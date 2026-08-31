@@ -681,14 +681,13 @@ private class IdeCoreServicesPlugin : Plugin {
     )
 
     override fun register(reg: PluginRegistration) {
-        reg.service(ANALYZER_JAVA, ServiceScopeLevel.MODULE) {
-            getService(ENGINE_CONTEXT).buildAnalyzer(module(), LanguageId("java"))
-        }
-        reg.service(ANALYZER_KOTLIN, ServiceScopeLevel.MODULE) {
-            getService(ENGINE_CONTEXT).buildAnalyzer(module(), KotlinLanguageBackend.LANGUAGE_ID)
-        }
-        reg.service(ANALYZER_XML, ServiceScopeLevel.MODULE) {
-            getService(ENGINE_CONTEXT).buildAnalyzer(module(), XmlLanguageBackend.LANGUAGE_ID)
+        // ONE module-scoped service for every language: it builds an analyzer per language on first use
+        // through the backend registered for it, so adding a language is a LANGUAGE_BACKEND_EP registration
+        // and nothing here changes.
+        reg.service(MODULE_ANALYZERS, ServiceScopeLevel.MODULE) {
+            val ctx = getService(ENGINE_CONTEXT)
+            val module = module()
+            ModuleAnalyzers { language -> ctx.buildAnalyzer(module, language) }
         }
         reg.service(SIGNING_SERVICE, ServiceScopeLevel.WORKSPACE) {
             SigningService(

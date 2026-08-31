@@ -91,6 +91,7 @@ import dev.ide.index.MemberValue
 import dev.ide.index.exactAll
 import dev.ide.index.impl.IndexServiceImpl
 import dev.ide.lang.AnalysisResult
+import dev.ide.lang.CacheInvalidation
 import dev.ide.lang.FILE_TYPE_EP
 import dev.ide.decompiler.Decompiler
 import dev.ide.decompiler.LibrarySources
@@ -409,10 +410,10 @@ internal val ENGINE_CONTEXT = ServiceKey<EngineContext>("ide.engineContext")
 /** APPLICATION-scoped: the warm K2 compiler shared across every opened project. */
 private val KOTLIN_JVM_COMPILER = ServiceKey<KotlinCompilerBackend>("ide.kotlin.jvmCompiler")
 
-/** MODULE-scoped: the per-module source analyzer for each language. */
-internal val ANALYZER_JAVA = ServiceKey<SourceAnalyzer>("ide.analyzer.java")
-internal val ANALYZER_KOTLIN = ServiceKey<SourceAnalyzer>("ide.analyzer.kotlin")
-internal val ANALYZER_XML = ServiceKey<SourceAnalyzer>("ide.analyzer.xml")
+/** MODULE-scoped: this module's source analyzers, keyed by language and built on first use. ONE key rather
+ *  than one per language, so the set of analyzable languages is whatever the registered
+ *  [dev.ide.lang.LanguageBackend]s claim — see [ModuleAnalyzers]. */
+internal val MODULE_ANALYZERS = ServiceKey<ModuleAnalyzers>("ide.analyzers")
 
 /** WORKSPACE-scoped: this engine's decomposed concern services, resolved from the workspace container. */
 internal val SIGNING_SERVICE = ServiceKey<SigningService>("ide.service.signing")
@@ -743,8 +744,7 @@ class IdeServices private constructor(
             }
 
             override fun dropJavaBindingCaches() {
-                store.liveModuleContainers()
-                    .forEach { (it.peekService(ANALYZER_JAVA) as? JdtSourceAnalyzer)?.invalidateBindingCache() }
+                invalidateAnalyzerCaches(CacheInvalidation.BINDINGS)
             }
 
             override fun dropOverlaysUnder(root: Path) = this@IdeServices.dropOverlaysUnder(root)
@@ -1039,12 +1039,6 @@ class IdeServices private constructor(
     }
 
     /** The MODULE-scoped analyzer service key for [language]. */
-    private fun analyzerKeyFor(language: LanguageId): ServiceKey<SourceAnalyzer> = when (language) {
-        KotlinLanguageBackend.LANGUAGE_ID -> ANALYZER_KOTLIN
-        XmlLanguageBackend.LANGUAGE_ID -> ANALYZER_XML
-        else -> ANALYZER_JAVA
-    }
-
     private fun buildIndexScope(): IndexScope {
         // Read the index roots through the neutral JvmIndexScopeProvider, not a concrete analyzer type, so the
         // scope survives swapping the .java editor backend (JDT ↔ IntelliJ-PSI); both analyzers implement it.
@@ -1467,9 +1461,14 @@ class IdeServices private constructor(
         // dispose these analyzers (to keep the warm classpath env), so nudge each live one to drop its caches.
         // (The Kotlin symbol service re-reads the freshly-swapped synthetic list by identity, so it needs no
         // equivalent nudge.)
-        store.liveModuleContainers().forEach {
-            (it.peekService(ANALYZER_JAVA) as? dev.ide.lang.java.JavaSourceAnalyzer)?.invalidateSyntheticClasses()
-        }
+        invalidateAnalyzerCaches(CacheInvalidation.SYNTHETIC_CLASSES)
+    }
+
+    /** Tell every ALREADY-BUILT analyzer in every live module to drop what [reason] invalidates. Neutral by
+     *  design: the host names the event, and each backend decides what that costs it, so a backend the host
+     *  has never heard of participates exactly like the built-ins. Never builds an analyzer. */
+    private fun invalidateAnalyzerCaches(reason: CacheInvalidation) {
+        store.liveModuleContainers().forEach { it.peekService(MODULE_ANALYZERS)?.invalidateCaches(reason) }
     }
 
     /** The open buffers as an FQCN -> source overlay for the name environment, plus synthetic light classes. */
@@ -1865,7 +1864,7 @@ class IdeServices private constructor(
     private fun analyzerFor(
         module: Module, language: LanguageId = LanguageId("java")
     ): SourceAnalyzer =
-        if (hasLanguageBackend(language)) module.service(analyzerKeyFor(language)) else PlainTextAnalyzer
+        if (hasLanguageBackend(language)) module.service(MODULE_ANALYZERS).analyzer(language) else PlainTextAnalyzer
 
     /** Construct the analyzer for [module] in [language]. Invoked once by the module-scoped analyzer
      *  service factory; the module container caches and disposes the result. */

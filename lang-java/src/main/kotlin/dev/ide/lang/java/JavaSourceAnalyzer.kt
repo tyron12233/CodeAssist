@@ -19,6 +19,7 @@ import dev.ide.index.ClassNameValue
 import dev.ide.index.IndexService
 import dev.ide.index.prefixAll
 import dev.ide.lang.AnalysisResult
+import dev.ide.lang.CacheInvalidation
 import dev.ide.lang.JvmIndexScopeProvider
 import dev.ide.lang.SourceAnalyzer
 import dev.ide.lang.completion.CompletionContribution
@@ -165,6 +166,19 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
      * dispose the analyzer, to keep the warm classpath env). Also drops the per-file parse cache, whose
      * diagnostics were computed against the old `R`.
      */
+    /**
+     * The neutral host hook ([SourceAnalyzer.invalidateCaches]). This analyzer holds a live IntelliJ env
+     * whose facade caches resolved synthetic classes by modification count, so SYNTHETIC_CLASSES has to drop
+     * them.
+     *
+     * BINDINGS deliberately does NOT: it fires on every batch of file changes, and [cachedParse] already
+     * re-parses on a content-hash change, so the only thing dropping the env would add is throwing away the
+     * warm PSI caches on each save.
+     */
+    override fun invalidateCaches(reason: CacheInvalidation) {
+        if (reason == CacheInvalidation.SYNTHETIC_CLASSES) invalidateSyntheticClasses()
+    }
+
     fun invalidateSyntheticClasses() {
         cache.clear()
         env.dropCaches()

@@ -1,6 +1,7 @@
 package dev.ide.lang.completion
 
 import dev.ide.lang.LanguageId
+import dev.ide.lang.appliesTo
 import dev.ide.lang.SourceAnalyzer
 import dev.ide.lang.dom.TextRange
 

@@ -86,6 +86,13 @@ class VcsUiContributionTest {
 
         override fun viewMode(mode: EditorViewModeContribution): Registration = Registration {}
 
+        override fun editorLanguage(profile: dev.ide.ui.ext.EditorLanguageProfile): Registration {
+            editorLanguages += profile
+            return Registration {}
+        }
+
+        val editorLanguages = mutableListOf<dev.ide.ui.ext.EditorLanguageProfile>()
+
         override fun overlay(overlay: OverlayContribution): Registration {
             overlays += overlay
             return Registration {}

@@ -1,6 +1,7 @@
 package dev.ide.ui.editor.core
 
 import dev.ide.ui.editor.CodeLanguage
+import dev.ide.ui.ext.SyntaxFamily
 
 ///**
 // * Per-line tokenization with carried lexer state — the incremental half of syntax highlighting.
@@ -38,7 +39,7 @@ class StyledLine(val spans: List<LineSpan>, val exitState: Int) {
     }
 }
 
-private val JAVA_KEYWORDS = setOf(
+internal val JAVA_KEYWORDS = setOf(
     "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const",
     "continue", "default", "do", "double", "else", "enum", "extends", "final", "finally", "float",
     "for", "goto", "if", "implements", "import", "instanceof", "int", "interface", "long", "native",
@@ -47,7 +48,7 @@ private val JAVA_KEYWORDS = setOf(
     "volatile", "while", "true", "false", "null", "var", "record", "sealed", "permits", "yield",
 )
 
-private val KOTLIN_KEYWORDS = setOf(
+internal val KOTLIN_KEYWORDS = setOf(
     // hard keywords
     "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface",
     "is", "null", "object", "package", "return", "super", "this", "throw", "true", "try", "typealias",
@@ -66,7 +67,7 @@ private val KOTLIN_KEYWORDS = setOf(
  * out: they start with a capital, so the shared scanner already colors them as types, the same way `String`
  * reads in a Java file.
  */
-private val AIDL_KEYWORDS = setOf(
+internal val AIDL_KEYWORDS = setOf(
     "package", "import", "interface", "parcelable", "enum", "union", "oneway", "const",
     "in", "out", "inout", "cpp_header",
     "void", "boolean", "byte", "char", "int", "long", "float", "double", "true", "false",
@@ -74,17 +75,24 @@ private val AIDL_KEYWORDS = setOf(
 
 private fun isPunct(c: Char) = c in "{}()[];,.<>=+-*\\/%&|!?:^~@"
 
-fun styleLine(line: String, entryState: Int, language: CodeLanguage): StyledLine = when (language) {
-    CodeLanguage.Plain -> StyledLine.EMPTY
-    CodeLanguage.Xml -> styleXmlLine(line, entryState)
-    CodeLanguage.Proguard -> styleProguardLine(line)
-    CodeLanguage.Markdown -> styleMarkdownLine(line, entryState)
-    CodeLanguage.Kotlin -> styleKotlinLine(line, entryState)
-    // AIDL shares Java's lexical shape (line/block comments, strings, numbers, `@annotations`, braces) and
-    // differs only in which words are keywords, so it reuses the scanner with its own set.
-    CodeLanguage.Aidl -> styleCodeLine(line, entryState, AIDL_KEYWORDS)
-    CodeLanguage.Java -> styleCodeLine(line, entryState)
-}
+/**
+ * Style one line of [language]. Dispatch is on the language's [SyntaxFamily], not on a fixed set of
+ * languages, so a plugin-contributed profile is colored by the same scanners the built-ins use: a C-family
+ * language differs from Java only in which words are keywords, which the profile carries.
+ *
+ * Kotlin keeps its own scanner rather than the shared C-family one because it colors constructs the shared
+ * scanner has no notion of (raw strings spanning lines, contextual soft keywords).
+ */
+fun styleLine(line: String, entryState: Int, language: CodeLanguage): StyledLine =
+    when (language.profile.syntax) {
+        SyntaxFamily.PLAIN -> StyledLine.EMPTY
+        SyntaxFamily.XML -> styleXmlLine(line, entryState)
+        SyntaxFamily.HASH_COMMENT -> styleProguardLine(line)
+        SyntaxFamily.MARKDOWN -> styleMarkdownLine(line, entryState)
+        SyntaxFamily.C_FAMILY ->
+            if (language == CodeLanguage.Kotlin) styleKotlinLine(line, entryState)
+            else styleCodeLine(line, entryState, language.profile.keywords.ifEmpty { JAVA_KEYWORDS })
+    }
 
 /**
  * Markdown line styling: headings, fenced code (``` / ~~~, carried across lines via [LexState.MD_FENCE]),
