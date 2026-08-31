@@ -1193,15 +1193,30 @@ class KotlinTreeResolver(
      * If [e] denotes a TYPE or `object` singleton rather than a value, a reference to that singleton (so a
      * trailing selector on it reads a static/companion member or a nested type). Covers a nested type reached
      * through a resolved outer (`LineHeightStyle.Alignment`, `Outer.Inner`) and a fully-qualified non-object
-     * type (`java.util.Locale`) via [KotlinResolver.typeDenotationFqn], PLUS a fully-qualified type or `object`
-     * by its own source text (`androidx.compose.material.icons.Icons`) which `typeDenotationFqn` intentionally
-     * rejects for objects. Null for a value chain (`Icons.Default`, `Color.Red`, `foo().bar`), which then
+     * type (`java.util.Locale`) via [KotlinResolver.typeDenotationFqn], PLUS a nested SINGLETON through that
+     * same outer (`PathFillType.Companion`) and a fully-qualified type or `object` by its own source text
+     * (`androidx.compose.material.icons.Icons`), both of which `typeDenotationFqn` intentionally rejects for
+     * singletons. Null for a value chain (`Icons.Default`, `Color.Red`, `foo().bar`), which then
      * lowers as an ordinary receiver + property/call.
      */
     private fun typeOrObjectRef(e: KtDotQualifiedExpression): RNode? {
         val sel = (e.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
         runCatching { resolver.typeDenotationFqn(e) }.getOrNull()?.let {
             return RNode.Name(Binding.ObjectRef(it, sel), span(e))
+        }
+        // A nested SINGLETON reached through a resolved outer (`PathFillType.Companion`, a named
+        // `Duration.Companion`, `Outer.Factory`). `typeDenotationFqn` rejects those on purpose - an explicitly
+        // spelled companion is an INSTANCE, and the editor must offer its members as instance members - but the
+        // singleton is exactly what a reference here should denote. Without this the receiver lowers as a VALUE,
+        // where a bare type name already denotes its companion, and the trailing selector then reads a property
+        // of the companion it IS: "no readable property `Companion` on ...PathFillType$Companion", which is the
+        // whole `path(...)` of a generated icon (`pathFillType = PathFillType.Companion.NonZero`).
+        val outerFqn = runCatching { resolver.typeDenotationFqn(e.receiverExpression) }.getOrNull()
+        if (outerFqn != null) {
+            val nested = "$outerFqn.$sel"
+            if (runCatching { service.isKnownType(nested) }.getOrDefault(false)) {
+                return RNode.Name(Binding.ObjectRef(nested, sel), span(e))
+            }
         }
         if (sel.firstOrNull()?.isUpperCase() == true) {
             val text = e.text
