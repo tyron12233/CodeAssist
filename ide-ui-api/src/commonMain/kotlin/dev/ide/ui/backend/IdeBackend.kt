@@ -71,6 +71,10 @@ interface IdeBackend {
     /** The AI coding agent (chat + tool use). Optional — a backend that wires none inherits [AgentService.Unsupported]. */
     val agent: AgentService get() = AgentService.Unsupported
 
+    /** Version control: the working copy, branches, history, and the forge account remotes authenticate with.
+     *  Optional; a backend that wires no engine inherits [VcsService.Unsupported]. */
+    val vcs: VcsService get() = VcsService.Unsupported
+
     /** User editor customizations: the keyboard symbol bar (and, later, live-template macros + recorded macros).
      *  Optional — a backend that wires no store inherits [CustomizationService.Unsupported]. */
     val customize: CustomizationService get() = CustomizationService.Unsupported

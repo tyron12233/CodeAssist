@@ -1,6 +1,8 @@
 package dev.ide.ui
 
 import dev.ide.ui.backend.FileActions
+import dev.ide.ui.ext.ScreenContribution
+import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.UiImportPreview
 import dev.ide.ui.backend.UiPackagedModule
@@ -129,6 +131,92 @@ class CodeAssistAppStateTest {
         assertEquals(Screen.Hub, app.screen)
         app.navigateBack()
         assertEquals(Screen.Editor, app.screen)
+    }
+
+    // ---- plugin-contributed screens ----
+
+    /** Register a contributed screen for the duration of [block], so navigation to it is possible. */
+    private fun withScreens(vararg ids: String, block: () -> Unit) {
+        val handles = ids.map { id -> ScreenRegistry.register(ScreenContribution(id, id) { }) }
+        try {
+            block()
+        } finally {
+            handles.forEach { it.dispose() }
+        }
+    }
+
+    @Test
+    fun oneBackFromAPluginScreenReturnsToTheEditorAndKeepsTheProjectOpen() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+        backend.epochFlow.value++ // opening a project lands in the editor
+        advanceUntilIdle()
+        assertEquals(Screen.Editor, app.screen)
+
+        withScreens("vcs.history") {
+            app.openPluginScreen("vcs.history")
+            assertEquals(Screen.PluginScreen, app.screen)
+            assertEquals("vcs.history", app.pluginScreenId)
+
+            // One back returns to the editor and clears the id. It must NOT reach the picker: the screen used
+            // to pop twice for one press, which closed the project.
+            app.navigateBack()
+            assertEquals(Screen.Editor, app.screen)
+            assertNull(app.pluginScreenId)
+
+            // Only a second back leaves the project, as it does from the editor anywhere else.
+            app.navigateBack()
+            assertEquals(Screen.Projects, app.screen)
+        }
+    }
+
+    @Test
+    fun oneBackFromAPluginScreenOpenedAtThePickerReturnsToThePicker() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+        assertEquals(Screen.Projects, app.screen)
+
+        withScreens("vcs.clone") {
+            app.openPluginScreen("vcs.clone")
+            assertEquals(Screen.PluginScreen, app.screen)
+            app.navigateBack()
+            assertEquals(Screen.Projects, app.screen)
+        }
+    }
+
+    @Test
+    fun steppingBetweenPluginScreensStillReturnsToTheOpener() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+        backend.epochFlow.value++
+        advanceUntilIdle()
+
+        withScreens("vcs.diff", "vcs.history") {
+            app.openPluginScreen("vcs.diff")
+            // A diff opening that file's history stays on the same destination; the return target is unchanged.
+            app.openPluginScreen("vcs.history")
+            assertEquals("vcs.history", app.pluginScreenId)
+            app.navigateBack()
+            assertEquals(Screen.Editor, app.screen)
+        }
+    }
+
+    @Test
+    fun anUnregisteredPluginScreenIsNotNavigatedTo() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+        backend.epochFlow.value++
+        advanceUntilIdle()
+
+        // A disabled plugin (or a stale action) names a screen nothing registered. Navigating anyway would
+        // land on an empty destination, which is what the route used to try to recover from by popping again.
+        app.openPluginScreen("nothing.registered")
+        assertEquals(Screen.Editor, app.screen)
+        assertNull(app.pluginScreenId)
     }
 
     @Test

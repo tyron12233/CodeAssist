@@ -75,6 +75,8 @@ import dev.ide.ui.generated.resources.delete_project
 import dev.ide.ui.generated.resources.delete_project_content
 import dev.ide.ui.generated.resources.export_share
 import dev.ide.ui.generated.resources.import_gradle_subtitle
+import dev.ide.ui.generated.resources.clone_repository_subtitle
+import dev.ide.ui.generated.resources.clone_repository_title
 import dev.ide.ui.generated.resources.import_gradle_title
 import dev.ide.ui.generated.resources.import_project
 import dev.ide.ui.generated.resources.join_the_community
@@ -121,6 +123,8 @@ fun ProjectPickerScreen(
     onImportProject: (() -> Unit)? = null,
     /** Import an external Gradle project folder (best effort). Shows a secondary card; null hides it. */
     onImportGradle: (() -> Unit)? = null,
+    /** Clone a Git repository into a new project. Shows a secondary card; null hides it (no VCS engine). */
+    onCloneRepository: (() -> Unit)? = null,
     /** Export a project as a shareable `.caproj` (shows a per-card Share action). Null hides it. */
     onExportProject: ((ProjectInfo) -> Unit)? = null,
     onBackup: (() -> Unit)? = null,
@@ -176,6 +180,10 @@ fun ProjectPickerScreen(
 
                 // A secondary path: import an existing Gradle project (best-effort compatibility mode).
                 if (onImportGradle != null) ImportGradleCard(onImportGradle)
+
+                // The other way in: clone a repository. Reachable here because a user with no projects yet
+                // has nowhere else to start a clone from.
+                if (onCloneRepository != null) CloneRepositoryCard(onCloneRepository)
 
                 // The support card: CodeAssist is free, ad-free and open source, so the only "monetisation"
                 // is an optional sponsor/star. Shown whenever the host can open links.
@@ -335,6 +343,35 @@ private fun ImportGradleCard(onClick: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(stringResource(Res.string.import_gradle_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
             Text(stringResource(Res.string.import_gradle_subtitle), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        }
+        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
+    }
+}
+
+/** A secondary, outlined card opening the version-control clone screen. */
+@Composable
+private fun CloneRepositoryCard(onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressScale(interaction)
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg))
+            .clickable(interaction, indication = null, onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(CaIcons.gitBranch, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(Res.string.clone_repository_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(Res.string.clone_repository_subtitle), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
         Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
     }

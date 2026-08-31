@@ -289,8 +289,6 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="sig_peek_collapse">Toca para contraer</string>
 
     <!-- Editor sheet -->
-    <string name="edsheet_source_control">Control de versiones</string>
-    <string name="edsheet_source_control_desc">Integración con Git. La preparación, los diffs, commit y push están en la hoja de ruta.</string>
 
     <!-- Symbol bar -->
     <string name="symbolbar_move_line_up">Subir línea</string>
@@ -307,7 +305,6 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
 
     <!-- Editor chrome -->
     <string name="edchrome_files">Archivos</string>
-    <string name="edchrome_source">Fuente</string>
     <string name="edchrome_more">Más</string>
     <string name="edchrome_settings_and_tools">Configuración y herramientas</string>
     <string name="edchrome_toggle_navigator">Alternar navegador</string>

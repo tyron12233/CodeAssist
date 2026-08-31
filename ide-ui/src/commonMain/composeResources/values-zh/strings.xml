@@ -302,8 +302,6 @@
     <string name="sig_more">还有 %1$d 项</string>
     <string name="sig_peek_tip">点按查看完整定义</string>
     <string name="sig_peek_collapse">点按收起</string>
-    <string name="edsheet_source_control">源代码管理</string>
-    <string name="edsheet_source_control_desc">Git 集成功能正在规划中，将支持暂存、差异、提交和推送功能。</string>
     <string name="symbolbar_move_line_up">上移行</string>
     <string name="symbolbar_move_line_down">下移行</string>
     <string name="symbolbar_duplicate_line">复制行</string>
@@ -367,7 +365,6 @@
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">文件</string>
-    <string name="edchrome_source">源代码</string>
     <string name="edchrome_more">更多</string>
     <string name="edchrome_settings_and_tools">设置与工具</string>
     <string name="edchrome_toggle_navigator">切换导航器</string>

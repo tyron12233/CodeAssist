@@ -79,6 +79,8 @@ import dev.ide.ui.backend.StepStatus
 import dev.ide.ui.backend.UiLogLevel
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.ext.ToolWindowAnchor
+import dev.ide.ui.LocalHostFileActions
+import dev.ide.ui.LocalPluginNavigator
 import dev.ide.ui.ext.ToolWindowContext
 import dev.ide.ui.ext.ToolWindowContribution
 import dev.ide.ui.ext.ToolWindowRegistry
@@ -192,10 +194,14 @@ fun BuildConsole(
             val plugin = pluginTabs.firstOrNull { it.id == activePluginTab }
             if (plugin != null && backend != null) {
                 val ctxBackend: IdeBackend = backend
-                val ctx = remember(ctxBackend, activeFilePath) {
+                val hostFileActions = LocalHostFileActions.current
+                val navigate = LocalPluginNavigator.current
+                val ctx = remember(ctxBackend, activeFilePath, hostFileActions, navigate) {
                     object : ToolWindowContext {
                         override val backend = ctxBackend
                         override val activeFilePath = activeFilePath
+                        override val fileActions = hostFileActions
+                        override fun openScreen(id: String) = navigate(id)
                     }
                 }
                 plugin.content(ctx)

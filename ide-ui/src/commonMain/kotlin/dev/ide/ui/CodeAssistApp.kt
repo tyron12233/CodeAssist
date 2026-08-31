@@ -122,7 +122,11 @@ fun CodeAssistApp(
         PlatformBackHandler(enabled = app.canNavigateBack, onBack = app::navigateBack)
         // The M3 background fills the whole window edge-to-edge (behind the system bars); content is
         // then inset by `safeDrawing`. On desktop these insets are empty, so this is a no-op there.
-        CompositionLocalProvider(LocalAds provides app.adController) {
+        CompositionLocalProvider(
+            LocalAds provides app.adController,
+            LocalHostFileActions provides fileActions,
+            LocalPluginNavigator provides app::openPluginScreen,
+        ) {
             // Occasional full-screen ad over a LONG build (Android only; inert on desktop / when ads are off).
             // Renders nothing — it just observes the build state and asks the host to present an interstitial.
             BuildAdInterstitial(backend, app.adController)

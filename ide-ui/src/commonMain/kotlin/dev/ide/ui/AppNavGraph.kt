@@ -1,15 +1,22 @@
 package dev.ide.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.ProjectInfo
+import dev.ide.ui.backend.VcsService
 import dev.ide.ui.components.BetaInfo
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.settings_title
+import dev.ide.ui.ext.ScreenContext
+import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.screens.CodeStyleScreen
 import dev.ide.ui.screens.CreateProjectScreen
@@ -166,6 +173,32 @@ internal fun AppNavGraph(
                 backend = state.backend,
                 onBack = { app.navigateTo(Screen.Hub) },
             )
+
+            // A plugin-contributed screen (ScreenRegistry). The route is generic: the contribution renders its
+            // own body against the backend, the host bridges, and a Back that pops to wherever it came from.
+            Screen.PluginScreen -> {
+                // Hold the id this instance is showing rather than reading it live. Navigating away clears
+                // `pluginScreenId` while [ScreenHost]'s AnimatedContent still composes this branch for the
+                // exit animation, so reading it live would blank the screen mid-transition. It follows a
+                // change to another plugin screen (a diff opening that file's history), which stays on this
+                // same destination and so reuses this instance.
+                var shown by remember { mutableStateOf(app.pluginScreenId) }
+                LaunchedEffect(app.pluginScreenId) {
+                    app.pluginScreenId?.let { shown = it }
+                }
+                val contribution = shown?.let { ScreenRegistry.find(it) }
+                if (contribution != null) {
+                    val screenCtx = remember(backend, fileActions, app) {
+                        object : ScreenContext {
+                            override val backend = backend
+                            override val fileActions = fileActions
+                            override fun back() = app.navigateBack()
+                            override fun openScreen(id: String) = app.openPluginScreen(id)
+                        }
+                    }
+                    contribution.content(screenCtx)
+                }
+            }
 
             Screen.Plugins -> PluginsScreen(
                 backend = state.backend,
@@ -331,6 +364,12 @@ private fun ProjectPickerRoute(
         onImportProject = if (fileActions.canPickFile) app::pickProjectPackage else null,
         // One "Import project" entry for both sources; it asks which when the host can do both.
         onImportGradle = if (fileActions.canPickDirectory || fileActions.canPickFile) app::requestProjectImport else null,
+        // Cloning is the other way into a project, and it is the only one a user with no projects yet can
+        // reach: the Git panel lives in the editor, which needs a project open. Hidden when the version-control
+        // plugin is disabled or this build carries no engine.
+        onCloneRepository = if (app.backend.vcs.supported()) {
+            { app.openPluginScreen(VcsService.SCREEN_CLONE) }
+        } else null,
         onExportProject = if (fileActions.canShare || fileActions.canExport || fileActions.canReveal) {
             app::startExport
         } else null,

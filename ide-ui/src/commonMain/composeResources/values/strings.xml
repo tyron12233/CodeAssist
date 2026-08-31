@@ -70,6 +70,8 @@ We never collect your code, file or project names, which features you use, or an
     <string name="import_hide_files">Hide files</string>
     <!-- Gradle project import (best-effort compatibility mode) -->
     <string name="import_gradle_title">Import project</string>
+    <string name="clone_repository_title">Clone from Git</string>
+    <string name="clone_repository_subtitle">Copy a repository from GitHub or any Git server into a new project.</string>
     <string name="import_gradle_subtitle">Open a CodeAssist project folder, or an existing Gradle build</string>
     <string name="import_gradle_busy">Importing Gradle project…</string>
     <string name="import_gradle_failed">That folder isn't a CodeAssist project or a Gradle build.</string>
@@ -354,8 +356,6 @@ We never collect your code, file or project names, which features you use, or an
     <string name="sig_more">+%1$d more</string>
     <string name="sig_peek_tip">Tap to peek full definition</string>
     <string name="sig_peek_collapse">Tap to collapse</string>
-    <string name="edsheet_source_control">Source Control</string>
-    <string name="edsheet_source_control_desc">Git integration. Staging, diffs, commit &amp; push is on the roadmap.</string>
     <string name="symbolbar_move_line_up">Move line up</string>
     <string name="symbolbar_move_line_down">Move line down</string>
     <string name="symbolbar_duplicate_line">Duplicate line</string>
@@ -419,7 +419,6 @@ We never collect your code, file or project names, which features you use, or an
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">Files</string>
-    <string name="edchrome_source">Source</string>
     <string name="edchrome_more">More</string>
     <string name="edchrome_settings_and_tools">Settings &amp; Tools</string>
     <string name="edchrome_toggle_navigator">Toggle navigator</string>

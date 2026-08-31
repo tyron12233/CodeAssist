@@ -9,6 +9,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
+import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.ads.AdController
 import dev.ide.ui.backend.UiProjectFolderKind
 import dev.ide.ui.backend.AdHost
@@ -80,6 +81,11 @@ class CodeAssistAppState(
 
     var screen: Screen by mutableStateOf(Screen.Projects)
         private set
+
+    /** Which plugin-contributed screen [Screen.PluginScreen] is showing, and where Back returns to. */
+    var pluginScreenId: String? by mutableStateOf(null)
+        private set
+    private var pluginScreenReturn: Screen = Screen.Editor
 
     /** The home screen's selected bottom-nav tab (project picker / store / learn). Lives here, not in the
      *  per-project [IdeUiState], so it survives across the landing session and resets only on a full relaunch. */
@@ -301,6 +307,22 @@ class CodeAssistAppState(
 
     fun selectHomeTab(tab: HomeTab) {
         homeTab = tab
+    }
+
+    /**
+     * Open a plugin-contributed screen ([ScreenRegistry]) and remember where to return to. A plugin panel
+     * navigates here for a detail view that needs the whole window, and any action's `Navigate` effect
+     * resolves to the same route.
+     *
+     * An id nothing has registered (a disabled plugin, a stale action) is ignored rather than navigated to:
+     * the destination would render nothing, and recovering from it in the route would have to re-enter
+     * navigation from inside a screen that is already animating away.
+     */
+    fun openPluginScreen(id: String) {
+        if (ScreenRegistry.find(id) == null) return
+        if (screen != Screen.PluginScreen) pluginScreenReturn = screen
+        pluginScreenId = id
+        screen = Screen.PluginScreen
     }
 
     /** Open the Settings and Tools hub, remembering [from] as its Back destination. */
@@ -617,6 +639,12 @@ class CodeAssistAppState(
             screen == Screen.Hub -> screen = hubReturn
 
             screen == Screen.Run || screen == Screen.ModuleConfig -> screen = Screen.Editor
+
+            // A plugin screen returns to wherever it was opened from.
+            screen == Screen.PluginScreen -> {
+                pluginScreenId = null
+                screen = pluginScreenReturn
+            }
 
             // The lesson player steps back to its track; the track steps back to the Learn tab (picker).
             screen == Screen.LessonPlayer -> exitLessonPlayer()

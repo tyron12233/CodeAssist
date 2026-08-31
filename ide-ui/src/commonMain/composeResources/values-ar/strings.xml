@@ -316,8 +316,6 @@
     <string name="sig_peek_collapse">انقر للطي</string>
 
     <!-- Editor sheet / symbol bar -->
-    <string name="edsheet_source_control">التحكم في المصدر</string>
-    <string name="edsheet_source_control_desc">تكامل Git. التجهيز والفروق والالتزام والدفع مدرجة في خارطة الطريق.</string>
     <string name="symbolbar_move_line_up">تحريك السطر لأعلى</string>
     <string name="symbolbar_move_line_down">تحريك السطر لأسفل</string>
     <string name="symbolbar_duplicate_line">تكرار السطر</string>
@@ -330,7 +328,6 @@
 
     <!-- Editor chrome -->
     <string name="edchrome_files">الملفات</string>
-    <string name="edchrome_source">المصدر</string>
     <string name="edchrome_more">المزيد</string>
     <string name="edchrome_settings_and_tools">الإعدادات والأدوات</string>
     <string name="edchrome_toggle_navigator">تبديل المتصفح</string>

@@ -264,8 +264,6 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="sig_more">+%1$d lainnya</string>
     <string name="sig_peek_tip">Ketuk untuk mengintip definisi lengkap</string>
     <string name="sig_peek_collapse">Ketuk untuk menciutkan</string>
-    <string name="edsheet_source_control">Kontrol Sumber</string>
-    <string name="edsheet_source_control_desc">Integrasi Git. Staging, diff, commit &amp; push ada dalam rencana.</string>
     <string name="symbolbar_move_line_up">Pindahkan baris ke atas</string>
     <string name="symbolbar_move_line_down">Pindahkan baris ke bawah</string>
     <string name="symbolbar_duplicate_line">Duplikat baris</string>
@@ -276,7 +274,6 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="breadcrumb_preview">Pratinjau</string>
     <string name="breadcrumb_split">Terpisah</string>
     <string name="edchrome_files">File</string>
-    <string name="edchrome_source">Sumber</string>
     <string name="edchrome_more">Lainnya</string>
     <string name="edchrome_settings_and_tools">Setelan &amp; Alat</string>
     <string name="edchrome_toggle_navigator">Alihkan navigator</string>

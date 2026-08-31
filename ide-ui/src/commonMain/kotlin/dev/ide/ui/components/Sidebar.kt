@@ -55,6 +55,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.AdPlacement
+import dev.ide.ui.LocalHostFileActions
+import dev.ide.ui.LocalPluginNavigator
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.ext.ToolWindowContext
@@ -95,10 +97,14 @@ private val RailIconBox = 46.dp
 fun pluginPanels(anchor: ToolWindowAnchor, backend: IdeBackend, activeFilePath: String?): List<SidebarPanel> {
     UiPluginHost.ensureLoaded()
     val tools = ToolWindowRegistry.forAnchor(anchor)
-    val ctx = remember(backend, activeFilePath) {
+    val hostFileActions = LocalHostFileActions.current
+    val navigate = LocalPluginNavigator.current
+    val ctx = remember(backend, activeFilePath, hostFileActions, navigate) {
         object : ToolWindowContext {
             override val backend = backend
             override val activeFilePath = activeFilePath
+            override val fileActions = hostFileActions
+            override fun openScreen(id: String) = navigate(id)
         }
     }
     return tools.map { tw -> SidebarPanel(tw.id, tw.title, actionIcon(tw.iconId), tw.order) { tw.content(ctx) } }

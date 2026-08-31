@@ -269,8 +269,6 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="sig_more">+%1$d mais</string>
     <string name="sig_peek_tip">Toque para espiar a definição completa</string>
     <string name="sig_peek_collapse">Toque para recolher</string>
-    <string name="edsheet_source_control">Controle de versão</string>
-    <string name="edsheet_source_control_desc">Integração com Git. Staging, diffs, commit e push estão no roteiro.</string>
     <string name="symbolbar_move_line_up">Mover linha para cima</string>
     <string name="symbolbar_move_line_down">Mover linha para baixo</string>
     <string name="symbolbar_duplicate_line">Duplicar linha</string>
@@ -283,7 +281,6 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">Arquivos</string>
-    <string name="edchrome_source">Fonte</string>
     <string name="edchrome_more">Mais</string>
     <string name="edchrome_settings_and_tools">Configurações e ferramentas</string>
     <string name="edchrome_toggle_navigator">Alternar navegador</string>
