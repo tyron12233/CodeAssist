@@ -1,1 +1,1 @@
-Build, edit and run Android and Java apps entirely on your device.
+Build, edit, run and commit Android and Java apps entirely on your device.
