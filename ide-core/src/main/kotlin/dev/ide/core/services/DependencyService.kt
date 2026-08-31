@@ -515,6 +515,19 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
     }
 
     /**
+     * Persist a change to a module's DECLARED dependencies (→ `module.toml`), right after the model commit
+     * that made it.
+     *
+     * The declared set is the durable source of truth and has to reach disk on its own: [assembleModuleClasspath]
+     * saves only when the LIBRARY TABLE changed, and a declaration can change without changing any library —
+     * [DependencyPartition.partition] claims each artifact for the FIRST declarer that reaches it, so a
+     * coordinate an earlier declarer already pulls in transitively (`kotlinx-coroutines-core` under almost any
+     * Kotlin dependency) gets an empty partition and rewrites nothing. Leaning on that save left an edit in
+     * memory only, and the next open read the old declaration back.
+     */
+    private fun persistDeclaredDependencies() = ctx.store.save()
+
+    /**
      * Resolve the template's declared dependencies in the background — started by the host **once the project
      * is open** (not during creation), so a large/slow closure never blocks creation and the user can use the
      * rest of the app while it streams in.
@@ -1094,6 +1107,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             )
             commit()
         }
+        if (finalize) persistDeclaredDependencies()
         val updated = ctx.modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(
             false, "Module '$moduleName' disappeared during resolution."
         )
@@ -1359,6 +1373,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             module(module.id).addDependency(entry.copy(exclusions = parsed))
             commit()
         }
+        persistDeclaredDependencies()
         _depsState.value = DepsResolveState(
             resolving = true,
             message = "Updating exclusions for $coordinate…",
@@ -1480,6 +1495,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                 module(module.id).addDependency(LibraryDependency(LibraryRef(newLibraryName), newScope, exclusions = parsedExclusions))
                 commit()
             }
+            persistDeclaredDependencies()
             val updated = ctx.modules().firstOrNull { it.name == moduleName }
                 ?: return UiAddResult(false, "Module '$moduleName' disappeared.")
             val asm = assembleModuleClasspath(updated, depsProgress(), finalize = true)
