@@ -128,8 +128,11 @@ internal class StoreBackend(
     private val likeStore = StoreLikes(
         reviews = reviewService,
         readLocal = {
-            ctx.manager?.preference(LIKES_PREF)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
-                ?.toSet().orEmpty()
+            // Both separators: the UI's former local-only list wrote this same preference newline-separated,
+            // and reading one of those as a single id would turn someone's whole saved shelf into one
+            // nonexistent entry. The first write normalises it to commas.
+            ctx.manager?.preference(LIKES_PREF)?.split(',', '\n')?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }?.toSet().orEmpty()
         },
         writeLocal = { ids -> ctx.manager?.setPreference(LIKES_PREF, ids.joinToString(",")) },
     )

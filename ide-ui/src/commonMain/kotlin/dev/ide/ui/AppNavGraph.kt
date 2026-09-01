@@ -46,7 +46,6 @@ import dev.ide.ui.screens.ModuleConfigScreen
 import dev.ide.ui.screens.ModulesTab
 import dev.ide.ui.screens.PluginsScreen
 import dev.ide.ui.screens.ProjectsHomeScreen
-import dev.ide.ui.screens.StoreFavorites
 import dev.ide.ui.screens.ExploreFeed
 import dev.ide.ui.screens.ProjectsStoreScreen
 import dev.ide.ui.screens.RunScreen
