@@ -170,9 +170,14 @@ class CodeAssistAppState(
 
     // ---- project sharing + import ----
 
-    /** Bumped after a project is deleted so the picker re-reads the (now smaller) on-disk project list. */
+    /** Bumped after a project is deleted, or on a pull-to-refresh, so Home re-reads the on-disk list. */
     var projectsRefresh: Int by mutableStateOf(0)
         private set
+
+    /** Re-read the project list from disk (the Home screen's pull-to-refresh). */
+    fun refreshProjects() {
+        projectsRefresh++
+    }
 
     /** The project whose Export dialog is open, and the picked package being previewed for import (path plus
      *  the read manifest/peek). Held here so they survive picker recompositions. */
@@ -393,6 +398,35 @@ class CodeAssistAppState(
     }
 
     /** Open the Create-Project gallery, optionally pre-selecting [templateId] (a Store item's template). */
+    /**
+     * Install a store item, or route it to Create-Project when it is a bundled scaffold.
+     *
+     * An item with a `templateId` is already on the device, so creating it locally is both faster and works
+     * offline: it never downloads. Everything else goes through the real download/verify/unpack path.
+     *
+     * Progress and failures are reported through the engine's install-progress flow, which every shelf
+     * reads, so the download says so wherever the item appears rather than only where it was tapped. The
+     * install counter is bumped by the engine on success, never here: counting a button press would inflate
+     * the very numbers the trending chart ranks on.
+     */
+    fun installStoreItem(item: UiStoreItem) {
+        val template = item.templateId
+        if (template != null) {
+            createProject(template)
+            return
+        }
+        if (!item.available) {
+            // Nothing to download and no local scaffold: the detail page is all there is to offer.
+            openStoreItem(item)
+            return
+        }
+        scope.launch {
+            val result = runCatching { backend.store.install(item.id) }.getOrNull()
+            // The unpacked project is on disk now, so Home has to be told to look again.
+            if (result?.success == true) refreshProjects()
+        }
+    }
+
     fun createProject(templateId: String? = null) {
         createTemplateId = templateId
         screen = Screen.CreateProject
@@ -681,7 +715,8 @@ fun rememberCodeAssistAppState(
 internal fun accentOf(settings: UiSettings): CaAccent = when (settings.accent) {
     UiAccent.Teal -> CaAccent.Teal
     UiAccent.Orange -> CaAccent.Orange
-    else -> CaAccent.Violet
+    UiAccent.Violet -> CaAccent.Violet
+    else -> CaAccent.Lime
 }
 
 /** The color a Custom accent seeds the whole expressive theme from, or null for every other accent. */

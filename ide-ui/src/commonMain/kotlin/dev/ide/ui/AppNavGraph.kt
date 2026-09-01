@@ -1,9 +1,11 @@
 package dev.ide.ui
 
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,7 +39,9 @@ import dev.ide.ui.screens.LessonTrackScreen
 import dev.ide.ui.screens.ModuleConfigScreen
 import dev.ide.ui.screens.ModulesTab
 import dev.ide.ui.screens.PluginsScreen
-import dev.ide.ui.screens.ProjectPickerScreen
+import dev.ide.ui.screens.ProjectsHomeScreen
+import dev.ide.ui.screens.StoreFavorites
+import dev.ide.ui.screens.ExploreFeed
 import dev.ide.ui.screens.ProjectsStoreScreen
 import dev.ide.ui.screens.RunScreen
 import dev.ide.ui.screens.SdkManagerScreen
@@ -128,12 +132,23 @@ internal fun AppNavGraph(
                 onExit = app::exitLessonPlayer,
             )
 
-            Screen.StoreItem -> StoreItemScreen(
-                backend = backend,
-                item = app.storeItem,
-                onBack = { app.navigateTo(Screen.Projects) },
-                onCreateFromTemplate = { id -> app.createProject(id) },
-            )
+            Screen.StoreItem -> {
+                // Bookmarks are persisted locally (see StoreFavorites); rating needs an account, so the
+                // rate button stays hidden until store auth lands rather than being a dead control.
+                var saved by remember(app.storeItem?.id) {
+                    mutableStateOf(app.storeItem?.let { StoreFavorites.contains(backend, it.id) } == true)
+                }
+                StoreItemScreen(
+                    backend = backend,
+                    item = app.storeItem,
+                    onBack = { app.navigateTo(Screen.Projects) },
+                    onCreateFromTemplate = { id -> app.createProject(id) },
+                    isSaved = saved,
+                    onToggleSaved = app.storeItem?.let { current ->
+                        { saved = StoreFavorites.toggle(backend, current.id) }
+                    },
+                )
+            }
 
             Screen.Editor -> EditorScreen(
                 state = state,
@@ -330,8 +345,8 @@ internal fun AppNavGraph(
 }
 
 /**
- * The landing surface: the project picker on its own, or (behind the Projects Store flag) the picker as one
- * tab of [HomeScreen] alongside the store and Learn.
+ * The landing surface: the project manager on its own, or (behind the Projects Store flag) that manager as
+ * one tab of [HomeScreen] alongside the store and Learn.
  */
 @Composable
 private fun HomeRoute(app: CodeAssistAppState, fileActions: FileActions) {
@@ -356,9 +371,10 @@ private fun ProjectPickerRoute(
     projects: List<ProjectInfo>,
 ) {
     val backend = app.backend
-    ProjectPickerScreen(
+    ProjectsHomeScreen(
         projects = projects,
         onOpen = app::openProject,
+        // Straight to the full-screen Create-Project gallery, which owns the template picker.
         onNewProject = { app.createProject() },
         onDeleteProject = app::deleteProject,
         // One "Import project" entry for both sources; it asks which when the host can do both.
@@ -390,6 +406,7 @@ private fun ProjectPickerRoute(
         onOpenInFiles = if (fileActions.canReveal) {
             { backend.projects.storageRootPath()?.let { fileActions.reveal(it) } }
         } else null,
+        onRefresh = app::refreshProjects,
         showLegacyRecovery = app.showLegacyRecovery,
         onDismissLegacyRecovery = app::dismissLegacyRecovery,
         loadIcon = { backend.projects.projectIcon(it.rootPath) },
@@ -398,10 +415,43 @@ private fun ProjectPickerRoute(
 
 @Composable
 private fun StoreRoute(app: CodeAssistAppState) {
-    ProjectsStoreScreen(
-        backend = app.backend,
+    // Ask for the server-driven feed once per epoch. Null means there is no remote store to reach —
+    // NOT that the store is empty — so the bundled catalog screen takes over. Those are opposite
+    // claims and must not render the same page.
+    val feed by produceState<dev.ide.ui.backend.UiStoreFeed?>(null, app.backend, app.epoch) {
+        value = runCatching { app.backend.store.feed(seedItemId = null) }.getOrNull()
+    }
+    val current = feed
+    if (current == null) {
+        ProjectsStoreScreen(
+            backend = app.backend,
+            onOpenItem = app::openStoreItem,
+            onOpenHub = { app.openHub(Screen.Projects) },
+        )
+        return
+    }
+    // The bundled scaffolds fill the "Bundled with your IDE" shelf in the empty and sparse states. They
+    // come from the DEVICE, not the feed — that shelf's whole point is working with no network — so they
+    // are read from the bundled catalog rather than from `feed`.
+    val bundledItems by produceState(emptyList<dev.ide.ui.backend.UiStoreItem>(), app.backend, app.epoch) {
+        value = runCatching {
+            app.backend.store.catalog().sections
+                .firstOrNull { it.id == "templates" }?.items
+                ?.filter { it.templateId != null }
+                ?.take(4)
+                .orEmpty()
+        }.getOrDefault(emptyList())
+    }
+    ExploreFeed(
+        feed = current,
         onOpenItem = app::openStoreItem,
-        onOpenHub = { app.openHub(Screen.Projects) },
+        installing = app.backend.store.installProgress().collectAsState().value,
+        onInstallItem = { item -> app.installStoreItem(item) },
+        onOpenSearch = { app.selectHomeTab(dev.ide.ui.HomeTab.Store) },
+        bundled = bundledItems,
+        onUseBundled = { item -> item.templateId?.let(app::createProject) },
+        onPublish = { app.openHub(Screen.Projects) },
+        onHowItWorks = { app.openHub(Screen.Projects) },
     )
 }
 

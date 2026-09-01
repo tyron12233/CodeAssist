@@ -9,19 +9,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import dev.ide.ui.HomeTab
-import dev.ide.ui.components.BottomNavBar
-import dev.ide.ui.components.BottomNavItem
+import dev.ide.ui.components.AppNavBar
+import dev.ide.ui.components.NavDestination
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.home_learn
 import dev.ide.ui.generated.resources.home_store
 import dev.ide.ui.generated.resources.projects
-import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.Motion
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The home/landing scaffold: the selected [HomeTab]'s content above a [BottomNavBar] that switches between
- * the project picker, the Projects Store, and Learn. Each tab's content is supplied by the host (so all the
+ * The home/landing scaffold: the selected [HomeTab]'s content above a [AppNavBar] that switches between
+ * the project manager, the Projects Store, and Learn. Each tab's content is supplied by the host (so all the
  * picker/store/learn wiring stays in one place) and crossfades on switch. Only shown on `Screen.Projects`;
  * full-screen destinations (editor, settings, run) push over it without the nav bar.
  */
@@ -48,11 +48,11 @@ fun HomeScreen(
                 }
             }
         }
-        BottomNavBar(
-            items = listOf(
-                BottomNavItem(HomeTab.Projects.name, stringResource(Res.string.projects), CaIcons.folder),
-                BottomNavItem(HomeTab.Store.name, stringResource(Res.string.home_store), CaIcons.grid),
-                BottomNavItem(HomeTab.Learn.name, stringResource(Res.string.home_learn), CaIcons.lightbulb),
+        AppNavBar(
+            destinations = listOf(
+                NavDestination(HomeTab.Projects.name, stringResource(Res.string.projects), CaSymbols.folderOpen),
+                NavDestination(HomeTab.Store.name, stringResource(Res.string.home_store), CaSymbols.travelExplore),
+                NavDestination(HomeTab.Learn.name, stringResource(Res.string.home_learn), CaSymbols.school),
             ),
             selectedId = tab.name,
             onSelect = { id -> onSelectTab(HomeTab.valueOf(id)) },

@@ -71,6 +71,8 @@ import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.UiExportModule
 import dev.ide.ui.backend.UiImportPreview
 import dev.ide.ui.backend.UiProjectIcon
+import dev.ide.ui.components.AndroidTag
+import dev.ide.ui.components.projectColor
 import dev.ide.ui.components.CenteredDialog
 import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.components.ProjectTile

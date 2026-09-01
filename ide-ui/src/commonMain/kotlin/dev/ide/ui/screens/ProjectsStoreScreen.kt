@@ -1,17 +1,12 @@
 package dev.ide.ui.screens
 
-import dev.ide.ui.theme.Ide
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,73 +14,82 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.ide.ui.ads.LocalAds
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreItemKind
 import dev.ide.ui.backend.UiStoreSection
+import dev.ide.ui.components.inFlight
+import dev.ide.ui.components.installActionLabel
 import dev.ide.ui.components.AdSlot
-import dev.ide.ui.components.Chip
+import dev.ide.ui.components.CategoryTile
 import dev.ide.ui.components.ComingSoon
-import dev.ide.ui.components.IconButtonCa
-import dev.ide.ui.components.darken
-import dev.ide.ui.components.entranceSlideUp
-import dev.ide.ui.components.pressScale
+import dev.ide.ui.components.FeaturedHeroCard
+import dev.ide.ui.components.PillChip
+import dev.ide.ui.components.StoreListRow
+import dev.ide.ui.components.TrendingTicker
+import dev.ide.ui.components.motifFor
 import dev.ide.ui.generated.resources.Res
-import dev.ide.ui.generated.resources.clear
-import dev.ide.ui.generated.resources.store_all
-import dev.ide.ui.generated.resources.store_coming_soon
-import dev.ide.ui.generated.resources.store_community_content
-import dev.ide.ui.generated.resources.store_kind_community
-import dev.ide.ui.generated.resources.store_kind_sample
-import dev.ide.ui.generated.resources.store_kind_template
-import dev.ide.ui.generated.resources.store_no_matches
+import dev.ide.ui.generated.resources.store_browse_by_kind
+import dev.ide.ui.generated.resources.store_install
+import dev.ide.ui.generated.resources.store_no_results
+import dev.ide.ui.generated.resources.store_open
 import dev.ide.ui.generated.resources.store_search_hint
-import dev.ide.ui.generated.resources.store_settings_and_tools
-import dev.ide.ui.generated.resources.store_soon
-import dev.ide.ui.generated.resources.store_subtitle
+import dev.ide.ui.generated.resources.store_search_placeholder
+import dev.ide.ui.generated.resources.store_see_all
 import dev.ide.ui.generated.resources.store_title
 import dev.ide.ui.generated.resources.store_unavailable
 import dev.ide.ui.generated.resources.store_unavailable_content
-import dev.ide.ui.generated.resources.store_by_author
+import dev.ide.ui.generated.resources.store_use
 import dev.ide.ui.icons.CaIcons
-import dev.ide.ui.icons.TreeIcon
-import dev.ide.ui.icons.TreeIcons
-import dev.ide.ui.theme.resolveTint
-import dev.ide.ui.theme.Ca
+import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.theme.Symbol
+import dev.ide.ui.theme.cardShape
+import dev.ide.ui.theme.tileShape
+import dev.ide.ui.theme.tonalPair
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The Projects Store — a varied, single-scroll storefront (App-Store-style rather than a flat list): a hero
- * carousel, colorful category tiles, a horizontal shelf of starter templates, a two-column grid of sample
- * projects, and a community banner. Everything is one [LazyColumn] so the search bar scrolls with the content.
- * Data comes from [IdeBackend.store]; a search query or a category tile switches the body to a results grid.
- * Tapping an item calls [onOpenItem], which the host routes to the full-screen [StoreItemScreen].
+ * The home screen's **Explore** tab — the Projects Store.
+ *
+ * Browse mode is a single [LazyColumn] so the header scrolls with the content: title, a search entry that
+ * is a *button* rather than a live field, the trending ticker, the featured carousel, the "browse by kind"
+ * grid, then one list per catalog section. Tapping the search entry swaps the whole screen into search
+ * mode, which owns the real text field — the same split the design uses, implemented as one screen with
+ * two modes rather than two nav destinations, so the tab keeps its scroll position on the way back.
+ *
+ * Every card's tint and silhouette come from its position in its run, not from the item, so a catalog with
+ * no artwork of its own still renders as a varied shelf.
  */
 @Composable
 fun ProjectsStoreScreen(
@@ -106,476 +110,390 @@ fun ProjectsStoreScreen(
     }
 
     val state = rememberProjectsStoreState(backend)
-    val catalog = state.catalog
-    val filtering = state.filtering
-    val adsActive = LocalAds.current?.adsActive == true
+    var searching by remember { mutableStateOf(false) }
 
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(
-            Modifier.widthIn(max = 820.dp).fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            item(key = "header") { StoreHeader(onOpenHub) }
-            item(key = "search") {
-                SearchField(state.query, onChange = state::updateQuery, modifier = Modifier.padding(horizontal = HPAD, vertical = 8.dp))
-            }
-            item(key = "categories") {
-                CategoryStrip(catalog.categories, selected = state.category, onSelect = state::selectCategory)
-            }
-
-            if (filtering) {
-                resultsGrid(state.results, onClick = onOpenItem)
+        Box(Modifier.widthIn(max = 820.dp).fillMaxSize()) {
+            if (searching) {
+                StoreSearch(
+                    state = state,
+                    onOpenItem = onOpenItem,
+                    onClose = {
+                        searching = false
+                        state.updateQuery("")
+                        state.selectCategory(null)
+                    },
+                )
             } else {
-                if (catalog.featured.isNotEmpty()) {
-                    item(key = "featured") {
-                        Spacer(Modifier.height(6.dp))
-                        FeaturedCarousel(catalog.featured, onClick = onOpenItem)
-                    }
-                }
-                // A native ad reads as just another shelf item in the gallery — the most natural placement.
-                if (adsActive) {
-                    item(key = "ad") {
-                        AdSlot(AdPlacement.STORE, Modifier.padding(horizontal = HPAD, vertical = 8.dp))
-                    }
-                }
-                catalog.sections.forEach { section -> storeSection(section, onClick = onOpenItem) }
+                StoreBrowse(
+                    state = state,
+                    onOpenItem = onOpenItem,
+                    onOpenSearch = { category ->
+                        state.selectCategory(category)
+                        searching = true
+                    },
+                )
             }
         }
     }
 }
 
-private val HPAD = 20.dp
-
-// ---- header + search ----
-
 @Composable
-private fun StoreHeader(onOpenHub: (() -> Unit)?) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = HPAD, end = HPAD, top = 28.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(Res.string.store_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                stringResource(Res.string.store_subtitle),
-                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (onOpenHub != null) IconButtonCa(CaIcons.gear, stringResource(Res.string.store_settings_and_tools), onOpenHub)
-    }
-}
+private fun StoreBrowse(
+    state: ProjectsStoreState,
+    onOpenItem: (UiStoreItem) -> Unit,
+    onOpenSearch: (String?) -> Unit,
+) {
+    val catalog = state.catalog
+    val allItems = remember(catalog) { catalog.sections.flatMap { it.items } }
+    val ticker = remember(catalog) { tickerLabels(catalog.sections, catalog.categories) }
 
-@Composable
-private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .height(46.dp)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        Icon(CaIcons.search, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.outline)
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (value.isEmpty()) Text(stringResource(Res.string.store_search_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
-            BasicTextField(
-                value = value,
-                onValueChange = onChange,
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        if (value.isNotEmpty()) {
-            val interaction = remember { MutableInteractionSource() }
-            Box(
-                Modifier.size(22.dp).clickable(interaction, indication = null) { onChange("") },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(CaIcons.close, stringResource(Res.string.clear), Modifier.size(15.dp), tint = MaterialTheme.colorScheme.outline)
+        item("header") {
+            Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 12.dp)) {
+                Text(
+                    stringResource(Res.string.store_title),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                SearchEntry(onClick = { onOpenSearch(null) }, modifier = Modifier.padding(top = 14.dp))
             }
         }
-    }
-}
 
-// ---- colorful category strip ----
-
-@Composable
-private fun CategoryStrip(categories: List<String>, selected: String?, onSelect: (String?) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = HPAD, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        CategoryTile(stringResource(Res.string.store_all), MaterialTheme.colorScheme.primary, CaIcons.grid, selected == null) { onSelect(null) }
-        categories.forEach { c ->
-            CategoryTile(c, categoryColor(c), categoryIcon(c), selected == c) { onSelect(if (selected == c) null else c) }
+        if (ticker.isNotEmpty()) {
+            item("ticker") {
+                TrendingTicker(
+                    labels = ticker,
+                    pairAt = { tonalPair(it) },
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
         }
-    }
-}
 
-@Composable
-private fun CategoryTile(label: String, color: Color, icon: ImageVector, active: Boolean, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val shape = RoundedCornerShape(Ca.radius.lg)
-    Column(
-        Modifier
-            .width(96.dp)
-            .height(76.dp)
-            .pressScale(interaction)
-            .clip(shape)
-            .background(Brush.linearGradient(listOf(color, color.darken(0.55f))))
-            .border(2.dp, if (active) Color.White.copy(alpha = 0.9f) else Color.Transparent, shape)
-            .clickable(interaction, indication = null, onClick = onClick)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Icon(icon, null, Modifier.size(22.dp), tint = Color.White)
-        Spacer(Modifier.weight(1f))
-        Text(label, color = Color.White, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-// ---- featured hero carousel ----
-
-@Composable
-private fun FeaturedCarousel(items: List<UiStoreItem>, onClick: (UiStoreItem) -> Unit) {
-    val pager = rememberPagerState(pageCount = { items.size })
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        HorizontalPager(
-            state = pager,
-            pageSpacing = 12.dp,
-            contentPadding = PaddingValues(horizontal = HPAD),
-        ) { i ->
-            FeaturedCard(items[i], onClick = { onClick(items[i]) })
-        }
-        if (items.size > 1) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    repeat(items.size) { i ->
-                        val on = i == pager.currentPage
-                        Box(
-                            Modifier
-                                .size(if (on) 8.dp else 6.dp)
-                                .background(
-                                    if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                                    RoundedCornerShape(Ca.radius.pill),
-                                ),
+        if (catalog.featured.isNotEmpty()) {
+            item("featured") {
+                val listState = rememberLazyListState()
+                LazyRow(
+                    state = listState,
+                    flingBehavior = rememberSnapFlingBehavior(listState),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    itemsIndexed(catalog.featured, key = { _, it -> it.id }) { i, item ->
+                        FeaturedHeroCard(
+                            title = item.title,
+                            badge = kindLabel(item.kind),
+                            subtitle = listOfNotNull(item.author, item.language).joinToString(" · ")
+                                .ifBlank { item.category },
+                            pair = tonalPair(i),
+                            motif = remember(item.id) { motifFor(item.id) },
+                            rating = item.rating,
+                            installs = item.installs,
+                            preview = if (hasSamplePreview(item.previewKey)) {
+                                { m -> SamplePreview(item.previewKey!!, m) }
+                            } else null,
+                            onClick = { onOpenItem(item) },
                         )
                     }
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun FeaturedCard(item: UiStoreItem, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val base = item.accentColor?.let { Color(it) } ?: categoryColor(item.category)
-    val shape = RoundedCornerShape(Ca.radius.xl)
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(180.dp)
-            .pressScale(interaction)
-            .clip(shape)
-            .background(Brush.linearGradient(listOf(base, base.darken(0.6f))))
-            .clickable(interaction, indication = null, onClick = onClick),
-    ) {
-        // A large translucent glyph bleeding off the right edge as decorative art.
-        Box(Modifier.align(Alignment.CenterEnd).padding(end = 14.dp)) {
-            StoreGlyph(item.iconId, tile = 76.dp, glyph = 40.dp, fill = Color.White.copy(alpha = 0.16f), tint = Color.White)
-        }
-        Column(
-            Modifier.fillMaxSize().padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            PillChip(kindLabel(item).uppercase())
-            Spacer(Modifier.weight(1f))
-            Text(item.title, color = Color.White, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                item.summary,
-                color = Color.White.copy(alpha = 0.9f),
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(0.82f),
-            )
-            if (item.tags.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    item.tags.take(2).forEach { PillChip(it) }
-                }
+        if (catalog.categories.isNotEmpty()) {
+            item("categoriesHeader") {
+                SectionHeader(stringResource(Res.string.store_browse_by_kind))
             }
-        }
-    }
-}
-
-@Composable
-private fun PillChip(text: String) {
-    Box(
-        Modifier.background(Color.White.copy(alpha = 0.22f), RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 10.dp, vertical = 4.dp),
-    ) {
-        Text(text, color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
-    }
-}
-
-// ---- section shelves (varied: horizontal carousel for templates, grid for samples, banner for community) ----
-
-private fun androidx.compose.foundation.lazy.LazyListScope.storeSection(
-    section: UiStoreSection,
-    onClick: (UiStoreItem) -> Unit,
-) {
-    when {
-        section.id == "community" -> {
-            item(key = "sh-${section.id}") { SectionHeader(section) }
-            item(key = "community-banner") { CommunityBanner(Modifier.padding(horizontal = HPAD, vertical = 4.dp)) }
-        }
-        section.items.isEmpty() -> Unit
-        section.id == "samples" -> {
-            item(key = "sh-${section.id}") { SectionHeader(section) }
-            gridOf(section.items, keyPrefix = section.id, onClick = onClick)
-        }
-        else -> {
-            // Templates (and any other shelf): a horizontal carousel of taller cards.
-            item(key = "sh-${section.id}") { SectionHeader(section) }
-            item(key = "row-${section.id}") {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = HPAD),
+            // A LazyVerticalGrid cannot nest inside a LazyColumn, so the two-column grid is emitted as
+            // chunked rows instead.
+            val rows = catalog.categories.chunked(2)
+            itemsIndexed(rows, key = { i, _ -> "catRow$i" }) { rowIndex, row ->
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    items(section.items, key = { "c-${section.id}-${it.id}" }) { item ->
-                        TemplateCard(item, onClick = { onClick(item) })
+                    row.forEachIndexed { colIndex, cat ->
+                        val i = rowIndex * 2 + colIndex
+                        CategoryTile(
+                            name = cat,
+                            count = allItems.count { it.category == cat },
+                            glyph = symbolForCategory(cat),
+                            pair = tonalPair(i),
+                            shape = cardShape(i),
+                            onClick = { onOpenSearch(cat) },
+                            modifier = Modifier.weight(1f),
+                        )
                     }
+                    // Keep a lone tile on an odd final row at one column's width rather than full bleed.
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+
+        catalog.sections.filter { it.items.isNotEmpty() }.forEachIndexed { sectionIndex, section ->
+            item("head_${section.id}") {
+                // "See all" drops into search filtered to that shelf's category, which is the closest the
+                // backend can answer: sections are by kind, and search filters by category.
+                SectionHeader(
+                    title = section.title,
+                    subtitle = section.subtitle,
+                    onSeeAll = { onOpenSearch(section.items.firstOrNull()?.category) },
+                )
+            }
+            storeRows(section, onOpenItem)
+            // One native ad between shelves — browse time between topics, never over the hero carousel.
+            // Padded to the same 20 dp gutter as the rows so it sits in the list rather than beside it.
+            if (sectionIndex == 0) {
+                item("ad_${section.id}") {
+                    AdSlot(AdPlacement.STORE, Modifier.padding(horizontal = 20.dp).padding(top = 16.dp))
                 }
             }
         }
     }
 }
 
-/** A two-column grid rendered as chunked rows (so it lives inside the outer [LazyColumn] without a nested grid). */
-private fun androidx.compose.foundation.lazy.LazyListScope.gridOf(
-    list: List<UiStoreItem>,
-    keyPrefix: String,
-    onClick: (UiStoreItem) -> Unit,
+/** One catalog section rendered as list rows. */
+private fun LazyListScope.storeRows(section: UiStoreSection, onOpenItem: (UiStoreItem) -> Unit) {
+    itemsIndexed(section.items, key = { _, it -> "${section.id}_${it.id}" }) { i, item ->
+        StoreItemRow(item, i, onOpenItem)
+    }
+}
+
+@Composable
+internal fun StoreItemRow(
+    item: UiStoreItem,
+    index: Int,
+    onOpenItem: (UiStoreItem) -> Unit,
+    onAction: ((UiStoreItem) -> Unit)? = null,
+    /** This item's in-flight install, if any. Turns the action into live progress. */
+    progress: dev.ide.ui.backend.UiInstallProgress? = null,
 ) {
-    val rows = list.chunked(2)
-    items(rows, key = { "g-$keyPrefix-${it.first().id}" }) { pair ->
+    val message = progress?.message
+    StoreListRow(
+        title = item.title,
+        // A failure replaces the subtitle: the row is where the tap happened, so it is where the reason belongs.
+        subtitle = message
+            ?: listOfNotNull(item.author, item.language).joinToString(" · ").ifBlank { item.summary },
+        iconId = item.iconId,
+        pair = tonalPair(index),
+        tileShape = tileShape(index),
+        // A template routes straight into the Create-Project flow, so its action reads "Use", not "Install".
+        actionLabel = installActionLabel(item, progress),
+        actionFilled = item.available,
+        rating = item.rating,
+        installs = item.installs,
+        onOpen = { onOpenItem(item) },
+        onAction = { if (!progress.inFlight) (onAction ?: onOpenItem)(item) },
+    )
+}
+
+/**
+ * The non-editable search entry on the browse screen.
+ *
+ * A button that looks like a field, not a field: the real text input lives on the search screen, and a live
+ * field here would put focus (and the soft keyboard) on the browse tab every time it recomposed.
+ */
+@Composable
+internal fun SearchEntry(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = MaterialTheme.colorScheme
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = c.surfaceContainer,
+        contentColor = c.onSurfaceVariant,
+        modifier = modifier.fillMaxWidth().height(52.dp),
+    ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = HPAD, vertical = 5.dp),
+            Modifier.padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            pair.forEach { item -> ItemTile(item, Modifier.weight(1f), onClick = { onClick(item) }) }
-            if (pair.size == 1) Spacer(Modifier.weight(1f))
+            Symbol(CaSymbols.search, contentDescription = null, size = 22.dp)
+            Text(
+                stringResource(Res.string.store_search_placeholder),
+                style = MaterialTheme.typography.bodyLarge,
+                color = c.onSurfaceVariant,
+            )
         }
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.resultsGrid(
-    results: List<UiStoreItem>,
-    onClick: (UiStoreItem) -> Unit,
+/**
+ * Search mode: the pill-shaped app bar with the live field, the category pills, and the results.
+ *
+ * Results re-query as the user types (the state holder debounces by 180 ms). The design's full filter
+ * sheet — sort order, multi-select language, minimum rating — is not here: [dev.ide.ui.backend.StoreService]
+ * can filter by query and category only, and a sheet whose sort and rating controls silently did nothing
+ * would be worse than not offering them. The category pills are the part that actually works today.
+ */
+@Composable
+private fun StoreSearch(
+    state: ProjectsStoreState,
+    onOpenItem: (UiStoreItem) -> Unit,
+    onClose: () -> Unit,
 ) {
-    if (results.isEmpty()) {
-        item(key = "no-matches") {
-            Box(Modifier.fillMaxWidth().padding(HPAD), contentAlignment = Alignment.TopCenter) {
+    val c = MaterialTheme.colorScheme
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = c.surfaceContainer,
+                contentColor = c.onSurfaceVariant,
+                modifier = Modifier.weight(1f).height(56.dp),
+            ) {
+                Row(
+                    Modifier.padding(start = 4.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onClose),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Symbol(CaSymbols.arrowBack, contentDescription = stringResource(Res.string.store_title), size = 24.dp)
+                    }
+                    BasicTextField(
+                        value = state.query,
+                        onValueChange = state::updateQuery,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = c.onSurface),
+                        cursorBrush = SolidColor(c.primary),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = {}),
+                        modifier = Modifier.weight(1f).focusRequester(focus),
+                        decorationBox = { field ->
+                            if (state.query.isEmpty()) {
+                                Text(
+                                    stringResource(Res.string.store_search_hint),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = c.onSurfaceVariant,
+                                )
+                            }
+                            field()
+                        },
+                    )
+                }
+            }
+        }
+
+        if (state.catalog.categories.isNotEmpty()) {
+            LazyRow(
+                Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                contentPadding = PaddingValues(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(state.catalog.categories, key = { it }) { cat ->
+                    PillChip(
+                        label = cat,
+                        selected = state.category == cat,
+                        leadingGlyph = CaSymbols.check,
+                        onClick = { state.selectCategory(if (state.category == cat) null else cat) },
+                    )
+                }
+            }
+        }
+
+        val results = state.results
+        if (state.filtering && results.isEmpty()) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 56.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Symbol(CaSymbols.searchOff, contentDescription = null, size = 44.dp, tint = c.outlineVariant)
                 Text(
-                    stringResource(Res.string.store_no_matches),
-                    color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(top = 24.dp),
+                    stringResource(Res.string.store_no_results, state.query),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = c.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                itemsIndexed(results, key = { _, it -> it.id }) { i, item -> StoreItemRow(item, i, onOpenItem) }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun SectionHeader(title: String, subtitle: String? = null, onSeeAll: (() -> Unit)? = null) {
+    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 26.dp, bottom = 8.dp)) {
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            if (onSeeAll != null) {
+                Text(
+                    stringResource(Res.string.store_see_all),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable(onClick = onSeeAll).padding(vertical = 4.dp),
                 )
             }
         }
-    } else {
-        item(key = "results-gap") { Spacer(Modifier.height(4.dp)) }
-        gridOf(results, keyPrefix = "results", onClick = onClick)
-    }
-}
-
-@Composable
-private fun SectionHeader(section: UiStoreSection) {
-    Column(
-        Modifier.fillMaxWidth().padding(start = HPAD, end = HPAD, top = 22.dp, bottom = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(section.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f, fill = false))
-            if (section.items.isNotEmpty()) Chip(section.items.size.toString(), fill = MaterialTheme.colorScheme.surfaceContainerHigh, textColor = MaterialTheme.colorScheme.outline)
-        }
-        section.subtitle?.let { Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium) }
-    }
-}
-
-// ---- card variants ----
-
-/** A tall carousel card (starter templates): a colored header band with the glyph, then title + meta. */
-@Composable
-private fun TemplateCard(item: UiStoreItem, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val accent = item.accentColor?.let { Color(it) } ?: categoryColor(item.category)
-    val shape = RoundedCornerShape(Ca.radius.lg)
-    Column(
-        Modifier
-            .width(230.dp)
-            .pressScale(interaction)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
-            .clickable(interaction, indication = null, onClick = onClick),
-    ) {
-        Box(
-            Modifier.fillMaxWidth().height(92.dp).background(Brush.linearGradient(listOf(accent, accent.darken(0.55f)))),
-        ) {
-            Box(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp)) {
-                StoreGlyph(item.iconId, tile = 52.dp, glyph = 28.dp, fill = Color.White.copy(alpha = 0.16f), tint = Color.White)
-            }
-            Box(Modifier.align(Alignment.TopStart).padding(12.dp)) { PillChip(kindLabel(item).uppercase()) }
-        }
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(item.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(item.summary, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.height(36.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip(item.category, fill = MaterialTheme.colorScheme.surfaceContainerHigh, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (item.installs >= 0) InstallStat(item.installs)
-            }
+        if (subtitle != null) {
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
+            )
         }
     }
 }
 
-/** A compact grid tile (samples / search results): a preview banner (when the sample ships one) or an
- *  accent-tinted glyph, then title, summary, and status chips. */
-@Composable
-private fun ItemTile(item: UiStoreItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val accent = item.accentColor?.let { Color(it) } ?: categoryColor(item.category)
-    val shape = RoundedCornerShape(Ca.radius.lg)
-    val showPreview = hasSamplePreview(item.previewKey)
-    Column(
-        modifier
-            .entranceSlideUp()
-            .pressScale(interaction)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
-            .clickable(interaction, indication = null, onClick = onClick),
-    ) {
-        if (showPreview) SamplePreview(item.previewKey!!, Modifier.fillMaxWidth().aspectRatio(16f / 10f))
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!showPreview) {
-                StoreGlyph(item.iconId, tile = 44.dp, glyph = 24.dp, fill = accent.copy(alpha = 0.16f), tint = accent)
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(item.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(item.summary, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.height(36.dp))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (!item.available) Chip(stringResource(Res.string.store_soon), fill = Ide.colors.warning.copy(alpha = 0.16f), textColor = Ide.colors.warning)
-                else Chip(item.category, fill = MaterialTheme.colorScheme.surfaceContainerHigh, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (item.installs >= 0) InstallStat(item.installs)
-                item.author?.let { Text(stringResource(Res.string.store_by_author, it), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            }
-        }
-    }
+private fun kindLabel(kind: UiStoreItemKind): String = when (kind) {
+    UiStoreItemKind.Template -> "Template"
+    UiStoreItemKind.Sample -> "Sample"
+    UiStoreItemKind.Community -> "Community"
 }
 
-@Composable
-private fun InstallStat(installs: Int) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-        Icon(CaIcons.download, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.outline)
-        Text(compactCount(installs), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
-    }
+/**
+ * The ticker's labels, taken from the catalog's own tags rather than invented.
+ *
+ * The most-used tags are the honest answer to "what is trending here"; a catalog with no tags falls back
+ * to its category names, and one with neither shows no ticker at all rather than a placeholder.
+ */
+private fun tickerLabels(sections: List<UiStoreSection>, categories: List<String>): List<String> {
+    val tags = sections.flatMap { it.items }.flatMap { it.tags }
+    val ranked = tags.groupingBy { it }.eachCount().entries
+        .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+        .map { it.key }
+    return (if (ranked.size >= 4) ranked else categories).take(8)
 }
 
-@Composable
-private fun CommunityBanner(modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(Ca.radius.lg)
-    val accent = Color(0xFF5865F2)
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.22f), accent.copy(alpha = 0.08f))))
-            .border(1.dp, accent.copy(alpha = 0.35f), shape)
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(Ca.radius.md)).background(accent),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(CaIcons.discord, null, Modifier.size(24.dp), tint = Color.White)
-        }
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(Res.string.store_coming_soon), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(Res.string.store_community_content), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
+/** A store category name mapped onto a Material Symbol. Unknown categories fall back to a package glyph. */
+private fun symbolForCategory(category: String): Char = when (category.lowercase()) {
+    "kotlin" -> CaSymbols.bolt
+    "java" -> CaSymbols.coffee
+    "android" -> CaSymbols.phoneAndroid
+    "compose", "multiplatform" -> CaSymbols.hub
+    "games" -> CaSymbols.palette
+    "web", "server", "backend" -> CaSymbols.dns
+    "build", "plugins", "build plugins" -> CaSymbols.extension
+    "snippets", "snippet packs" -> CaSymbols.codeBlocks
+    "community" -> CaSymbols.apartment
+    "console", "cli" -> CaSymbols.terminal
+    else -> CaSymbols.extension
 }
 
-// ---- shared bits ----
-
-/** Render a store item's icon id through the shared [TreeIcons] registry, on a soft rounded tile. */
-@Composable
-private fun StoreGlyph(
-    iconId: String,
-    tile: androidx.compose.ui.unit.Dp,
-    glyph: androidx.compose.ui.unit.Dp,
-    fill: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    tint: Color? = null,
-) {
-    Box(Modifier.size(tile).clip(RoundedCornerShape(Ca.radius.md)).background(fill), contentAlignment = Alignment.Center) {
-        when (val ic = TreeIcons.resolve(iconId)) {
-            is TreeIcon.Glyph -> Icon(ic.image, null, Modifier.size(glyph), tint = tint ?: resolveTint(ic.tint))
-            is TreeIcon.Folder -> Icon(ic.closed, null, Modifier.size(glyph), tint = tint ?: resolveTint(ic.tint))
-            is TreeIcon.Badge -> Text(ic.text, color = tint ?: ic.color, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-/** A short human count (1200 → "1.2k") for the soft install/star stat on a card. */
-private fun compactCount(n: Int): String = when {
-    n >= 1_000_000 -> "${n / 100_000 / 10.0}m"
-    n >= 1_000 -> "${n / 100 / 10.0}k"
-    else -> n.toString()
-}
-
-/** A brand color for a category (known ones fixed; the rest hashed into a palette) — drives tiles + card accents. */
-private fun categoryColor(category: String): Color = when (category.lowercase()) {
-    "android" -> Color(0xFF3DDC84)
-    "kotlin" -> Color(0xFF7F52FF)
-    "java" -> Color(0xFFF89820)
-    "games" -> Color(0xFFE0533D)
-    "compose" -> Color(0xFF3FBDD9)
-    "samples" -> Color(0xFF00A8A0)
-    "community" -> Color(0xFF5865F2)
-    "other" -> Color(0xFF8E8E93)
-    else -> TILE_PALETTE[(category.hashCode() and 0x7fffffff) % TILE_PALETTE.size]
-}
-
-private val TILE_PALETTE = listOf(
-    Color(0xFF3DDC84), Color(0xFF7F52FF), Color(0xFFF89820),
-    Color(0xFFE0533D), Color(0xFF3FBDD9), Color(0xFFB487F7),
-)
-
-private fun categoryIcon(category: String): ImageVector = when (category.lowercase()) {
-    "android" -> CaIcons.androidLogo
-    "kotlin" -> CaIcons.code
-    "java" -> CaIcons.braces
-    "games" -> CaIcons.star
-    "compose" -> CaIcons.sparkle
-    "community" -> CaIcons.discord
-    "samples" -> CaIcons.layers
-    else -> CaIcons.grid
-}
-
-@Composable
-private fun kindLabel(item: UiStoreItem): String = when (item.kind) {
-    UiStoreItemKind.Template -> stringResource(Res.string.store_kind_template)
-    UiStoreItemKind.Sample -> stringResource(Res.string.store_kind_sample)
-    UiStoreItemKind.Community -> stringResource(Res.string.store_kind_community)
-}
+/**
+ * A store item's glyph: whatever the backend named, else something derived from its category.
+ *
+ * Catalog rows carry `iconId` in the line-icon vocabulary (or, once the remote catalog lands, a Material
+ * Symbols name directly), so a name that resolves is used as-is and everything else falls back.
+ */
+private fun symbolForStoreItem(item: UiStoreItem): Char =
+    CaSymbols.forIconId(item.iconId, fallback = symbolForCategory(item.category))
