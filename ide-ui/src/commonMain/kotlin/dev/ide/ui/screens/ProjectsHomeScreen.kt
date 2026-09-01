@@ -145,6 +145,11 @@ fun ProjectsHomeScreen(
     onDismissLegacyRecovery: () -> Unit = {},
     /** Re-read the project list from disk. Null hides the pull-to-refresh gesture entirely. */
     onRefresh: (() -> Unit)? = null,
+    /**
+     * The notification bell for the header. Passed in rather than built here so this screen keeps taking
+     * plain data and stays renderable in a snapshot test with no backend.
+     */
+    bell: (@Composable () -> Unit)? = null,
     loadIcon: (suspend (ProjectInfo) -> UiProjectIcon?)? = null,
 ) {
     var segment by remember { mutableStateOf(HomeSegment.Projects) }
@@ -190,7 +195,7 @@ fun ProjectsHomeScreen(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 24.dp),
         ) {
-            item("header") { HomeHeader(onOpenAccount = { sheet = HomeSheet.Account }) }
+            item("header") { HomeHeader(onOpenAccount = { sheet = HomeSheet.Account }, bell = bell) }
             item("actions") {
                 HomeActions(onNewProject = onNewProject, onClone = onCloneRepository)
             }
@@ -259,7 +264,11 @@ fun ProjectsHomeScreen(
 private enum class HomeSheet { Account }
 
 @Composable
-private fun HomeHeader(onOpenAccount: () -> Unit) {
+private fun HomeHeader(
+    onOpenAccount: () -> Unit,
+    /** The notification bell, supplied by the host so this screen needs no backend of its own. */
+    bell: (@Composable () -> Unit)? = null,
+) {
     val c = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp),
@@ -274,6 +283,7 @@ private fun HomeHeader(onOpenAccount: () -> Unit) {
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
+        bell?.invoke()
         // No account exists yet, so this is a glyph rather than a letter tile: initials would have to be
         // invented. It becomes the real avatar once store sign-in lands.
         SquareToneButton(

@@ -613,6 +613,17 @@ We never collect your code, file or project names, which features you use, or an
     <string name="submit_withdraw">Withdraw</string>
     <string name="submit_unavailable">Publishing isn't available in this build.</string>
     <string name="submit_signin_first">Sign in to publish.</string>
+    <string name="notif_title">Notifications</string>
+    <string name="notif_empty">Nothing to catch up on.</string>
+    <string name="notif_empty_body">Reviews, updates and finished builds show up here.</string>
+    <string name="notif_mark_all">Mark all read</string>
+    <string name="notif_clear">Clear</string>
+    <string name="notif_open">Open</string>
+    <string name="notif_dismiss">Dismiss</string>
+    <string name="notif_just_now">just now</string>
+    <string name="notif_minutes">%1$d min ago</string>
+    <string name="notif_hours">%1$d h ago</string>
+    <string name="notif_days">%1$d d ago</string>
     <string name="store_get">Get</string>
     <string name="store_kind_template">Template</string>
     <string name="store_kind_sample">Sample</string>

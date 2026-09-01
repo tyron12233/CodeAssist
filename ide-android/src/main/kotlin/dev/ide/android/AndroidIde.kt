@@ -18,6 +18,7 @@ import dev.ide.analytics.impl.AnalyticsLogSink
 import dev.ide.analytics.impl.DefaultAnalyticsService
 import dev.ide.analytics.impl.SupabaseSink
 import dev.ide.core.ANALYTICS_SERVICE
+import dev.ide.core.NOTIFICATION_PRESENTER
 import dev.ide.core.STORE_ACCOUNT_SERVICE
 import dev.ide.core.STORE_CATALOG_SOURCE
 import dev.ide.core.STORE_SUBMISSION_SERVICE
@@ -96,6 +97,11 @@ object AndroidIde {
         manager.applicationContainer.registerServiceIfAbsent(STORE_CATALOG_SOURCE) { buildStoreSource() }
         // Sign-in and submissions. Built here too, and held so MainActivity can hand the OAuth deep link
         // straight to the instance the engine is using rather than a second one with no session in it.
+        // OS notifications for the in-app center. Registered before the backend builds the center, which
+        // resolves this port once.
+        manager.applicationContainer.registerServiceIfAbsent(NOTIFICATION_PRESENTER) {
+            AndroidNotificationPresenter(appContext)
+        }
         val supabaseAccounts = buildStoreAccounts()
         val storeAccounts: dev.ide.store.StoreAccountService =
             supabaseAccounts ?: dev.ide.store.StoreAccountService.Unsupported

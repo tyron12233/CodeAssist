@@ -40,6 +40,8 @@ internal class StoreBackend(
     private val accounts: dev.ide.store.StoreAccountService = dev.ide.store.StoreAccountService.Unsupported,
     private val submissions: dev.ide.store.StoreSubmissionService =
         dev.ide.store.StoreSubmissionService.Unsupported,
+    /** Told when a submission's review state changes. Null in tests and on hosts with no storage. */
+    private val notifications: NotificationCenter? = null,
 ) : StoreService {
 
     private fun templates(): List<ProjectTemplate> =
@@ -154,10 +156,58 @@ internal class StoreBackend(
     override suspend fun submit(
         draft: dev.ide.ui.backend.UiSubmissionDraft,
         packaged: dev.ide.ui.backend.UiPackagedProject,
-    ): dev.ide.ui.backend.UiSubmitResult = withContext(storeIo) { submissionState.submit(draft, packaged) }
+    ): dev.ide.ui.backend.UiSubmitResult = withContext(storeIo) {
+        val result = submissionState.submit(draft, packaged)
+        // Keyed on the item and version, so re-submitting the same version updates the entry rather than
+        // stacking a second one, and a later review decision replaces this with its outcome.
+        result.submission?.let { sub ->
+            notifications?.post(
+                kind = dev.ide.ui.backend.UiNotificationKind.STORE_SUBMISSION,
+                title = "${draft.title} is in review",
+                body = "A moderator reviews every submission. Nothing is public until it is approved.",
+                target = dev.ide.ui.backend.UiNotificationTarget.Submissions,
+                key = "submission:${sub.itemId}:${sub.version}",
+            )
+        }
+        result
+    }
 
-    override suspend fun mySubmissions(): List<dev.ide.ui.backend.UiStoreSubmission> =
-        withContext(storeIo) { submissionState.mine() }
+    /**
+     * The account's submissions, and a notification for anything whose state changed since last time.
+     *
+     * The change has to be noticed here because there is nothing to push it: a review happens on someone
+     * else's schedule, days later, with the app closed. Comparing on each read is what turns that into
+     * something the user finds out about at all.
+     */
+    override suspend fun mySubmissions(): List<dev.ide.ui.backend.UiStoreSubmission> = withContext(storeIo) {
+        val current = submissionState.mine()
+        current.forEach { sub ->
+            val seenKey = "store.submission.seen.${sub.itemId}.${sub.version}"
+            val previous = ctx.manager?.preference(seenKey)
+            if (previous != sub.status.name) {
+                ctx.manager?.setPreference(seenKey, sub.status.name)
+                // The first sighting of a submission this device did not create is not news; only a change
+                // from a state we had already recorded is.
+                if (previous != null) notifications?.post(
+                    kind = dev.ide.ui.backend.UiNotificationKind.STORE_SUBMISSION,
+                    title = submissionHeadline(sub),
+                    body = sub.note,
+                    target = dev.ide.ui.backend.UiNotificationTarget.Submissions,
+                    key = "submission:${sub.itemId}:${sub.version}",
+                )
+            }
+        }
+        current
+    }
+
+    /** What the change actually means, in the words a submitter would use. */
+    private fun submissionHeadline(sub: dev.ide.ui.backend.UiStoreSubmission): String = when (sub.status) {
+        dev.ide.ui.backend.UiSubmissionStatus.PUBLISHED -> "${sub.projectName} is live in the store"
+        dev.ide.ui.backend.UiSubmissionStatus.REJECTED -> "${sub.projectName} was not accepted"
+        dev.ide.ui.backend.UiSubmissionStatus.CHANGES_REQUESTED -> "${sub.projectName} needs changes"
+        dev.ide.ui.backend.UiSubmissionStatus.BUILDING -> "${sub.projectName} is being built"
+        dev.ide.ui.backend.UiSubmissionStatus.SUBMITTED -> "${sub.projectName} is in review"
+    }
 
     override suspend fun withdrawSubmission(itemId: String, version: String): Boolean =
         withContext(storeIo) { submissionState.withdraw(itemId, version) }

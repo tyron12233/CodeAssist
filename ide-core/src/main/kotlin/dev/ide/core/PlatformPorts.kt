@@ -53,3 +53,17 @@ val STORE_ACCOUNT_SERVICE = ServiceKey<dev.ide.store.StoreAccountService>("platf
 /** Submissions. Separate from [STORE_ACCOUNT_SERVICE] because submitting needs a signed-in session and
  *  browsing needs neither, so a host can wire the catalog without wiring publishing at all. */
 val STORE_SUBMISSION_SERVICE = ServiceKey<dev.ide.store.StoreSubmissionService>("platform.storeSubmissions")
+
+/**
+ * A host that can raise an OS-level notification.
+ *
+ * Optional: the in-app notification center works without it, and on a host with no notification surface
+ * (desktop today, tests) there is nothing to register. The center posts to it as well as to its own list,
+ * so the host decides what deserves interrupting the user and what only belongs in the list.
+ */
+val NOTIFICATION_PRESENTER = ServiceKey<NotificationPresenter>("platform.notificationPresenter")
+
+/** Implemented by the launcher; see [NOTIFICATION_PRESENTER]. */
+interface NotificationPresenter {
+    fun present(notification: dev.ide.ui.backend.UiNotification)
+}

@@ -629,6 +629,34 @@ class CodeAssistAppState(
         screen = Screen.SubmitProject
     }
 
+    /**
+     * Act on a tapped notification.
+     *
+     * A target that no longer resolves is a no-op rather than an error: a project can be deleted and a
+     * store item withdrawn between the notification being posted and the user opening it, and neither is
+     * worth an error dialog. The notification stays in the list so it is not silently swallowed.
+     */
+    fun openNotificationTarget(notification: dev.ide.ui.backend.UiNotification) {
+        when (val target = notification.target) {
+            null -> Unit
+            is dev.ide.ui.backend.UiNotificationTarget.Project -> {
+                val match = backend.projects.projects().firstOrNull { it.rootPath == target.rootPath }
+                if (match != null) openProject(match)
+            }
+            is dev.ide.ui.backend.UiNotificationTarget.StoreItem -> {
+                scope.launch {
+                    val item = runCatching { backend.store.feed()?.allItems?.firstOrNull { it.id == target.itemId } }
+                        .getOrNull()
+                    if (item != null) openStoreItem(item)
+                }
+            }
+            dev.ide.ui.backend.UiNotificationTarget.Submissions -> openSubmitProject()
+            is dev.ide.ui.backend.UiNotificationTarget.Screen -> {
+                Screen.entries.firstOrNull { it.name == target.route }?.let { navigateTo(it) }
+            }
+        }
+    }
+
     // ---- first-launch sheets ----
 
     fun dismissMigration() {

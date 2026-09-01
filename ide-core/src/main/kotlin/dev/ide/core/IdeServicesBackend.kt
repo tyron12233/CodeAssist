@@ -310,6 +310,25 @@ class IdeServicesBackend(
     // (engineDispatcher / scheduler / epochs / engineScope) because the extracted impls build their engine-
     // backed flows in their constructors via `engineFlow`, which reads that state — so it must already exist.
     override val files: FileService = FileBackend(this)
+
+    /**
+     * The notification center, persisted under the app's storage root.
+     *
+     * Held as the concrete type because subsystems POST to it and the UI-facing [NotificationService] is
+     * read-only by design: the UI marks things read, it does not invent notifications.
+     */
+    internal val notificationCenter: dev.ide.core.backend.NotificationCenter = run {
+        val host: NotificationPresenter? =
+            manager?.applicationContainer?.getServiceOrNull(NOTIFICATION_PRESENTER)
+        dev.ide.core.backend.NotificationCenter(
+            storageRoot = manager?.storageRoot?.toFile(),
+            presenter = host?.let { presenter ->
+                { n: dev.ide.ui.backend.UiNotification -> presenter.present(n) }
+            },
+        )
+    }
+
+    override val notifications: dev.ide.ui.backend.NotificationService = notificationCenter
     override val editor: EditorService = EditorBackend(this)
     override val blocks: BlockService = BlockBackend(this)
     override val preview: PreviewService = PreviewBackend(this)
@@ -335,7 +354,7 @@ class IdeServicesBackend(
             ?: dev.ide.store.StoreSubmissionService.Unsupported
 
     override val store: StoreService =
-        StoreBackend(this, storeCatalogSource, storeAccountService, storeSubmissionService)
+        StoreBackend(this, storeCatalogSource, storeAccountService, storeSubmissionService, notificationCenter)
     // Held as the concrete type so the Compose preview host can reach its ide-core-only lesson-lowering methods
     // ([lowerLessonComposePreview]) that return an ide-core type the [LearnService] UI interface can't name.
     private val learnBackend = LearnBackend(this)

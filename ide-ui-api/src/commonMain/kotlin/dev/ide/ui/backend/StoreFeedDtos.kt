@@ -135,7 +135,26 @@ data class UiStoreFeed(
     val sections: List<UiFeedSection> = emptyList(),
     /** True when this came from the on-disk cache rather than the network — the UI says so. */
     val fromCache: Boolean = false,
-)
+) {
+    /**
+     * Every item mentioned anywhere in the feed, deduplicated by id.
+     *
+     * For looking one up by id — following a notification, for instance — where which shelf it happened to
+     * appear on is irrelevant.
+     */
+    val allItems: List<UiStoreItem>
+        get() = sections.flatMap { section ->
+            when (section) {
+                is UiFeedSection.Featured -> section.items
+                is UiFeedSection.ItemList -> section.items
+                is UiFeedSection.Catalogue -> section.items
+                is UiFeedSection.Personalized -> section.items
+                is UiFeedSection.Charts -> section.tabs.flatMap { tab -> tab.entries.map { it.item } }
+                is UiFeedSection.Bundled -> section.items
+                else -> emptyList()
+            }
+        }.distinctBy { it.id }
+}
 
 /**
  * Where a submission stands.

@@ -21,6 +21,9 @@ interface IdeBackend {
     /** Files & VFS: the workspace tree and file/directory operations. */
     val files: FileService
 
+    /** The notification center. Defaults to [NotificationService.Unsupported] for hosts without storage. */
+    val notifications: NotificationService get() = NotificationService.Unsupported
+
     /** Editor language services: completion, analysis, hints, navigation, rename, code actions. */
     val editor: EditorService
 

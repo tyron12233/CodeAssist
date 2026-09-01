@@ -20,6 +20,8 @@ import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.ext.ScreenContext
 import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.navigation.ScreenHost
+import dev.ide.ui.screens.NotificationBell
+import dev.ide.ui.screens.NotificationsSheet
 import dev.ide.ui.screens.StoreSignInSheet
 import dev.ide.ui.screens.SubmitProjectScreen
 import dev.ide.ui.screens.CodeStyleScreen
@@ -381,7 +383,9 @@ private fun ProjectPickerRoute(
     projects: List<ProjectInfo>,
 ) {
     val backend = app.backend
+    var notificationsVisible by remember { mutableStateOf(false) }
     ProjectsHomeScreen(
+        bell = { NotificationBell(backend, onClick = { notificationsVisible = true }) },
         projects = projects,
         onOpen = app::openProject,
         // Straight to the full-screen Create-Project gallery, which owns the template picker.
@@ -421,6 +425,16 @@ private fun ProjectPickerRoute(
         onDismissLegacyRecovery = app::dismissLegacyRecovery,
         loadIcon = { backend.projects.projectIcon(it.rootPath) },
     )
+    if (notificationsVisible) {
+        NotificationsSheet(
+            backend = backend,
+            onDismiss = { notificationsVisible = false },
+            onOpenTarget = { n ->
+                notificationsVisible = false
+                app.openNotificationTarget(n)
+            },
+        )
+    }
 }
 
 @Composable
