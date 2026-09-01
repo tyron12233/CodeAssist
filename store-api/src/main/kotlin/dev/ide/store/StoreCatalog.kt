@@ -58,6 +58,7 @@ data class RemoteStoreItem(
     val templateId: String? = null,
     val featured: Boolean = false,
     val installs: Int = 0,
+    val likes: Int = 0,
     val rating: Float? = null,
     val ratingCount: Int = 0,
     val version: String? = null,

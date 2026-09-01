@@ -330,7 +330,7 @@ fun SpotlightCard(
 
 /** Inverted-filled when not following, outlined once following — so the "done" state is the quieter one. */
 @Composable
-private fun FollowButton(
+internal fun FollowButton(
     following: Boolean,
     onClick: () -> Unit,
     container: Color,

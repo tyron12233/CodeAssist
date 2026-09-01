@@ -144,6 +144,14 @@ internal object StoreFeedMapper {
      *    try to download a zip that is already in the APK.
      *  - `previewKey`, because the screenshots are bundled drawables the server knows nothing about.
      */
+    /**
+     * One remote item as the UI sees it, with no bundled overlay.
+     *
+     * For surfaces that show a specific publisher's catalogue rather than the merchandised feed: there is
+     * nothing to overlay there, because a publisher's own list is exactly what they published.
+     */
+    internal fun itemToUi(item: RemoteStoreItem): UiStoreItem = item.toUi(emptyMap())
+
     private fun RemoteStoreItem.toUi(bundled: Map<String, UiStoreItem>): UiStoreItem {
         val local = bundled[id]
         return UiStoreItem(
@@ -164,6 +172,7 @@ internal object StoreFeedMapper {
             featured = featured,
             accentColor = accent?.let(::parseHexColor) ?: local?.accentColor,
             installs = installs,
+            likes = likes,
             rating = rating ?: -1f,
             ratingCount = ratingCount,
             version = version,

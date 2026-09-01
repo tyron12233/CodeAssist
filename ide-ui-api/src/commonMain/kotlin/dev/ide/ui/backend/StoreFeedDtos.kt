@@ -355,3 +355,33 @@ data class UiReviewPage(
  * carries the detail field for everything that does not fit.
  */
 enum class UiReportReason { MALWARE, SPAM, COPYRIGHT, INAPPROPRIATE, BROKEN, OTHER }
+
+
+// ---- publisher profiles ----
+
+/**
+ * A publisher's page.
+ *
+ * [averageRating] is weighted by each project's rating count, so a project with one five-star review does
+ * not outweigh one with two hundred ratings. Null means nothing they published has been rated, which is a
+ * different statement from an average of zero.
+ */
+data class UiPublisherProfile(
+    val handle: String,
+    val displayName: String,
+    val bio: String? = null,
+    val avatarUrl: String? = null,
+    val location: String? = null,
+    val linkUrl: String? = null,
+    val verified: Boolean = false,
+    val followers: Int = 0,
+    val following: Boolean = false,
+    val projectCount: Int = 0,
+    val totalInstalls: Int = 0,
+    val totalLikes: Int = 0,
+    val averageRating: Float? = null,
+    val items: List<UiStoreItem> = emptyList(),
+    val loading: Boolean = false,
+    /** Set when the profile could not be loaded; shown verbatim. Distinct from "no such publisher". */
+    val error: String? = null,
+)

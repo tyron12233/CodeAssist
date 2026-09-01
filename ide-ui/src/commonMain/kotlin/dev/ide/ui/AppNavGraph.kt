@@ -22,6 +22,7 @@ import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.screens.NotificationBell
 import dev.ide.ui.screens.NotificationsSheet
+import dev.ide.ui.screens.PublisherProfileScreen
 import dev.ide.ui.screens.PublishingGuideScreen
 import dev.ide.ui.screens.StoreSignInSheet
 import dev.ide.ui.screens.SubmitProjectScreen
@@ -143,6 +144,16 @@ internal fun AppNavGraph(
                 onExit = app::exitLessonPlayer,
             )
 
+            Screen.PublisherProfile -> PublisherProfileScreen(
+                backend = backend,
+                handle = app.publisherHandle.orEmpty(),
+                onBack = { app.navigateTo(Screen.Projects) },
+                onOpenItem = app::openStoreItem,
+                // Following needs an account; null would hide the button, which is not the same as it
+                // being unavailable, so it asks instead.
+                onNeedSignIn = { app.navigateTo(Screen.Projects) },
+            )
+
             Screen.PublishingGuide -> PublishingGuideScreen(
                 onBack = { app.navigateTo(Screen.Projects) },
                 onPublish = if (backend.store.submissionsAvailable()) ({ app.openSubmitProject() }) else null,
@@ -157,10 +168,13 @@ internal fun AppNavGraph(
             )
 
             Screen.StoreItem -> {
-                // Bookmarks are persisted locally (see StoreFavorites); rating needs an account, so the
-                // rate button stays hidden until store auth lands rather than being a dead control.
+                val storeScope = rememberCoroutineScope()
+                // The bookmark IS the like now: saving a project is the signal that you rate it, so the
+                // store counts saves publicly rather than asking twice for one opinion. Server-backed, with
+                // the device list as the offline answer (see StoreLikes), which is why a reinstall or a
+                // second device keeps the list.
                 var saved by remember(app.storeItem?.id) {
-                    mutableStateOf(app.storeItem?.let { StoreFavorites.contains(backend, it.id) } == true)
+                    mutableStateOf(app.storeItem?.let { backend.store.isLiked(it.id) } == true)
                 }
                 StoreItemScreen(
                     backend = backend,
@@ -169,7 +183,15 @@ internal fun AppNavGraph(
                     onCreateFromTemplate = { id -> app.createProject(id) },
                     isSaved = saved,
                     onToggleSaved = app.storeItem?.let { current ->
-                        { saved = StoreFavorites.toggle(backend, current.id) }
+                        {
+                            val next = !saved
+                            // Flip first: the local write is what makes the tap feel like it landed, and a
+                            // refusal puts it back rather than leaving the button lying.
+                            saved = next
+                            storeScope.launch {
+                                if (backend.store.setLike(current.id, next) != null) saved = !next
+                            }
+                        }
                     },
                     // Signing in to review needs a browser; null on a host that cannot open one, which the
                     // sheet reports rather than working around.
@@ -508,6 +530,9 @@ private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
                 notifyMessage = error
             }
         },
+        // A publisher with no handle has no page to open — the handle IS the address — so the tap is a
+        // no-op rather than opening a profile that cannot resolve.
+        onOpenPublisher = { publisher -> publisher.handle?.let { app.openPublisher(it) } },
         onAccount = if (app.backend.store.authProviders().isNotEmpty()) ({ signInVisible = true }) else null,
         signedIn = app.backend.store.authState().collectAsState().value.signedIn,
         onHowItWorks = { app.openPublishingGuide() },

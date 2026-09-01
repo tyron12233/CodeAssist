@@ -1026,6 +1026,37 @@ interface StoreService {
     suspend fun setReviewHidden(itemId: String, authorId: String, hidden: Boolean): String? =
         "Reviews are not available in this build"
 
+    // ---- likes ----
+
+    /**
+     * Like a project, or take it back. Returns null on success, or a message to show.
+     *
+     * The like and the saved-for-later bookmark are one thing: saving a project is the signal that you rate
+     * it, so the store counts saves publicly rather than asking twice for one opinion.
+     */
+    suspend fun setLike(itemId: String, liked: Boolean): String? =
+        "Likes are not available in this build"
+
+    /**
+     * Every project the reader has liked.
+     *
+     * Answers from the device first so the Saved shelf paints offline, then reconciles with the account —
+     * likes made on another device belong here too.
+     */
+    suspend fun likedItems(): Set<String> = emptySet()
+
+    /** Whether [itemId] is liked, from the local list. Safe to read during composition. */
+    fun isLiked(itemId: String): Boolean = false
+
+    // ---- publisher profiles ----
+
+    /** A publisher's page, or null when there is no such publisher. */
+    suspend fun publisherProfile(handle: String): UiPublisherProfile? = null
+
+    /** Follow or unfollow a publisher. Returns null on success, or a message to show. */
+    suspend fun setFollowing(handle: String, following: Boolean): String? =
+        "Following is not available in this build"
+
     companion object {
         /** A store that advertises nothing — the default for backends that wire no catalog. */
         val Unsupported: StoreService = object : StoreService {}

@@ -233,6 +233,8 @@ data class UiStoreItem(
     val accentColor: Long? = null,
     /** Downloads / stars, shown as a soft stat on the card. Negative hides it. */
     val installs: Int = -1,
+    /** Public like count. -1 when unknown (a bundled item nobody can like). */
+    val likes: Int = -1,
     /** Mean rating out of 5. Negative hides the rating entirely, which is what a catalog with no ratings
      *  yet reports — a card showing "0.0 stars" would read as "rated badly", not as "not rated". */
     val rating: Float = -1f,
@@ -1106,6 +1108,9 @@ data class ProjectInfo(
     /** Epoch-ms of the last time the user opened this project (0 = unknown). The picker lists most-recent
      *  first and shows a relative "opened …" label. */
     val lastOpened: Long = 0L,
+    /** True when the project was adopted from a folder no build system recognized (a clone), so it holds
+     *  files the user can edit but nothing that can be built. See [UiUnrecognizedProject]. */
+    val unrecognized: Boolean = false,
 )
 
 /** Options chosen in the Export-project screen (see [ProjectService.exportProject]). */
@@ -1209,6 +1214,14 @@ data class UiCompatibilityInfo(
     /** True when a watched build file changed since the last sync, so the model is out of date. */
     val syncNeeded: Boolean = false,
 )
+
+/**
+ * Details of a project adopted from a folder no build system recognized: a clone (or other import) that is
+ * neither a CodeAssist workspace nor anything an importer claims. The files are open for editing, but the
+ * project has no modules, so building, running and code analysis have nothing to work from until the user
+ * sets one up. [origin] is where the folder came from (a clone URL), or blank when it was not recorded.
+ */
+data class UiUnrecognizedProject(val summary: String, val origin: String = "")
 
 /** The result of re-syncing a project from its build files (see [ProjectService.syncProject]). */
 data class UiSyncResult(val ok: Boolean, val message: String, val notes: List<String> = emptyList())

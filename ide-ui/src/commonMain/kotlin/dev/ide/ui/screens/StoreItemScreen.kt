@@ -123,6 +123,7 @@ import dev.ide.ui.generated.resources.reviews_unavailable
 import dev.ide.ui.generated.resources.reviews_write
 import dev.ide.ui.generated.resources.review_hidden_done
 import dev.ide.ui.generated.resources.review_reported
+import dev.ide.ui.generated.resources.profile_likes
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -487,7 +488,8 @@ private fun DetailHero(item: UiStoreItem, pair: TonalPair) {
                 }
                 // A bundled item has no rating, installs or payload size, so the figure row is skipped
                 // entirely rather than left as an empty band of padding under the title.
-                val hasStats = item.rating >= 0f || item.installs >= 0 || item.downloadBytes > 0
+                val hasStats = item.rating >= 0f || item.installs >= 0 || item.downloadBytes > 0 ||
+                    item.likes >= 0
                 if (hasStats) Row(Modifier.fillMaxWidth().padding(top = 18.dp)) {
                     if (item.rating >= 0f) {
                         HeroStat(
@@ -495,6 +497,15 @@ private fun DetailHero(item: UiStoreItem, pair: TonalPair) {
                             label = stringResource(Res.string.store_item_reviews, item.ratingCount),
                             pair = pair,
                             trailingGlyph = CaSymbols.star,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (item.likes > 0) {
+                        HeroStat(
+                            value = compactCount(item.likes),
+                            label = stringResource(Res.string.profile_likes),
+                            pair = pair,
+                            trailingGlyph = CaSymbols.bookmark,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -1018,7 +1029,7 @@ private fun formatRating(rating: Float): String {
     return "${tenths / 10}.${tenths % 10}"
 }
 
-private fun compactCount(n: Int): String = when {
+internal fun compactCount(n: Int): String = when {
     n >= 1_000_000 -> "${n / 1_000_000}M"
     n >= 1_000 -> "${n / 1_000}K"
     else -> n.toString()

@@ -357,6 +357,7 @@ class SupabaseStoreSource(
                 templateId = JsonReader.str(v, "templateId"),
                 featured = JsonReader.bool(v, "featured"),
                 installs = JsonReader.int(v, "installs"),
+                likes = JsonReader.int(v, "likes"),
                 // Absent (not 0) when nothing is rated — the backend omits the key deliberately.
                 rating = JsonReader.float(v, "rating"),
                 ratingCount = JsonReader.int(v, "ratingCount"),

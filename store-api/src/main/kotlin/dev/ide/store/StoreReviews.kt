@@ -80,6 +80,38 @@ enum class ReportReason(val wire: String) {
     OTHER("other"),
 }
 
+/**
+ * A publisher's page: who they are, and everything they have published.
+ *
+ * [averageRating] is weighted by how many people rated each project, so one five-star review cannot
+ * outweigh two hundred ratings. Null when nothing they published has been rated at all, which is different
+ * from an average of zero.
+ */
+data class RemotePublisherProfile(
+    val handle: String,
+    val displayName: String,
+    val bio: String? = null,
+    val avatarUrl: String? = null,
+    val location: String? = null,
+    val linkUrl: String? = null,
+    val verified: Boolean = false,
+    val joinedAt: String? = null,
+    val followers: Int = 0,
+    val following: Boolean = false,
+    val projectCount: Int = 0,
+    val totalInstalls: Int = 0,
+    val totalLikes: Int = 0,
+    val averageRating: Float? = null,
+    val items: List<RemoteStoreItem> = emptyList(),
+)
+
+/**
+ * The engagement port: everything a signed-in reader does to someone else's project.
+ *
+ * Reviews, helpful votes, reports, publisher replies and likes all live here because they share the one
+ * thing that matters to the transport — they need the caller's session — while the catalog source stays
+ * anonymous. Reading a profile is the exception and sits here too, so a caller has one place to look.
+ */
 interface StoreReviewService {
     fun reviewsAvailable(): Boolean = false
 
@@ -144,6 +176,33 @@ interface StoreReviewService {
 
     /** Hide or restore a review. Moderators only; the backend refuses anyone else. */
     fun setReviewHidden(itemSlug: String, authorId: String, hidden: Boolean): StoreResult<Unit> =
+        StoreResult.Unavailable("No store endpoint")
+
+    // ---- likes ----
+
+    /**
+     * Like a project, or take it back.
+     *
+     * The like IS the saved-for-later bookmark: saving something is the honest signal that you rate it, and
+     * asking for both would be asking twice for one opinion. The count is public; who liked is not.
+     */
+    fun setLike(itemSlug: String, liked: Boolean): StoreResult<Unit> =
+        StoreResult.Unavailable("No store endpoint")
+
+    /**
+     * The caller's liked slugs, newest first.
+     *
+     * Slugs rather than ids because that is what the device stores, so reconciling its local list never
+     * needs a mapping it would then have to invalidate.
+     */
+    fun myLikes(): StoreResult<List<String>> = StoreResult.Unavailable("No store endpoint")
+
+    /** A publisher's page. Public: browsing someone's work needs no account. */
+    fun publisherProfile(handle: String): StoreResult<RemotePublisherProfile?> =
+        StoreResult.Unavailable("No store endpoint")
+
+    /** Follow or unfollow a publisher, by handle. */
+    fun setFollowing(handle: String, following: Boolean): StoreResult<Unit> =
         StoreResult.Unavailable("No store endpoint")
 
     companion object {

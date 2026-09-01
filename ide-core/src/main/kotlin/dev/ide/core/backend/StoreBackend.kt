@@ -119,6 +119,68 @@ internal class StoreBackend(
         runCatching { source.recordInstall(id, installId) }
     }
 
+    // ---- likes, and the Saved shelf they back ----
+
+    /**
+     * The same preference key the UI's local list already used, so an existing device's saves survive this
+     * becoming an account-backed feature instead of silently starting empty.
+     */
+    private val likeStore = StoreLikes(
+        reviews = reviewService,
+        readLocal = {
+            ctx.manager?.preference(LIKES_PREF)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+                ?.toSet().orEmpty()
+        },
+        writeLocal = { ids -> ctx.manager?.setPreference(LIKES_PREF, ids.joinToString(",")) },
+    )
+
+    override fun isLiked(itemId: String): Boolean = likeStore.isLiked(itemId)
+
+    override suspend fun setLike(itemId: String, liked: Boolean): String? =
+        withContext(storeIo) { likeStore.setLiked(itemId, liked) }
+
+    override suspend fun likedItems(): Set<String> = withContext(storeIo) { likeStore.reconcile() }
+
+    // ---- publisher profiles ----
+
+    override suspend fun publisherProfile(handle: String): dev.ide.ui.backend.UiPublisherProfile? =
+        withContext(storeIo) {
+            when (val result = reviewService.publisherProfile(handle)) {
+                is dev.ide.store.StoreResult.Ok -> result.value?.let { p ->
+                    dev.ide.ui.backend.UiPublisherProfile(
+                        handle = p.handle,
+                        displayName = p.displayName,
+                        bio = p.bio,
+                        avatarUrl = p.avatarUrl,
+                        location = p.location,
+                        linkUrl = p.linkUrl,
+                        verified = p.verified,
+                        followers = p.followers,
+                        following = p.following,
+                        projectCount = p.projectCount,
+                        totalInstalls = p.totalInstalls,
+                        totalLikes = p.totalLikes,
+                        averageRating = p.averageRating,
+                        items = p.items.map { StoreFeedMapper.itemToUi(it) },
+                    )
+                }
+                // A failure is a page that says why, not a missing publisher: "no such publisher" is
+                // Ok(null) and must not be confused with "could not load".
+                is dev.ide.store.StoreResult.Unavailable ->
+                    dev.ide.ui.backend.UiPublisherProfile(handle, handle, error = result.reason)
+                is dev.ide.store.StoreResult.Failed ->
+                    dev.ide.ui.backend.UiPublisherProfile(handle, handle, error = result.message)
+            }
+        }
+
+    override suspend fun setFollowing(handle: String, following: Boolean): String? = withContext(storeIo) {
+        when (val result = reviewService.setFollowing(handle, following)) {
+            is dev.ide.store.StoreResult.Ok -> null
+            is dev.ide.store.StoreResult.Unavailable -> result.reason
+            is dev.ide.store.StoreResult.Failed -> result.message
+        }
+    }
+
     // ---- launch notification ----
 
     override fun launchNotificationEnabled(): Boolean =
@@ -476,6 +538,9 @@ internal class StoreBackend(
 
         /** The broadcast topic name, matched by `store_push_claim`'s topic join. */
         const val LAUNCH_TOPIC = "store-launch"
+
+        /** Shared with the UI's former local-only list, so existing saves carry over. */
+        const val LIKES_PREF = "store.favorites"
 
         /** Sample template ids that ship a built-in preview screenshot ([UiStoreItem.previewKey]). */
         val PREVIEW_SAMPLES = setOf("sample-snake", "sample-tictactoe", "sample-memory", "sample-2048")

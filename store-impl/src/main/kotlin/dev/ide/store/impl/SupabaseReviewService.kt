@@ -148,6 +148,33 @@ class SupabaseReviewService(
             ),
         )
 
+    override fun setLike(itemSlug: String, liked: Boolean): StoreResult<Unit> =
+        unit(rpc("store_set_like", """{"p_slug":${jsonStr(itemSlug)},"p_liked":$liked}"""))
+
+    override fun myLikes(): StoreResult<List<String>> =
+        when (val r = rpc("store_my_likes", "{}")) {
+            is StoreResult.Ok -> StoreResult.Ok(
+                JsonReader.arr(JsonReader.parseOrNull(r.value)).mapNotNull { it as? String },
+            )
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+
+    override fun publisherProfile(handle: String): StoreResult<dev.ide.store.RemotePublisherProfile?> =
+        when (val r = rpc("store_publisher_profile", """{"p_handle":${jsonStr(handle)}}""")) {
+            is StoreResult.Ok -> {
+                val root = JsonReader.parseOrNull(r.value)
+                // The RPC answers `null` for an unknown or banned handle. That is a real answer — "no such
+                // publisher" — and not a failure, so it comes back as Ok(null) rather than an error.
+                StoreResult.Ok(if (root == null) null else parseProfile(root))
+            }
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+
+    override fun setFollowing(handle: String, following: Boolean): StoreResult<Unit> =
+        unit(rpc("store_set_following", """{"p_handle":${jsonStr(handle)},"p_following":$following}"""))
+
     private fun unit(result: StoreResult<String>): StoreResult<Unit> = when (result) {
         is StoreResult.Ok -> StoreResult.Ok(Unit)
         is StoreResult.Unavailable -> StoreResult.Unavailable(result.reason)
@@ -216,6 +243,35 @@ class SupabaseReviewService(
                 val n = (v as? Number)?.toInt() ?: (v as? String)?.toIntOrNull() ?: return@mapNotNull null
                 star to n
             }.toMap()
+        }
+
+        internal fun parseProfile(root: Any?): dev.ide.store.RemotePublisherProfile? {
+            val handle = JsonReader.str(root, "handle") ?: return null
+            val avg = JsonReader.obj(root)?.get("averageRating")
+            return dev.ide.store.RemotePublisherProfile(
+                handle = handle,
+                displayName = JsonReader.str(root, "displayName") ?: handle,
+                bio = JsonReader.str(root, "bio"),
+                avatarUrl = JsonReader.str(root, "avatarUrl"),
+                location = JsonReader.str(root, "location"),
+                linkUrl = JsonReader.str(root, "linkUrl"),
+                verified = JsonReader.bool(root, "verified", false),
+                joinedAt = JsonReader.str(root, "joinedAt"),
+                followers = JsonReader.int(root, "followers", 0),
+                following = JsonReader.bool(root, "following", false),
+                projectCount = JsonReader.int(root, "projectCount", 0),
+                totalInstalls = JsonReader.int(root, "totalInstalls", 0),
+                totalLikes = JsonReader.int(root, "totalLikes", 0),
+                // Absent rather than zero when nothing is rated: an unrated catalogue has no average, and
+                // 0.0 would read as unanimously terrible.
+                averageRating = when (avg) {
+                    is Number -> avg.toFloat()
+                    is String -> avg.toFloatOrNull()
+                    else -> null
+                },
+                items = JsonReader.arr(JsonReader.obj(root)?.get("items"))
+                    .mapNotNull { SupabaseStoreSource.parseItem(it) },
+            )
         }
 
         internal fun parseReview(value: Any?): RemoteReview? {

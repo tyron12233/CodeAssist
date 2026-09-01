@@ -634,6 +634,16 @@ class CodeAssistAppState(
         screen = Screen.PublishingGuide
     }
 
+    /** The handle whose profile is open. */
+    var publisherHandle: String? by mutableStateOf(null)
+        private set
+
+    /** A publisher's page: everything they have published, and what it adds up to. */
+    fun openPublisher(handle: String) {
+        publisherHandle = handle
+        screen = Screen.PublisherProfile
+    }
+
     /**
      * Act on a tapped notification.
      *
@@ -725,6 +735,7 @@ class CodeAssistAppState(
             screen == Screen.StoreItem -> screen = Screen.Projects
             screen == Screen.SubmitProject -> screen = Screen.Projects
             screen == Screen.PublishingGuide -> screen = Screen.Projects
+            screen == Screen.PublisherProfile -> screen = Screen.Projects
 
             screen == Screen.CreateProject -> screen = Screen.Projects
             screen == Screen.ImportProject -> cancelImportPreview()
