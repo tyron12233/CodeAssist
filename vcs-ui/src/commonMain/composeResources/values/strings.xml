@@ -142,6 +142,9 @@
     <string name="vcs_clone_search">Search repositories</string>
     <string name="vcs_clone_sign_in">Sign in to browse your repositories.</string>
     <string name="vcs_clone_none">No repositories found.</string>
+    <string name="vcs_clone_unrecognized_title">Not a recognized project</string>
+    <string name="vcs_clone_unrecognized_body">%1$s was cloned and added to your projects, but no build system recognized it. You can browse and edit its files; building and running need a module set up first.</string>
+    <string name="vcs_clone_unrecognized_open">Open for editing</string>
     <string name="vcs_private">Private</string>
     <string name="vcs_fork">Fork</string>
 

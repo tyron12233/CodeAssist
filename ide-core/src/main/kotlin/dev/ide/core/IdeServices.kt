@@ -190,6 +190,8 @@ import dev.ide.core.sync.NoSyncProgress
 import dev.ide.core.sync.ProjectSyncOutcome
 import dev.ide.core.sync.ProjectSyncService
 import dev.ide.core.sync.SyncStamp
+import dev.ide.core.sync.UnrecognizedProjectMarker
+import dev.ide.model.BuildSystemId
 import dev.ide.model.impl.DefaultFileIconProvider
 import dev.ide.model.impl.ExternalModelApplier
 import dev.ide.model.sync.ModelOwnership
@@ -1752,6 +1754,20 @@ class IdeServices private constructor(
 
     /** True when a watched build file changed since the last sync, so the model is out of date. */
     fun isSyncStale(): Boolean = projectSync.isStale()
+
+    /**
+     * True when this project was adopted from a folder nothing recognized (see [adoptPlainFolderAt]) and
+     * still has no modules, so it is open for editing but cannot be built.
+     *
+     * Both halves matter. The marker alone would keep accusing a project the user has since set up; the empty
+     * module list alone would accuse a project whose modules were merely deleted.
+     */
+    fun isUnrecognizedProject(): Boolean =
+        modules().isEmpty() && UnrecognizedProjectMarker.exists(workspaceRoot)
+
+    /** Where an [isUnrecognizedProject] project's folder came from (a clone URL), or blank if not recorded. */
+    fun unrecognizedProjectOrigin(): String =
+        UnrecognizedProjectMarker.read(workspaceRoot)?.origin.orEmpty()
 
     /**
      * Re-read the build files still present at [workspaceRoot] into the OPEN model: add the modules they
@@ -4707,6 +4723,33 @@ class IdeServices private constructor(
             }
             SyncStamp.write(root, importer.id.value, SyncStamp.match(root, importer.syncFiles()))
             return true
+        }
+
+        /**
+         * Write a workspace at [root] for a folder nothing recognized, so it lists and opens like any other
+         * project even though no build system claims it. The workspace holds the project and no modules: the
+         * IDE has no basis to invent one, and guessing source roots wrong is worse than having none.
+         *
+         * [origin] is recorded for the editor's notice (a clone URL, or blank). Unlike
+         * [importExternalProjectAt] this cannot fail on the folder's contents, because it reads none of them.
+         */
+        fun adoptPlainFolderAt(
+            root: Path,
+            sdk: SdkData,
+            /** App-level shared download cache (projects-root parent); null -> per-project. */
+            sharedCachesRoot: Path? = null,
+            env: ApplicationEnvironment = ApplicationEnvironment(),
+            origin: String = "",
+        ) {
+            val (_, store) = openStore(root, env)
+            ensureSdks(store, sdk, sharedCachesRoot ?: root)
+            val name = root.fileName?.toString()?.takeIf { it.isNotBlank() } ?: "project"
+            store.workspace.beginModification().apply {
+                addProject(name, BuildSystemId.NATIVE, store.vfs.root())
+                commit()
+            }
+            store.save()
+            UnrecognizedProjectMarker.write(root, origin)
         }
     }
 }

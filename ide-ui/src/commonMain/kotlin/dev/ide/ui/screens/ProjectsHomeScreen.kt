@@ -835,6 +835,7 @@ private fun greeting(): String = when (localHourOfDay()) {
 private fun symbolForProject(project: ProjectInfo): Char = when {
     project.isAndroid -> CaSymbols.phoneAndroid
     project.compatibility -> CaSymbols.construction
+    project.unrecognized -> CaSymbols.folder
     project.moduleCount > 1 -> CaSymbols.hub
     else -> CaSymbols.folder
 }
@@ -842,6 +843,9 @@ private fun symbolForProject(project: ProjectInfo): Char = when {
 private fun kindLabel(project: ProjectInfo): String = when {
     project.isAndroid -> "Android"
     project.compatibility -> "Gradle"
+    // A cloned folder nothing recognized is listed so the user can reach it, but calling it a CodeAssist
+    // project would be the same claim that made a clone confusing in the first place.
+    project.unrecognized -> "Files"
     else -> "CodeAssist"
 }
 

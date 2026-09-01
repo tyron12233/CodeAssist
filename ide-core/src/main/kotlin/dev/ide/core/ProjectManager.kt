@@ -7,6 +7,7 @@ import dev.ide.build.engine.ProgramInterpreter
 import dev.ide.core.gradle.GradleProjectExport
 import dev.ide.core.sync.ExternalProjectMarker
 import dev.ide.core.sync.ProjectSyncService
+import dev.ide.core.sync.UnrecognizedProjectMarker
 import dev.ide.model.LanguageLevel
 import dev.ide.model.ModuleDependency
 import dev.ide.model.PlatformKind
@@ -64,6 +65,9 @@ data class ProjectSummary(
     /** Epoch-ms of the last time the project was opened by the user (0 = never recorded). Drives the
      *  picker's most-recent-first ordering. */
     val lastOpened: Long = 0L,
+    /** True when the project was adopted from a folder no build system recognized, so the picker can say so
+     *  rather than presenting it as a CodeAssist project it is not. */
+    val unrecognized: Boolean = false,
 )
 
 /** What [ProjectManager.inspectFolder] found in a folder offered for import. */
@@ -217,6 +221,8 @@ class ProjectManager private constructor(
                     compatibility = ExternalProjectMarker.exists(dir),
                     isAndroid = proj?.modules?.any { m -> m.facets.any { it.tomlTable == AndroidFacetCodec.tomlTable } } ?: false,
                     lastOpened = prefs.getProperty(openedKey(dir))?.toLongOrNull() ?: 0L,
+                    // Same two conditions as IdeServices.isUnrecognizedProject, read without opening the engine.
+                    unrecognized = proj?.modules.isNullOrEmpty() && UnrecognizedProjectMarker.exists(dir),
                 )
             }
             .sortedWith(compareByDescending<ProjectSummary> { it.lastOpened }.thenBy { it.name.lowercase() })
@@ -353,6 +359,33 @@ class ProjectManager private constructor(
         return runCatching {
             IdeServices.importExternalProjectAt(here, sdk(), languageLevel, env)
         }.getOrDefault(false)
+    }
+
+    /**
+     * Turn a directory that is already a direct child of [projectsRoot] into a listable project **whatever it
+     * holds**, and report what it turned out to be.
+     *
+     * The clone path needs this. [adoptProjectInPlace] gives up on a folder no importer claims, which for an
+     * install is right (the download was not a project) but for a clone is not: the user asked for those
+     * files, they are on disk, and refusing to list them makes a successful clone look like a failure. So a
+     * folder nothing recognizes still gets a workspace written for it ([ImportableKind.NONE]), and the caller
+     * can warn that the project opens for editing only.
+     *
+     * [origin] is recorded for that notice, e.g. the URL a clone came from.
+     */
+    fun adoptFolderInPlace(dir: Path, origin: String = ""): ImportableKind {
+        val here = dir.toAbsolutePath().normalize()
+        require(here.parent == projectsRoot.toAbsolutePath().normalize() && here != projectsRoot) {
+            "Refusing to adopt a path outside the projects directory: $here"
+        }
+        val kind = inspectFolder(here)
+        // An importer claiming the folder can still fail on its contents (an unreadable build script). The
+        // fallback is the same as for a folder nothing claimed: an editable project beats no project.
+        val adopted = kind == ImportableKind.CODE_ASSIST ||
+            (kind == ImportableKind.EXTERNAL && runCatching { adoptProjectInPlace(here) }.getOrDefault(false))
+        if (adopted) return kind
+        IdeServices.adoptPlainFolderAt(here, sdk(), sharedCachesRoot = homeDir, env = env, origin = origin)
+        return ImportableKind.NONE
     }
 
     /**

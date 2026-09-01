@@ -64,9 +64,14 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         ctx.services.modules().mapNotNull { m -> ctx.services.moduleRoot(m)?.let { it.normalize() to m.name } }.toMap()
 
     /** Curated module view: manifest + code/res/assets roots, plus each module's root config files, then the
-     *  workspace root's own files (a top-level README/LICENSE/config). */
+     *  workspace root's own files (a top-level README/LICENSE/config). Falls back to the raw tree for a
+     *  project with no modules, which has nothing to curate. */
     private fun projectTree(): TreeNode {
         val root = ctx.services.workspaceRoot
+        // Nothing to curate without modules, and the curated view would show only the root's loose files:
+        // a project adopted from an unrecognized folder (a clone) would look almost empty while its sources
+        // sit one directory down. Show the real tree instead, which is what the user came for.
+        if (ctx.services.modules().isEmpty()) return allFilesTree()
         val moduleDirs = ctx.services.modules().mapNotNull { ctx.services.moduleRoot(it)?.normalize() }.toSet()
         val moduleNodes = ctx.services.modules().sortedBy { it.name }.map { module ->
             val moduleDir = ctx.services.moduleRoot(module)

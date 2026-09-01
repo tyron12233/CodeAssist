@@ -195,6 +195,12 @@ data class UiVcsResult(
     val path: String? = null,
     /** Paths left conflicted by a merge or pull. */
     val conflicts: List<String> = emptyList(),
+    /**
+     * What a clone's destination turned out to hold, once it was adopted as a project. [UiProjectFolderKind.UNKNOWN]
+     * means no build system recognized it, so the clone opens for editing only and the screen should say so.
+     * Null for every command that is not a clone.
+     */
+    val projectKind: UiProjectFolderKind? = null,
 ) {
     companion object {
         val Ok: UiVcsResult = UiVcsResult(true)

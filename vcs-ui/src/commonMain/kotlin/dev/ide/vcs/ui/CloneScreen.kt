@@ -20,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -35,19 +36,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiForgeRepo
+import dev.ide.ui.backend.UiProjectFolderKind
 import dev.ide.ui.backend.VcsService
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.ext.ScreenContext
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.theme.Ide
 import dev.ide.vcs.ui.generated.resources.Res
+import dev.ide.vcs.ui.generated.resources.vcs_cancel
 import dev.ide.vcs.ui.generated.resources.vcs_clone_action
 import dev.ide.vcs.ui.generated.resources.vcs_clone_folder
 import dev.ide.vcs.ui.generated.resources.vcs_clone_none
 import dev.ide.vcs.ui.generated.resources.vcs_clone_search
 import dev.ide.vcs.ui.generated.resources.vcs_clone_sign_in
 import dev.ide.vcs.ui.generated.resources.vcs_clone_title
+import dev.ide.vcs.ui.generated.resources.vcs_clone_unrecognized_body
+import dev.ide.vcs.ui.generated.resources.vcs_clone_unrecognized_open
+import dev.ide.vcs.ui.generated.resources.vcs_clone_unrecognized_title
 import dev.ide.vcs.ui.generated.resources.vcs_clone_url
 import dev.ide.vcs.ui.generated.resources.vcs_clone_yours
 import dev.ide.vcs.ui.generated.resources.vcs_fork
@@ -59,8 +66,11 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * Clone a repository into a new project: paste a URL, or pick one of the signed-in account's repositories.
- * A successful clone opens the project, which the shell then lands on, so this screen does not navigate
- * itself.
+ *
+ * A clone always lands as a listable project, but a repository is not a CodeAssist project, so the result
+ * says which of the three cases it was. A recognized one opens straight away and the shell lands on it, so
+ * this screen does not navigate itself. One nothing recognized stops here instead, behind a notice: the files
+ * are saved and listed either way, and the user decides whether to open an editor that cannot build them.
  */
 @Composable
 internal fun CloneScreen(ctx: ScreenContext) {
@@ -75,6 +85,9 @@ internal fun CloneScreen(ctx: ScreenContext) {
     var query by remember { mutableStateOf("") }
     var repos by remember { mutableStateOf(emptyList<UiForgeRepo>()) }
     var loading by remember { mutableStateOf(false) }
+    // A finished clone that no build system recognized: held here rather than opened, because the user has to
+    // be told before they land in an editor that cannot build anything.
+    var unrecognized by remember { mutableStateOf<ClonedFolder?>(null) }
 
     // Debounced so typing a search term does not fire a request per keystroke.
     LaunchedEffect(query, accounts.size) {
@@ -92,10 +105,14 @@ internal fun CloneScreen(ctx: ScreenContext) {
         val target = url.trim()
         val name = folder.trim().ifBlank { target.substringAfterLast('/').removeSuffix(".git") }
         scope.launch {
+            unrecognized = null
             val result = vcs.cloneRepository(target, name)
             feedback.show(result.message, isError = !result.ok)
             val path = result.path
-            if (result.ok && path != null) ctx.backend.projects.openProject(path)
+            if (!result.ok || path == null) return@launch
+            // The clone is a listable project either way. Only an unrecognized one stops here for an answer.
+            if (result.projectKind == UiProjectFolderKind.UNKNOWN) unrecognized = ClonedFolder(name, path)
+            else ctx.backend.projects.openProject(path)
         }
     }
 
@@ -132,6 +149,16 @@ internal fun CloneScreen(ctx: ScreenContext) {
                 }
             }
             FeedbackStrip(feedback)
+            unrecognized?.let { cloned ->
+                UnrecognizedCloneNotice(
+                    name = cloned.name,
+                    onDismiss = { unrecognized = null },
+                    onOpen = {
+                        unrecognized = null
+                        scope.launch { ctx.backend.projects.openProject(cloned.path) }
+                    },
+                )
+            }
 
             if (accounts.isEmpty()) {
                 VcsEmptyState(
@@ -175,6 +202,50 @@ internal fun CloneScreen(ctx: ScreenContext) {
                     }
                 }
             }
+        }
+    }
+}
+
+/** A clone that finished, waiting on the user because nothing recognized what it holds. */
+private data class ClonedFolder(val name: String, val path: String)
+
+/**
+ * Said in place, on the clone screen, the moment a clone turns out to hold no project the IDE understands.
+ * The files are already saved and listed, so the only question left is whether to open them now, and the
+ * editor repeats the limitation in its own banner once it does.
+ */
+@Composable
+private fun UnrecognizedCloneNotice(name: String, onDismiss: () -> Unit, onOpen: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .background(Ide.colors.warning.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(CaIcons.warning, null, Modifier.size(16.dp), tint = Ide.colors.warning)
+            Text(
+                stringResource(Res.string.vcs_clone_unrecognized_title),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Ide.colors.warning,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Text(
+            stringResource(Res.string.vcs_clone_unrecognized_body, name),
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onDismiss) { Text(stringResource(Res.string.vcs_cancel), style = MaterialTheme.typography.labelLarge) }
+            PrimaryButton(stringResource(Res.string.vcs_clone_unrecognized_open), onOpen, icon = CaIcons.folder)
         }
     }
 }

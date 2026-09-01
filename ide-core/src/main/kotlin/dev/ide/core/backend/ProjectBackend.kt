@@ -33,6 +33,7 @@ import dev.ide.ui.backend.UiStorageProject
 import dev.ide.ui.backend.UiStorageReport
 import dev.ide.ui.backend.UiSyncResult
 import dev.ide.ui.backend.UiTemplateParam
+import dev.ide.ui.backend.UiUnrecognizedProject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
@@ -46,6 +47,13 @@ private const val TAB_FORMAT_V2 = "#v2"
 /** Ceiling on an image read for a UI preview (the export screen's screenshot thumbnails). */
 private const val MAX_PREVIEW_IMAGE_BYTES = 8L * 1024 * 1024
 
+/** The picker's folder kinds, as the project manager reports them. */
+internal fun ImportableKind.toUi(): UiProjectFolderKind = when (this) {
+    ImportableKind.CODE_ASSIST -> UiProjectFolderKind.CODE_ASSIST
+    ImportableKind.EXTERNAL -> UiProjectFolderKind.GRADLE
+    ImportableKind.NONE -> UiProjectFolderKind.UNKNOWN
+}
+
 /**
  * [ProjectService]: the project picker + create/open/delete, the Create-Project template gallery, and the
  * per-project open-tab session. Open/create drive the engine swap through [BackendContext.swapEngine] (the
@@ -58,7 +66,7 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
     override val projectEpoch: StateFlow<Int> get() = ctx.projectEpoch
 
     override fun projects(): List<ProjectInfo> =
-        ctx.manager?.list()?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount, it.compatibility, it.isAndroid, it.lastOpened) }
+        ctx.manager?.list()?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount, it.compatibility, it.isAndroid, it.lastOpened, it.unrecognized) }
             ?: ctx.servicesOrNull?.let {
                 listOf(ProjectInfo(it.projectDisplayName(), it.workspaceRoot.toString(), it.modules().size, runCatching { it.isCompatibilityMode() }.getOrDefault(false)))
             }
@@ -200,6 +208,17 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         )
     }
 
+    override fun unrecognizedProjectInfo(): UiUnrecognizedProject? {
+        val svc = ctx.servicesOrNull ?: return null
+        if (!runCatching { svc.isUnrecognizedProject() }.getOrDefault(false)) return null
+        return UiUnrecognizedProject(
+            summary = "No build system recognized this folder, so it opens for editing only: there are no " +
+                "modules yet, and building, running and code analysis have nothing to work from until you " +
+                "add one.",
+            origin = runCatching { svc.unrecognizedProjectOrigin() }.getOrDefault(""),
+        )
+    }
+
     override suspend fun syncProject(): UiSyncResult {
         val svc = ctx.servicesOrNull ?: return UiSyncResult(false, "No project is open.")
         return withContext(Dispatchers.IO) {
@@ -249,11 +268,7 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
 
     override suspend fun inspectProjectFolder(path: String): UiProjectFolderKind = withContext(Dispatchers.IO) {
         val mgr = ctx.manager ?: return@withContext UiProjectFolderKind.UNKNOWN
-        when (runCatching { mgr.inspectFolder(Paths.get(path)) }.getOrDefault(ImportableKind.NONE)) {
-            ImportableKind.CODE_ASSIST -> UiProjectFolderKind.CODE_ASSIST
-            ImportableKind.EXTERNAL -> UiProjectFolderKind.GRADLE
-            ImportableKind.NONE -> UiProjectFolderKind.UNKNOWN
-        }
+        runCatching { mgr.inspectFolder(Paths.get(path)) }.getOrDefault(ImportableKind.NONE).toUi()
     }
 
     override suspend fun importExternalProject(sourceRootPath: String): UiProjectResult {

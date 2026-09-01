@@ -77,6 +77,10 @@ internal fun EditorCenter(
     val compatInfo = remember(project.rootPath, compatEpoch) { state.backend.projects.compatibilityInfo() }
     var showCompatBanner by remember(project.rootPath) { mutableStateOf(compatInfo != null) }
     var showConvertDialog by remember(project.rootPath) { mutableStateOf(false) }
+    // A project adopted from a folder nothing recognized (a clone). Read once per project: the marker only
+    // changes when the project gains a module, which re-opens the editor anyway.
+    val unrecognizedInfo = remember(project.rootPath) { state.backend.projects.unrecognizedProjectInfo() }
+    var showUnrecognizedBanner by remember(project.rootPath) { mutableStateOf(unrecognizedInfo != null) }
     // One-shot: an import where "Convert to CodeAssist project" was chosen at the picker. Now that the editor
     // is open (so the reader's notes are known), run the convert flow — the confirm dialog is the gate when
     // `gradle.convert.warnUnresolved` is on (default); otherwise convert straight away.
@@ -208,6 +212,13 @@ internal fun EditorCenter(
                     onConverted = { compatEpoch++; showCompatBanner = false },
                     onReverted = { compatEpoch++; showCompatBanner = true },
                     onClose = { showConvertDialog = false },
+                )
+            }
+            if (unrecognizedInfo != null) {
+                UnrecognizedProjectBanner(
+                    info = unrecognizedInfo,
+                    visible = showUnrecognizedBanner,
+                    onDismiss = { showUnrecognizedBanner = false },
                 )
             }
             // A toolchain problem that will break a module's build (a bundled KSP processor whose generated code

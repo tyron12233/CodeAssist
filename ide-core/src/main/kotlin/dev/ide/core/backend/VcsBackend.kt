@@ -1,6 +1,7 @@
 package dev.ide.core.backend
 
 import dev.ide.core.BackendContext
+import dev.ide.core.ImportableKind
 import dev.ide.core.VcsPlugin
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.UiForgePullRequest
@@ -436,7 +437,22 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
             withContext(Dispatchers.IO) {
                 git.clone(url.trim(), target, auth = auth, progress = progressSink()).close()
             }
-            UiVcsResult(true, "Cloned into $name", path = target.toString())
+            // A repository is not a CodeAssist project. Adopt whatever landed so it is listable and openable,
+            // and report what it turned out to be: a clone that no build system recognizes is a real outcome
+            // the screen has to say out loud, not a silent one the user discovers via an empty picker.
+            val kind = withContext(Dispatchers.IO) {
+                runCatching { manager.adoptFolderInPlace(target, origin = url.trim()) }
+                    .getOrElse { e ->
+                        log.warn("Cloned $url but could not adopt $target as a project", e)
+                        ImportableKind.NONE
+                    }
+            }
+            UiVcsResult(
+                ok = true,
+                message = "Cloned into $name",
+                path = target.toString(),
+                projectKind = kind.toUi(),
+            )
         }
     }
 
