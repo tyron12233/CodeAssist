@@ -1048,6 +1048,14 @@ interface StoreService {
     /** Whether [itemId] is liked, from the local list. Safe to read during composition. */
     fun isLiked(itemId: String): Boolean = false
 
+    /**
+     * A remote screenshot as a local file path, downloading and caching it on first use.
+     *
+     * The galleries decode files rather than URLs, so this is what turns a published screenshot into
+     * something they can render. Null when it could not be fetched, and the gallery shows what it has.
+     */
+    suspend fun screenshotFile(storagePath: String): String? = null
+
     // ---- publisher profiles ----
 
     /** A publisher's page, or null when there is no such publisher. */

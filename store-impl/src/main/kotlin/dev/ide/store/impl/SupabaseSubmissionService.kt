@@ -1,6 +1,7 @@
 package dev.ide.store.impl
 
 import dev.ide.platform.JsonReader
+import dev.ide.platform.log.Log
 import dev.ide.store.PackagedProject
 import dev.ide.store.StoreResult
 import dev.ide.store.StoreSubmissionRequest
@@ -67,6 +68,7 @@ class SupabaseSubmissionService(
         ensurePublisher(account.userId, token)
 
         // 2. Upload. First, because a row without its payload is worse than an orphaned object.
+        val shots = uploadScreenshots("${account.userId}/$slug/${request.version}-shots", request.screenshotPaths, token)
         when (val up = upload(objectPath, archive, token)) {
             is StoreResult.Ok -> Unit
             is StoreResult.Unavailable -> return StoreResult.Unavailable(up.reason)
@@ -100,6 +102,9 @@ class SupabaseSubmissionService(
             append(""""size_bytes":""").append(packaged.totalBytes).append(',')
             field("sha256", packaged.sha256); comma()
             append(""""file_count":""").append(packaged.fileCount).append(',')
+            append(""""screenshot_paths":[""")
+            shots.forEachIndexed { i, path -> if (i > 0) append(','); append(q(path)) }
+            append("],")
             append(""""file_manifest":""").append(manifestJson(packaged)).append(',')
             field("status", "pending"); comma()
             field("submitter_id", account.userId)
@@ -225,6 +230,82 @@ class SupabaseSubmissionService(
             is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
         }
 
+    /**
+     * Upload the submitted screenshots, returning the paths that landed.
+     *
+     * Best effort per image: a project whose fourth screenshot failed to upload is still a project worth
+     * reviewing, and failing the whole submission over one image would lose the archive too. The paths
+     * returned are only the ones that actually uploaded, so nothing records an image that is not there.
+     */
+    /**
+     * Upload the screenshots, returning the paths that actually landed.
+     *
+     * Best-effort per image: one that will not upload must not cost the submitter their submission. But
+     * every drop is logged, because silence here once hid a bucket that rejected every image type — the
+     * submission succeeded with no screenshots and nothing said why.
+     */
+    private fun uploadScreenshots(
+        prefix: String,
+        paths: List<String>,
+        token: String,
+    ): List<String> = paths.take(MAX_SCREENSHOTS).mapIndexedNotNull { index, local ->
+        val file = File(local)
+        if (!file.isFile) {
+            log.warn("Screenshot $local is gone; submitting without it")
+            return@mapIndexedNotNull null
+        }
+        if (file.length() > MAX_SCREENSHOT_BYTES) {
+            log.warn("Screenshot $local is ${file.length()} bytes, over the $MAX_SCREENSHOT_BYTES limit")
+            return@mapIndexedNotNull null
+        }
+        val extension = file.name.substringAfterLast('.', "png").lowercase()
+        val objectPath = "$prefix/shot-$index.$extension"
+        when (val result = uploadBytes(objectPath, file, mimeFor(extension), token)) {
+            is StoreResult.Ok -> objectPath
+            is StoreResult.Failed -> {
+                log.warn("Screenshot upload rejected (HTTP ${result.status}): ${result.message}")
+                null
+            }
+            is StoreResult.Unavailable -> {
+                log.warn("Screenshot upload failed: ${result.reason}")
+                null
+            }
+        }
+    }
+
+    private fun mimeFor(extension: String): String = when (extension) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "webp" -> "image/webp"
+        else -> "image/png"
+    }
+
+    /** The same streamed upload as the archive, with the content type as a parameter. */
+    private fun uploadBytes(
+        objectPath: String,
+        file: File,
+        contentType: String,
+        token: String,
+    ): StoreResult<Unit> = try {
+        val conn = (URL("$base/storage/v1/object/store-uploads/$objectPath").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = connectTimeoutMs
+            readTimeout = readTimeoutMs
+            doOutput = true
+            setRequestProperty("apikey", apiKey)
+            setRequestProperty("Authorization", "Bearer $token")
+            setRequestProperty("Content-Type", contentType)
+            setFixedLengthStreamingMode(file.length())
+            setRequestProperty("x-upsert", "true")
+        }
+        file.inputStream().buffered().use { input -> conn.outputStream.use { input.copyTo(it) } }
+        val code = conn.responseCode
+        val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+            ?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
+        if (code in 200..299) StoreResult.Ok(Unit) else StoreResult.Failed(storageError(text) ?: "Upload rejected", code)
+    } catch (e: Exception) {
+        StoreResult.Unavailable(e.message ?: "Network unavailable")
+    }
+
     private fun upload(objectPath: String, archive: File, token: String): StoreResult<Unit> = try {
         val conn = (URL("$base/storage/v1/object/store-uploads/$objectPath").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -331,7 +412,15 @@ class SupabaseSubmissionService(
 
     private fun StringBuilder.comma() { append(',') }
 
+    private val log = Log.logger("StoreSubmit")
+
     companion object {
+        /** Matches the CHECK on `store_item_versions.screenshot_paths`. */
+        const val MAX_SCREENSHOTS = 6
+
+        /** Matches the `store-media` bucket's per-file limit, so an image cannot fail only on approval. */
+        const val MAX_SCREENSHOT_BYTES = 2L * 1024 * 1024
+
         private fun q(s: String) = SupabaseStoreSource.jsonStr(s)
 
         private fun strArray(items: List<String>): String =

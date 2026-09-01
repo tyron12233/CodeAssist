@@ -141,6 +141,26 @@ internal class StoreBackend(
 
     override suspend fun likedItems(): Set<String> = withContext(storeIo) { likeStore.reconcile() }
 
+    /**
+     * Cache a remote screenshot to disk and return its local path, or null.
+     *
+     * The gallery decodes files, so remote images have to become files. Caching them under the store's own
+     * directory keyed by the storage path means a revisit costs nothing and the same image shared by two
+     * surfaces is fetched once. Published screenshot keys are version-scoped (`slug/version/shot-0.png`,
+     * written by approval), so the bytes at a path never change and a cached file cannot go stale.
+     */
+    override suspend fun screenshotFile(storagePath: String): String? = withContext(storeIo) {
+        val root = ctx.manager?.storageRoot?.toFile() ?: return@withContext null
+        val cached = java.io.File(root, "store/media/${storagePath.replace('/', '_')}")
+        if (cached.isFile && cached.length() > 0) return@withContext cached.absolutePath
+        when (source.downloadMedia(storagePath, cached)) {
+            is dev.ide.store.StoreResult.Ok -> cached.absolutePath
+            // A screenshot that will not load is not worth an error surface: the gallery simply shows the
+            // ones that did.
+            else -> null
+        }
+    }
+
     // ---- publisher profiles ----
 
     override suspend fun publisherProfile(handle: String): dev.ide.ui.backend.UiPublisherProfile? =

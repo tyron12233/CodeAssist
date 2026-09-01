@@ -282,6 +282,8 @@ data class UiSubmissionDraft(
     val language: String? = null,
     val tags: List<String> = emptyList(),
     val version: String = "1.0.0",
+    /** Local image paths to publish with the project, at most six. */
+    val screenshotPaths: List<String> = emptyList(),
     /** Set to publish a new version of an item you already own; null creates a new one. */
     val itemSlug: String? = null,
     val changelog: String? = null,

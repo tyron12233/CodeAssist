@@ -121,6 +121,14 @@ data class StoreSubmissionRequest(
     val language: String? = null,
     val tags: List<String> = emptyList(),
     val highlights: List<String> = emptyList(),
+    /**
+     * Local image files to publish with the project, at most six.
+     *
+     * Uploaded to the PRIVATE bucket with the archive and copied to the public one on approval, exactly as
+     * the payload is: a submitter writing straight to the public bucket would be free image hosting no
+     * moderator ever sees.
+     */
+    val screenshotPaths: List<String> = emptyList(),
     val version: String = "1.0.0",
     val changelog: String? = null,
 )

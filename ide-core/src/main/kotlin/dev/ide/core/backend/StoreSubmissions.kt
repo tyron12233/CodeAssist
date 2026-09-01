@@ -65,6 +65,7 @@ internal class StoreSubmissions(private val submissions: StoreSubmissionService)
             tags = draft.tags.map { it.trim() }.filter { it.isNotEmpty() },
             version = draft.version.trim().ifEmpty { "1.0.0" },
             changelog = draft.changelog?.trim()?.takeIf { it.isNotEmpty() },
+            screenshotPaths = draft.screenshotPaths,
         )
         // The archive the screen showed, not a reconstruction of it: same bytes, same manifest, same hash.
         // Re-packing if it is missing keeps a submit working after the engine was rebuilt underneath the

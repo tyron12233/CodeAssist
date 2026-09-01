@@ -169,6 +169,7 @@ internal object StoreFeedMapper {
             iconId = icon ?: local?.iconId ?: "file",
             tags = tags,
             author = author,
+            authorHandle = authorHandle,
             featured = featured,
             accentColor = accent?.let(::parseHexColor) ?: local?.accentColor,
             installs = installs,

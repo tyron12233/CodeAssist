@@ -239,6 +239,17 @@ interface StoreCatalogSource {
     /** Forget a device. Called when the token rotates or the user opts out of push entirely. */
     fun forgetDevice(token: String): StoreResult<Unit> = StoreResult.Unavailable("No store endpoint")
 
+    /**
+     * Download a public media object (a screenshot) into [into].
+     *
+     * Separate from [downloadPayload] because there is no checksum to verify: an image is decoded and
+     * displayed, never executed, so the worst a corrupt one does is fail to decode. Payloads are unpacked
+     * into the user's workspace and must be verified; conflating the two would either add a hash the store
+     * does not keep for images or drop the one it does keep for archives.
+     */
+    fun downloadMedia(storagePath: String, into: java.io.File): StoreResult<Unit> =
+        StoreResult.Unavailable("No store endpoint")
+
     fun recordInstall(slug: String, installId: String)
 
     companion object {
@@ -255,6 +266,8 @@ interface StoreCatalogSource {
             override fun setTopics(installId: String, token: String, topics: List<String>) =
                 StoreResult.Unavailable<Unit>("No store endpoint")
             override fun authProviders() = StoreResult.Unavailable<List<String>>("No store endpoint")
+            override fun downloadMedia(storagePath: String, into: java.io.File) =
+                StoreResult.Unavailable<Unit>("No store endpoint")
             override fun downloadPayload(storagePath: String, expectedSha256: String?, expectedBytes: Long, into: java.io.File, onProgress: (Float) -> Unit) =
                 StoreResult.Unavailable<Unit>("No store endpoint")
             override fun recordInstall(slug: String, installId: String) = Unit

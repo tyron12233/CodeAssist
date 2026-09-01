@@ -153,6 +153,40 @@ class SupabaseStoreSource(
         }
     }
 
+    override fun downloadMedia(storagePath: String, into: java.io.File): StoreResult<Unit> {
+        if (!configured) return StoreResult.Unavailable("No store endpoint configured")
+        return try {
+            val url = "$base/storage/v1/object/public/store-media/$storagePath"
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = connectTimeoutMs
+                readTimeout = readTimeoutMs
+                setRequestProperty("apikey", apiKey)
+            }
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                conn.errorStream?.use { it.readBytes() }
+                return StoreResult.Failed("Image unavailable (HTTP $code)", code)
+            }
+            into.parentFile?.mkdirs()
+            // Bounded: this writes a remote body to the user's disk, and a screenshot that needs more than
+            // this is not one worth caching. Truncated output is deleted rather than left to decode as
+            // garbage.
+            val written = conn.inputStream.use { input ->
+                into.outputStream().buffered().use { out -> copyAtMost(input, out, MAX_MEDIA_BYTES) }
+            }
+            if (written > MAX_MEDIA_BYTES) {
+                into.delete()
+                return StoreResult.Failed("Image is too large", 0)
+            }
+            StoreResult.Ok(Unit)
+        } catch (e: Exception) {
+            // A half-written file would decode as garbage, so it does not survive the failure.
+            into.delete()
+            StoreResult.Unavailable(e.message ?: "Network unavailable")
+        }
+    }
+
     /**
      * Fire-and-forget. A failure here is swallowed on purpose: the count is a nice-to-have and an install
      * must never fail because the counter was unreachable.
@@ -370,6 +404,26 @@ class SupabaseStoreSource(
                 publishedAt = JsonReader.str(v, "publishedAt"),
                 updatedAt = JsonReader.str(v, "updatedAt"),
             )
+        }
+
+        /** A screenshot larger than this is not cached; see `downloadMedia`. */
+        private const val MAX_MEDIA_BYTES = 8L * 1024 * 1024
+
+        /**
+         * Copy up to [limit] bytes, returning how many were copied, or `limit + 1` when the source had
+         * more. Reads one byte past the limit on purpose: that is what distinguishes an exactly-sized
+         * body from a truncated one.
+         */
+        private fun copyAtMost(input: java.io.InputStream, out: java.io.OutputStream, limit: Long): Long {
+            val buffer = ByteArray(64 * 1024)
+            var total = 0L
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) return total
+                total += read
+                if (total > limit) return limit + 1
+                out.write(buffer, 0, read)
+            }
         }
 
         /** Minimal JSON string escaping — enough for the scalars these RPC bodies carry. */

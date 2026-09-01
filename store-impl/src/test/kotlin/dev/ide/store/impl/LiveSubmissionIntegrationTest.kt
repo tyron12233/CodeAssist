@@ -188,6 +188,95 @@ class LiveSubmissionIntegrationTest {
         assertTrue(service.withdraw(status.itemSlug, request.version) is StoreResult.Ok)
     }
 
+    /**
+     * Screenshots make the whole trip: uploaded to the private bucket, recorded on the version row, and
+     * capped.
+     *
+     * Worth a live test because every part of it is enforced somewhere this process cannot see: the bucket
+     * accepts the object under a policy, and `screenshot_paths` carries a CHECK on its length. A mocked
+     * transport would agree with itself and prove nothing.
+     */
+    @Test
+    fun screenshotsUploadAndAreRecordedOnTheVersion() {
+        if (!stackUp()) return
+        val bob = userId("bob@example.com") ?: return
+        val accounts = accountsFor(bob)
+        val service = SupabaseSubmissionService(baseUrl, anonKey, accounts)
+        deleteTestItems("bob@example.com")
+        clearPending(service)
+
+        val packed = service.pack(sampleProject().absolutePath)
+        assertTrue(packed is StoreResult.Ok, "pack failed: $packed")
+
+        // More than the cap, so the take() and the CHECK are both exercised.
+        val shots = (0 until SupabaseSubmissionService.MAX_SCREENSHOTS + 2).map { i ->
+            File(kotlin.io.path.createTempDirectory("ca-live-shot-").toFile().also { temps += it }, "s$i.png")
+                .also { it.writeBytes(onePixelPng()) }.absolutePath
+        }
+        val unique = System.currentTimeMillis() % 900 + 1
+        val request = dev.ide.store.StoreSubmissionRequest(
+            title = "Live Test Shots $unique",
+            summary = "Submitted with screenshots",
+            description = "Checks the screenshot upload path.",
+            category = "java",
+            language = "Kotlin",
+            tags = listOf("test"),
+            version = "1.0.$unique",
+            screenshotPaths = shots,
+        )
+        val submitted = service.submit(request, (packed as StoreResult.Ok).value)
+        assertTrue(submitted is StoreResult.Ok, "submit failed: $submitted")
+        val status = (submitted as StoreResult.Ok).value
+
+        val recorded = screenshotPathsOf(status.itemSlug, request.version)
+        assertEquals(
+            SupabaseSubmissionService.MAX_SCREENSHOTS,
+            recorded.size,
+            "the cap should be applied client-side, not left for the CHECK to reject: $recorded",
+        )
+        // Every recorded path is an object that actually exists, read back as the owner.
+        recorded.forEach { path ->
+            assertTrue(objectExists(path, accounts), "recorded screenshot is not in the bucket: $path")
+        }
+
+        assertTrue(service.withdraw(status.itemSlug, request.version) is StoreResult.Ok)
+    }
+
+    /** The smallest valid PNG, so the upload is a real image rather than bytes named `.png`. */
+    private fun onePixelPng(): ByteArray = java.util.Base64.getDecoder().decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==",
+    )
+
+    /** `screenshot_paths` as the database holds it, read straight out of Postgres. */
+    private fun screenshotPathsOf(slug: String, version: String): List<String> {
+        val out = ProcessBuilder(
+            "docker", "exec", "supabase_db_codeassist", "psql", "-U", "postgres", "-At", "-c",
+            """
+            select coalesce(array_to_string(v.screenshot_paths, '|'), '')
+              from store_item_versions v
+              join store_items i on i.id = v.item_id
+             where i.slug = '$slug' and v.version = '$version';
+            """.trimIndent(),
+        ).redirectErrorStream(true).start()
+        val text = out.inputStream.bufferedReader().readText().trim()
+        out.waitFor()
+        return text.lines().firstOrNull { it.isNotBlank() }?.split('|')?.filter { it.isNotBlank() } ?: emptyList()
+    }
+
+    /** A HEAD on the private bucket as the submitter, which is the only role allowed to read it. */
+    private fun objectExists(path: String, accounts: SupabaseAccountService): Boolean {
+        val token = accounts.bearer() ?: return false
+        val c = (URL("$baseUrl/storage/v1/object/store-uploads/$path").openConnection() as HttpURLConnection)
+            .apply {
+                requestMethod = "GET"
+                setRequestProperty("apikey", anonKey)
+                setRequestProperty("Authorization", "Bearer $token")
+                connectTimeout = 4000
+                readTimeout = 4000
+            }
+        return runCatching { c.responseCode in 200..299 }.getOrDefault(false)
+    }
+
     /** The quota message from the database trigger has to reach the user readably. */
     @Test
     fun pendingQuotaMessageSurfacesFromTheTrigger() {

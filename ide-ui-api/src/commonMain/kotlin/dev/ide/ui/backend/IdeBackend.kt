@@ -229,6 +229,8 @@ data class UiStoreItem(
     val iconId: String = "file",
     val tags: List<String> = emptyList(),
     val author: String? = null,
+    /** The publisher's handle, which is the address of their profile. Null for a bundled item. */
+    val authorHandle: String? = null,
     val featured: Boolean = false,
     val accentColor: Long? = null,
     /** Downloads / stars, shown as a soft stat on the card. Negative hides it. */
