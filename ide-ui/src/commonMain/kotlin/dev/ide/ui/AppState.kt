@@ -48,7 +48,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * Top-level screens, ordered by depth so the transition helper can infer direction: a move to a
  * higher-ordinal screen animates "forward" (deeper), a lower one "back".
  */
-enum class Screen { Projects, CreateProject, ImportProject, ExportProject, Editor, Hub, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, IconManager, AppIconStudio, Settings, CodeStyle, EditorSymbols, Plugins, Storage, LessonTrack, LessonPlayer, StoreItem }
+enum class Screen { Projects, CreateProject, ImportProject, ExportProject, Editor, Hub, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, IconManager, AppIconStudio, Settings, CodeStyle, EditorSymbols, Plugins, Storage, LessonTrack, LessonPlayer, StoreItem, PluginScreen }
 
 /**
  * The home screen's bottom-navigation destinations (the landing surface shown on [Screen.Projects]): the

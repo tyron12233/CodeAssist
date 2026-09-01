@@ -520,6 +520,36 @@ internal class GenerateRJarTask(
 }
 
 /**
+ * `generateAarR`: package an `R` class per dependency-AAR package into **`aar-R.jar`**, generated from each
+ * AAR's `R.txt` symbol table. An AAR ships no `R` of its own, so a consumer has to make one. An app already
+ * does, as a by-product of its own aapt2 link (`--extra-packages` over the merged table); a LIBRARY module
+ * links only its own resources and so has nowhere to get `com.google.android.material.R.attr.x` from — this
+ * task is that source, joining the library's compile classpath (compile-only, never dexed: the app's final
+ * `R` supplies the real ids at runtime). See [RBytecodeGenerator.writeSymbolJar].
+ */
+internal class GenerateAarRJarTask(
+    override val name: TaskName,
+    /** Each dependency AAR's manifest package paired with its `R.txt`. */
+    private val symbolTables: List<Pair<String, Path>>,
+    private val outJar: Path,
+) : Task {
+    override val inputs: TaskInputs get() = TaskInputsImpl().apply {
+        property("packages", symbolTables.map { it.first }.sorted().joinToString(":"))
+        filePaths("rTxt", symbolTables.map { it.second })
+    }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("aarRJar", outJar) }
+
+    override suspend fun execute(ctx: TaskContext): TaskResult {
+        ctx.checkCanceled()
+        val res = withContext(Dispatchers.IO) { runCatching { RBytecodeGenerator.writeSymbolJar(symbolTables, outJar) } }
+        return res.fold(
+            onSuccess = { ctx.logger()("generateAarR -> $it class(es) for ${symbolTables.size} AAR package(s)"); TaskResult.Success },
+            onFailure = { TaskResult.Failed("AAR R.jar generation failed: ${it.message}") },
+        )
+    }
+}
+
+/**
  * `compileJava`: compile the variant's Java sources against the Android classpath. The generated `R.java` is
  * NOT compiled here — it is packaged as `R.jar` by [GenerateRJarTask] and reaches this task on [classpath].
  * Only non-`R` generated files (e.g. `Manifest.java`) under [genJavaDir] are compiled alongside the sources.

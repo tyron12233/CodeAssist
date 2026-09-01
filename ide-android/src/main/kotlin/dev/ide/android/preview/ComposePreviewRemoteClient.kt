@@ -11,6 +11,8 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Process
 import dev.ide.core.LoweredComposePreview
+import dev.ide.interp.SandboxCategory
+import dev.ide.interp.SandboxFinding
 import dev.ide.core.preview.ComposePreviewWireCodec
 import dev.ide.platform.log.Log
 import java.io.File
@@ -46,6 +48,14 @@ class ComposePreviewRemoteClient(context: Context) {
         /** The measured content size (surface px) of a wrap-to-content preview — the IDE crops the frame to it and
          *  sizes the card. Default no-op: a fixed-size preview never reports one (content fills the surface). */
         fun onContentSize(widthPx: Int, heightPx: Int) {}
+
+        /** A non-fatal content-lambda failure — the preview still draws, but part of it is missing. Null clears
+         *  it. Default no-op so the render spikes (which only want frames) don't have to implement it. */
+        fun onPartialError(message: String?) {}
+
+        /** The calls the preview sandbox blocked this pass. A blocked call is stubbed out, so the preview may
+         *  look fine and the chip is the only place it shows. Default no-op, like the rest. */
+        fun onSandboxFindings(findings: List<SandboxFinding>) {}
     }
 
     /** A rendered frame + the `:preview` process id it was rendered in (so callers can confirm isolation). */
@@ -110,6 +120,8 @@ class ComposePreviewRemoteClient(context: Context) {
         packageName: String = "",
         minApi: Int = 26,
         wrapContent: Boolean = false,
+        /** [SandboxCategory] ids the project restricts; empty = unrestricted (the spikes' default). */
+        sandbox: Array<String> = emptyArray(),
     ): Session? {
         val d = awaitDaemon(BIND_TIMEOUT_MS) ?: return null
         val local = seq.incrementAndGet()
@@ -132,11 +144,23 @@ class ComposePreviewRemoteClient(context: Context) {
             }
             override fun onError(message: String?) { sink.onError(message ?: "unknown error") }
             override fun onContentSize(widthPx: Int, heightPx: Int) { sink.onContentSize(widthPx, heightPx) }
+            override fun onPartialError(message: String?) { sink.onPartialError(message) }
+            override fun onSandboxFindings(findings: Array<out String>?) {
+                // "categoryId\tmember" — an unknown id (a newer :preview against an older IDE) is dropped
+                // rather than crashing the callback thread.
+                sink.onSandboxFindings(
+                    findings.orEmpty().mapNotNull { entry ->
+                        val i = entry.indexOf('\t')
+                        if (i <= 0) return@mapNotNull null
+                        SandboxCategory.fromId(entry.substring(0, i))?.let { SandboxFinding(it, entry.substring(i + 1)) }
+                    },
+                )
+            }
         }
         val blob = File(dir, "req-open.blob")
         return runCatching {
             blob.writeBytes(ComposePreviewWireCodec.encode(lowered))
-            val id = d.open(blob.path, classpath, resRoots, packageName, minApi, widthPx, heightPx, density, night, wrapContent, dir.path, callback)
+            val id = d.open(blob.path, classpath, resRoots, packageName, minApi, widthPx, heightPx, density, night, wrapContent, dir.path, sandbox, callback)
             if (id < 0) { dir.deleteRecursively(); null }
             else Session(d, id, runCatching { d.pid() }.getOrDefault(-1), dir)
         }.getOrElse { log.warn("compose openSession threw", it); dir.deleteRecursively(); null }

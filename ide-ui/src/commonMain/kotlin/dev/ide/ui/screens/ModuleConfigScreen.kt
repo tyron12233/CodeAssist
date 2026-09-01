@@ -1,6 +1,8 @@
 package dev.ide.ui.screens
 
 import dev.ide.ui.theme.Ide
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -41,7 +43,14 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -83,7 +92,6 @@ import dev.ide.ui.backend.UiRunConfig
 import dev.ide.ui.backend.UiSourceSetInfo
 import dev.ide.ui.components.AddSourceRootDialog
 import dev.ide.ui.components.AddSourceRootRequest
-import dev.ide.ui.components.CaSwitch
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.DropdownOverlay
 import dev.ide.ui.components.GlassMaterial
@@ -95,6 +103,8 @@ import dev.ide.ui.generated.resources.add
 import dev.ide.ui.generated.resources.back
 import dev.ide.ui.generated.resources.cancel
 import dev.ide.ui.generated.resources.create
+import dev.ide.ui.generated.resources.modcfg_discard
+import dev.ide.ui.generated.resources.modcfg_unsaved_changes
 import dev.ide.ui.generated.resources.remove
 import dev.ide.ui.generated.resources.modcfg_add_placeholder
 import dev.ide.ui.generated.resources.modcfg_add_row
@@ -309,17 +319,25 @@ private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: Mo
 
 @Composable
 private fun ModuleTabRow(tab: ModulesTab, onSelect: (ModulesTab) -> Unit) {
-    // Scrolls horizontally so the tab strip never clips on a narrow phone (Settings · Build Features · Signing · Dependencies).
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // A real M3 tab strip: scrollable so it never clips on a narrow phone (Settings · Build Features ·
+    // Compiler plugins · Packaging · Signing · Dependencies), with the selected-tab indicator M3 draws for it.
+    PrimaryScrollableTabRow(
+        selectedTabIndex = ModulesTab.entries.indexOf(tab),
+        edgePadding = 12.dp,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
         ModulesTab.entries.forEach { t ->
-            val sel = t == tab
-            val bg by animateColorAsState(if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.FAST), label = "tabBg")
-            Box(
-                Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null) { onSelect(t) }
-                    .padding(horizontal = 16.dp, vertical = 7.dp),
-            ) {
-                Text(stringResource(t.label), color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            }
+            Tab(
+                selected = t == tab,
+                onClick = { onSelect(t) },
+                // BOTH colours must be given: M3's `Tab` defaults `unselectedContentColor` to
+                // `selectedContentColor`, so leaving them out paints every tab the row's content colour and
+                // the selection reads only from the indicator — which is off-screen whenever the strip is
+                // scrolled away from the active tab.
+                selectedContentColor = MaterialTheme.colorScheme.primary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = { Text(stringResource(t.label), style = MaterialTheme.typography.titleSmall, maxLines = 1) },
+            )
         }
     }
 }
@@ -366,21 +384,19 @@ private fun BuildFeaturesPane(backend: IdeBackend, moduleName: String, modifier:
 
 @Composable
 private fun BuildFeatureRow(feature: UiBuildFeature, working: Boolean, switchEnabled: Boolean, onToggle: (Boolean) -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(feature.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                Text(feature.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(feature.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                    Text(feature.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (working) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+                else Switch(checked = feature.enabled, onCheckedChange = { if (switchEnabled) onToggle(it) }, enabled = switchEnabled)
             }
-            if (working) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
-            else CaSwitch(feature.enabled) { if (switchEnabled) onToggle(it) }
-        }
-        feature.note?.let {
-            Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+            feature.note?.let {
+                Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
 }
@@ -427,18 +443,15 @@ private fun CompilerPluginsPane(backend: IdeBackend, moduleName: String, modifie
 
 @Composable
 private fun CompilerPluginRow(plugin: UiCompilerPlugin, working: Boolean, switchEnabled: Boolean, onToggle: (Boolean) -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+    OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(plugin.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Text(plugin.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
                 Text(plugin.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
             if (working) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
-            else CaSwitch(plugin.enabled) { if (switchEnabled) onToggle(it) }
+            else Switch(checked = plugin.enabled, onCheckedChange = { if (switchEnabled) onToggle(it) }, enabled = switchEnabled)
         }
         // "Active on the classpath" badge — the real build behavior, which can differ from the toggle when the
         // runtime came in transitively (a dependency pulling it in applies the plugin even if not toggled here).
@@ -450,6 +463,7 @@ private fun CompilerPluginRow(plugin: UiCompilerPlugin, working: Boolean, switch
         }
         plugin.note?.let {
             Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+        }
         }
     }
 }
@@ -591,17 +605,15 @@ private fun BuildTypeSigningRow(assignment: UiSigningAssignment, keystores: List
 
 @Composable
 private fun SigningPill(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest, tween(Motion.FAST), label = "pillBg")
-    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-    Row(
-        Modifier.background(bg, RoundedCornerShape(Ca.radius.pill))
-            .clickable(remember { MutableInteractionSource() }, null, enabled = enabled) { onClick() }
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        if (selected) Icon(CaIcons.check, null, Modifier.size(13.dp), tint = fg)
-        Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = fg)
-    }
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        enabled = enabled,
+        label = { Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1) },
+        // The chip's own leading check is the M3 selected affordance, so the hand-drawn one goes.
+        leadingIcon = if (selected) ({ Icon(CaIcons.check, null, Modifier.size(16.dp)) }) else null,
+        shape = RoundedCornerShape(Ca.radius.pill),
+    )
 }
 
 @Composable
@@ -768,15 +780,31 @@ private fun ConfigForm(
     onCreateProguard: (entry: String) -> Unit,
     onSave: (UiModuleConfigEdit) -> Unit,
 ) {
-    // Editable state, rebuilt whenever a fresh config is loaded (e.g. after a save).
-    var level by remember(config) { mutableStateOf(config.languageLevel) }
-    var sdk by remember(config) { mutableStateOf(config.platformSdk) } // "" = follow the module-type default
-    val forms = remember(config) { config.facets.map { it.toForm() } }
-    val mainClass = remember(config) { mutableStateOf(config.runConfig?.mainClass ?: "") }
+    // Editable state, rebuilt whenever a fresh config is loaded (e.g. after a save) — and whenever [revision]
+    // moves, which is how Discard throws the edits away: everything below is re-derived from `config`.
+    var revision by remember(config) { mutableStateOf(0) }
+    var level by remember(config, revision) { mutableStateOf(config.languageLevel) }
+    var sdk by remember(config, revision) { mutableStateOf(config.platformSdk) } // "" = follow the module-type default
+    val forms = remember(config, revision) { config.facets.map { it.toForm() } }
+    val mainClass = remember(config, revision) { mutableStateOf(config.runConfig?.mainClass ?: "") }
+    // The facet values as loaded, snapshotted the moment the forms are built. Facet edits were previously
+    // invisible to the dirty check, so changing a namespace / minSdk / versionCode left the form looking
+    // untouched — which is fatal once the Save affordance only appears when something HAS changed.
+    val baselineFacets = remember(config, revision) { forms.associate { it.table to it.toValues() } }
+    val facetValues = forms.associate { it.table to it.toValues() }
     val dirty = level != config.languageLevel || sdk != config.platformSdk ||
-        (config.runConfig != null && mainClass.value.trim() != config.runConfig!!.mainClass)
+        (config.runConfig != null && mainClass.value.trim() != config.runConfig!!.mainClass) ||
+        facetValues != baselineFacets
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    fun edit() = UiModuleConfigEdit(
+        languageLevel = level,
+        facetValues = facetValues,
+        mainClass = if (config.runConfig != null) mainClass.value.trim() else null,
+        platformSdk = sdk,
+    )
+
+    Column(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // ---- General ----
         item("general") {
             SectionCard(stringResource(Res.string.modcfg_section_general)) {
@@ -829,17 +857,36 @@ private fun ConfigForm(
         // ---- Facet panels (generic) ----
         items(forms, key = { it.table }) { form -> FacetPanel(form, codeFont) }
 
-        item("save") {
-            Row(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp), horizontalArrangement = Arrangement.End) {
-                PrimaryButton(stringResource(if (dirty) Res.string.modcfg_save_changes else Res.string.modcfg_save), icon = CaIcons.check, onClick = {
-                    onSave(UiModuleConfigEdit(
-                        languageLevel = level,
-                        facetValues = forms.associate { it.table to it.toValues() },
-                        mainClass = if (config.runConfig != null) mainClass.value.trim() else null,
-                        platformSdk = sdk,
-                    ))
-                })
-            }
+    }
+        // Pinned, not the last row of the form: the Save button used to sit below every facet panel, so on an
+        // Android module you had to scroll past a screenful of fields to discover that your edits needed
+        // saving at all. It slides in the moment anything differs from the loaded config and stays put.
+        AnimatedVisibility(
+            visible = dirty,
+            enter = slideInVertically(tween(Motion.FAST)) { it } + fadeIn(tween(Motion.FAST)),
+            exit = slideOutVertically(tween(Motion.FAST)) { it } + fadeOut(tween(Motion.FAST)),
+        ) {
+            SaveBar(onDiscard = { revision++ }, onSave = { onSave(edit()) })
+        }
+    }
+}
+
+/** The pinned unsaved-changes bar: what changed, a way back, and the commit. */
+@Composable
+private fun SaveBar(onDiscard: () -> Unit, onSave: () -> Unit) {
+    Surface(tonalElevation = 3.dp, shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(CaIcons.info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                stringResource(Res.string.modcfg_unsaved_changes),
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            TextButton(onClick = onDiscard) { Text(stringResource(Res.string.modcfg_discard)) }
+            Button(onClick = onSave) { Text(stringResource(Res.string.modcfg_save)) }
         }
     }
 }
@@ -948,16 +995,16 @@ private fun CreateRuleButton(onClick: () -> Unit) {
 
 @Composable
 private fun SectionCard(title: String, action: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(title.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            action?.invoke()
+    OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // titleSmall in the section colour, not an uppercased micro-label: M3 section headers are
+                // read as headings, and SMALL CAPS at labelSmall is the hardest thing on the screen to scan.
+                Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                action?.invoke()
+            }
+            content()
         }
-        content()
     }
 }
 
@@ -1056,33 +1103,20 @@ private fun LabeledField(label: String, content: @Composable () -> Unit) {
 
 @Composable
 private fun BoxedTextField(state: MutableState<String>, codeFont: FontFamily, numeric: Boolean = false) {
-    Box(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 10.dp),
-    ) {
-        BasicTextField(
-            value = state.value,
-            onValueChange = { state.value = if (numeric) it.filter { c -> c.isDigit() } else it },
-            singleLine = true,
-            keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
-            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
+    OutlinedTextField(
+        value = state.value,
+        onValueChange = { state.value = if (numeric) it.filter { c -> c.isDigit() } else it },
+        singleLine = true,
+        keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont),
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
 private fun ToggleSwitch(on: Boolean, onToggle: (Boolean) -> Unit) {
-    val bg by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest, tween(Motion.FAST), label = "switchBg")
-    val align = if (on) Alignment.CenterEnd else Alignment.CenterStart
-    Box(
-        Modifier.size(width = 44.dp, height = 26.dp).background(bg, RoundedCornerShape(Ca.radius.pill))
-            .clickable(remember { MutableInteractionSource() }, null) { onToggle(!on) }.padding(3.dp),
-        contentAlignment = align,
-    ) {
-        Box(Modifier.size(20.dp).background(MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(Ca.radius.pill)))
-    }
+    Switch(checked = on, onCheckedChange = onToggle)
 }
 
 @Composable
@@ -1161,13 +1195,12 @@ private fun AddRowButton(label: String, onClick: () -> Unit) {
 
 @Composable
 private fun LevelChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.FAST), label = "levelBg")
-    Box(
-        Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-    ) {
-        Text(label, color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-    }
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1) },
+        shape = RoundedCornerShape(Ca.radius.pill),
+    )
 }
 
 /** The user-facing text of a pane's reported outcome. */

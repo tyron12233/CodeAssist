@@ -244,6 +244,11 @@ internal class AddDependencyState(
     var variants: List<String> by mutableStateOf(emptyList())
         private set
 
+    /** Whether the scope/variant options are expanded. Collapsed by default — the summary line carries the
+     *  current values, and almost every add takes the defaults, so the chips shouldn't cost a row each. */
+    var optionsOpen: Boolean by mutableStateOf(false)
+        private set
+
     var moduleTargets: List<String> by mutableStateOf(emptyList())
         private set
     var localCandidates: List<String> by mutableStateOf(emptyList())
@@ -317,15 +322,26 @@ internal class AddDependencyState(
         if (!busy) variant = value
     }
 
-    /** Add a versioned library/AAR, a BOM platform, a module-on-module dependency, or a local file. */
-    fun add(coordinate: String) {
+    fun toggleOptions() {
+        if (!busy) optionsOpen = !optionsOpen
+    }
+
+    /**
+     * Add a versioned library/AAR, a BOM platform, a module-on-module dependency, or a local file.
+     *
+     * [asPlatform] imports the coordinate as a platform (Gradle `platform(...)`) regardless of the current
+     * mode. Search no longer has a separate BOM mode: a hit is recognised as a BOM from its POM-only
+     * packaging and adds itself as one, so the caller says what this coordinate is rather than the user
+     * having to pick the right mode before searching.
+     */
+    fun add(coordinate: String, asPlatform: Boolean = false) {
         start(coordinate)
         scope.launch {
-            val result = when (mode) {
-                AddMode.Platform -> backend.deps.addPlatform(moduleName, coordinate, variant = variant)
-                AddMode.Module -> backend.deps.addModuleDependency(moduleName, coordinate, configuration, variant = variant)
-                AddMode.Local -> backend.deps.addLocalLibrary(moduleName, coordinate, configuration)
-                AddMode.Library -> backend.deps.addDependency(moduleName, coordinate, configuration, variant = variant)
+            val result = when {
+                asPlatform || mode == AddMode.Platform -> backend.deps.addPlatform(moduleName, coordinate, variant = variant)
+                mode == AddMode.Module -> backend.deps.addModuleDependency(moduleName, coordinate, configuration, variant = variant)
+                mode == AddMode.Local -> backend.deps.addLocalLibrary(moduleName, coordinate, configuration)
+                else -> backend.deps.addDependency(moduleName, coordinate, configuration, variant = variant)
             }
             finish(result)
         }

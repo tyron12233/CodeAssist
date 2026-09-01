@@ -39,6 +39,8 @@ dependencies {
     implementation(project(":agent-impl")) // the AI coding agent engine (providers, loop, tools)
     implementation(project(":agent-mcp")) // the agent's MCP server (stdio standalone + in-app HTTP, see AgentBackend)
     implementation(project(":agent-ui")) // the agent's Compose UI plugin (AgentUiPlugin) — paired with AgentPlugin in BuiltInPlugins
+    implementation(project(":vcs-impl")) // the Git engine (JGit working copy + the GitHub client + the account store)
+    implementation(project(":vcs-ui")) // the version-control Compose UI plugin (VcsUiPlugin) — paired with VcsPlugin in BuiltInPlugins
     // Opt-in usage analytics. `api` because AnalyticsService appears in IdeServicesBackend's (public)
     // constructor signature, so a host wiring it (ide-android) needs the type on its compile classpath.
     api(project(":analytics-api"))

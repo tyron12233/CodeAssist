@@ -5,6 +5,11 @@ loaded from a separate artifact, is contributed by a **plugin** through the same
 scoped-service container. The IDE's own built-ins are the first consumers of this API, so there is no
 separate, privileged host-wiring path.
 
+> **Writing a plugin?** This page describes the model as built. For the task-oriented, step-by-step
+> guide — creating a plugin module, contributing to extension points, adding services, settings pages,
+> actions and Compose UI, and two worked examples — see
+> [writing-plugins.md](writing-plugins.md).
+
 This document describes the model as built (the internal, one-classpath tier). The externally-packaged,
 classloader-isolated, trust-gated tier is future work; see [Future work](#future-work) and
 `docs/ui-extensibility-and-plugin-api.md`.

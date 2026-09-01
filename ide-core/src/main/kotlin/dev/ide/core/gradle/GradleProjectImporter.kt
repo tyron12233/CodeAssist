@@ -1,5 +1,6 @@
 package dev.ide.core.gradle
 
+import dev.ide.android.support.AndroidApiLevels
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.BuildFeatures
@@ -134,6 +135,7 @@ class GradleProjectImporter : ProjectImporter {
         // manifest (AndroidFacet's DSL-wins rule).
         versionCode = spec.versionCode ?: AndroidFacet.DEFAULT_VERSION_CODE,
         versionName = spec.versionName ?: AndroidFacet.DEFAULT_VERSION_NAME,
+        manifestPlaceholders = spec.manifestPlaceholders,
         isApplication = spec.kind == GradleImport.Kind.ANDROID_APP,
         flavorDimensions = spec.flavorDimensions,
         buildTypes = if (spec.buildTypes.isEmpty()) AndroidFacet.DEFAULT_BUILD_TYPES
@@ -146,9 +148,12 @@ class GradleProjectImporter : ProjectImporter {
                 proguardFiles = it.proguardFiles,
                 applicationIdSuffix = it.applicationIdSuffix,
                 versionNameSuffix = it.versionNameSuffix,
+                manifestPlaceholders = it.manifestPlaceholders,
             )
         },
-        productFlavors = spec.productFlavors.map { ProductFlavor(it.name, dimension = it.dimension) },
+        productFlavors = spec.productFlavors.map {
+            ProductFlavor(it.name, dimension = it.dimension, manifestPlaceholders = it.manifestPlaceholders)
+        },
         buildFeatures = BuildFeatures(
             viewBinding = spec.viewBinding,
             compose = spec.isCompose,
@@ -168,7 +173,9 @@ class GradleProjectImporter : ProjectImporter {
     }
 
     private companion object {
-        const val DEFAULT_COMPILE_SDK = 34
+        /** Only a fallback: it applies when the scripts declare no `compileSdk` at all (an unreadable
+         *  convention plugin), so it tracks the newest level the IDE supports rather than lagging it. */
+        const val DEFAULT_COMPILE_SDK = AndroidApiLevels.LATEST
         const val DEFAULT_MIN_SDK = 21
     }
 }

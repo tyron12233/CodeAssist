@@ -60,8 +60,13 @@ object GradleImport {
         val applicationIdSuffix: String? = null,
         val versionNameSuffix: String? = null,
         val proguardFiles: List<String> = emptyList(),
+        val manifestPlaceholders: Map<String, String> = emptyMap(),
     )
-    data class FlavorSpec(val name: String, val dimension: String?)
+    data class FlavorSpec(
+        val name: String,
+        val dimension: String?,
+        val manifestPlaceholders: Map<String, String> = emptyMap(),
+    )
 
     /** A custom Maven repository declared in `settings.gradle`/`build.gradle` (name + URL). */
     data class RepoSpec(val name: String, val url: String)
@@ -76,6 +81,9 @@ object GradleImport {
         val targetSdk: Int?,
         val versionCode: Int?,
         val versionName: String?,
+        /** `defaultConfig.manifestPlaceholders`: the `${key}` values the manifest merge substitutes, which a
+         *  dependency's manifest may require (see `AndroidFacet.manifestPlaceholders`). */
+        val manifestPlaceholders: Map<String, String>,
         val isKotlin: Boolean,
         val isCompose: Boolean,
         val viewBinding: Boolean,
@@ -262,6 +270,18 @@ object GradleImport {
         if (hasAndroidBlock) noteUnmodeledAndroid(name, androidTexts, notes)
 
         val defaultConfig = androidSearch.firstNotNullOfOrNull { GradleScript.blockBody(it, "defaultConfig") }
+        val placeholders = defaultConfig?.let { parseManifestPlaceholders(it, vars) } ?: emptyMap()
+        val buildTypeSpecs = mergeByName(androidTexts.map { parseBuildTypes(it, vars) }) { it.name }
+        val flavorSpecs = mergeByName(androidTexts.map { parseProductFlavors(it, vars) }) { it.name }
+        // A placeholder whose value isn't a plain string (a function call, a computed property) can't be read.
+        // Say so, rather than let the build fail later on an unresolved `${…}` in a dependency's manifest.
+        if (androidTexts.any { "manifestPlaceholders" in it } && placeholders.isEmpty() &&
+            buildTypeSpecs.all { it.manifestPlaceholders.isEmpty() } &&
+            flavorSpecs.all { it.manifestPlaceholders.isEmpty() }
+        ) notes.add(
+            "$name: manifestPlaceholders is declared but none of its values could be read. Set them in " +
+                "Module Settings if a dependency's manifest needs them.",
+        )
 
         return ModuleSpec(
             name = name,
@@ -275,6 +295,7 @@ object GradleImport {
             targetSdk = androidInt("""targetSdk(?:Version)?"""),
             versionCode = defaultConfig?.let { firstGroup(it, """versionCode\s*=?\s*\(?\s*(\d+)""")?.toIntOrNull() },
             versionName = defaultConfig?.let { firstGroup(it, """versionName\s*=?\s*['"]([^'"]+)['"]""") },
+            manifestPlaceholders = placeholders,
             isKotlin = isKotlin,
             isCompose = isCompose,
             viewBinding = viewBinding,
@@ -285,8 +306,8 @@ object GradleImport {
             moduleDeps = moduleDeps,
             platformDeps = platforms,
             flavorDimensions = androidTexts.flatMap { flavorDimensions(it) }.distinct(),
-            buildTypes = mergeByName(androidTexts.map { parseBuildTypes(it) }) { it.name },
-            productFlavors = mergeByName(androidTexts.map { parseProductFlavors(it) }) { it.name },
+            buildTypes = buildTypeSpecs,
+            productFlavors = flavorSpecs,
         )
     }
 
@@ -465,7 +486,7 @@ object GradleImport {
 
     private val RESERVED_CONFIG_BLOCKS = setOf("all", "each", "configureEach", "forEach", "getByName", "named", "create", "register")
 
-    private fun parseBuildTypes(android: String): List<BuildTypeSpec> {
+    private fun parseBuildTypes(android: String, vars: Map<String, String>): List<BuildTypeSpec> {
         val body = GradleScript.blockBody(android, "buildTypes") ?: return emptyList()
         return GradleScript.childBlocks(body).filter { it.name !in RESERVED_CONFIG_BLOCKS }.map { b ->
             val proguard = LinkedHashSet<String>()
@@ -481,11 +502,12 @@ object GradleImport {
                 applicationIdSuffix = firstGroup(b.body, """applicationIdSuffix\s*=?\s*['"]([^'"]+)['"]"""),
                 versionNameSuffix = firstGroup(b.body, """versionNameSuffix\s*=?\s*['"]([^'"]+)['"]"""),
                 proguardFiles = proguard.toList(),
+                manifestPlaceholders = parseManifestPlaceholders(b.body, vars),
             )
         }
     }
 
-    private val UNMODELED_ANDROID = listOf("buildConfigField", "resValue", "manifestPlaceholders", "abiFilters")
+    private val UNMODELED_ANDROID = listOf("buildConfigField", "resValue", "abiFilters")
 
     /** Note the `android {}` features the model doesn't carry, so a converted project isn't silently missing them. */
     private fun noteUnmodeledAndroid(module: String, androidTexts: List<String>, notes: MutableList<String>) {
@@ -513,11 +535,51 @@ object GradleImport {
         return ids
     }
 
-    private fun parseProductFlavors(android: String): List<FlavorSpec> {
+    private fun parseProductFlavors(android: String, vars: Map<String, String>): List<FlavorSpec> {
         val body = GradleScript.blockBody(android, "productFlavors") ?: return emptyList()
         return GradleScript.childBlocks(body).filter { it.name !in RESERVED_CONFIG_BLOCKS }.map { b ->
-            FlavorSpec(b.name, firstGroup(b.body, """dimension\s*=?\s*['"]([\w.\-]+)['"]"""))
+            FlavorSpec(
+                b.name,
+                firstGroup(b.body, """dimension\s*=?\s*['"]([\w.\-]+)['"]"""),
+                parseManifestPlaceholders(b.body, vars),
+            )
         }
+    }
+
+    // `manifestPlaceholders["k"] = "v"` and `manifestPlaceholders.put("k", "v")`: the per-key forms, written
+    // in both DSLs (and the only form modern KTS offers, since the property is read-only there).
+    private val PLACEHOLDER_INDEXED =
+        Regex("""manifestPlaceholders\s*\[\s*['"]([^'"]+)['"]\s*]\s*=\s*['"]([^'"]*)['"]""")
+    private val PLACEHOLDER_PUT =
+        Regex("""manifestPlaceholders\s*\.\s*put\s*\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]*)['"]""")
+
+    /** One entry of a map literal in either DSL: Groovy's `k: "v"` / `'k': "v"`, or Kotlin's `"k" to "v"`. */
+    private val PLACEHOLDER_ENTRY = Regex("""['"]?([\w.\-]+)['"]?\s*(?::|\bto\b)\s*['"]([^'"]*)['"]""")
+
+    /**
+     * The `manifestPlaceholders` declared in [body] (a `defaultConfig`, build-type, or flavor block), in each
+     * form the two DSLs write them: a whole map assigned or added (`= [k: "v"]`, `+= mapOf("k" to "v")`) and the
+     * per-key assignments above. Values interpolate `$var` like every other value the reader takes.
+     *
+     * A library dependency commonly REQUIRES one of these (the Myket billing client's manifest names
+     * `${marketApplicationId}`/`${marketPermission}`), and an unresolved placeholder fails the aapt2 link, so
+     * dropping the block (as the reader did before) turned a working Gradle project into an unbuildable one.
+     */
+    private fun parseManifestPlaceholders(body: String, vars: Map<String, String>): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        for (st in GradleScript.statements(body)) {
+            if ("manifestPlaceholders" !in st) continue
+            var perKey = false
+            for (m in PLACEHOLDER_INDEXED.findAll(st) + PLACEHOLDER_PUT.findAll(st)) {
+                out[m.groupValues[1]] = interpolate(m.groupValues[2], vars)
+                perKey = true
+            }
+            if (perKey) continue
+            // Only what follows the `=` / `+=`, so `manifestPlaceholders` itself can't be read as an entry key.
+            val literal = st.substringAfter('=', "")
+            for (m in PLACEHOLDER_ENTRY.findAll(literal)) out[m.groupValues[1]] = interpolate(m.groupValues[2], vars)
+        }
+        return out
     }
 
     // --- variables ---

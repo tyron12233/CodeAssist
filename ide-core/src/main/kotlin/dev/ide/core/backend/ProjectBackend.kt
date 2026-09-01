@@ -2,6 +2,7 @@ package dev.ide.core.backend
 
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.core.BackendContext
+import dev.ide.core.ImportableKind
 import dev.ide.core.CaprojFormat
 import dev.ide.core.ProjectIconLocator
 import dev.ide.core.ProjectPackaging
@@ -13,13 +14,18 @@ import dev.ide.platform.storage.StorageUsage
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.ProjectService
 import dev.ide.ui.backend.UiCompatibilityInfo
+import dev.ide.ui.backend.UiExportModule
 import dev.ide.ui.backend.UiExportOptions
+import dev.ide.ui.backend.UiExportPlan
+import dev.ide.ui.backend.UiGradleExport
 import dev.ide.ui.backend.UiImportPreview
 import dev.ide.ui.backend.UiPackagedEntry
+import dev.ide.ui.backend.UiPackagedModule
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiConvertResult
+import dev.ide.ui.backend.UiProjectFolderKind
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.UiProjectTemplate
 import dev.ide.ui.backend.UiStorageCategory
@@ -36,6 +42,9 @@ import java.nio.file.Paths
 
 /** Marker on line 1 of `.platform/open-tabs.txt` for the caret/scroll/view-mode-aware tab format (see below). */
 private const val TAB_FORMAT_V2 = "#v2"
+
+/** Ceiling on an image read for a UI preview (the export screen's screenshot thumbnails). */
+private const val MAX_PREVIEW_IMAGE_BYTES = 8L * 1024 * 1024
 
 /**
  * [ProjectService]: the project picker + create/open/delete, the Create-Project template gallery, and the
@@ -238,12 +247,21 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         }
     }
 
+    override suspend fun inspectProjectFolder(path: String): UiProjectFolderKind = withContext(Dispatchers.IO) {
+        val mgr = ctx.manager ?: return@withContext UiProjectFolderKind.UNKNOWN
+        when (runCatching { mgr.inspectFolder(Paths.get(path)) }.getOrDefault(ImportableKind.NONE)) {
+            ImportableKind.CODE_ASSIST -> UiProjectFolderKind.CODE_ASSIST
+            ImportableKind.EXTERNAL -> UiProjectFolderKind.GRADLE
+            ImportableKind.NONE -> UiProjectFolderKind.UNKNOWN
+        }
+    }
+
     override suspend fun importExternalProject(sourceRootPath: String): UiProjectResult {
         val mgr = ctx.manager ?: return UiProjectResult(false, "Project import not supported by this backend")
         return withContext(Dispatchers.IO) {
             runCatching {
                 val next = mgr.importExternalProject(Paths.get(sourceRootPath))
-                    ?: return@runCatching UiProjectResult(false, "That folder isn't an importable Gradle project.")
+                    ?: return@runCatching UiProjectResult(false, "That folder isn't a CodeAssist or Gradle project.")
                 ctx.swapEngine(next)
                 UiProjectResult(true, "Imported ${next.projectDisplayName()}", next.workspaceRoot.toString())
             }.getOrElse { e ->
@@ -265,10 +283,51 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
                         bundleDependencies = options.bundleDependencies,
                         author = options.author,
                         description = options.description,
+                        includedModules = options.includedModules,
+                        screenshotPaths = options.screenshotPaths,
                     ),
                 ).toString()
             }.getOrElse { e -> log.error("Couldn't export the project at $rootPath", e); null }
         }
+    }
+
+    override suspend fun exportGradleProject(rootPath: String): UiGradleExport? {
+        val mgr = ctx.manager ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val outcome = mgr.exportGradleProject(rootPath)
+                UiGradleExport(outcome.zip.toString(), outcome.notes)
+            }.getOrElse { e -> log.error("Couldn't export $rootPath as a Gradle project", e); null }
+        }
+    }
+
+    override suspend fun exportPlan(rootPath: String): UiExportPlan? {
+        val mgr = ctx.manager ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val plan = mgr.exportPlan(rootPath) ?: return@runCatching null
+                UiExportPlan(
+                    modules = plan.modules.map {
+                        UiExportModule(it.name, it.typeId, it.path, it.fileCount, it.sizeBytes, it.dependsOn)
+                    },
+                    bundledDepsBytes = plan.bundledDepsBytes,
+                )
+            }.getOrElse { e -> log.error("Couldn't read the export plan for $rootPath", e); null }
+        }
+    }
+
+    override suspend fun importDestination(projectName: String): String? {
+        val mgr = ctx.manager ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatching { mgr.plannedImportDir(projectName).toString() }.getOrNull()
+        }
+    }
+
+    override suspend fun imageBytes(path: String): ByteArray? = withContext(Dispatchers.IO) {
+        runCatching {
+            val file = Paths.get(path)
+            if (Files.size(file) > MAX_PREVIEW_IMAGE_BYTES) null else Files.readAllBytes(file)
+        }.getOrNull()
     }
 
     override suspend fun previewImportPackage(archivePath: String): UiImportPreview? {
@@ -286,7 +345,7 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
                     isAndroid = m.isAndroid,
                     packageName = m.packageName,
                     moduleCount = m.moduleCount,
-                    modules = m.modules,
+                    modules = preview.modules.map { UiPackagedModule(it.name, it.typeId, it.fileCount, it.sizeBytes) },
                     fileCount = m.fileCount,
                     uncompressedSizeBytes = m.uncompressedSize,
                     hasBundledDeps = m.hasBundledDeps,
@@ -301,11 +360,11 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         }
     }
 
-    override suspend fun importPackage(archivePath: String): UiProjectResult {
+    override suspend fun importPackage(archivePath: String, projectName: String?): UiProjectResult {
         val mgr = ctx.manager ?: return UiProjectResult(false, "Project import not supported by this backend")
         return withContext(Dispatchers.IO) {
             runCatching {
-                val next = mgr.importProject(archivePath)
+                val next = mgr.importProject(archivePath, projectName)
                     ?: return@runCatching UiProjectResult(
                         false,
                         "That file isn't a CodeAssist project package, or it needs a newer version of CodeAssist.",

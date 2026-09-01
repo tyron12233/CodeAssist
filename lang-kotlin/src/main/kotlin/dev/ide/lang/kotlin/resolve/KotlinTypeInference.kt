@@ -328,13 +328,16 @@ internal fun KotlinResolver.isNullBranch(e: KtExpression): Boolean =
     e is KtConstantExpression && e.text.trim() == "null"
 
 /** `xs[i]` → the element type: the (substituted) return type of the receiver's `get(index)` operator
- *  (`List<String>.get` → `String`, `Map<K,V>.get` → `V?`). Null when the receiver type or `get` is unknown. */
+ *  (`List<String>.get` → `String`, `Map<K,V>.get` → `V?`). The receiver's type arguments come from its type;
+ *  `get`'s OWN type parameters are inferred from the index expressions ([operatorResultType]), which is what
+ *  types `coroutineContext[CoroutineName]` — `get(key: Key<E>): E?` — as `CoroutineName?`. Null when the
+ *  receiver type or `get` is unknown. */
 internal fun KotlinResolver.inferArrayGet(e: KtArrayAccessExpression): KotlinType? {
     val recv = inferType(e.arrayExpression) ?: return null
     val arity = e.indexExpressions.size
-    return service.membersNamed(recv.qualifiedName, recv.typeArguments, "get")
-        .firstOrNull { it.kind == SymbolKind.METHOD && it.paramTypes.size == arity }
-        ?.type as? KotlinType
+    val get = service.membersNamed(recv.qualifiedName, recv.typeArguments, "get")
+        .firstOrNull { it.kind == SymbolKind.METHOD && it.paramTypes.size == arity } ?: return null
+    return operatorResultType(get, e.indexExpressions)
 }
 
 /** `this` (optionally `this@Label`) → the matching implicit receiver in scope (innermost when unlabeled). */
@@ -469,16 +472,25 @@ internal fun KotlinResolver.typeOfCall(
         }
         service.resolveTypeName(name, fileContext)?.let { typeFqn ->
             // A capitalized no-receiver call on a name that resolves to a TYPE is normally a constructor
-            // (`Box("s")` → `Box<String>`). But an INTERFACE has no constructor: a call on its name is either a
-            // SAM / `fun interface` constructor (`Comparator { … }`, whose result IS the interface type) or a
-            // same-named top-level FACTORY function that returns it (`fun <T> MutableStateFlow(value: T):
-            // MutableStateFlow<T>`, which shadows the `MutableStateFlow` interface). Route to the factory
-            // function — falling through to the function path below — ONLY when one actually exists, so its type
-            // parameters infer from the arguments (`T = TextFieldValue`) instead of `constructorResultType`
-            // returning the bare, un-parameterized interface type. Absent a factory it's the SAM case, so keep
-            // the constructor path.
-            val factoryFunction = service.isInterfaceType(typeFqn) == true &&
-                service.topLevelByName(name).any { it.kind == SymbolKind.METHOD }
+            // (`Box("s")` → `Box<String>`). Two cases are NOT, and both route to a same-named top-level FACTORY
+            // function instead — falling through to the function path below, but ONLY when one actually exists:
+            //
+            //  * The name resolves to a type that CANNOT be constructed — an `interface`, or an
+            //    `abstract`/`sealed` class. The call is then either a SAM / `fun interface` constructor
+            //    (`Comparator { … }`, whose result IS the interface type) or a factory shadowing the type
+            //    (`fun <T> MutableStateFlow(value: T): MutableStateFlow<T>`; Compose's `FontFamily(vararg Font)`
+            //    over the sealed `FontFamily`). Taking the factory also lets its type parameters infer from the
+            //    arguments (`T = TextFieldValue`) instead of `constructorResultType` returning the bare,
+            //    un-parameterized type. Absent a factory it's the SAM case, so keep the constructor path.
+            //  * The name doesn't resolve to a type AT ALL. `resolveTypeName` import-qualifies a bare name
+            //    against the file's imports, and a Kotlin import names both classifiers and CALLABLES — so
+            //    `import androidx.compose.ui.text.googlefonts.Font` (a package with a top-level `Font(…)` and no
+            //    `Font` class) yields a `…googlefonts.Font` that names nothing. Constructing it typed the call as
+            //    a non-existent type, which then bound to no parameter anywhere: `FontFamily(Font(googleFont =
+            //    …))` lost every `FontFamily` overload and fell back to instantiating the abstract class.
+            val known = service.isKnownType(typeFqn)
+            val factoryFunction = service.topLevelByName(name).any { it.kind == SymbolKind.METHOD } &&
+                (!known || service.isNonInstantiableType(typeFqn) == true)
             if (!factoryFunction) return constructorResultType(typeFqn, call)
         }
     }
@@ -633,12 +645,16 @@ internal fun KotlinResolver.invokeReturnType(call: KtCallExpression): KotlinType
     val calleeType = inferType(call.calleeExpression)?.takeIf { !it.isTypeParameter } ?: return null
     // A directly function-typed value (`val f = fun(x: Int) = x; f(3)`, a lambda held in a var) — its result is
     // the function type's `R`, which the `kotlin.FunctionN` classifier carries as its last type argument.
-    service.functionalShape(calleeType)?.returnType?.let { return it as? KotlinType }
+    // A SAM interface has a functional shape too, and when its single abstract method is a GENERIC `invoke`
+    // that `R` is the METHOD's own type parameter — unbound here. Fall through to the member path below, which
+    // binds it from the arguments; a function type whose `R` is a type parameter reaches the same answer there.
+    (service.functionalShape(calleeType)?.returnType as? KotlinType)
+        ?.takeIf { !it.isTypeParameter }?.let { return it }
     val n = call.valueArguments.size
     val invokes = service.membersNamed(calleeType.qualifiedName, calleeType.typeArguments, "invoke")
         .filter { it.kind == SymbolKind.METHOD }
-    return (invokes.firstOrNull { it.paramTypes.size == n }
-        ?: invokes.firstOrNull())?.type as? KotlinType
+    val invoke = invokes.firstOrNull { it.paramTypes.size == n } ?: invokes.firstOrNull() ?: return null
+    return operatorResultType(invoke, call.valueArguments.map { it.getArgumentExpression() })
 }
 
 internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {

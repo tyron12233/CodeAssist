@@ -158,7 +158,9 @@ private fun DrawScope.drawVectorNodes(nodes: List<UiVectorNode>, rootAlpha: Floa
 }
 
 private fun DrawScope.drawVectorPath(p: UiVectorPath, rootAlpha: Float) {
-    val path = AndroidPathParser.parse(p.pathData, fillEvenOdd = p.fillRule == "evenOdd")
+    // Drawing only READS the path, so the shared cached one is safe here and saves a re-parse per
+    // path per frame — the icon grid redraws every visible tile on every scroll frame.
+    val path = AndroidPathParser.cached(p.pathData, fillEvenOdd = p.fillRule == "evenOdd")
     p.fillColor?.let {
         drawPath(path, argbColor(it), alpha = (p.fillAlpha * rootAlpha).coerceIn(0f, 1f), style = Fill)
     }
@@ -193,7 +195,7 @@ private fun DrawScope.drawVectorGroup(g: UiVectorGroup, rootAlpha: Float) {
             scale(g.scaleX, g.scaleY, pivot) {
                 val clip = g.clipPathData
                 if (clip == null) drawVectorNodes(g.children, rootAlpha)
-                else clipPath(AndroidPathParser.parse(clip)) { drawVectorNodes(g.children, rootAlpha) }
+                else clipPath(AndroidPathParser.cached(clip)) { drawVectorNodes(g.children, rootAlpha) }
             }
         }
     }

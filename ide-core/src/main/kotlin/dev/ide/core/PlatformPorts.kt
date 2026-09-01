@@ -2,6 +2,7 @@ package dev.ide.core
 
 import dev.ide.analytics.AnalyticsService
 import dev.ide.build.engine.ProgramInterpreter
+import dev.ide.lang.kotlin.compile.KotlinCompilerBackend
 import dev.ide.lang.kotlin.compile.KotlinPluginLoader
 import dev.ide.platform.ServiceKey
 import dev.ide.preview.impl.CustomViewRuntime
@@ -29,6 +30,7 @@ internal val APK_INSTALLER = ServiceKey<ApkInstaller>("platform.apkInstaller")
 internal val APP_LOG_CHANNEL = ServiceKey<AppLogChannel>("platform.appLogChannel")
 internal val CUSTOM_VIEW_RUNTIME = ServiceKey<CustomViewRuntime>("platform.customViewRuntime")
 internal val KOTLIN_PLUGIN_LOADER = ServiceKey<KotlinPluginLoader>("platform.kotlinPluginLoader")
+internal val KOTLIN_COMPILER_BACKEND = ServiceKey<KotlinCompilerBackend>("platform.kotlinCompilerBackend")
 internal val ANDROID_DEVICE_TOOLS = ServiceKey<AndroidDeviceTools>("platform.androidDeviceTools")
 internal val REAL_VIEW_RUNTIME = ServiceKey<RealViewRuntime>("platform.realViewRuntime")
 

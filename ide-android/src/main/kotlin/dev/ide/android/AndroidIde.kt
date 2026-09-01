@@ -8,7 +8,10 @@ import dev.ide.analytics.AnalyticsEvent
 import dev.ide.analytics.DeviceInfo
 import dev.ide.analytics.EventCategory
 import dev.ide.analytics.Events
+import dev.ide.android.fork.ForkedKotlinCompiler
+import dev.ide.android.fork.ProcessIdentity
 import dev.ide.android.preview.SwingAwareProgramInterpreter
+import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.analytics.impl.AnalyticsLogSink
 import dev.ide.analytics.impl.DefaultAnalyticsService
@@ -223,6 +226,33 @@ object AndroidIde {
         // "Forward app logs" (Build Runtime page), default on — read lazily like the R8/dex knobs.
         val injectAppLogKey = settingsPrefix + BuiltInSettingsPages.INJECT_APP_LOG
         val appLogEnabledProvider = { managerRef.get()?.preference(injectAppLogKey)?.trim() != "false" }
+        // Kotlin compilation runs in a PERSISTENT forked VM (`dev.ide.android.fork`): a compile then gets a
+        // heap above the app cap and its working set stays off the editor's heap. Unlike the R8/D8 forks the VM
+        // is not per invocation — kotlinc's cost is dominated by warm state (the compiler's class-loading and
+        // IntelliJ-core application environment, plus the read jars KotlinEnvironmentKeepAlive holds), so the
+        // worker is started once and reused. The in-process compiler it wraps is the fallback for every failure
+        // path, and it carries the same ART plugin loader so a runtime compiler plugin still loads either way.
+        val separateProcessKey = settingsPrefix + BuiltInSettingsPages.SEPARATE_PROCESS
+        // Only the process that actually builds may hold a compiler VM: this engine is stood up in BOTH the
+        // IDE process and the `:build` daemon, and the daemon is where compiles land unless the user turned
+        // separate-process builds off.
+        val isBuildProcess = ProcessIdentity.isBuildProcess()
+        val hostsBuilds = {
+            isBuildProcess || managerRef.get()?.preference(separateProcessKey)?.trim() == "false"
+        }
+        val kotlincModeKey = settingsPrefix + BuiltInSettingsPages.KOTLINC_MODE
+        val kotlincHeapKey = settingsPrefix + BuiltInSettingsPages.KOTLINC_MAX_HEAP
+        val kotlincWorkersKey = settingsPrefix + BuiltInSettingsPages.KOTLINC_WORKERS
+        val kotlinCompiler = ForkedKotlinCompiler(
+            context.applicationContext,
+            modeProvider = { managerRef.get()?.preference(kotlincModeKey)?.trim() },
+            maxHeapMbProvider = { managerRef.get()?.preference(kotlincHeapKey)?.trim()?.toIntOrNull() },
+            workerCountProvider = { managerRef.get()?.preference(kotlincWorkersKey)?.trim()?.toIntOrNull() },
+            hostsBuilds = hostsBuilds,
+            androidJar = androidJar.toPath(),
+            minApi = minOf(Build.VERSION.SDK_INT, 36),
+            fallback = KotlinJvmCompiler(pluginLoader = kotlinPluginLoader),
+        )
         // The dex MERGE (debug-path memory peak) forks too, under the same R8 execution / heap settings; the
         // archive step forks above the "Off-heap dexing threshold". The merge batches + parallelizes across
         // forked VMs bounded by the process-wide fork gate (see ForkedD8Dexer / R8ForkSupport).
@@ -238,8 +268,6 @@ object AndroidIde {
         // Runs in the separate `:preview` process (RemoteRealViewRuntime) when the "Build in a separate process"
         // setting is on (default) — isolating arbitrary library/user View code, with in-process fallback —
         // governed by the same toggle as the build daemon (read lazily via the manager).
-        val separateProcessKey =
-            settingsPrefix + BuiltInSettingsPages.SEPARATE_PROCESS
         val realViewRuntime = dev.ide.preview.realview.RemoteRealViewRuntime(
             context.applicationContext,
             androidJar.toPath(),
@@ -277,6 +305,7 @@ object AndroidIde {
             customViewRuntime = previewRuntime,
             realViewRuntime = realViewRuntime,
             kotlinPluginLoader = kotlinPluginLoader,
+            kotlinCompiler = kotlinCompiler,
             r8Shrinker = r8Shrinker,
             r8MergeDexer = r8MergeDexer,
             mergeChunkProvider = dexMergeChunkProvider,

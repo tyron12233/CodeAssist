@@ -20,6 +20,20 @@ oneway interface IComposePreviewCallback {
     // A fatal render error for the session (the IDE surfaces an error view / falls back in-process).
     void onError(String message);
 
+    // A NON-fatal render problem: a content lambda inside the preview threw, so the preview still DRAWS but part
+    // of it (lazy items, a slot) is missing. Null clears it once the pass renders cleanly again. This is the
+    // isolated counterpart of the in-process host's "Preview partially rendered" warning; without it the
+    // service's onPartialError went nowhere and an isolated preview reported no problem at all while the same
+    // code in-process warned. Deduped by message on the service side -- the interpreter re-runs every
+    // recomposition and hands over a FRESH Throwable each pass.
+    void onPartialError(String message);
+
+    // The calls the preview sandbox BLOCKED this pass, as "categoryId\tmember" entries (SandboxCategory.id and
+    // the owner.name the code tried). A blocked call is stubbed out, so the preview may LOOK fine -- the chip is
+    // the only place it is visible, which is why the isolated path has to send these rather than keep them.
+    // Sent after each composition pass; an empty array clears.
+    void onSandboxFindings(in String[] findings);
+
     // The measured CONTENT size of a wrap-to-content preview (`@Preview` with no device/size), in surface pixels.
     // The surface itself is rendered at a fixed max size (the device viewport), the composable wrapped to its
     // intrinsic size at top-left; this reports that intrinsic size so the IDE crops the streamed frame to it and

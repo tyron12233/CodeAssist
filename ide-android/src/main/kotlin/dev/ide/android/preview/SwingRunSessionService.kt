@@ -23,6 +23,7 @@ import dev.ide.swing.ToolkitEventQueue
 import java.io.File
 import java.io.OutputStream
 import java.io.PrintStream
+import java.lang.reflect.UndeclaredThrowableException
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Path
@@ -154,7 +155,28 @@ class SwingRunSessionService : Service() {
             peerFactory = DexPeerFactory(),
         )
 
-        private val thread = Thread(null, ::pump, "swing-run-$id", STACK_BYTES).apply { isDaemon = true }
+        /**
+         * The group the pump thread and everything the program starts from it belong to, so what those threads
+         * throw is handled here. A `Thread` the program starts is a REAL host thread: an exception escaping it
+         * would otherwise reach the process-wide handler, which on Android is the system killer, and the user's
+         * bug would take `:preview` (and the run they are looking at) down with it. A real JVM prints the trace
+         * and lets the rest of the program carry on, which is what this does, into the run console.
+         */
+        private val group = object : ThreadGroup("swing-run-$id") {
+            override fun uncaughtException(t: Thread, e: Throwable) {
+                // An interpreted lambda or peer reaches platform code as a java.lang.reflect.Proxy, whose
+                // generated method wraps a checked throwable its interface does not declare; that wrapper is an
+                // artifact of the VM's boundary, not something the program did.
+                val error = if (e is UndeclaredThrowableException) e.undeclaredThrowable ?: e else e
+                when {
+                    error is VmInterruptedException -> {} // the VM unwinding a cancelled run
+                    error is InterruptedException && !running -> {} // the interrupt `stop` raises, not a bug
+                    else -> emit("\nException in thread \"${t.name}\" ${error.stackTraceToString()}")
+                }
+            }
+        }
+
+        private val thread = Thread(group, ::pump, "swing-run-$id", STACK_BYTES).apply { isDaemon = true }
 
         fun start() = thread.start()
 
@@ -185,7 +207,9 @@ class SwingRunSessionService : Service() {
         fun stop() {
             running = false
             vm.requestCancel()
-            thread.interrupt()
+            // The whole group, not just the pump: a thread the program started is in here too, and would keep
+            // interpreting (against a session that is gone) until it noticed the cancel on its own.
+            group.interrupt()
         }
 
         /**

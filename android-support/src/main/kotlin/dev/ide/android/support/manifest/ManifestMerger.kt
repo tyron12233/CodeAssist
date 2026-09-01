@@ -275,12 +275,17 @@ object ManifestMerger {
      */
     private fun validateIdentifierAttributes(root: Element, msgs: MutableList<Message>) {
         fun report(e: Element, attrLabel: String, value: String) {
+            val unresolved = PLACEHOLDER.findAll(value).map { it.groupValues[1] }.distinct().toList()
             val reason = if ("\${" in value) "has an unresolved \${} placeholder" else "is empty"
+            // Name the keys and where they are set: a dependency whose manifest needs a placeholder the module
+            // never declares is the common trigger, and the fix is one entry per key rather than a guess.
+            val fix = if (unresolved.isEmpty()) "Give it a value, or fix the dependency's manifest."
+            else "Define ${unresolved.joinToString(", ")} for this module in Module Settings ▸ Android ▸ " +
+                "manifestPlaceholders (a Gradle project: `defaultConfig { manifestPlaceholders = [...] }`), " +
+                "or fix the dependency's manifest."
             msgs += Message(
                 Severity.ERROR,
-                "<${e.tagName}> $attrLabel $reason (\"$value\") — aapt2 requires a valid identifier here. " +
-                    "Define the placeholder value (the app's applicationId/namespace, or a manifestPlaceholder " +
-                    "the dependency expects), or fix the dependency's manifest.",
+                "<${e.tagName}> $attrLabel $reason (\"$value\"): aapt2 requires a valid identifier here. $fix",
             )
         }
         fun checkAndroidName(e: Element) {

@@ -24,6 +24,37 @@ object AndroidPathParser {
         return path
     }
 
+    /**
+     * A SHARED, READ-ONLY [Path] for [pathData] — parsing is ~20us per Material icon path, and the drawable
+     * canvas re-parsed every path of every visible icon on every frame, so an icon grid paid that per tile per
+     * frame while scrolling.
+     *
+     * The caller MUST NOT mutate or transform the result; it is handed to every other caller with the same
+     * path data. [parse] stays the owning entry point for callers that do take ownership (the layout/RealView
+     * render backends wrap the Path and transform it), which is why this is separate rather than caching
+     * inside [parse].
+     *
+     * Bounded to [MAX_CACHED_PATHS] with oldest-first eviction — a project's drawables plus a 300-icon
+     * catalogue fit comfortably, and a pathological set evicts instead of growing without limit.
+     */
+    fun cached(pathData: String, fillEvenOdd: Boolean = false): Path {
+        val key = if (fillEvenOdd) "e:$pathData" else pathData
+        cache[key]?.let { return it }
+        val path = parse(pathData, fillEvenOdd)
+        // Racing callers may each parse and put; they produce equal paths, so the last write is as good as the
+        // first, and eviction under the same lock keeps the map's size bounded either way.
+        synchronized(cacheLock) {
+            if (cache.size >= MAX_CACHED_PATHS) cache.keys.take(cache.size - MAX_CACHED_PATHS + 1).forEach(cache::remove)
+            cache[key] = path
+        }
+        return path
+    }
+
+    private const val MAX_CACHED_PATHS = 512
+    private val cacheLock = Any()
+    // LinkedHashMap for insertion order, so eviction drops the oldest entries.
+    private val cache = LinkedHashMap<String, Path>()
+
     private class Cursor(var x: Float = 0f, var y: Float = 0f)
 
     private fun build(data: String, path: Path) {

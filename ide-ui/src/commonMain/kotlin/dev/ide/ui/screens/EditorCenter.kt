@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.LocalPluginNavigator
 import dev.ide.ui.theme.Ide
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -67,6 +68,7 @@ internal fun EditorCenter(
     val project = state.backend.project
     val depsState by state.backend.deps.depsState.collectAsState()
     val depsScope = rememberCoroutineScope()
+    val pluginNavigator = LocalPluginNavigator.current
     // Gradle compatibility mode: non-null only for a project imported from Gradle. Drives the top-bar compat
     // chip + the details banner below the toolbar; the chip re-opens a dismissed banner. `compatEpoch` re-keys
     // the disk read so a convert/revert (which drops/re-adds the marker without changing rootPath) refreshes it
@@ -179,7 +181,8 @@ internal fun EditorCenter(
                             UiActionContext(
                                 place = UiActionPlaces.MAIN_TOOLBAR,
                                 activeFilePath = active?.path
-                            )
+                            ),
+                            navigate = pluginNavigator,
                         )
                     }
                 },

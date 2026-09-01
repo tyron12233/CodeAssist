@@ -9,7 +9,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
+import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.ads.AdController
+import dev.ide.ui.backend.UiProjectFolderKind
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
@@ -79,6 +81,11 @@ class CodeAssistAppState(
 
     var screen: Screen by mutableStateOf(Screen.Projects)
         private set
+
+    /** Which plugin-contributed screen [Screen.PluginScreen] is showing, and where Back returns to. */
+    var pluginScreenId: String? by mutableStateOf(null)
+        private set
+    private var pluginScreenReturn: Screen = Screen.Editor
 
     /** The home screen's selected bottom-nav tab (project picker / store / learn). Lives here, not in the
      *  per-project [IdeUiState], so it survives across the landing session and resets only on a full relaunch. */
@@ -183,6 +190,11 @@ class CodeAssistAppState(
 
     /** True while a picked Gradle folder is being copied and imported (a blocking, non-cancellable operation). */
     var importBusy: Boolean by mutableStateOf(false)
+        private set
+
+    /** The "which source?" chooser for Import project: a project folder, or a `.caproj` package. Shown only
+     *  when the host can service BOTH — with one available there is nothing to ask. */
+    var showImportSourceChoice: Boolean by mutableStateOf(false)
         private set
 
     /** The import-time "compatibility mode vs convert" chooser (shown after the folder pick request), and a
@@ -295,6 +307,22 @@ class CodeAssistAppState(
 
     fun selectHomeTab(tab: HomeTab) {
         homeTab = tab
+    }
+
+    /**
+     * Open a plugin-contributed screen ([ScreenRegistry]) and remember where to return to. A plugin panel
+     * navigates here for a detail view that needs the whole window, and any action's `Navigate` effect
+     * resolves to the same route.
+     *
+     * An id nothing has registered (a disabled plugin, a stale action) is ignored rather than navigated to:
+     * the destination would render nothing, and recovering from it in the route would have to re-enter
+     * navigation from inside a screen that is already animating away.
+     */
+    fun openPluginScreen(id: String) {
+        if (ScreenRegistry.find(id) == null) return
+        if (screen != Screen.PluginScreen) pluginScreenReturn = screen
+        pluginScreenId = id
+        screen = Screen.PluginScreen
     }
 
     /** Open the Settings and Tools hub, remembering [from] as its Back destination. */
@@ -425,38 +453,94 @@ class CodeAssistAppState(
         screen = next
     }
 
-    // ---- Gradle import ----
+    // ---- project import ----
 
-    /** The picker's "Import Gradle project" action: ask which mode first (compatibility vs convert). */
-    fun requestGradleImport() {
-        showImportModeChoice = true
+    /** The folder the user picked, held while the compatibility/convert question is answered for it. */
+    private var pendingImportPath: String? = null
+
+    /**
+     * The picker's "Import project" action. Picks the folder FIRST and asks what it is, because the only
+     * follow-up question -- compatibility vs convert -- applies to a foreign build system and not to a
+     * CodeAssist workspace. Asking first (as this did) meant a CodeAssist project folder had to answer a
+     * question about Gradle conversion that meant nothing for it, before being rejected anyway.
+     */
+    fun requestProjectImport() {
+        // The two sources sit behind different host APIs (pickDirectory vs pickFile), so which picker to
+        // launch has to be answered first. With only one available, don't ask — go straight to it.
+        val folder = fileActions.canPickDirectory
+        val pkg = fileActions.canPickFile
+        when {
+            folder && pkg -> showImportSourceChoice = true
+            folder -> pickProjectFolder()
+            pkg -> pickProjectPackage()
+        }
+    }
+
+    fun dismissImportSourceChoice() {
+        showImportSourceChoice = false
+    }
+
+    /** Chose "Project folder" at the source prompt. */
+    fun chooseFolderImport() {
+        showImportSourceChoice = false
+        pickProjectFolder()
+    }
+
+    /** Chose "Project package" at the source prompt — hands off to the existing `.caproj` preview flow. */
+    fun choosePackageImport() {
+        showImportSourceChoice = false
+        pickProjectPackage()
+    }
+
+    private fun pickProjectFolder() {
+        fileActions.pickDirectory { path ->
+            if (path.isNullOrBlank()) return@pickDirectory
+            importBusy = true
+            scope.launch {
+                when (backend.projects.inspectProjectFolder(path)) {
+                    // Nothing to translate: adopt it and open it.
+                    UiProjectFolderKind.CODE_ASSIST -> runImport(path, convert = false)
+                    // Foreign build system: it still has a mode to choose.
+                    // The question is the user's to answer, so drop the overlay while it is on screen.
+                    UiProjectFolderKind.GRADLE -> {
+                        importBusy = false
+                        pendingImportPath = path
+                        showImportModeChoice = true
+                    }
+                    UiProjectFolderKind.UNKNOWN -> {
+                        importBusy = false
+                        importError = ImportError.GradleFailed("")
+                    }
+                }
+            }
+        }
     }
 
     fun dismissImportModeChoice() {
         showImportModeChoice = false
+        pendingImportPath = null
     }
 
-    /**
-     * Pick a Gradle folder and import it (always in compatibility mode first). When [convert] was chosen at the
-     * mode prompt, flag the freshly-opened editor to run the convert flow once it is up (see EditorCenter).
-     */
+    /** Answer to the compatibility/convert prompt, for the folder already picked. */
     fun importGradleProject(convert: Boolean) {
+        val path = pendingImportPath
         showImportModeChoice = false
-        doImportGradle(
-            fileActions = fileActions,
-            scope = scope,
-            onBusy = { importBusy = true },
-            import = { path -> backend.projects.importExternalProject(path) },
-        ) { result ->
-            importBusy = false
-            when {
-                result == null -> {} // cancelled, stay on the picker
-                result.success -> {
-                    if (convert) pendingGradleConvert = true
-                    screen = Screen.Editor
-                }
-                else -> importError = ImportError.GradleFailed(result.message)
-            }
+        pendingImportPath = null
+        if (path != null) {
+            importBusy = true
+            scope.launch { runImport(path, convert) }
+        }
+    }
+
+    /** Import [path] and open it; [convert] flags the freshly-opened editor to run the Gradle convert flow. */
+    private suspend fun runImport(path: String, convert: Boolean) {
+        val result = backend.projects.importExternalProject(path)
+        importBusy = false
+        if (result.success) {
+            if (convert) pendingGradleConvert = true
+            screen = Screen.Editor
+        } else {
+            importError = ImportError.GradleFailed(result.message)
         }
     }
 
@@ -555,6 +639,12 @@ class CodeAssistAppState(
             screen == Screen.Hub -> screen = hubReturn
 
             screen == Screen.Run || screen == Screen.ModuleConfig -> screen = Screen.Editor
+
+            // A plugin screen returns to wherever it was opened from.
+            screen == Screen.PluginScreen -> {
+                pluginScreenId = null
+                screen = pluginScreenReturn
+            }
 
             // The lesson player steps back to its track; the track steps back to the Learn tab (picker).
             screen == Screen.LessonPlayer -> exitLessonPlayer()

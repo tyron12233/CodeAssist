@@ -431,6 +431,13 @@ fun KotlinResolver.isTypeReceiver(expr: KtExpression): Boolean = typeDenotationF
  * resolves through imports/classpath (unless a local of that name shadows it); a qualified expression
  * resolves either as a fully-qualified type by its own text or as a nested type through a resolved outer
  * — so `R.layout.<caret>` (where `layout` is lower-case) is still recognized as static navigation.
+ *
+ * A singleton is excluded via [KotlinSymbolService.isSingletonObject], NOT [KotlinSymbolService.isObject]:
+ * the latter deliberately reports false for a COMPANION, because a bare `Foo.` denotes the class. But an
+ * EXPLICITLY spelled `Foo.Companion` / `Duration.Companion` / a named `Foo.Factory` denotes the singleton
+ * INSTANCE, whose members are instance members — classifying it as a type receiver filtered completion down
+ * to statics and left `import kotlin.time.Duration.Companion.<caret>` (and `Duration.Companion.<caret>`
+ * anywhere else) with nothing to offer.
  */
 fun KotlinResolver.typeDenotationFqn(expr: KtExpression): String? = when (expr) {
     is KtParenthesizedExpression -> expr.expression?.let { typeDenotationFqn(it) }
@@ -446,7 +453,7 @@ fun KotlinResolver.typeDenotationFqn(expr: KtExpression): String? = when (expr) 
                 name,
                 fileContext
             ))
-                ?.takeIf { service.isKnownType(it) && !service.isObject(it) }
+                ?.takeIf { service.isKnownType(it) && !service.isSingletonObject(it) }
         }
     }
 
@@ -454,16 +461,13 @@ fun KotlinResolver.typeDenotationFqn(expr: KtExpression): String? = when (expr) 
         val sel = (expr.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()
         when {
             sel == null -> null
-            // (a) fully-qualified type by its own text: `java.util.Locale` (but not a qualified `object`)
-            sel.firstOrNull()
-                ?.isUpperCase() == true && service.isKnownType(expr.text) && !service.isObject(expr.text) -> expr.text
-            // (b) nested type through a resolved outer: `R.layout`, `Outer.Inner`
+            // (a) fully-qualified type by its own text: `java.util.Locale` (but not a qualified singleton)
+            sel.firstOrNull()?.isUpperCase() == true && service.isKnownType(expr.text) &&
+                !service.isSingletonObject(expr.text) -> expr.text
+            // (b) nested type through a resolved outer: `R.layout`, `Outer.Inner` — but a nested SINGLETON
+            // (`Foo.Companion`, `object Outer { object Inner }`) is an instance, same as (a).
             else -> typeDenotationFqn(expr.receiverExpression)?.let {
-                "$it.$sel".takeIf { f ->
-                    service.isKnownType(
-                        f
-                    )
-                }
+                "$it.$sel".takeIf { f -> service.isKnownType(f) && !service.isSingletonObject(f) }
             }
         }
     }

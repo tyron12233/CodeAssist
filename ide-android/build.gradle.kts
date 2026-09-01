@@ -267,10 +267,20 @@ val bundleKotlincResourcesAsset = tasks.register<Copy>("bundleKotlincResourcesAs
 // --- R8 tool dexed as an asset (forked-VM R8 for the release/minify OOM fix) ---------------------
 // R8's whole-program pass needs more heap than an app process's `largeHeap` cap (576MB on the test device);
 // a command-line VM (dalvikvm) forked from the app is NOT a zygote app process, so its `-Xmx` can exceed
-// that cap (measured ceiling ~1.5GB). To run R8 there it needs its classes as a loadable dex — the app's own
-// copy is buried in secondary dexes a bare `dalvikvm -cp base.apk` won't load. D8-dex the r8 tool jar into a
-// standalone r8.dex.zip asset; `dev.ide.android.ForkedR8Shrinker` extracts it and runs
-// `dalvikvm64 -Xmx<n>m -cp <dexes> com.android.tools.r8.R8 …`. (Mirrors what AGP already does to r8 for the app.)
+// that cap (measured ceiling ~1.5GB). To run R8 there it needs its classes as a loadable dex, so the r8 tool
+// jar is D8-dexed into a standalone r8.dex.zip asset that `dev.ide.android.R8ForkSupport` extracts and puts
+// on `dalvikvm64 -Xmx<n>m -cp <asset> com.android.tools.r8.R8 …`.
+//
+// A fork CAN load the app's own APK instead (the persistent Kotlin compiler VM in `dev.ide.android.fork`
+// does exactly that), which would make this asset unnecessary. It is kept because R8/D8 fork PER INVOCATION
+// and a 180MB APK classpath costs ~800ms of class loading per fork against ~130ms for this asset, which the
+// dex merge would pay several times a build.
+//
+// The zip carries the jar's RESOURCES as well as its dex. D8 emits `classes*.dex` only, so dexing alone
+// silently drops `resources/new_api_database.ser` (R8's API-level database), the `META-INF/services` entry
+// and `r8-version.properties`. R8 then warns "Could not find the api database at
+// resources/new_api_database.ser" and emits different code than the same version run from the jar. With the
+// resources folded back in, a forked run reproduces a host `java -cp r8.jar` run byte for byte.
 val r8DexTool: Configuration by configurations.creating {
     isCanBeConsumed = false
     isCanBeResolved = true
@@ -278,8 +288,9 @@ val r8DexTool: Configuration by configurations.creating {
 dependencies { r8DexTool(libs.android.r8) { isTransitive = false } }
 
 val bundleR8DexAsset = tasks.register<JavaExec>("bundleR8DexAsset") {
-    description = "D8-dex the R8 tool jar into a forked-VM-loadable r8.dex.zip asset."
+    description = "D8-dex the R8 tool jar, with its resources, into a forked-VM-loadable r8.dex.zip asset."
     val outZip = layout.buildDirectory.file("r8-dex-asset/r8.dex.zip")
+    val dexOnlyZip = layout.buildDirectory.file("r8-dex-asset/r8-dex-only.zip")
     classpath = r8DexTool                       // r8.jar contains D8 — self-dex it
     mainClass.set("com.android.tools.r8.D8")
     inputs.files(r8DexTool)
@@ -287,14 +298,40 @@ val bundleR8DexAsset = tasks.register<JavaExec>("bundleR8DexAsset") {
     // min-api 26 = the app's minSdk; the forked VM runs on the device's ART (>= 26), and a higher min-api
     // minimises desugaring (r8 is plain Java 8 bytecode), so no `--lib` platform is needed to dex it.
     doFirst {
-        val out = outZip.get().asFile
-        out.parentFile.mkdirs(); out.delete()
+        val dexOnly = dexOnlyZip.get().asFile
+        dexOnly.parentFile.mkdirs(); dexOnly.delete()
         args = listOf(
             "--release",
             "--min-api", "26",
-            "--output", out.absolutePath,
+            "--output", dexOnly.absolutePath,
             r8DexTool.singleFile.absolutePath,
         )
+    }
+    // Combine D8's `classes*.dex` with every non-class entry of the source jar into one zip. A classloader
+    // built over it then sees both the code and the resources, exactly as one built over the jar does.
+    doLast {
+        val dexOnly = dexOnlyZip.get().asFile
+        val out = outZip.get().asFile
+        out.delete()
+        val written = HashSet<String>()
+        ZipOutputStream(out.outputStream().buffered()).use { zos ->
+            fun copyEntries(from: File, keep: (ZipEntry) -> Boolean) {
+                ZipFile(from).use { zf ->
+                    zf.entries().asSequence().filter { !it.isDirectory && keep(it) }.forEach { e ->
+                        if (!written.add(e.name)) return@forEach
+                        zos.putNextEntry(ZipEntry(e.name))
+                        zf.getInputStream(e).use { it.copyTo(zos) }
+                        zos.closeEntry()
+                    }
+                }
+            }
+            copyEntries(dexOnly) { it.name.endsWith(".dex") }
+            // Everything the jar carries that is not code. The MANIFEST is dropped: it describes the jar, and
+            // an inaccurate one on a dex classpath is worse than none.
+            copyEntries(r8DexTool.singleFile) { !it.name.endsWith(".class") && it.name != "META-INF/MANIFEST.MF" }
+        }
+        dexOnly.delete()
+        logger.lifecycle("bundleR8DexAsset: ${out.name} = ${out.length() / (1024 * 1024)}MB (dex + jar resources)")
     }
 }
 
@@ -365,8 +402,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // versionCode must exceed the last published release (the previous-codebase app reached ~29).
-        versionCode = 82
-        versionName = "3.9.9"
+        versionCode = 84
+        versionName = "3.11.0"
         // connectedAndroidTest harness (the on-device Kotlin-compiler discovery spike).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -405,6 +442,7 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-fonts-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-strings-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("agent-ui-strings-asset").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("vcs-ui-strings-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-drawables-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("r8-dex-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("applog-runtime-asset").get().asFile)
@@ -729,7 +767,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
+    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleVcsUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's
@@ -759,6 +797,59 @@ val bundleAgentUiComposeStringAsset = tasks.register<Copy>("bundleAgentUiCompose
         include("values*/**/*.cvr")
     }
     into(layout.buildDirectory.dir("agent-ui-strings-asset/composeResources/dev.ide.agent.ui.generated.resources"))
+}
+
+// The SAME Android packaging gap, for :vcs-ui's OWN compose-resource strings (the vcs_* i18n keys, under
+// package dev.ide.vcs.ui.generated.resources). Without this the Git panel crashes on device the moment it
+// renders, with `MissingResourceException: composeResources/dev.ide.vcs.ui.generated.resources/values/
+// strings.commonMain.cvr`. Mirrors bundleAgentUiComposeStringAsset.
+val bundleVcsUiComposeStringAsset = tasks.register<Copy>("bundleVcsUiComposeStringAsset") {
+    description = "Stage :vcs-ui's i18n compose-resource strings into the APK assets (Android packaging gap)."
+    dependsOn(":vcs-ui:desktopProcessResources")
+    from(project(":vcs-ui").layout.buildDirectory.dir("processedResources/desktop/main/composeResources/dev.ide.vcs.ui.generated.resources")) {
+        include("values*/**/*.cvr")
+    }
+    into(layout.buildDirectory.dir("vcs-ui-strings-asset/composeResources/dev.ide.vcs.ui.generated.resources"))
+}
+
+// The staging tasks above are easy to forget, and forgetting one is invisible until the app runs on a device:
+// desktop and unit tests load composeResources through the normal JVM resources route, so a module whose
+// strings never reach the APK assets compiles and tests green, then throws MissingResourceException on the
+// first render of the UI that reads them. That has shipped before. Assert the invariant during the assets
+// merge instead: every module carrying its own string resources must land its compiled `.cvr` under its own
+// resClass package. The expected packages are read from each module's `packageOfResClass`, so a new UI module
+// is covered without touching this check.
+val composeStringPackages: Map<String, String> = rootProject.subprojects
+    .filter { it.file("src/commonMain/composeResources/values/strings.xml").exists() }
+    .mapNotNull { module ->
+        val script = module.file("build.gradle.kts").takeIf { it.exists() } ?: return@mapNotNull null
+        val declared = Regex("packageOfResClass\\s*=\\s*\"([^\"]+)\"").find(script.readText())
+        declared?.let { module.path to it.groupValues[1] }
+    }
+    .toMap()
+
+tasks.matching { it.name.matches(Regex("merge(Debug|Profile|Release|Minified)Assets")) }.configureEach {
+    val expected = composeStringPackages
+    doLast {
+        val merged = outputs.files.files.firstOrNull() ?: return@doLast
+        val missing = expected.filterValues { pkg ->
+            !File(merged, "composeResources/$pkg/values/strings.commonMain.cvr").exists()
+        }
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("Compose string resources never reached the APK assets:")
+                    missing.forEach { (module, pkg) -> appendLine("  $module -> composeResources/$pkg") }
+                    append(
+                        "Each Compose Multiplatform module with its own composeResources needs a staging Copy " +
+                            "task here (see bundleVcsUiComposeStringAsset), an assets.srcDir for its output " +
+                            "directory, and an entry in preBuild's dependsOn. Without one the module's UI " +
+                            "throws MissingResourceException on device.",
+                    )
+                },
+            )
+        }
+    }
 }
 
 // The stock Eclipse jars we relocate for ART (ecj, core.runtime, equinox.common) reach the app's runtime

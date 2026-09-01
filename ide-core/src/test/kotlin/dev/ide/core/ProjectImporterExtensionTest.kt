@@ -133,6 +133,44 @@ class ProjectImporterExtensionTest {
         }
     }
 
+    /**
+     * A folder that is ALREADY a CodeAssist workspace is adopted verbatim — no importer claims it (there is no
+     * foreign build system to translate), so it used to be rejected as unimportable and a project folder that
+     * had dropped out of the picker could not be brought back. Adoption must copy it in and list it, without
+     * going near the importer machinery or flagging compatibility mode.
+     */
+    @Test
+    fun anExistingCodeAssistWorkspaceIsAdoptedNotReImported() {
+        withTempDir("importer-ep-native") { tmp ->
+            // Build a real workspace by creating one, then move it OUT of the projects root so it is a plain
+            // folder on disk — exactly the shape a user hands to "Import project".
+            val projects = tmp.resolve("projects")
+            val donor = ProjectManager.desktop(projects)
+            val created = try {
+                donor.create("java-console", mapOf("name" to "Adopted", "packageName" to "com.acme.adopted"))
+                    .use { it.workspaceRoot }
+            } finally {
+                donor.dispose()
+            }
+            val loose = tmp.resolve("loose").also { Files.createDirectories(it) }.resolve("Adopted")
+            Files.move(created, loose)
+
+            val manager = ProjectManager.desktop(tmp.resolve("projects2"))
+            try {
+                manager.env.platform.extensions.register(PROJECT_IMPORTER_EP, BzlImporter(), PluginId("bzl-test"))
+                val ide = manager.importExternalProject(loose)
+                assertTrue(ide != null, "an existing CodeAssist workspace must be importable")
+                ide!!.use {
+                    assertFalse(it.isCompatibilityMode(), "adopting a native workspace is not a compatibility import")
+                }
+                assertEquals(listOf("Adopted"), manager.list().map { it.name })
+                assertTrue(Files.isDirectory(loose), "the source folder is left where it was")
+            } finally {
+                manager.dispose()
+            }
+        }
+    }
+
     @Test
     fun aFolderNoImporterClaimsIsNotImported() {
         withTempDir("importer-ep-none") { tmp ->

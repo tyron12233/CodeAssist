@@ -28,8 +28,8 @@ class GradleBuildFileWriter : BuildFileWriter {
         val text = runCatching { file.readText() }.getOrNull()
             ?: return WriteOutcome.failed("Couldn't read ${file.fileName}.")
         val kts = file.fileName.toString().endsWith(".kts")
-        val entry = GradleDependencyEdits.declaration(kts, configurationFor(scope), coordinate.toString())
-        val updated = GradleDependencyEdits.add(text, kts, configurationFor(scope), coordinate)
+        val entry = GradleDependencyEdits.declaration(kts, gradleConfiguration(scope), coordinate.toString())
+        val updated = GradleDependencyEdits.add(text, kts, gradleConfiguration(scope), coordinate)
             ?: return WriteOutcome.ok(file, "${coordinate.group}:${coordinate.name} is already declared in ${file.fileName}.")
         return runCatching {
             file.writeText(updated)
@@ -58,14 +58,6 @@ class GradleBuildFileWriter : BuildFileWriter {
         return listOf("build.gradle.kts", "build.gradle")
             .map { moduleDir.resolve(it) }
             .firstOrNull { Files.isRegularFile(it) }
-    }
-
-    private fun configurationFor(scope: DependencyScope): String = when (scope) {
-        DependencyScope.API -> "api"
-        DependencyScope.IMPLEMENTATION -> "implementation"
-        DependencyScope.COMPILE_ONLY -> "compileOnly"
-        DependencyScope.RUNTIME_ONLY -> "runtimeOnly"
-        DependencyScope.TEST_IMPLEMENTATION -> "testImplementation"
     }
 }
 

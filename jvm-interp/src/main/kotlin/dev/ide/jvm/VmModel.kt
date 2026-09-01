@@ -168,8 +168,10 @@ internal class VmLambda(
             // interpreted exception that escaped the lambda body must surface as the REAL throwable — never the
             // internal [VmException] carrier, which has no message or stack (a leak reads as a bare
             // `dev.ide.jvm.VmException` FATAL on the caller's thread, e.g. a Compose measure/effect lambda).
-            // Mirrors [Vm.surfacing] for the peer path.
-            throw (ve.value as? Throwable) ?: RuntimeException("uninterpreted exception escaped a lambda: ${ve.value}")
+            // An interpreted exception is a [VmObject] here, so [toReal] resolves it to its peer (the real
+            // throwable it is). Mirrors [Vm.surfacing] for the peer path.
+            throw (toReal(ve.value) as? Throwable)
+                ?: RuntimeException("uninterpreted exception escaped a lambda: ${ve.value}")
         }
 
     override fun toString(): String = "VmLambda($interfaceType.$samName)"
@@ -207,8 +209,17 @@ internal class MethodHandleRef(
  * Carries a thrown value up through interpreted frames until a matching handler is found. The value is a
  * [VmObject] exception, or a real [Throwable] surfaced by the bridge or by an intrinsic such as integer
  * division by zero.
+ *
+ * [value] is always in the INTERPRETER's representation, never a peer: an interpreted exception that reached
+ * real code crosses as its generated peer, and real code that throws it back (`Optional.orElseThrow`, the
+ * stdlib's `SafeContinuation.getOrThrow()` after a synchronous `resumeWithException`) hands the bridge that
+ * peer. Its class is `dev.ide.jvm.peers.…_Peer3`, so a `catch` naming the interpreted type would match nothing
+ * and the exception would escape the `try` that declared it. Resolving the peer here keeps every handler
+ * search, `instanceof` and member access on a thrown value working on the interpreted class.
  */
-internal class VmException(val value: Any?) : RuntimeException() {
+internal class VmException(value: Any?) : RuntimeException() {
+    val value: Any? = if (value is VmPeer) value.vmObject() else value
+
     override fun fillInStackTrace(): Throwable = this // interpreted control flow, not a host stack trace
 }
 

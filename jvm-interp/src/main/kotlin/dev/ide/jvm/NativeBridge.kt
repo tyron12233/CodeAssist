@@ -6,6 +6,7 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
+import java.lang.reflect.UndeclaredThrowableException
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -191,12 +192,23 @@ class ReflectiveBridge(
         try {
             action()
         } catch (e: InvocationTargetException) {
-            when (val target = e.targetException) {
+            when (val target = unwrapUndeclared(e.targetException)) {
                 is VmException -> throw target
                 null -> throw e
                 else -> throw VmException(target)
             }
         }
+
+    /**
+     * What a real method actually threw, with the wrapper a [Proxy] adds stripped off. Platform code invokes an
+     * interpreted lambda (or a proxy peer) through a [Proxy], whose generated method wraps any CHECKED throwable
+     * the functional interface does not declare in an [UndeclaredThrowableException]. Interpreted Kotlin declares
+     * nothing, so an `InterruptedException` from a `Thread.sleep` inside a `Runnable`/`forEach` lambda would come
+     * back to the interpreted caller under a type no `catch` of it can match. The wrapper is an artifact of how
+     * the VM hands interpreted code to the platform, so the interpreted caller sees the cause instead.
+     */
+    private fun unwrapUndeclared(t: Throwable?): Throwable? =
+        if (t is UndeclaredThrowableException) t.undeclaredThrowable ?: t else t
 
     override fun getStatic(owner: String, name: String, descriptor: String): Any? =
         marshalOut(resolveField(loadClass(owner), name).get(null), descriptor)

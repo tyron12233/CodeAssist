@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -44,6 +46,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
@@ -61,6 +67,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -90,94 +97,104 @@ import dev.ide.ui.theme.Motion
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.add
 import dev.ide.ui.generated.resources.cancel
-import dev.ide.ui.generated.resources.remove
-import dev.ide.ui.generated.resources.save
-import dev.ide.ui.generated.resources.dep_declared
-import dev.ide.ui.generated.resources.dep_resolved
-import dev.ide.ui.generated.resources.dep_tree
-import dev.ide.ui.generated.resources.dep_graph
-import dev.ide.ui.generated.resources.dep_mode_library
-import dev.ide.ui.generated.resources.dep_mode_platform
-import dev.ide.ui.generated.resources.dep_mode_module
-import dev.ide.ui.generated.resources.dep_mode_local
-import dev.ide.ui.generated.resources.dep_resolving
-import dev.ide.ui.generated.resources.dep_re_resolve
-import dev.ide.ui.generated.resources.dep_repositories
-import dev.ide.ui.generated.resources.dep_repositories_subtitle
-import dev.ide.ui.generated.resources.dep_repo_name_hint
-import dev.ide.ui.generated.resources.dep_repo_url_hint
-import dev.ide.ui.generated.resources.dep_remove_repo
-import dev.ide.ui.generated.resources.dep_built_in
-import dev.ide.ui.generated.resources.dep_load_failed
-import dev.ide.ui.generated.resources.dep_resolving_dependencies
-import dev.ide.ui.generated.resources.dep_downloading_artifacts
-import dev.ide.ui.generated.resources.dep_unresolved_count
-import dev.ide.ui.generated.resources.dep_none_declared
-import dev.ide.ui.generated.resources.dep_nothing_resolved
-import dev.ide.ui.generated.resources.dep_not_resolved
-import dev.ide.ui.generated.resources.dep_cycle_shown_above
-import dev.ide.ui.generated.resources.dep_couldnt_resolve_tooltip
-import dev.ide.ui.generated.resources.dep_unresolved
-import dev.ide.ui.generated.resources.dep_incompatible
-import dev.ide.ui.generated.resources.dep_edit_named
-import dev.ide.ui.generated.resources.dep_more_actions
-import dev.ide.ui.generated.resources.dep_exclude_named
-import dev.ide.ui.generated.resources.dep_remove_named
-import dev.ide.ui.generated.resources.dep_transitive
-import dev.ide.ui.generated.resources.dep_options_excluded
-import dev.ide.ui.generated.resources.dep_remove_exclusion
-import dev.ide.ui.generated.resources.dep_excluded
 import dev.ide.ui.generated.resources.dep_add_dependency
-import dev.ide.ui.generated.resources.dep_search_bom_hint
-import dev.ide.ui.generated.resources.dep_search_library_hint
-import dev.ide.ui.generated.resources.dep_scope
-import dev.ide.ui.generated.resources.dep_variant
-import dev.ide.ui.generated.resources.dep_all_variants
-import dev.ide.ui.generated.resources.dep_suggested
-import dev.ide.ui.generated.resources.dep_adding
-import dev.ide.ui.generated.resources.dep_resolving_transitive
-import dev.ide.ui.generated.resources.dep_no_other_modules
-import dev.ide.ui.generated.resources.dep_no_results
-import dev.ide.ui.generated.resources.dep_type_to_search
-import dev.ide.ui.generated.resources.dep_add_named
-import dev.ide.ui.generated.resources.dep_import_as_platform
-import dev.ide.ui.generated.resources.dep_add_versionless
 import dev.ide.ui.generated.resources.dep_add_exact
 import dev.ide.ui.generated.resources.dep_add_infer_group
-import dev.ide.ui.generated.resources.dep_choose_local_file
-import dev.ide.ui.generated.resources.dep_copied_into_libs
+import dev.ide.ui.generated.resources.dep_add_named
+import dev.ide.ui.generated.resources.dep_add_versionless
+import dev.ide.ui.generated.resources.dep_adding
+import dev.ide.ui.generated.resources.dep_all_variants
 import dev.ide.ui.generated.resources.dep_already_in_project
-import dev.ide.ui.generated.resources.dep_no_local_libs
 import dev.ide.ui.generated.resources.dep_attach_named
-import dev.ide.ui.generated.resources.dep_remove_dependency
-import dev.ide.ui.generated.resources.dep_remove_confirm
-import dev.ide.ui.generated.resources.dep_edit_dependency
-import dev.ide.ui.generated.resources.dep_section_version
-import dev.ide.ui.generated.resources.dep_section_scope
-import dev.ide.ui.generated.resources.dep_section_exclusions
-import dev.ide.ui.generated.resources.dep_section_downloaded
-import dev.ide.ui.generated.resources.dep_downloaded_help
-import dev.ide.ui.generated.resources.dep_downloaded_empty
-import dev.ide.ui.generated.resources.dep_in_use
+import dev.ide.ui.generated.resources.dep_back_to_search
+import dev.ide.ui.generated.resources.dep_bom_badge
+import dev.ide.ui.generated.resources.dep_built_in
+import dev.ide.ui.generated.resources.dep_choose_local_file
+import dev.ide.ui.generated.resources.dep_conflicts_to_review
+import dev.ide.ui.generated.resources.dep_copied_into_libs
+import dev.ide.ui.generated.resources.dep_couldnt_resolve_tooltip
+import dev.ide.ui.generated.resources.dep_cycle_shown_above
+import dev.ide.ui.generated.resources.dep_cycles
+import dev.ide.ui.generated.resources.dep_declared
 import dev.ide.ui.generated.resources.dep_delete_version_named
+import dev.ide.ui.generated.resources.dep_downloaded_empty
+import dev.ide.ui.generated.resources.dep_downloaded_help
+import dev.ide.ui.generated.resources.dep_downloading_artifacts
+import dev.ide.ui.generated.resources.dep_edit_dependency
+import dev.ide.ui.generated.resources.dep_edit_named
+import dev.ide.ui.generated.resources.dep_exclude_named
+import dev.ide.ui.generated.resources.dep_excluded
 import dev.ide.ui.generated.resources.dep_exclusions_help
 import dev.ide.ui.generated.resources.dep_exclusions_hint
-import dev.ide.ui.generated.resources.dep_version_hint
-import dev.ide.ui.generated.resources.dep_loading_versions
-import dev.ide.ui.generated.resources.dep_versions_load_failed
-import dev.ide.ui.generated.resources.dep_selected
-import dev.ide.ui.generated.resources.dep_variant_only_tooltip
-import dev.ide.ui.generated.resources.dep_version_conflict_tooltip
-import dev.ide.ui.generated.resources.dep_version_conflict
 import dev.ide.ui.generated.resources.dep_extra_auto_resolved
+import dev.ide.ui.generated.resources.dep_firebase_subtitle
+import dev.ide.ui.generated.resources.dep_graph
+import dev.ide.ui.generated.resources.dep_import_as_platform
+import dev.ide.ui.generated.resources.dep_in_use
+import dev.ide.ui.generated.resources.dep_incompatible
+import dev.ide.ui.generated.resources.dep_load_failed
+import dev.ide.ui.generated.resources.dep_loading_versions
+import dev.ide.ui.generated.resources.dep_location_subtitle
+import dev.ide.ui.generated.resources.dep_maps_subtitle
+import dev.ide.ui.generated.resources.dep_mode_library
+import dev.ide.ui.generated.resources.dep_mode_local
+import dev.ide.ui.generated.resources.dep_mode_module
+import dev.ide.ui.generated.resources.dep_mode_platform
+import dev.ide.ui.generated.resources.dep_more_actions
+import dev.ide.ui.generated.resources.dep_no_local_libs
+import dev.ide.ui.generated.resources.dep_no_other_modules
+import dev.ide.ui.generated.resources.dep_no_results
+import dev.ide.ui.generated.resources.dep_none_declared
+import dev.ide.ui.generated.resources.dep_not_resolved
+import dev.ide.ui.generated.resources.dep_nothing_resolved
+import dev.ide.ui.generated.resources.dep_options_excluded
+import dev.ide.ui.generated.resources.dep_options_summary
+import dev.ide.ui.generated.resources.dep_other_sources
+import dev.ide.ui.generated.resources.dep_play_auth_subtitle
+import dev.ide.ui.generated.resources.dep_quick_start
+import dev.ide.ui.generated.resources.dep_re_resolve
+import dev.ide.ui.generated.resources.dep_remove_confirm
+import dev.ide.ui.generated.resources.dep_remove_dependency
+import dev.ide.ui.generated.resources.dep_remove_exclusion
+import dev.ide.ui.generated.resources.dep_remove_named
+import dev.ide.ui.generated.resources.dep_remove_repo
 import dev.ide.ui.generated.resources.dep_repo_invalid
-import dev.ide.ui.generated.resources.dep_subtitle_module
-import dev.ide.ui.generated.resources.dep_subtitle_platform
+import dev.ide.ui.generated.resources.dep_repo_name_hint
+import dev.ide.ui.generated.resources.dep_repo_url_hint
+import dev.ide.ui.generated.resources.dep_repositories
+import dev.ide.ui.generated.resources.dep_repositories_subtitle
+import dev.ide.ui.generated.resources.dep_resolved
+import dev.ide.ui.generated.resources.dep_resolving
+import dev.ide.ui.generated.resources.dep_resolving_dependencies
+import dev.ide.ui.generated.resources.dep_resolving_transitive
+import dev.ide.ui.generated.resources.dep_scope
+import dev.ide.ui.generated.resources.dep_search_hint
+import dev.ide.ui.generated.resources.dep_section_downloaded
+import dev.ide.ui.generated.resources.dep_section_exclusions
+import dev.ide.ui.generated.resources.dep_section_scope
+import dev.ide.ui.generated.resources.dep_section_version
+import dev.ide.ui.generated.resources.dep_selected
+import dev.ide.ui.generated.resources.dep_show_options
+import dev.ide.ui.generated.resources.dep_source_local
+import dev.ide.ui.generated.resources.dep_source_module
 import dev.ide.ui.generated.resources.dep_subtitle_local_aar
 import dev.ide.ui.generated.resources.dep_subtitle_local_jar
-import dev.ide.ui.generated.resources.dep_cycles
-import dev.ide.ui.generated.resources.dep_conflicts_to_review
+import dev.ide.ui.generated.resources.dep_subtitle_module
+import dev.ide.ui.generated.resources.dep_subtitle_platform
+import dev.ide.ui.generated.resources.dep_transitive
+import dev.ide.ui.generated.resources.dep_tree
+import dev.ide.ui.generated.resources.dep_type_to_search
+import dev.ide.ui.generated.resources.dep_unresolved
+import dev.ide.ui.generated.resources.dep_unresolved_count
+import dev.ide.ui.generated.resources.dep_variant
+import dev.ide.ui.generated.resources.dep_variant_only_tooltip
+import dev.ide.ui.generated.resources.dep_version_conflict
+import dev.ide.ui.generated.resources.dep_version_conflict_tooltip
+import dev.ide.ui.generated.resources.dep_version_hint
 import dev.ide.ui.generated.resources.dep_versions_auto_resolved
+import dev.ide.ui.generated.resources.dep_versions_load_failed
+import dev.ide.ui.generated.resources.remove
+import dev.ide.ui.generated.resources.save
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
@@ -696,7 +713,7 @@ private fun RowActionMenu(contentDesc: String, itemLabel: String, itemIcon: Imag
 // ---- Add dependency (shared by the desktop dialog + phone sheet) --------------------------------
 
 @Composable
-private fun AddDependencyContent(
+internal fun AddDependencyContent(
     pane: DependenciesPaneState,
     codeFont: FontFamily,
     fileActions: FileActions,
@@ -710,72 +727,46 @@ private fun AddDependencyContent(
     val moduleName = pane.moduleName
     val resolveState by backend.deps.depsState.collectAsState()
 
+    // Module / local-file are SOURCES, not search modes: picking one takes over the body and the search
+    // field steps aside, with the title row carrying the way back. Everything else is one search.
+    val picking = state.mode == AddMode.Module || state.mode == AddMode.Local
+
     Column(modifier) {
-        Text(stringResource(Res.string.dep_add_dependency), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
-
-        // Library / Platform (BOM) / Module / Local toggle: scrolls horizontally so chips never squish.
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AddMode.entries.forEach { m -> ModeChip(m.label(), m == state.mode) { state.selectMode(m) } }
-        }
-
-        // search field — library/platform only (Module picks project modules; Local picks files)
-        if (state.mode != AddMode.Module && state.mode != AddMode.Local) Row(
-            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Icon(CaIcons.search, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-            Box(Modifier.weight(1f)) {
-                val hint = if (state.mode == AddMode.Platform) stringResource(Res.string.dep_search_bom_hint)
-                    else stringResource(Res.string.dep_search_library_hint)
-                if (state.query.isEmpty()) Text(hint, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                BasicTextField(state.query, state::updateQuery, singleLine = true, enabled = !state.busy,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = Modifier.fillMaxWidth())
-            }
-            if (state.searching) CircularProgressIndicator(Modifier.size(14.dp), color = MaterialTheme.colorScheme.outline, strokeWidth = 2.dp)
+            if (picking) IconButtonCa(
+                CaIcons.chevronLeft, stringResource(Res.string.dep_back_to_search),
+                onClick = { state.selectMode(AddMode.Library) }, boxSize = 32, iconSize = 18,
+            )
+            Text(
+                if (picking) state.mode.label() else stringResource(Res.string.dep_add_dependency),
+                color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+            )
         }
 
-        // scope selector — libraries + module deps (a platform carries no scope)
-        if (state.mode != AddMode.Platform) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(Res.string.dep_scope), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 4.dp))
-            DEP_CONFIGURATIONS.forEach { s -> ScopeChip(s, s == state.configuration) { state.selectConfiguration(s) } }
-        } else Spacer(Modifier.height(10.dp))
+        // The only chrome above the results. There is no BOM mode to pick any more: a platform is recognised
+        // from its POM-only packaging on the row that offers it, so one query covers libraries and BOMs both.
+        if (!picking) OutlinedTextField(
+            value = state.query,
+            onValueChange = state::updateQuery,
+            enabled = !state.busy,
+            singleLine = true,
+            placeholder = {
+                Text(stringResource(Res.string.dep_search_hint), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            },
+            leadingIcon = { Icon(CaIcons.search, null, Modifier.size(18.dp)) },
+            trailingIcon = {
+                if (state.searching) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            },
+            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = codeFont),
+            shape = RoundedCornerShape(Ca.radius.control),
+            modifier = Modifier.fillMaxWidth(),
+        )
 
-        // variant selector — library/module/platform deps on an Android module: scope the dependency to a
-        // build variant (e.g. `debug` → `debugImplementation`). "All variants" (null) is the shared default.
-        // (Local file libraries aren't variant-scoped.)
-        if (state.mode != AddMode.Local && state.variants.isNotEmpty()) Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(stringResource(Res.string.dep_variant), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 4.dp))
-            ScopeChip(stringResource(Res.string.dep_all_variants), state.variant == null) { state.selectVariant(null) }
-            state.variants.forEach { v -> ScopeChip(v, v == state.variant) { state.selectVariant(v) } }
-        }
-
-        // Transitive exclusions aren't set here anymore — add the dependency, then exclude any transitive
-        // from the dependency tree (its ⋮ menu) or the per-dependency "Edit exclusions" editor.
-
-        // One-click quick-add for common Google libraries (Library mode). Firebase imports the BoM +
-        // firebase-analytics (and reminds about google-services.json); Play Services adds the named artifact.
-        // Each reuses the busy/error/result flow; the backend rejects them on a non-Android module.
-        if (state.mode == AddMode.Library) Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(stringResource(Res.string.dep_suggested), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 4.dp))
-            ModeChip("Firebase", false) { state.quickAdd("Firebase") { backend.deps.addFirebase(moduleName) } }
-            ModeChip("Play Services Auth", false) {
-                state.quickAdd("Play Services Auth") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-auth:21.2.0")) }
-            }
-            ModeChip("Maps", false) {
-                state.quickAdd("Maps") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-maps:19.0.0")) }
-            }
-            ModeChip("Location", false) {
-                state.quickAdd("Location") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-location:21.3.0")) }
-            }
-        }
+        if (!state.busy) AddOptions(state)
 
         state.error?.let { msg ->
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).background(MaterialTheme.colorScheme.error.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.sm)).padding(10.dp),
@@ -788,7 +779,7 @@ private fun AddDependencyContent(
         // The results area: fills the sheet height on mobile (fillHeight), or caps at 360dp in the dialog.
         val listModifier = if (fillHeight) Modifier.fillMaxWidth().fillMaxHeight() else Modifier.fillMaxWidth().heightIn(max = 360.dp)
 
-        // While adding: a live download panel. Otherwise: the results / module list.
+        // While adding: a live download panel. Otherwise: the results / picker for the chosen source.
         Crossfade(targetState = state.busy, animationSpec = tween(Motion.BASE), label = "addBody",
             modifier = if (fillHeight) Modifier.weight(1f) else Modifier) { isBusy ->
             if (isBusy) {
@@ -814,22 +805,175 @@ private fun AddDependencyContent(
                     onPick = state::pickLocalFile,
                     onAttach = { path -> state.add(path) },
                 )
+            } else if (state.query.isBlank()) {
+                AddEmptyState(state, backend, moduleName, listModifier)
             } else {
                 val typed = state.query.trim()
                 LazyColumn(listModifier) {
                     // Direct add of a typed coordinate — the only way to add a versionless `group:name`
                     // (resolved against the module's imported platforms) or a coordinate not in the index.
                     if (looksLikeCoordinate(typed)) item("direct:$typed") {
-                        DirectAddRow(typed, state.mode, codeFont, Modifier.animateItem()) { state.add(typed) }
+                        DirectAddRow(typed, codeFont, Modifier.animateItem()) { asPlatform -> state.add(typed, asPlatform) }
                     }
                     items(state.results, key = { it.coordinate }) { hit ->
-                        AddResultRow(hit, codeFont, Modifier.animateItem()) { state.add(hit.coordinate) }
+                        AddResultRow(hit, codeFont, Modifier.animateItem()) { state.add(hit.coordinate, hit.isBom) }
                     }
                     if (typed.length >= 2 && state.results.isEmpty() && !state.searching && !looksLikeCoordinate(typed)) item { EmptyRow(stringResource(Res.string.dep_no_results)) }
                     if (typed.length < 2) item { EmptyRow(stringResource(Res.string.dep_type_to_search)) }
                 }
             }
         }
+    }
+}
+
+/** A BOM is published POM-only; that is what distinguishes it from a library on a search hit. */
+private val UiArtifactHit.isBom: Boolean get() = packaging.equals("pom", ignoreCase = true)
+
+/** Whether a typed coordinate names a BOM, by the Maven convention of a `-bom` artifact suffix. */
+private fun coordinateIsBom(coordinate: String): Boolean =
+    coordinate.split(":").getOrNull(1)?.let { it == "bom" || it.endsWith("-bom") } == true
+
+/**
+ * Scope + variant as ONE line that reads as a sentence ("implementation · All variants") and opens on tap.
+ * Both were permanently-visible horizontally-scrolling chip rows, which cost two rows of the sheet on every
+ * add while almost every add takes the defaults.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AddOptions(state: AddDependencyState) {
+    val allVariants = stringResource(Res.string.dep_all_variants)
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
+        Row(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(Ca.radius.sm))
+                .clickable(remember { MutableInteractionSource() }, null, onClick = state::toggleOptions)
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                stringResource(Res.string.dep_options_summary, state.configuration, state.variant ?: allVariants),
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            )
+            Icon(
+                if (state.optionsOpen) CaIcons.chevronUp else CaIcons.chevronDown,
+                stringResource(Res.string.dep_show_options), Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.outline,
+            )
+        }
+        AnimatedVisibility(state.optionsOpen, enter = expandVertically(tween(Motion.FAST)) + fadeIn(), exit = shrinkVertically(tween(Motion.FAST)) + fadeOut()) {
+            Column(Modifier.padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // FlowRow, not a horizontal scroller: every option stays reachable without a hidden swipe.
+                OptionLabel(stringResource(Res.string.dep_scope))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DEP_CONFIGURATIONS.forEach { s ->
+                        OptionChip(s, s == state.configuration) { state.selectConfiguration(s) }
+                    }
+                }
+                if (state.variants.isNotEmpty()) {
+                    OptionLabel(stringResource(Res.string.dep_variant))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OptionChip(allVariants, state.variant == null) { state.selectVariant(null) }
+                        state.variants.forEach { v -> OptionChip(v, v == state.variant) { state.selectVariant(v) } }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OptionLabel(text: String) {
+    Text(text, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+}
+
+@Composable
+private fun OptionChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1) },
+        shape = RoundedCornerShape(Ca.radius.pill),
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
+    )
+}
+
+/**
+ * What an empty query offers instead of a blank list: the one-tap Google libraries that used to sit in a
+ * permanent "suggested" chip row, and the two non-search sources (another module, a local file) that used to
+ * be modes you had to choose BEFORE you could type anything.
+ */
+@Composable
+private fun AddEmptyState(
+    state: AddDependencyState,
+    backend: IdeBackend,
+    moduleName: String,
+    modifier: Modifier,
+) {
+    LazyColumn(modifier) {
+        item("quick-header") { SectionLabel(stringResource(Res.string.dep_quick_start)) }
+        item("firebase") {
+            AddSourceRow("F", Ide.colors.warning, "Firebase", stringResource(Res.string.dep_firebase_subtitle)) {
+                state.quickAdd("Firebase") { backend.deps.addFirebase(moduleName) }
+            }
+        }
+        item("play-auth") {
+            AddSourceRow("G", Ide.colors.info, "Play Services Auth", stringResource(Res.string.dep_play_auth_subtitle)) {
+                state.quickAdd("Play Services Auth") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-auth:21.2.0")) }
+            }
+        }
+        item("maps") {
+            AddSourceRow("G", Ide.colors.info, "Maps", stringResource(Res.string.dep_maps_subtitle)) {
+                state.quickAdd("Maps") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-maps:19.0.0")) }
+            }
+        }
+        item("location") {
+            AddSourceRow("G", Ide.colors.info, "Location", stringResource(Res.string.dep_location_subtitle)) {
+                state.quickAdd("Location") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-location:21.3.0")) }
+            }
+        }
+        item("sources-header") {
+            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            SectionLabel(stringResource(Res.string.dep_other_sources))
+        }
+        item("module") {
+            AddSourceRow("M", MaterialTheme.colorScheme.primary, stringResource(Res.string.dep_mode_module), stringResource(Res.string.dep_source_module)) {
+                state.selectMode(AddMode.Module)
+            }
+        }
+        item("local") {
+            AddSourceRow("L", Ide.colors.run, stringResource(Res.string.dep_mode_local), stringResource(Res.string.dep_source_local)) {
+                state.selectMode(AddMode.Local)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+    )
+}
+
+/** A one-tap entry in the empty state — a quick-add library or a non-search source. */
+@Composable
+private fun AddSourceRow(letter: String, color: Color, title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(Ca.radius.sm))
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick).padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        LetterBox(letter, color)
+        Column(Modifier.weight(1f)) {
+            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }
 
@@ -848,32 +992,43 @@ private fun ModuleTargetRow(name: String, modifier: Modifier, onAdd: () -> Unit)
 
 /** A row offering to add the literally-typed coordinate (handles versionless `group:name` + BOMs). */
 @Composable
-private fun DirectAddRow(coordinate: String, mode: AddMode, codeFont: FontFamily, modifier: Modifier, onAdd: () -> Unit) {
+private fun DirectAddRow(coordinate: String, codeFont: FontFamily, modifier: Modifier, onAdd: (asPlatform: Boolean) -> Unit) {
+    val (group, name, version) = splitCoordinate(coordinate)
     val parts = coordinate.split(":")
     // `name:version` (2nd segment version-like) is a full add whose group is inferred by search; only a
     // `group:name` whose 2nd segment is NOT a version is truly versionless (a BOM supplies the version).
     val secondIsVersion = parts.getOrNull(1)?.firstOrNull()?.isDigit() == true
     val versionless = parts.size == 2 && !secondIsVersion
     val inferGroup = parts.size == 2 && secondIsVersion
-    val color = if (mode == AddMode.Platform) Ide.colors.info else MaterialTheme.colorScheme.primary
+    // No Platform mode to select any more: a typed `…:…-bom:…` imports itself as a platform.
+    val isBom = coordinateIsBom(coordinate)
+    val color = if (isBom) Ide.colors.info else MaterialTheme.colorScheme.primary
+    val explainer = when {
+        isBom -> stringResource(Res.string.dep_import_as_platform)
+        versionless -> stringResource(Res.string.dep_add_versionless)
+        inferGroup -> stringResource(Res.string.dep_add_infer_group)
+        else -> stringResource(Res.string.dep_add_exact)
+    }
     Row(
-        modifier.fillMaxWidth().height(52.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onAdd).padding(vertical = 4.dp),
+        modifier.fillMaxWidth().height(52.dp).clickable(remember { MutableInteractionSource() }, null) { onAdd(isBom) }.padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        LetterBox(if (mode == AddMode.Platform) "B" else "+", color)
+        LetterBox(if (isBom) "B" else "+", color)
         Column(Modifier.weight(1f)) {
-            Text(coordinate, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont),
+                    fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (version.isNotEmpty()) VersionTag(version, codeFont)
+            }
+            // The group leads the subtitle when it's known, so the row still says WHICH artifact this is;
+            // the explainer follows because a typed coordinate can mean several different adds.
             Text(
-                when {
-                    mode == AddMode.Platform -> stringResource(Res.string.dep_import_as_platform)
-                    versionless -> stringResource(Res.string.dep_add_versionless)
-                    inferGroup -> stringResource(Res.string.dep_add_infer_group)
-                    else -> stringResource(Res.string.dep_add_exact)
-                },
+                if (group.isNotEmpty()) "$group · $explainer" else explainer,
                 color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButtonCa(CaIcons.plus, stringResource(Res.string.dep_add_named, coordinate), onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
+        IconButtonCa(CaIcons.plus, stringResource(Res.string.dep_add_named, coordinate), onClick = { onAdd(isBom) }, active = true, boxSize = 32, iconSize = 18)
     }
 }
 
@@ -940,33 +1095,75 @@ private fun LocalCandidateRow(path: String, codeFont: FontFamily, modifier: Modi
 }
 
 @Composable
-private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.FAST), label = "modeBg")
-    Box(
-        Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-    ) {
-        Text(label, color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
 private fun AddResultRow(hit: UiArtifactHit, codeFont: FontFamily, modifier: Modifier, onAdd: () -> Unit) {
     val isAar = hit.packaging.equals("aar", ignoreCase = true)
+    val (group, name, version) = splitCoordinate(hit.coordinate)
+    val letter = when {
+        hit.isBom -> "B"
+        isAar -> "A"
+        else -> "J"
+    }
+    val letterColor = when {
+        !hit.compatible -> MaterialTheme.colorScheme.error
+        hit.isBom -> Ide.colors.info
+        isAar -> Ide.colors.run
+        else -> Ide.colors.warning
+    }
     Row(
         modifier.fillMaxWidth().height(52.dp).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        LetterBox(if (isAar) "A" else "J", if (hit.compatible) (if (isAar) Ide.colors.run else Ide.colors.warning) else MaterialTheme.colorScheme.error)
+        LetterBox(letter, letterColor)
+        // Two lines, matching the declared list: the artifact NAME (the part you actually recognise) and its
+        // version read first, with the group demoted to the subtitle. A single `group:name:version` line put
+        // the least distinctive part first and ellipsized away the version on any real coordinate.
         Column(Modifier.weight(1f)) {
-            Text(hit.coordinate, color = if (hit.compatible) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
-                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (!hit.compatible && hit.incompatibleReason != null)
-                Text(hit.incompatibleReason!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            else Text(hit.packaging, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    name,
+                    color = if (hit.compatible) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont),
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                )
+                if (version.isNotEmpty()) VersionTag(version, codeFont)
+                // Says what the row will DO, now that there is no BOM mode to have chosen beforehand.
+                if (hit.isBom) Box(
+                    Modifier.background(Ide.colors.info.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 6.dp, vertical = 1.dp),
+                ) {
+                    Text(stringResource(Res.string.dep_bom_badge), color = Ide.colors.info, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, maxLines = 1)
+                }
+            }
+            // Line 2 is the GROUP on every row — including a BOM, whose badge already says what it is, so
+            // the subtitle is free to carry the part that tells two same-named artifacts apart. Only a
+            // rejected hit displaces it, because why it can't be added matters more than where it lives.
+            val reason = hit.incompatibleReason?.takeIf { !hit.compatible }
+            val subtitle = reason ?: group.ifEmpty { hit.packaging }
+            Text(
+                subtitle,
+                color = if (reason != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = if (reason == null && group.isNotEmpty()) codeFont else FontFamily.Default),
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
         }
         if (hit.compatible) IconButtonCa(CaIcons.plus, stringResource(Res.string.dep_add_named, hit.coordinate), onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
         else Icon(CaIcons.warning, stringResource(Res.string.dep_incompatible), Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+    }
+}
+
+/**
+ * Split a typed or searched coordinate into (group, name, version). A search hit is always
+ * `group:name:version`; a TYPED one may be `group:name` (versionless, a platform supplies the version) or
+ * `name:version` (the group is inferred by search) — told apart by whether the 2nd segment looks like a
+ * version. An unknown part comes back empty.
+ */
+private fun splitCoordinate(coordinate: String): Triple<String, String, String> {
+    val parts = coordinate.split(":")
+    return when {
+        parts.size >= 3 -> Triple(parts[0], parts[1], parts[2])
+        parts.size == 2 && parts[1].firstOrNull()?.isDigit() == true -> Triple("", parts[0], parts[1])
+        parts.size == 2 -> Triple(parts[0], parts[1], "")
+        else -> Triple("", coordinate, "")
     }
 }
 
@@ -1382,7 +1579,10 @@ private fun WithTooltip(text: String, content: @Composable () -> Unit) {
 private fun ConflictSummaryBanner(conflicts: List<UiVersionConflict>, realArtifacts: Set<String>, codeFont: FontFamily, modifier: Modifier = Modifier) {
     val real = conflicts.filter { it.artifact in realArtifacts }
     val benign = conflicts.filterNot { it.artifact in realArtifacts }
-    var open by remember(conflicts) { mutableStateOf(real.isNotEmpty()) }
+    // Collapsed until asked for. This used to open itself whenever any requested versions spanned a major
+    // version, which nags on a project that resolves and builds perfectly well — newest-wins is the
+    // normal, correct outcome. The count stays visible; the detail is one tap away.
+    var open by remember(conflicts) { mutableStateOf(false) }
     val color = if (real.isNotEmpty()) Ide.colors.warning else MaterialTheme.colorScheme.outline
     val title = if (real.isNotEmpty()) pluralStringResource(Res.plurals.dep_conflicts_to_review, real.size, real.size)
         else pluralStringResource(Res.plurals.dep_versions_auto_resolved, benign.size, benign.size)

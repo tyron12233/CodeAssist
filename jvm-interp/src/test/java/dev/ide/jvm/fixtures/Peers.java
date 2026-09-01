@@ -3,6 +3,8 @@ package dev.ide.jvm.fixtures;
 import dev.ide.jvm.host.Counter;
 import dev.ide.jvm.host.Eager;
 import dev.ide.jvm.host.Shape;
+import dev.ide.jvm.host.Weighted;
+import dev.ide.jvm.host.WeightedBase;
 import dev.ide.jvm.host.Widget;
 import java.util.Arrays;
 import java.util.function.IntUnaryOperator;
@@ -36,6 +38,12 @@ public final class Peers {
         @Override public int sides() { throw new RuntimeException("boom-sides"); }
     }
 
+    /** Implements an interface method its real abstract super left unimplemented, without naming the
+     *  interface itself — the peer must still carry {@code weight()}. */
+    static class Heavy extends WeightedBase {
+        @Override public int weight() { return 700; }
+    }
+
     static class Doubler implements IntUnaryOperator {
         @Override public int applyAsInt(int v) { return v * 2; }
     }
@@ -55,6 +63,13 @@ public final class Peers {
         @Override protected int bump() { return 5; }
         int current() { return this.count; }
     }
+
+    /** Hands platform code an interpreted object typed as the INTERFACE its real abstract super left
+     *  unimplemented, so the caller invokes {@code weight()} on the generated peer. */
+    public static Weighted makeHeavy() { return new Heavy(); }
+
+    /** The same override reached through real code rather than by the test calling the peer directly. */
+    public static int askHeavy() { return WeightedBase.ask(new Heavy()); }
 
     /** Calls the real template method, which dispatches back to the interpreted override. */
     public static int describeTriangle() { return new Triangle().describe(); }

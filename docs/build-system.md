@@ -439,3 +439,42 @@ workspace.
 The project is bound to `BuildSystemId.GRADLE_COMPAT`, so a build system contributed for that id would take its
 builds over; with none registered the native Java/Android pipelines build it as before. Still out of scope: a
 live file-watch sync (the stamp is compared on demand), and executing Gradle itself.
+
+## Exporting a project to Gradle
+
+The other direction: a native project written out as a real Gradle build, so the work can continue in Android
+Studio or on a CI machine. `GradleProjectExport` (`ide-core`, `dev.ide.core.gradle`) renders the model
+(`workspace.json` + each `module.toml` + the Android facet) into `settings.gradle.kts`, a root script that
+declares every plugin version once, and one `build.gradle.kts` per module, then zips those together with the
+sources under `<home>/exports/<name>-gradle.zip`. Reachable from the export screen (the picker's share action)
+as the second export format, alongside the `.caproj` package.
+
+What crosses is what Gradle also models:
+
+- **Modules**: a module's directory becomes its Gradle path (`features/home` → `:features:home`), so the
+  include needs no `projectDir` override; a module sitting at the project root is folded into the root script.
+- **Type and language level**: `com.android.application`/`com.android.library` plus `kotlin.android`, or
+  `java-library` plus `kotlin.jvm`; `compileOptions`/`java { }` and a `kotlin { compilerOptions { jvmTarget } }`
+  from the model's `LanguageLevel`. A JVM module's entry point is detected off disk (a top-level `fun main` or
+  a `static void main`) so the `application` plugin keeps it runnable.
+- **Dependencies**: module deps as `project(":x")`, libraries as their Maven coordinates (versionless ones
+  included, since a `platform(...)` BOM supplies the version), `Exclusion`s as `exclude(group =, module =)`,
+  and a build-variant qualifier as the configuration prefix (`debugImplementation`). The IDE's bundled
+  `kotlin-stdlib` is dropped: the Kotlin plugin brings its own.
+- **The Android facet**: namespace, SDK levels, versionCode/Name when set, manifest placeholders, build types
+  (only where they say something AGP would not do by itself), flavor dimensions and flavors, `buildFeatures`,
+  `packaging`, core-library desugaring, and any source root that is not where Gradle already looks.
+- **Compiler plugins**: Compose, parcelize and serialization are turned on in the IDE by a classpath probe
+  rather than a flag, so the export applies each plugin when either the facet flag or the declared runtime says
+  so. A Compose project that never touched the Build Features toggle still exports as Compose.
+
+Anything with no faithful Gradle expression is reported instead of guessed: a build type's signing config
+(the keystore lives in the app's registry, not the project), the bundled KSP processors (the IDE runs its own,
+so no plugin version or processor coordinate exists to write), a library with no Maven coordinate, and a
+dependency on a module outside the project. The notes appear on the export screen and in the archive's
+`GRADLE-EXPORT.md`. Supporting files are written too: `gradle.properties`, the wrapper properties (the
+`gradlew` scripts are not included, since Android Studio writes them on the first sync), a `.gitignore`, and
+any R8 rules file a build type names but the native project never had.
+
+`GradleExportTest` covers the rendering and closes the loop by re-importing an export with `GradleImport`,
+so the two directions stay in agreement.

@@ -28,7 +28,8 @@ import org.jetbrains.compose.resources.stringResource
  * The [content] receives the top-bar inset as [PaddingValues] — apply it (or pass it to a LazyColumn's
  * `contentPadding`) so content scrolls under the collapsing bar.
  *
- * Set [large] = false for a compact (non-collapsing) [TopAppBar] on dense/secondary screens.
+ * Set [large] = false for a compact (non-collapsing) [TopAppBar] on dense/secondary screens. A screen whose
+ * commit action must stay reachable while its content scrolls passes it as [bottomBar].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,6 +39,8 @@ fun ExpressiveScaffold(
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     floatingActionButton: @Composable () -> Unit = {},
+    /** Pinned bottom bar — the place for a screen's primary/secondary actions. */
+    bottomBar: @Composable () -> Unit = {},
     /** Snackbar host, for a screen that reports the outcome of an action. */
     snackbarHost: @Composable () -> Unit = {},
     large: Boolean = true,
@@ -60,6 +63,7 @@ fun ExpressiveScaffold(
                 TopAppBar(title = titleContent, navigationIcon = nav, actions = actions, scrollBehavior = scroll)
             }
         },
+        bottomBar = bottomBar,
         floatingActionButton = floatingActionButton,
         snackbarHost = snackbarHost,
         content = content,

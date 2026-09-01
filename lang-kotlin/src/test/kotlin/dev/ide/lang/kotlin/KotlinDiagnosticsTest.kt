@@ -231,6 +231,37 @@ class KotlinDiagnosticsTest {
         assertTrue(d.none { it.code == "kt.conflictingImport" }, "same-named function imports must not conflict; got $d")
     }
 
+    @Test
+    fun enumInheritsKotlinEnumMembers() {
+        // `Direction.LEFT.name` — a source `enum class` writes no supertype, and only WRITTEN supertypes were
+        // walked, so `kotlin.Enum`'s `name`/`ordinal`/`compareTo` resolved to nothing. A library enum was fine
+        // all along: its `@Metadata` lists `kotlin.Enum<E>` explicitly.
+        val diags = diagnose(
+            "EnumMembers.kt",
+            "package demo\nenum class Direction { LEFT, RIGHT }\n" +
+                "fun f(d: Direction) = d.name + d.ordinal + d.compareTo(Direction.LEFT) + Direction.LEFT.name\n",
+        )
+        assertTrue(
+            diags.none { it.code == "kt.unresolved" },
+            "name/ordinal/compareTo are inherited from kotlin.Enum; got $diags",
+        )
+    }
+
+    @Test
+    fun sourceTypesInheritKotlinAnyMembers() {
+        // The same gap one level up: `kotlin.Any` is implicit on every classifier — a class, an object, and an
+        // enum that declare no supertype still have equals/hashCode/toString.
+        val diags = diagnose(
+            "AnyMembers.kt",
+            "package demo\nclass Plain\nobject Solo\nenum class Dir { LEFT }\n" +
+                "fun f(p: Plain, d: Dir) = p.toString() + p.equals(p) + p.hashCode() + Solo.toString() + d.toString()\n",
+        )
+        assertTrue(
+            diags.none { it.code == "kt.unresolved" },
+            "equals/hashCode/toString come from the implicit kotlin.Any supertype; got $diags",
+        )
+    }
+
     companion object {
         val srcDir: Path = tempProject(
             mapOf(

@@ -42,6 +42,7 @@ import dev.ide.core.backend.SdkBackend
 import dev.ide.core.backend.SearchBackend
 import dev.ide.core.backend.SettingsBackend
 import dev.ide.core.backend.SigningBackend
+import dev.ide.core.backend.VcsBackend
 import dev.ide.platform.EngineBreadcrumb
 import dev.ide.platform.EngineCanceledException
 import dev.ide.platform.EnginePhase
@@ -336,6 +337,13 @@ class IdeServicesBackend(
         if (manager?.env?.pluginCatalog?.isEnabled(AgentPlugin.ID) != false) AgentBackend(this)
         else dev.ide.ui.backend.AgentService.Unsupported
 
+    // Version control is a disablable, non-essential plugin ([VcsPlugin.ID]). When it is off the plugin isn't
+    // loaded, so the UI is handed the no-op service and every Git surface disappears. A manager-less backend
+    // (tests / single-project) has no catalog, so it stays wired.
+    override val vcs: dev.ide.ui.backend.VcsService =
+        if (manager?.env?.pluginCatalog?.isEnabled(VcsPlugin.ID) != false) VcsBackend(this)
+        else dev.ide.ui.backend.VcsService.Unsupported
+
     // The Compose UI facets of the enabled built-in plugins (see BuiltInPlugins). The shell registers them into
     // UiPluginHost; a disabled plugin's facet isn't in this list, so its UI never appears. Empty with no manager.
     override fun uiPlugins(): List<dev.ide.ui.ext.UiPlugin> = manager?.env?.enabledUiPlugins ?: emptyList()
@@ -594,6 +602,8 @@ class IdeServicesBackend(
         runCatching { perf.flushAll() } // drain partial latency windows so the last session's samples ship
         runCatching { analytics.flush() }
         runCatching { analytics.close() }
+        // The version-control backend holds an open repository handle and its own refresh coroutine.
+        runCatching { (vcs as? VcsBackend)?.close() }
         activeServices?.close()
         runCatching { engineExecutor.shutdown() } // stop the dedicated ide-engine thread on teardown
         // Clean shutdown ⇒ drop the crash breadcrumb, so a file that survives to the next launch means the

@@ -202,6 +202,12 @@ class KotlinSymbolService(
     // only carries extensions whose declared receiver IS a supertype). Powers [receiverSupertypeArgs].
     private val supertypeArgTemplateMemo = ConcurrentHashMap<String, List<TypeRef>>()
 
+    // The same template memo for a SOURCE sub type, dropped with the other source memos: its chain — and the
+    // arguments it passes up — changes on edit. A classpath sub type cannot reach project source (the classpath
+    // can't extend your code), so its template stays in the session-stable map above.
+    @Volatile
+    private var sourceSupertypeArgTemplateMemo = ConcurrentHashMap<String, List<TypeRef>>()
+
     // Per-(receiver-target, name-prefix) memo of the classpath extension-index query. Like the classpath
     // supertype memo, this is session-stable: the persistent `kotlin.callables` index can't gain a project
     // extension (the classpath can't extend your code), and any re-index rebuilds this whole service. The
@@ -396,6 +402,7 @@ class KotlinSymbolService(
             cachedModel = null
             sourceSupertypeMemo =
                 ConcurrentHashMap() // only SOURCE chains can change; classpath memo stays warm
+            sourceSupertypeArgTemplateMemo = ConcurrentHashMap()
             sourceOwnMembersMemo =
                 ConcurrentHashMap() // a source type's members change on edit; classpath memo stays warm
         }
@@ -418,6 +425,7 @@ class KotlinSymbolService(
             cachedModel = null
             sourceSupertypeMemo =
                 ConcurrentHashMap() // only SOURCE chains can change; classpath memo stays warm
+            sourceSupertypeArgTemplateMemo = ConcurrentHashMap()
             sourceOwnMembersMemo =
                 ConcurrentHashMap() // a source type's members change on edit; classpath memo stays warm
         }
@@ -1181,7 +1189,13 @@ class KotlinSymbolService(
             val syntheticPlugin = syntheticInstanceMembers(rc)
             val inherited = rc.superTypeTexts.mapNotNull { resolveTypeName(it, rc.ctx) }
                 .flatMap { ownAndInherited(it, emptyList(), visited) }
-            return own + synthetic + syntheticPlugin + inherited
+            // …and the supertypes the compiler adds that source never writes down ([implicitSupertypes]).
+            // LAST, so an explicit supertype's override (or the class's own member) is found before the
+            // inherited default — the enumeration is order-sensitive, first match wins.
+            val implicit = implicitSupertypes(rc, fqn).flatMap { (superFqn, args) ->
+                ownAndInherited(superFqn, args, visited)
+            }
+            return own + synthetic + syntheticPlugin + inherited + implicit
         }
         // `kotlin.Throwable` is a mapped built-in whose `.kotlin_builtins` shape is intentionally minimal
         // (`message`, `cause`); the rest of its API — `stackTrace`, `printStackTrace`, `localizedMessage`,
@@ -1254,6 +1268,22 @@ class KotlinSymbolService(
         return index?.exact<ClassNameValue>(JAVA_CLASS_NAMES, fqn.substringAfterLast('.'))
             ?.any { it.fqn == fqn && it.origin == IndexOrigin.SOURCE } == true
     }
+
+    /**
+     * The supertypes a source declaration has WITHOUT writing them — as (fqn, type arguments) pairs, to walk
+     * alongside its declared ones. A classpath binary carries these explicitly (a Kotlin `@Metadata` enum lists
+     * `kotlin.Enum<E>`, every JVM class lists `java.lang.Object`), which is why a LIBRARY enum's `name`
+     * resolved all along while a source `enum class` reported "Unresolved reference: name":
+     *  - an `enum class` extends `kotlin.Enum<Self>` — `name`, `ordinal`, `compareTo(other: E)`. The self type
+     *    is passed as the argument so `compareTo` binds to the enum rather than staying an unbound `E`.
+     *  - every classifier extends `kotlin.Any` — `equals`, `hashCode`, `toString`. Interfaces and objects
+     *    included: `Any`'s members are callable on any reference.
+     * The shared `visited` set makes this idempotent — a class that already reaches `Any` through a declared
+     * supertype (or an enum, which reaches it through `Enum`) enumerates it once.
+     */
+    private fun implicitSupertypes(rc: RawClass, fqn: String): List<Pair<String, List<TypeRef>>> =
+        if (rc.isEnum) listOf("kotlin.Enum" to listOf(typeByFqn(fqn)), "kotlin.Any" to emptyList())
+        else listOf("kotlin.Any" to emptyList())
 
     /** The compiler-synthesized static members of a (source) enum [fqn]: `values(): Array<E>`,
      *  `valueOf(value: String): E`, and `entries: List<E>` (the `EnumEntries<E>`, modeled as a `List` for member
@@ -1614,8 +1644,10 @@ class KotlinSymbolService(
         return outer.isNotEmpty() && companionObjectFqn(outer) == fqn
     }
 
-    /** The companion object's FQN (`androidx…Color.Companion`) for [typeFqnRaw], or null if it has none. */
-    private fun companionObjectFqn(typeFqnRaw: String): String? {
+    /** The companion object's FQN for [typeFqnRaw] (`androidx…Color` → `androidx…Color.Companion`, a
+     *  named one `kotlinx.coroutines.CoroutineName` → `kotlinx.coroutines.CoroutineName.Key`), or null if it
+     *  has none. */
+    internal fun companionObjectFqn(typeFqnRaw: String): String? {
         val fqn = Builtins.kotlinTypeFor(typeFqnRaw) ?: typeFqnRaw
         model().classByFqn[fqn]?.let { return it.companionObjectName?.let { name -> "$fqn.$name" } }
         return typeShape(fqn)?.companionObjectName?.let { "$fqn.$it" }
@@ -1955,8 +1987,12 @@ class KotlinSymbolService(
         subArgs: List<TypeRef>,
         superFqn: String
     ): List<TypeRef>? {
-        val params = (builtinShape(subFqn) ?: typeShape(subFqn))?.typeParameters ?: return null
-        val template = supertypeArgTemplateMemo.getOrPut("$subFqn $superFqn") {
+        val sourceClass = model().classByFqn[subFqn]
+        val params = (builtinShape(subFqn) ?: typeShape(subFqn))?.typeParameters
+            ?: sourceClass?.typeParameterNames
+            ?: return null
+        val memo = if (sourceClass != null) sourceSupertypeArgTemplateMemo else supertypeArgTemplateMemo
+        val template = memo.getOrPut("$subFqn $superFqn") {
             val paramRefs = params.map { KotlinType(it, isTypeParameter = true, context = this) }
             walkSupertypeArgs(subFqn, paramRefs, superFqn, HashSet())
                 ?: return null // don't cache a non-supertype
@@ -1976,10 +2012,15 @@ class KotlinSymbolService(
     ): List<TypeRef>? {
         if (subFqn == superFqn) return subArgs
         if (!visited.add(subFqn)) return null
-        val shape = builtinShape(subFqn) ?: typeShape(subFqn) ?: return null
-        val subst = if (subArgs.isEmpty() || shape.typeParameters.isEmpty()) emptyMap()
-        else shape.typeParameters.zip(subArgs).toMap()
-        for (sup in shape.supertypes) {
+        // A classpath/builtin type carries its supertypes pre-resolved WITH their arguments; a SOURCE type
+        // records them as declaration text, so resolve those here — otherwise a project `object K : Key<Tag>`
+        // projected onto nothing and a `Key<E>` parameter never bound E.
+        val shape = builtinShape(subFqn) ?: typeShape(subFqn)
+        val params = shape?.typeParameters ?: model().classByFqn[subFqn]?.typeParameterNames ?: return null
+        val supertypes = shape?.supertypes ?: sourceSupertypeRefs(subFqn)
+        val subst = if (subArgs.isEmpty() || params.isEmpty()) emptyMap()
+        else params.zip(subArgs).toMap()
+        for (sup in supertypes) {
             val supK = sup as? KotlinType ?: continue
             val supFqn = Builtins.kotlinTypeFor(supK.qualifiedName) ?: supK.qualifiedName
             val supArgs = if (subst.isEmpty()) supK.typeArguments else supK.typeArguments.map {
@@ -1991,6 +2032,17 @@ class KotlinSymbolService(
             walkSupertypeArgs(supFqn, supArgs, superFqn, visited)?.let { return it }
         }
         return null
+    }
+
+    /** A SOURCE class's supertypes as resolved refs, keeping their type ARGUMENTS (`: Key<Tag>` →
+     *  `demo.Key<demo.Tag>`). The source model records a supertype as its declaration TEXT — the type-reference
+     *  text only, so there is no constructor-argument list to strip. An argument naming one of the class's OWN
+     *  type parameters is marked as such (`interface MutableStateFlow<T> : Flow<T>` → `Flow<T-as-parameter>`),
+     *  which is what lets the walk substitute the receiver's arguments through it. */
+    private fun sourceSupertypeRefs(fqn: String): List<TypeRef> {
+        val rc = model().classByFqn[fqn] ?: return emptyList()
+        val tps = rc.typeParameterNames.toHashSet()
+        return rc.superTypeTexts.mapNotNull { markTypeParameters(typeFromText(it, rc.ctx, fqn), tps) }
     }
 
     /** Apply type-parameter [bindings] to a symbol's return/param/receiver-arg types. */

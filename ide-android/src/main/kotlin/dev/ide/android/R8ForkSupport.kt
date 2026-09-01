@@ -7,7 +7,6 @@ import dev.ide.platform.log.Log
 import java.io.File
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
-import java.util.zip.ZipInputStream
 
 /**
  * Shared on-device machinery for running R8 in a FORKED command-line VM (the release/minify OOM fix,
@@ -15,9 +14,15 @@ import java.util.zip.ZipInputStream
  * limit" settings action ([detectCeiling]).
  *
  * A forked `dalvikvm`/`art` VM is NOT a zygote app process, so its `-Xmx` can exceed the app's `largeHeap`
- * cap (576MB on the measured device, ceiling ~1.5GB). R8's classes ship as a dedicated dex asset
- * (`r8.dex.zip`, the `bundleR8DexAsset` build task) because the app's own copy is in secondary dexes a bare
- * `-cp base.apk` won't load.
+ * cap (576MB on the measured device, ceiling ~1.5GB). R8 rides on a dedicated asset (`r8.dex.zip`, the
+ * `bundleR8DexAsset` build task) holding the tool's dex AND the jar's resources.
+ *
+ * A fork can load the app's own APK instead, which is what the persistent Kotlin compiler VM
+ * (`dev.ide.android.fork`) does. R8 and D8 keep the asset because they fork PER INVOCATION: a 180MB APK
+ * classpath measures ~800ms of class loading per fork against ~130ms for the asset, and the dex merge forks
+ * several times per build. The resources matter for the same reason the APK works and a bare dex does not:
+ * without `resources/new_api_database.ser` R8 warns that it cannot find its API database and emits different
+ * code than the same version run from the jar.
  */
 object R8ForkSupport {
     private val log = Log.logger("ide.mem")
@@ -38,48 +43,46 @@ object R8ForkSupport {
     fun launcher(): String? = LAUNCHERS.firstOrNull { File(it).exists() }
 
     /**
-     * Extract `assets/r8.dex.zip` → `cacheDir/r8-dex/` and return its `classes*.dex`, made READ-ONLY.
+     * Copy `assets/$R8_DEX_ASSET` out to `cacheDir/r8-dex/` and return it, ready to put on a fork's `-cp`.
      *
-     * The read-only part is load-bearing: ART refuses to load a WRITABLE dex on a command-line VM's classpath
-     * (W^X — `SecurityException: Writable dex file '…' is not allowed`, aborting the VM at system-classloader
-     * creation). A freshly-extracted file is writable, so each is `setReadOnly()` after writing. Marker-guarded
-     * by the app's `lastUpdateTime` so a new APK (possibly a new r8) re-extracts; the stale read-only files are
-     * cleared first so the rewrite can't hit a read-only file.
+     * The asset goes on the classpath AS A ZIP rather than being unpacked into loose `classes*.dex`, because
+     * a classloader built over loose dex files sees code but no resources: R8 would lose its API database,
+     * its `META-INF/services` provider and its version stamp. A zip is read like an APK, so both are visible.
+     *
+     * It is also made READ-ONLY. ART refuses a WRITABLE dex on a command-line VM's classpath (W^X:
+     * `SecurityException: Writable dex file '…' is not allowed`, aborting the VM while it builds the system
+     * classloader). A zip container is not subject to that check, but the extracted copy is immutable by
+     * contract and the flag costs nothing. Marker-guarded by the app's `lastUpdateTime` so a new APK (possibly
+     * a new r8) re-extracts; the stale read-only file is cleared first so the rewrite can't hit it.
      */
-    fun extractR8Dexes(context: Context): List<File>? {
+    fun extractR8Zip(context: Context): File? {
         val ctx = context.applicationContext
         val dir = File(ctx.cacheDir, "r8-dex")
         val stamp = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime }.getOrDefault(0L).toString()
         val marker = File(dir, ".extracted")
-        fun dexes() = dir.listFiles { f -> f.name.endsWith(".dex") }?.toList()?.sortedBy { it.name }
-        dexes()?.takeIf { marker.exists() && marker.readText() == stamp && it.isNotEmpty() }?.let { return it }
+        val zip = File(dir, R8_DEX_ASSET)
+        if (marker.exists() && runCatching { marker.readText() == stamp }.getOrDefault(false) &&
+            zip.isFile && zip.length() > 0L
+        ) {
+            return zip
+        }
         dir.mkdirs()
-        // Clear any stale (read-only) dexes from a prior extract so the fresh write can't hit a read-only file.
+        // Clear anything from a prior extract (read-only, and possibly the old loose-dex layout) so the fresh
+        // write can't hit a read-only file.
         dir.listFiles()?.forEach { runCatching { it.setWritable(true); it.delete() } }
         return runCatching {
-            ctx.assets.open(R8_DEX_ASSET).use { ins ->
-                ZipInputStream(ins.buffered()).use { zis ->
-                    var e = zis.nextEntry
-                    while (e != null) {
-                        if (!e.isDirectory && e.name.endsWith(".dex")) {
-                            val f = File(dir, File(e.name).name)
-                            f.outputStream().use { out -> zis.copyTo(out) }
-                            f.setReadOnly() // ART won't load a writable dex on a VM classpath (W^X)
-                        }
-                        e = zis.nextEntry
-                    }
-                }
-            }
+            ctx.assets.open(R8_DEX_ASSET).use { ins -> zip.outputStream().use { ins.copyTo(it) } }
+            zip.setReadOnly()
             marker.writeText(stamp)
-            dexes()?.takeIf { it.isNotEmpty() }
+            zip.takeIf { it.isFile && it.length() > 0L }
         }.onFailure { log.warn("r8-fork: failed to extract $R8_DEX_ASSET: ${it.message}") }.getOrNull()
     }
 
-    /** True if a forked `launcher -Xmx<n>m -cp <r8 dexes> R8 --version` starts (heap granted + R8 loaded). */
-    fun canFork(launcher: String, dexes: List<File>, xmxMb: Int): Boolean = runCatching {
-        val cp = dexes.joinToString(File.pathSeparator) { it.absolutePath }
-        val proc = ProcessBuilder(launcher, "-Xmx${xmxMb}m", "-cp", cp, "com.android.tools.r8.R8", "--version")
-            .redirectErrorStream(true).start()
+    /** True if a forked `launcher -Xmx<n>m -cp <r8 asset> R8 --version` starts (heap granted + R8 loaded). */
+    fun canFork(launcher: String, toolClasspath: File, xmxMb: Int): Boolean = runCatching {
+        val proc = ProcessBuilder(
+            launcher, "-Xmx${xmxMb}m", "-cp", toolClasspath.absolutePath, "com.android.tools.r8.R8", "--version",
+        ).redirectErrorStream(true).start()
         if (!proc.waitFor(30, TimeUnit.SECONDS)) {
             proc.destroyForcibly()
             return false
@@ -100,7 +103,7 @@ object R8ForkSupport {
      */
     fun detectCeiling(context: Context): Int? {
         val launcher = launcher() ?: return null
-        val dexes = extractR8Dexes(context) ?: return null
+        val toolClasspath = extractR8Zip(context) ?: return null
         val ladder = affordableHeaps(context, CEILING_LADDER)
         if (ladder.isEmpty()) {
             log.info("r8-fork: ${totalMemMb(context)}MB of device RAM can't back even a ${CEILING_LADDER.first()}MB fork — forking unavailable")
@@ -108,7 +111,7 @@ object R8ForkSupport {
         }
         var ceiling: Int? = null
         for (mb in ladder) {
-            if (canFork(launcher, dexes, mb)) ceiling = mb else break
+            if (canFork(launcher, toolClasspath, mb)) ceiling = mb else break
         }
         log.info("r8-fork: detected forked-VM ceiling = ${ceiling ?: "none"}MB (app cap ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB)")
         return ceiling

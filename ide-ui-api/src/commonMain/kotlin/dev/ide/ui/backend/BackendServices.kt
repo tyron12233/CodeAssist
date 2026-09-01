@@ -684,9 +684,17 @@ interface ProjectService {
     suspend fun revertToGradle(): UiConvertResult = UiConvertResult(false, "Nothing to revert")
 
     /**
-     * Import the foreign-build-system project at [sourceRootPath] (a Gradle folder today) into a new workspace
-     * under the projects root and open it in compatibility mode (bumps [projectEpoch]). Returns a failure
-     * result when no importer recognizes the folder or no project manager is available.
+     * What kind of project, if any, the folder at [path] holds — so the picker can ask the questions that
+     * actually apply to it. A CodeAssist workspace is adopted as-is and has no compatibility/convert choice
+     * to make; only a foreign build system does.
+     */
+    suspend fun inspectProjectFolder(path: String): UiProjectFolderKind = UiProjectFolderKind.UNKNOWN
+
+    /**
+     * Import the project at [sourceRootPath] into a new workspace under the projects root and open it (bumps
+     * [projectEpoch]). A CodeAssist workspace is copied verbatim; a foreign build system (Gradle today) is
+     * read statically and opened in compatibility mode. Returns a failure result when the folder is neither,
+     * or when no project manager is available.
      */
     suspend fun importExternalProject(sourceRootPath: String): UiProjectResult =
         UiProjectResult(false, "Project import not supported by this backend")
@@ -699,17 +707,42 @@ interface ProjectService {
     suspend fun exportProject(rootPath: String, options: UiExportOptions): String? = null
 
     /**
-     * Read the `.caproj` at [archivePath] for the import preview (manifest, file peek, icon) without
+     * Export the project at [rootPath] as a Gradle project (sources plus generated build scripts, zipped
+     * under the app exports dir) so it can be opened in Android Studio or built with `gradle`. Best effort:
+     * the scripts are derived from the project model, and whatever has no Gradle equivalent comes back in
+     * [UiGradleExport.notes]. Null when the export failed. Runs off the main thread.
+     */
+    suspend fun exportGradleProject(rootPath: String): UiGradleExport? = null
+
+    /**
+     * What the export screen can offer for the project at [rootPath]: its modules (with the share of the
+     * package each accounts for) and what bundling the resolved dependencies would cost. Walks the project
+     * tree, so it suspends. Null when [rootPath] holds no readable project.
+     */
+    suspend fun exportPlan(rootPath: String): UiExportPlan? = null
+
+    /**
+     * Read the `.caproj` at [archivePath] for the import preview (manifest, contents, icon) without
      * extracting it. Returns null when the file isn't a readable package.
      */
     suspend fun previewImportPackage(archivePath: String): UiImportPreview? = null
 
     /**
-     * Import the `.caproj` at [archivePath] into a new workspace and open it (bumps [projectEpoch]). Returns a
-     * failure result when the package is invalid or its format is unsupported.
+     * Import the `.caproj` at [archivePath] into a new workspace and open it (bumps [projectEpoch]). A
+     * non-blank [projectName] overrides the name in the package, for both the project and the directory it
+     * lands in. Returns a failure result when the package is invalid or its format is unsupported.
      */
-    suspend fun importPackage(archivePath: String): UiProjectResult =
+    suspend fun importPackage(archivePath: String, projectName: String? = null): UiProjectResult =
         UiProjectResult(false, "Project import not supported by this backend")
+
+    /** Where [importPackage] would put a project imported under [projectName], so the import preview can show
+     *  the destination before committing. Checks the projects directory for name collisions, so it suspends.
+     *  Null when this backend has no projects directory. */
+    suspend fun importDestination(projectName: String): String? = null
+
+    /** Raw bytes of the image at [path], for previewing a file the user picked outside any project (the
+     *  export screen's screenshots). Null when it isn't a readable image of a sane size. */
+    suspend fun imageBytes(path: String): ByteArray? = null
 }
 
 /**

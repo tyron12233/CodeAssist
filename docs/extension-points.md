@@ -34,6 +34,7 @@ interface ExtensionRegistry {
 | `platform.blockMapping` | Block mappings (`BlockMapping`) for the projectional editor. | The Java block mapping. |
 | `platform.kotlinCompilerPlugin` | Kotlin compiler plugins (`KotlinCompilerPlugin`) the build's `compileKotlin` tasks apply per module. | Compose (`ComposeCompilerPlugin`). |
 | `platform.iconRepository` | Icon libraries (`IconRepository`) the Icon Manager browses: search, list, and fetch an icon's geometry. | Bundled Material Symbols, remote Material Symbols. |
+| `platform.vcsProvider` | Version-control systems (`VcsProvider`): find a checkout root, open it, initialize one, clone one. | The Git provider (JGit). |
 
 ## Icon repository SPI
 
@@ -45,6 +46,14 @@ repository's entries identically, so a contributed library behaves exactly like 
 
 Geometry is returned as the same `VectorSpec` the drawable parser produces, so a contributed icon previews,
 imports and rasterises through the paths already in place. See [icon-manager.md](icon-manager.md).
+
+## Version-control provider SPI
+
+`platform.vcsProvider` lets a plugin contribute a version-control system other than Git. A `VcsProvider`
+answers whether a directory sits inside a checkout it owns (`findRoot`) and opens, initializes, or clones one;
+the resulting `VcsRepository` is the whole working-copy surface the UI drives. The host consults every
+registered provider in turn and uses the first that claims the directory, falling back to the built-in Git
+provider. See [version-control.md](version-control.md).
 
 ## Language backend SPI
 

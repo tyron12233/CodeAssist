@@ -73,8 +73,12 @@ import dev.ide.ui.generated.resources.delete_project
 import dev.ide.ui.generated.resources.delete_project_content
 import dev.ide.ui.generated.resources.export_share
 import dev.ide.ui.generated.resources.import_gradle_subtitle
+import dev.ide.ui.generated.resources.clone_repository_subtitle
+import dev.ide.ui.generated.resources.clone_repository_title
 import dev.ide.ui.generated.resources.import_gradle_title
 import dev.ide.ui.generated.resources.import_project
+import dev.ide.ui.generated.resources.join_the_community
+import dev.ide.ui.generated.resources.join_the_community_content
 import dev.ide.ui.generated.resources.modules
 import dev.ide.ui.generated.resources.new_project
 import dev.ide.ui.generated.resources.new_project_content
@@ -107,10 +111,10 @@ fun ProjectPickerScreen(
     onOpen: (ProjectInfo) -> Unit,
     onNewProject: () -> Unit,
     onDeleteProject: ((ProjectInfo) -> Unit)? = null,
-    /** Import a shared `.caproj` package (shows the top-bar Import action). Null hides it. */
+    /** Import an existing project (folder or `.caproj` package). Shows a secondary card; null hides it. */
     onImportProject: (() -> Unit)? = null,
-    /** Import an external Gradle project folder (best effort). Shows a secondary card; null hides it. */
-    onImportGradle: (() -> Unit)? = null,
+    /** Clone a Git repository into a new project. Shows a secondary card; null hides it (no VCS engine). */
+    onCloneRepository: (() -> Unit)? = null,
     /** Export a project as a shareable `.caproj` (shows a per-card Share action). Null hides it. */
     onExportProject: ((ProjectInfo) -> Unit)? = null,
     onBackup: (() -> Unit)? = null,
@@ -138,9 +142,6 @@ fun ProjectPickerScreen(
             LargeTopAppBar(
                 title = { Text(stringResource(Res.string.projects)) },
                 actions = {
-                    if (onImportProject != null) IconButton(onClick = onImportProject) {
-                        Icon(CaIcons.download, stringResource(Res.string.import_project))
-                    }
                     if (onBackup != null) IconButton(onClick = onBackup) {
                         Icon(CaIcons.box, stringResource(Res.string.backup))
                     }
@@ -164,8 +165,12 @@ fun ProjectPickerScreen(
                 // The primary action leads: a prominent New-Project card (no floating button).
                 NewProjectCard(onNewProject)
 
-                // A secondary path: import an existing Gradle project (best-effort compatibility mode).
-                if (onImportGradle != null) ImportGradleCard(onImportGradle)
+                // A secondary path: import an existing project (a folder, or a shared `.caproj` package).
+                if (onImportProject != null) ImportProjectCard(onImportProject)
+
+                // The other way in: clone a repository. Reachable here because a user with no projects yet
+                // has nowhere else to start a clone from.
+                if (onCloneRepository != null) CloneRepositoryCard(onCloneRepository)
 
                 if (showLegacyRecovery && compatibilityCount > 0) {
                     LegacyRecoveryBanner(count = compatibilityCount, onDismiss = onDismissLegacyRecovery)
@@ -294,9 +299,9 @@ private fun NewProjectCard(onClick: () -> Unit) {
     }
 }
 
-/** A secondary, outlined card opening the host folder picker to import an existing Gradle build. */
+/** A secondary, outlined card opening the import flow: a project folder, or a shared `.caproj` package. */
 @Composable
-private fun ImportGradleCard(onClick: () -> Unit) {
+private fun ImportProjectCard(onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier
@@ -318,6 +323,35 @@ private fun ImportGradleCard(onClick: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(stringResource(Res.string.import_gradle_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
             Text(stringResource(Res.string.import_gradle_subtitle), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        }
+        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
+    }
+}
+
+/** A secondary, outlined card opening the version-control clone screen. */
+@Composable
+private fun CloneRepositoryCard(onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressScale(interaction)
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg))
+            .clickable(interaction, indication = null, onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(CaIcons.gitBranch, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(Res.string.clone_repository_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(Res.string.clone_repository_subtitle), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
         Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
     }

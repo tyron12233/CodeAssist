@@ -77,6 +77,27 @@ object BuiltInSettingsPages {
     const val DEX_FORK_CONCURRENCY = "dexForkConcurrency"
     const val DEX_FORK_CONCURRENCY_DEFAULT = 0
 
+    /** Choice key on [BUILD_RUNTIME]: where Kotlin compilation runs. Read by `ForkedKotlinCompiler`
+     *  (:ide-android). [KOTLINC_MODE_FORKED] (the default) keeps a Kotlin compiler VM alive alongside the app,
+     *  so a compile gets a heap above the app cap and its working set stays off the editor's heap;
+     *  [KOTLINC_MODE_INPROCESS] compiles inside the app process. The forked path falls back to in-process on
+     *  any failure, so this is a preference, not a requirement. Android-only. */
+    const val KOTLINC_MODE = "kotlincMode"
+    const val KOTLINC_MODE_FORKED = "forked"
+    const val KOTLINC_MODE_INPROCESS = "inprocess"
+    const val KOTLINC_MODE_DEFAULT = KOTLINC_MODE_FORKED
+
+    /** IntSlider key on [BUILD_RUNTIME]: the heap (MB) the Kotlin compiler VM runs with. The device may grant
+     *  less, in which case the VM starts at the largest heap it can back. Android-only. */
+    const val KOTLINC_MAX_HEAP = "kotlincMaxHeapMb"
+    const val KOTLINC_MAX_HEAP_DEFAULT = 1536
+
+    /** IntSlider key on [BUILD_RUNTIME]: how many Kotlin compiler VMs may run at once. Each one is RESIDENT
+     *  for the session, so a second is another large working set held against the device; raise it only for a
+     *  multi-module project whose modules compile in parallel. Android-only. */
+    const val KOTLINC_WORKERS = "kotlincWorkers"
+    const val KOTLINC_WORKERS_DEFAULT = 1
+
     /** Toggle key on the [ANALYSIS] page: write per-pass / per-stage editor timings to the log (diagnostic).
      *  Applied by the backend — it flips the shared `PerfTrace` flag. */
     const val PERF_LOGGING = "perfLogging"
@@ -274,6 +295,25 @@ object BuiltInSettingsPages {
             SettingControl.IntSlider(
                 DEX_FORK_CONCURRENCY, "Max concurrent dex forks", null,
                 default = DEX_FORK_CONCURRENCY_DEFAULT, min = 0, max = 4, step = 1, advanced = true,
+            ),
+            SettingControl.Choice(
+                KOTLINC_MODE, "Kotlin compiler execution",
+                "Keep a Kotlin compiler VM running alongside the IDE so compiles get more memory than the app is allowed and don't compete with the editor. Off = compile inside the IDE process. Applies on the next build.",
+                default = KOTLINC_MODE_DEFAULT,
+                options = listOf(
+                    SettingControl.Choice.Option(KOTLINC_MODE_FORKED, "Compiler VM"),
+                    SettingControl.Choice.Option(KOTLINC_MODE_INPROCESS, "In-process"),
+                ),
+            ),
+            SettingControl.IntSlider(
+                KOTLINC_MAX_HEAP, "Kotlin compiler VM heap",
+                "Memory the Kotlin compiler VM may use. The device may grant less, in which case the largest heap it can back is used.",
+                default = KOTLINC_MAX_HEAP_DEFAULT, min = 768, max = 4096, step = 128, unit = "MB",
+            ),
+            SettingControl.IntSlider(
+                KOTLINC_WORKERS, "Kotlin compiler VMs",
+                "How many Kotlin compiler VMs run at once. Each stays resident for the session, so raise this only for a project whose modules compile in parallel.",
+                default = KOTLINC_WORKERS_DEFAULT, min = 1, max = 3, step = 1, advanced = true,
             ),
         )
     }

@@ -29,7 +29,8 @@ object KotlinBuiltinsIndex : IndexExtension<String, TypeShape> {
     // Base 5 folds in TypeShapeExternalizer.FORMAT (the shared codec). Bumped 4→5 to abandon stale on-device
     // segments: the shared externalizer gained isDeprecated + isInfix while this index was left at 4, so an old
     // v4 segment was read with the newer format and desynced mid-value (UTFDataFormatException in readSymbol).
-    override val version = 5 + TypeShapeExternalizer.FORMAT
+    // 5→6: the decode gained enum ENTRIES, so a segment built before it holds enum shapes with no constants.
+    override val version = 6 + TypeShapeExternalizer.FORMAT
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = TypeShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried only by exact Kotlin FQN

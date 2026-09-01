@@ -92,6 +92,21 @@ class MavenDependencyResolver(
     /** Packaging (`jar`/`aar`) per coordinate, read from its POM. Released POMs are immutable, so this is safe. */
     private val googlePackaging = ConcurrentHashMap<Coordinate, String>()
 
+    /**
+     * Forget the memoized ABSENCES — the `Optional.empty()` entries meaning "this coordinate has no POM" /
+     * "no Gradle module metadata". Both caches are keyed by coordinate ALONE and live for the session, so an
+     * absence recorded against one repository set stays wrong after that set changes: adding the very
+     * repository that carries an artifact wouldn't find it, because the lookup never reaches the network
+     * again. Call this whenever the repository list changes.
+     *
+     * Positive entries are deliberately kept — a released POM is immutable, so what was found stays valid,
+     * and dropping them would re-fetch the hundreds of AndroidX parent POMs a Compose graph shares.
+     */
+    fun forgetAbsentArtifacts() {
+        effCache.entries.removeIf { !it.value.isPresent }
+        moduleCache.entries.removeIf { !it.value.isPresent }
+    }
+
     override suspend fun resolve(
         coordinates: List<Coordinate>,
         repositories: List<Repository>,

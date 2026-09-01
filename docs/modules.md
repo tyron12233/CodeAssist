@@ -30,6 +30,7 @@ ide-android (Android launcher) → ide-core
 | `build-api` | `dev.ide.build` | `BuildSystem` SPI; the generic incremental task engine contracts (`Task`/`TaskInputs`/`TaskOutputs`/`TaskGraph`/`TaskExecutor`); the contribution seams (`BuildPlugin`, `RunTaskProvider`/`RunAction`). |
 | `language-api` | `dev.ide.lang`, `.dom`, `.incremental`, `.resolve`, `.completion` | `LanguageBackend` SPI, source analyzer/compiler contracts, the backend-neutral DOM, incremental parsing, symbol/scope/type resolution, code completion. |
 | `deps-api` | `dev.ide.deps` | Dependency resolution SPI (Maven coordinates → jars/aars, conflict policy). |
+| `vcs-api` | `dev.ide.vcs` | Version-control SPI: the repository/branch/commit/status model, the `VcsProvider` extension point, and the account/credential/forge ports sign-in is built on. |
 | `index-api` | `dev.ide.index` | Indexing SPI: index extensions, index service, shared value types. |
 | `analysis-api` | `dev.ide.analysis` | Diagnostics/analyzer/quick-fix SPI: one diagnostic model and one pipeline; compiler errors and analyzer findings merge into the same stream. |
 | `block-api` | `dev.ide.block` | Projectional (block) editor SPI: block tree, block mappings, block edits, the projection service. |
@@ -45,6 +46,7 @@ ide-android (Android launcher) → ide-core
 | `analysis-impl` | The analysis engine behind `analysis-api` (analyzers, the compiler as a diagnostic provider, profiles, suppression, debounce/cancellation). |
 | `block-impl` | The block projection engine and the Java block mapping. |
 | `deps-impl` | The dependency resolver implementation. |
+| `vcs-impl` | The Git engine: a JGit-backed working copy (status, staging, commit, branches, diff, stash, fetch/pull/push, clone), the GitHub REST + device-flow client, and the encrypted account store. |
 
 ## Language backends
 
@@ -67,5 +69,6 @@ ide-android (Android launcher) → ide-core
 |---|---|
 | `ide-ui` | The reusable Compose Multiplatform UI (desktop + Android): theme, components, code editor with completion and inline diagnostics, file tree, block editor. Talks only to the `IdeBackend` port. |
 | `ide-core` | The shared engine → UI bridge: the `IdeServices` façade over the implementations, and `IdeServicesBackend` implementing `IdeBackend`. |
+| `vcs-ui` | The version-control Compose UI as a self-contained plugin: the Git tool window plus the branches, history, diff, sign-in, clone, and GitHub screens. |
 | `ide-desktop` | The JVM Compose launcher. |
 | `ide-android` | The Android Compose launcher; supplies the on-device ports (dex run, APK install/launch). |

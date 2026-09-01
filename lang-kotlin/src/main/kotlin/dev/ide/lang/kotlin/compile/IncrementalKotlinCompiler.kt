@@ -26,7 +26,7 @@ import java.util.stream.Collectors
  * Pure JVM + ASM + `kotlin-metadata-jvm`; no compiler IC caches (which mmap on ART). The state is plain
  * text keyed off the output dir, so it survives an IDE restart and needs no in-memory continuity.
  */
-class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = KotlinJvmCompiler()) {
+class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = KotlinJvmCompiler()) {
 
     /** Which path the last compile took — surfaced for tests/diagnostics (the build engine ignores it). */
     enum class Mode { FULL, INCREMENTAL, NOOP }
@@ -91,8 +91,13 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
     ): Result {
         clearDir(outputDir)
         Files.createDirectories(outputDir)
-        val r = compiler.compile(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath,
-            compilerPlugins = compilerPlugins, pluginOptions = pluginOptions, runtimePluginClasspaths = runtimePluginClasspaths)
+        val r = compiler.compile(
+            KotlinCompileRequest(
+                kotlinSources = kt, javaSources = javaSources, classpath = classpath, outputDir = outputDir,
+                jvmTarget = jvmTarget, bootClasspath = bootClasspath, compilerPlugins = compilerPlugins,
+                pluginOptions = pluginOptions, runtimePluginClasspaths = runtimePluginClasspaths,
+            ),
+        )
         if (!r.success) {
             // The output dir was just cleared and the compile failed, so it now holds a wiped/partial class set.
             // Drop the (now-stale) manifest: leaving it would let the NEXT build take the incremental fast path
@@ -149,9 +154,12 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
 
         // friendPaths=[cleanDir] keeps same-module `internal` access working across the source/binary split.
         val r = compiler.compile(
-            dirty, javaSources, listOf(cleanDir) + classpath, stagingDir, jvmTarget, bootClasspath,
-            friendPaths = listOf(cleanDir),
-            compilerPlugins = compilerPlugins, pluginOptions = pluginOptions, runtimePluginClasspaths = runtimePluginClasspaths,
+            KotlinCompileRequest(
+                kotlinSources = dirty, javaSources = javaSources, classpath = listOf(cleanDir) + classpath,
+                outputDir = stagingDir, jvmTarget = jvmTarget, bootClasspath = bootClasspath,
+                friendPaths = listOf(cleanDir), compilerPlugins = compilerPlugins,
+                pluginOptions = pluginOptions, runtimePluginClasspaths = runtimePluginClasspaths,
+            ),
         )
         // A staging (dirty-only) compile failure is NOT reported as the build's failure — fall back to [full]
         // (the caller's `?: full(...)`), which is always correct. Recompiling one file against the rest as a
