@@ -63,8 +63,9 @@ object ArtPatchPasses {
         // *shipping* the type instead: :ide-android dexes the real javax.swing.Icon from the JBR (see
         // generateSwingApiJar). Stripping it from bytecode (an earlier SwingIconArtPass) only made the marker
         // interfaces load, then broke verification of Icon-returning methods on stricter ART verifiers.
-        // Same instrumentation (scope = ALL) also reaches the dexed Eclipse jars, so an ecj fix rides here too.
-        EcjInputStreamArtPass(),  // InputStream.readAllBytes/readNBytes (API 33) absent on ART → shim call sites
+        // Same instrumentation (scope = ALL) also reaches the dexed Eclipse jars, so ecj and JGit fixes ride here.
+        EclipseStreamArtPass(),   // InputStream/OutputStream methods (API 33) absent on ART → shim call sites
+                                  // (ecj's parser tables, and every JGit config read, clone and init)
         // Same instrumentation reaches the merged IntelliJ-platform jar (:kotlin-compiler-deps).
         ClassValueArtPass(),      // MethodHandleCache extends java.lang.ClassValue (absent on ART) → shim superclass
         VarHandleArtPass(),       // VarHandle polymorphic calls VerifyError on strict ART → sun.misc.Unsafe shim

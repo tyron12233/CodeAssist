@@ -18,7 +18,7 @@ import org.objectweb.asm.Opcodes
  * `hierarchicalMethodSignature`) works — only the Introspector-touching paths broke.
  *
  * Only two methods are ever called, so the shim is trivial; a `java.*` type can't be shipped under its own name
- * on ART, so this pass rewrites the call sites instead (like [EcjInputStreamArtPass] for `InputStream.readAllBytes`).
+ * on ART, so this pass rewrites the call sites instead (like [EclipseStreamArtPass] for `InputStream.readAllBytes`).
  * Both are already `static` with the shim's exact signatures, so only the owner changes — the stack effect is
  * identical. Fixing the class (not the caller) means `findSuperMethods` and every other Introspector-dependent
  * path across `:lang-java` AND `:lang-kotlin` (getter/setter detection via `PropertyUtilBase`, the `*Search`

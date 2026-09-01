@@ -21,6 +21,10 @@ dependencies {
     // tests bring their own copy.
     testImplementation("org.ow2.asm:asm:9.7")
     testImplementation("org.ow2.asm:asm-commons:9.7") // ClassRemapper — used by ClassValueArtPass
+    // The Git engine EclipseStreamArtPass rewrites. The pass is checked against the real jar, so an upgrade
+    // that moves or adds an API-33 stream call site fails the build instead of the device. Keep the version
+    // aligned with `jgit` in gradle/libs.versions.toml.
+    testImplementation("org.eclipse.jgit:org.eclipse.jgit:6.10.1.202505221210-r")
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation(kotlin("test"))

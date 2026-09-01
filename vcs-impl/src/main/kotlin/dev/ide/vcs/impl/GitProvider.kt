@@ -16,6 +16,11 @@ import java.nio.file.Path
  * The Git [VcsProvider], backed by JGit. [configDir] is where the user-level Git config lives (see
  * [GitEnvironment]); the host passes an app-owned directory so nothing is read from or written to the
  * device's home directory.
+ *
+ * Every operation catches [Throwable], not [Exception]. JGit is built for a desktop JVM, so a call into it
+ * can fail with a [LinkageError] rather than an exception when a method it was compiled against is missing
+ * from the device's runtime. Catching only [Exception] let such an error unwind past the caller and take the
+ * process down instead of reporting a failed Git operation.
  */
 class GitProvider(configDir: Path) : VcsProvider {
 
@@ -48,7 +53,7 @@ class GitProvider(configDir: Path) : VcsProvider {
                 .readEnvironment()
                 .build()
             GitRepository(Git(repo), root)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             throw VcsException("Could not open the Git repository at $root: ${e.reason()}", e)
         }
     }
@@ -61,7 +66,7 @@ class GitProvider(configDir: Path) : VcsProvider {
                 .setInitialBranch(defaultBranch)
                 .call()
             GitRepository(git, dir)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             throw VcsException("Could not create a Git repository in $dir: ${e.reason()}", e)
         }
     }
@@ -87,7 +92,7 @@ class GitProvider(configDir: Path) : VcsProvider {
             if (!branch.isNullOrBlank()) command.setBranch(branch)
             if (depth > 0) command.setDepth(depth)
             GitRepository(command.call(), target)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             // A failed clone leaves a partial directory behind; clearing it keeps a retry from tripping the
             // "already exists" check above.
             runCatching { dir.deleteRecursively() }

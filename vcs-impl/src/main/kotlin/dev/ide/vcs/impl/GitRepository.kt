@@ -390,7 +390,7 @@ internal class GitRepository(
                 .call()
             val updates = result.trackingRefUpdates.map { "${Repository.shortenRefName(it.localName)}: ${it.result}" }
             VcsSyncResult(ok = true, message = result.messages.trim(), updates = updates)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             throw e.asVcsFailure("Could not fetch from $remote")
         }
     }
@@ -408,7 +408,7 @@ internal class GitRepository(
                 message = merge?.message ?: result.fetchResult?.messages?.trim().orEmpty(),
                 merge = merge,
             )
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             throw e.asVcsFailure("Could not pull from $remote")
         }
     }
@@ -451,7 +451,7 @@ internal class GitRepository(
                 message = if (ok) "" else updates.joinToString("\n"),
                 updates = updates,
             )
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             throw e.asVcsFailure("Could not push to $remote")
         }
     }
@@ -583,12 +583,17 @@ internal class GitRepository(
         else -> VcsOperation.NONE
     }
 
-    /** Run a JGit call, turning any failure into the neutral exception pair with a message fit to show. */
+    /**
+     * Run a JGit call, turning any failure into the neutral exception pair with a message fit to show.
+     *
+     * Catches [Throwable] for the reason [GitProvider] does: JGit is a desktop-JVM library, so a missing
+     * runtime method surfaces as a [LinkageError], which is not an [Exception].
+     */
     private inline fun <T> guard(what: String, body: () -> T): T = try {
         body()
     } catch (e: VcsException) {
         throw e
-    } catch (e: Exception) {
+    } catch (e: Throwable) {
         throw e.asVcsFailure(what)
     }
 

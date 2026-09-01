@@ -42,6 +42,7 @@ import dev.ide.vcs.VcsStatus
 import dev.ide.vcs.impl.FileAccountStore
 import dev.ide.vcs.impl.GitHubClient
 import dev.ide.vcs.impl.GitProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -594,15 +595,21 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
     /**
      * Run a mutating command, refresh the working-tree snapshot, and turn any engine failure into a result
      * carrying a message the UI shows as-is.
+     *
+     * Catches [Throwable] rather than [Exception]: the Git engine is a desktop-JVM library, so a call into it
+     * can fail with a [LinkageError] when the device's runtime lacks a method it was compiled against. Such an
+     * error is not an [Exception], so it used to unwind out of the coroutine and take the process down.
      */
     private suspend fun command(body: suspend () -> UiVcsResult): UiVcsResult = try {
         val result = body()
         refresh()
         result
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: VcsAuthException) {
         refresh()
         UiVcsResult(false, e.userMessage(), authRequired = true)
-    } catch (e: Exception) {
+    } catch (e: Throwable) {
         log.warn("Version-control command failed", e)
         refresh()
         UiVcsResult(false, e.userMessage())
