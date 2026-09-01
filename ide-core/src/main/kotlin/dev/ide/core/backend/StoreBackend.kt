@@ -7,21 +7,34 @@ import dev.ide.ui.backend.UiStoreCatalog
 import dev.ide.ui.backend.UiStoreInstallResult
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreItemKind
+import dev.ide.ui.backend.UiInstallProgress
+import dev.ide.ui.backend.UiInstallState
+import dev.ide.ui.backend.UiStoreFeed
 import dev.ide.ui.backend.UiStoreSection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * [StoreService] for the home screen's Store tab. This is the UI-shell wiring: the catalog is served from the
- * bundled [ProjectTemplate]s (the real, installable content) plus a curated set of preview sample projects,
- * and the Community shelf is left empty. The interface is exactly what a remote, submission-backed catalog
- * will later implement, so the UI does not change when [catalog]/[search]/[install] move to a backend.
+ * [StoreService] for the home screen's Explore tab.
  *
- * Template items route through the normal Create-Project flow (the UI opens the configure form pre-selected
- * to [UiStoreItem.templateId]); only sample/community items would download through [install], which is not
- * wired yet (those items are marked [UiStoreItem.available] = false).
+ * Two sources, and the precedence between them is the whole design:
+ *
+ *  1. The **bundled** [ProjectTemplate]s. Always present, always work offline, and the only content a
+ *     build with no store endpoint has.
+ *  2. The **remote** catalog, via [source]. When reachable it supplies the server-driven feed — modes,
+ *     shelf ordering, charts — and *overlays* the bundled items by id rather than duplicating them.
+ *
+ * A remote failure is never an error state here. [feed] returns null and the caller falls back to
+ * [catalog]'s bundled shelves, because "we cannot reach the store" and "nobody has published anything"
+ * are opposite claims and must not render the same screen.
+ *
+ * The last good feed is cached on disk, so a cold launch offline shows content immediately instead of a
+ * spinner.
  */
-internal class StoreBackend(private val ctx: BackendContext) : StoreService {
+internal class StoreBackend(
+    private val ctx: BackendContext,
+    private val source: dev.ide.store.StoreCatalogSource = dev.ide.store.StoreCatalogSource.Unconfigured,
+) : StoreService {
 
     private fun templates(): List<ProjectTemplate> =
         ctx.servicesOrNull?.projectTemplates() ?: ctx.manager?.projectTemplates() ?: emptyList()
@@ -53,11 +66,152 @@ internal class StoreBackend(private val ctx: BackendContext) : StoreService {
         all.filter { item -> matchesCategory(item, category) && matchesQuery(item, q) }
     }
 
-    override suspend fun install(id: String, args: Map<String, String>): UiStoreInstallResult {
-        // Templates AND samples are both created through the Create-Project flow (the UI routes any item with
-        // a templateId there); only the future community downloads would land here.
-        return UiStoreInstallResult(false, "Community projects are coming soon")
+    /**
+     * The server-driven Explore feed, or null when there is no remote store to ask.
+     *
+     * Order of attempts: network, then the on-disk cache. A cached feed is marked [UiStoreFeed.fromCache]
+     * so the UI can say so rather than presenting stale ranks as live.
+     */
+    override suspend fun feed(seedItemId: String?): UiStoreFeed? {
+        if (!source.configured()) return null
+        return withContext(dev.ide.core.backend.storeIo) {
+            val bundled = bundledBySlug()
+            when (val result = source.feedDocument(seedItemId)) {
+                is dev.ide.store.StoreResult.Ok -> {
+                    val parsed = dev.ide.store.impl.StoreFeedParser.parse(result.value)
+                    if (parsed == null) {
+                        // A response we cannot read is not evidence about the store, so behave as offline.
+                        cachedFeed(bundled)
+                    } else {
+                        // Cache the exact bytes that were just rendered, so the cached copy cannot drift.
+                        writeCache(result.value)
+                        // Remember the payload coordinates so install() needs no second round trip.
+                        rememberPayloads(parsed)
+                        StoreFeedMapper.toUi(parsed, bundled)
+                    }
+                }
+                // Offline or a server hiccup: fall back to whatever was last seen.
+                else -> cachedFeed(bundled)
+            }
+        }
     }
+
+    /**
+     * Count one install, deduplicated server-side by the anonymous install id.
+     *
+     * Never throws, but it does **block** on a short HTTP POST, so it has to be called from a background
+     * context. [install] does the counting itself, from the IO context, which is the only place it should
+     * happen: the count belongs to a finished install, not to a tap.
+     */
+    override fun recordInstall(id: String) {
+        if (!source.configured()) return
+        val installId = ctx.manager?.preference(INSTALL_ID_PREF) ?: return
+        runCatching { source.recordInstall(id, installId) }
+    }
+
+    /**
+     * The bundled catalog keyed by the id a remote row would use, for the overlay.
+     *
+     * Keys are the bare template id (`sample-calculator`), matching `store_items.slug`, NOT the
+     * `sample:`/`template:`-prefixed id the bundled [catalog] emits for its own rows.
+     */
+    private fun bundledBySlug(): Map<String, UiStoreItem> =
+        templates().associate { t ->
+            t.id.value to toItem(t, if (isSample(t)) UiStoreItemKind.Sample else UiStoreItemKind.Template)
+        }
+
+    /**
+     * The last good feed from disk.
+     *
+     * Returns null rather than an empty feed when nothing is cached: an empty feed would render the
+     * "nobody has published anything" screen, which is a claim about the store rather than about the
+     * network.
+     */
+    private fun cachedFeed(bundled: Map<String, UiStoreItem>): UiStoreFeed? {
+        val file = cacheFile() ?: return null
+        if (!file.isFile) return null
+        val raw = runCatching { file.readText() }.getOrNull()?.takeIf { it.isNotBlank() } ?: return null
+        val parsed = dev.ide.store.impl.StoreFeedParser.parse(raw) ?: return null
+        // The cached rows are as good a source of payload coordinates as the live ones, and the sha256 is
+        // still checked against the bytes: without this, an install from a cached feed would fail claiming
+        // the item has nothing to download.
+        rememberPayloads(parsed)
+        return StoreFeedMapper.toUi(parsed, bundled).copy(fromCache = true)
+    }
+
+    private fun cacheFile(): java.io.File? =
+        ctx.manager?.storageRoot?.let { java.io.File(it.toFile(), "store/explore-feed.json") }
+
+    /** Best effort: a cache that cannot be written must not fail the fetch that produced it. */
+    private fun writeCache(document: String) {
+        val file = cacheFile() ?: return
+        runCatching {
+            file.parentFile?.mkdirs()
+            file.writeText(document)
+        }
+    }
+
+    /**
+     * Download, verify and unpack a community project into the workspace.
+     *
+     * Templates and samples never reach here: the UI routes anything with a `templateId` through the
+     * Create-Project flow, because that scaffold is already on the device.
+     *
+     * Counting happens last, and only on success. Counting a tap instead would inflate the very numbers
+     * the trending chart ranks on, with the items that fail to install ranking highest.
+     */
+    override suspend fun install(id: String, args: Map<String, String>): UiStoreInstallResult {
+        val payload = payloads[id]
+            ?: return UiStoreInstallResult(false, "That project has nothing to download yet")
+        val projectsRoot = ctx.manager?.projectsRoot?.toFile()
+            ?: return UiStoreInstallResult(false, "There is no projects folder to install into")
+
+        val manager = ctx.manager
+        // Everything here, the counting included, stays on the IO context: recordInstall performs a
+        // blocking POST, and this is called from a UI scope, so counting outside would run it on the main
+        // thread — where it throws, gets swallowed, and the install silently never counts.
+        //
+        // ProjectManager.list() rescans on every call, so the unpacked project is already visible to the
+        // picker; the UI only has to be told to ask again (CodeAssistAppState.refreshProjects).
+        return withContext(storeIo) {
+            val result = installer.install(
+                payload = payload,
+                projectsRoot = projectsRoot,
+                adopt = { dir ->
+                    val ok = manager?.adoptProjectInPlace(dir.toPath()) ?: false
+                    if (ok) null else "That download isn't a project CodeAssist can open"
+                },
+                onProgress = { p -> progressState.value = progressState.value + (p.itemId to p) },
+            )
+            if (result.success) recordInstall(id)
+            result
+        }
+    }
+
+    override fun installProgress(): kotlinx.coroutines.flow.StateFlow<Map<String, UiInstallProgress>> =
+        progressState
+
+    private val progressState =
+        kotlinx.coroutines.flow.MutableStateFlow<Map<String, UiInstallProgress>>(emptyMap())
+
+    private val installer = StoreInstaller(source)
+
+    /**
+     * Payload coordinates from the last feed, so an install needs no second round trip.
+     *
+     * Taken from the catalog row and never from the archive: the size and hash are what the server
+     * promised, and checking the download against them is the point.
+     */
+    private val payloads = java.util.concurrent.ConcurrentHashMap<String, StoreInstaller.Payload>()
+
+    private fun rememberPayloads(feed: dev.ide.store.StoreFeed) {
+        feed.allItems.forEach { item ->
+            val path = item.storagePath ?: return@forEach
+            payloads[item.id] = StoreInstaller.Payload(item.id, path, item.sha256, item.sizeBytes, item.title)
+        }
+    }
+
+
 
     /** Sample projects are registered as `sample-`-prefixed templates so they share the create path but list
      *  under "Sample projects" rather than "Starter templates". */
@@ -109,6 +263,9 @@ internal class StoreBackend(private val ctx: BackendContext) : StoreService {
 
     private companion object {
         const val CATEGORY_COMMUNITY = "Community"
+
+        /** The anonymous install id the analytics service already generates; reused for install dedupe. */
+        const val INSTALL_ID_PREF = "analytics.install.id"
 
         /** Sample template ids that ship a built-in preview screenshot ([UiStoreItem.previewKey]). */
         val PREVIEW_SAMPLES = setOf("sample-snake", "sample-tictactoe", "sample-memory", "sample-2048")

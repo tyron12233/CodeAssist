@@ -52,3 +52,6 @@ docs/*.png
 
 # Release announcement drafts (never commit; they feed `gh release create` from the working tree only)
 discord_release_*.txt
+
+# Supabase backend for the Projects Store (untracked: migrations, keys, admin page)
+supabase/

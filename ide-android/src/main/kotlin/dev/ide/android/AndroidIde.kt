@@ -18,6 +18,7 @@ import dev.ide.analytics.impl.AnalyticsLogSink
 import dev.ide.analytics.impl.DefaultAnalyticsService
 import dev.ide.analytics.impl.SupabaseSink
 import dev.ide.core.ANALYTICS_SERVICE
+import dev.ide.core.STORE_CATALOG_SOURCE
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
 import dev.ide.core.settings.BuiltInSettingsPages
@@ -87,6 +88,10 @@ object AndroidIde {
         val appContext = context.applicationContext
         // Analytics is an application-scoped host service now; register it before the backend resolves it.
         manager.applicationContainer.registerServiceIfAbsent(ANALYTICS_SERVICE) { analytics }
+        // The remote Projects Store, from the same baked-in Supabase config. Registered here for the same
+        // reason as analytics: it is built from transport config the manager knows nothing about. An empty
+        // URL or key leaves it unconfigured and the store falls back to the bundled catalog.
+        manager.applicationContainer.registerServiceIfAbsent(STORE_CATALOG_SOURCE) { buildStoreSource() }
         val backend = IdeServicesBackend(
             initial = null, manager = manager,
             buildRunnerFactory = { svc ->
@@ -412,6 +417,28 @@ object AndroidIde {
         }
     }
 
+    /**
+     * The remote store catalog source, from the baked-in Supabase config.
+     *
+     * Same project and key as analytics (`BuildConfig.SUPABASE_URL` / `SUPABASE_KEY`) — one Supabase
+     * project serves both, so a rotated key reaches both at once. Row-level security is what confines an
+     * anonymous caller to approved rows; see supabase/README.md.
+     *
+     * An empty URL or key returns the unconfigured source, so a fork can build with no endpoint and the
+     * store simply shows the bundled catalog.
+     */
+    private fun buildStoreSource(): dev.ide.store.StoreCatalogSource {
+        val url = BuildConfig.SUPABASE_URL
+        val key = BuildConfig.SUPABASE_KEY
+        if (url.isBlank() || key.isBlank()) return dev.ide.store.StoreCatalogSource.Unconfigured
+        return dev.ide.store.impl.SupabaseStoreSource(
+            url = url,
+            apiKey = key,
+            // Hides catalog items that need a newer IDE than this install.
+            appBuild = BuildConfig.VERSION_CODE,
+        )
+    }
+
     /** Log and track one native exit record, with the breadcrumb attached when it is recent enough to describe
      *  this death rather than an earlier one. */
     private fun reportNativeExit(
@@ -475,8 +502,9 @@ object AndroidIde {
     private fun buildAnalytics(
         manager: ProjectManager, home: File
     ): dev.ide.analytics.AnalyticsService {
-        val url = BuildConfig.ANALYTICS_URL
-        val key = BuildConfig.ANALYTICS_KEY
+        // One shared Supabase project; the analytics sink and the store catalog read the same pair.
+        val url = BuildConfig.SUPABASE_URL
+        val key = BuildConfig.SUPABASE_KEY
         if (url.isBlank() || key.isBlank()) return dev.ide.analytics.NoopAnalyticsService
 
         val installId = manager.preference("analytics.install.id") ?: UUID.randomUUID().toString()

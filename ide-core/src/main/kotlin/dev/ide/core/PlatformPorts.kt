@@ -38,3 +38,8 @@ internal val REAL_VIEW_RUNTIME = ServiceKey<RealViewRuntime>("platform.realViewR
  *  it is built from the baked-in transport config *after* the manager exists — hence public, unlike the ports
  *  above. Absent (desktop / tests) resolves to the no-op service. Resolved on `IdeServicesBackend`. */
 val ANALYTICS_SERVICE = ServiceKey<AnalyticsService>("platform.analytics")
+
+/** The remote Projects Store catalog. Registered by the launcher (`:ide-android`) from the baked-in
+ *  Supabase config, for the same reason as [ANALYTICS_SERVICE]. Absent (desktop / tests) resolves to
+ *  [dev.ide.store.StoreCatalogSource.Unconfigured], and the store falls back to the bundled catalog. */
+val STORE_CATALOG_SOURCE = ServiceKey<dev.ide.store.StoreCatalogSource>("platform.storeCatalog")

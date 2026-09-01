@@ -319,7 +319,12 @@ class IdeServicesBackend(
     override val modules: ModuleService = ModuleBackend(this)
     override val signing: SigningService = SigningBackend(this)
     override val projects: ProjectService = ProjectBackend(this)
-    override val store: StoreService = StoreBackend(this)
+    /** The remote store catalog, resolved like [analytics]; absent → bundled-only. */
+    private val storeCatalogSource: dev.ide.store.StoreCatalogSource =
+        manager?.applicationContainer?.getServiceOrNull(STORE_CATALOG_SOURCE)
+            ?: dev.ide.store.StoreCatalogSource.Unconfigured
+
+    override val store: StoreService = StoreBackend(this, storeCatalogSource)
     // Held as the concrete type so the Compose preview host can reach its ide-core-only lesson-lowering methods
     // ([lowerLessonComposePreview]) that return an ide-core type the [LearnService] UI interface can't name.
     private val learnBackend = LearnBackend(this)

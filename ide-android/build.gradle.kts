@@ -407,18 +407,25 @@ android {
         // connectedAndroidTest harness (the on-device Kotlin-compiler discovery spike).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Opt-in usage analytics (see docs/analytics.md). The Supabase project URL + *publishable* key are
-        // baked in as BuildConfig fields, overridable per-build via -PANALYTICS_URL / -PANALYTICS_KEY or the
-        // ANALYTICS_URL / ANALYTICS_KEY env vars (so the endpoint/key can rotate without a code change). The
-        // publishable key is safe to ship: the `events` table's RLS allows INSERT only. An empty URL leaves
-        // analytics wired but inert (the host falls back to the no-op service), so a fork can build with no
-        // endpoint. Collection still never happens without the user's explicit consent.
-        val analyticsUrl = (findProperty("ANALYTICS_URL") as String?) ?: System.getenv("ANALYTICS_URL")
+        // The Supabase project URL + *publishable* key, shared by every feature that talks to it: opt-in
+        // usage analytics (docs/analytics.md) and the Projects Store catalog (supabase/README.md). One pair
+        // of fields rather than per-feature copies, because it is one project and a rotated key has to reach
+        // both at once.
+        //
+        // Overridable per-build via -PSUPABASE_URL / -PSUPABASE_KEY or the SUPABASE_URL / SUPABASE_KEY env
+        // vars, so the endpoint or key can rotate without a code change.
+        //
+        // The publishable key is safe to ship in an open-source client ONLY because row-level security is
+        // what actually gates access: INSERT-only on `events`, and read-approved-rows-only on the `store_*`
+        // tables. An empty URL leaves both features wired but inert (analytics falls back to the no-op
+        // service; the store falls back to the bundled catalog), so a fork can build with no endpoint.
+        // Analytics collection still never happens without the user's explicit consent.
+        val supabaseUrl = (findProperty("SUPABASE_URL") as String?) ?: System.getenv("SUPABASE_URL")
             ?: "https://lqlpkeummmmglikumotx.supabase.co"
-        val analyticsKey = (findProperty("ANALYTICS_KEY") as String?) ?: System.getenv("ANALYTICS_KEY")
+        val supabaseKey = (findProperty("SUPABASE_KEY") as String?) ?: System.getenv("SUPABASE_KEY")
             ?: "sb_publishable_5T14bUAG6fOGz47kwYzG7A_25dj3ap4"
-        buildConfigField("String", "ANALYTICS_URL", "\"$analyticsUrl\"")
-        buildConfigField("String", "ANALYTICS_KEY", "\"$analyticsKey\"")
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_KEY", "\"$supabaseKey\"")
 
         // AdMob defaults = Google TEST ids. Debug inherits these as-is; `release` overrides to the real ids
         // below, and `profile` (a local perf build) is forced back to test. The App id reaches the manifest
@@ -933,6 +940,8 @@ dependencies {
     // Opt-in usage analytics engine: DefaultAnalyticsService + the Supabase sink + the crash reporter. The
     // analytics-api types reach here transitively via :ide-core (which exposes them as `api`).
     implementation(project(":analytics-impl"))
+    // The Supabase-backed store catalog the launcher registers against STORE_CATALOG_SOURCE.
+    implementation(project(":store-impl"))
     // The logging facade (Log) — used directly here for the main-thread guard + the analytics log sink. It
     // reaches :ide-core only as `implementation` (not transitive), so depend on it explicitly.
     implementation(project(":platform-core"))

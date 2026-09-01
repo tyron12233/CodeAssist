@@ -164,5 +164,5 @@ $$;
 
 ## Rotating the endpoint / key
 
-Build with `-PANALYTICS_URL=… -PANALYTICS_KEY=…` (or the `ANALYTICS_URL` / `ANALYTICS_KEY` env vars) to
+Build with `-PSUPABASE_URL=… -PSUPABASE_KEY=…` (or the `SUPABASE_URL` / `SUPABASE_KEY` env vars) to
 override the baked-in defaults. An empty URL ships the app with analytics inert (no-op service).

@@ -94,6 +94,8 @@ include(
     ":vcs-impl", // the Git engine: JGit-backed repository, the GitHub REST/device-flow client, the account store
     ":analytics-api", // opt-in usage-analytics SPI (event model + AnalyticsService/AnalyticsSink ports)
     ":analytics-impl", // the engine: durable batch buffer + Supabase PostgREST sink + scrubbed crash reporter
+    ":store-api",  // remote Projects Store SPI: catalog model + catalog/account/submission ports
+    ":store-impl", // the engine: Supabase PostgREST catalog source, offline cache, submission packager
     ":block-api",
     ":block-impl",
     ":plugin-api",  // UI extensibility SPI: the lean action model (IdeAction/ActionGroup + places) + EPs

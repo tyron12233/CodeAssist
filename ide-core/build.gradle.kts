@@ -44,6 +44,12 @@ dependencies {
     // Opt-in usage analytics. `api` because AnalyticsService appears in IdeServicesBackend's (public)
     // constructor signature, so a host wiring it (ide-android) needs the type on its compile classpath.
     api(project(":analytics-api"))
+    // The remote Projects Store. `api` on store-api for the same reason as analytics-api: the catalog
+    // source type appears in the service key the launcher registers against, so a host wiring it needs
+    // the type on its compile classpath. The Supabase impl stays `implementation` — nothing outside
+    // ide-core constructs it except the launcher, which depends on store-impl itself.
+    api(project(":store-api"))
+    implementation(project(":store-impl"))
     implementation(project(":vfs-api"))
 
     implementation(libs.kotlinx.coroutines.core)
@@ -52,6 +58,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.kotlinx.coroutines.test)
+    // The Supabase store client, for the engine→UI feed mapping test.
+    testImplementation(project(":store-impl"))
     // Opt-in regression suites (`regressionTest`): shared benchmark/baseline harness.
     testImplementation(project(":bench-support"))
     // Bouncy Castle: the keystore-registry test creates a real keystore (KeystoreCrypto.create needs BC at runtime).

@@ -809,6 +809,41 @@ interface StoreService {
     suspend fun install(id: String, args: Map<String, String> = emptyMap()): UiStoreInstallResult =
         UiStoreInstallResult(false, "Explore is not available in this build")
 
+    /**
+     * The server-driven Explore feed: the mode, the store's state, and the ordered sections.
+     *
+     * Null means no feed is available at all (no remote store configured, and nothing cached), which is
+     * different from an empty store — the caller falls back to [catalog]'s bundled shelves rather than
+     * rendering the zero-data screen, because "we cannot reach the store" and "nobody has published
+     * anything" are opposite claims.
+     *
+     * [seedItemId] is the locally most-recently-installed item, supplied by the caller because under the
+     * anonymous personalization model only the device knows its own install history.
+     *
+     * The app's build number is NOT a parameter: it belongs to the backend's store source, which knows
+     * the installation it is part of. The UI has no way to know it and should not have to pass it.
+     */
+    suspend fun feed(seedItemId: String? = null): UiStoreFeed? = null
+
+    /**
+     * Live install progress, keyed by item id.
+     *
+     * Keyed rather than singular so concurrent installs each report their own progress; the UI must not
+     * share one value across rows.
+     */
+    fun installProgress(): kotlinx.coroutines.flow.StateFlow<Map<String, UiInstallProgress>> =
+        kotlinx.coroutines.flow.MutableStateFlow(emptyMap())
+
+    /**
+     * Count one install of [id].
+     *
+     * Called by the engine **after** an install actually succeeds, never by the UI on a button press —
+     * counting on intent rather than completion inflates the very numbers the charts rank on. [install]
+     * already does it, so no UI code should need this; it also blocks briefly on the network, so a caller
+     * would have to be off the main thread.
+     */
+    fun recordInstall(id: String) {}
+
     companion object {
         /** A store that advertises nothing — the default for backends that wire no catalog. */
         val Unsupported: StoreService = object : StoreService {}

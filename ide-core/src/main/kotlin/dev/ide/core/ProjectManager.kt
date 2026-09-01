@@ -329,6 +329,33 @@ class ProjectManager private constructor(
     }
 
     /**
+     * Turn a directory that is **already** a direct child of [projectsRoot] into a listable project,
+     * without opening it.
+     *
+     * The store's install path needs this: it unpacks a downloaded archive straight into the workspace,
+     * and until a model exists there [list] will not show it — `list` only surfaces directories with a
+     * persisted model, so an unpacked folder would install "successfully" and then be invisible.
+     *
+     * Unlike [importExternalProject] this neither copies nor opens: the bytes are already in place, and an
+     * install that yanked the user into the editor would be a side effect they did not ask for.
+     *
+     * Returns false when nothing claims the folder — a download that is not a project CodeAssist can open.
+     * The caller owns the cleanup, because it is the caller that put the directory there.
+     */
+    fun adoptProjectInPlace(dir: Path): Boolean {
+        val here = dir.toAbsolutePath().normalize()
+        require(here.parent == projectsRoot.toAbsolutePath().normalize() && here != projectsRoot) {
+            "Refusing to adopt a path outside the projects directory: $here"
+        }
+        // Packaged by CodeAssist (the usual case, since submissions are zipped by the IDE): the model
+        // travelled with it and there is nothing to translate.
+        if (ModelPersistence.exists(here)) return true
+        return runCatching {
+            IdeServices.importExternalProjectAt(here, sdk(), languageLevel, env)
+        }.getOrDefault(false)
+    }
+
+    /**
      * Permanently delete the project rooted at [rootPath] from disk. Guarded to a direct child of
      * [projectsRoot] so a stray path can never wipe an unrelated directory; a missing project is a no-op.
      */
