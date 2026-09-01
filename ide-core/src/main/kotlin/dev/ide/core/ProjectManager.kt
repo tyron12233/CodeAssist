@@ -4,10 +4,15 @@ import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.android.support.tools.KeystoreRegistry
 import dev.ide.build.engine.ProgramInterpreter
+import dev.ide.core.gradle.GradleProjectExport
+import dev.ide.core.sync.ExternalProjectMarker
+import dev.ide.core.sync.ProjectSyncService
 import dev.ide.model.LanguageLevel
-import dev.ide.model.impl.ModelPersistence
-import dev.ide.model.impl.ProjectTemplateRegistry
+import dev.ide.model.ModuleDependency
 import dev.ide.model.PlatformKind
+import dev.ide.model.impl.ModelPersistence
+import dev.ide.model.impl.ProjectData
+import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.model.impl.SdkData
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateArgs
@@ -25,6 +30,28 @@ import java.util.zip.ZipOutputStream
 import java.nio.file.Paths
 
 
+/** Cap on screenshots embedded in an exported package, and on the size of each one. */
+private const val MAX_EXPORT_SCREENSHOTS = 8
+private const val MAX_SCREENSHOT_BYTES = 8L * 1024 * 1024
+
+/**
+ * One module offered by the export screen: what it is ([typeId]), where it lives ([path], relative to the
+ * workspace root), the share of the package it accounts for, and the modules it depends on. [dependsOn] is
+ * what lets the screen keep a partial export coherent — dropping a module has to drop its dependents too.
+ */
+data class ExportModule(
+    val name: String,
+    val typeId: String,
+    val path: String,
+    val fileCount: Int,
+    val sizeBytes: Long,
+    val dependsOn: List<String>,
+)
+
+/** What the export screen shows before packaging: the project's modules and what bundling the resolved
+ *  dependencies would cost. */
+data class ExportPlan(val modules: List<ExportModule>, val bundledDepsBytes: Long)
+
 /** A project listed in the picker, read cheaply from disk without opening the full engine. */
 data class ProjectSummary(
     val name: String,
@@ -38,6 +65,19 @@ data class ProjectSummary(
      *  picker's most-recent-first ordering. */
     val lastOpened: Long = 0L,
 )
+
+/** What [ProjectManager.inspectFolder] found in a folder offered for import. */
+enum class ImportableKind {
+    /** A CodeAssist workspace (`.platform/workspace.json`) -- adopted verbatim, nothing to translate. */
+    CODE_ASSIST,
+
+    /** A foreign build system some [dev.ide.model.sync.ProjectImporter] claims (Gradle today) -- read
+     *  statically into a native workspace, so it opens in compatibility mode. */
+    EXTERNAL,
+
+    /** Neither -- the caller should say so rather than silently doing nothing. */
+    NONE,
+}
 
 /**
  * Owns the on-disk set of projects (one workspace dir per project under [projectsRoot]) and the
@@ -73,6 +113,9 @@ class ProjectManager private constructor(
     /** On-device Kotlin compiler-plugin loader (from :ide-android): D8-dex + DexClassLoader, so runtime
      *  (non-bundled) Kotlin compiler plugins can be applied on ART. Null on desktop (URLClassLoader default). */
     private val kotlinPluginLoader: dev.ide.lang.kotlin.compile.KotlinPluginLoader? = null,
+    /** On-device Kotlin compiler backend (from :ide-android): a persistent forked VM whose heap is not bound
+     *  by the app's cap. Null on desktop → the engine's in-process K2 compiler. */
+    private val kotlinCompiler: dev.ide.lang.kotlin.compile.KotlinCompilerBackend? = null,
 ) {
     init {
         Files.createDirectories(projectsRoot)
@@ -96,6 +139,7 @@ class ProjectManager private constructor(
         appLogChannel?.let { c -> env.container.registerServiceIfAbsent(APP_LOG_CHANNEL) { c } }
         customViewRuntime?.let { c -> env.container.registerServiceIfAbsent(CUSTOM_VIEW_RUNTIME) { c } }
         kotlinPluginLoader?.let { l -> env.container.registerServiceIfAbsent(KOTLIN_PLUGIN_LOADER) { l } }
+        kotlinCompiler?.let { c -> env.container.registerServiceIfAbsent(KOTLIN_COMPILER_BACKEND) { c } }
         realViewRuntime?.let { rv -> env.container.registerServiceIfAbsent(REAL_VIEW_RUNTIME) { rv } }
     }
 
@@ -161,7 +205,7 @@ class ProjectManager private constructor(
                     proj?.name ?: dir.fileName.toString(),
                     dir.toString(),
                     proj?.modules?.size ?: 0,
-                    compatibility = GradleImport.isCompatibilityMode(dir),
+                    compatibility = ExternalProjectMarker.exists(dir),
                     isAndroid = proj?.modules?.any { m -> m.facets.any { it.tomlTable == AndroidFacetCodec.tomlTable } } ?: false,
                     lastOpened = prefs.getProperty(openedKey(dir))?.toLongOrNull() ?: 0L,
                 )
@@ -228,16 +272,48 @@ class ProjectManager private constructor(
     }
 
     /**
-     * Import the Gradle project at [sourceDir] into a new workspace under [projectsRoot] (copying its
-     * sources, minus build outputs), build a best-effort compatibility-mode model from its scripts, and open
-     * it. Returns null when [sourceDir] isn't an importable Gradle project or the import fails.
+     * Import the foreign-build-system project at [sourceDir] into a new workspace under [projectsRoot]
+     * (copying its sources, minus build outputs), build the model from its build files through the
+     * [dev.ide.model.sync.ProjectImporter] that claims it, and open it. Returns null when no importer
+     * recognizes [sourceDir] or the import fails.
      */
-    fun importGradleProject(sourceDir: Path): IdeServices? {
-        if (!GradleImport.isGradleProject(sourceDir)) return null
-        val dest = uniqueProjectDir(sourceDir.fileName?.toString() ?: "gradle-project")
+    /**
+     * What [dir] holds, for a caller that must ask a different follow-up question per kind (the picker's
+     * import flow). Detection only — nothing is copied or opened. Mirrors the branching in
+     * [importExternalProject], so the two can't disagree about what a folder is.
+     */
+    fun inspectFolder(dir: Path): ImportableKind = when {
+        !Files.isDirectory(dir) -> ImportableKind.NONE
+        ModelPersistence.exists(dir) -> ImportableKind.CODE_ASSIST
+        ProjectSyncService.importerFor(env.platform.extensions, dir) != null -> ImportableKind.EXTERNAL
+        else -> ImportableKind.NONE
+    }
+
+    fun importExternalProject(sourceDir: Path): IdeServices? {
+        // Already a CodeAssist workspace: adopt it verbatim. No importer claims such a folder -- there is no
+        // foreign build system to translate, the workspace IS the model -- so before this it was rejected as
+        // "not an importable Gradle project", and a project folder that had dropped out of the picker (moved
+        // in from another device, restored from a backup, or orphaned when its parent app data went) could
+        // not be brought back at all. Copied like every other import, since [list] only surfaces direct
+        // children of [projectsRoot].
+        if (ModelPersistence.exists(sourceDir)) {
+            val here = sourceDir.toAbsolutePath().normalize()
+            // Already in place (an orphan whose model failed to load once): open it rather than clone it.
+            if (here.parent == projectsRoot.toAbsolutePath().normalize()) return open(here.toString())
+            val dest = uniqueProjectDir(sourceDir.fileName?.toString() ?: "project")
+            if (runCatching { copyTree(sourceDir, dest) }.isFailure) {
+                runCatching { deleteTree(dest) }
+                return null
+            }
+            return open(dest.toString())
+        }
+        val importer = ProjectSyncService.importerFor(env.platform.extensions, sourceDir) ?: return null
+        val detection = importer.detect(sourceDir)
+        val name = detection?.name ?: sourceDir.fileName?.toString() ?: "project"
+        val dest = uniqueProjectDir(name)
         val ok = runCatching {
             copyTree(sourceDir, dest)
-            IdeServices.importGradleProjectAt(dest, sdk(), languageLevel)
+            IdeServices.importExternalProjectAt(dest, sdk(), languageLevel, env)
         }.getOrDefault(false)
         if (!ok) { runCatching { deleteTree(dest) }; return null }
         return open(dest.toString())
@@ -338,7 +414,69 @@ class ProjectManager private constructor(
         var out = exportsDir.resolve("$base.${CaprojFormat.EXTENSION}")
         var n = 2
         while (Files.exists(out)) { out = exportsDir.resolve("$base-$n.${CaprojFormat.EXTENSION}"); n++ }
-        return ProjectPackaging.export(projectDir, out, options, exportIcon(projectDir), meta)
+        return ProjectPackaging.export(projectDir, out, options, exportIcon(projectDir), meta, storeContent(options))
+    }
+
+    /**
+     * Export the project at [rootPath] as a best-effort Gradle project: the sources plus generated build
+     * scripts, zipped under `<home>/exports` next to the `.caproj` exports. The build files are derived from
+     * the project model, so what has no Gradle equivalent comes back in [GradleProjectExport.Outcome.notes]
+     * rather than being silently dropped. See [GradleProjectExport].
+     */
+    internal fun exportGradleProject(rootPath: String): GradleProjectExport.Outcome {
+        val projectDir = Paths.get(rootPath)
+        val name = runCatching { ModelPersistence.load(projectDir) }.getOrNull()?.projects?.firstOrNull()?.name
+            ?: projectDir.fileName?.toString().orEmpty()
+        val folder = slug(name).ifEmpty { "project" }
+        val exportsDir = homeDir.resolve("exports").also { Files.createDirectories(it) }
+        var out = exportsDir.resolve("$folder-gradle.zip")
+        var n = 2
+        while (Files.exists(out)) { out = exportsDir.resolve("$folder-gradle-$n.zip"); n++ }
+        return GradleProjectExport.exportZip(projectDir, out, folder)
+    }
+
+    /**
+     * What the export screen needs to offer choices before packaging the project at [rootPath]: every module
+     * with the share of the package it accounts for and the modules it depends on, plus the extra bytes
+     * "bundle dependencies" would add. Null when [rootPath] holds no readable project model.
+     */
+    internal fun exportPlan(rootPath: String): ExportPlan? {
+        val projectDir = Paths.get(rootPath)
+        val project = runCatching { ModelPersistence.load(projectDir) }.getOrNull()?.projects?.firstOrNull() ?: return null
+        val specs = moduleSpecs(project)
+        val measured = ProjectPackaging.measure(projectDir, specs).associateBy { it.name }
+        val byId = project.modules.associate { it.id to it.name }
+        val modules = project.modules.mapIndexed { i, m ->
+            val stats = measured[m.name]
+            ExportModule(
+                name = m.name,
+                typeId = m.typeId,
+                path = specs[i].path,
+                fileCount = stats?.fileCount ?: 0,
+                sizeBytes = stats?.sizeBytes ?: 0L,
+                dependsOn = m.dependencies.filterIsInstance<ModuleDependency>()
+                    .map { byId[it.target.value] ?: it.target.value }
+                    .filter { it != m.name }
+                    .distinct(),
+            )
+        }
+        return ExportPlan(modules, ProjectPackaging.bundledDepsSize(projectDir))
+    }
+
+    /** The screenshots picked in the export screen, read as store content (the packager's carrier for them),
+     *  or null when none were attached. Unreadable or oversized images are dropped. */
+    private fun storeContent(options: ProjectPackaging.ExportOptions): ProjectPackaging.StoreContent? {
+        val shots = options.screenshotPaths.take(MAX_EXPORT_SCREENSHOTS).mapNotNull { path ->
+            runCatching {
+                val file = Paths.get(path)
+                if (Files.size(file) > MAX_SCREENSHOT_BYTES) null else Files.readAllBytes(file)
+            }.getOrNull()
+        }
+        if (shots.isEmpty()) return null
+        return ProjectPackaging.StoreContent(
+            summary = options.description.trim(), category = "", tags = emptyList(),
+            highlights = emptyList(), language = null, screenshots = shots,
+        )
     }
 
     /** Read a `.caproj`'s manifest, file peek, and icon for the import preview, without extracting it. */
@@ -350,15 +488,21 @@ class ProjectManager private constructor(
      * null when the archive isn't a valid package, its format is newer than this build understands, or the
      * extracted tree isn't a loadable workspace (the half-written directory is cleaned up).
      */
-    fun importProject(archivePath: String): IdeServices? {
+    fun importProject(archivePath: String, projectName: String? = null): IdeServices? {
         val archive = Paths.get(archivePath)
         val preview = ProjectPackaging.readPreview(archive) ?: return null
         if (preview.manifest.format > CaprojFormat.FORMAT_VERSION) return null
-        val dest = uniqueProjectDir(preview.manifest.name)
+        val name = projectName?.trim()?.takeIf { it.isNotEmpty() } ?: preview.manifest.name
+        val dest = uniqueProjectDir(name)
         val ok = runCatching { ProjectPackaging.unpack(archive, dest) }.isSuccess && ModelPersistence.exists(dest)
         if (!ok) { runCatching { deleteTree(dest) }; return null }
+        if (name != preview.manifest.name) ProjectPackaging.renameProject(dest, name)
         return open(dest.toString())
     }
+
+    /** Where [importProject] would put a package imported under [name] — what the import preview shows as the
+     *  destination. Computes the path without creating anything. */
+    internal fun plannedImportDir(name: String): Path = uniqueProjectDir(name)
 
     /** Project-derived package metadata: name, module list, and Android app namespace read cheaply from the model. */
     private fun exportMeta(projectDir: Path): ProjectPackaging.ExportMeta {
@@ -371,11 +515,21 @@ class ProjectManager private constructor(
             name = project?.name ?: projectDir.fileName?.toString() ?: "project",
             isAndroid = androidFacets.isNotEmpty(),
             packageName = appFacet?.namespace,
-            modules = project?.modules?.map { it.name } ?: emptyList(),
+            modules = project?.let { moduleSpecs(it) } ?: emptyList(),
             createdBy = CaprojFormat.APP_NAME,
             exportedAt = System.currentTimeMillis(),
         )
     }
+
+    /** Each module of [project] with its directory relative to the WORKSPACE root — the project root and the
+     *  module dir joined, since the packager walks from the workspace root. */
+    private fun moduleSpecs(project: ProjectData): List<ProjectPackaging.ModuleSpec> =
+        project.modules.map { m ->
+            val path = listOf(project.rootRelPath, m.dirRelPath)
+                .filter { it.isNotBlank() && it != "." }
+                .joinToString("/") { it.trim('/') }
+            ProjectPackaging.ModuleSpec(m.name, path, m.typeId)
+        }
 
     /** The Android launcher icon's raster bytes for the package preview, or null (non-raster icons fall back
      *  to the initial-letter tile in the importer, matching the picker). */
@@ -404,12 +558,12 @@ class ProjectManager private constructor(
                 if (runCatching { copyTree(src, dest) }.isSuccess) imported++
                 else runCatching { deleteTree(dest) } // drop a half-copied directory
             }
-            // Legacy Gradle projects (e.g. v0.2.9): copy sources, then build a compatibility-mode model.
+            // Legacy Gradle projects (e.g. v0.2.9): copy sources, then import their model from the scripts.
             for (src in legacyProjectDirs(legacy) { GradleImport.isGradleProject(it) }) {
                 val dest = uniqueProjectDir(src.fileName.toString())
                 val ok = runCatching {
                     copyTree(src, dest)
-                    IdeServices.importGradleProjectAt(dest, sdk(), languageLevel)
+                    IdeServices.importExternalProjectAt(dest, sdk(), languageLevel, env)
                 }.getOrDefault(false)
                 if (ok) imported++ else runCatching { deleteTree(dest) }
             }
@@ -527,6 +681,9 @@ class ProjectManager private constructor(
             /** The host's ART Kotlin compiler-plugin loader (D8-dex + DexClassLoader), so runtime Kotlin
              *  compiler plugins can be applied on device. */
             kotlinPluginLoader: dev.ide.lang.kotlin.compile.KotlinPluginLoader? = null,
+            /** The host's persistent forked-VM Kotlin compiler, so `compileKotlin` runs off the app heap with
+             *  a heap above the app cap. Null → in-process K2 (the forked one also self-falls-back). */
+            kotlinCompiler: dev.ide.lang.kotlin.compile.KotlinCompilerBackend? = null,
             /** The host's forked-VM R8 shrinker (`dalvikvm64 -Xmx…`), so the release/minify R8 pass gets a heap
              *  above the app cap. Null → in-process R8 (the shrinker also self-falls-back if forking fails). */
             r8Shrinker: dev.ide.android.support.tools.Shrinker? = null,
@@ -544,7 +701,14 @@ class ProjectManager private constructor(
         ): ProjectManager {
 
 
-            val sdk = SdkData("android", bootClasspath, buildToolsPath = null, kind = PlatformKind.ANDROID)
+            // android.jar carries no java.awt/javax.swing, so a Swing project could not be compiled on
+            // device without the owned toolkit's API on the platform classpath (see [SwingApiStubs]).
+            val sdk = SdkData(
+                "android",
+                bootClasspath + listOfNotNull(SwingApiStubs.bundled()?.toString()),
+                buildToolsPath = null,
+                kind = PlatformKind.ANDROID,
+            )
             // android.jar is the first boot entry; later entries (the desugar stubs) join the compile platform.
             val tools = AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel,
                 desugarStubs = bootClasspath.drop(1).map { Paths.get(it) }, r8Shrinker = r8Shrinker, r8MergeDexer = r8MergeDexer,
@@ -563,6 +727,7 @@ class ProjectManager private constructor(
                 customViewRuntime = customViewRuntime,
                 realViewRuntime = realViewRuntime,
                 kotlinPluginLoader = kotlinPluginLoader,
+                kotlinCompiler = kotlinCompiler,
             )
         }
     }

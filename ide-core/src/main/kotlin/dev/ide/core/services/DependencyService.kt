@@ -19,6 +19,7 @@ import dev.ide.deps.impl.MavenDependencyResolver
 import dev.ide.deps.impl.ResolverCache
 import dev.ide.deps.impl.VariantRequest
 import dev.ide.lang.jdt.JdtSourceAnalyzer
+import dev.ide.model.BuildSystemId
 import dev.ide.model.Coordinate
 import dev.ide.model.DependencyScope
 import dev.ide.model.Exclusion
@@ -32,6 +33,9 @@ import dev.ide.model.PlatformDependency
 import dev.ide.model.Project
 import dev.ide.model.SdkDependency
 import dev.ide.model.module
+import dev.ide.model.sync.BUILD_FILE_WRITER_EP
+import dev.ide.model.sync.BuildFileWriter
+import dev.ide.model.sync.WriteOutcome
 import dev.ide.platform.Disposable
 import dev.ide.platform.ProgressReporter
 import dev.ide.platform.log.Log
@@ -195,10 +199,17 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
      *  its `res/`) invalidates every marker → a one-time reconcile re-resolves on the next open, re-extracting
      *  any stale exploded dir that predates the change (which would otherwise be reused missing its resources). */
     private fun reconcileFingerprint(mods: List<Module>): String =
-        "v=${dev.ide.deps.impl.AAR_EXPLODE_VERSION}\n" + mods.flatMap { m ->
-            m.dependencies.filterIsInstance<LibraryDependency>()
-                .map { "${m.id.value}|${it.library.name}|${it.variant ?: ""}" }
-        }.sorted().joinToString("\n")
+        "v=${dev.ide.deps.impl.AAR_EXPLODE_VERSION}\n" +
+            // WHERE a dependency resolves from is as much a part of the resolved picture as WHAT is declared:
+            // the same coordinate against a different repository set is a different resolve. Without this, a
+            // project whose declared set hadn't changed kept its "already reconciled" marker after a repo was
+            // added, so the re-walk was skipped and the new repository was never consulted. Order is included,
+            // not sorted — repositories are searched in order, so a reorder is a real change.
+            "repos=${currentRepositories().joinToString(",") { it.url.trimEnd('/') }}\n" +
+            mods.flatMap { m ->
+                m.dependencies.filterIsInstance<LibraryDependency>()
+                    .map { "${m.id.value}|${it.library.name}|${it.variant ?: ""}" }
+            }.sorted().joinToString("\n")
 
     /** Record that the current declared set has been fully resolved, so the next open skips the re-walk. */
     private fun markReconciled(fingerprint: String) = runCatching {
@@ -504,6 +515,19 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
     }
 
     /**
+     * Persist a change to a module's DECLARED dependencies (→ `module.toml`), right after the model commit
+     * that made it.
+     *
+     * The declared set is the durable source of truth and has to reach disk on its own: [assembleModuleClasspath]
+     * saves only when the LIBRARY TABLE changed, and a declaration can change without changing any library —
+     * [DependencyPartition.partition] claims each artifact for the FIRST declarer that reaches it, so a
+     * coordinate an earlier declarer already pulls in transitively (`kotlinx-coroutines-core` under almost any
+     * Kotlin dependency) gets an empty partition and rewrites nothing. Leaning on that save left an edit in
+     * memory only, and the next open read the old declaration back.
+     */
+    private fun persistDeclaredDependencies() = ctx.store.save()
+
+    /**
      * Resolve the template's declared dependencies in the background — started by the host **once the project
      * is open** (not during creation), so a large/slow closure never blocks creation and the user can use the
      * rest of the app while it streams in.
@@ -593,10 +617,11 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
      * back, without reopening. Always runs (unlike the once-per-open background paths).
      */
     suspend fun retryDependencyResolution() {
-        runCatching { java.nio.file.Files.deleteIfExists(reconcileMarker) }
-        // Explicit user retry: forget the recorded 404s so known-missing artifacts (and absent sources) are
-        // re-probed — the user may have just added the repo that carries them, or come back online.
-        depsCache.clearMisses()
+        // Explicit user retry: forget every recorded absence so known-missing artifacts (and absent sources)
+        // are re-probed — the user may have just added the repo that carries them, or come back online. This
+        // used to clear only the on-disk 404s, leaving the resolvers' in-memory "no POM" memos to keep the
+        // retry off the network for the rest of the session.
+        forgetNegativeResolutionCaches()
         val mods = mavenDepModules()
         depsLog.info("retryDependencyResolution: ${mods.size} module(s) with Maven deps")
         if (mods.isEmpty()) {
@@ -987,7 +1012,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             log = listOf("Resolving $coordinate…")
         )
         return try {
-            resolveAndAttach(
+            val added = resolveAndAttach(
                 moduleName,
                 coordinate,
                 scope,
@@ -995,6 +1020,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                 exclusions = exclusions.mapNotNull(Exclusion::parse),
                 variant = variant,
             )
+            if (added.success) declareInBuildFiles(moduleName, coordinate, scope, added) else added
         } finally {
             // resolveAndAttach → assembleModuleClasspath already stamped reasons; refresh the error state.
             _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved()) }
@@ -1081,6 +1107,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             )
             commit()
         }
+        if (finalize) persistDeclaredDependencies()
         val updated = ctx.modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(
             false, "Module '$moduleName' disappeared during resolution."
         )
@@ -1231,6 +1258,49 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         return GoogleServices.findJson(moduleDir, variant) != null
     }
 
+    /**
+     * Mirror a just-added dependency into the project's build files when a foreign build system owns the
+     * model, so the declaration survives the next sync instead of being re-derived away. Native projects have
+     * no writer and no build files to mirror into, so this is a pass-through for them.
+     *
+     * The model edit has already happened, so a failed write is reported in the result rather than rolled
+     * back: the classpath works now, and the message says where the declaration still has to be made.
+     */
+    private fun declareInBuildFiles(
+        moduleName: String,
+        coordinate: String,
+        scope: String,
+        result: UiAddResult,
+    ): UiAddResult {
+        if (!ctx.store.workspace.projects.any { isExternallyOwned(it) }) return result
+        val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return result
+        val parsed = parseInputCoordinate(coordinate) ?: return result
+        val writer = buildFileWriter()
+            ?: return result.copy(
+                message = result.message +
+                    ". The build files declare this project's dependencies, so add it there too or it will be " +
+                    "dropped on the next sync."
+            )
+        val outcome = runCatching { writer.addDependency(module, parsed, parseScope(scope)) }
+            .getOrElse { WriteOutcome.failed(it.message ?: it.javaClass.simpleName) }
+        if (!outcome.ok) {
+            depsLog.warn("Couldn't declare $coordinate in the build files: ${outcome.message}")
+            return result.copy(message = result.message + ". Couldn't update the build files: ${outcome.message}")
+        }
+        return result
+    }
+
+    /** True when [project] is bound to a build system whose files own the model (an imported project). */
+    private fun isExternallyOwned(project: Project): Boolean =
+        project.buildSystemId != BuildSystemId.NATIVE
+
+    /** The writer for the build system this workspace is bound to, or null when nothing can be written back. */
+    private fun buildFileWriter(): BuildFileWriter? {
+        val bound = ctx.store.workspace.projects.map { it.buildSystemId }.filter { it != BuildSystemId.NATIVE }
+        if (bound.isEmpty()) return null
+        return ctx.platform.extensions.extensions(BUILD_FILE_WRITER_EP).lastOrNull { it.id in bound }
+    }
+
     /** Remove the declared library dependency or platform BOM [coordinate] from [moduleName] (false if absent). */
     fun removeDependency(moduleName: String, coordinate: String): Boolean {
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return false
@@ -1238,6 +1308,17 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             (it is LibraryDependency && it.library.name == coordinate) || (it is PlatformDependency && it.bom.toString() == coordinate) || (it is ModuleDependency && it.target.value == coordinate)
         } ?: return false
         val project = ctx.projectOf(module) ?: return false
+        // For a project whose build files own the model, drop the declaration there too; otherwise the next
+        // sync re-derives it from those files and the dependency comes back.
+        if (entry is LibraryDependency) {
+            parseCoordinate(coordinate)?.let { parsed ->
+                buildFileWriter()?.let { writer ->
+                    runCatching { writer.removeDependency(module, parsed) }.getOrNull()
+                        ?.takeIf { !it.ok }
+                        ?.let { depsLog.warn("Couldn't remove $coordinate from the build files: ${it.message}") }
+                }
+            }
+        }
         project.beginModification().apply {
             module(module.id).removeDependency(entry)
             commit()
@@ -1292,6 +1373,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             module(module.id).addDependency(entry.copy(exclusions = parsed))
             commit()
         }
+        persistDeclaredDependencies()
         _depsState.value = DepsResolveState(
             resolving = true,
             message = "Updating exclusions for $coordinate…",
@@ -1413,6 +1495,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                 module(module.id).addDependency(LibraryDependency(LibraryRef(newLibraryName), newScope, exclusions = parsedExclusions))
                 commit()
             }
+            persistDeclaredDependencies()
             val updated = ctx.modules().firstOrNull { it.name == moduleName }
                 ?: return UiAddResult(false, "Module '$moduleName' disappeared.")
             val asm = assembleModuleClasspath(updated, depsProgress(), finalize = true)
@@ -1562,7 +1645,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         if (!(u.startsWith("http://") || u.startsWith("https://"))) return false
         if (currentRepositories().any { it.url.trimEnd('/') == u.trimEnd('/') }) return false
         val next = userRepositories() + Repository(name.trim().ifEmpty { u }, u)
-        return writeRepositories(next)
+        return writeRepositories(next).also { if (it) forgetNegativeResolutionCaches() }
     }
 
     /** Remove a user-added repository by URL (built-ins can't be removed). */
@@ -1571,7 +1654,31 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         val current = userRepositories()
         val remaining = current.filterNot { it.url.trimEnd('/') == u }
         if (remaining.size == current.size) return false
-        return writeRepositories(remaining)
+        return writeRepositories(remaining).also { if (it) forgetNegativeResolutionCaches() }
+    }
+
+    /**
+     * Drop every memoized "couldn't resolve this" verdict, so the next resolve genuinely re-probes. Three
+     * caches record such a verdict keyed by coordinate ALONE, none of them knowing which repositories — or
+     * which network conditions — produced it:
+     *
+     *  * the resolvers' in-memory effective-POM / Gradle-module memos hold `Optional.empty()` for a coordinate
+     *    whose POM was absent — session-lived, so this one bites IMMEDIATELY, with no restart needed;
+     *  * the on-disk negative cache remembers a confirmed 404 for a week, so the artifact is skipped without
+     *    touching the network at all;
+     *  * the reconcile marker says "this declared set is fully resolved", so with the declared set unchanged
+     *    the whole re-walk is skipped.
+     *
+     * Called on the two events that invalidate all three: an explicit Retry, and a repository add/remove.
+     * Leaving them stale on a repository edit is what made "add the repository, then re-add the dependency"
+     * a no-op — the report that motivated this. Positive results are untouched (a released POM is immutable),
+     * so this costs nothing beyond re-probing what genuinely wasn't found.
+     */
+    private fun forgetNegativeResolutionCaches() {
+        depsResolver.forgetAbsentArtifacts()
+        jvmDepsResolver.forgetAbsentArtifacts()
+        depsCache.clearMisses()
+        runCatching { java.nio.file.Files.deleteIfExists(reconcileMarker) }
     }
 
     private fun writeRepositories(repos: List<Repository>): Boolean = runCatching {

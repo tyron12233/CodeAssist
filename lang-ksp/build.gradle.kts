@@ -117,6 +117,10 @@ val hiltLibs: Configuration by configurations.creating        // hilt-core (dagg
 // reproduce the device classloader shape (see ToolClassIsolation). It is resolved from bundletool so the
 // fixture tracks whatever version the app actually ships instead of a hardcoded guess.
 val appProvidedDagger: Configuration by configurations.creating
+// The guava the APP carries (bundletool's collections), which every processor bundle also ships at its own
+// version. ProcessorGuavaShadowingTest parents the processor loader on it to reproduce the device classloader
+// shape, where the app's copy is dexed at build time and the bundle's on device.
+val appProvidedGuava: Configuration by configurations.creating
 // The KSP2 runner as an isolated classpath — KspSourceGeneratorTest hands its path to KspSourceGenerator's
 // loader (the production reflective path), mirroring how the app will feed the bundled runner jar.
 val kspRunner: Configuration by configurations.creating
@@ -130,6 +134,7 @@ dependencies {
     moshiLibs(libs.moshi.runtime)
     hiltLibs(libs.hilt.core)
     appProvidedDagger(libs.android.bundletool)
+    appProvidedGuava(libs.guava)   // the version :ide-android ships, so the fixture tracks the app
     kspRunner(libs.ksp.aa.embeddable)
 
     kspThinRuntime(libs.ksp.aa)               // non-embeddable — KSP impl classes extracted, its bundled AA dropped
@@ -140,11 +145,12 @@ dependencies {
     kspThinRuntime(libs.kotlin.stdlib)
 }
 // KSP2 stands up a full (relocated) Analysis API frontend in-process, the same heavyweight footprint as the
-// K2 compiler tests in :lang-kotlin. Give the worker real heap and a fresh JVM per test class so the frontend
-// footprint can't accumulate into an OutOfMemoryError across test classes.
+// K2 compiler tests in :lang-kotlin, so the worker needs real heap. It does not need a fresh JVM per class:
+// one shared worker amortizes the frontend/processor setup across the suite (measured: 22s → 8s wall, the
+// same 22 tests green). If that footprint ever does accumulate into an OutOfMemoryError, set a middle
+// `forkEvery(N)` rather than 1.
 tasks.named<Test>("test") {
     maxHeapSize = "3g"
-    setForkEvery(1)
     dependsOn(sqliteStubJar)   // RoomWithoutSqliteJdbcTest swaps the stub in for the real sqlite-jdbc
     // Hand the isolated Room + runner classpaths to the spikes / KspSourceGeneratorTest, resolved lazily at
     // execution time (so unrelated task graphs don't resolve them during configuration).
@@ -161,6 +167,12 @@ tasks.named<Test>("test") {
             appProvidedDagger.filter { f ->
                 (f.name.startsWith("dagger-") && !f.name.contains("compiler")) || f.name.startsWith("javax.inject")
             }.asPath,
+        )
+        // Just guava itself out of its closure: the fixture is the shadowing pair, not a second copy of the
+        // app's whole collections world.
+        systemProperty(
+            "app.guava.classpath",
+            appProvidedGuava.filter { f -> f.name.startsWith("guava-") }.asPath,
         )
         systemProperty("ksp.runner.classpath", kspRunner.asPath)
         systemProperty("ksp.thin.runtime.classpath", kspThinRuntime.asPath)

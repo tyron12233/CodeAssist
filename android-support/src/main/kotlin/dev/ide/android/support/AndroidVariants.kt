@@ -50,6 +50,29 @@ object AndroidVariants {
         return (flavorAppId ?: facet.namespace) + flavorIdSuffix + buildTypeSuffix
     }
 
+    /**
+     * Every `${key}` value the manifest merge substitutes for [variant], in the app's own manifest AND in
+     * every dependency manifest merged into it, which is where they usually matter: a library's manifest may
+     * REQUIRE one (the Myket billing client names `${marketApplicationId}`/`${marketPermission}`), and an
+     * unresolved placeholder left in an `android:name` fails the aapt2 link.
+     *
+     * The build's two built-ins first (`applicationId`, the variant's effective id, and `packageName`), then
+     * the module's declared placeholders in AGP's precedence: `defaultConfig`, then the variant's flavors in
+     * dimension order, then the build type, each layer overriding the keys below it. Declared last on
+     * purpose: as in AGP, a placeholder the module declares as `applicationId` overrides the injected one.
+     */
+    fun manifestPlaceholders(facet: AndroidFacet, variant: AndroidVariant): Map<String, String> {
+        val merged = LinkedHashMap<String, String>()
+        merged["applicationId"] = applicationId(facet, variant)
+        merged["packageName"] = facet.namespace
+        merged.putAll(facet.manifestPlaceholders)
+        variant.flavorNames.forEach { fn ->
+            facet.productFlavors.firstOrNull { it.name == fn }?.let { merged.putAll(it.manifestPlaceholders) }
+        }
+        facet.buildType(variant.buildTypeName)?.let { merged.putAll(it.manifestPlaceholders) }
+        return merged
+    }
+
     /** Every applicationId [module] could install as — the effective id of each of its variants, plus the bare
      *  namespace as a floor. Used to configure app-log capture so a running app is recognized no matter which
      *  variant is installed and whether it was launched from the IDE or the device launcher. Empty when [module]

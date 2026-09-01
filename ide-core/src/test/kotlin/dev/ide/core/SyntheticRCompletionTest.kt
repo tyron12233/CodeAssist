@@ -76,6 +76,30 @@ class SyntheticRCompletionTest {
     }
 
     @Test
+    fun kotlinResolvesDependencyModuleR() {
+        // A module reads a DEPENDENCY module's own `R` by its namespace - `com.example.feature.R.string.X`
+        // (what AGP's non-transitive R classes force you to write). The dependency's R is a real class on the
+        // consumer's compile classpath, so it must resolve for Kotlin as well as Java, both fully qualified
+        // and through an import.
+        val s = IdeServices.bootstrapDemo(root).also { services = it }
+        val probe = root.resolve("app/src/main/kotlin/com/example/app/Probe.kt")
+
+        val qualified = kotlinLabels(
+            s, probe,
+            "package com.example.app\nfun m() { val x = com.example.feature.R.string. }",
+            "com.example.feature.R.string.",
+        )
+        assertTrue("feature_title" in qualified, "dependency module R (qualified) expected: $qualified")
+
+        val imported = kotlinLabels(
+            s, probe,
+            "package com.example.app\nimport com.example.feature.R\nfun m() { val x = R.string. }",
+            "R.string.",
+        )
+        assertTrue("feature_title" in imported, "dependency module R (imported) expected: $imported")
+    }
+
+    @Test
     fun kotlinResolvesFrameworkAndroidR() {
         // `android.R` is the FRAMEWORK R from android.jar (distinct from the app's synthetic `com.example.app.R`).
         // A package-qualified type used directly must resolve, exposing its nested resource-type classes and

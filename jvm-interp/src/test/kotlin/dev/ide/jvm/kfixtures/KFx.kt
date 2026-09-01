@@ -1,5 +1,8 @@
 package dev.ide.jvm.kfixtures
 
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.startCoroutine
+
 /** An inline value class, as Compose uses for Dp/Color/TextUnit: its members compile to mangled static
  *  `-impl` methods over the unboxed underlying value. */
 @JvmInline
@@ -82,3 +85,63 @@ private fun charFilter(s: String, predicate: (Char) -> Boolean): String = buildS
  *  with a real wrapper. Regression for `ClassCastException: java.lang.Character cannot be cast to
  *  java.lang.Integer` when seeding the impl's `char` local. */
 fun filterLetters(s: String): String = charFilter(s) { it in 'a'..'z' }
+
+/** An exception declared by interpreted code over a REAL supertype: instances cross the bridge as generated
+ *  peers, which is what makes them catchable-by-the-wrong-name (see [rethrownByRealCode]). */
+class MyKtException : Throwable("just an exception")
+
+/** Real code holds an interpreted throwable and throws it back at the interpreted frame: `Optional.orElseThrow`
+ *  invokes the supplier (an interpreted lambda whose result crosses out as a peer) and throws the result. The
+ *  `catch` naming the INTERPRETED type must still match. */
+fun rethrownByRealCode(): String =
+    try {
+        java.util.Optional.empty<String>().orElseThrow { MyKtException() }
+    } catch (e: MyKtException) {
+        "Caught ${e.message}"
+    }
+
+/** The same rethrow caught by a REAL supertype of the interpreted exception, which must keep working. */
+fun rethrownByRealCodeCaughtAsThrowable(): String =
+    try {
+        java.util.Optional.empty<String>().orElseThrow { MyKtException() }
+    } catch (e: Throwable) {
+        "Caught ${e.message}"
+    }
+
+/** An interpreted exception must NOT match a `catch` of a real type it does not extend (`MyKtException` is a
+ *  `Throwable`, not an `Exception`), so the peer's own class name cannot be what the match consults. */
+fun rethrownByRealCodeNotAnException(): String =
+    try {
+        try {
+            java.util.Optional.empty<String>().orElseThrow { MyKtException() }
+        } catch (e: Exception) {
+            "wrongly caught as Exception"
+        }
+    } catch (e: Throwable) {
+        "propagated to Throwable"
+    }
+
+private suspend fun resumeWithAnException(): String =
+    try {
+        kotlin.coroutines.suspendCoroutine<Unit> { continuation ->
+            continuation.resumeWithException(MyKtException())
+        }
+        "not caught"
+    } catch (e: MyKtException) {
+        "Caught ${e.message}"
+    }
+
+/** The reported shape: `suspendCoroutine { it.resumeWithException(e) }` resumes SYNCHRONOUSLY, so the stdlib's
+ *  `SafeContinuation.getOrThrow()` (real, bridged) throws the interpreted exception straight back into the
+ *  interpreted frame's `try`. Driven with a bare stdlib continuation so no kotlinx-coroutines is needed. */
+fun suspendCoroutineResumeWithException(): String {
+    var out = "no result"
+    val block: suspend () -> String = ::resumeWithAnException
+    block.startCoroutine(object : kotlin.coroutines.Continuation<String> {
+        override val context = kotlin.coroutines.EmptyCoroutineContext
+        override fun resumeWith(result: Result<String>) {
+            out = result.getOrElse { "escaped as ${it.javaClass.simpleName}" }
+        }
+    })
+    return out
+}

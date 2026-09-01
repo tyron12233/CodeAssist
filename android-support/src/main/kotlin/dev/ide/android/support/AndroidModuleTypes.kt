@@ -55,17 +55,17 @@ sealed class AndroidModuleType(
             "src/$name/assets" to setOf(ContentRole.ASSETS),
             "src/$name/resources" to setOf(ContentRole.RESOURCE),  // Java resources → merged into the APK root
             "src/$name/jniLibs" to setOf(ContentRole.JNI_LIBS),    // prebuilt `<abi>/*.so` → packaged under lib/
+            "src/$name/aidl" to setOf(ContentRole.AIDL),           // `.aidl` → Binder stubs via compileAidl
         ),
     )
 
     companion object {
-        const val DEFAULT_COMPILE_SDK = 34
-        // 26, not 21: below API 26 D8 must desugar (lambdas/default-interface-methods/core-library) every
-        // library on device, and the whole-set desugaring cache key means adding a dependency re-dexes the
-        // entire classpath. At 26+ desugaring is off and each library dexes once into a cross-project bucket,
-        // so a new Compose project's first build is far cheaper and later builds are cache hits. New projects
-        // default here; importing an existing project keeps its declared minSdk (AndroidFacet default stays 21).
-        const val DEFAULT_MIN_SDK = 26
+        /** The newest platform the IDE ships support for (see [AndroidApiLevels.LATEST]). A stale default is
+         *  not cosmetic: a modern AndroidX AAR declares a `minCompileSdk` the build enforces. */
+        const val DEFAULT_COMPILE_SDK = AndroidApiLevels.LATEST
+        /** 26, for the on-device dexing reason spelled out on [AndroidApiLevels.DEFAULT_MIN_SDK]. Importing an
+         *  existing project keeps its declared minSdk (the [AndroidFacet] default stays 21). */
+        const val DEFAULT_MIN_SDK = AndroidApiLevels.DEFAULT_MIN_SDK
     }
 }
 

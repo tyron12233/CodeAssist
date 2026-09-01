@@ -234,6 +234,11 @@ object NotValueClassMember
  */
 interface InterpretedLambda {
     val paramCount: Int
+
+    /** The declared parameter names, when known — a lowered LOCAL FUNCTION carries them, so a call using NAMED
+     *  arguments (`g(b = 1, a = 5)`) can be reordered into declared order before [invoke]. Empty means unknown
+     *  (an ordinary lambda), and the call binds positionally. */
+    val paramNames: List<String> get() = emptyList()
     fun invoke(args: List<Any?>): Any?
 
     /**

@@ -48,6 +48,8 @@ It ships with a Compose Multiplatform UI and both desktop and Android launchers.
 - 📐 **Android XML assist** — tag, attribute, and resource completion for layouts/manifests with live
   validation.
 - 📦 **Real APK builds on device** — resolve, compile, dex, package, sign, and install — no laptop.
+- 🌱 **Git, on device** — stage, commit, branch, merge, stash, and push without a laptop; sign in to GitHub
+  to clone private repositories and open pull requests. [How it works →](docs/version-control.md)
 - 🔌 **Extensible everywhere** — module types, build systems, language backends, analyzers, quick-fixes,
   and more all plug in through extension points.
 
@@ -109,7 +111,7 @@ on each release.
 ## Tests
 
 <!-- AUTOGEN:tests:START -->
-**2766** tests passing across **454** suites · 0 failing · 2 skipped (framework / `CI_CORE_ONLY`).
+**3325** tests passing across **514** suites · 0 failing · 2 skipped (framework / `CI_CORE_ONLY`).
 <!-- AUTOGEN:tests:END -->
 
 The badges and the numbers in this section are regenerated automatically on each release (see
@@ -126,6 +128,7 @@ The badges and the numbers in this section are regenerated automatically on each
 | [docs/kotlin-completion.md](docs/kotlin-completion.md) | How on-device Kotlin completion works. |
 | [docs/block-editing.md](docs/block-editing.md) | How the projectional (block) editor works. |
 | [docs/build-system.md](docs/build-system.md) | The task engine, the native pipelines, Gradle compat. |
+| [docs/version-control.md](docs/version-control.md) | Git on device: the model, running JGit on ART, accounts, and the UI. |
 
 ## Module layout
 

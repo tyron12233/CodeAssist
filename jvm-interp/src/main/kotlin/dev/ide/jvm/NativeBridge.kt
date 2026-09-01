@@ -6,6 +6,7 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
+import java.lang.reflect.UndeclaredThrowableException
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -191,12 +192,23 @@ class ReflectiveBridge(
         try {
             action()
         } catch (e: InvocationTargetException) {
-            when (val target = e.targetException) {
+            when (val target = unwrapUndeclared(e.targetException)) {
                 is VmException -> throw target
                 null -> throw e
                 else -> throw VmException(target)
             }
         }
+
+    /**
+     * What a real method actually threw, with the wrapper a [Proxy] adds stripped off. Platform code invokes an
+     * interpreted lambda (or a proxy peer) through a [Proxy], whose generated method wraps any CHECKED throwable
+     * the functional interface does not declare in an [UndeclaredThrowableException]. Interpreted Kotlin declares
+     * nothing, so an `InterruptedException` from a `Thread.sleep` inside a `Runnable`/`forEach` lambda would come
+     * back to the interpreted caller under a type no `catch` of it can match. The wrapper is an artifact of how
+     * the VM hands interpreted code to the platform, so the interpreted caller sees the cause instead.
+     */
+    private fun unwrapUndeclared(t: Throwable?): Throwable? =
+        if (t is UndeclaredThrowableException) t.undeclaredThrowable ?: t else t
 
     override fun getStatic(owner: String, name: String, descriptor: String): Any? =
         marshalOut(resolveField(loadClass(owner), name).get(null), descriptor)
@@ -286,10 +298,13 @@ class ReflectiveBridge(
     }
 
     /**
-     * A method [name] with matching [paramTypes], preferring one declared on a public class or interface so it
-     * can be invoked without [Method.setAccessible]. A concrete platform class is often not exported by its
-     * module (for example `java.util.stream.IntPipeline`), so the public interface method it overrides
-     * (`IntStream.map`) is used instead. Falls back to any matching method up the hierarchy.
+     * A method [name] with matching [paramTypes], preferring one declared on a public class or interface whose
+     * members are actually reachable, so it can be invoked without [Method.setAccessible]. A concrete platform
+     * class is often not public (`java.util.stream.IntPipeline`) or not exported by its module
+     * (`sun.java2d.SunGraphics2D`, the runtime class of every `Graphics2D` Swing hands a `paintComponent`), so
+     * the public supertype method it overrides (`IntStream.map`, `java.awt.Graphics2D.setRenderingHint`) is
+     * used instead: reflection resolves the declaring class, and invoking a supertype's method still
+     * dispatches virtually to the real one. Falls back to any matching method up the hierarchy.
      */
     private fun findMethod(cls: Class<*>, name: String, paramTypes: Array<Class<*>>, returnType: Class<*>?): Method? {
         publicMethod(cls, name, paramTypes, returnType)?.let { return it }
@@ -301,7 +316,8 @@ class ReflectiveBridge(
         return cls.methods.firstOrNull { matches(it, name, paramTypes, returnType) }
     }
 
-    /** A matching method declared on a public type in [cls]'s hierarchy (superclasses and interfaces), or null. */
+    /** A matching method declared on a public, reachable type in [cls]'s hierarchy (superclasses and
+     *  interfaces), or null. */
     private fun publicMethod(cls: Class<*>, name: String, paramTypes: Array<Class<*>>, returnType: Class<*>?): Method? {
         val seen = HashSet<Class<*>>()
         val queue = ArrayDeque<Class<*>>()
@@ -310,14 +326,23 @@ class ReflectiveBridge(
             val c = queue.removeFirst()
             if (!seen.add(c)) continue
             if (Modifier.isPublic(c.modifiers)) {
-                c.declaredMethods.firstOrNull { Modifier.isPublic(it.modifiers) && matches(it, name, paramTypes, returnType) }
-                    ?.let { return it }
+                c.declaredMethods.firstOrNull {
+                    Modifier.isPublic(it.modifiers) && matches(it, name, paramTypes, returnType) && openable(it)
+                }?.let { return it }
             }
             c.superclass?.let { queue.add(it) }
             c.interfaces.forEach { queue.add(it) }
         }
         return null
     }
+
+    /** Whether [m] can actually be invoked from here, decided by trying the access rather than by reading
+     *  modifiers: a `public` method of a `public` class in a package its module does not export
+     *  (`sun.java2d.SunGraphics2D.setRenderingHint`, `sun.nio.cs.UTF_8.newDecoder`) passes every modifier check
+     *  but throws `InaccessibleObjectException` here and `IllegalAccessException` from `invoke`. Asking the
+     *  runtime keeps this correct on ART too, which enforces no module boundaries and answers true throughout.
+     *  Resolution is cached per (class, name+descriptor), so the probe runs once per call site. */
+    private fun openable(m: Method): Boolean = runCatching { m.isAccessible = true }.isSuccess
 
     /** Name + parameter types must match; the [returnType] must match too when given (null = don't constrain it,
      *  the params-only fallback). This is what separates two overloads that differ ONLY by return type. */

@@ -87,6 +87,11 @@ internal object JavaDeclarationChecks {
     }
 
     fun checkClass(cls: PsiClass, out: MutableList<Diagnostic>) {
+        // A type parameter is a PsiClass whose "supertypes" are its bounds, but it declares nothing: none of
+        // the checks below apply to it. Without this, `<T extends Runnable>` reads as a concrete class that
+        // inherits `run()` and never implements it, so every bounded type parameter in the file was reported
+        // as an unimplemented abstract class.
+        if (cls is PsiTypeParameter) return
         val nameEl = cls.nameIdentifier
         // Cyclic inheritance — a class that reaches itself through its extends/implements graph. Reported alone
         // (the supertype walk the other structural checks do is meaningless / could churn on a cycle).

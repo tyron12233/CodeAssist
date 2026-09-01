@@ -1,5 +1,6 @@
 package dev.ide.android.support.templates
 
+import dev.ide.android.support.AndroidApiLevels
 import dev.ide.android.support.AndroidFacet
 import dev.ide.model.BuildSystemId
 import dev.ide.model.template.ProjectScaffold
@@ -14,34 +15,25 @@ import dev.ide.model.template.TemplateParameter
 internal object AndroidTemplateSupport {
     fun pkgPath(pkg: String): String = pkg.replace('.', '/')
 
-    /** The minSdk picker offered by both Android templates. */
+    private fun options(levels: List<AndroidApiLevels.Level>) =
+        levels.map { TemplateParameter.Choice.Option(it.api.toString(), it.label) }
+
+    /** The minSdk picker offered by both Android templates, defaulting to the level new modules use. */
     val minSdkParam = TemplateParameter.Choice(
         key = "minSdk",
         label = "Minimum SDK",
-        options = listOf(
-            TemplateParameter.Choice.Option("21", "API 21 · Android 5.0"),
-            TemplateParameter.Choice.Option("23", "API 23 · Android 6.0"),
-            TemplateParameter.Choice.Option("24", "API 24 · Android 7.0"),
-            TemplateParameter.Choice.Option("26", "API 26 · Android 8.0"),
-            TemplateParameter.Choice.Option("28", "API 28 · Android 9.0"),
-            TemplateParameter.Choice.Option("30", "API 30 · Android 11"),
-            TemplateParameter.Choice.Option("33", "API 33 · Android 13"),
-            TemplateParameter.Choice.Option("34", "API 34 · Android 14"),
-        ),
-        defaultIndex = 2,
+        options = options(AndroidApiLevels.MIN_SDK_LEVELS),
+        defaultIndex = AndroidApiLevels.MIN_SDK_LEVELS.indexOfFirst { it.api == AndroidApiLevels.DEFAULT_MIN_SDK },
         help = "Lowest Android version the app supports.",
     )
 
-    /** The targetSdk picker — the API level the app is tested/optimised against. */
+    /** The targetSdk picker: the API level the app is tested/optimised against, newest by default (Play
+     *  requires a current target, and an old one opts the app into compatibility behaviour). */
     val targetSdkParam = TemplateParameter.Choice(
         key = "targetSdk",
         label = "Target SDK",
-        options = listOf(
-            TemplateParameter.Choice.Option("30", "API 30 · Android 11"),
-            TemplateParameter.Choice.Option("33", "API 33 · Android 13"),
-            TemplateParameter.Choice.Option("34", "API 34 · Android 14"),
-        ),
-        defaultIndex = 2,
+        options = options(AndroidApiLevels.TARGET_SDK_LEVELS),
+        defaultIndex = AndroidApiLevels.TARGET_SDK_LEVELS.lastIndex,
         help = "The API level the app is built and optimised against.",
     )
 
@@ -57,7 +49,8 @@ internal object AndroidTemplateSupport {
         help = "Language of the starter source files.",
     )
 
-    const val COMPILE_SDK = 34
+    /** What every built-in template compiles against: the newest level the IDE ships support for. */
+    const val COMPILE_SDK = AndroidApiLevels.LATEST
 
     /** Google's Material Components for Android — the library behind Material You theming + the FAB/Snackbar. */
     const val MATERIAL_COORDINATE = "com.google.android.material:material:1.12.0"

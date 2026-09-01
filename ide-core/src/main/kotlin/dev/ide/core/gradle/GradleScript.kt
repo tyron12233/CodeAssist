@@ -41,8 +41,19 @@ internal object GradleScript {
     fun blockBody(text: String, name: String): String? = allBlockBodies(text, name).firstOrNull()
 
     /** The bodies of every `name { … }` block found (used where a name can repeat, e.g. `sourceSets`). */
-    fun allBlockBodies(text: String, name: String): List<String> {
-        val out = ArrayList<String>()
+    fun allBlockBodies(text: String, name: String): List<String> =
+        blockBodyRanges(text, name).map { text.substring(it.first, it.last + 1) }
+
+    /**
+     * The body of the first `name { … }` block as a range into [text] (the braces excluded), or null. Ranges
+     * rather than substrings are what an edit needs: pass [maskComments] output to locate the block and the
+     * offsets index straight into the original source.
+     */
+    fun blockBodyRange(text: String, name: String): IntRange? = blockBodyRanges(text, name).firstOrNull()
+
+    /** The body ranges of every `name { … }` (or `name(args) { … }`) block, in order of appearance. */
+    private fun blockBodyRanges(text: String, name: String): List<IntRange> {
+        val out = ArrayList<IntRange>()
         var i = 0
         while (i < text.length) {
             val c = text[i]
@@ -59,7 +70,7 @@ internal object GradleScript {
                     }
                     if (j < text.length && text[j] == '{') {
                         val close = matching(text, j, '{', '}')
-                        if (close > j) { out.add(text.substring(j + 1, close)); i = close + 1; continue }
+                        if (close > j) { out.add(j + 1 until close); i = close + 1; continue }
                     }
                 }
                 continue
@@ -67,6 +78,31 @@ internal object GradleScript {
             i++
         }
         return out
+    }
+
+    /**
+     * A copy of [src] of the same length with every comment's characters replaced by spaces. Structure
+     * scanning runs over the mask (so a brace or quote inside a comment can't confuse it) while offsets stay
+     * valid in the original text.
+     */
+    fun maskComments(src: String): String {
+        val sb = StringBuilder(src)
+        var i = 0
+        while (i < src.length) {
+            val c = src[i]
+            when {
+                c == '"' || c == '\'' -> i = literalEnd(src, i)
+                c == '/' && i + 1 < src.length && src[i + 1] == '/' -> {
+                    while (i < src.length && src[i] != '\n') { sb.setCharAt(i, ' '); i++ }
+                }
+                c == '/' && i + 1 < src.length && src[i + 1] == '*' -> {
+                    val end = src.indexOf("*/", i + 2).let { if (it < 0) src.length else it + 2 }
+                    while (i < end) { if (src[i] != '\n') sb.setCharAt(i, ' '); i++ }
+                }
+                else -> i++
+            }
+        }
+        return sb.toString()
     }
 
     /** Split [text] into its top-level statements (broken on newlines and `;`), each trimmed and non-empty.

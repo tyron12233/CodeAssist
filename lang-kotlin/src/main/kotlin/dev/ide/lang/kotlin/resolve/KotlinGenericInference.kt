@@ -212,22 +212,48 @@ fun KotlinResolver.missingRequiredArgument(call: KtCallExpression): String? {
 internal fun KotlinResolver.bindingsFromValueArgs(
     sym: KotlinSymbol,
     call: KtCallExpression
+): Map<String, TypeRef> =
+    bindingsFromArgExprs(sym, call.valueArguments.map { it.getArgumentExpression() })
+
+/** [bindingsFromValueArgs] over bare argument EXPRESSIONS, for a call site that is not a [KtCallExpression] —
+ *  an operator convention (`a[i]`, `a(i)`), whose operands fill the operator's value parameters just the same. */
+internal fun KotlinResolver.bindingsFromArgExprs(
+    sym: KotlinSymbol,
+    args: List<KtExpression?>
 ): Map<String, TypeRef> {
     if (sym.typeParameters.isEmpty()) return emptyMap()
     val bindings = HashMap<String, TypeRef>()
     val needed = sym.typeParameters.toHashSet()
-    call.valueArguments.forEachIndexed { i, arg ->
+    args.forEachIndexed { i, expr ->
         // `unify` is putIfAbsent (first binding wins), so once every type parameter is bound the remaining
         // arguments can only no-op — stop inferring siblings (a nested Compose tree fans this out hard).
         // Behaviour-identical: a key-form mismatch just means no early exit, never a different result.
         if (bindings.keys.containsAll(needed)) return bindings
-        val expr = arg.getArgumentExpression() ?: return@forEachIndexed
-        if (expr is KtLambdaExpression) return@forEachIndexed
+        if (expr == null || expr is KtLambdaExpression) return@forEachIndexed
         val pt = (sym.paramTypes.getOrNull(i) ?: sym.paramTypes.lastOrNull()) as? KotlinType
             ?: return@forEachIndexed
         inferType(expr)?.let { unify(pt, it, bindings) }
     }
     return bindings
+}
+
+/**
+ * An operator's result type with its OWN type parameters substituted, inferred from the operand expressions.
+ *
+ * An operator convention (`ctx[key]`, `greeter(name)`) looks its member up by name instead of going through the
+ * call path, so nothing there binds the operator's type parameters — `CoroutineContext`'s
+ * `operator fun <E : Element> get(key: Key<E>): E?` handed back a bare `E?`, and `coroutineContext[CoroutineName]`
+ * offered no members of `CoroutineName`. Mirrors the call path: unify the operands against the parameters, then
+ * fall back to each variable's erased upper bound so an operand that pins nothing still yields a usable type.
+ */
+internal fun KotlinResolver.operatorResultType(
+    sym: KotlinSymbol,
+    args: List<KtExpression?>
+): KotlinType? {
+    val raw = sym.type as? KotlinType ?: return null
+    if (sym.typeParameters.isEmpty()) return raw
+    val bindings = methodTypeParamErasure(sym) + bindingsFromArgExprs(sym, args)
+    return service.substitute(raw, bindings) as? KotlinType
 }
 
 internal fun KotlinResolver.unify(
@@ -259,9 +285,24 @@ internal fun KotlinResolver.unify(
     // against the subtype's own (fewer / differently-ordered) arguments misses O, leaving the callback lambda's
     // parameter an unbound type parameter — the `registerForActivityResult { result -> result.data }` case.
     val argArgs = if (param.qualifiedName != arg.qualifiedName && param.typeArguments.isNotEmpty())
-        service.receiverSupertypeArgs(arg.qualifiedName, arg.typeArguments, param.qualifiedName) ?: arg.typeArguments
+        service.receiverSupertypeArgs(arg.qualifiedName, arg.typeArguments, param.qualifiedName)
+            ?: companionSupertypeArgs(arg, param.qualifiedName)
+            ?: arg.typeArguments
     else arg.typeArguments
     param.typeArguments.zip(argArgs).forEach { (p, a) ->
         if (p is KotlinType && a is KotlinType) unify(p, a, bindings)
     }
 }
+
+/**
+ * A bare classifier used as a VALUE denotes its COMPANION object: `coroutineContext[CoroutineName]` passes
+ * `CoroutineName.Key` (the companion, which is the `CoroutineContext.Key<CoroutineName>`), not the class. The
+ * expression still types as the CLASS here — a name reference resolves to its classifier, which is what
+ * qualifier resolution (`Type.NESTED`, `Type.CONST`) needs — so when the class itself does not project onto
+ * [superFqn], project its companion instead. That is what binds `E` in `get(key: Key<E>): E?` to
+ * `CoroutineName`, so `coroutineContext[CoroutineName]?.name` resolves. Null when the type has no companion,
+ * or the companion is not a subtype of [superFqn] either.
+ */
+private fun KotlinResolver.companionSupertypeArgs(arg: KotlinType, superFqn: String): List<TypeRef>? =
+    service.companionObjectFqn(arg.qualifiedName)
+        ?.let { service.receiverSupertypeArgs(it, emptyList(), superFqn) }

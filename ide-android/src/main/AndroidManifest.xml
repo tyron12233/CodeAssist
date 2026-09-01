@@ -137,6 +137,17 @@
                 android:process=":preview"
                 android:exported="false" />
 
+        <!-- Java AWT/Swing program runner, sharing the ":preview" OS process: it interprets the user's program
+             with its java.awt/javax.swing references remapped onto the owned :awt-toolkit, paints the result
+             into a Bitmap, and streams the frames to the Run console. A GUI program is arbitrary code with a
+             UI thread, so an infinite loop in `paintComponent` must peg only this process; the IDE links a
+             DeathRecipient and ends the run if it dies. Console runs stay in ":build" — only GUI runs come
+             here, because only they need a surface to draw on. -->
+        <service
+                android:name=".preview.SwingRunSessionService"
+                android:process=":preview"
+                android:exported="false" />
+
         <!-- App-log sink: the debug-only log bridge woven into a built app (a SEPARATE untrusted app) binds to
              this over Binder and pushes its logs to the IDE's Logcat console tab. A LocalSocket can't cross the
              untrusted-app boundary (SELinux denies connectto), so this is exported and resolved by the SINK

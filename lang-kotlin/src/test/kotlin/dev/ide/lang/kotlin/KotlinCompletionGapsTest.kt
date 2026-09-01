@@ -126,6 +126,27 @@ class KotlinCompletionGapsTest {
         assertTrue(ls.any { it.startsWith("length") }, "a `\${s.len}` template should complete members; got $ls")
     }
 
+    // --- inherited enum members (regression) ---
+
+    @Test
+    fun enumInstanceOffersInheritedEnumMembers() {
+        // `Color.RED.name` — inherited from `kotlin.Enum`, which a source `enum class` never writes as a
+        // supertype, so the member walk missed it entirely: completion offered nothing and the reference was
+        // reported unresolved. A LIBRARY enum was fine, since its `@Metadata` does list `kotlin.Enum<E>`.
+        val names = items("package demo\nfun f(c: Color) { c.| }").mapNotNull { it.symbol?.name }
+        assertTrue("name" in names, "an enum value should offer the inherited `name`; got $names")
+        assertTrue("ordinal" in names, "an enum value should offer the inherited `ordinal`; got $names")
+        assertTrue(items("package demo\nfun f(c: Color) { c.nam| }").mapNotNull { it.symbol?.name }.contains("name"),
+            "`name` should survive prefix filtering")
+    }
+
+    @Test
+    fun sourceTypeOffersInheritedAnyMembers() {
+        val names = items("package demo\nfun f(s: Square) { s.| }").mapNotNull { it.symbol?.name }
+        assertTrue("toString" in names && "equals" in names && "hashCode" in names,
+            "every source type has kotlin.Any's members; got $names")
+    }
+
     companion object {
         val srcDir: Path = tempProject(
             mapOf(

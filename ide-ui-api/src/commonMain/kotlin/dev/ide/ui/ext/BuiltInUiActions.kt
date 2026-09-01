@@ -41,6 +41,18 @@ object BuiltInUiPlugin : UiPlugin {
         )
         scope.action(
             SimpleUiAction(
+                "ui.icons",
+                "Icon Manager",
+                moreAndPalette,
+                "Browse and import icons, and change the app icon",
+                "image",
+                22
+            ) {
+                it.navigate(UiDestinations.ICONS)
+            },
+        )
+        scope.action(
+            SimpleUiAction(
                 "ui.dependencies",
                 "Manage dependencies",
                 setOf(palette),

@@ -40,7 +40,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -59,7 +58,6 @@ import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiExerciseResult
 import dev.ide.ui.backend.UiInlayHint
-import dev.ide.ui.backend.UiLesson
 import dev.ide.ui.backend.UiLessonStep
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.entrancePop
@@ -117,22 +115,13 @@ fun LessonPlayerScreen(
     /** The platform Compose renderer for [dev.ide.ui.backend.UiContentBlock.ComposePreview] lesson blocks. */
     host: dev.ide.ui.ComposePreviewHost? = null,
 ) {
-    val lesson by produceState<UiLesson?>(null, backend, lessonId) {
-        value = runCatching { lessonId?.let { backend.learn.lesson(it) } }.getOrNull()
-    }
-    val steps = lesson?.steps ?: emptyList()
-    var stepIndex by remember(lessonId) { mutableStateOf(initialStep.coerceAtLeast(0)) }
-    LaunchedEffect(steps.size) { if (steps.isNotEmpty()) stepIndex = stepIndex.coerceIn(0, steps.size - 1) }
-    val step = steps.getOrNull(stepIndex)
+    val state = rememberLessonPlayerState(backend, lessonId, initialStep)
+    val lesson = state.lesson
+    val steps = state.steps
+    val step = state.step
 
     // Ad gating (null on desktop / when hosted without ads). Drives the completion interstitial below.
     val ads = rememberAds()
-
-    // Advance gating per step: concept always; interactive/quiz flip it when solved/answered.
-    var canAdvance by remember(step?.id) { mutableStateOf(step is UiLessonStep.Concept) }
-
-    // Record the learner's place for the Resume banner as they move through the lesson.
-    LaunchedEffect(step?.id) { val id = lessonId; if (id != null && step != null) backend.learn.recordVisit(id, stepIndex) }
 
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
@@ -147,14 +136,14 @@ fun LessonPlayerScreen(
                     )
                     if (steps.isNotEmpty()) {
                         Text(
-                            stringResource(Res.string.learn_step_progress, stepIndex + 1, steps.size),
+                            stringResource(Res.string.learn_step_progress, state.stepIndex + 1, steps.size),
                             color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall,
                         )
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 ProgressBar(
-                    if (steps.isEmpty()) 0f else (stepIndex + 1).toFloat() / steps.size,
+                    state.progress,
                     track = MaterialTheme.colorScheme.surfaceContainerHighest, fill = MaterialTheme.colorScheme.primary,
                 )
             }
@@ -162,7 +151,7 @@ fun LessonPlayerScreen(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 // Slide steps in the direction of travel (forward on Next, back on Back) with a soft fade.
                 AnimatedContent(
-                    targetState = stepIndex,
+                    targetState = state.stepIndex,
                     transitionSpec = {
                         val forward = targetState >= initialState
                         val enter = fadeIn(tween(Motion.BASE, easing = Motion.soft)) +
@@ -176,19 +165,19 @@ fun LessonPlayerScreen(
                 ) { idx ->
                     when (val s = steps.getOrNull(idx)) {
                         is UiLessonStep.Concept -> ConceptStep(s, backend, host)
-                        is UiLessonStep.Interactive -> InteractiveStep(s, backend, lessonId, inlayHintsEnabled, host) { canAdvance = true }
-                        is UiLessonStep.Quiz -> QuizStep(s) { correct -> canAdvance = correct }
+                        is UiLessonStep.Interactive -> InteractiveStep(s, backend, lessonId, inlayHintsEnabled, host) { state.allowAdvance(true) }
+                        is UiLessonStep.Quiz -> QuizStep(s) { correct -> state.allowAdvance(correct) }
                         null -> {}
                     }
                 }
             }
 
-            val isLast = stepIndex >= steps.size - 1
+            val isLast = state.isLast
             // Preload the completion interstitial as the learner reaches the final step (once it's solved /
             // answered) so it's ready the instant they tap Finish. Ads-active gated; a no-op on desktop and when
             // ads are off. The show itself happens on Finish below, throttled to every 2nd lesson.
-            LaunchedEffect(isLast, canAdvance) {
-                if (isLast && canAdvance && ads?.adsActive == true) ads.host.preloadInterstitial()
+            LaunchedEffect(isLast, state.canAdvance) {
+                if (isLast && state.canAdvance && ads?.adsActive == true) ads.host.preloadInterstitial()
             }
 
             // Bottom navigation bar: Back + Next / Finish.
@@ -197,25 +186,21 @@ fun LessonPlayerScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (stepIndex > 0) {
-                    PlayerButton(stringResource(Res.string.back), primary = false, icon = CaIcons.chevronLeft) { stepIndex-- }
+                if (state.stepIndex > 0) {
+                    PlayerButton(stringResource(Res.string.back), primary = false, icon = CaIcons.chevronLeft, onClick = state::back)
                 }
                 Spacer(Modifier.weight(1f))
                 PlayerButton(
                     if (isLast) stringResource(Res.string.learn_finish) else stringResource(Res.string.learn_next),
                     primary = true,
-                    enabled = canAdvance && step != null,
+                    enabled = state.canAdvance && step != null,
                     icon = if (isLast) CaIcons.check else CaIcons.chevronRight,
                 ) {
-                    val id = lessonId
-                    if (id != null && step != null) backend.learn.markStepComplete(id, step.id)
-                    if (isLast) {
+                    state.next {
                         // Every 2nd finished lesson shows the full-screen interstitial (ads-active gated); it
                         // overlays as we return to the track. shouldShowLessonInterstitial advances the counter.
                         if (ads?.shouldShowLessonInterstitial() == true) ads.host.showInterstitial()
                         onExit()
-                    } else {
-                        stepIndex++
                     }
                 }
             }

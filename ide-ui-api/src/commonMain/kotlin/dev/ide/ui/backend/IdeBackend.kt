@@ -71,9 +71,16 @@ interface IdeBackend {
     /** The AI coding agent (chat + tool use). Optional — a backend that wires none inherits [AgentService.Unsupported]. */
     val agent: AgentService get() = AgentService.Unsupported
 
+    /** Version control: the working copy, branches, history, and the forge account remotes authenticate with.
+     *  Optional; a backend that wires no engine inherits [VcsService.Unsupported]. */
+    val vcs: VcsService get() = VcsService.Unsupported
+
     /** User editor customizations: the keyboard symbol bar (and, later, live-template macros + recorded macros).
      *  Optional — a backend that wires no store inherits [CustomizationService.Unsupported]. */
     val customize: CustomizationService get() = CustomizationService.Unsupported
+
+    /** Icon browsing, import, and the app-icon studio. */
+    val icons: IconService get() = IconService.Unsupported
 
     /**
      * The Compose UI facets (tool windows, actions, screens) contributed by the currently-ENABLED plugins. The
@@ -184,6 +191,13 @@ sealed interface UiTemplateParam {
 
 /** Outcome of a create: [success] + a human message (the reason on failure) + the new project's root path. */
 data class UiProjectResult(val success: Boolean, val message: String, val rootPath: String? = null)
+
+/**
+ * What an "Import project" folder pick turned out to be. Drives which follow-up question the picker asks:
+ * a [CODE_ASSIST] workspace is adopted as-is, a [GRADLE] folder still has to choose compatibility vs convert,
+ * and [UNKNOWN] is reported rather than silently doing nothing.
+ */
+enum class UiProjectFolderKind { CODE_ASSIST, GRADLE, UNKNOWN }
 
 // ---- Projects Store DTOs ----
 
@@ -588,7 +602,18 @@ data class RunConsoleUi(
     val transcript: List<ConsoleChunk> = emptyList(),
     val acceptsInput: Boolean = false,
     val exitCode: Int? = null,
+    /** The latest frame of a windowed program's UI, or null for a console run (the common case). */
+    val frame: RunFrameUi? = null,
 )
+
+/**
+ * One frame of a windowed program: raw RGBA_8888 pixels, row-major, in the file at [path].
+ *
+ * A path rather than the bytes, and rather than a platform image type: the pixels come from another process
+ * over the shared filesystem, and this type crosses into multiplatform UI code. [seq] increases monotonically,
+ * so a screen redrawing slower than the program repaints can tell a new frame from the one it already drew.
+ */
+class RunFrameUi(val path: String, val width: Int, val height: Int, val seq: Long)
 
 /** Severity of a [BuildLogLine] — drives the per-line color and the Log tab's level filter. */
 enum class UiLogLevel { Debug, Info, Warn, Error }
@@ -937,6 +962,27 @@ data class UiCompilerPlugin(
 )
 
 /**
+ * A toolchain problem that will break the build for a module, surfaced as an editor banner rather than left to
+ * appear as a wall of errors in generated code.
+ *
+ * Today's only source is a bundled KSP processor whose generated code needs a newer runtime than the module
+ * declares: the IDE always runs the processor version it ships (executed code cannot be downloaded), so the
+ * two have to agree. [fixLabel] describes the version change that resolves it ("Update x to 2.60.1", or
+ * "Downgrade" when the module pins something newer than the IDE bundles) and [detail] explains why.
+ *
+ * [acceptable] means the user may choose to build anyway: the IDE stops blocking source generation and reports
+ * the problem once per build instead. That is not a fix, and the compile is still expected to fail.
+ */
+data class UiToolchainWarning(
+    val id: String,
+    val moduleName: String,
+    val title: String,
+    val detail: String,
+    val fixLabel: String? = null,
+    val acceptable: Boolean = true,
+)
+
+/**
  * A module's Android packaging options (AGP's `packaging { }`) — the merge rules the user configures for
  * how Java resources + native libraries with the same archive path are combined. Null when the module is
  * not Android. [defaultResourceExcludes]/[defaultResourceMerges] are AGP's always-applied defaults, shown
@@ -1040,7 +1086,7 @@ data class ProjectInfo(
     val lastOpened: Long = 0L,
 )
 
-/** Options chosen in the Export-project dialog (see [ProjectService.exportProject]). */
+/** Options chosen in the Export-project screen (see [ProjectService.exportProject]). */
 data class UiExportOptions(
     /** Bundle the resolved dependencies into the package so the recipient can build offline. */
     val bundleDependencies: Boolean = false,
@@ -1048,10 +1094,61 @@ data class UiExportOptions(
     val author: String = "",
     /** Optional description shown in the recipient's import preview. */
     val description: String = "",
+    /** The modules to package, by name; null (the default) packages all of them. The screen keeps this
+     *  dependency-closed — see [UiExportModule.dependsOn]. */
+    val includedModules: Set<String>? = null,
+    /** Image files to embed as preview screenshots, in display order. */
+    val screenshotPaths: List<String> = emptyList(),
 )
+
+/**
+ * One module the export screen offers to include, with the share of the package it accounts for and the
+ * modules it needs. Dropping a module from an export has to drop everything in [dependsOn]'s reverse
+ * direction too, or the recipient imports a project that can't build.
+ */
+data class UiExportModule(
+    val name: String,
+    /** Module type id (`android-app`, `java-lib`, ...); the screen maps it to a label. */
+    val typeId: String,
+    /** Directory relative to the project root (`""` at the root). */
+    val path: String,
+    val fileCount: Int,
+    val sizeBytes: Long,
+    /** Names of the modules this one depends on. */
+    val dependsOn: List<String> = emptyList(),
+)
+
+/** What the export screen shows before packaging (see [ProjectService.exportPlan]): the project's modules
+ *  and the extra bytes bundling the resolved dependencies would add. */
+data class UiExportPlan(
+    val modules: List<UiExportModule> = emptyList(),
+    val bundledDepsBytes: Long = 0L,
+)
+
+/**
+ * A finished Gradle export (see [ProjectService.exportGradleProject]): the archive that was written, and
+ * the best-effort [notes] the render collected. A note names something the project model holds that Gradle
+ * expresses differently or not at all (a signing config kept in the app keystore registry, a bundled
+ * annotation processor, a library with no Maven coordinate), so the user learns what to finish by hand
+ * instead of discovering it at the first sync. The same notes are written into the archive's
+ * `GRADLE-EXPORT.md`.
+ */
+data class UiGradleExport(val path: String, val notes: List<String> = emptyList())
 
 /** One file listed in an import preview's peek (path relative to the project root). */
 data class UiPackagedEntry(val path: String, val sizeBytes: Long)
+
+/**
+ * One module inside a package being previewed for import: what it is and how much of the package it is.
+ * [fileCount]/[sizeBytes] are 0 when the package predates the manifest carrying them and its layout didn't
+ * let them be reconstructed — the screen then shows the module without numbers.
+ */
+data class UiPackagedModule(
+    val name: String,
+    val typeId: String,
+    val fileCount: Int,
+    val sizeBytes: Long,
+)
 
 /**
  * What a `.caproj` package contains, read for the import preview before it is extracted (see
@@ -1067,7 +1164,7 @@ data class UiImportPreview(
     val isAndroid: Boolean,
     val packageName: String?,
     val moduleCount: Int,
-    val modules: List<String>,
+    val modules: List<UiPackagedModule>,
     val fileCount: Int,
     val uncompressedSizeBytes: Long,
     val hasBundledDeps: Boolean,
@@ -1084,9 +1181,14 @@ data class UiImportPreview(
  * Gradle scripts were read statically, not evaluated, so its model is a best-effort approximation: builds and
  * dependency resolution may fail, and versions/config the reader couldn't extract are listed in [notes].
  */
-data class UiCompatibilityInfo(val summary: String, val notes: List<String> = emptyList())
+data class UiCompatibilityInfo(
+    val summary: String,
+    val notes: List<String> = emptyList(),
+    /** True when a watched build file changed since the last sync, so the model is out of date. */
+    val syncNeeded: Boolean = false,
+)
 
-/** The result of re-syncing a compatibility-mode project from its Gradle scripts (see [ProjectService.syncGradle]). */
+/** The result of re-syncing a project from its build files (see [ProjectService.syncProject]). */
 data class UiSyncResult(val ok: Boolean, val message: String, val notes: List<String> = emptyList())
 
 /**
@@ -1109,6 +1211,7 @@ enum class UiSourceRootRole { Source, Resource, AndroidRes, Assets, Aidl }
 enum class UiNewFileTemplate {
     JavaClass, JavaInterface, JavaEnum, JavaAbstractClass, JavaAnnotation,
     KotlinFile, KotlinClass, KotlinInterface, KotlinDataClass, KotlinEnum, KotlinObject,
+    AidlInterface, AidlParcelable,
 }
 
 /** Structural role of a tree node. The *icon* is chosen separately via [TreeNode.iconId]. */
@@ -1139,6 +1242,12 @@ data class TreeNode(
      * created in. Non-null marks an XML new-file target — the counterpart to [sourceRootPath] for Java.
      */
     val resDirPath: String? = null,
+    /**
+     * For a node inside an `aidl/` source root (the root, a package under it, or a file beside one): the
+     * root itself. AIDL is package-structured like Java, so those nodes also carry [sourceRootPath]; this
+     * is what tells the "New ▸" menu to offer an AIDL interface rather than a Java class.
+     */
+    val aidlRootPath: String? = null,
     /**
      * When non-null, opening this node opens the Module Settings editor for the named module instead of a
      * text editor — set on a `module.toml` file (and the module node itself). The host only sets it for a
@@ -1567,6 +1676,8 @@ data class UiSettings(
     val wordWrap: Boolean = false,
     /** Indent wrapped continuation rows to the line's own indent (IntelliJ-style); only when [wordWrap]. */
     val wrapIndent: Boolean = true,
+    /** Draggable bar along the editor's bottom edge while a line runs past the view; none when [wordWrap]. */
+    val horizontalScrollbar: Boolean = true,
     /** Free (two-axis) touch scrolling: a single drag pans both axes (off = orientation-locked). */
     val twoAxisScroll: Boolean = true,
     /** Two-finger pinch zooms the code font. */

@@ -20,6 +20,17 @@ subprojects {
     group = "dev.ide"
     version = "3.4.0"
 
+    // Applies to EVERY test task in every module — including the multiplatform modules' `desktopTest`, which
+    // the `kotlin.jvm`-gated block below never sees.
+    tasks.withType<Test>().configureEach {
+        // Run the forked workers headless. On macOS a JVM that touches AWT becomes a foreground GUI app, so a
+        // test run would raise a Dock icon and steal window focus from whatever the developer is doing —
+        // several suites here rasterize Compose content (ImageComposeScene/Skiko) and would do exactly that.
+        // Neither flag stops Skiko loading or rendering off-screen; no display is ever opened.
+        systemProperty("java.awt.headless", "true")
+        systemProperty("apple.awt.UIElement", "true")
+    }
+
     // Shared configuration applied to every module once it applies the Kotlin/JVM plugin.
     plugins.withId("org.jetbrains.kotlin.jvm") {
         // Framework modules are built by desktop tooling but must ultimately load on Android/ART,
@@ -78,6 +89,9 @@ subprojects {
             workingDir = projectDir
             systemProperty("bench.baselineDir", layout.projectDirectory.dir("baselines").asFile.absolutePath)
             System.getProperty("bench.updateBaselines")?.let { systemProperty("bench.updateBaselines", it) }
+            // `-Dbench.quick=true`: one timed batch instead of five, for iterating on a suite. Gates and
+            // baseline writes are off in that mode — see `Bench.quick`.
+            System.getProperty("bench.quick")?.let { systemProperty("bench.quick", it) }
             maxHeapSize = "1536m"
             // Benchmarks must always run fresh: never UP-TO-DATE, and never served FROM-CACHE (a cached
             // full run would otherwise replay regardless of a `--tests` filter, and cached perf numbers are

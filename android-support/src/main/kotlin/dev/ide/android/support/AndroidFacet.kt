@@ -32,6 +32,17 @@ data class AndroidFacet(
      *  flavor): it then overrides a manifest-declared `android:versionName` at link. Left at
      *  [DEFAULT_VERSION_NAME] it is unset, so a manifest-declared value is respected. */
     val versionName: String = DEFAULT_VERSION_NAME,
+    /**
+     * AGP's `defaultConfig { manifestPlaceholders = [...] }`: the values substituted for `${key}` tokens in
+     * the app's manifest AND in every dependency manifest the merge pulls in. A library commonly REQUIRES
+     * one: the Myket billing client's manifest names `${marketApplicationId}`/`${marketPermission}`, and a
+     * merge that cannot resolve them leaves a `${…}` in an `android:name`, which aapt2 rejects.
+     *
+     * `applicationId` and `packageName` are always supplied by the build and need no entry here; a key
+     * declared here overrides them. A build type or flavor can override individual keys
+     * (see [BuildType.manifestPlaceholders]); [AndroidVariants.manifestPlaceholders] resolves the chain.
+     */
+    val manifestPlaceholders: Map<String, String> = emptyMap(),
     /** true == `android-app` (produces an APK); false == `android-lib` (produces an AAR). */
     val isApplication: Boolean = true,
     /** Flavor dimension order; a variant picks one flavor per dimension in this order. */
@@ -121,9 +132,20 @@ data class BuildFeatures(
      * time. A set (not a flag per processor) so adding a processor to the catalog needs no new field.
      */
     val kspProcessors: Set<String> = emptySet(),
+    /**
+     * The ids of bundled KSP processors whose RUNTIME-version mismatch the user has explicitly accepted for
+     * this module (see `KspProcessorCatalog.RuntimeMismatch`). The IDE runs the processor version it bundles,
+     * so a project pinning an older runtime gets generated code that runtime cannot compile; source generation
+     * refuses to run in that state. Accepting it here downgrades the refusal to a per-build warning: the
+     * generated sources are produced and the compile fails on them, which is what the user asked for by
+     * accepting. Persisted per module so the choice survives a reload and reaches the build process.
+     */
+    val kspRuntimeMismatchAccepted: Set<String> = emptySet(),
 ) {
     /** True when at least one build feature is enabled (drives "emit only when set" persistence). */
-    val anyEnabled: Boolean get() = viewBinding || compose || parcelize || serialization || kspProcessors.isNotEmpty()
+    val anyEnabled: Boolean
+        get() = viewBinding || compose || parcelize || serialization ||
+            kspProcessors.isNotEmpty() || kspRuntimeMismatchAccepted.isNotEmpty()
 }
 
 /** A build type (`debug`/`release`/…): how a variant is assembled regardless of flavor. */
@@ -152,6 +174,9 @@ data class BuildType(
     val proguardRules: List<String> = emptyList(),
     val applicationIdSuffix: String? = null,
     val versionNameSuffix: String? = null,
+    /** Manifest placeholders for this build type, overriding the same keys from `defaultConfig` and from the
+     *  variant's flavors (AGP's precedence). See [AndroidFacet.manifestPlaceholders]. */
+    val manifestPlaceholders: Map<String, String> = emptyMap(),
     /**
      * The id of the signing keystore this build type is signed with, referencing an entry in the global
      * keystore registry (app-home), e.g. `"release"`. Null ⇒ the build's default debug keystore. Only the id
@@ -248,4 +273,7 @@ data class ProductFlavor(
     val applicationId: String? = null,
     val applicationIdSuffix: String? = null,
     val versionName: String? = null,
+    /** Manifest placeholders for this flavor, overriding the same keys from `defaultConfig` and overridden in
+     *  turn by the build type's. See [AndroidFacet.manifestPlaceholders]. */
+    val manifestPlaceholders: Map<String, String> = emptyMap(),
 )

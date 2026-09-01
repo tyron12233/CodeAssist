@@ -60,6 +60,9 @@ fun EditorScreen(
     state: IdeUiState,
     onToggleTheme: () -> Unit,
     onOpenHub: () -> Unit = {},
+    onOpenIconManager: () -> Unit = {},
+    /** Open the Icon Manager scoped to a `res/` tree node, from its "New" menu. */
+    onNewImageAsset: (resDirPath: String) -> Unit = {},
     onOpenDependencies: (String?) -> Unit = {},
     onOpenModuleConfig: (String?) -> Unit = {},
     onCloseProject: () -> Unit = {},
@@ -94,6 +97,7 @@ fun EditorScreen(
     val onNewFolder: (String, List<PackageSegment>) -> Unit =
         { dir, segs -> newEntry = NewEntryRequest(dir, NewEntryKind.Folder, dirLabel(dir), segs) }
     val onNewResource: (TreeNode) -> Unit = { node -> xmlTargetOf(node)?.let { newXmlTarget = it } }
+    val newImageAsset: (TreeNode) -> Unit = { node -> node.resDirPath?.let(onNewImageAsset) }
     val onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit =
         { dir, lang, segs -> newSource = NewSourceRequest(dir, lang, dirLabel(dir), segs) }
     val onFileOp: (TreeNode, FileOpKind) -> Unit =
@@ -126,11 +130,13 @@ fun EditorScreen(
                 state,
                 onToggleTheme,
                 onOpenHub,
+                onOpenIconManager,
                 indexStatus,
                 buildState,
                 onNewFile,
                 onNewFolder,
                 onNewResource,
+                newImageAsset,
                 onNewSource,
                 onFileOp,
                 onOpenDependencies,
@@ -142,11 +148,13 @@ fun EditorScreen(
                 state,
                 onToggleTheme,
                 onOpenHub,
+                onOpenIconManager,
                 indexStatus,
                 buildState,
                 onNewFile,
                 onNewFolder,
                 onNewResource,
+                newImageAsset,
                 onNewSource,
                 onFileOp,
                 onOpenDependencies,

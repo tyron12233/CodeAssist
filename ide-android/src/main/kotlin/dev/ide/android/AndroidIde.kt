@@ -8,6 +8,10 @@ import dev.ide.analytics.AnalyticsEvent
 import dev.ide.analytics.DeviceInfo
 import dev.ide.analytics.EventCategory
 import dev.ide.analytics.Events
+import dev.ide.android.fork.ForkedKotlinCompiler
+import dev.ide.android.fork.ProcessIdentity
+import dev.ide.android.preview.SwingAwareProgramInterpreter
+import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.analytics.impl.AnalyticsLogSink
 import dev.ide.analytics.impl.DefaultAnalyticsService
@@ -152,7 +156,13 @@ object AndroidIde {
         // Runs a console app by INTERPRETING its compiled bytecode on the VM — no dexing, no dynamic class
         // loading of the user's/libraries' code. The peer factory dexes the small generated peer classes the
         // VM needs when an interpreted object is handed to real platform code (a Comparator, a Runnable).
-        val programInterpreter = VmProgramInterpreter(peerFactory = DexPeerFactory())
+        // A WINDOWED program (a Swing app) cannot run this way: ART has no java.awt and no javax.swing, so the
+        // bridge would ask it for a class no device has, and a console has no surface to draw on anyway. Those
+        // go to the owned toolkit in :preview instead, and their frames come back to the Run screen.
+        val programInterpreter = SwingAwareProgramInterpreter(
+            context,
+            VmProgramInterpreter(peerFactory = DexPeerFactory()),
+        )
         // Installs + launches a built APK (the android Run) via the system package installer.
         val apkInstaller = ApkInstallerImpl(context)
         // The debug-only in-app log bridge: extract the bundled runtime jar (woven into debug builds); the
@@ -216,6 +226,33 @@ object AndroidIde {
         // "Forward app logs" (Build Runtime page), default on — read lazily like the R8/dex knobs.
         val injectAppLogKey = settingsPrefix + BuiltInSettingsPages.INJECT_APP_LOG
         val appLogEnabledProvider = { managerRef.get()?.preference(injectAppLogKey)?.trim() != "false" }
+        // Kotlin compilation runs in a PERSISTENT forked VM (`dev.ide.android.fork`): a compile then gets a
+        // heap above the app cap and its working set stays off the editor's heap. Unlike the R8/D8 forks the VM
+        // is not per invocation — kotlinc's cost is dominated by warm state (the compiler's class-loading and
+        // IntelliJ-core application environment, plus the read jars KotlinEnvironmentKeepAlive holds), so the
+        // worker is started once and reused. The in-process compiler it wraps is the fallback for every failure
+        // path, and it carries the same ART plugin loader so a runtime compiler plugin still loads either way.
+        val separateProcessKey = settingsPrefix + BuiltInSettingsPages.SEPARATE_PROCESS
+        // Only the process that actually builds may hold a compiler VM: this engine is stood up in BOTH the
+        // IDE process and the `:build` daemon, and the daemon is where compiles land unless the user turned
+        // separate-process builds off.
+        val isBuildProcess = ProcessIdentity.isBuildProcess()
+        val hostsBuilds = {
+            isBuildProcess || managerRef.get()?.preference(separateProcessKey)?.trim() == "false"
+        }
+        val kotlincModeKey = settingsPrefix + BuiltInSettingsPages.KOTLINC_MODE
+        val kotlincHeapKey = settingsPrefix + BuiltInSettingsPages.KOTLINC_MAX_HEAP
+        val kotlincWorkersKey = settingsPrefix + BuiltInSettingsPages.KOTLINC_WORKERS
+        val kotlinCompiler = ForkedKotlinCompiler(
+            context.applicationContext,
+            modeProvider = { managerRef.get()?.preference(kotlincModeKey)?.trim() },
+            maxHeapMbProvider = { managerRef.get()?.preference(kotlincHeapKey)?.trim()?.toIntOrNull() },
+            workerCountProvider = { managerRef.get()?.preference(kotlincWorkersKey)?.trim()?.toIntOrNull() },
+            hostsBuilds = hostsBuilds,
+            androidJar = androidJar.toPath(),
+            minApi = minOf(Build.VERSION.SDK_INT, 36),
+            fallback = KotlinJvmCompiler(pluginLoader = kotlinPluginLoader),
+        )
         // The dex MERGE (debug-path memory peak) forks too, under the same R8 execution / heap settings; the
         // archive step forks above the "Off-heap dexing threshold". The merge batches + parallelizes across
         // forked VMs bounded by the process-wide fork gate (see ForkedD8Dexer / R8ForkSupport).
@@ -231,8 +268,6 @@ object AndroidIde {
         // Runs in the separate `:preview` process (RemoteRealViewRuntime) when the "Build in a separate process"
         // setting is on (default) — isolating arbitrary library/user View code, with in-process fallback —
         // governed by the same toggle as the build daemon (read lazily via the manager).
-        val separateProcessKey =
-            settingsPrefix + BuiltInSettingsPages.SEPARATE_PROCESS
         val realViewRuntime = dev.ide.preview.realview.RemoteRealViewRuntime(
             context.applicationContext,
             androidJar.toPath(),
@@ -270,6 +305,7 @@ object AndroidIde {
             customViewRuntime = previewRuntime,
             realViewRuntime = realViewRuntime,
             kotlinPluginLoader = kotlinPluginLoader,
+            kotlinCompiler = kotlinCompiler,
             r8Shrinker = r8Shrinker,
             r8MergeDexer = r8MergeDexer,
             mergeChunkProvider = dexMergeChunkProvider,
@@ -288,6 +324,11 @@ object AndroidIde {
     /** How far back a process-exit record may be and still be reported. The event carries the version running
      *  now, so an older record would be attributed to the wrong release. */
     private const val NATIVE_CRASH_MAX_AGE_MS = 24 * 60 * 60 * 1000L
+
+    /** How many exit records to open a tombstone for, and how many of those to report. The scan runs past the
+     *  reported cap because forked build-tool VMs are dropped from the middle of it. */
+    private const val NATIVE_CRASH_SCAN = 8
+    private const val NATIVE_CRASH_MAX_REPORTED = 5
 
     /**
      * If a PREVIOUS process died of a native crash (the ART SIGSEGV; see [dev.ide.platform.RuntimeInfo]; seen on
@@ -310,6 +351,12 @@ object AndroidIde {
      * Each exit record is reported once ([PREF_NATIVE_CRASH_REPORTED]), since the OS keeps it for many launches,
      * and records older than [NATIVE_CRASH_MAX_AGE_MS] are dropped so an update does not import old history
      * under the new version's name.
+     *
+     * A death of a VM this app FORKED to run a build tool is not reported at all
+     * ([dev.ide.platform.ForkedToolVm.isToolVmCrash]). Those forks are how the app measures the heap a device
+     * grants, and a rung the device refuses aborts by design; the OS files that abort under this package, so
+     * without the filter the app's own capability probe reads back as a crash on a healthy device — 12 of the
+     * 13 crashes reported for 3.9.6 were that probe.
      */
     private fun reportPreviousNativeCrash(
         context: Context,
@@ -324,17 +371,38 @@ object AndroidIde {
             // routinely, and with a window of one their exits hide a native death of the IDE process.
             val reported = manager.preference(PREF_NATIVE_CRASH_REPORTED)?.toLongOrNull() ?: 0L
             val now = System.currentTimeMillis()
-            val fresh = am.getHistoricalProcessExitReasons(context.packageName, 0, 20)
+            val candidates = am.getHistoricalProcessExitReasons(context.packageName, 0, 20)
                 .filter {
                     it.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE ||
                         it.reason == android.app.ApplicationExitInfo.REASON_SIGNALED
                 }
                 .filter { it.timestamp > reported && now - it.timestamp < NATIVE_CRASH_MAX_AGE_MS }
-                .sortedBy { it.timestamp }
-                .takeLast(5)
-            if (fresh.isEmpty()) return
-            manager.setPreference(PREF_NATIVE_CRASH_REPORTED, fresh.last().timestamp.toString())
-            fresh.forEach { reportNativeExit(it, analytics, prev) }
+                .sortedByDescending { it.timestamp }
+                .take(NATIVE_CRASH_SCAN)
+            if (candidates.isEmpty()) return
+            // Mark the whole window seen, including the forked-VM deaths dropped below: they are answered, not
+            // deferred, and re-reading them on every launch would only re-drop them.
+            manager.setPreference(PREF_NATIVE_CRASH_REPORTED, candidates.first().timestamp.toString())
+
+            // Newest first, so the ones that survive the filter are the most recent; parse each tombstone once
+            // and hand it to the reporter rather than re-reading the trace.
+            val reportable = ArrayList<Pair<android.app.ApplicationExitInfo, dev.ide.platform.NativeTombstone?>>()
+            for (exit in candidates) {
+                if (reportable.size >= NATIVE_CRASH_MAX_REPORTED) break
+                val tomb = runCatching {
+                    exit.traceInputStream?.use { dev.ide.platform.NativeTombstone.parse(it) }
+                }.getOrNull()
+                if (dev.ide.platform.ForkedToolVm.isToolVmCrash(tomb)) {
+                    Log.logger("ide.crash").info(
+                        "Ignoring a native death of a forked build-tool VM ('${tomb?.faultingThread}'): " +
+                            "${tomb?.abortMessage ?: tomb?.topFrames(2)}. Not an IDE crash — the fork ladder " +
+                            "steps down and the build runs in-process."
+                    )
+                    continue
+                }
+                reportable += exit to tomb
+            }
+            reportable.asReversed().forEach { (exit, tomb) -> reportNativeExit(exit, tomb, analytics, prev) }
         }
     }
 
@@ -342,15 +410,13 @@ object AndroidIde {
      *  this death rather than an earlier one. */
     private fun reportNativeExit(
         exit: android.app.ApplicationExitInfo,
+        tomb: dev.ide.platform.NativeTombstone?,
         analytics: dev.ide.analytics.AnalyticsService,
         prev: dev.ide.platform.EngineBreadcrumb.Crumb?,
     ) {
         val sinceOp = prev?.let { exit.timestamp - it.epochMillis }
         // A crumb from long before the death describes an unrelated session, not this crash.
         val crumb = if (sinceOp != null && sinceOp > -60_000L && sinceOp < 10 * 60_000L) prev else null
-        val tomb = runCatching {
-            exit.traceInputStream?.use { dev.ide.platform.NativeTombstone.parse(it) }
-        }.getOrNull()
 
         Log.logger("ide.crash").warn(
             "Recovered from a native crash in a previous session of '${exit.processName}'. " +

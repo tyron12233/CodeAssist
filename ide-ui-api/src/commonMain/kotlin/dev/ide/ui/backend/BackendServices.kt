@@ -328,6 +328,21 @@ interface BuildService {
     /** Signal end-of-input (EOF / Ctrl-D) to the running program's stdin. */
     fun closeRunInput() {}
 
+    /** Forward a pointer event into a windowed program's UI; [x] and [y] are in the frame's pixel space and
+     *  [action] is a `RunPointer` constant. No-op for a console run, which has no window. */
+    fun sendRunPointer(action: Int, x: Float, y: Float) {}
+
+    /** Forward a key event into a windowed program's UI. No-op for a console run. */
+    fun sendRunKey(action: Int, keyCode: Int, keyChar: Char) {}
+
+    /** Forward a scroll into a windowed program's UI; [notches] is positive when the content should move
+     *  down. No-op for a console run. */
+    fun sendRunScroll(x: Float, y: Float, notches: Int) {}
+
+    /** Tell a windowed program the pixel size its window is drawn at, so it paints at that size rather than
+     *  being scaled to fit. No-op for a console run. */
+    fun setRunSurfaceSize(widthPx: Int, heightPx: Int) {}
+
     /** The pending permission a running program is asking for (the run sandbox), or null. */
     val permissionRequest: StateFlow<UiPermissionRequest?> get() = MutableStateFlow(null)
 
@@ -500,6 +515,29 @@ interface ModuleService {
         moduleName: String, resources: UiPackagingRules, jniLibs: UiPackagingRules
     ): UiConfigResult = UiConfigResult(false, "Packaging options not supported by this backend")
 
+    /**
+     * Toolchain problems that will break the build, across EVERY module of the open project (a bundled KSP
+     * processor whose generated code needs a newer runtime than the module declares). Drives the editor banner.
+     *
+     * Project-wide, not per file: the problem belongs to a module's configuration, so it is knowable the moment
+     * the project opens and should not wait for someone to open a file from the offending module (typically a
+     * `di/` module nobody edits). Empty for a healthy project, so the banner costs nothing when there is nothing
+     * to say. The probe short-circuits on modules that declare none of the bundled processors.
+     */
+    suspend fun toolchainWarnings(): List<UiToolchainWarning> = emptyList()
+
+    /** Apply [warningId]'s fix on [moduleName]: set the declared runtime to the version the IDE bundles. */
+    suspend fun fixToolchainWarning(moduleName: String, warningId: String): UiConfigResult =
+        UiConfigResult(false, "Toolchain warnings not supported by this backend")
+
+    /**
+     * Record that the user accepts [warningId] on [moduleName]: source generation stops refusing to run and the
+     * problem is reported once per build instead. Persisted on the module, and NOT a fix (the compile is still
+     * expected to fail on the generated code).
+     */
+    suspend fun acceptToolchainWarning(moduleName: String, warningId: String): UiConfigResult =
+        UiConfigResult(false, "Toolchain warnings not supported by this backend")
+
     /** For an Android module, the referenced-but-missing module-relative keep-rule files. */
     suspend fun missingProguardFiles(moduleName: String): List<UiMissingProguardFile> = emptyList()
 
@@ -622,17 +660,17 @@ interface ProjectService {
     fun saveOpenTabs(tabs: UiOpenTabs) {}
 
     /**
-     * Compatibility details for the currently-open project, or null when it is a native project (not imported
-     * from Gradle). Drives the editor's compatibility-mode notice — see [UiCompatibilityInfo].
+     * Compatibility details for the currently-open project, or null when it is a native project (one whose
+     * model the IDE owns). Drives the editor's compatibility-mode notice, see [UiCompatibilityInfo].
      */
     fun compatibilityInfo(): UiCompatibilityInfo? = null
 
     /**
-     * Re-read the open compatibility-mode project's Gradle build scripts into the model (modules, dependencies,
-     * Android config), then re-resolve dependencies and re-index. Slow (parses + network resolution), so it
-     * suspends off the main thread. No-op returning `ok = false` when the project isn't a Gradle import.
+     * Re-read the open project's build files into the model (modules, dependencies, Android config), then
+     * re-resolve dependencies and re-index. Slow (parses plus network resolution), so it suspends off the main
+     * thread. No-op returning `ok = false` for a project whose model the IDE itself owns.
      */
-    suspend fun syncGradle(): UiSyncResult = UiSyncResult(false, "Not a Gradle project")
+    suspend fun syncProject(): UiSyncResult = UiSyncResult(false, "This project has no build files to sync from.")
 
     /**
      * Convert the open Gradle compatibility-mode project to a native CodeAssist project: the leftover Gradle
@@ -646,12 +684,20 @@ interface ProjectService {
     suspend fun revertToGradle(): UiConvertResult = UiConvertResult(false, "Nothing to revert")
 
     /**
-     * Import the Gradle project at [sourceRootPath] into a new native workspace under the projects root and
-     * open it in compatibility mode (bumps [projectEpoch]). Returns a failure result when the folder isn't an
-     * importable Gradle project or no project manager is available.
+     * What kind of project, if any, the folder at [path] holds — so the picker can ask the questions that
+     * actually apply to it. A CodeAssist workspace is adopted as-is and has no compatibility/convert choice
+     * to make; only a foreign build system does.
      */
-    suspend fun importGradleProject(sourceRootPath: String): UiProjectResult =
-        UiProjectResult(false, "Gradle import not supported by this backend")
+    suspend fun inspectProjectFolder(path: String): UiProjectFolderKind = UiProjectFolderKind.UNKNOWN
+
+    /**
+     * Import the project at [sourceRootPath] into a new workspace under the projects root and open it (bumps
+     * [projectEpoch]). A CodeAssist workspace is copied verbatim; a foreign build system (Gradle today) is
+     * read statically and opened in compatibility mode. Returns a failure result when the folder is neither,
+     * or when no project manager is available.
+     */
+    suspend fun importExternalProject(sourceRootPath: String): UiProjectResult =
+        UiProjectResult(false, "Project import not supported by this backend")
 
     /**
      * Export the project at [rootPath] to a shareable `.caproj` package and return its path (under the app's
@@ -661,17 +707,42 @@ interface ProjectService {
     suspend fun exportProject(rootPath: String, options: UiExportOptions): String? = null
 
     /**
-     * Read the `.caproj` at [archivePath] for the import preview (manifest, file peek, icon) without
+     * Export the project at [rootPath] as a Gradle project (sources plus generated build scripts, zipped
+     * under the app exports dir) so it can be opened in Android Studio or built with `gradle`. Best effort:
+     * the scripts are derived from the project model, and whatever has no Gradle equivalent comes back in
+     * [UiGradleExport.notes]. Null when the export failed. Runs off the main thread.
+     */
+    suspend fun exportGradleProject(rootPath: String): UiGradleExport? = null
+
+    /**
+     * What the export screen can offer for the project at [rootPath]: its modules (with the share of the
+     * package each accounts for) and what bundling the resolved dependencies would cost. Walks the project
+     * tree, so it suspends. Null when [rootPath] holds no readable project.
+     */
+    suspend fun exportPlan(rootPath: String): UiExportPlan? = null
+
+    /**
+     * Read the `.caproj` at [archivePath] for the import preview (manifest, contents, icon) without
      * extracting it. Returns null when the file isn't a readable package.
      */
     suspend fun previewImportPackage(archivePath: String): UiImportPreview? = null
 
     /**
-     * Import the `.caproj` at [archivePath] into a new workspace and open it (bumps [projectEpoch]). Returns a
-     * failure result when the package is invalid or its format is unsupported.
+     * Import the `.caproj` at [archivePath] into a new workspace and open it (bumps [projectEpoch]). A
+     * non-blank [projectName] overrides the name in the package, for both the project and the directory it
+     * lands in. Returns a failure result when the package is invalid or its format is unsupported.
      */
-    suspend fun importPackage(archivePath: String): UiProjectResult =
+    suspend fun importPackage(archivePath: String, projectName: String? = null): UiProjectResult =
         UiProjectResult(false, "Project import not supported by this backend")
+
+    /** Where [importPackage] would put a project imported under [projectName], so the import preview can show
+     *  the destination before committing. Checks the projects directory for name collisions, so it suspends.
+     *  Null when this backend has no projects directory. */
+    suspend fun importDestination(projectName: String): String? = null
+
+    /** Raw bytes of the image at [path], for previewing a file the user picked outside any project (the
+     *  export screen's screenshots). Null when it isn't a readable image of a sane size. */
+    suspend fun imageBytes(path: String): ByteArray? = null
 }
 
 /**
@@ -1126,6 +1197,15 @@ interface AgentService {
 
     /** Answer a pending [permissionRequest]. */
     fun answerPermission(id: Int, decision: UiAgentPermissionDecision)
+
+    /** Whether the backend hosts the local FTP asset server (the More-menu toggle + `ftp_server` tool). */
+    fun ftpServerSupported(): Boolean = false
+
+    /** Whether the local FTP asset server is currently running. */
+    fun ftpServerEnabled(): Boolean = false
+
+    /** Start or stop the local FTP asset server (persisted under `settings.ai.ftpServer`). */
+    fun setFtpServerEnabled(enabled: Boolean) {}
 
     /** A no-op agent for backends that wire none. */
     object Unsupported : AgentService {

@@ -9,17 +9,24 @@ implementations on top of it.
 ```kotlin
 interface BuildSystem {
     val id: BuildSystemId
-    suspend fun sync(project: ProjectContext): SyncResult        // populate/refresh the model
     fun supports(type: ModuleType): Boolean
-    fun createBuildGraph(project: Project, request: BuildRequest): TaskGraph
+    fun createBuildGraph(project: Project, request: BuildRequest, ctx: BuildContext): TaskGraph
     fun tasks(project: Project): List<TaskDescriptor>            // assemble, test, lint, clean, …
+    fun runTasks(project: Project): List<RunTaskSpec>            // rows for the Run picker
+    fun actionFor(spec: RunTaskSpec, project: Project, ctx: BuildContext): RunAction?
 }
 ```
 
-`sync` imports or refreshes the project model from the build system's source of truth.
-`createBuildGraph` turns a build request into an executable task DAG over the module graph. Because
-every build system satisfies the same SPI, the workspace coordinator can mix them across linked
-projects.
+`createBuildGraph` turns a build request into an executable task DAG over the module graph, with the host's
+`BuildContext` supplying the contributed `BuildPlugin`s and the paths/classpaths their tasks need.
+`runTasks`/`actionFor` are the enumerate-then-execute pair behind the Run picker, so a build system's own
+targets are runnable without the host knowing their ids. Reading a project model out of a build system's files
+is a separate SPI (`ProjectImporter`, below), so a build system only builds.
+
+The engine picks a build system per build: one contributed to `platform.buildSystem` whose id matches
+`Project.buildSystemId` owns that project outright, otherwise the built-ins are tried by `supports(moduleType)`
+and then the contributed ones. Because every build system satisfies the same SPI, the workspace coordinator can
+mix them across linked projects.
 
 ## The incremental task engine
 
@@ -91,6 +98,101 @@ host-formatted local time, untyped tool lines best-effort level-inferred from th
 `error:`/`warning:` prefixes) on `BuildState.log`. The console's **Log** tab groups lines by the task that
 produced them (collapsible), colors them by level, and offers a level filter + text search.
 
+## Extending the build
+
+Build logic is contributed, not hard-coded: the built-in Java and Android pipelines are `Plugin`s over the
+task container, and a plugin adds its own the same way through `platform.buildPlugin`.
+
+```kotlin
+class BuildInfoPlugin : BuildPlugin {
+    override val id = "build-info"
+    override fun appliesTo(config: BuildConfiguration) = config.request.goal != BuildGoal.CLEAN
+
+    override fun apply(config: BuildConfiguration) {
+        for (module in config.project.modules) {
+            val gen = TaskName(":${module.name}:generateBuildInfo")
+            val out = config.env.generatedDir(module, id)
+            config.tasks.register(gen) { WriteBuildInfoTask(gen, out) }        // lazy: runs at realize
+            config.tasks.named(Lifecycle.compileJava(module.name)).configure { dependsOn(gen) }
+            config.tasks.named(Lifecycle.assemble(module.name)).configure { dependsOn(gen) }
+        }
+    }
+}
+```
+
+The host reads the extension point per build and hands the plugins to the build system in `BuildContext`; each
+one is applied after the build system's own plugins and before the container is realized. That ordering is what
+lets a contributed task wire by name to tasks it does not own, in both directions. Configuring a task that no
+build system registered is ignored, so one plugin can target several pipelines without probing which is
+running, and a plugin that throws is skipped with a logged warning rather than making the project unbuildable.
+
+A task is the same `Task` the built-ins implement: declare typed inputs and outputs (build-engine's
+`TaskInputsImpl`/`TaskOutputsImpl` cover files, dirs, properties, and classpath hashes) and the engine gives it
+up-to-date checking, caching, parallelism, cancellation, and console/diagnostic streaming for free. Declaring no
+inputs marks the task NO-SOURCE and skips it.
+
+### Lifecycle task names
+
+Contributed tasks anchor to the per-module names each pipeline registers (`Lifecycle` in build-api spells them
+out). Every one is optional: configuring an absent task is a no-op.
+
+| Name | What it fronts |
+|---|---|
+| `:<module>:generateSources` | Source generators, ahead of every compile task. |
+| `:<module>:compileKotlin` | Kotlin compilation, ahead of `compileJava`. |
+| `:<module>:compileJava` | Java compilation. |
+| `:<module>:processResources` | JVM resources copied into the output. |
+| `:<module>:classes` | Everything compiled and resources in place. |
+| `:<module>:jar` | The module's jar. |
+| `:<module>:assemble` | The module's build products, complete. Android suffixes the variant (`assembleDebug`). |
+
+The Android pipeline adds its own variant-suffixed steps (`mergeResources`, `aapt2Link`, `dexBuilder`,
+`packageApk`, `sign`, …), listed with the pipeline below.
+
+### Contributing runnable tasks
+
+A `RunTaskProvider` puts rows in the Run picker (`tasksFor(module)`) and executes the ones it owns
+(`actionFor(...)` returning a `RunAction`: the graph, the console header, an optional banner, and an optional
+post-build step such as installing an APK). Its graph runs through the same executor, console, step list, and
+cancellation as a built-in task. An id that reuses a built-in prefix (`build:`, `run:`, `assemble:`) is
+dispatched by the host's own pipeline instead, so a provider can offer a row that reuses existing machinery.
+
+## Bringing your own project model
+
+A build system the IDE cannot execute can still describe a project. A `ProjectImporter`
+(`platform.projectImporter`) reads its files and returns a declarative snapshot:
+
+```kotlin
+interface ProjectImporter {
+    val id: BuildSystemId                       // becomes Project.buildSystemId
+    val displayName: String
+    fun detect(root: Path): Detection?          // is this folder mine?
+    val ownership: ModelOwnership               // EXTERNAL: the build files are the source of truth
+    fun syncFiles(): List<String>               // globs whose change makes the model stale
+    suspend fun resolve(request: SyncRequest): SyncOutcome
+}
+```
+
+`ExternalProjectModel` holds modules (directory, module-type id, language level, source sets, dependencies,
+facets) plus the repositories the build files declare. It is plain data: an importer never touches a model
+transaction, which keeps it a pure function of the files it read, testable on its own, and comparable between
+syncs. Facets travel as a table name plus TOML-representable values and are decoded by the codec registered for
+that table (`platform.facetCodec`), so an importer can emit an `android` facet without depending on the plugin
+that defines it, and module types are named by id against `platform.moduleType`.
+
+The host owns everything that is the same for every importer: selecting one by `detect` (highest confidence),
+applying the snapshot in a single transaction (`ExternalModelApplier`: add, refresh, remove), binding the
+project to the importer's `BuildSystemId`, merging the declared repositories into `.platform/repositories.txt`,
+recording the owner and the importer's notes in `.platform/external-project`, and stamping the matched
+`syncFiles` in `.platform/sync/<id>.stamp`. A later change to any of those files makes the stamp mismatch, which
+is what surfaces the "sync needed" line in the compatibility banner.
+
+Ownership decides what a sync may do. Under `ModelOwnership.EXTERNAL` the build files are the truth: each sync
+re-declares dependencies and facets from them and removes modules they no longer declare. Declarations made in
+the IDE therefore have to reach those files, which is what `BuildFileWriter` (`platform.buildFileWriter`) is
+for: the host routes an add/remove through the writer registered for the project's build system, and when there
+is none it still applies the change to the model but says in its result that the build files need the same edit.
+
 ## The native Java pipeline
 
 For `java-lib` / `java-cli` modules the graph is `compileJava → jar`, plus a run graph whose exec task
@@ -143,7 +245,7 @@ The Android build expresses the APK build as an incremental task DAG, faithful t
 plugin's shape:
 
 ```
-mergeResources → aapt2Compile → aapt2Link (+R) → [compileKotlin →] compileJava
+[compileAidl →] mergeResources → aapt2Compile → aapt2Link (+R) → [compileKotlin →] compileJava
   → dexBuilder → {mergeProjectDex, mergeLibDex, mergeExtDex} → packageApk → sign   (debug / no minify)
   → minify<Variant>WithR8 (shrink+optimize+obfuscate+dex, +resource shrink) → [shrinkResources →] packageApk → sign   (release / minify)
 mergeNativeLibs, mergeJavaResource ⇒ packageApk    (run alongside dexing; feed the packager)
@@ -220,6 +322,17 @@ mergeNativeLibs, mergeJavaResource ⇒ packageApk    (run alongside dexing; feed
   whole, since L8 release-shrinking against R8's emitted keep rules drops internal helper classes). The
   desugar runtime + config jars are an injected host artifact; when a host ships none the flag is a no-op.
   The config folds into the dex cache key only when enabled, so a no-desugaring build's cache is unchanged.
+- **AIDL.** A module whose `aidl/` source root holds `.aidl` files gets a `compileAidl<Variant>` step that
+  generates the Binder `IInterface`/`Stub`/`Proxy` Java into a generated source root, which then joins the
+  Java and Kotlin compile source paths. There is no `buildFeatures` flag: the task exists exactly when
+  `.aidl` files do, and a module without any registers no task. AGP shells this step out to the SDK's `aidl`
+  binary, which ships only as a linux-x86_64 executable; the compiler here is a Kotlin implementation
+  (`android-support`'s `aidl` package), so the same code serves the desktop build, the on-device build, and
+  the editor's pre-build resolution. Dependency modules' and AAR `aidl/` folders are import roots,
+  contributing type declarations without being generated a second time, and a library's own `aidl/` is
+  packaged into its `.aar`. Framework types are classified from `platforms/android-NN/framework.aidl` when
+  the host has one, and otherwise by reading `android.jar` for an `android.os.Parcelable` or
+  `android.os.IInterface` supertype.
 - **Library-aware.** JAR and AAR dependencies are routed: code to compile/dex, AAR resources into the
   merged app R, AAR assets and JNI into the package.
 - **Packaging: native libs + Java resources (AGP-faithful).** Two merge tasks feed the packager, mirroring
@@ -274,9 +387,9 @@ system produces, so once synced a Gradle-imported project and a native project a
 
 ### Implementation (`ide-core`)
 
-`GradleImport` (with the `dev.ide.core.gradle` reader primitives) is the tolerant, **non-evaluating**
-importer. It is used both to recover legacy Gradle projects into the picker and to re-sync an open
-compatibility-mode project from its scripts.
+`GradleImport` (with the `dev.ide.core.gradle` reader primitives) is the tolerant, **non-evaluating** reader.
+It is used both to recover legacy Gradle projects into the picker and to re-sync an open compatibility-mode
+project from its scripts.
 
 - **`GradleScript`** — a brace-aware, comment-stripping reader (never throws): locate a named block's body
   (`android { … }`, `dependencies { … }`, `plugins { … }`) by balanced braces, split a block into its
@@ -299,22 +412,69 @@ compatibility-mode project from its scripts.
   `freeApi`-style configuration maps to the base scope plus the build-variant qualifier the model's
   `OrderEntry.variant` carries. Anything it can't resolve (an unknown catalog alias, an unresolved version
   variable) is collected into a **`SyncReport`** rather than silently dropped.
-
-`populate()` authors a fresh workspace from a parsed spec; `reconcile()` re-reads the scripts into an
-**already-open** model (adds new modules, and re-declares each module's dependencies + Android facet from
-the scripts — the scripts are the source of truth, so a user-added dependency not in the scripts is dropped).
-`IdeServices.syncGradleFromScripts()` runs the reconcile + save + rewrites the marker/report;
-`ProjectService.syncGradle()` then re-resolves dependencies (`retryDependencyResolution`) and re-indexes.
+- **`GradleProjectImporter`** is the `ProjectImporter` over that reader: it detects a Gradle folder, and maps a
+  parsed `ProjectSpec` onto an `ExternalProjectModel` (module type ids, source sets, dependency declarations,
+  and the `android { }` block encoded through the same facet codec that persists it). Nothing Gradle-specific
+  touches the model: the host applies the snapshot, records the marker and the file stamp, and merges the
+  declared repositories (see "Bringing your own project model"). `ProjectService.syncProject()` runs a sync and,
+  when the model changed, re-resolves dependencies (`retryDependencyResolution`) and re-indexes.
+- **`GradleBuildFileWriter`** is the matching `BuildFileWriter`: adding or removing a dependency in the IDE
+  edits the module's `dependencies { }` block (creating it when absent) so the declaration is still there after
+  the next sync. Edits are located on a comment-masked copy of the script and applied as a single line
+  insertion or deletion, leaving the rest of the file byte-for-byte intact.
 
 ### Surfacing compatibility mode
 
-An imported project is flagged with a `.platform/imported-from-gradle` marker (which also stores the
-`SyncReport` notes). `ProjectInfo.compatibility` is populated for the open project, so the editor shows a
-persistent amber **compat chip** in the top bar (`EditorTopBar`) and a dismissible **details banner**
-(`GradleCompatBanner`) explaining the limitations, listing the reader's notes, and offering **Re-sync**. The
-chip re-opens a dismissed banner, so the limitation is never fully out of sight. `ProjectService.
-importGradleProject(sourceRootPath)` imports any Gradle folder (not just the legacy-recovery path) into a new
-compatibility-mode workspace.
+An imported project is flagged with a `.platform/external-project` marker recording the importer that owns it,
+a one-line summary, and the reader's notes (the older `.platform/imported-from-gradle` marker is still read, so
+a workspace imported by an earlier build keeps its compatibility surface). `ProjectInfo.compatibility` is
+populated for the open project, so the editor shows a persistent amber **compat chip** in the top bar
+(`EditorTopBar`) and a dismissible **details banner** (`GradleCompatBanner`) explaining the limitations, listing
+the reader's notes, and offering **Re-sync**. The chip re-opens a dismissed banner, so the limitation is never
+fully out of sight. When the recorded file stamp no longer matches the scripts on disk, the banner leads with
+"the build files changed since the last sync" instead. `ProjectService.importExternalProject(sourceRootPath)`
+imports any folder an importer claims (not just the legacy-recovery path) into a new compatibility-mode
+workspace.
 
-Still out of scope (roadmap step 9 proper): a live file-watch sync, and `GRADLE_COMPAT` as a first-class
-`BuildSystem` rather than a one-way import to `NATIVE`.
+The project is bound to `BuildSystemId.GRADLE_COMPAT`, so a build system contributed for that id would take its
+builds over; with none registered the native Java/Android pipelines build it as before. Still out of scope: a
+live file-watch sync (the stamp is compared on demand), and executing Gradle itself.
+
+## Exporting a project to Gradle
+
+The other direction: a native project written out as a real Gradle build, so the work can continue in Android
+Studio or on a CI machine. `GradleProjectExport` (`ide-core`, `dev.ide.core.gradle`) renders the model
+(`workspace.json` + each `module.toml` + the Android facet) into `settings.gradle.kts`, a root script that
+declares every plugin version once, and one `build.gradle.kts` per module, then zips those together with the
+sources under `<home>/exports/<name>-gradle.zip`. Reachable from the export screen (the picker's share action)
+as the second export format, alongside the `.caproj` package.
+
+What crosses is what Gradle also models:
+
+- **Modules**: a module's directory becomes its Gradle path (`features/home` → `:features:home`), so the
+  include needs no `projectDir` override; a module sitting at the project root is folded into the root script.
+- **Type and language level**: `com.android.application`/`com.android.library` plus `kotlin.android`, or
+  `java-library` plus `kotlin.jvm`; `compileOptions`/`java { }` and a `kotlin { compilerOptions { jvmTarget } }`
+  from the model's `LanguageLevel`. A JVM module's entry point is detected off disk (a top-level `fun main` or
+  a `static void main`) so the `application` plugin keeps it runnable.
+- **Dependencies**: module deps as `project(":x")`, libraries as their Maven coordinates (versionless ones
+  included, since a `platform(...)` BOM supplies the version), `Exclusion`s as `exclude(group =, module =)`,
+  and a build-variant qualifier as the configuration prefix (`debugImplementation`). The IDE's bundled
+  `kotlin-stdlib` is dropped: the Kotlin plugin brings its own.
+- **The Android facet**: namespace, SDK levels, versionCode/Name when set, manifest placeholders, build types
+  (only where they say something AGP would not do by itself), flavor dimensions and flavors, `buildFeatures`,
+  `packaging`, core-library desugaring, and any source root that is not where Gradle already looks.
+- **Compiler plugins**: Compose, parcelize and serialization are turned on in the IDE by a classpath probe
+  rather than a flag, so the export applies each plugin when either the facet flag or the declared runtime says
+  so. A Compose project that never touched the Build Features toggle still exports as Compose.
+
+Anything with no faithful Gradle expression is reported instead of guessed: a build type's signing config
+(the keystore lives in the app's registry, not the project), the bundled KSP processors (the IDE runs its own,
+so no plugin version or processor coordinate exists to write), a library with no Maven coordinate, and a
+dependency on a module outside the project. The notes appear on the export screen and in the archive's
+`GRADLE-EXPORT.md`. Supporting files are written too: `gradle.properties`, the wrapper properties (the
+`gradlew` scripts are not included, since Android Studio writes them on the first sync), a `.gitignore`, and
+any R8 rules file a build type names but the native project never had.
+
+`GradleExportTest` covers the rendering and closes the loop by re-importing an export with `GradleImport`,
+so the two directions stay in agreement.

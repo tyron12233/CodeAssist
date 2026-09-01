@@ -19,7 +19,11 @@ interface ExtensionRegistry {
 | Extension point | Contributes | Example contributors |
 |---|---|---|
 | `platform.moduleType` | New module types (`ModuleType`). | `android-app`, `android-lib`, `java-lib`, `java-cli`. |
-| `platform.buildSystem` | Build systems (`BuildSystem`). | The native Java/Android build system; a Gradle compatibility importer. |
+| `platform.buildSystem` | Build systems (`BuildSystem`). Selected by `Project.buildSystemId` first, then by `supports(moduleType)`. | The native Java/Android build system. |
+| `platform.buildPlugin` | Build logic (`BuildPlugin`): tasks contributed into a graph another build system assembles. | (none built in; the seam a plugin registers its own tasks through) |
+| `platform.runTaskProvider` | Run-picker rows (`RunTaskProvider`) and the `RunAction` that executes them. | (none built in) |
+| `platform.projectImporter` | Foreign project models (`ProjectImporter`): build files read into an `ExternalProjectModel`. | The Gradle importer. |
+| `platform.buildFileWriter` | Declaration writes back into build files (`BuildFileWriter`). | The Gradle `build.gradle(.kts)` dependency writer. |
 | `platform.languageBackend` | Language backends (`LanguageBackend`). The host picks one per file by matching the file's `LanguageId`. | JDT (`.java`), XML (`.xml`), Kotlin (`.kt`/`.kts`). |
 | `platform.index` | Index extensions (`IndexExtension`). | Class names, packages, source symbols, bytecode members, Android resources. |
 | `platform.analyzer` | File/project analyzers (`Analyzer`). | Built-in Java analyzers. |
@@ -29,6 +33,27 @@ interface ExtensionRegistry {
 | `platform.projectTemplate` | Create-Project templates (`ProjectTemplate`) with data-driven parameters. | `java-console`, `java-library`, `android-app`, `android-library`. |
 | `platform.blockMapping` | Block mappings (`BlockMapping`) for the projectional editor. | The Java block mapping. |
 | `platform.kotlinCompilerPlugin` | Kotlin compiler plugins (`KotlinCompilerPlugin`) the build's `compileKotlin` tasks apply per module. | Compose (`ComposeCompilerPlugin`). |
+| `platform.iconRepository` | Icon libraries (`IconRepository`) the Icon Manager browses: search, list, and fetch an icon's geometry. | Bundled Material Symbols, remote Material Symbols. |
+| `platform.vcsProvider` | Version-control systems (`VcsProvider`): find a checkout root, open it, initialize one, clone one. | The Git provider (JGit). |
+
+## Icon repository SPI
+
+`platform.iconRepository` lets a plugin contribute an icon library to the Icon Manager. An `IconRepository`
+answers three things: the icons it offers (`entries`), how to fetch one icon's geometry in a given style and
+fill (`artwork`), and whether listing them needs the network (`requiresNetwork`, which gates downloading
+behind an explicit user action). Search ranking is not the repository's job: `IconSearch` ranks every
+repository's entries identically, so a contributed library behaves exactly like the built-in ones.
+
+Geometry is returned as the same `VectorSpec` the drawable parser produces, so a contributed icon previews,
+imports and rasterises through the paths already in place. See [icon-manager.md](icon-manager.md).
+
+## Version-control provider SPI
+
+`platform.vcsProvider` lets a plugin contribute a version-control system other than Git. A `VcsProvider`
+answers whether a directory sits inside a checkout it owns (`findRoot`) and opens, initializes, or clones one;
+the resulting `VcsRepository` is the whole working-copy surface the UI drives. The host consults every
+registered provider in turn and uses the first that claims the directory, falling back to the built-in Git
+provider. See [version-control.md](version-control.md).
 
 ## Language backend SPI
 
@@ -88,3 +113,28 @@ A `ProjectTemplate` (contributed to `platform.projectTemplate`) sits one level a
 declares its inputs as a list of typed parameters (text / choice / toggle) so the Create-Project UI is
 data-driven, and authors a whole project against a scaffold (the workspace transaction surface plus a
 file-write helper, with the host injecting the SDK and language level).
+
+## Extending the build
+
+Four points cover the two things a build extension does: add work to a build, and bring in a project model
+from a build system the IDE doesn't own. See `docs/build-system.md` for the task-authoring contract and the
+lifecycle task names a contributed task anchors to.
+
+- **`platform.buildPlugin`** contributes tasks to whatever graph is being assembled. A `BuildPlugin` is the
+  same `Plugin` interface the built-in Java and Android pipelines are written against, so a plugin registers
+  lazily and wires by name (`dependsOn`, `mustRunAfter`) to tasks it does not own. It receives a
+  `BuildConfiguration` carrying the project, the request, the task container, the id of the build system
+  assembling the graph, and a `BuildEnv` for host paths and the module's platform classpath.
+- **`platform.runTaskProvider`** puts rows in the Run picker and executes them: `tasksFor(module)` enumerates,
+  `actionFor(...)` returns a `RunAction` (a graph, a console header, an optional post-build step). An id that
+  reuses a built-in prefix (`build:`, `run:`, `assemble:`) runs through the host's own pipeline instead. A
+  `BuildSystem` bound to a project offers the same pair through `runTasks`/`actionFor`.
+- **`platform.projectImporter`** reads a foreign build system's files into a declarative
+  `ExternalProjectModel` (modules, source sets, dependencies, facets as table + values). The importer returns
+  data and never mutates the model; the host applies the snapshot in one transaction, binds the project to the
+  importer's `BuildSystemId`, merges the repositories it declared, and stamps the files it read so a later
+  change surfaces as "sync needed". `ModelOwnership.EXTERNAL` marks the build files as the source of truth,
+  which makes a sync re-derive the model and drop what they no longer declare.
+- **`platform.buildFileWriter`** writes declarations back, so a dependency added in the IDE survives the next
+  sync of an externally-owned project. Without one the host still applies the change to the model and says in
+  its result that the build files have to be edited too.

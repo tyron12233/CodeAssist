@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.lang.dom.Diagnostic
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
 import kotlin.test.Test
@@ -8,12 +9,19 @@ import kotlin.test.assertTrue
 /**
  * Full-fidelity built-ins: `List`/`Int`/… now come from the real `.kotlin_builtins` declarations (via
  * [dev.ide.lang.kotlin.symbols.BuiltinsReader]), not the `java.util.List`/`java.lang.Integer` approximation.
- * So a read-only `List` has no mutators, `MutableList` does, and `Int.` exposes its companion's `MAX_VALUE`.
+ * So a read-only `List` has no mutators, `MutableList` does, `Int.` exposes its companion's `MAX_VALUE`,
+ * and a builtin enum (`AnnotationTarget`, `AnnotationRetention`, `DeprecationLevel` — types with no
+ * `.class` file at all) carries its constants.
  */
 class BuiltinsFidelityTest {
 
     private fun labels(code: String): List<String> =
         runBlocking { analyzer.completeAtCaret(srcDir, "Use.kt", code) }.items.map { it.symbol?.name ?: it.label }
+
+    private fun diagnose(code: String): List<Diagnostic> {
+        val doc = SnippetDoc(code, DiskFile(srcDir.resolve("Diag.kt")))
+        return runBlocking { analyzer.incrementalParser.parseFull(doc); analyzer.analyze(doc.file).diagnostics }
+    }
 
     @Test
     fun readOnlyListHasRealMembersButNoMutators() {
@@ -33,6 +41,28 @@ class BuiltinsFidelityTest {
     fun intCompanionShowsOnTypeAccess() {
         // `Int.` is type access → the companion's MAX_VALUE shows (it didn't with the java.lang.Integer hack).
         assertTrue("MAX_VALUE" in labels("fun f() { val x = Int.MAX| }"), "Int. should show companion MAX_VALUE")
+    }
+
+    @Test
+    fun builtinEnumEntriesCompleteOnTypeAccess() {
+        // A builtin enum lives ONLY in `.kotlin_builtins` (no `.class`), where its entries are their own
+        // protobuf list — so they used to decode away entirely and `AnnotationTarget.` completed empty.
+        val targets = labels("fun f() { val x = AnnotationTarget.| }")
+        assertTrue("CLASS" in targets && "FUNCTION" in targets, "AnnotationTarget. should offer its entries; got $targets")
+        assertTrue("WARNING" in labels("fun f() { val x = DeprecationLevel.| }"), "DeprecationLevel. should offer WARNING")
+    }
+
+    @Test
+    fun builtinEnumEntryIsNotUnresolved() {
+        val d = diagnose(
+            "package demo\n" +
+                "@Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)\n" +
+                "@Retention(AnnotationRetention.SOURCE)\n" +
+                "annotation class Ann\n" +
+                "val level = DeprecationLevel.WARNING\n"
+        )
+        assertTrue(d.none { it.code == KotlinDiagnosticCodes.UNRESOLVED },
+            "builtin enum constants resolve — none of these is an unresolved reference; got $d")
     }
 
     @Test

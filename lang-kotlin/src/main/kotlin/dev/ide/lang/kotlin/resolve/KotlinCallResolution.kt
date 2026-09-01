@@ -128,7 +128,13 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         // none matches do we pay for the scope-aware lookup, which also finds a bare-called scope EXTENSION
         // (`itemsIndexed(...)` inside `LazyColumn { }`, on the implicit `LazyListScope`) so its `itemContent`
         // function type + receiver is seen. This keeps the common path off the expensive recursive walk.
+        // A LOCAL function SHADOWS a same-named top-level one, so when one is in scope the top-level candidates
+        // are dropped — otherwise `fun f() { fun g() {}; g() }` beside a top-level `fun g(a: Int)` bound to the
+        // top-level and reported a missing argument. The scope walk only runs when a same-named top-level
+        // function actually exists (otherwise the `ifEmpty` branch below already resolves the local), so the
+        // common case stays on the plain index lookup.
         service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD }
+            .let { if (it.isNotEmpty() && localFunctionsInScope(call.textRange.startOffset, name).isNotEmpty()) emptyList() else it }
             .ifEmpty {
                 scopeSymbolsAt(
                     call.textRange.startOffset,

@@ -15,6 +15,7 @@ import dev.ide.ui.backend.BuildStepUi
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.backend.ConsoleChunk
 import dev.ide.ui.backend.ConsoleChunkKind
+import dev.ide.ui.backend.RunFrameUi
 import dev.ide.ui.backend.RunConsoleUi
 import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
@@ -183,6 +184,12 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
                 cur.copy(transcript = appendConsoleChunk(cur.transcript, text, chunkKindOf(kind)))
             }
         },
+        onRunFrame = { runId, path, width, height, seq ->
+            _runConsole.update { cur ->
+                if (cur == null || cur.id != runId) return@update cur
+                cur.copy(frame = RunFrameUi(path, width, height, seq))
+            }
+        },
         onPermission = { reqId, category, detail ->
             _permissionRequest.value = if (reqId < 0) null else UiPermissionRequest(reqId, category, detail)
         },
@@ -237,6 +244,14 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
 
     override fun sendRunInput(text: String) { runCatching { client.sendRunInput(text) } }
     override fun closeRunInput() { runCatching { client.closeRunInput() } }
+
+    override fun sendRunPointer(action: Int, x: Float, y: Float) { runCatching { client.sendRunPointer(action, x, y) } }
+
+    override fun sendRunKey(action: Int, keyCode: Int, keyChar: Char) { runCatching { client.sendRunKey(action, keyCode, keyChar) } }
+
+    override fun sendRunScroll(x: Float, y: Float, notches: Int) { runCatching { client.sendRunScroll(x, y, notches) } }
+
+    override fun setRunSurfaceSize(widthPx: Int, heightPx: Int) { runCatching { client.setRunSurfaceSize(widthPx, heightPx) } }
     override fun answerPermission(id: Int, decision: UiPermissionDecision) { runCatching { client.answerPermission(id, decision.ordinal) } }
 
     /** Fires on first connect AND on every auto-restart after a daemon death — (re)drive a pending build so a

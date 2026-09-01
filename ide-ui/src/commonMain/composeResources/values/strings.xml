@@ -60,21 +60,34 @@ We never collect your code, file or project names, which features you use, or an
     <string name="import_more">+%1$d more</string>
     <string name="import_incompatible">This package needs a newer version of CodeAssist to import.</string>
     <string name="import_deps_bundled">Dependencies included</string>
-    <string name="import_failed">Couldn\'t import the project package.</string>
-    <string name="import_unrecognized_title">Can\'t import this file</string>
-    <string name="import_unrecognized">CodeAssist doesn\'t recognize this file. Choose a .caproj project package to import.</string>
+    <string name="import_failed">Couldn't import the project package.</string>
+    <string name="import_unrecognized_title">Can't import this file</string>
+    <string name="import_unrecognized">CodeAssist doesn't recognize this file. Choose a .caproj project package to import.</string>
+    <string name="import_as_title">Import as</string>
+    <string name="import_as_hint">Project name</string>
+    <string name="import_destination">Lands in %1$s</string>
+    <string name="import_show_files">Show all %1$d files</string>
+    <string name="import_hide_files">Hide files</string>
     <!-- Gradle project import (best-effort compatibility mode) -->
-    <string name="import_gradle_title">Import Gradle project</string>
-    <string name="import_gradle_subtitle">Open an existing Gradle build (best effort)</string>
+    <string name="import_gradle_title">Import project</string>
+    <string name="clone_repository_title">Clone from Git</string>
+    <string name="clone_repository_subtitle">Copy a repository from GitHub or any Git server into a new project.</string>
+    <string name="import_gradle_subtitle">Open a CodeAssist project folder, or an existing Gradle build</string>
     <string name="import_gradle_busy">Importing Gradle project…</string>
-    <string name="import_gradle_failed">That folder isn\'t an importable Gradle project.</string>
+    <string name="import_gradle_failed">That folder isn't a CodeAssist project or a Gradle build.</string>
     <!-- Import-time choice: keep Gradle (compatibility) vs convert to the native module system -->
+    <string name="import_source_title">Import project</string>
+    <string name="import_source_message">Where is the project?</string>
+    <string name="import_source_folder">Project folder</string>
+    <string name="import_source_folder_desc">A CodeAssist project, or an existing Gradle build</string>
+    <string name="import_source_package">Project package</string>
+    <string name="import_source_package_desc">A .caproj file shared or exported from CodeAssist</string>
     <string name="import_gradle_mode_title">Import Gradle project</string>
     <string name="import_gradle_mode_message">How should CodeAssist open this project?</string>
     <string name="import_gradle_mode_compat">Compatibility mode</string>
     <string name="import_gradle_mode_compat_desc">Keep the Gradle files and re-sync from them. You can convert later.</string>
     <string name="import_gradle_mode_convert">Convert to CodeAssist</string>
-    <string name="import_gradle_mode_convert_desc">Switch to CodeAssist\'s module system. Gradle files are moved to a backup folder.</string>
+    <string name="import_gradle_mode_convert_desc">Switch to CodeAssist's module system. Gradle files are moved to a backup folder.</string>
     <plurals name="caproj_files">
         <item quantity="one">%1$d file</item>
         <item quantity="other">%1$d files</item>
@@ -89,7 +102,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="export_description_hint">What does this project do?</string>
     <string name="export_action">Export</string>
     <string name="export_share">Share project</string>
-    <string name="export_failed">Couldn\'t export the project.</string>
+    <string name="export_failed">Couldn't export the project.</string>
     <string name="export_exporting">Exporting…</string>
     <string name="export_success_title">Project exported</string>
     <string name="export_success_subtitle">Your project package is ready.</string>
@@ -97,6 +110,34 @@ We never collect your code, file or project names, which features you use, or an
     <string name="export_save_copy">Save a copy…</string>
     <string name="export_done">Done</string>
     <string name="export_retry">Try again</string>
+    <string name="export_details_title">Details</string>
+    <string name="export_modules_title">Modules</string>
+    <string name="export_modules_desc">Leaving a module out takes everything that depends on it too.</string>
+    <string name="export_options_title">Options</string>
+    <string name="export_bundle_deps_cost">+%1$s</string>
+    <string name="export_excluded_note">Build outputs, caches and SDKs are never packaged.</string>
+    <string name="export_size_estimate">About %1$s</string>
+    <string name="export_screenshots_title">Screenshots</string>
+    <string name="export_screenshots_desc">Shown to whoever imports the package.</string>
+    <string name="export_screenshot_add">Add image</string>
+    <string name="export_screenshot_remove">Remove screenshot</string>
+    <string name="export_intro_gradle">Write this project out as a Gradle build, so you can open it in Android Studio or build it with gradle.</string>
+    <string name="export_format_title">Format</string>
+    <string name="export_format_package">CodeAssist package</string>
+    <string name="export_format_package_desc">A .caproj file anyone with CodeAssist can import, exactly as it is here.</string>
+    <string name="export_format_gradle">Gradle project</string>
+    <string name="export_format_gradle_desc">A .zip holding your sources plus generated Gradle build files, for Android Studio or a gradle build.</string>
+    <string name="export_gradle_title">What gets generated</string>
+    <string name="export_gradle_contents">settings.gradle.kts, a build.gradle.kts per module, gradle.properties, and the Gradle wrapper settings, all written from your project: modules, dependencies, SDK levels, build types, flavors and build features.</string>
+    <string name="export_gradle_caveat">Best effort. The build files are generated from the project model rather than from a build that ran, so read them before you rely on them. Dependencies are declared as Maven coordinates and Gradle downloads them on the first sync, so that sync needs a connection.</string>
+    <string name="export_gradle_wrapper_note">The gradlew scripts are not included: Android Studio adds them on the first sync, or run gradle wrapper once.</string>
+    <string name="export_success_subtitle_gradle">Your Gradle project is ready.</string>
+    <string name="export_notes_title">Worth checking</string>
+    <string name="export_notes_desc">These are also in GRADLE-EXPORT.md inside the archive.</string>
+    <!-- Module type names, shown under a module in the export and import screens -->
+    <string name="share_type_android_app">Android app</string>
+    <string name="share_type_android_lib">Android library</string>
+    <string name="share_type_java_lib">Java library</string>
     <string name="join_the_community">Join the community</string>
     <string name="join_the_community_content">Chat, get help, and share what you build on Discord.</string>
     <string name="support_title">Support CodeAssist</string>
@@ -161,6 +202,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="performance_analytics">Performance analytics</string>
     <string name="sharing_performance_data">Sharing anonymous performance data</string>
     <string name="not_sharing_performance_data">Not sharing performance data</string>
+    <string name="ftp_server">FTP server</string>
+    <string name="ftp_server_running">Running on 127.0.0.1:8021 · uploads go to assets/, writable by any app on this device</string>
+    <string name="ftp_server_stopped">Stopped · local asset upload server</string>
     <string name="compatibility">Compatibility</string>
     <plurals name="recovered_projects">
         <item quantity="one">Recovered %1$d project from an older version</item>
@@ -247,6 +291,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="filetree_delete">Delete</string>
     <string name="filetree_java_class">Java Class</string>
     <string name="filetree_kotlin_file">Kotlin File</string>
+    <string name="filetree_aidl_file">AIDL File</string>
     <string name="filetree_resource_file">Resource File</string>
     <string name="filetree_file">File</string>
     <string name="filetree_directory">Directory</string>
@@ -311,8 +356,6 @@ We never collect your code, file or project names, which features you use, or an
     <string name="sig_more">+%1$d more</string>
     <string name="sig_peek_tip">Tap to peek full definition</string>
     <string name="sig_peek_collapse">Tap to collapse</string>
-    <string name="edsheet_source_control">Source Control</string>
-    <string name="edsheet_source_control_desc">Git integration. Staging, diffs, commit &amp; push is on the roadmap.</string>
     <string name="symbolbar_move_line_up">Move line up</string>
     <string name="symbolbar_move_line_down">Move line down</string>
     <string name="symbolbar_duplicate_line">Duplicate line</string>
@@ -341,7 +384,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="symed_import">Paste JSON</string>
     <string name="symed_import_title">Paste a Symbols &amp; Macros JSON</string>
     <string name="symed_import_apply">Import</string>
-    <string name="symed_import_bad">That doesn\'t look like a valid customization file.</string>
+    <string name="symed_import_bad">That doesn't look like a valid customization file.</string>
     <string name="symed_empty">No symbols yet. Add one, pick a preset, reset to defaults, or suggest from the current file.</string>
     <string name="symed_exported">Copied to clipboard</string>
     <string name="symed_tab_macros">Macros</string>
@@ -376,7 +419,6 @@ We never collect your code, file or project names, which features you use, or an
 
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">Files</string>
-    <string name="edchrome_source">Source</string>
     <string name="edchrome_more">More</string>
     <string name="edchrome_settings_and_tools">Settings &amp; Tools</string>
     <string name="edchrome_toggle_navigator">Toggle navigator</string>
@@ -425,17 +467,22 @@ We never collect your code, file or project names, which features you use, or an
     <!-- app/banners/editor-screen -->
     <string name="gradle_mode_title">Gradle compatibility mode</string>
     <string name="gradle_resync">Re-sync</string>
+    <string name="gradle_sync_needed">The build files changed since the last sync. Re-sync to update the project.</string>
     <string name="gradle_syncing">Syncing from Gradle…</string>
     <string name="gradle_convert">Convert</string>
     <string name="gradle_convert_title">Convert to a CodeAssist project?</string>
-    <string name="gradle_convert_body">The Gradle build files move to a backup folder and CodeAssist\'s own module system takes over. Re-syncing from Gradle won\'t be available afterward. You can undo this.</string>
-    <string name="gradle_convert_notes_intro">The importer read these best-effort — they won\'t be re-checked after converting:</string>
+    <string name="gradle_convert_body">The Gradle build files move to a backup folder and CodeAssist's own module system takes over. Re-syncing from Gradle won't be available afterward. You can undo this.</string>
+    <string name="gradle_convert_notes_intro">The importer read these best-effort — they won't be re-checked after converting:</string>
     <string name="gradle_convert_action">Convert</string>
     <string name="gradle_convert_working">Converting…</string>
     <string name="gradle_converted">Converted to a CodeAssist project.</string>
-    <string name="gradle_convert_failed">Couldn\'t convert this project.</string>
+    <string name="gradle_convert_failed">Couldn't convert this project.</string>
     <string name="gradle_convert_undo">Undo</string>
     <string name="gradle_convert_done">Done</string>
+    <string name="toolchain_warning_build_anyway">Build anyway</string>
+    <string name="toolchain_warning_many">%1$d modules have a runtime out of step with a bundled processor</string>
+    <string name="toolchain_warning_accept_note">Builds of this module will keep failing until the versions match.</string>
+    <string name="toolchain_warning_working">Working…</string>
     <string name="sources_not_installed">Android platform sources (%1$s) aren't installed. It is needed for android.* parameter names &amp; docs.</string>
     <string name="sources_download">Download</string>
     <string name="sources_downloading">Downloading…</string>
@@ -578,13 +625,13 @@ We never collect your code, file or project names, which features you use, or an
     <string name="run_conflict_title">Already running</string>
     <string name="run_conflict_message">A build or program is still running. Stop it and start this run instead?</string>
     <string name="run_conflict_stop_and_run">Stop and Run</string>
-    <string name="run_conflict_dont_ask">Don\'t ask again</string>
+    <string name="run_conflict_dont_ask">Don't ask again</string>
     <!-- Build notifications: the first-build permission prompt + its in-process fallback, and the Settings re-request -->
     <string name="build_notif_title">Show build notifications?</string>
     <string name="build_notif_message">CodeAssist can run builds and your program in a separate, isolated process and show a progress notification while they run. It keeps Android from stopping the build when you switch away, and lets you follow progress. Allow notifications to turn this on.</string>
     <string name="build_notif_not_now">Not now</string>
     <string name="build_notif_inprocess_title">Builds will run in the app</string>
-    <string name="build_notif_inprocess_message">Without notification permission, builds run inside CodeAssist instead of a separate process, and you won\'t see build progress notifications. You can turn notifications on anytime in Settings, under Build Runtime.</string>
+    <string name="build_notif_inprocess_message">Without notification permission, builds run inside CodeAssist instead of a separate process, and you won't see build progress notifications. You can turn notifications on anytime in Settings, under Build Runtime.</string>
     <string name="build_notif_enabled">Build notifications enabled</string>
     <string name="preview_live">Live</string>
     <string name="preview_paused">Paused</string>
@@ -656,10 +703,13 @@ We never collect your code, file or project names, which features you use, or an
     <string name="newfile_kind_file">File</string>
     <string name="newfile_kind_data_class">Data Class</string>
     <string name="newfile_kind_object">Object</string>
+    <string name="newfile_kind_parcelable">Parcelable</string>
     <string name="newfile_new_java_class">New Java class</string>
     <string name="newfile_new_kotlin_file">New Kotlin file</string>
     <string name="newfile_source_java_hint">MyClass</string>
     <string name="newfile_source_kotlin_hint">MyFile</string>
+    <string name="newfile_new_aidl_file">New AIDL file</string>
+    <string name="newfile_source_aidl_hint">IMyService</string>
     <string name="newfile_reskind_layout">Layout</string>
     <string name="newfile_reskind_values">Values</string>
     <string name="newfile_reskind_drawable">Drawable</string>
@@ -885,12 +935,22 @@ We never collect your code, file or project names, which features you use, or an
     <string name="dep_remove_exclusion">Remove exclusion</string>
     <string name="dep_excluded">excluded</string>
     <string name="dep_add_dependency">Add dependency</string>
-    <string name="dep_search_bom_hint">Search a BOM, or type group:name:version, e.g. androidx.compose:compose-bom:…</string>
-    <string name="dep_search_library_hint">Search Maven Central, or type group:name[:version]…</string>
+    <string name="dep_search_hint">Search or paste group:name:version</string>
+    <string name="dep_options_summary">%1$s · %2$s</string>
+    <string name="dep_show_options">Scope and variant options</string>
+    <string name="dep_bom_badge">BOM</string>
+    <string name="dep_quick_start">Quick add</string>
+    <string name="dep_other_sources">Other sources</string>
+    <string name="dep_source_module">Another module in this project</string>
+    <string name="dep_source_local">Local .jar or .aar file</string>
+    <string name="dep_back_to_search">Back to search</string>
+    <string name="dep_firebase_subtitle">BoM + Analytics</string>
+    <string name="dep_play_auth_subtitle">Google Sign-In</string>
+    <string name="dep_maps_subtitle">Google Maps SDK</string>
+    <string name="dep_location_subtitle">Fused location provider</string>
     <string name="dep_scope">scope</string>
     <string name="dep_variant">variant</string>
     <string name="dep_all_variants">All variants</string>
-    <string name="dep_suggested">suggested</string>
     <string name="dep_adding">Adding %1$s</string>
     <string name="dep_resolving_transitive">Resolving transitive dependencies…</string>
     <string name="dep_no_other_modules">No other modules available to depend on.</string>
@@ -961,7 +1021,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="modcfg_build_features_intro">Turn build features on per module. Enabling one adds the dependencies it needs.</string>
     <string name="modcfg_compiler_plugins_android_only">Compiler plugins apply to Android modules only.</string>
     <string name="modcfg_compiler_plugins_intro">Kotlin compiler plugins transform your code at build time. Enabling one adds its runtime; the plugin then applies automatically wherever that runtime is on the classpath.</string>
-    <string name="modcfg_compiler_plugin_applied">Active on this module\'s classpath</string>
+    <string name="modcfg_compiler_plugin_applied">Active on this module's classpath</string>
     <string name="modcfg_signing_android_only">Signing applies to Android modules only.</string>
     <string name="modcfg_signing_intro">Choose the keystore that signs each build type. An unassigned type signs with the debug keystore.</string>
     <string name="modcfg_packaging_android_only">Packaging options apply to Android modules only.</string>
@@ -1005,6 +1065,8 @@ We never collect your code, file or project names, which features you use, or an
     <string name="modcfg_no_source_sets">No source sets yet.</string>
     <string name="modcfg_save">Save</string>
     <string name="modcfg_save_changes">Save changes</string>
+    <string name="modcfg_unsaved_changes">Unsaved changes</string>
+    <string name="modcfg_discard">Discard</string>
     <string name="modcfg_missing_keep_rule_files">Missing keep-rule files</string>
     <string name="modcfg_missing_keep_rule_files_content">These files are referenced by a build type but don't exist, so R8 skips them when minify is on.</string>
     <string name="modcfg_no_roots">no roots</string>
@@ -1169,13 +1231,15 @@ We never collect your code, file or project names, which features you use, or an
     <string name="set_editor_wrap">Word wrap</string>
     <string name="set_editor_wrap_desc">Soft-wrap long lines at the viewport edge instead of scrolling horizontally</string>
     <string name="set_editor_wrap_indent">Indent wrapped lines</string>
-    <string name="set_editor_wrap_indent_desc">Align a wrapped line\'s continuation rows to its indentation (when word wrap is on)</string>
+    <string name="set_editor_wrap_indent_desc">Align a wrapped line's continuation rows to its indentation (when word wrap is on)</string>
+    <string name="set_editor_hscrollbar">Horizontal scrollbar</string>
+    <string name="set_editor_hscrollbar_desc">Show a draggable bar along the bottom edge while a line runs past the view (word wrap leaves nothing to scroll)</string>
     <string name="set_editor_two_axis">Two-axis scrolling</string>
     <string name="set_editor_two_axis_desc">Drag in any direction to scroll both axes at once (touch)</string>
     <string name="set_editor_pinch">Pinch to zoom</string>
     <string name="set_editor_pinch_desc">Pinch with two fingers to change the code font size</string>
     <string name="set_editor_kbd_suggest">Keyboard suggestions</string>
-    <string name="set_editor_kbd_suggest_desc">Let the soft keyboard autocorrect, suggest, and auto-space (a normal keyboard). Turn off for raw code input, so a typed \'.\' doesn\'t get an auto-inserted space, at the cost of the suggestion strip.</string>
+    <string name="set_editor_kbd_suggest_desc">Let the soft keyboard autocorrect, suggest, and auto-space (a normal keyboard). Turn off for raw code input, so a typed '.' doesn't get an auto-inserted space, at the cost of the suggestion strip.</string>
     <!-- Code Completion -->
     <string name="set_completion_auto">Auto-show suggestions</string>
     <string name="set_completion_auto_desc">Pop the list up while typing (off = Ctrl-Space only)</string>
@@ -1195,13 +1259,13 @@ We never collect your code, file or project names, which features you use, or an
     <string name="set_analysis_perf_desc">Diagnostic: write per-pass (semantic / diagnostics / folds / inlay / previews) and per-stage timings to the log so you can find what makes a file slow. Read them in Privacy → View logs. Off by default.</string>
     <!-- Preview sandbox -->
     <string name="set_preview_file">Block file access</string>
-    <string name="set_preview_file_desc">Stop previewed code from reading or writing files (java.io / java.nio / kotlin.io). Blocked calls return null and are listed on the preview\'s problem chip. Applies to newly opened previews.</string>
+    <string name="set_preview_file_desc">Stop previewed code from reading or writing files (java.io / java.nio / kotlin.io). Blocked calls return null and are listed on the preview's problem chip. Applies to newly opened previews.</string>
     <string name="set_preview_net">Block network access</string>
     <string name="set_preview_net_desc">Stop previewed code from opening sockets or HTTP connections (java.net, OkHttp, Ktor).</string>
     <string name="set_preview_android">Block Android system calls</string>
     <string name="set_preview_android_desc">Stop previewed code from launching activities/services, sending broadcasts, using system services, ContentResolver, or SharedPreferences. Resource and density reads stay available.</string>
     <string name="set_preview_process">Block process &amp; reflection</string>
-    <string name="set_preview_process_desc">Stop previewed code from exec\'ing processes, calling System.exit, loading native libraries, or invoking members reflectively.</string>
+    <string name="set_preview_process_desc">Stop previewed code from exec'ing processes, calling System.exit, loading native libraries, or invoking members reflectively.</string>
     <!-- Build &amp; Dependencies -->
     <string name="set_build_conflict">Dependency conflicts</string>
     <string name="set_build_conflict_desc">Which version wins when two are requested in the graph</string>
@@ -1210,9 +1274,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="set_build_conflict_fail">Fail on conflict</string>
     <!-- Build Runtime (titles/options/buttons + static descriptions; device-specific descriptions stay backend-English) -->
     <string name="set_br_separate">Build in a separate process</string>
-    <string name="set_br_separate_desc">Run builds and your program in an isolated process so an out-of-memory crash can\'t take down the IDE. Off = build in-process (uses less memory, no isolation). Needs notification permission (the isolated process shows a progress notification); without it, builds run in-process. Takes effect the next time you open a project.</string>
+    <string name="set_br_separate_desc">Run builds and your program in an isolated process so an out-of-memory crash can't take down the IDE. Off = build in-process (uses less memory, no isolation). Needs notification permission (the isolated process shows a progress notification); without it, builds run in-process. Takes effect the next time you open a project.</string>
     <string name="set_br_notif">Build notifications</string>
-    <string name="set_br_notif_desc">Show a progress notification while a build or your program runs in the separate process. Required for isolated builds; if it\'s off, builds run inside the app.</string>
+    <string name="set_br_notif_desc">Show a progress notification while a build or your program runs in the separate process. Required for isolated builds; if it's off, builds run inside the app.</string>
     <string name="set_br_notif_btn">Enable</string>
     <string name="set_br_r8mode">R8 execution</string>
     <string name="set_br_r8mode_forked">Forked VM</string>
@@ -1220,7 +1284,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="set_br_r8heap">R8 forked-VM heap</string>
     <string name="set_br_dexoff">Off-heap dexing threshold</string>
     <string name="set_br_dexbatch">Dex merge batch size</string>
-    <string name="set_br_dexbatch_desc">On a very large app the final dexing step merges classes in batches so it doesn\'t need all of them in memory at once. Smaller batches keep that memory low (good for low-memory devices) but make the APK slightly larger (less shared compression across classes); larger batches pack tighter but need more memory per merge. Most apps never reach this — it only kicks in past a few thousand classes.</string>
+    <string name="set_br_dexbatch_desc">On a very large app the final dexing step merges classes in batches so it doesn't need all of them in memory at once. Smaller batches keep that memory low (good for low-memory devices) but make the APK slightly larger (less shared compression across classes); larger batches pack tighter but need more memory per merge. Most apps never reach this — it only kicks in past a few thousand classes.</string>
     <string name="set_br_dexfork">Max concurrent dex forks</string>
     <!-- Privacy &amp; Data -->
     <string name="set_privacy_analytics">Share performance analytics</string>
@@ -1255,11 +1319,11 @@ We never collect your code, file or project names, which features you use, or an
     <string name="quickdoc_see_also">See also</string>
     <!-- Resource preview pane -->
     <string name="respreview_no_preview">No preview available for this file</string>
-    <string name="respreview_render_drawable_failed">Couldn\'t render this drawable</string>
+    <string name="respreview_render_drawable_failed">Couldn't render this drawable</string>
     <string name="respreview_unsupported">Unsupported: &lt;%1$s> — %2$s</string>
     <string name="respreview_no_colors">No colors declared in this file</string>
     <string name="respreview_unresolved">(unresolved)</string>
-    <string name="respreview_decode_image_failed">Couldn\'t decode this image</string>
+    <string name="respreview_decode_image_failed">Couldn't decode this image</string>
     <!-- Module config: keep-rule file build-type descriptor -->
     <string name="modcfg_consumer_suffix">%1$s · consumer</string>
     <!-- Block editor palette items -->
@@ -1271,4 +1335,74 @@ We never collect your code, file or project names, which features you use, or an
     <string name="block_palette_variable">Variable</string>
     <string name="block_palette_call">Call</string>
     <string name="block_palette_comment">Comment</string>
+    <!-- Icon Manager -->
+    <string name="icons_title">Icon Manager</string>
+    <string name="icons_tab_project">Project</string>
+    <string name="icons_tab_library">Libraries</string>
+    <string name="icons_tab_compose">Compose</string>
+    <string name="icons_search_hint">Search icons</string>
+    <string name="icons_empty">No icons match that search.</string>
+    <string name="icons_project_empty">This project has no drawable or mipmap resources yet.</string>
+    <string name="icons_compose_empty">This module has no Compose icons library on its classpath.</string>
+    <string name="icons_compose_add_hint">Add androidx.compose.material:material-icons-extended to browse the full set.</string>
+    <string name="icons_load_set">Load %1$s icons</string>
+    <string name="icons_loading_set">Downloading the icon list…</string>
+    <string name="icons_license">Licence: %1$s</string>
+    <string name="icons_style">Style</string>
+    <string name="icons_style_outlined">Outlined</string>
+    <string name="icons_style_rounded">Rounded</string>
+    <string name="icons_style_sharp">Sharp</string>
+    <string name="icons_filled">Filled</string>
+    <string name="icons_name">Resource name</string>
+    <string name="icons_size">Size</string>
+    <string name="icons_colour">Colour</string>
+    <string name="icons_colour_original">Keep original</string>
+    <string name="icons_res_type">Folder</string>
+    <string name="icons_target">Write to</string>
+    <string name="icons_import">Add to project</string>
+    <string name="icons_import_svg">Import an SVG</string>
+    <string name="icons_copied">Copied to the clipboard</string>
+    <string name="icons_conflict_title">Replace %1$s?</string>
+    <string name="icons_conflict_body">%1$s already declares this resource. Replacing it updates every reference.</string>
+    <string name="icons_replace">Replace</string>
+    <string name="icons_configurations">%1$d configurations</string>
+    <string name="icons_app_icon_title">App icon</string>
+    <string name="icons_app_icon_subtitle">Preview and replace the launcher icon</string>
+    <!-- App icon studio -->
+    <string name="appicon_title">App icon</string>
+    <string name="appicon_current">Current icon</string>
+    <string name="appicon_preview">Preview</string>
+    <string name="appicon_mask_circle">Circle</string>
+    <string name="appicon_mask_squircle">Squircle</string>
+    <string name="appicon_mask_rounded">Rounded</string>
+    <string name="appicon_mask_square">Square</string>
+    <string name="appicon_themed">Themed</string>
+    <string name="appicon_foreground">Foreground</string>
+    <string name="appicon_background">Background</string>
+    <string name="appicon_monochrome">Themed layer</string>
+    <string name="appicon_none">None</string>
+    <string name="appicon_choose_icon">Choose an icon</string>
+    <string name="appicon_choose_image">Choose an image</string>
+    <string name="appicon_use_project_drawable">Use a project drawable</string>
+    <string name="appicon_same_as_foreground">Same as foreground</string>
+    <string name="appicon_scale">Scale</string>
+    <string name="appicon_offset_x">Move across</string>
+    <string name="appicon_offset_y">Move down</string>
+    <string name="appicon_outputs">What gets written</string>
+    <string name="appicon_gen_rasters">Density PNGs (pre-Android 8)</string>
+    <string name="appicon_gen_round">Round icon</string>
+    <string name="appicon_gen_playstore">Play Store image (512px)</string>
+    <string name="appicon_files">%1$d files</string>
+    <string name="appicon_replacing">Replaces %1$d existing files</string>
+    <string name="appicon_manifest">Manifest: %1$s</string>
+    <string name="appicon_apply">Apply icon</string>
+    <string name="appicon_applied">App icon updated</string>
+    <string name="appicon_no_module">This project has no Android application module.</string>
+    <string name="appicon_module">Module</string>
+    <string name="filetree_image_asset">Image asset</string>
+    <string name="icons_insert">Insert at cursor</string>
+    <string name="icons_copy">Copy</string>
+    <string name="icons_reference">Reference</string>
+    <string name="icons_app_icon_short">App icon</string>
+    <string name="icons_no_repositories">No icon libraries are registered.</string>
 </resources>

@@ -64,6 +64,14 @@ interface AdHost {
     fun showPrivacyOptions() {}
 
     /**
+     * An opaque identity for the installed build: the same string for every launch of one installation, and a
+     * different one after a fresh install or an update (on Android, the package's `lastUpdateTime`).
+     * [dev.ide.ui.ads.AdController] uses it to turn ads back on once per install/update. Null where the host
+     * can't tell (desktop; the default), which means the ads preference simply persists forever.
+     */
+    val installStamp: String? get() = null
+
+    /**
      * Render a native ad for [placement] within the caller-provided [modifier] bounds. Called only when ads
      * are active (see [dev.ide.ui.ads.AdController]); the host loads/caches the ad and paints it to match the
      * app. A host with no ad ready may render nothing — the surrounding [dev.ide.ui.components.AdSlot] then

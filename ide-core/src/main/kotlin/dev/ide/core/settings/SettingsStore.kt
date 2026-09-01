@@ -36,6 +36,7 @@ class SettingsStore(
             codeFolding = bool("editor.codeFolding", d.codeFolding),
             wordWrap = bool("editor.wordWrap", d.wordWrap),
             wrapIndent = bool("editor.wrapIndent", d.wrapIndent),
+            horizontalScrollbar = bool("editor.horizontalScrollbar", d.horizontalScrollbar),
             twoAxisScroll = bool("editor.twoAxisScroll", d.twoAxisScroll),
             pinchZoom = bool("editor.pinchZoom", d.pinchZoom),
             softKeyboardSuggestions = bool("editor.softKeyboardSuggestions", d.softKeyboardSuggestions),
@@ -135,6 +136,7 @@ class SettingsStore(
         put("editor.codeFolding", s.codeFolding.toString())
         put("editor.wordWrap", s.wordWrap.toString())
         put("editor.wrapIndent", s.wrapIndent.toString())
+        put("editor.horizontalScrollbar", s.horizontalScrollbar.toString())
         put("editor.twoAxisScroll", s.twoAxisScroll.toString())
         put("editor.pinchZoom", s.pinchZoom.toString())
         put("editor.softKeyboardSuggestions", s.softKeyboardSuggestions.toString())

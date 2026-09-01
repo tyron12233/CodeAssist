@@ -5,13 +5,10 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
-import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -29,7 +26,6 @@ import kotlin.test.assertEquals
  * With both fixed, `6 * cardWidthWithPaddingPx` computes (width no longer collapses to 0 → the gradient draws).
  */
 class SourceExtPropInReceiverScopeTest {
-    private fun cp() = System.getProperty("java.class.path").split(File.pathSeparator).filter { it.endsWith(".jar") }.map { Paths.get(it) }
     private class Disk(val p: Path) : VirtualFile {
         override val path get() = p.toString(); override val name get() = p.fileName?.toString() ?: p.toString()
         override val isDirectory get() = Files.isDirectory(p); override val exists get() = Files.exists(p)
@@ -45,7 +41,7 @@ class SourceExtPropInReceiverScopeTest {
     private fun interpretIndexed(src: String): Any? {
         val dir = Files.createTempDirectory("srcext")
         val f = dir.resolve("Main.kt"); Files.writeString(f, src.trimIndent())
-        val svc = KotlinSymbolService(sourceRoots = listOf(Disk(dir)), classpathJars = cp())
+        val svc = previewSymbolService(listOf(Disk(dir)))
         val parsed = KotlinIncrementalParser().parseFull(Doc(f)) as KotlinParsedFile
         val prog = KotlinPreviewLowering(svc).program(parsed)
         return Interpreter(prog, ComposeDispatcher()).call(prog["box/0"] ?: error("no box/0; keys=${prog.keys}"), emptyList())

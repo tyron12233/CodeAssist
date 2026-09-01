@@ -3,6 +3,7 @@ package dev.ide.lang.jdt
 import dev.ide.lang.AnalysisResult
 import dev.ide.lang.CompilationContext
 import dev.ide.lang.JvmIndexScopeProvider
+import dev.ide.lang.JvmSourceAttachments
 import dev.ide.lang.SourceAnalyzer
 import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.dom.DomNode
@@ -152,44 +153,16 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable, J
 
         // Source attachments for names/javadoc: library -sources.jars (+ exploded source dirs), the JDK
         // src.zip (under the boot JDK image), and the Android platform sources dir (sibling of android.jar).
-        val attachments = ctx.sourceAttachments.mapNotNull { runCatching { Paths.get(it.path) }.getOrNull() }
-        val attachmentJars = attachments.filter { val s = it.toString(); (s.endsWith(".jar") || s.endsWith(".zip")) && Files.isRegularFile(it) }
-        val attachmentDirs = attachments.filter { Files.isDirectory(it) }
-        val jdkSrcZip = jdkHome?.resolve("lib")?.resolve("src.zip")?.takeIf { Files.isRegularFile(it) }
-        val androidSources = (ctx.classpath.entries + ctx.bootClasspath.entries)
-            .mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }
-            .firstOrNull { it.fileName?.toString() == "android.jar" }
-            ?.let { jar -> androidPlatformSources(jar) }
+        // Derived by the shared [JvmSourceAttachments] so this backend and the IntelliJ-PSI one publish the
+        // SAME roots: the set the source-doc index reads for real parameter names.
+        val attachmentDirs = JvmSourceAttachments.attachmentDirs(ctx)
+        val androidSources = JvmSourceAttachments.androidPlatformSources(ctx)
         baseSourceDirs = sourceRootPaths + attachmentDirs + listOfNotNull(androidSources)
-        baseSourceJars = attachmentJars + listOfNotNull(jdkSrcZip)
-        librarySourceArchives = (baseSourceJars + attachmentDirs + listOfNotNull(androidSources)).distinct()
+        baseSourceJars = JvmSourceAttachments.attachmentJars(ctx) +
+            listOfNotNull(JvmSourceAttachments.jdkSrcZip(jdkHome))
+        librarySourceArchives = JvmSourceAttachments.librarySourceArchives(ctx, jdkHome)
         sourceMethodResolver = SourceMethodResolver(baseSourceDirs, baseSourceJars)
     }
-
-    /**
-     * The Android platform `sources/android-NN` dir for a `platforms/android-NN/android.jar`, so framework
-     * APIs complete with real parameter names + javadoc. Prefers the exact platform-dir name, but falls back
-     * to any installed `sources/android-NN…` with the same MAJOR API level: the SDK ships framework sources
-     * keyed by base level (`android-36`) while the platform jar may be a minor/extension revision (`android-36.1`)
-     * — an exact-name-only match would silently miss the sources whenever the two don't line up.
-     */
-    private fun androidPlatformSources(jar: Path): Path? {
-        val platformDir = jar.parent ?: return null
-        val sourcesRoot = platformDir.parent?.parent?.resolve("sources") ?: return null
-        val exact = sourcesRoot.resolve(platformDir.fileName.toString())
-        if (Files.isDirectory(exact)) return exact
-        if (!Files.isDirectory(sourcesRoot)) return null
-        val major = androidMajor(platformDir.fileName.toString()) ?: return null
-        return Files.list(sourcesRoot).use { stream ->
-            stream.filter { Files.isDirectory(it) && androidMajor(it.fileName.toString()) == major }
-                .sorted(compareByDescending { it.fileName.toString() })
-                .findFirst().orElse(null)
-        }
-    }
-
-    /** `android-36` / `android-36.1` → 36 (the base API level, ignoring the minor/extension revision). */
-    private fun androidMajor(dirName: String): Int? =
-        dirName.removePrefix("android-").substringBefore('.').toIntOrNull()
 
     /** Add extra source archives (e.g. a downloaded JDK `src.zip`) for names/javadoc, rebuilding the resolver. */
     fun addSourceJars(extra: List<Path>) {

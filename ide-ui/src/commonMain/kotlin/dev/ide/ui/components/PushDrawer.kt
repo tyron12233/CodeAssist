@@ -186,19 +186,30 @@ fun PushDrawer(
         // content) move an open drawer directly — this is the drag-to-close path.
         val closeDrag = rememberDraggableState { delta -> dragBy(delta) }
 
+        // The drag-to-close modifier is ATTACHED only while the drawer is actually there to close, rather than
+        // left in place with `enabled = false`. A horizontal `draggable` answers its children's "is an ancestor
+        // interested in this drag?" question from the delta's angle alone, ignoring `enabled`, and a child
+        // `scrollable2D` (the editor's two-axis touch scrolling) never claims self-interest — Compose's angle
+        // test returns false for an unlocked orientation. A disabled drag-to-close therefore stalled every
+        // horizontal pan in the editor below it: the pan was deferred event after event, then delivered as one
+        // jump when the stroke finally stopped reading as horizontal.
+        val closeGesture = if (gesturesEnabled && drawerVisible) {
+            Modifier.draggable(
+                closeDrag,
+                Orientation.Horizontal,
+                // Settle on `scope` so it is ordered after the drag's pending snapTo (see onPreFling):
+                // running it inline on the draggable coroutine let a stale snap cancel it, leaving the
+                // drawer stuck mid-swipe on release instead of snapping to the nearer edge.
+                onDragStopped = { velocity -> scope.launch { settle(velocity) } },
+            )
+        } else {
+            Modifier
+        }
         Box(
             Modifier
                 .fillMaxSize()
                 .nestedScroll(connection)
-                .draggable(
-                    closeDrag,
-                    Orientation.Horizontal,
-                    enabled = gesturesEnabled && drawerVisible,
-                    // Settle on `scope` so it is ordered after the drag's pending snapTo (see onPreFling):
-                    // running it inline on the draggable coroutine let a stale snap cancel it, leaving the
-                    // drawer stuck mid-swipe on release instead of snapping to the nearer edge.
-                    onDragStopped = { velocity -> scope.launch { settle(velocity) } },
-                ),
+                .then(closeGesture),
         ) {
             // ONE moving plane carries both panes (a push, not an overlay): the drawer hangs off the
             // plane's left edge at a constant offset, so the single dynamic placement lambda below is the

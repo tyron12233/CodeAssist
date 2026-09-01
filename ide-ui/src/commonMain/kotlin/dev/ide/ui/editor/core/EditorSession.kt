@@ -74,6 +74,14 @@ class EditorSession(
     var maxLineChars by mutableIntStateOf(0)
         private set
 
+    // Live horizontal-scroll extent (px), mirrored from the editor geometry so gesture handlers OUTSIDE the
+    // editor (the right tool-window swipe overlay) can tell whether the editor still has content to reveal
+    // rightward before they claim a leftward swipe — otherwise that swipe-to-open steals the editor's
+    // horizontal scroll near the right edge. Plain vars, not snapshot state: written in the scroll/measure
+    // phase and read from pointer coroutines, both on the main thread, never in composition/draw.
+    var hScrollOffsetPx: Float = 0f
+    var hScrollMaxPx: Float = 0f
+
     /**
      * Diagnostics anchored to this buffer: error/warning squiggles and gutter marks. The editor treats
      * them like every other span it owns (the line index, the token spans): [replaceRange] shifts them in
@@ -951,7 +959,7 @@ class EditorSession(
     private class CommentSyntax(val line: String?, val blockOpen: String?, val blockClose: String?)
 
     private fun commentSyntax(): CommentSyntax = when (language) {
-        CodeLanguage.Java, CodeLanguage.Kotlin -> CommentSyntax("//", "/*", "*/")
+        CodeLanguage.Java, CodeLanguage.Kotlin, CodeLanguage.Aidl -> CommentSyntax("//", "/*", "*/")
         CodeLanguage.Xml, CodeLanguage.Markdown -> CommentSyntax(null, "<!--", "-->")
         CodeLanguage.Proguard -> CommentSyntax("#", null, null)
         CodeLanguage.Plain -> CommentSyntax(null, null, null)

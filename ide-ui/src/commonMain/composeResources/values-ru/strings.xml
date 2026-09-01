@@ -237,8 +237,6 @@
     <string name="sig_more">+%1$d ещё</string>
     <string name="sig_peek_tip">Нажмите, чтобы посмотреть полное определение</string>
     <string name="sig_peek_collapse">Нажмите, чтобы свернуть</string>
-    <string name="edsheet_source_control">Управление версиями</string>
-    <string name="edsheet_source_control_desc">Интеграция с Git. Индексация, различия, commit и push запланированы.</string>
     <string name="symbolbar_move_line_up">Переместить строку вверх</string>
     <string name="symbolbar_move_line_down">Переместить строку вниз</string>
     <string name="symbolbar_duplicate_line">Дублировать строку</string>
@@ -249,7 +247,6 @@
     <string name="breadcrumb_preview">Предпросмотр</string>
     <string name="breadcrumb_split">Разделение</string>
     <string name="edchrome_files">Файлы</string>
-    <string name="edchrome_source">Исходный код</string>
     <string name="edchrome_more">Ещё</string>
     <string name="edchrome_settings_and_tools">Настройки и инструменты</string>
     <string name="edchrome_toggle_navigator">Переключить навигатор</string>
@@ -659,12 +656,9 @@
     <string name="dep_remove_exclusion">Убрать исключение</string>
     <string name="dep_excluded">исключено</string>
     <string name="dep_add_dependency">Добавить зависимость</string>
-    <string name="dep_search_bom_hint">Найдите BOM или введите group:name:version, например androidx.compose:compose-bom:…</string>
-    <string name="dep_search_library_hint">Поиск в Maven Central или введите group:name[:version]…</string>
     <string name="dep_scope">область</string>
     <string name="dep_variant">вариант</string>
     <string name="dep_all_variants">Все варианты</string>
-    <string name="dep_suggested">рекомендуется</string>
     <string name="dep_adding">Добавление %1$s</string>
     <string name="dep_resolving_transitive">Разрешение транзитивных зависимостей…</string>
     <string name="dep_no_other_modules">Нет других модулей, от которых можно зависеть.</string>

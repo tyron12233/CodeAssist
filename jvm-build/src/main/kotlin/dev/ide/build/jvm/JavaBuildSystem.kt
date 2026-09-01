@@ -1,12 +1,15 @@
 package dev.ide.build.jvm
 
+import dev.ide.build.BuildContext
+import dev.ide.build.BuildEnv
 import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSystem
-import dev.ide.build.SyncResult
 import dev.ide.build.TaskDescriptor
 import dev.ide.build.TaskGraph
 import dev.ide.build.TaskName
+import dev.ide.build.engine.DefaultBuildEnv
 import dev.ide.build.engine.DefaultTaskContainer
+import dev.ide.build.engine.applyBuildPlugins
 import dev.ide.build.engine.InterpretExecTask
 import dev.ide.build.engine.ProgramInterpreter
 import dev.ide.build.engine.ProgramIo
@@ -23,7 +26,6 @@ import dev.ide.model.DependencyScope
 import dev.ide.model.Module
 import dev.ide.model.ModuleType
 import dev.ide.model.Project
-import dev.ide.platform.ProgressReporter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -56,8 +58,6 @@ class JavaBuildSystem(
 
     override val id: BuildSystemId = BuildSystemId.NATIVE
 
-    override suspend fun sync(project: Project, progress: ProgressReporter): SyncResult = SyncResult(true, emptyList())
-
     override fun supports(moduleType: ModuleType): Boolean = moduleType.id.startsWith("java")
 
     override fun tasks(project: Project): List<TaskDescriptor> = listOf(
@@ -65,11 +65,23 @@ class JavaBuildSystem(
         TaskDescriptor("compileJava", "build", "Compile Java sources"),
     )
 
-    override fun createBuildGraph(project: Project, request: BuildRequest): TaskGraph {
+    override fun createBuildGraph(project: Project, request: BuildRequest): TaskGraph =
+        createBuildGraph(project, request, BuildContext(env = env(project)))
+
+    override fun createBuildGraph(project: Project, request: BuildRequest, ctx: BuildContext): TaskGraph {
         val tasks = DefaultTaskContainer()
-        JavaPlugin(bootClasspathFor, kotlin, plugins, generators, mainClassFor).apply(SimpleBuildConfiguration(project, request, tasks))
+        val config = SimpleBuildConfiguration(project, request, tasks, id, ctx.env)
+        JavaPlugin(bootClasspathFor, kotlin, plugins, generators, mainClassFor).apply(config)
+        // Contributed build logic (BUILD_PLUGIN_EP) lands after the Java plugin, so it can wire by name to
+        // the tasks just registered; the container is realized only once every plugin has had its turn.
+        applyBuildPlugins(config, ctx.plugins)
         return tasks.build()
     }
+
+    /** The environment for a graph the host realized without one: the project root plus this system's
+     *  per-module platform classpath. */
+    private fun env(project: Project): BuildEnv =
+        DefaultBuildEnv(Paths.get(project.rootDir.path), bootClasspathFor = bootClasspathFor)
 
     /**
      * Build the closure of [module] then run [mainClass] as a console app by INTERPRETING its bytecode on the

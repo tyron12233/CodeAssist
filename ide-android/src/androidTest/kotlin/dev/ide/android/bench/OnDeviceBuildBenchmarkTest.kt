@@ -41,7 +41,11 @@ import dev.ide.model.LibraryKind
 import dev.ide.model.LibraryRef
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
+import dev.ide.core.gradle.GradleProjectImporter
+import dev.ide.model.impl.ExternalModelApplier
 import dev.ide.model.impl.ProjectModel
+import dev.ide.model.sync.SyncReason
+import dev.ide.model.sync.SyncRequest
 import dev.ide.platform.ProgressReporter
 import dev.ide.platform.impl.PlatformCore
 import dev.ide.vfs.local.LocalFileSystem
@@ -468,12 +472,18 @@ class OnDeviceBuildBenchmarkTest {
             AndroidSupport.register(ModuleTypeRegistry(platform.extensions), FacetCodecRegistry())
             val store = ProjectModel.open(ws.toPath(), platform, FacetCodecRegistry().register(AndroidFacetCodec))
 
-            val spec = dev.ide.core.GradleImport.parse(ws.toPath())
-                ?: throw AssertionError("not an importable Gradle project: $ws")
-            Log.i(TAG, "import: '${spec.name}' modules=${spec.modules.map { "${it.name}:${it.kind}(compose=${it.isCompose})" }}")
+            // The same two steps the IDE's own Sync runs: an importer reads the build files into a snapshot,
+            // then the applier merges that snapshot into the workspace. (This used to be a single
+            // `GradleImport.populate`, which the importer extension points replaced.)
+            val sync = runBlocking {
+                GradleProjectImporter().resolve(SyncRequest(ws.toPath(), NoopProgress, SyncReason.IMPORT))
+            }
+            val model = sync.model
+                ?: throw AssertionError("not an importable Gradle project: $ws (${sync.messages.map { it.text }})")
+            Log.i(TAG, "import: '${model.name}' modules=${model.modules.map { "${it.name}:${it.typeId}" }}")
             // JVM 17: the Compose/AndroidX libraries are JVM-11 bytecode, so kotlinc's jvmTarget must be ≥ 11 to
             // inline their code (JetSnack itself targets 17). JAVA_8 fails compileKotlin with a "cannot inline" error.
-            dev.ide.core.GradleImport.populate(store, spec, LanguageLevel.JAVA_17)
+            ExternalModelApplier(store).apply(model, LanguageLevel.JAVA_17, removeAbsent = true)
             store.save()
 
             val project = store.workspace.projects.firstOrNull { p -> p.modules.any { it.type.id == "android-app" } }

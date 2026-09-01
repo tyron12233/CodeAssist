@@ -65,6 +65,80 @@ object RBytecodeGenerator {
         return total
     }
 
+    /**
+     * Package one `R` class per (package, `R.txt`) entry of [symbolTables] into [outJar]. A dependency AAR
+     * ships an `R.txt` symbol table but NO `R` classes — the consumer generates them — which is why an app
+     * gets them from its own aapt2 link (`--extra-packages`) and a LIBRARY module, which links only its own
+     * resources, needs this instead to compile `com.google.android.material.R.attr.x`.
+     *
+     * Every field is emitted NON-final. The ids in an AAR's `R.txt` are placeholders (`0x0`, since only the
+     * final app link assigns real ones), so they must never be inlined into a caller: non-final means the
+     * library `getstatic`s them and the app-generated final `R` supplies the values at runtime — the same
+     * decoupled-R contract as a library's own R. Returns the total class count.
+     * ```
+     * int attr fontProviderAuthority 0x0
+     * int[] styleable FontFamily { 0x0, 0x0 }
+     * int styleable FontFamily_fontProviderAuthority 0
+     * ```
+     */
+    fun writeSymbolJar(symbolTables: List<Pair<String, Path>>, outJar: Path): Int {
+        outJar.parent?.let { Files.createDirectories(it) }
+        var total = 0
+        java.util.jar.JarOutputStream(Files.newOutputStream(outJar)).use { jos ->
+            // One package may be contributed by several artifacts (an AAR split across modules); merge their
+            // symbols so the emitted `R` holds every field rather than whichever entry came last.
+            val merged = LinkedHashMap<String, MutableList<Path>>()
+            for ((pkg, rTxt) in symbolTables) if (pkg.isNotEmpty()) merged.getOrPut(pkg) { ArrayList() }.add(rTxt)
+            for ((pkg, files) in merged) {
+                val model = parseSymbols(pkg, files.mapNotNull { runCatching { read(it) }.getOrNull() })
+                if (model.types.isEmpty()) continue
+                total += emit(model) { name, bytes ->
+                    jos.putNextEntry(java.util.jar.JarEntry("$name.class")); jos.write(bytes); jos.closeEntry()
+                }
+            }
+            if (total == 0) {
+                jos.putNextEntry(java.util.jar.JarEntry("META-INF/MANIFEST.MF"))
+                jos.write("Manifest-Version: 1.0\r\n\r\n".toByteArray()); jos.closeEntry()
+            }
+        }
+        return total
+    }
+
+    /**
+     * Parse `R.txt` symbol lines into the same model [parse] builds from `R.java`. Each line is
+     * `int <type> <name> <value>` or `int[] styleable <name> { v, v, … }` — always one line per symbol, so
+     * (unlike `R.java`) no array spans lines. Unparseable lines are skipped rather than failing the build: a
+     * malformed symbol costs one unresolvable field, a thrown exception costs the whole compile.
+     */
+    private fun parseSymbols(pkg: String, texts: List<String>): RModel {
+        val types = LinkedHashMap<String, TypeClass>()
+        val seen = HashSet<String>()
+        for (text in texts) for (raw in text.lineSequence()) {
+            val line = raw.trim()
+            val isArray = line.startsWith("int[] ")
+            if (!isArray && !line.startsWith("int ")) continue
+            // `int[] styleable FontFamily { 0x0, … }` / `int attr font 0x0` → type, name, value.
+            val rest = line.substringAfter(' ').trim()
+            val typeName = rest.substringBefore(' ').trim()
+            val afterType = rest.substringAfter(' ', "").trim()
+            val name = afterType.substringBefore(' ').trim()
+            if (typeName.isEmpty() || name.isEmpty()) continue
+            if (!seen.add("$typeName.$name.$isArray")) continue
+            val value = afterType.substringAfter(' ', "").trim()
+            val type = types.getOrPut(typeName) { TypeClass(typeName) }
+            if (isArray) {
+                val values = value.removePrefix("{").substringBefore('}')
+                    .split(',').map { it.trim() }.filter { it.isNotEmpty() }
+                    .mapNotNull { runCatching { decodeInt(it) }.getOrNull() }
+                type.arrays.add(ArrayField(name, values.toIntArray(), isFinal = false))
+            } else {
+                val v = runCatching { decodeInt(value) }.getOrNull()
+                if (v != null) type.ints.add(IntField(name, v, isFinal = false))
+            }
+        }
+        return RModel(pkg, types.values.toList())
+    }
+
     private fun read(p: Path): String = String(Files.readAllBytes(p), Charsets.UTF_8)
 
     private fun parse(text: String): RModel {

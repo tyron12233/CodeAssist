@@ -7,6 +7,11 @@ and follow the links into each subsystem.
   abstraction, the concurrency model, and how extension points fit together.
 - [modules.md](modules.md) — the module map: every module, its package(s), and its responsibility,
   with the acyclic dependency direction.
+- [writing-plugins.md](writing-plugins.md) — the step-by-step guide to writing a plugin: the `Plugin`
+  SPI, extension points, scoped services, events and logging, settings pages, actions, Compose UI
+  contributions (tool windows, screens, overlays), and the Git and AI-agent plugins as worked examples.
+- [plugin-system.md](plugin-system.md) — the delivered plugin model itself: the substrate, the manifest +
+  entry-point contract, the loader, and how the IDE's own built-ins run through it.
 - [extension-points.md](extension-points.md) — the extension-point registry and every published
   extension point (module types, build systems, language backends, indexing, analysis, icons,
   templates, block mappings), plus the language-backend SPI.
@@ -18,3 +23,5 @@ and follow the links into each subsystem.
   round-trips block edits back to byte-for-byte source.
 - [build-system.md](build-system.md) — the `BuildSystem` SPI, the incremental task engine, the native
   Java and Android pipelines, and the Gradle compatibility layer.
+- [version-control.md](version-control.md) — Git on device: the provider-neutral model, what it takes to
+  run JGit on ART, GitHub sign-in and the account store, and the UI surfaces.

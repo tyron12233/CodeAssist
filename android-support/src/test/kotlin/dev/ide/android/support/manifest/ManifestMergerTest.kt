@@ -157,6 +157,70 @@ class ManifestMergerTest {
     }
 
     @Test
+    fun distinctQueriesIntentsFromAppAndLibraryStaySeparate() {
+        // Repro of "There was a problem while parsing the package": play-billing / play-services-ads contribute
+        // <queries><intent> package-visibility entries. Keyless <intent> elements used to collapse onto one node
+        // key and merge into a SINGLE <intent> carrying every <action> — a malformed manifest the on-device
+        // installer rejects. Each distinct intent must survive as its own element.
+        val app = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
+                <queries>
+                    <intent>
+                        <action android:name="android.intent.action.DIAL"/>
+                        <data android:scheme="tel"/>
+                    </intent>
+                </queries>
+                <application android:label="App"/>
+            </manifest>
+        """.trimIndent()
+        val billing = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.android.billingclient.api">
+                <queries>
+                    <intent>
+                        <action android:name="com.android.vending.billing.InAppBillingService.BIND"/>
+                    </intent>
+                    <intent>
+                        <action android:name="com.google.android.apps.play.billingtestcompanion.BillingOverrideService.BIND"/>
+                    </intent>
+                </queries>
+            </manifest>
+        """.trimIndent()
+        val r = ManifestMerger.mergeXml(app, listOf(billing), mapOf("applicationId" to "com.example.app"))
+        assertFalse(r.hasErrors, "unexpected errors: ${r.messages}")
+        val root = parse(r.xml)
+        assertEquals(1, descendants(root, "queries").size, "the two <queries> blocks union into one")
+        val intents = descendants(root, "intent")
+        assertEquals(3, intents.size, "each distinct intent survives as its own element:\n${r.xml}")
+        // The bug produced one <intent> holding every action; no intent may absorb another's.
+        assertTrue(intents.all { descendants(it, "action").size == 1 }, "no intent may hold more than its own action:\n${r.xml}")
+        val actions = descendants(root, "action").mapNotNull { android(it, "name") }.toSet()
+        assertTrue("android.intent.action.DIAL" in actions && "com.android.vending.billing.InAppBillingService.BIND" in actions)
+    }
+
+    @Test
+    fun identicalQueriesIntentsAreDeduped() {
+        // The app and a library both request the same visibility query → one <intent> in the output, not two.
+        val app = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
+                <queries>
+                    <intent><action android:name="android.intent.action.SEND"/><data android:mimeType="*/*"/></intent>
+                </queries>
+                <application android:label="App"/>
+            </manifest>
+        """.trimIndent()
+        val lib = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.lib">
+                <queries>
+                    <intent><action android:name="android.intent.action.SEND"/><data android:mimeType="*/*"/></intent>
+                </queries>
+            </manifest>
+        """.trimIndent()
+        val r = ManifestMerger.mergeXml(app, listOf(lib), mapOf("applicationId" to "com.example.app"))
+        assertFalse(r.hasErrors, "unexpected errors: ${r.messages}")
+        assertEquals(1, descendants(parse(r.xml), "intent").size, "an identical intent from a library must dedupe:\n${r.xml}")
+    }
+
+    @Test
     fun dedupesAComponentDeclaredInBothAppAndLibrary() {
         val lib = """
             <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.lib">

@@ -115,6 +115,25 @@ class BuiltinsReader(private val jars: List<Path>) {
                 val members = ArrayList<KotlinSymbol>()
                 cls.functionList.filterNot { it.hasReceiverType() }.forEach { members += func(it, nr, classTp, owner, static = false, tt = tt) }
                 cls.propertyList.filterNot { it.hasReceiverType() }.forEach { members += prop(it, nr, classTp, owner, static = false, tt = tt) }
+                // Enum ENTRIES (`AnnotationTarget.CLASS`, `AnnotationRetention.SOURCE`, `DeprecationLevel.WARNING`).
+                // A builtin enum is declared ONLY in the `.kotlin_builtins` fragment, where its entries live in
+                // their own protobuf list — they are neither functions nor properties, so without this the type
+                // decoded with zero constants: `AnnotationTarget.CLASS` resolved to nothing (a false "Unresolved
+                // reference") and `AnnotationTarget.` completed empty. A `.class`-backed enum never had the
+                // problem — the bytecode reader surfaces its entries as static fields of the enum's own type.
+                cls.enumEntryList.forEach { e ->
+                    val entry = nr.getString(e.name)
+                    members += KotlinSymbol(
+                        name = entry,
+                        kind = SymbolKind.ENUM_CONSTANT,
+                        type = KotlinType(fqn),
+                        owner = owner,
+                        modifiers = setOf(Modifier.STATIC), // reached through the TYPE, like a companion member
+                        origin = BINARY,
+                        signature = ": ${TypeRendering.render(fqn, emptyList(), false)}",
+                        declaringClassFqn = fqn,
+                    )
+                }
                 // Companion object: its members behave like statics (`Int.MAX_VALUE`).
                 val companionName = if (cls.hasCompanionObjectName()) nr.getString(cls.companionObjectName) else null
                 companionName?.let { name ->

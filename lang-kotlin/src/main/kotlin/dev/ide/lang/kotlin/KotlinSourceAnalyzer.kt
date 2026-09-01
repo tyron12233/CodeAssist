@@ -28,6 +28,7 @@ import dev.ide.platform.Disposable
 import dev.ide.vfs.VirtualFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
+import dev.ide.lang.kotlin.symbols.KotlinType
 import com.intellij.psi.PsiElement
 import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.folding.FoldingService
@@ -58,6 +59,8 @@ import org.jetbrains.kotlin.psi.KtEnumEntry
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtLambdaArgument
+import org.jetbrains.kotlin.psi.KtValueArgument
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
@@ -667,7 +670,9 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      * callable / type), inserting `import <fqn>` after the existing imports (else the package directive, else
      * the file top). A candidate already imported contributes nothing; results are de-duplicated and capped.
      * A `kt.delegateOperator` diagnostic under the caret additionally offers imports for the delegate's missing
-     * `getValue`/`setValue` operator (`import androidx.compose.runtime.getValue` for `by mutableStateOf`).
+     * `getValue`/`setValue` operator (`import androidx.compose.runtime.getValue` for `by mutableStateOf`), and a
+     * bad ARGUMENT (a type mismatch, or a named argument no in-scope overload declares) offers the unimported
+     * overload of the callee that would take it, from the callee name as well as from the argument itself.
      */
     fun importFixesAt(file: VirtualFile, offset: Int): List<KotlinImportFix> {
         val parsed = lastByFile[file.path] ?: return emptyList()
@@ -679,17 +684,45 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             diags.filter { it.code == KotlinDiagnosticCodes.UNRESOLVED && coversCaret(it) }
         val delegateOps =
             diags.filter { it.code == KotlinDiagnosticCodes.DELEGATE_OPERATOR && coversCaret(it) }
-        // A call-argument type mismatch may be fixable by importing an EXTENSION overload of the callee that
-        // fits the argument: `items(list)` binds the in-scope `LazyListScope.items(Int, …)` member and
-        // mismatches, but importing `androidx.compose.foundation.lazy.items` brings the matching `List` overload
-        // into scope (exactly what the compiler wants, and what Android Studio offers).
-        val callMismatches =
-            diags.filter { it.code == KotlinDiagnosticCodes.TYPE_MISMATCH && coversCaret(it) }
-        if (unresolved.isEmpty() && delegateOps.isEmpty() && callMismatches.isEmpty()) return emptyList()
+        // A bad ARGUMENT can be fixable by importing an EXTENSION overload of the callee that fits it. Two
+        // errors say so: an argument-type mismatch (`items(list)` binds the in-scope `LazyListScope.items(Int, …)`
+        // member and mismatches, but importing `androidx.compose.foundation.lazy.items` brings the matching
+        // `List` overload into scope, exactly what the compiler wants and what Android Studio offers), and a
+        // named argument no in-scope overload declares (`items(items = list)`, whose `items` parameter exists
+        // only on that same unimported overload).
+        //
+        // Both are reported ON THE ARGUMENT while the name to import is the CALLEE, so a call is a fix site
+        // when the caret sits on its callee name too, not only when it sits inside the diagnostic's own range:
+        // on `items(list)` the name the user wants imported is `items`, not the list passed to it.
+        val calleeCall = callAtCallee(parsed.ktFile, offset)
+        val argFixSites = LinkedHashMap<KtCallExpression, MutableList<Diagnostic>>()
+        for (d in diags) {
+            if (d.code != KotlinDiagnosticCodes.TYPE_MISMATCH &&
+                d.code != KotlinDiagnosticCodes.NAMED_ARGUMENT
+            ) continue
+            val onCaret = coversCaret(d)
+            if (!onCaret && (calleeCall == null || d.range.start < calleeCall.textRange.startOffset ||
+                    d.range.end > calleeCall.textRange.endOffset)
+            ) continue
+            // The call the bad argument BELONGS to, not the innermost call around the diagnostic: the mismatch
+            // in `items(notes())` sits inside the `notes()` call, whose own import ("Import demo.notes") fixes
+            // nothing while the `items` overload that fits goes unoffered. A mismatch outside any argument
+            // (`val x: Int = "s"`) keeps the innermost call, which has no importable namesake anyway.
+            val el = parsed.ktFile.findElementAt(d.range.start) ?: continue
+            val call = PsiTreeUtil.getParentOfType(el, KtValueArgument::class.java)
+                ?.let { PsiTreeUtil.getParentOfType(it, KtCallExpression::class.java) }
+                ?: PsiTreeUtil.getParentOfType(el, KtCallExpression::class.java)
+                ?: continue
+            // A nested call's own bad argument is not this caret's business unless the caret is inside it.
+            if (!onCaret && call !== calleeCall) continue
+            argFixSites.getOrPut(call) { ArrayList() } += d
+        }
+        if (unresolved.isEmpty() && delegateOps.isEmpty() && argFixSites.isEmpty()) return emptyList()
         val existing =
             parsed.ktFile.importDirectives.mapNotNull { it.importedFqName?.asString() }.toHashSet()
         val seen = HashSet<String>()
         val out = ArrayList<KotlinImportFix>()
+        val resolver by lazy { KotlinResolver(parsed.ktFile, parsed, service) }
         fun offer(fqn: String) {
             if (fqn in existing || !seen.add(fqn)) return
             // Splice the import in sorted position (a first import lands one blank line after the package).
@@ -701,25 +734,162 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
                 d.range.start.coerceIn(0, text.length),
                 d.range.end.coerceIn(0, text.length)
             )
-            service.importCandidates(name).forEach(::offer)
+            val candidates = service.importCandidates(name)
+            // Drop the namesakes this reference cannot reach ([deadBareExtensions]): inside `LazyColumn { }` an
+            // unresolved `itemsIndexed` can only be `androidx.compose.foundation.lazy.itemsIndexed`, and making
+            // the user choose between it and the `grid`/`staggeredgrid` namesakes is choosing between one fix
+            // and two errors. One candidate is nothing to narrow, so it skips the receiver work entirely.
+            val dead =
+                if (candidates.size < 2) emptySet()
+                else deadBareExtensions(name, d.range.start, parsed.ktFile, resolver)
+            candidates.forEach { if (it !in dead) offer(it) }
         }
         if (delegateOps.isNotEmpty()) {
-            val resolver = KotlinResolver(parsed.ktFile, parsed, service)
             for (prop in delegatePropertiesCovering(parsed.ktFile, offset)) {
                 resolver.delegateOperatorImportCandidates(prop).forEach(::offer)
             }
         }
-        // For a call-argument mismatch, offer the importable same-named callables of the ENCLOSING call's callee
-        // (an unimported extension overload that would fit). An ordinary non-call mismatch (`val x: Int = "s"`)
-        // has no callee name → nothing offered; a callee with no importable same-named overload → no candidates.
-        for (d in callMismatches) {
-            val el = parsed.ktFile.findElementAt(d.range.start) ?: continue
-            val call = PsiTreeUtil.getParentOfType(el, KtCallExpression::class.java) ?: continue
+        // Offer the importable same-named callables of the call's callee (the unimported overload that would
+        // fit). A mismatch with no callee name (`val x: Int = "s"`) offers nothing, and so does a callee with no
+        // importable namesake. Only candidates that COULD take this call are offered ([couldFixCall], plus every
+        // flagged named argument having to be a parameter of the candidate). An import that cannot fix
+        // anything is worse than no lightbulb, since accepting it leaves the error and adds a bogus line.
+        val filePackage = parsed.ktFile.packageFqName.asString()
+        for ((call, ds) in argFixSites) {
             val calleeName =
                 (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: continue
-            service.importCandidates(calleeName).forEach(::offer)
+            val flaggedNames = ds.filter { it.code == KotlinDiagnosticCodes.NAMED_ARGUMENT }
+                .map {
+                    text.substring(
+                        it.range.start.coerceIn(0, text.length),
+                        it.range.end.coerceIn(0, text.length)
+                    )
+                }
+            val fits = service.importableCallablesNamed(calleeName).filter { (fqn, cand) ->
+                // A same-package declaration is already visible without an import, so importing it cannot
+                // change how this call resolves.
+                fqn.substringBeforeLast('.') != filePackage &&
+                    couldFixCall(cand, call, resolver) &&
+                    flaggedNames.all { n -> n in cand.paramNames }
+            }
+            val bare = (call.parent as? KtQualifiedExpression)?.selectorExpression !== call
+            val reachable =
+                if (!bare) fits
+                else fits.filter { reachableBare(it.second, call.textRange.startOffset, resolver) }
+                    .ifEmpty { fits }
+            reachable.forEach { (fqn, _) -> offer(fqn) }
         }
         return out.take(12)
+    }
+
+    /** The call whose CALLEE NAME [offset] sits on (`ite|ms(list)`, or just past it), else null. The anchor that
+     *  lets an argument error's import fix be offered from the name that needs importing. */
+    private fun callAtCallee(kt: KtFile, offset: Int): KtCallExpression? =
+        calleeRefAt(kt, offset) ?: calleeRefAt(kt, offset - 1)
+
+    private fun calleeRefAt(kt: KtFile, offset: Int): KtCallExpression? {
+        if (offset < 0) return null
+        val el = kt.findElementAt(offset) ?: return null
+        val ref = PsiTreeUtil.getParentOfType(el, KtNameReferenceExpression::class.java, false) ?: return null
+        return (ref.parent as? KtCallExpression)?.takeIf { it.calleeExpression === ref }
+    }
+
+    /**
+     * Whether [cand] is reachable from a BARE reference at [offset]: a top-level callable always is, an
+     * EXTENSION only through an implicit `this` whose type its receiver accepts (`LazyListScope.items` inside
+     * `LazyColumn { }`). The receiver chain is [KotlinResolver.implicitReceiversAt]'s, so a receiver the
+     * parse-only model cannot pin yields no match, which callers treat as "don't narrow", never as proof.
+     */
+    private fun reachableBare(cand: KotlinSymbol, offset: Int, resolver: KotlinResolver): Boolean {
+        val recv = cand.receiverTypeFqn ?: return true
+        return resolver.implicitReceiversAt(offset).any { accepts(resolver, KotlinType(recv), it) }
+    }
+
+    /**
+     * The FQNs among [name]'s import candidates that a BARE reference at [offset] provably cannot reach: the
+     * extension namesakes left over once at least one extension candidate DOES match an implicit receiver in
+     * scope. That one match is the evidence the receiver chain is modeled here; without it (an unmodeled
+     * receiver, or none at all) nothing is dead and the set is empty, leaving every candidate offered as before.
+     * Empty too for a qualified `x.foo`, where an explicit receiver decides and the implicit chain is silent.
+     */
+    private fun deadBareExtensions(
+        name: String,
+        offset: Int,
+        kt: KtFile,
+        resolver: KotlinResolver,
+    ): Set<String> {
+        val el = kt.findElementAt(offset) ?: return emptySet()
+        val ref = PsiTreeUtil.getParentOfType(el, KtNameReferenceExpression::class.java, false)
+            ?: return emptySet()
+        if (isQualifiedSelector(ref)) return emptySet()
+        val extensions = service.importableCallablesNamed(name).filter { it.second.receiverTypeFqn != null }
+        val (matching, rest) = extensions.partition { reachableBare(it.second, offset, resolver) }
+        if (matching.isEmpty()) return emptySet()
+        // An FQN with one reachable overload stays, whatever its namesakes on other receivers look like.
+        return rest.mapTo(HashSet()) { it.first } - matching.mapTo(HashSet()) { it.first }
+    }
+
+    /** Whether [ref] is the selector of a qualified expression (`x.foo`, `x.foo()`), i.e. has an explicit receiver. */
+    private fun isQualifiedSelector(ref: KtNameReferenceExpression): Boolean {
+        val target: KtExpression =
+            (ref.parent as? KtCallExpression)?.takeIf { it.calleeExpression === ref } ?: ref
+        val q = target.parent as? KtQualifiedExpression ?: return false
+        return q.selectorExpression === target
+    }
+
+    /**
+     * Whether importing [cand] could plausibly make [call] resolve — the gate on the argument-mismatch import
+     * fix. The diagnostic means the arguments fit nothing currently in scope, so a same-NAMED declaration is
+     * only worth offering when it could actually take them.
+     *
+     * Rejects on PROOF only, never on missing information — an un-inferred argument, an unmodeled parameter
+     * type or an unknown receiver leaves the candidate offered, the same conservative posture the mismatch
+     * check itself takes before reporting. What it does rule out:
+     *  - a non-function candidate: a property or type can never accept an argument list;
+     *  - a candidate unreachable the way the call is written. With an explicit receiver (`out.write(b)`) only
+     *    an EXTENSION applies, and only one whose receiver type that receiver satisfies. A bare call
+     *    (`items(list)`) can land on a top-level function or on an extension of an implicit receiver, so no
+     *    receiver test runs here; the caller narrows a bare call's candidates against the receiver chain
+     *    ([reachableBare]), which stays silent unless one of them matches it;
+     *  - more positional arguments than the candidate has parameters (a vararg absorbs any number, so a
+     *    vararg candidate is never rejected on count);
+     *  - a positionally-typed argument its parameter provably cannot hold — the `write(text: String)` that
+     *    used to be offered for `write(byteArray)`.
+     */
+    private fun couldFixCall(cand: KotlinSymbol, call: KtCallExpression, resolver: KotlinResolver): Boolean {
+        if (cand.kind != SymbolKind.METHOD) return false
+        val qualified = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === call }
+        val receiverType = qualified?.receiverExpression?.let { resolver.inferType(it) }
+        if (receiverType != null && !receiverType.isTypeParameter) {
+            val candReceiver = cand.receiverTypeFqn ?: return false // a member/top-level can't take `x.` here
+            if (!accepts(resolver, KotlinType(candReceiver), receiverType)) return false
+        }
+        val args = call.valueArguments
+        val vararg = cand.varargParamIndex
+        val paramCount = maxOf(cand.paramTypes.size, cand.paramNames.size)
+        if (vararg < 0 && args.size > paramCount) return false
+        args.forEachIndexed { i, a ->
+            // A named argument's slot isn't `i`, a lambda lands on the last parameter, and anything folding
+            // into a vararg is open-typed — all left to the real overload resolution the import triggers.
+            if (a is KtLambdaArgument || a.getArgumentName() != null) return@forEachIndexed
+            if (vararg in 0..i) return@forEachIndexed
+            val pt = cand.paramTypes.getOrNull(i) as? KotlinType ?: return@forEachIndexed
+            val at = a.getArgumentExpression()?.let { resolver.inferType(it) } ?: return@forEachIndexed
+            if (!accepts(resolver, pt, at)) return false
+        }
+        return true
+    }
+
+    /** [paramAcceptsArg] over JVM-canonicalized types ([canonicalTypeForCheck]), and only where both sides are
+     *  modeled: an unknown classifier, a type parameter or `Nothing` is no evidence of a clash, so it accepts.
+     *  Deliberately the same comparison the mismatch check makes, so the fix never contradicts the diagnostic. */
+    private fun accepts(resolver: KotlinResolver, param: KotlinType, arg: KotlinType): Boolean {
+        if (param.isTypeParameter || arg.isTypeParameter) return true
+        if (arg.qualifiedName == "kotlin.Nothing") return true
+        val p = canonicalTypeForCheck(param)
+        val a = canonicalTypeForCheck(arg)
+        if (!service.isKnownType(p.qualifiedName) || !service.isKnownType(a.qualifiedName)) return true
+        return with(resolver) { paramAcceptsArg(p, a) }
     }
 
     /**
@@ -947,10 +1117,34 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
                 ?.let { resolver.receiverForMembers(it, q.receiverExpression.textRange.startOffset) }
                 ?.let { recv -> service.membersNamed(recv.qualifiedName, recv.typeArguments, name).firstOrNull() }
         } else {
-            resolver.scopeSymbolsAt(psi.textRange.startOffset).firstOrNull { it.name == name }
-                ?: service.typeNamesByPrefix(name).firstOrNull { it.name == name }
+            // The exact-name probe mode: a resolution already knows the name it wants, so the top-level lookup
+            // is an exact index scan instead of materializing every top-level callable on the classpath (the
+            // empty-prefix query is uncapped) only to filter it down to one name here.
+            resolver.scopeSymbolsAt(psi.textRange.startOffset, namePrefix = name, exactName = true)
+                .firstOrNull { it.name == name }
+                ?: typeNamed(name, resolver)
         }
         return sym?.let { ResolveResult.Resolved(it) } ?: ResolveResult.Unresolved
+    }
+
+    /**
+     * The TYPE that simple [name] denotes at the use site, for a reference nothing in scope claims as a value or
+     * callable: a type reference (`StringBuilder`, an imported class) resolves to its classifier.
+     *
+     * Gated through [KotlinSymbolService.resolveTypeName], which honours the file's imports, its package and the
+     * default star imports. It is deliberately NOT a search of the classpath by simple name: such a search picks
+     * an arbitrary same-named class from anywhere on the classpath, so in a file importing
+     * `androidx.compose.material3.Text` (a top-level function, whose own declaration lives in a facade class) the
+     * name `Text` resolved to `android.jar`'s `org.w3c.dom.Text`, and every go-to navigation, hover and quick doc
+     * followed it there.
+     */
+    private fun typeNamed(name: String, resolver: KotlinResolver): KotlinSymbol? {
+        val fqn = service.resolveTypeName(name, resolver.fileContext)
+            ?.takeIf { service.isKnownType(it) } ?: return null
+        // The index page carries the real classifier kind (class/interface/enum/annotation); a type it does not
+        // hold (the page is capped) still resolves, as a plain class.
+        return service.typeNamesByPrefix(name).firstOrNull { (it.type as? KotlinType)?.qualifiedName == fqn }
+            ?: KotlinSymbol(name, SymbolKind.CLASS, type = service.typeByFqn(fqn))
     }
 
     override fun scopeAt(file: VirtualFile, offset: Int): Scope {

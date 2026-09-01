@@ -2,6 +2,7 @@ package dev.ide.ui.ext
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
+import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 
 /**
@@ -25,6 +26,12 @@ enum class ToolWindowAnchor { LEFT, RIGHT, BOTTOM }
 interface ToolWindowContext {
     val backend: IdeBackend
     val activeFilePath: String?
+
+    /** Platform bridges a panel may need: opening an external link, sharing or picking a file. */
+    val fileActions: FileActions get() = FileActions.None
+
+    /** Navigate to a contributed [ScreenContribution] by id, for a panel whose detail view is a full screen. */
+    fun openScreen(id: String) {}
 }
 
 /**
@@ -87,10 +94,17 @@ object OverlayRegistry {
 // Screens (top-level destinations)
 // ---------------------------------------------------------------------------
 
-/** What a contributed screen is handed: the backend and a way to pop back to the editor. */
+/** What a contributed screen is handed: the backend, platform bridges, and a way to pop back. */
 interface ScreenContext {
     val backend: IdeBackend
+
+    /** Platform bridges a screen may need: opening an external link, sharing or picking a file. */
+    val fileActions: FileActions get() = FileActions.None
+
     fun back()
+
+    /** Navigate to another contributed screen, replacing this one. */
+    fun openScreen(id: String) {}
 }
 
 /** A top-level screen reachable by [id] (e.g. from an action's `Navigate(id)` effect / `UiActionHost`). */

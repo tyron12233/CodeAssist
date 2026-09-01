@@ -26,65 +26,108 @@ class LayoutAttributeEditTest {
     }
 
     @Test
-    fun addReplaceRemoveAndNamespaceAutoDeclare() = withTempDir("ide-attr-edit") { dir ->
-        IdeServices.bootstrapDemo(dir).use { ide ->
-            // setLayoutAttributeEdits parses the passed text, so an arbitrary path is fine here.
-            val file = Paths.get("res/layout/scratch.xml")
-            val xml = """<TextView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="wrap_content"/>"""
+    fun addReplaceRemoveAndNamespaceAutoDeclare() {
+        withTempDir("ide-attr-edit") { dir ->
+            IdeServices.bootstrapDemo(dir).use { ide ->
+                // setLayoutAttributeEdits parses the passed text, so an arbitrary path is fine here.
+                val file = Paths.get("res/layout/scratch.xml")
+                val xml = """<TextView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="wrap_content"/>"""
 
-            val added = applyEdits(xml, ide.setLayoutAttributeEdits(file, xml, xml.indexOf("<TextView"), null, "android:text", "Hi"))
-            assertTrue("""android:text="Hi"""" in added, added)
+                val added = applyEdits(xml, ide.setLayoutAttributeEdits(file, xml, xml.indexOf("<TextView"), null, "android:text", "Hi"))
+                assertTrue("""android:text="Hi"""" in added, added)
 
-            val replaced = applyEdits(added, ide.setLayoutAttributeEdits(file, added, added.indexOf("<TextView"), null, "android:text", "Bye"))
-            assertTrue(""""Bye"""" in replaced && """"Hi"""" !in replaced, replaced)
+                val replaced = applyEdits(added, ide.setLayoutAttributeEdits(file, added, added.indexOf("<TextView"), null, "android:text", "Bye"))
+                assertTrue(""""Bye"""" in replaced && """"Hi"""" !in replaced, replaced)
 
-            val removed = applyEdits(replaced, ide.removeLayoutAttributeEdits(file, replaced, replaced.indexOf("<TextView"), null, "android:text"))
-            assertTrue("android:text" !in removed, removed)
+                val removed = applyEdits(replaced, ide.removeLayoutAttributeEdits(file, replaced, replaced.indexOf("<TextView"), null, "android:text"))
+                assertTrue("android:text" !in removed, removed)
 
-            // Adding an app: attribute auto-declares xmlns:app on the root.
-            val noApp = """<TextView xmlns:android="http://schemas.android.com/apk/res/android"/>"""
-            val withApp = applyEdits(noApp, ide.setLayoutAttributeEdits(file, noApp, noApp.indexOf("<TextView"), null, "app:foo", "bar"))
-            assertTrue("""xmlns:app="http://schemas.android.com/apk/res-auto"""" in withApp, withApp)
-            assertTrue("""app:foo="bar"""" in withApp, withApp)
+                // Adding an app: attribute auto-declares xmlns:app on the root.
+                val noApp = """<TextView xmlns:android="http://schemas.android.com/apk/res/android"/>"""
+                val withApp = applyEdits(noApp, ide.setLayoutAttributeEdits(file, noApp, noApp.indexOf("<TextView"), null, "app:foo", "bar"))
+                assertTrue("""xmlns:app="http://schemas.android.com/apk/res-auto"""" in withApp, withApp)
+                assertTrue("""app:foo="bar"""" in withApp, withApp)
+            }
         }
-        dir.toFile().deleteRecursively()
     }
 
     @Test
-    fun escapesAttributeValue() = withTempDir("ide-attr-escape") { dir ->
-        IdeServices.bootstrapDemo(dir).use { ide ->
-            val file = Paths.get("res/layout/scratch.xml")
-            val xml = """<TextView xmlns:android="http://schemas.android.com/apk/res/android"/>"""
-            val out = applyEdits(xml, ide.setLayoutAttributeEdits(file, xml, xml.indexOf("<TextView"), null, "android:text", """a & "b" < c"""))
-            assertTrue("&amp;" in out && "&quot;" in out && "&lt;" in out, out)
+    fun addedAttributeGetsItsOwnLineWhenTheElementIsWrittenThatWay() {
+        withTempDir("ide-attr-lines") { dir ->
+            IdeServices.bootstrapDemo(dir).use { ide ->
+                val file = Paths.get("res/layout/scratch.xml")
+                val xml = """
+                    <TextView
+                        xmlns:android="http://schemas.android.com/apk/res/android"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                """.trimIndent()
+                val added = applyEdits(xml, ide.setLayoutAttributeEdits(file, xml, xml.indexOf("<TextView"), null, "android:text", "Hi"))
+                assertEquals(
+                    """
+                    <TextView
+                        xmlns:android="http://schemas.android.com/apk/res/android"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Hi" />
+                    """.trimIndent(),
+                    added,
+                )
+                // A compact single-line element keeps its shape (the style is read off the element, not a setting).
+                val compact = """<TextView xmlns:android="http://schemas.android.com/apk/res/android"/>"""
+                assertEquals(
+                    """<TextView xmlns:android="http://schemas.android.com/apk/res/android" android:text="Hi"/>""",
+                    applyEdits(compact, ide.setLayoutAttributeEdits(file, compact, 0, null, "android:text", "Hi")),
+                )
+                // An auto-declared namespace follows the same style, before the element's other attributes.
+                val needsApp = "<TextView\n    android:layout_width=\"1dp\" />"
+                val withApp = applyEdits(needsApp, ide.setLayoutAttributeEdits(file, needsApp, 0, null, "app:foo", "bar"))
+                assertEquals(
+                    "<TextView\n    xmlns:app=\"http://schemas.android.com/apk/res-auto\"\n" +
+                        "    android:layout_width=\"1dp\"\n    app:foo=\"bar\" />",
+                    withApp,
+                )
+            }
         }
-        dir.toFile().deleteRecursively()
     }
 
     @Test
-    fun elementModelAndValueCompletionFromRealMetadata() = withTempDir("ide-attr-model") { dir ->
-        IdeServices.bootstrapDemo(dir).use { ide ->
-            val layout = ide.workspaceRoot.resolve("app/src/main/res/layout/activity_main.xml")
-            val text = layout.readText()
-            val off = text.indexOf("<TextView")
-            assertTrue(off >= 0, "demo layout must contain a TextView")
-
-            val model = ide.layoutElement(layout, text, off, null)
-            assertNotNull(model)
-            assertEquals("TextView", model.tag)
-            val setNames = model.setAttributes.map { it.name }.toSet()
-            assertTrue("android:text" in setNames, "set attributes: $setNames")
-
-            // The add list is only valid attributes for a TextView — real ones present, made-up ones absent.
-            val addable = model.addable.map { it.name }.toSet()
-            assertTrue(addable.any { it == "android:hint" || it == "android:gravity" }, "addable: $addable")
-            assertTrue("android:fake_attr_xyz" !in addable)
-
-            // Value completion for layout_width offers the size keywords, exactly like the XML editor.
-            val vals = ide.completeLayoutAttributeValue(layout, text, off, null, "android:layout_width", "", 0)
-                .items.map { it.label }
-            assertTrue("wrap_content" in vals && "match_parent" in vals, "values: $vals")
+    fun escapesAttributeValue() {
+        withTempDir("ide-attr-escape") { dir ->
+            IdeServices.bootstrapDemo(dir).use { ide ->
+                val file = Paths.get("res/layout/scratch.xml")
+                val xml = """<TextView xmlns:android="http://schemas.android.com/apk/res/android"/>"""
+                val out = applyEdits(xml, ide.setLayoutAttributeEdits(file, xml, xml.indexOf("<TextView"), null, "android:text", """a & "b" < c"""))
+                assertTrue("&amp;" in out && "&quot;" in out && "&lt;" in out, out)
+            }
         }
-        dir.toFile().deleteRecursively()
+    }
+
+    @Test
+    fun elementModelAndValueCompletionFromRealMetadata() {
+        withTempDir("ide-attr-model") { dir ->
+            IdeServices.bootstrapDemo(dir).use { ide ->
+                val layout = ide.workspaceRoot.resolve("app/src/main/res/layout/activity_main.xml")
+                val text = layout.readText()
+                val off = text.indexOf("<TextView")
+                assertTrue(off >= 0, "demo layout must contain a TextView")
+
+                val model = ide.layoutElement(layout, text, off, null)
+                assertNotNull(model)
+                assertEquals("TextView", model.tag)
+                val setNames = model.setAttributes.map { it.name }.toSet()
+                assertTrue("android:text" in setNames, "set attributes: $setNames")
+
+                // The add list is only valid attributes for a TextView: real ones present, made-up ones absent.
+                val addable = model.addable.map { it.name }.toSet()
+                assertTrue(addable.any { it == "android:hint" || it == "android:gravity" }, "addable: $addable")
+                assertTrue("android:fake_attr_xyz" !in addable)
+
+                // Value completion for layout_width offers the size keywords, exactly like the XML editor.
+                val vals = ide.completeLayoutAttributeValue(layout, text, off, null, "android:layout_width", "", 0)
+                    .items.map { it.label }
+                assertTrue("wrap_content" in vals && "match_parent" in vals, "values: $vals")
+            }
+        }
     }
 }

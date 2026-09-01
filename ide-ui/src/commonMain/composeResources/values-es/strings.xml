@@ -289,8 +289,6 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="sig_peek_collapse">Toca para contraer</string>
 
     <!-- Editor sheet -->
-    <string name="edsheet_source_control">Control de versiones</string>
-    <string name="edsheet_source_control_desc">Integración con Git. La preparación, los diffs, commit y push están en la hoja de ruta.</string>
 
     <!-- Symbol bar -->
     <string name="symbolbar_move_line_up">Subir línea</string>
@@ -307,7 +305,6 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
 
     <!-- Editor chrome -->
     <string name="edchrome_files">Archivos</string>
-    <string name="edchrome_source">Fuente</string>
     <string name="edchrome_more">Más</string>
     <string name="edchrome_settings_and_tools">Configuración y herramientas</string>
     <string name="edchrome_toggle_navigator">Alternar navegador</string>
@@ -775,12 +772,9 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="dep_remove_exclusion">Quitar exclusión</string>
     <string name="dep_excluded">excluida</string>
     <string name="dep_add_dependency">Agregar dependencia</string>
-    <string name="dep_search_bom_hint">Busca un BOM, o escribe group:name:version, p. ej. androidx.compose:compose-bom:…</string>
-    <string name="dep_search_library_hint">Busca en Maven Central, o escribe group:name[:version]…</string>
     <string name="dep_scope">ámbito</string>
     <string name="dep_variant">variante</string>
     <string name="dep_all_variants">Todas las variantes</string>
-    <string name="dep_suggested">sugerida</string>
     <string name="dep_adding">Agregando %1$s</string>
     <string name="dep_resolving_transitive">Resolviendo dependencias transitivas…</string>
     <string name="dep_no_other_modules">No hay otros módulos disponibles de los que depender.</string>
@@ -1052,7 +1046,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="set_editor_pinch">Pellizcar para hacer zoom</string>
     <string name="set_editor_pinch_desc">Pellizca con dos dedos para cambiar el tamaño de la fuente del código</string>
     <string name="set_editor_kbd_suggest">Sugerencias del teclado</string>
-    <string name="set_editor_kbd_suggest_desc">Permite que el teclado en pantalla autocorrija, sugiera y agregue espacios automáticamente (un teclado normal). Desactívalo para introducir código sin procesar, de modo que un \'.\' escrito no reciba un espacio automático, a costa de la barra de sugerencias.</string>
+    <string name="set_editor_kbd_suggest_desc">Permite que el teclado en pantalla autocorrija, sugiera y agregue espacios automáticamente (un teclado normal). Desactívalo para introducir código sin procesar, de modo que un '.' escrito no reciba un espacio automático, a costa de la barra de sugerencias.</string>
     <string name="set_completion_auto">Mostrar sugerencias automáticamente</string>
     <string name="set_completion_auto_desc">Muestra la lista mientras escribes (desactivado = solo con Ctrl-Space)</string>
     <string name="set_completion_postfix">Plantillas postfix</string>

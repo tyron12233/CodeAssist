@@ -4,6 +4,7 @@ import dev.ide.android.support.tools.Aapt2
 import dev.ide.android.support.tools.ApkSigner
 import dev.ide.android.support.tools.DesugaredLibrary
 import dev.ide.android.support.tools.DexDiagnostics
+import dev.ide.android.support.tools.DexGlobalSynthetics
 import dev.ide.android.support.tools.Dexer
 import dev.ide.android.support.tools.L8Request
 import dev.ide.android.support.tools.MergePlan
@@ -519,6 +520,36 @@ internal class GenerateRJarTask(
 }
 
 /**
+ * `generateAarR`: package an `R` class per dependency-AAR package into **`aar-R.jar`**, generated from each
+ * AAR's `R.txt` symbol table. An AAR ships no `R` of its own, so a consumer has to make one. An app already
+ * does, as a by-product of its own aapt2 link (`--extra-packages` over the merged table); a LIBRARY module
+ * links only its own resources and so has nowhere to get `com.google.android.material.R.attr.x` from — this
+ * task is that source, joining the library's compile classpath (compile-only, never dexed: the app's final
+ * `R` supplies the real ids at runtime). See [RBytecodeGenerator.writeSymbolJar].
+ */
+internal class GenerateAarRJarTask(
+    override val name: TaskName,
+    /** Each dependency AAR's manifest package paired with its `R.txt`. */
+    private val symbolTables: List<Pair<String, Path>>,
+    private val outJar: Path,
+) : Task {
+    override val inputs: TaskInputs get() = TaskInputsImpl().apply {
+        property("packages", symbolTables.map { it.first }.sorted().joinToString(":"))
+        filePaths("rTxt", symbolTables.map { it.second })
+    }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("aarRJar", outJar) }
+
+    override suspend fun execute(ctx: TaskContext): TaskResult {
+        ctx.checkCanceled()
+        val res = withContext(Dispatchers.IO) { runCatching { RBytecodeGenerator.writeSymbolJar(symbolTables, outJar) } }
+        return res.fold(
+            onSuccess = { ctx.logger()("generateAarR -> $it class(es) for ${symbolTables.size} AAR package(s)"); TaskResult.Success },
+            onFailure = { TaskResult.Failed("AAR R.jar generation failed: ${it.message}") },
+        )
+    }
+}
+
+/**
  * `compileJava`: compile the variant's Java sources against the Android classpath. The generated `R.java` is
  * NOT compiled here — it is packaged as `R.jar` by [GenerateRJarTask] and reaches this task on [classpath].
  * Only non-`R` generated files (e.g. `Manifest.java`) under [genJavaDir] are compiled alongside the sources.
@@ -747,19 +778,37 @@ internal class DexArchiveBuilderTask(
             if (subProjectJars.isEmpty()) extUniverse
             else libDexer.computeUniverse(subProjectJars + externalJars, hashCacheDir)
 
-        var ok = archiveProject(ctx, subUniverse)
-        // Libraries are atomic jars → per-jar content-hash buckets (a changed lib re-dexes alone).
-        ok = libDexer.dexScope(subProjectJars, subDexRoot, subUniverse) && ok
-        // External libs stay in the universe above (project/sub desugar against them) but may be dexed elsewhere
-        // (one-pass forked; see [DexExternalLibsTask]) rather than archived here.
-        if (archiveExternalScope) ok = libDexer.dexScope(externalJars, extDexRoot, extUniverse) && ok
-        // R.jar into its OWN archive root (merged into the project layer downstream). It has nothing to desugar, so
-        // the ext libs on its classpath are harmless; it re-dexes alone on a resource edit and never touches the
-        // external scope's archives (so mergeExtDex stays up-to-date). NB: its ~3s cost on a material app is R's
-        // SIZE (≈50 dependency-package R classes, thousands of constants), not the classpath — and it's GC-bound,
-        // so throwing D8 threads at it made it slower, not faster (see DexConcurrency.archivePlanFor).
-        if (rDexRoot != null && rJars.isNotEmpty()) {
-            ok = libDexer.dexScope(rJars, rDexRoot, extUniverse) && ok
+        // The scopes are independent — distinct archive roots, distinct inputs, and the one piece of shared mutable
+        // state (the `.hashcache` sidecar, which is not thread-safe) has already been written by the universe
+        // computation above — so archive them CONCURRENTLY. Run one after another, a scope with a single input left
+        // all but one worker idle: the app's R.jar is one jar that dexes single-threaded and went LAST, after the
+        // libraries (and on a small device it is not cheap — ≈50 dependency-package R classes, GC-bound), while the
+        // project archive went first, alone. Overlapped, both hide inside the library fan-out; measured on-device,
+        // R.jar's whole ~2s ran inside the external scope's window instead of after it.
+        //
+        // The LIBRARY scopes share one [SharedLibraryDexer.ScopeBudget], sized as the largest of them would have
+        // sized itself, so their combined fan-out is what the heap model behind the plan was calibrated for. The
+        // project archive deliberately stays outside that budget (see [archiveProject]).
+        val budget = scopeBudget(subProjectJars.size + externalJars.size + rJars.size)
+        val ok = coroutineScope {
+            val scopes = ArrayList<kotlinx.coroutines.Deferred<Boolean>>(4)
+            scopes.add(async(Dispatchers.IO) { archiveProject(ctx, subUniverse) })
+            // Libraries are atomic jars → per-jar content-hash buckets (a changed lib re-dexes alone).
+            scopes.add(async(Dispatchers.IO) { libDexer.dexScope(subProjectJars, subDexRoot, subUniverse, budget) })
+            // External libs stay in the universe above (project/sub desugar against them) but may be dexed elsewhere
+            // (one-pass forked; see [DexExternalLibsTask]) rather than archived here.
+            if (archiveExternalScope) {
+                scopes.add(async(Dispatchers.IO) { libDexer.dexScope(externalJars, extDexRoot, extUniverse, budget) })
+            }
+            // R.jar into its OWN archive root (merged into the project layer downstream). It has nothing to desugar,
+            // so the ext libs on its classpath are harmless; it re-dexes alone on a resource edit and never touches
+            // the external scope's archives (so mergeExtDex stays up-to-date). Its cost is R's SIZE, not the
+            // classpath — and it's GC-bound, so throwing D8 threads at it made it slower, not faster (see
+            // DexConcurrency.archivePlanFor); overlapping it with the other scopes is what actually hides it.
+            if (rDexRoot != null && rJars.isNotEmpty()) {
+                scopes.add(async(Dispatchers.IO) { libDexer.dexScope(rJars, rDexRoot, extUniverse, budget) })
+            }
+            scopes.awaitAll().all { it }
         }
         return if (ok) TaskResult.Success else TaskResult.Failed(firstFailure.get() ?: "dexBuilder failed")
     }
@@ -777,6 +826,20 @@ internal class DexArchiveBuilderTask(
      * [archiveProject]'s `removed` set, so the next build deletes their stale project-scope `.dex`.
      */
     private fun isGeneratedRClass(fileName: String): Boolean = fileName == "R.class" || fileName.startsWith("R\$")
+
+    /**
+     * The worker budget the concurrently-archived LIBRARY scopes share, for [total] library inputs across all of
+     * them. A dexer that plans its own archive fan-out ([OffHeapArchiveDexer]) still decides; otherwise it is the
+     * in-process heap model.
+     */
+    private fun scopeBudget(total: Int): SharedLibraryDexer.ScopeBudget {
+        (dexer as? OffHeapArchiveDexer)?.let {
+            val p = it.offHeapArchivePlan(total)
+            return SharedLibraryDexer.ScopeBudget(p.concurrency, p.threadsPerInvocation)
+        }
+        val p = DexConcurrency.archivePlan(total)
+        return SharedLibraryDexer.ScopeBudget(p.workers, p.threadsPerInvocation)
+    }
 
     /**
      * Project scope, per class file: archive only the `.class` files whose content changed (tracked in a
@@ -838,6 +901,12 @@ internal class DexArchiveBuilderTask(
                 // classes (program + restJar) so a library that redefines one can't collide with them either.
                 classpath.addAll(DexArchives.classpathFor(universe.universeByHash.values, universe.classesOf, exclude = current.keys))
             }
+            // NOT drawn from the library scopes' shared worker budget, deliberately. This is ONE invocation, it is a
+            // real D8 compile of the app's changed classes, and it gates `mergeProjectDex` — so queueing it behind
+            // the (dozens of, largely I/O-bound) library jobs competing for that budget put it at the back of the
+            // critical path: measured on-device, dexBuilder went 2.1s -> 3.0s on a warm build when it did. Heap is
+            // still bounded process-wide by [InProcessDexGate], which every in-process D8 call draws from, so
+            // overlapping this with the library fan-out cannot over-commit the heap.
             val r = dexer.dexArchive(
                 listOf(changedJar),
                 classpath,
@@ -964,6 +1033,12 @@ internal object DexArchives {
     fun hasDex(dir: Path): Boolean = Files.isDirectory(dir) && Files.walk(dir)
         .use { s -> s.anyMatch { it.toString().endsWith(".dex") } }
 
+    /** How many `.dex` files [dir] holds, recursively (0 for a missing dir). */
+    fun countDex(dir: Path): Int {
+        if (!Files.isDirectory(dir)) return 0
+        return Files.walk(dir).use { s -> s.filter { it.toString().endsWith(".dex") }.count() }.toInt()
+    }
+
     /** The per-class `.dex` path a `DexFilePerClassFile` archive writes for a `.class` at [classRel]. */
     fun dexRelOf(classRel: String): String = classRel.removeSuffix(".class") + ".dex"
 
@@ -981,10 +1056,78 @@ internal object DexArchives {
      * incomplete bucket would be reused forever — silently omitting that class (a runtime
      * `ClassNotFoundException`). An incomplete bucket is re-dexed rather than reused.
      */
-    fun bucketComplete(bucket: Path, jarClasses: Set<String>): Boolean {
+    fun bucketComplete(bucket: Path, jarClasses: Set<String>): Boolean = bucketComplete(bucket) { jarClasses }
+
+    /**
+     * [bucketComplete] over a class set the caller only has to produce on a MISS. The per-class scan needs the
+     * library jar's `.class` listing, which costs a zip central-directory read per library; taking it lazily lets
+     * an already-verified bucket ([bucketVerified]) be accepted without opening the jar at all — and without the
+     * caller keeping that class set alive for a library it is not going to dex.
+     */
+    fun bucketComplete(bucket: Path, jarClasses: () -> Set<String>): Boolean {
+        if (bucketVerified(bucket)) return true
         if (!hasDex(bucket)) return false
-        return jarClasses.all { !dexable(it) || Files.isRegularFile(bucket.resolve(dexRelOf(it))) }
+        if (!jarClasses().all { !dexable(it) || Files.isRegularFile(bucket.resolve(dexRelOf(it))) }) return false
+        // A bucket dexed before sentinels existed passes the full scan; record the result so this is the last
+        // time it pays for one.
+        markBucketVerified(bucket)
+        return true
     }
+
+    /**
+     * Record that [bucket] has been VERIFIED complete — it holds a `.dex` for every dexable class of the jar whose
+     * content hash names it. Only ever written where that has actually been established (a fresh dex that passed
+     * the per-class check, a completed copy out of the shared cache, or a full [bucketComplete] scan), so the
+     * sentinel states a fact rather than an assumption.
+     *
+     * It stores the `.dex` count observed at that moment, which is what makes trusting it later safe: a bucket
+     * truncated afterwards (an interrupted copy, a partial delete) no longer matches its own record and falls back
+     * to the full scan. The [DEX_CACHE_FORMAT] stamp retires sentinels from a different D8 or archive layout,
+     * which matters because a module's bucket root — unlike the shared cache — is not namespaced by format.
+     *
+     * [dexCount] lets a caller that just walked the bucket supply the count instead of paying for another walk.
+     * That matters on the shared-cache HIT path, which is the hot one: it runs once per library on any build whose
+     * module buckets are absent (a clean, a fresh checkout), and re-walking every bucket there measured ~0.4s of a
+     * ~6s build. Pass < 0 to have it counted here.
+     */
+    fun markBucketVerified(bucket: Path, dexCount: Int = -1) {
+        runCatching {
+            val text = "format=$DEX_CACHE_FORMAT\ndex=${if (dexCount >= 0) dexCount else countDex(bucket)}\n"
+            // Staged + renamed into place: a reader must never see a half-written sentinel, and two builds (or a
+            // build and a preview) can verify the same shared-cache bucket at once.
+            val tmp = bucket.resolve("$BUCKET_SENTINEL.tmp-" + java.util.UUID.randomUUID())
+            Files.write(tmp, text.toByteArray())
+            try {
+                Files.move(tmp, bucket.resolve(BUCKET_SENTINEL), StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: Exception) {
+                runCatching { Files.move(tmp, bucket.resolve(BUCKET_SENTINEL), StandardCopyOption.REPLACE_EXISTING) }
+                    .onFailure { runCatching { Files.deleteIfExists(tmp) } }
+            }
+        }
+    }
+
+    /**
+     * Whether [bucket] carries a valid [markBucketVerified] sentinel: a completeness proof that costs one small
+     * file read plus one directory walk, in place of opening the library jar to list its classes and then stat-ing
+     * one `.dex` per class. That scan ran on EVERY build, warm ones included, for every library in the scope (tens
+     * of thousands of syscalls on a dependency-heavy classpath) and again in the layout preview's readiness gate.
+     *
+     * Trusting the sentinel is sound because a bucket's directory name IS the jar's content hash: identical
+     * content means an identical class set, so a proof recorded for that name holds for any jar mapping to it.
+     */
+    fun bucketVerified(bucket: Path): Boolean {
+        val f = bucket.resolve(BUCKET_SENTINEL)
+        if (!Files.isRegularFile(f)) return false
+        val lines = runCatching { Files.readAllLines(f) }.getOrNull() ?: return false
+        if (lines.none { it == "format=$DEX_CACHE_FORMAT" }) return false
+        val recorded =
+            lines.firstOrNull { it.startsWith("dex=") }?.removePrefix("dex=")?.trim()?.toIntOrNull() ?: return false
+        return recorded > 0 && countDex(bucket) == recorded
+    }
+
+    /** The per-bucket completeness sentinel ([markBucketVerified]). Not a `.dex`, so it is invisible to
+     *  [countDex], to [DexMergeTask]'s dex collection, and to the packager. */
+    private const val BUCKET_SENTINEL = ".dexbucket"
 
     /**
      * Build a duplicate-free desugaring classpath from [candidates]. D8 aborts when two classpath entries
@@ -1034,18 +1177,22 @@ internal object DexArchives {
         }
     }
 
-    /** Delete the per-class `.dex` for a `com/example/Foo.class` relpath (DexFilePerClassFile names it `Foo.dex`). */
+    /** Delete the per-class `.dex` for a `com/example/Foo.class` relpath (DexFilePerClassFile names it
+     *  `Foo.dex`), together with the `Foo.globals` D8 writes beside it when desugaring that class produced a
+     *  global synthetic ([DexGlobalSynthetics]); a stale one would otherwise reach the next merge. */
     fun deleteClassDex(root: Path, classRelPath: String) {
-        runCatching { Files.deleteIfExists(root.resolve(classRelPath.removeSuffix(".class") + ".dex")) }
+        val base = classRelPath.removeSuffix(".class")
+        runCatching { Files.deleteIfExists(root.resolve("$base.dex")) }
+        runCatching { Files.deleteIfExists(root.resolve(base + DexGlobalSynthetics.EXTENSION)) }
     }
 
-    /** Drop every per-class `.dex` + the manifest (the project has no classes anymore). */
+    /** Drop every per-class `.dex` (+ its global synthetics) + the manifest (the project has no classes anymore). */
     fun clearClassDex(root: Path) {
         if (!Files.isDirectory(root)) return
         Files.walk(root).use { s ->
             s.filter {
-                Files.isRegularFile(it) && (it.toString()
-                    .endsWith(".dex") || it.fileName.toString() == CLASS_MANIFEST)
+                Files.isRegularFile(it) && (it.toString().endsWith(".dex") || it.toString()
+                    .endsWith(DexGlobalSynthetics.EXTENSION) || it.fileName.toString() == CLASS_MANIFEST)
             }.collect(Collectors.toList())
         }.forEach { runCatching { Files.deleteIfExists(it) } }
     }
@@ -1156,10 +1303,13 @@ internal object DexArchives {
         }
     }
 
-    /** Recursively copy [src] dir into [dst] (cheap — moves a few per-class `.dex`, vs re-running D8). */
-    fun copyDir(src: Path, dst: Path) {
-        if (!Files.isDirectory(src)) return
+    /** Recursively copy [src] dir into [dst] (cheap — moves a few per-class `.dex`, vs re-running D8). Returns how
+     *  many `.dex` files it copied, so a caller that then records a [markBucketVerified] proof gets the count from
+     *  the walk it already did rather than paying for a second one. */
+    fun copyDir(src: Path, dst: Path): Int {
+        if (!Files.isDirectory(src)) return 0
         Files.createDirectories(dst)
+        var dexCount = 0
         Files.walk(src).use { s ->
             s.forEach { p ->
                 val target = dst.resolve(src.relativize(p).toString())
@@ -1168,9 +1318,11 @@ internal object DexArchives {
                     target.parent?.let { Files.createDirectories(it) }; Files.copy(
                         p, target, StandardCopyOption.REPLACE_EXISTING
                     )
+                    if (p.toString().endsWith(".dex")) dexCount++
                 }
             }
         }
+        return dexCount
     }
 
     /**
@@ -1178,6 +1330,37 @@ internal object DexArchives {
      * move it into place, so a half-written bucket is never visible — and a lost race with another project
      * dexing the same jar concurrently just discards our copy (the winner's is already valid).
      */
+    /**
+     * Replace an INCOMPLETE [shared] bucket with [bucket], without ever leaving the shared path missing for
+     * longer than a rename.
+     *
+     * The shared cache is read concurrently — by another module's scope in this build, by another project's
+     * build, by the layout preview's readiness gate, by the ahead-of-build warm. Clearing the bucket first and
+     * then publishing (which is what this replaced) opened a window the length of a recursive delete of every
+     * per-class `.dex` in it, and any reader landing in that window sees no bucket, dexes the library itself,
+     * and then republishes the same way — so one racing pair keeps knocking each other's buckets out and the
+     * cache never converges. Staging into a sibling and swapping by rename keeps the gap to two renames.
+     */
+    fun replaceInCache(bucket: Path, shared: Path) {
+        runCatching {
+            shared.parent?.let { Files.createDirectories(it) }
+            val staged = shared.resolveSibling(shared.fileName.toString() + ".new-" + java.util.UUID.randomUUID())
+            clearDir(staged)
+            copyDir(bucket, staged)
+            if (runCatching { Files.move(staged, shared, StandardCopyOption.ATOMIC_MOVE) }.isSuccess) return
+            // The target exists, so the move needs the old bucket out of the way first. Rename it aside rather
+            // than delete it, so a failed swap can put it back and a reader never sees a half-deleted bucket.
+            val stale = shared.resolveSibling(shared.fileName.toString() + ".stale-" + java.util.UUID.randomUUID())
+            val movedAside = runCatching { Files.move(shared, stale) }.isSuccess
+            if (runCatching { Files.move(staged, shared) }.isSuccess) {
+                if (movedAside) clearDir(stale)
+            } else {
+                if (movedAside) runCatching { Files.move(stale, shared) }
+                clearDir(staged)
+            }
+        }
+    }
+
     fun publishToCache(bucket: Path, shared: Path) {
         runCatching {
             shared.parent?.let { Files.createDirectories(it) }

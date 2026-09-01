@@ -275,12 +275,17 @@ object ManifestMerger {
      */
     private fun validateIdentifierAttributes(root: Element, msgs: MutableList<Message>) {
         fun report(e: Element, attrLabel: String, value: String) {
+            val unresolved = PLACEHOLDER.findAll(value).map { it.groupValues[1] }.distinct().toList()
             val reason = if ("\${" in value) "has an unresolved \${} placeholder" else "is empty"
+            // Name the keys and where they are set: a dependency whose manifest needs a placeholder the module
+            // never declares is the common trigger, and the fix is one entry per key rather than a guess.
+            val fix = if (unresolved.isEmpty()) "Give it a value, or fix the dependency's manifest."
+            else "Define ${unresolved.joinToString(", ")} for this module in Module Settings ▸ Android ▸ " +
+                "manifestPlaceholders (a Gradle project: `defaultConfig { manifestPlaceholders = [...] }`), " +
+                "or fix the dependency's manifest."
             msgs += Message(
                 Severity.ERROR,
-                "<${e.tagName}> $attrLabel $reason (\"$value\") — aapt2 requires a valid identifier here. " +
-                    "Define the placeholder value (the app's applicationId/namespace, or a manifestPlaceholder " +
-                    "the dependency expects), or fix the dependency's manifest.",
+                "<${e.tagName}> $attrLabel $reason (\"$value\"): aapt2 requires a valid identifier here. $fix",
             )
         }
         fun checkAndroidName(e: Element) {
@@ -338,7 +343,12 @@ object ManifestMerger {
             // Singletons: at most one per parent, keyed by type alone.
             "manifest", "application", "uses-sdk", "supports-screens", "compatible-screens",
             "supports-gl-texture" -> type
-            "intent-filter" -> "$type|${intentFilterKey(e)}"
+            // Both are keyless containers of the same action/category/data children: an `<intent-filter>` on a
+            // component, and a `<queries><intent>` (Android 11 package visibility). Key each by its content so
+            // DISTINCT ones (e.g. an app's DIAL query and a billing library's BIND query) stay separate rather
+            // than collapsing onto the empty `signatureOf` key and merging into one intent with every action —
+            // a malformed manifest the on-device package installer rejects ("problem parsing the package").
+            "intent-filter", "intent" -> "$type|${intentFilterKey(e)}"
             "data" -> "$type|${dataKey(e)}"
             "uses-feature" -> "$type|${androidAttr(e, "name") ?: "glEs:${androidAttr(e, "glEsVersion")}"}"
             "provider" -> "$type|${androidAttr(e, "name") ?: "auth:${androidAttr(e, "authorities")}"}"
@@ -347,7 +357,7 @@ object ManifestMerger {
         }
     }
 
-    /** An intent-filter has no name: key it by its sorted actions/categories + data signatures. */
+    /** An `<intent-filter>` / `<queries><intent>` has no name: key it by its sorted actions/categories + data. */
     private fun intentFilterKey(e: Element): String {
         val actions = childElements(e).filter { it.tagName == "action" }.mapNotNull { androidAttr(it, "name") }.sorted()
         val cats = childElements(e).filter { it.tagName == "category" }.mapNotNull { androidAttr(it, "name") }.sorted()

@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtFunctionLiteral
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression
@@ -32,6 +33,7 @@ import org.jetbrains.kotlin.psi.KtPropertyAccessor
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtSecondaryConstructor
 import org.jetbrains.kotlin.psi.KtSuperTypeCallEntry
+import org.jetbrains.kotlin.psi.KtUserType
 import org.jetbrains.kotlin.psi.KtWhenExpression
 
 /** Scope and name resolution: locals, implicit receivers, same-file symbols, enclosing class/companion context, and type-receiver classification. */
@@ -172,26 +174,28 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
     var node: PsiElement? = elementAt(offset)
     while (node != null) {
         when (node) {
-            is KtBlockExpression -> node.statements.filter { it.textRange.endOffset <= offset }
-                .forEach { st ->
-                    when (st) {
-                        is KtProperty -> out += localVar(st)
-                        is KtDestructuringDeclaration -> out += destructuringLocals(
-                            st,
-                            inferType(st.initializer)
-                        )
-
-                        is KtNamedFunction -> out += KotlinSymbol(
-                            st.name ?: "_",
-                            SymbolKind.METHOD,
-                            type = service.typeFromText(st.typeReference?.text, fileContext),
-                            origin = SOURCE,
-                            declarationNode = runCatching { parsed.adapt(st) }.getOrNull(),
-                        )
-
-                        else -> {}
+            is KtBlockExpression -> node.statements.forEach { st ->
+                // A local FUNCTION is in scope from its declaration on AND inside its own body (self-recursion:
+                // `fun fact(n: Int): Int = … fact(n - 1)`); everything else only once its declaration closed.
+                // An EXTENSION local (`fun String.twice()`) is not callable by bare name — it surfaces on a
+                // matching receiver through [scopeMemberExtensions], mirroring [sameFileScopeSymbols].
+                if (st is KtNamedFunction) {
+                    if (st.receiverTypeReference == null && localFunctionVisibleAt(st, offset)) {
+                        out += localFunction(st)
                     }
+                    return@forEach
                 }
+                if (st.textRange.endOffset > offset) return@forEach
+                when (st) {
+                    is KtProperty -> out += localVar(st)
+                    is KtDestructuringDeclaration -> out += destructuringLocals(
+                        st,
+                        inferType(st.initializer)
+                    )
+
+                    else -> {}
+                }
+            }
             // A lambda's value parameters are handled by the KtLambdaExpression branch below (which types
             // `it`/named params from the functional parameter the lambda fills). Skip the KtFunctionLiteral
             // here — it IS a KtFunction, and adding its params via param() (type-from-text only) would
@@ -264,6 +268,86 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
     // member property's initializer/delegate, or the superclass delegation call) — see [constructorScopeParams].
     constructorScopeParams(offset).forEach { out += param(it) }
     return out
+}
+
+/**
+ * Whether the local function [fn] is in scope at [offset]: at or after its declaration, or anywhere inside its
+ * own body. The second case is what makes SELF-RECURSION resolve (`fun fact(n: Int): Int = … fact(n - 1)`) —
+ * without it the callee sat outside the "declared before the caret" window and read as unresolved. A local
+ * function declared LATER in the block stays out of scope, matching Kotlin (no forward reference between
+ * sibling local functions).
+ */
+internal fun localFunctionVisibleAt(fn: KtNamedFunction, offset: Int): Boolean {
+    val r = fn.textRange
+    return r.endOffset <= offset || (offset >= r.startOffset && offset <= r.endOffset)
+}
+
+/**
+ * The local functions in scope at [offset] — declared in any block enclosing [from] and visible there (see
+ * [localFunctionVisibleAt]), optionally narrowed to one [name]. Both plain and EXTENSION locals; callers filter.
+ * Allocation-free until something matches (almost no file declares a local function, and this sits on the
+ * per-call resolution path): the enclosing blocks are walked by sibling pointer rather than through
+ * `KtBlockExpression.statements`, which materializes a list per block per query.
+ */
+internal fun localFunctionsInScope(
+    from: PsiElement?,
+    offset: Int,
+    name: String? = null
+): List<KtNamedFunction> {
+    var out: MutableList<KtNamedFunction>? = null
+    var node: PsiElement? = from
+    while (node != null) {
+        if (node is KtBlockExpression) forEachLocalFunction(node) { fn ->
+            if ((name == null || fn.name == name) && localFunctionVisibleAt(fn, offset)) {
+                (out ?: ArrayList<KtNamedFunction>(2).also { out = it }) += fn
+            }
+        }
+        node = node.parent
+    }
+    return out ?: emptyList()
+}
+
+/** Apply [action] to each local function declared directly in [block], walking children by sibling pointer so
+ *  the common "no local functions here" case costs nothing. */
+internal inline fun forEachLocalFunction(block: KtBlockExpression, action: (KtNamedFunction) -> Unit) {
+    var child: PsiElement? = block.firstChild
+    while (child != null) {
+        if (child is KtNamedFunction) action(child)
+        child = child.nextSibling
+    }
+}
+
+internal fun KotlinResolver.localFunctionsInScope(offset: Int, name: String? = null): List<KtNamedFunction> =
+    localFunctionsInScope(elementAt(offset), offset, name)
+
+/**
+ * A symbol for a LOCAL function declaration (`fun helper(x: Int) = …` inside a body). Carries the same shape as
+ * [sameFileFunction] — value-parameter types/names, per-parameter defaults, the vararg index, type parameters,
+ * `@Composable`/`inline`/`suspend` — minus the owner/package (a local has neither). Previously locals got a
+ * name-and-kind-only symbol, so every call-applicability check saw a ZERO-parameter function: `helper(1)` was
+ * reported "Too many arguments (expected 0)", a named argument "Cannot find a parameter with this name", and a
+ * genuinely missing argument went unreported. The return type stays the DECLARED one; an expression body's
+ * inferred type is resolved per call site by [inferredReturnTypeForCall] through [declarationNode].
+ */
+internal fun KotlinResolver.localFunction(fn: KtNamedFunction): KotlinSymbol {
+    val params = fn.valueParameters.map { (it.name ?: "_") to it.typeReference?.text }
+    val retText = fn.typeReference?.text
+    return KotlinSymbol(
+        name = fn.name ?: "_", kind = SymbolKind.METHOD,
+        type = retText?.let { service.typeFromText(it, fileContext) },
+        origin = SOURCE,
+        signature = "(" + params.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" + (retText?.let { ": $it" }
+            ?: ""),
+        paramTypes = params.map { (_, t) -> service.typeFromText(t, fileContext) },
+        paramNames = params.map { (n, _) -> n },
+        paramHasDefault = fn.valueParameters.map { it.hasDefaultValue() },
+        varargParamIndex = fn.valueParameters.indexOfFirst { it.isVarArg },
+        typeParameters = fn.typeParameters.mapNotNull { it.name },
+        isComposable = fn.annotationEntries.any { it.shortName?.asString() == "Composable" },
+        isInline = fn.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.INLINE_KEYWORD),
+        isSuspend = fn.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.SUSPEND_KEYWORD),
+        declarationNode = runCatching { parsed.adapt(fn) }.getOrNull(),
+    )
 }
 
 /**
@@ -347,6 +431,13 @@ fun KotlinResolver.isTypeReceiver(expr: KtExpression): Boolean = typeDenotationF
  * resolves through imports/classpath (unless a local of that name shadows it); a qualified expression
  * resolves either as a fully-qualified type by its own text or as a nested type through a resolved outer
  * — so `R.layout.<caret>` (where `layout` is lower-case) is still recognized as static navigation.
+ *
+ * A singleton is excluded via [KotlinSymbolService.isSingletonObject], NOT [KotlinSymbolService.isObject]:
+ * the latter deliberately reports false for a COMPANION, because a bare `Foo.` denotes the class. But an
+ * EXPLICITLY spelled `Foo.Companion` / `Duration.Companion` / a named `Foo.Factory` denotes the singleton
+ * INSTANCE, whose members are instance members — classifying it as a type receiver filtered completion down
+ * to statics and left `import kotlin.time.Duration.Companion.<caret>` (and `Duration.Companion.<caret>`
+ * anywhere else) with nothing to offer.
  */
 fun KotlinResolver.typeDenotationFqn(expr: KtExpression): String? = when (expr) {
     is KtParenthesizedExpression -> expr.expression?.let { typeDenotationFqn(it) }
@@ -362,7 +453,7 @@ fun KotlinResolver.typeDenotationFqn(expr: KtExpression): String? = when (expr) 
                 name,
                 fileContext
             ))
-                ?.takeIf { service.isKnownType(it) && !service.isObject(it) }
+                ?.takeIf { service.isKnownType(it) && !service.isSingletonObject(it) }
         }
     }
 
@@ -370,21 +461,37 @@ fun KotlinResolver.typeDenotationFqn(expr: KtExpression): String? = when (expr) 
         val sel = (expr.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()
         when {
             sel == null -> null
-            // (a) fully-qualified type by its own text: `java.util.Locale` (but not a qualified `object`)
-            sel.firstOrNull()
-                ?.isUpperCase() == true && service.isKnownType(expr.text) && !service.isObject(expr.text) -> expr.text
-            // (b) nested type through a resolved outer: `R.layout`, `Outer.Inner`
+            // (a) fully-qualified type by its own text: `java.util.Locale` (but not a qualified singleton)
+            sel.firstOrNull()?.isUpperCase() == true && service.isKnownType(expr.text) &&
+                !service.isSingletonObject(expr.text) -> expr.text
+            // (b) nested type through a resolved outer: `R.layout`, `Outer.Inner` — but a nested SINGLETON
+            // (`Foo.Companion`, `object Outer { object Inner }`) is an instance, same as (a).
             else -> typeDenotationFqn(expr.receiverExpression)?.let {
-                "$it.$sel".takeIf { f ->
-                    service.isKnownType(
-                        f
-                    )
-                }
+                "$it.$sel".takeIf { f -> service.isKnownType(f) && !service.isSingletonObject(f) }
             }
         }
     }
 
     else -> null // calls, literals, `this`, `super` → instances
+}
+
+/**
+ * The FQN of the `object` singleton a BARE [name] denotes at [offset] — a local `object`, a same-file or
+ * nested one reached by simple name, an imported one (`import nav.NavKeys.shoppingListScreen`) — or null when
+ * [name] isn't one. A value in scope of that name shadows it, as does anything the name resolves to that
+ * isn't a singleton.
+ *
+ * The counterpart of [typeDenotationFqn], which deliberately EXCLUDES objects: a bare object reference is the
+ * INSTANCE (a value), not a type/static receiver. Case-blind — an object may be named in any case
+ * (`data object shoppingListScreen`), so the capitalized-name shortcut that guards the type paths can't be
+ * used here.
+ */
+fun KotlinResolver.objectDenotationFqn(name: String, offset: Int): String? {
+    if (name.isEmpty()) return null
+    if (localsAt(offset).any { it.name == name }) return null // a value of that name shadows the object
+    localTypesInScope(offset)[name]?.let { return it.takeIf { fqn -> service.isObject(fqn) } }
+    return service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))
+        ?.takeIf { service.isObject(it) }
 }
 
 /** Whether [name] is a type parameter declared by an enclosing function / class / property at [offset]
@@ -493,6 +600,13 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
                 .any { !it.isExtension || extensionInScope(it) }
         }
     ) return true
+    // A LOCAL extension function called bare on an implicit `this` of its receiver type — in practice its own
+    // recursive self-call (`fun String.twice(): String = if (n == 0) this else twice()`). Locals of that shape
+    // are deliberately kept out of [localsAt] (an extension is not bare-callable in general), so without this
+    // the recursion read as unresolved. Needs no import check: a local is always in its own scope.
+    if (localFunctionsInScope(offset, name).any { it.receiverTypeReference != null } &&
+        implicitReceiversAt(offset).any { recv -> scopeMemberExtensions(offset, recv, name).any { it.name == name } }
+    ) return true
     // A top-level callable (`remember`, `mutableStateOf`) resolves bare only when it is actually in
     // scope — explicitly imported, star-imported, same-package, or default-imported. A classpath
     // callable that was never imported stays unresolved, as Kotlin reports (mirrors the extension rule).
@@ -581,16 +695,57 @@ internal fun KotlinResolver.enclosingClassMemberKind(offset: Int, name: String):
     return if (sawFunction) true else null
 }
 
-/** True if any enclosing class has a companion object, whose members are bare-accessible but not
- *  modeled, so the unresolved-reference diagnostic backs off to avoid false positives. */
-fun KotlinResolver.companionInScope(offset: Int): Boolean {
+/**
+ * Whether [name] resolves through a COMPANION object in scope at [offset] — a companion's members (and the
+ * companion's own name, `companion object Factory`) are bare-accessible throughout the enclosing class's body.
+ * Three sources, so the unresolved-reference diagnostic doesn't need the old blanket "any enclosing class has
+ * a companion → back off" rule (which silently suppressed EVERY unresolved bare name in such a class — the
+ * common `class MyViewModel { … companion object { … } }` shape, where a missing `viewModelScope`/`withContext`
+ * import was never reported):
+ *  - the LIVE buffer's own companion declarations (an edit is seen before the disk model catches up);
+ *  - the symbol model's view of the enclosing class's companion ([KotlinSymbolService.companionMembersFor] —
+ *    the companion's inherited members plus compiler-plugin synthetics like `serializer()`);
+ *  - a SUPERTYPE's companion, whose members are bare-accessible in a subclass body too.
+ *
+ * Backs off (returns true) when an enclosing class's supertype can't be resolved: that supertype may declare a
+ * companion contributing [name], and erring toward "resolved" keeps the check false-positive-free.
+ */
+fun KotlinResolver.companionMemberInScope(name: String, offset: Int): Boolean {
+    if (name.isEmpty()) return false
     var node: PsiElement? = elementAt(offset)
     while (node != null) {
-        if (node is KtClassOrObject && node.companionObjects.isNotEmpty()) return true
+        if (node is KtClassOrObject) {
+            // `companion object Factory` referenced by its own name (`Factory.create()`).
+            if (node.companionObjects.any { it.name == name }) return true
+            for (comp in node.companionObjects) {
+                if (comp.declarations.any { it is KtNamedDeclaration && it.name == name }) return true
+                // A companion with a supertype we can't enumerate could inherit `name` → back off.
+                if (comp.superTypeListEntries.isNotEmpty() && !supertypesResolvable(comp)) return true
+            }
+            val fqn = node.fqName?.asString()
+            if (fqn != null) {
+                if (service.companionMembersFor(fqn, name).any { it.name == name }) return true
+                if (service.supertypesOf(fqn).any { sup ->
+                        service.companionMembersFor(sup.qualifiedName, name).any { it.name == name }
+                    }
+                ) return true
+            }
+            if (node.superTypeListEntries.isNotEmpty() && !supertypesResolvable(node)) return true
+        }
         node = node.parent
     }
     return false
 }
+
+/** Whether every supertype named in [cls]'s supertype list resolves to a known type (or is a type parameter) —
+ *  i.e. the inherited scope is fully enumerable. False when any entry's name can't be resolved. */
+private fun KotlinResolver.supertypesResolvable(cls: KtClassOrObject): Boolean =
+    cls.superTypeListEntries.all { entry ->
+        val userType = entry.typeReference?.typeElement as? KtUserType ?: return@all true
+        val name = userType.referenceExpression?.getReferencedName() ?: return@all true
+        if (isTypeParameterInScope(name, entry.textRange.startOffset)) return@all true
+        service.resolveTypeName(name, fileContext)?.let { service.isKnownType(it) } == true
+    }
 
 /** Named LOCAL types in scope at [offset] (simple name → the synthetic FQN they were registered under): a
  *  `class`/`object` declared as a statement in this block or an enclosing one. So a `LocalClass()` / a local

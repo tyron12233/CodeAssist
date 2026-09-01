@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.psi.KtCatchClause
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtForExpression
+import org.jetbrains.kotlin.psi.KtImportDirective
 import org.jetbrains.kotlin.psi.KtWhenExpression
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtAnnotationEntry
@@ -53,10 +54,17 @@ import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
  * classify CONFIDENTLY off the parse-only symbol model:
  *  - declarations (classes/objects, functions, properties, parameters, type parameters) — exact from PSI;
  *  - call sites resolved to a function — with the Kotlin distinctions the user asked for:
- *    `@Composable` (Android-Studio style), extension, and `suspend`;
+ *    `@Composable` (Android-Studio style), extension, and `suspend`; a call that instead invokes a VALUE of
+ *    function type (`block()` in an `inline fun`, a local lambda, a `() -> Unit` property) colors as that value,
+ *    so an identifier reads the same where it is called as where it is read;
  *  - local variables / parameters in use, with `var` (mutable) vs `val` (read-only);
+ *  - `object` singletons wherever they are NAMED as a value — through their owner (`NavKeys.shoppingListScreen`),
+ *    bare after an import, or as a qualifier — not just at their declaration. An object may be named in any case,
+ *    so a lowercase one (`data object shoppingListScreen`) is invisible to the lexer's Capitalized-means-type guess;
  *  - destructuring bindings (`val (a, b) = …`, `for ((k, v) in …)`, `{ (a, b) -> }`) at declaration and use;
  *  - type references, separating a type parameter (`T`) from a class;
+ *  - import lines — the imported name reads as what it names (a type, a member imported through one, or a
+ *    top-level/extension callable, `suspend`/`@Composable`/extension included), not as the lexer's shape guess;
  *  - inside string literals: interpolated variables/expressions (`$name`, `${p.x}` — via the normal walk), plus
  *    the interpolation delimiters (`$`/`${`/`}`) and escape sequences (`\n`, `\uXXXX`) as distinct kinds.
  *
@@ -300,6 +308,15 @@ class KotlinSemanticHighlighter(
                 }
 
                 is KtStringTemplateExpression -> classifyStringTemplate(psi, ::emit)
+                // An import line. The lexical layer can only guess by shape — a Capitalized leaf reads as a
+                // type, a callable leaf (`import kotlinx.coroutines.withContext`) stays uncolored — so classify
+                // the imported name off the symbol model. This OWNS its subtree (no descent): the qualifier
+                // segments are package names, which the generic reference path would try (and fail) to resolve.
+                is KtImportDirective -> {
+                    KotlinPerf.span("hl.import") { classifyImport(psi, resolver, ::emit) }
+                    return
+                }
+
                 else -> {}
             }
             var c = psi.firstChild
@@ -343,6 +360,84 @@ class KotlinSemanticHighlighter(
                 child = child.nextSibling
             }
         }
+    }
+
+    /**
+     * Color an import's imported NAME (and its `as` alias) for what it actually names: a type, a member
+     * imported through one (`java.lang.Math.max`, `Foo.Companion.TAG`, an enum entry), or a package-level
+     * callable (`kotlinx.coroutines.withContext` → a `suspend` function; `androidx.lifecycle.viewModelScope`
+     * → an extension property). A star import's leaf is a package, and a name the model can't resolve is left
+     * to the lexical layer — so an unresolvable import simply stays as the lexer drew it.
+     */
+    private fun classifyImport(
+        imp: KtImportDirective,
+        resolver: KotlinResolver,
+        emit: (com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit
+    ) {
+        if (imp.isAllUnder) return // `import pkg.*` — the last segment is a package, not a name
+        val leafRef = when (val ref = imp.importedReference) {
+            is KtQualifiedExpression -> ref.selectorExpression as? KtNameReferenceExpression
+            is KtNameReferenceExpression -> ref
+            else -> null
+        } ?: return
+        val fqn = imp.importedFqName?.asString()?.takeIf { '.' in it } ?: return
+        val (kind, mods) = importedClassification(fqn, resolver) ?: return
+        emit(leafRef.textRange, kind, mods)
+        // `import a.b.c as d` — the alias denotes the same thing, so it reads the same.
+        imp.alias?.nameIdentifier?.let { emit(it.textRange, kind, mods) }
+    }
+
+    /** What an import's fully-qualified [fqn] names, or null when the parse-only model can't tell. The probe
+     *  order follows Kotlin naming convention — a lowercase leaf is looked up as a CALLABLE first, a
+     *  Capitalized one as a TYPE — so the common case costs one lookup family, not all three. */
+    private fun importedClassification(
+        fqn: String,
+        resolver: KotlinResolver
+    ): Pair<HighlightKind, Set<HighlightModifier>>? {
+        val leaf = fqn.substringAfterLast('.')
+        val owner = fqn.substringBeforeLast('.', "")
+        if (leaf.isEmpty() || owner.isEmpty()) return null
+        val callableFirst = leaf.firstOrNull()?.isLowerCase() == true
+        if (callableFirst) packageCallable(owner, leaf, resolver)?.let { return it }
+        // An imported `object` reads as an object, not a class — `import nav.NavKeys.shoppingListScreen` names
+        // the singleton, and the use sites it puts in scope are colored that way too.
+        if (resolver.service.typeFqnKnown(fqn))
+            return (if (resolver.service.isObject(fqn)) HighlightKind.OBJECT else HighlightKind.CLASS) to emptySet()
+        // A member imported THROUGH a type: an object/companion member, a Java static (`java.lang.Math.max`),
+        // an enum entry (`java.time.DayOfWeek.MONDAY`). The LONGEST type prefix owns the leaf.
+        var prefix = owner
+        while (prefix.isNotEmpty()) {
+            if (resolver.service.typeFqnKnown(prefix)) {
+                if (leaf in resolver.enumConstantNames(prefix)) return HighlightKind.ENUM_CONSTANT to emptySet()
+                return resolver.staticMemberNamed(prefix, leaf)?.let(::symbolClassification)
+            }
+            prefix = prefix.substringBeforeLast('.', "")
+        }
+        return if (callableFirst) null else packageCallable(owner, leaf, resolver)
+    }
+
+    /** The classification of a top-level / extension callable [name] declared in package [owner], or null. */
+    private fun packageCallable(
+        owner: String,
+        name: String,
+        resolver: KotlinResolver
+    ): Pair<HighlightKind, Set<HighlightModifier>>? =
+        resolver.service.packageCallables(owner, name).firstOrNull()?.let(::symbolClassification)
+
+    /** A resolved symbol's highlight kind + its orthogonal facts (composable / extension / suspend / deprecated). */
+    private fun symbolClassification(sym: KotlinSymbol): Pair<HighlightKind, Set<HighlightModifier>> {
+        val mods = HashSet<HighlightModifier>(4)
+        if (sym.isComposable) mods += HighlightModifier.COMPOSABLE
+        if (sym.isExtension) mods += HighlightModifier.EXTENSION
+        if (sym.isSuspend) mods += HighlightModifier.SUSPEND
+        if (sym.isDeprecated) mods += HighlightModifier.DEPRECATED
+        val kind = when (sym.kind) {
+            SymbolKind.METHOD -> HighlightKind.FUNCTION
+            SymbolKind.ENUM_CONSTANT -> HighlightKind.ENUM_CONSTANT
+            SymbolKind.CLASS -> HighlightKind.CLASS
+            else -> HighlightKind.PROPERTY
+        }
+        return kind to mods
     }
 
     private fun classKind(c: KtClass): HighlightKind = when {
@@ -397,7 +492,15 @@ class KotlinSemanticHighlighter(
             return
         }
 
-        // No function resolved: a capitalized callee is a constructor / object invoke (`Foo(...)`, `Color(...)`).
+        // No function resolved — but a call needn't name one: a VALUE of function type is invoked through the
+        // `invoke` convention (`block()` inside an `inline fun`, a local `val f = { … }`, a `val cb: () -> Unit`
+        // member). Kotlin resolves those against the value in scope, which is also why a local/parameter SHADOWS
+        // a same-named function here, so the value reading is tried before the constructor guess below. Without
+        // it the identifier was colored where it is READ (`h(f)`, `f.invoke()`) and left to the lexer where it is
+        // CALLED (`f()`) — the same name, two colors, in one function body.
+        if (classifyValueRead(callee, resolver, emit)) return
+
+        // A capitalized callee that names no value is a constructor / object invoke (`Foo(...)`, `Color(...)`).
         if (callee.getReferencedName().firstOrNull()?.isUpperCase() == true) {
             emit(callee.textRange, HighlightKind.CONSTRUCTOR, emptySet())
         }
@@ -469,20 +572,40 @@ class KotlinSemanticHighlighter(
                 emit(ref.textRange, HighlightKind.CLASS, emptySet()); return
             }
         }
+        classifyValueRead(ref, resolver, emit)
+    }
+
+    /**
+     * Color [ref] for the VALUE it names — a local, a parameter, a destructuring entry, `it`, a member read
+     * through an implicit receiver, an enclosing-class / same-file top-level property, or an `object`
+     * singleton. Returns whether a token was emitted (false = nothing here names a value, so the caller may
+     * try another reading, and an unresolved name is left to the lexical layer).
+     *
+     * Shared by the plain read path ([classifyReference]) and the CALL path ([classifyCall]): a value of
+     * function type is invoked through the `invoke` convention (`block()` inside an `inline fun`, a local
+     * `val f = { … }`, a `val cb: () -> Unit` member), which resolves to no function symbol — so the call
+     * path would otherwise emit nothing and leave the name to the lexer, coloring the very same identifier
+     * differently where it is CALLED than where it is read.
+     */
+    private fun classifyValueRead(
+        ref: KtNameReferenceExpression,
+        resolver: KotlinResolver,
+        emit: (com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit
+    ): Boolean {
         val name = ref.getReferencedName()
-        if (name.isEmpty()) return
+        if (name.isEmpty()) return false
         val offset = ref.textRange.startOffset
         when (val decl = localOrParamDecl(name, offset, ref)) {
             is KtParameter -> {
-                emit(ref.textRange, HighlightKind.PARAMETER, paramMutability(decl)); return
+                emit(ref.textRange, HighlightKind.PARAMETER, paramMutability(decl)); return true
             }
 
             is KtProperty -> {
-                emit(ref.textRange, HighlightKind.LOCAL_VARIABLE, mutability(decl.isVar)); return
+                emit(ref.textRange, HighlightKind.LOCAL_VARIABLE, mutability(decl.isVar)); return true
             }
 
             is KtDestructuringDeclarationEntry -> {
-                emit(ref.textRange, HighlightKind.LOCAL_VARIABLE, mutability(decl.isVar)); return
+                emit(ref.textRange, HighlightKind.LOCAL_VARIABLE, mutability(decl.isVar)); return true
             }
         }
         // The implicit lambda parameter `it` (`x.let { it }`, `x.also { it }`) is synthetic — no `KtParameter`,
@@ -491,12 +614,12 @@ class KotlinSemanticHighlighter(
         if (name == "it" && resolver.localsAt(offset)
                 .any { it.name == "it" && it.kind == SymbolKind.PARAMETER }
         ) {
-            emit(ref.textRange, HighlightKind.PARAMETER, setOf(HighlightModifier.READONLY)); return
+            emit(ref.textRange, HighlightKind.PARAMETER, setOf(HighlightModifier.READONLY)); return true
         }
         // `field` inside a property accessor is the backing-field soft keyword (`get() = field`, `set(v) { field
         // = v }`). No real local/param named `field` shadowed it above, so color it as a keyword.
         if (name == "field" && ref.getStrictParentOfType<KtPropertyAccessor>() != null) {
-            emit(ref.textRange, HighlightKind.KEYWORD, emptySet()); return
+            emit(ref.textRange, HighlightKind.KEYWORD, emptySet()); return true
         }
         // A bare member read resolved through an implicit receiver — the `this` of an `apply`/`with`/`run` block,
         // an enclosing extension receiver, or the enclosing class (`p.apply { x }`). Colored like the qualified
@@ -516,9 +639,10 @@ class KotlinSemanticHighlighter(
                     deprecationMods(member)
                 )
 
-                else -> {} // a member / top-level / unresolved name → leave to the lexical layer
+                // a member / top-level / unresolved name → leave to the lexical layer
+                else -> return false
             }
-            return
+            return true
         }
         // Fallback (pure PSI): a bare read of an ENCLOSING-CLASS member property through the implicit `this`
         // (`nickname = _nickname` inside an `init` block). The resolver's implicit-receiver lookup can miss this
@@ -526,15 +650,23 @@ class KotlinSemanticHighlighter(
         // against the enclosing class's declared members colors it regardless. Runs AFTER the resolver lookup so
         // a nearer `apply`/`with` receiver member still wins.
         enclosingClassMemberProperty(name, ref)?.let { isVar ->
-            emit(ref.textRange, HighlightKind.PROPERTY, mutability(isVar)); return
+            emit(ref.textRange, HighlightKind.PROPERTY, mutability(isVar)); return true
         }
         // A bare read of a SAME-FILE TOP-LEVEL property — the Compose ImageVector backing-property pattern, where
         // `val edit`'s getter reads/writes a `private var _edit` declared BELOW it. Top-level declarations are
         // order-independent (unlike a local, which [localOrParamDecl] matches only before the offset), so this
         // matches regardless of declaration order. Runs last, so a nearer local / receiver / class member wins.
         topLevelPropertyInFile(name, ref)?.let { isVar ->
-            emit(ref.textRange, HighlightKind.PROPERTY, mutability(isVar))
+            emit(ref.textRange, HighlightKind.PROPERTY, mutability(isVar)); return true
         }
+        // A bare reference to an `object` singleton — an imported one (`import nav.NavKeys.shoppingListScreen`),
+        // a nested one named from inside its owner, a local `object`. It denotes the INSTANCE, so none of the
+        // value lookups above resolve it; a lowercase-named one (`data object shoppingListScreen`) is invisible
+        // to the lexer's Capitalized-means-type guess too, which is why it read as plain text.
+        if (resolver.objectDenotationFqn(name, offset) != null) {
+            emit(ref.textRange, HighlightKind.OBJECT, emptySet()); return true
+        }
+        return false
     }
 
     /** Whether [name] is a SAME-FILE top-level property (order-independent), returning its mutability (`var` →
@@ -611,10 +743,12 @@ class KotlinSemanticHighlighter(
         if (name.isEmpty()) return
         val receiver = q.receiverExpression
         val typeFqn = resolver.typeDenotationFqn(receiver)
+        val ownerFqn: String
         val member = if (typeFqn != null) {
             if (resolver.enumConstantNames(typeFqn).contains(name)) {
                 emit(ref.textRange, HighlightKind.ENUM_CONSTANT, emptySet()); return
             }
+            ownerFqn = typeFqn
             resolver.staticMemberNamed(typeFqn, name)
         } else {
             val inferred = resolver.inferType(receiver) ?: return
@@ -625,8 +759,17 @@ class KotlinSemanticHighlighter(
             val recvType =
                 resolver.receiverForMembers(inferred, receiver.textRange.startOffset) ?: return
             if (recvType.isTypeParameter) return
+            ownerFqn = recvType.qualifiedName
             resolver.instanceMemberNamed(recvType, name)
-        } ?: return
+        } ?: run {
+            // Not a member at all: a NESTED `object` named through its owner (`NavKeys.shoppingListScreen`).
+            // It denotes the singleton INSTANCE, so no member lookup finds it — and since an object may be
+            // named in any case, a lowercase one (`data object shoppingListScreen`) would otherwise be left
+            // to the lexer, which colors only Capitalized names.
+            if (resolver.service.isObject("$ownerFqn.$name"))
+                emit(ref.textRange, HighlightKind.OBJECT, emptySet())
+            return
+        }
         // A property/field read (a method ref without a call is rare; leave it to the lexical layer).
         if (member.kind == SymbolKind.FIELD || member.kind == SymbolKind.ENUM_CONSTANT) {
             val kind =

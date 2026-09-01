@@ -16,6 +16,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -96,7 +98,7 @@ class ArtReflectionRewriteTest {
             val patched = ArtReflectionRewrite.patch(listOf(src), outDir)
             assertEquals(1, patched.size)
             assertNotEquals(src, patched[0], "a jar that calls trySetAccessible is rewritten to a new path")
-            assertEquals(outDir.resolve("xprocessing.jar"), patched[0])
+            assertEquals(outDir.resolve("0-xprocessing.jar"), patched[0], "rewritten under its classpath index")
 
             val rewritten = classEntry(patched[0], "$PROBE.class")
             val calls = invokedReflectionMethods(rewritten)
@@ -127,6 +129,33 @@ class ArtReflectionRewriteTest {
             assertFalse(Files.exists(outDir), "no rewritten copy is written for a jar that needs no patch")
         }
     }
+
+    /**
+     * A tool classpath can hold two SAME-NAMED jars: a module activating two bundled KSP processors gets each
+     * closure's own `annotations-13.0.jar`, `jsr305-3.0.2.jar`, and so on. Both rewritten to `outDir/<name>`,
+     * one would silently overwrite the other and the classpath would carry its classes twice under the second
+     * entry's identity, so the destination is keyed by classpath index.
+     */
+    @Test
+    fun twoSameNamedJarsDoNotOverwriteEachOthersRewrite() {
+        withTempDir("art-reflect-collide") { tmp ->
+            val a = jarOf(Files.createDirectories(tmp.resolve("a")), "shared.jar", mapOf("$PROBE.class" to probeClassBytes()))
+            val b = jarOf(Files.createDirectories(tmp.resolve("b")), "shared.jar", mapOf("Other.class" to probeClassBytes()))
+            val outDir = tmp.resolve("art-safe")
+
+            val patched = ArtReflectionRewrite.patch(listOf(a, b), outDir)
+
+            assertEquals(2, patched.size)
+            assertNotEquals(patched[0], patched[1], "same-named jars must rewrite to distinct paths")
+            // Each rewritten jar still carries ITS OWN class, not the other's.
+            assertNotNull(zipEntryOrNull(patched[0], "$PROBE.class"), "first jar keeps its own entry")
+            assertNotNull(zipEntryOrNull(patched[1], "Other.class"), "second jar keeps its own entry")
+            assertNull(zipEntryOrNull(patched[0], "Other.class"), "no cross-contamination")
+        }
+    }
+
+    private fun zipEntryOrNull(jar: Path, name: String): ByteArray? =
+        ZipFile(jar.toFile()).use { zf -> zf.getEntry(name)?.let { e -> zf.getInputStream(e).use { it.readBytes() } } }
 
     private companion object {
         const val PROBE = "Probe"

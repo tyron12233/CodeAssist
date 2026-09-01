@@ -95,6 +95,44 @@ class KotlinSemanticHighlightTest {
     }
 
     @Test
+    fun lowercaseObjectUsesAreColoredAsObject() {
+        // A `data object` may be named in any case, and the lexer only guesses "type" from a Capitalized name —
+        // so a lowercase one's USES (declaration aside) used to read as plain text: `NavKeys.shoppingListScreen`
+        // is the singleton INSTANCE, which no member lookup resolves.
+        val code = "package demo\n" +
+            "sealed interface NavKeys {\n" +
+            "  data object shoppingListScreen : NavKeys\n" +
+            "}\n" +
+            "fun go(k: NavKeys): NavKeys {\n" +
+            "  val a = NavKeys.shoppingListScreen\n" +
+            "  when (k) {\n" +
+            "    NavKeys.shoppingListScreen -> {}\n" +
+            "  }\n" +
+            "  return a\n" +
+            "}\n"
+        val toks = tokens("NavUse.kt", code)
+        // the declaration + both `NavKeys.shoppingListScreen` reads
+        assertTrue(
+            toks.count { it.text == "shoppingListScreen" && it.kind == "object" } >= 3,
+            "a lowercase object's uses should color as an object; got $toks",
+        )
+    }
+
+    @Test
+    fun importedLowercaseObjectReadsAsObject() {
+        // The same object reached BARE through an import — no receiver to resolve it off, and no local/member
+        // of that name, so it fell off the end of the reference classifier uncolored.
+        val code = "package demo\n" +
+            "import demo.NavKeys.shoppingListScreen\n" +
+            "fun go(): NavKeys = shoppingListScreen\n"
+        val toks = tokens("NavImport.kt", code)
+        assertTrue(
+            toks.count { it.text == "shoppingListScreen" && it.kind == "object" } >= 2,
+            "an imported lowercase object should color as an object at the import AND the use; got $toks",
+        )
+    }
+
+    @Test
     fun stdlibInfixCallIsMarked() {
         val toks = tokens("Infix.kt", "package demo\nfun f() { val p = 1 to 2 }\n")
         assertTrue(
@@ -261,6 +299,46 @@ class KotlinSemanticHighlightTest {
         assertTrue(
             toks.any { it.text == "oldApi" && it.kind == "method" && HighlightModifier.DEPRECATED in it.mods },
             "a call to a cross-file @Deprecated function should be struck through; got $toks",
+        )
+    }
+
+    @Test
+    fun invokedFunctionTypedValueIsColoredLikeTheValue() {
+        // A lambda parameter of an `inline fun` invoked in its body — the shape the report came in on. `block()`
+        // resolves to no FUNCTION (it is the value's `invoke`), so the call path used to emit nothing and the
+        // name was colored by the lexer at the call while the resolver colored it at every read.
+        val inl = tokens("Inv1.kt", "inline fun run2(block: () -> Unit) { block(); block() }\n")
+        assertTrue(
+            inl.count { it.text == "block" && it.kind == "parameter" && HighlightModifier.DECLARATION !in it.mods } == 2,
+            "both `block()` invocations should color as the parameter; got $inl",
+        )
+        // The same value read but not invoked already worked — the two must agree.
+        val mixed = tokens("Inv2.kt", "fun h(f: () -> Unit) {}\nfun g(f: () -> Unit) { f(); h(f); f.invoke() }\n")
+        assertTrue(
+            mixed.count { it.text == "f" && it.kind == "parameter" && HighlightModifier.DECLARATION !in it.mods } == 3,
+            "a function-typed parameter colors the same invoked, passed, or `.invoke()`d; got $mixed",
+        )
+        // …and for the other value kinds that carry a function type.
+        val local = tokens("Inv3.kt", "fun g() {\n  val f = { 1 }\n  val x = f()\n}\n")
+        assertTrue(
+            local.any { it.text == "f" && it.kind == "localVariable" && HighlightModifier.DECLARATION !in it.mods },
+            "an invoked local lambda should color as a localVariable; got $local",
+        )
+        val prop = tokens("Inv4.kt", "class C(val cb: () -> Unit) { fun go() { cb() } }\n")
+        assertTrue(
+            prop.any { it.text == "cb" && it.kind == "property" && HighlightModifier.DECLARATION !in it.mods },
+            "an invoked function-typed property should color as a property; got $prop",
+        )
+    }
+
+    @Test
+    fun constructorCallStillColorsAsConstructor() {
+        // Guard the ordering: the value lookup runs before the capitalized-callee guess, so a real constructor
+        // (which names no value) must still read as one.
+        val toks = tokens("Ctor.kt", "package demo\nfun f() { val p = Point(1, 2) }\n")
+        assertTrue(
+            toks.any { it.text == "Point" && it.kind == "constructor" },
+            "a constructor call should still color as a constructor; got $toks",
         )
     }
 
@@ -441,6 +519,10 @@ class KotlinSemanticHighlightTest {
         val srcDir: Path = tempProject(mapOf(
             "Seed.kt" to "package demo\n",
             "Money.kt" to "package demo\nclass Money\ninfix fun Money.combine(o: Money): Money = o",
+            "NavKeys.kt" to "package demo\n" +
+                "sealed interface NavKeys {\n" +
+                "  data object shoppingListScreen : NavKeys\n" +
+                "}\n",
             "Models.kt" to "package demo\n" +
                 "data class Point(val x: Int, val y: Int)\n" +
                 "enum class Hue { RED, GREEN }\n" +

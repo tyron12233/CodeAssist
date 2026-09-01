@@ -30,6 +30,7 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiActionPlaces
 import dev.ide.ui.components.AnalyticsToggleRow
 import dev.ide.ui.components.BottomSheet
+import dev.ide.ui.components.FtpServerToggleRow
 import dev.ide.ui.components.CommandPalette
 import dev.ide.ui.components.DropdownOverlay
 import dev.ide.ui.ext.UiPluginHost
@@ -44,7 +45,13 @@ import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpenHub: () -> Unit, onOpenDependencies: (String?) -> Unit) {
+internal fun PaletteOverlay(
+    state: IdeUiState,
+    onToggleTheme: () -> Unit,
+    onOpenHub: () -> Unit,
+    onOpenIconManager: () -> Unit,
+    onOpenDependencies: (String?) -> Unit,
+) {
     // The palette's UI-navigation commands come from UiActionRegistry; this host bridges them to the app's
     // navigation callbacks (the same pattern as the More menu). Global settings + SDK/keystore managers all
     // live behind the Settings & Tools hub now, so they route through one HUB destination.
@@ -55,6 +62,7 @@ internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpen
             when (destination) {
                 UiDestinations.HUB -> onOpenHub()
                 UiDestinations.DEPENDENCIES -> onOpenDependencies(null)
+                UiDestinations.ICONS -> onOpenIconManager()
                 UiDestinations.LOGS -> state.logsOpen = true
             }
         }
@@ -87,6 +95,7 @@ internal fun DestinationSheets(
     onOpenModuleConfig: (String?) -> Unit,
     onToggleTheme: () -> Unit,
     onOpenHub: () -> Unit,
+    onOpenIconManager: () -> Unit,
     onCloseProject: () -> Unit,
     fileActions: FileActions,
 ) {
@@ -101,6 +110,7 @@ internal fun DestinationSheets(
                     when (destination) {
                         UiDestinations.HUB -> onOpenHub()
                         UiDestinations.MODULES -> onOpenModuleConfig(null)
+                        UiDestinations.ICONS -> onOpenIconManager()
                         UiDestinations.LOGS -> state.logsOpen = true
                         UiDestinations.PROJECTS -> onCloseProject()
                     }
@@ -151,6 +161,16 @@ internal fun MoreSheetContent(
             Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
             Box(Modifier.padding(horizontal = 6.dp)) {
                 AnalyticsToggleRow(enabled = on, onChange = { on = it; backend.diagnostics.setAnalyticsConsent(it) })
+            }
+        }
+
+        // The local FTP asset server toggle sits below analytics; it's controllable from the app or via the
+        // `ftp_server` MCP tool (both flip the same `settings.ai.ftpServer` pref + live server state).
+        if (backend.agent.ftpServerSupported()) {
+            var on by remember { mutableStateOf(backend.agent.ftpServerEnabled()) }
+            Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+            Box(Modifier.padding(horizontal = 6.dp)) {
+                FtpServerToggleRow(enabled = on, onChange = { on = it; backend.agent.setFtpServerEnabled(it) })
             }
         }
     }

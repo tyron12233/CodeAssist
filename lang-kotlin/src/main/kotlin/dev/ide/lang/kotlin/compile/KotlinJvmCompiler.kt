@@ -27,7 +27,8 @@ import java.io.File
 import java.nio.file.Path
 
 /**
- * Kotlin to `.class` codegen for the build. A thin wrapper over the in-process K2 `K2JVMCompiler`
+ * Kotlin to `.class` codegen for the build: the IN-PROCESS [KotlinCompilerBackend]. A thin wrapper over
+ * the in-process K2 `K2JVMCompiler`
  * (:kotlin-compiler-deps, the unshaded `-for-ide` compiler), run
  * in-process: the same compiler the editor parse-host loads, and one that runs on ART. The build's
  * `compileKotlin` task ([dev.ide.lang.kotlin.build.KotlinCompileTask], via [IncrementalKotlinCompiler])
@@ -48,18 +49,19 @@ import java.nio.file.Path
 class KotlinJvmCompiler(
     /** Loads runtime (non-bundled) plugins' registrars. Desktop default; `:ide-android` injects a D8/dex one. */
     private val pluginLoader: KotlinPluginLoader = DefaultKotlinPluginLoader,
-) {
+) : KotlinCompilerBackend {
 
-    /**
-     * [outputs] maps each compiled source file to the `.class` files it produced (populated via
-     * `-Xreport-output-files`; empty when the compile threw before reporting). [IncrementalKotlinCompiler]
-     * uses it to know which outputs a changed source owns, so a class a source no longer produces can be
-     * detected and pruned, and per-class ABI diffed.
-     */
-    data class Result(
-        val success: Boolean,
-        val messages: List<String>,
-        val outputs: Map<Path, List<Path>> = emptyMap(),
+    override fun compile(request: KotlinCompileRequest): KotlinCompileResult = compile(
+        kotlinSources = request.kotlinSources,
+        javaSources = request.javaSources,
+        classpath = request.classpath,
+        outputDir = request.outputDir,
+        jvmTarget = request.jvmTarget,
+        bootClasspath = request.bootClasspath,
+        friendPaths = request.friendPaths,
+        compilerPlugins = request.compilerPlugins,
+        pluginOptions = request.pluginOptions,
+        runtimePluginClasspaths = request.runtimePluginClasspaths,
     )
 
     /** True on Android's runtime (ART/Dalvik), where there is no host JDK for the compiler to borrow. */
@@ -103,8 +105,8 @@ class KotlinJvmCompiler(
          * registrars) so a mixed compile still applies them.
          */
         runtimePluginClasspaths: List<List<Path>> = emptyList(),
-    ): Result {
-        if (kotlinSources.isEmpty()) return Result(true, emptyList())
+    ): KotlinCompileResult {
+        if (kotlinSources.isEmpty()) return KotlinCompileResult(true, emptyList())
         // Keep the compiler's application environment (and its warm jar FS) alive across builds. Must be set
         // before the first KotlinCoreEnvironment is created, so do it before exec touches one.
         KotlinEnvironmentKeepAlive.ensure()
@@ -141,9 +143,9 @@ class KotlinJvmCompiler(
         val collector = RecordingMessageCollector()
         val exit = runCatching { K2JVMCompiler().exec(collector, Services.EMPTY, args) }
             .getOrElse {
-                return Result(false, collector.messages + "error: kotlinc threw: ${it.javaClass.name}: ${it.message}")
+                return KotlinCompileResult(false, collector.messages + "error: kotlinc threw: ${it.javaClass.name}: ${it.message}")
             }
-        return Result(exit == ExitCode.OK && !collector.hasErrors(), collector.messages, collector.outputs())
+        return KotlinCompileResult(exit == ExitCode.OK && !collector.hasErrors(), collector.messages, collector.outputs())
     }
 
     /**
@@ -170,7 +172,7 @@ class KotlinJvmCompiler(
         friendPaths: List<Path>,
         pluginRegistrarClasspaths: List<List<Path>>,
         pluginOptions: List<String>,
-    ): Result {
+    ): KotlinCompileResult {
         val registrars = pluginRegistrarClasspaths.flatMap { loadCompilerPluginRegistrars(it, pluginLoader) }
         val collector = RecordingMessageCollector()
         if (pluginOptions.isNotEmpty()) {
@@ -195,12 +197,12 @@ class KotlinJvmCompiler(
         // Reached by EVERY exit path: render the configuration's accumulated FIR diagnostics into `collector`
         // (mirrors CheckCompilationErrors → FirDiagnosticsCompilerResultsReporter), flush any grouped messages,
         // then decide success from whether an error was actually recorded. Renders once per compile.
-        fun finish(config: CompilerConfiguration?, extra: List<String> = emptyList()): Result {
+        fun finish(config: CompilerConfiguration?, extra: List<String> = emptyList()): KotlinCompileResult {
             config?.let {
                 FirDiagnosticsCompilerResultsReporter.reportToMessageCollector(it.diagnosticsCollector, collector, false)
             }
             runCatching { grouping.flush() }
-            return Result(!collector.hasErrors(), collector.messages + extra, collector.outputs())
+            return KotlinCompileResult(!collector.hasErrors(), collector.messages + extra, collector.outputs())
         }
 
         try {
@@ -267,7 +269,7 @@ class KotlinJvmCompiler(
      * retried. [bootClasspath] should be the platform library the real build uses (android.jar on ART, empty on
      * desktop) so the warm-up exercises the same `-no-jdk`/boot path. Call from a background thread at project open.
      */
-    fun warmUp(bootClasspath: List<Path> = emptyList()) {
+    override fun warmUp(bootClasspath: List<Path>) {
         if (warmedUp) return
         synchronized(warmLock) {
             if (warmedUp) return

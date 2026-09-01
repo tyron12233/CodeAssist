@@ -5,6 +5,11 @@ loaded from a separate artifact, is contributed by a **plugin** through the same
 scoped-service container. The IDE's own built-ins are the first consumers of this API, so there is no
 separate, privileged host-wiring path.
 
+> **Writing a plugin?** This page describes the model as built. For the task-oriented, step-by-step
+> guide — creating a plugin module, contributing to extension points, adding services, settings pages,
+> actions and Compose UI, and two worked examples — see
+> [writing-plugins.md](writing-plugins.md).
+
 This document describes the model as built (the internal, one-classpath tier). The externally-packaged,
 classloader-isolated, trust-gated tier is future work; see [Future work](#future-work) and
 `docs/ui-extensibility-and-plugin-api.md`.
@@ -128,13 +133,23 @@ because the analysis pipeline dispatches by language, is never analysed as Java.
 
 ### Build-system and run-task selection
 
-The build service picks a module's build system by `BuildSystem.supports(moduleType)` — its own built-in
-Java/Android systems first, then `BUILD_SYSTEM_EP`, so a plugin can add support for a new module type without a
-host edit. The built-ins stay concrete engine fields rather than extensions on purpose: they are per-project
-and context-heavy (the Android one defers SDK detection), so the point is the seam for *additions*, not the
-registry the built-ins themselves flow through. Extra Run-picker options come from `RUN_TASK_PROVIDER_EP`
-(`RunTaskProvider` → `RunTaskSpec`), merged after the built-in enumeration; id dispatch stays host-side, so a
-provider reuses a built-in id prefix (`build:` / `run:` / `assemble:`) to execute through the existing pipeline.
+The build service resolves a build system two ways: one contributed to `BUILD_SYSTEM_EP` whose id matches the
+project's `buildSystemId` owns that project's builds outright (how a foreign build system takes over a project
+its importer claimed), otherwise selection is by `BuildSystem.supports(moduleType)`: the built-in Java/Android
+systems first, then the contributed ones, so a plugin can add support for a new module type without a host edit.
+The built-ins stay concrete engine fields rather than extensions on purpose: they are per-project and
+context-heavy (the Android one defers SDK detection), so the point is the seam for *additions*, not the registry
+the built-ins themselves flow through.
+
+Run-picker options come from `RUN_TASK_PROVIDER_EP` (`RunTaskProvider` → `RunTaskSpec`) and from the project's
+bound build system (`BuildSystem.runTasks`), merged after the built-in enumeration. Dispatch follows the same
+split: an id carrying a built-in prefix (`build:` / `run:` / `assemble:`) runs through the host's pipeline, and
+any other id goes back to its contributor's `actionFor`, which returns a `RunAction` (graph + console header +
+optional post-build step) the host runs through the usual executor, console, and cancellation path.
+
+Tasks themselves are contributable: `BUILD_PLUGIN_EP` (`BuildPlugin`) is applied to every graph the host
+realizes, after the build system's own plugins, so a plugin's task can be wired by name to the tasks the
+pipeline just registered. See `docs/build-system.md` for the task contract and lifecycle names.
 
 ## Platform ports as host services
 

@@ -2,6 +2,7 @@ package dev.ide.jvm
 
 import dev.ide.jvm.fixtures.Peers
 import dev.ide.jvm.host.Shape
+import dev.ide.jvm.host.Weighted
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -37,6 +38,18 @@ class VmPeerTest {
         assertEquals(expected.describe(), shape.describe(), "describe (override calling super)")
         assertEquals(expected.sides(), shape.sides(), "sides (override)")
         assertEquals(expected.kind(), shape.kind(), "kind (real method calling the override)")
+    }
+
+    @Test fun peerImplementsAnInterfaceMethodTheRealAbstractSuperLeftUnimplemented() {
+        // An interpreted class extends a real ABSTRACT class that implements an interface but does not
+        // implement all of it. The peer's method set was built from the superclass CHAIN plus the interpreted
+        // class's OWN interfaces, so the interface the SUPERCLASS brings in was never scanned and its abstract
+        // method reached neither the trampolines nor the stubs — the peer inherited it still abstract.
+        // Reported as `AbstractMethodError: abstract method "FontWeight …font.Font.getWeight()" on receiver
+        // …GoogleFontImpl_Peer` when a Material 3 preview used a downloadable Google font.
+        val heavy = vm.invokeStatic(PEERS, "makeHeavy", "()Ldev/ide/jvm/host/Weighted;") as Weighted
+        assertEquals(Peers.makeHeavy().weight(), heavy.weight(), "platform code calling the interface method")
+        assertEquals(Peers.askHeavy(), vm.invokeStatic(PEERS, "askHeavy", "()I"), "reached through real code")
     }
 
     @Test fun interpretedInterfaceImplPassedToPlatformApi() {

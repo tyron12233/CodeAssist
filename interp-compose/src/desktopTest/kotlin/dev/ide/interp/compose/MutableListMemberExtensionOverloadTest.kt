@@ -7,12 +7,8 @@ import dev.ide.lang.kotlin.interp.RNode
 import dev.ide.lang.kotlin.interp.walk
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
-import java.io.File
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -29,10 +25,6 @@ import kotlin.test.assertTrue
  */
 class MutableListMemberExtensionOverloadTest {
 
-    private fun classpathJars(): List<Path> =
-        System.getProperty("java.class.path").split(File.pathSeparator)
-            .filter { it.endsWith(".jar") }.map { Paths.get(it) }
-
     @Test
     fun addAllRemoveAllRetainAllResolveToTheMember() {
         val code = """
@@ -44,7 +36,7 @@ class MutableListMemberExtensionOverloadTest {
                 xs.removeAll(listOf("Milk"))
             }
         """.trimIndent()
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(Doc(code)) as KotlinParsedFile
         val entry = assertNotNull(KotlinPreviewLowering(service).program(parsed)["f/0"], "f must lower")
 
@@ -72,7 +64,7 @@ class MutableListMemberExtensionOverloadTest {
                 xs.addAll(mutableListOf("Jam", "Honey"))
             }
         """.trimIndent()
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(Doc(code)) as KotlinParsedFile
         val entry = assertNotNull(KotlinPreviewLowering(service).program(parsed)["f/0"], "f must lower")
         var call: RNode.Call? = null

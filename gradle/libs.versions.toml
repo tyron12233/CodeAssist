@@ -6,7 +6,7 @@ kotlin = "2.4.0"
 # (`p/ij/intellij-dependencies`), NOT Maven Central.
 kotlinForIde = "2.4.20-dev-6138"
 intellijPlatform = "251.27812.49"
-coroutines = "1.10.2"
+coroutines = "1.11.0"
 junit = "5.11.4"
 jdt = "3.40.0"
 compose = "1.11.1"
@@ -32,6 +32,10 @@ admobMediationPangle = "8.2.0.4.0"     # com.google.ads.mediation:pangle — Pan
 admobMediationMintegral = "17.1.71.0"  # com.google.ads.mediation:mintegral — Mintegral adapter (native-capable)
 androidStub = "4.1.1.4"     # com.google.android:android — the throwaway stub android.jar (compileOnly) :applog-runtime compiles against
 okhttp = "4.12.0"           # com.squareup.okhttp3 — HTTP + SSE transport for the agent's LLM client (:agent-impl); runs on JVM and ART
+# Eclipse JGit: the pure-Java Git implementation behind :vcs-impl. The 6.10.x line targets Java 11
+# bytecode and keeps to java.nio/java.time APIs that exist from API 26, so it dexes and runs on ART as-is
+# (the 7.x line moves to Java 17 and records). Pulls JavaEWAH, slf4j-api and commons-codec transitively.
+jgit = "6.10.1.202505221210-r"
 # The Model Context Protocol Java SDK (io.modelcontextprotocol.sdk:mcp) — the wire protocol for
 # :agent-mcp's stdio server. 2.0.0 tracks the 2025-11-25 spec; the `mcp` bundle pulls mcp-core + Jackson 3.
 mcp = "2.0.0"
@@ -152,6 +156,9 @@ android-stub = { module = "com.google.android:android", version.ref = "androidSt
 # desktop and ART (bundled into :ide-android like the other in-process tools). okhttp-sse tracks okhttp.
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-sse = { module = "com.squareup.okhttp3:okhttp-sse", version.ref = "okhttp" }
+# JGit, the Git engine :vcs-impl drives (clone/fetch/pull/push, status, branches, commit, diff, stash).
+# One implementation for both hosts: plain JVM on desktop, dexed like the other in-process tools on ART.
+jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
 # The MCP SDK convenience bundle (mcp-core + Jackson 3): stdio server/client transports and the full
 # tools/resources/prompts JSON-RPC model for :agent-mcp.
 mcp = { module = "io.modelcontextprotocol.sdk:mcp", version.ref = "mcp" }

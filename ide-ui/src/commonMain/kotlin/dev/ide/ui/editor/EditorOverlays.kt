@@ -7,6 +7,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +52,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
@@ -317,13 +322,30 @@ internal fun DiagnosticChip(
     val density = LocalDensity.current
     val lineHeightDp = with(density) { lineHeightPx.toDp() }
     val em = with(density) { fontSize.toDp() } // the code font's em in dp — scales the icon + paddings with zoom
+    val latestOnClick by rememberUpdatedState(onClick)
     // Outer box is exactly one line tall (positioned at the row top by [modifier]'s offset); the pill sits
     // content-sized and vertically centred within it, so its baseline tracks the code glyphs on the same row.
     Box(modifier.height(lineHeightDp), contentAlignment = Alignment.CenterStart) {
         Row(
             Modifier
                 .background(color.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill))
-                .clickable(onClick = onClick)
+                // Cooperate with the editor's scroll: the chips are an overlay sibling, NOT a descendant of the
+                // editor's scrollable, so `clickable` (which defers only to an ANCESTOR scroll) would swallow a
+                // drag and freeze scrolling whenever a finger lands on a chip. Consume the DOWN so the editor's
+                // tap (caret placement + soft keyboard) doesn't also fire on a chip touch — the editor's
+                // scrollable still starts (it tolerates a consumed down, just as it does under its own
+                // detectTapGestures), so a DRAG on the chip scrolls the editor and cancels this gesture; only a
+                // clean tap (no scroll claimed the move) opens the diagnostic sheet.
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false).also { it.consume() }
+                        val up = waitForUpOrCancellation()
+                        if (up != null) {
+                            up.consume()
+                            latestOnClick()
+                        }
+                    }
+                }
                 .padding(horizontal = em * 0.5f, vertical = em * 0.12f),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(em * 0.35f),

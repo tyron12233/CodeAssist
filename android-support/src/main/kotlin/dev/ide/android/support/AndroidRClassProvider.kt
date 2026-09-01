@@ -2,6 +2,7 @@ package dev.ide.android.support
 
 import dev.ide.android.support.resources.AndroidResources
 import dev.ide.android.support.resources.RIdAssignment
+import dev.ide.android.support.resources.ResourceItem
 import dev.ide.android.support.resources.ResourceModel
 import dev.ide.android.support.resources.ResourceRepository
 import dev.ide.android.support.resources.ResourceType
@@ -19,6 +20,11 @@ import dev.ide.lang.synthetic.SyntheticModifier
  * module's merged [dev.ide.android.support.resources.ResourceRepository] (its own `res/` plus its android-lib
  * dependencies'). So `R.layout.activity_main` resolves iff that resource actually exists. No aapt2, no build:
  * a fast, SDK-free stand-in for completion + analysis, parsed by the [ResourceModel] port.
+ *
+ * Also emits one `R` per dependency AAR package (`androidx.core.R`, `com.google.android.material.R`, …),
+ * sliced out of the same merged repository by the `res/` dir each resource came from. An AAR ships no `R`
+ * classes of its own, so this is the only thing that makes the package-qualified form non-transitive R classes
+ * require — `com.google.android.material.R.attr.colorPrimary` — resolve before a build.
  *
  * Fields carry **stable, deterministic int ids** ([RIdAssignment]), and `R.styleable.<Name>` is emitted as a
  * real `int[]` (the attr ids in declaration order) plus the `<Name>_<attr>` index constants, so a custom
@@ -42,12 +48,54 @@ class AndroidRClassProvider(
 
         val repo = repository(context.module, context.workspace) ?: return emptyList()
         if (repo.isEmpty()) return emptyList()
+        // ONE id assignment for the whole merged table, shared by every R emitted here — so
+        // `com.google.android.material.R.attr.x` and the module's own `R.attr.x` are the same int, exactly as
+        // they are after the app's single aapt2 link.
         val ids = RIdAssignment(repo)
 
+        val own = rClass(facet.namespace, repo, ids)
+        // Each dependency AAR's own `R`, sliced out of the merged repository by the `res/` dir its resources
+        // came from. AARs ship no `R` classes (the consumer generates them from `R.txt`), so without this
+        // `com.google.android.material.R.attr.colorPrimary` — the form non-transitive R classes require —
+        // resolves nowhere, even though the resource itself is already in this repository.
+        val aarPackages = runCatching { AndroidResources.aarResourcePackages(context.module, context.workspace) }
+            .getOrDefault(emptyList())
+            .filter { it.packageName != facet.namespace }
+        if (aarPackages.isEmpty()) return listOf(own)
+        val byResDir = itemsByResourceRoot(repo)
+        val aars = aarPackages.mapNotNull { aar ->
+            byResDir[aar.resDir.normalize()]?.let { rClass(aar.packageName, slice(repo, it), ids) }
+        }
+        return listOf(own) + aars
+    }
+
+    /**
+     * [repo]'s items grouped by the `res/` root each came from. A resource file always sits exactly two levels
+     * under its root (`res/<config-dir>/<file>`), so the root is the source's grandparent — one pass over the
+     * items rather than a prefix test per AAR per item.
+     */
+    private fun itemsByResourceRoot(repo: ResourceRepository): Map<java.nio.file.Path, List<ResourceItem>> =
+        repo.all().groupBy { it.source?.parent?.parent?.normalize() }
+            .filterKeys { it != null }
+            .mapKeys { (dir, _) -> dir!! }
+
+    /**
+     * One AAR's own resources as a repository of their own — its `R` holds exactly what that AAR declares,
+     * never the consuming module's (non-transitive R). Styleable attr lists are read back from the merged
+     * [repo], where a `<declare-styleable>`'s children were recorded.
+     */
+    private fun slice(repo: ResourceRepository, items: List<ResourceItem>): ResourceRepository {
+        val styleables = items.filter { it.type == ResourceType.STYLEABLE }
+            .associate { it.name to repo.styleableAttrs(it.name) }
+        return ResourceRepository(items, styleableAttrs = styleables)
+    }
+
+    /** The `<namespace>.R` for [repo]'s resources, with ids from [ids] (which may span a wider table). */
+    private fun rClass(namespace: String, repo: ResourceRepository, ids: RIdAssignment): SyntheticClass {
         val nested = repo.types().sortedBy { it.rClass }.map { type ->
-            if (type == ResourceType.STYLEABLE) styleableClass(facet.namespace, repo, ids)
+            if (type == ResourceType.STYLEABLE) styleableClass(namespace, repo, ids)
             else SyntheticClass(
-                fqName = "${facet.namespace}.R.${type.rClass}",
+                fqName = "$namespace.R.${type.rClass}",
                 modifiers = NESTED_MODIFIERS,
                 fields = repo.names(type).sorted().map { name ->
                     // Field name is the aapt2-sanitized identifier (e.g. style `Theme.App` → `Theme_App`); the
@@ -56,7 +104,7 @@ class AndroidRClassProvider(
                 },
             )
         }
-        return listOf(SyntheticClass(fqName = "${facet.namespace}.R", nestedClasses = nested, doc = "Resource identifiers (synthetic R)"))
+        return SyntheticClass(fqName = "$namespace.R", nestedClasses = nested, doc = "Resource identifiers (synthetic R)")
     }
 
     /** `R.styleable`: each `<declare-styleable>` becomes an `int[]` of its attr ids + per-attr index constants. */

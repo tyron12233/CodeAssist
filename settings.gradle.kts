@@ -90,6 +90,8 @@ include(
     ":jvm-interp", // PoC: standalone .class bytecode-interpreting VM + Android/native bridge seam (Play dynamic-code compliance spike)
     ":deps-api",
     ":deps-impl",
+    ":vcs-api",  // version-control SPI: repository/branch/commit/status model, the provider EP, accounts + forge ports
+    ":vcs-impl", // the Git engine: JGit-backed repository, the GitHub REST/device-flow client, the account store
     ":analytics-api", // opt-in usage-analytics SPI (event model + AnalyticsService/AnalyticsSink ports)
     ":analytics-impl", // the engine: durable batch buffer + Supabase PostgREST sink + scrubbed crash reporter
     ":block-api",
@@ -101,6 +103,7 @@ include(
     ":agent-mcp",   // Model Context Protocol server: exposes the agent's tools over stdio JSON-RPC to external clients
     ":layout-preview-api",  // owned XML-layout preview: render contracts (RCanvas/RenderNode/Renderer), android-free
     ":layout-preview-impl", // the preview engine: resource value resolver, inflater, built-in renderers, ASM bridge remapper
+    ":awt-toolkit", // owned java.awt/javax.swing over RCanvas + the ASM remapper that points a program at it
     ":bench-support", // test-only: shared regression/benchmark harness (consumed via testImplementation)
     ":test-support",  // test-only: shared fixtures/infrastructure (temp dirs, stubs, jars, contexts) — auto-wired
 )
@@ -116,6 +119,7 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":ide-ui-api", // neutral IdeBackend port + DTOs + UI-contribution model, shared by :ide-ui and :ide-core
         ":ide-ui",
         ":agent-ui", // the AI agent's Compose UI as a self-contained plugin module (chat panel + provider sheet + permission overlay)
+        ":vcs-ui", // the version-control Compose UI as a self-contained plugin module (Git panel, branches, history, sign-in, clone)
         ":ide-core",
         ":ide-desktop",
         ":ide-android",

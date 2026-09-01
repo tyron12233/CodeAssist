@@ -6,9 +6,10 @@ import dev.ide.platform.PluginId
 
 /**
  * Registration entry point for the XML editor diagnostics: contributes the [XmlDiagnosticProvider] on
- * `platform.diagnosticProvider`, wired to the host's resource lookups ([XmlResourceHost]) and Android attribute
- * schema ([XmlAttributeChecker]). The detection rules ([XmlLintRules]), the provider, and the quick-fixes
- * ([XmlQuickFixes]) are each their own unit; this only wires them into the platform.
+ * `platform.diagnosticProvider`, wired to the host's resource lookups ([XmlResourceHost]), Android attribute
+ * schema ([XmlAttributeChecker]) and element catalog ([XmlTagChecker]). The detection rules ([XmlLintRules]),
+ * the provider, and the quick-fixes ([XmlQuickFixes]) are each their own unit; this only wires them into the
+ * platform.
  */
 object XmlAnalysisSupport {
     val PLUGIN = PluginId("xml-analysis")
@@ -17,8 +18,9 @@ object XmlAnalysisSupport {
         extensions: ExtensionRegistry,
         host: XmlResourceHost,
         attributes: XmlAttributeChecker = XmlAttributeChecker.NONE,
+        tags: XmlTagChecker = XmlTagChecker.NONE,
         plugin: PluginId = PLUGIN,
     ) {
-        extensions.register(DIAGNOSTIC_PROVIDER_EP, XmlDiagnosticProvider(host, attributes), plugin)
+        extensions.register(DIAGNOSTIC_PROVIDER_EP, XmlDiagnosticProvider(host, attributes, tags), plugin)
     }
 }

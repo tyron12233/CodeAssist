@@ -1193,15 +1193,30 @@ class KotlinTreeResolver(
      * If [e] denotes a TYPE or `object` singleton rather than a value, a reference to that singleton (so a
      * trailing selector on it reads a static/companion member or a nested type). Covers a nested type reached
      * through a resolved outer (`LineHeightStyle.Alignment`, `Outer.Inner`) and a fully-qualified non-object
-     * type (`java.util.Locale`) via [KotlinResolver.typeDenotationFqn], PLUS a fully-qualified type or `object`
-     * by its own source text (`androidx.compose.material.icons.Icons`) which `typeDenotationFqn` intentionally
-     * rejects for objects. Null for a value chain (`Icons.Default`, `Color.Red`, `foo().bar`), which then
+     * type (`java.util.Locale`) via [KotlinResolver.typeDenotationFqn], PLUS a nested SINGLETON through that
+     * same outer (`PathFillType.Companion`) and a fully-qualified type or `object` by its own source text
+     * (`androidx.compose.material.icons.Icons`), both of which `typeDenotationFqn` intentionally rejects for
+     * singletons. Null for a value chain (`Icons.Default`, `Color.Red`, `foo().bar`), which then
      * lowers as an ordinary receiver + property/call.
      */
     private fun typeOrObjectRef(e: KtDotQualifiedExpression): RNode? {
         val sel = (e.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
         runCatching { resolver.typeDenotationFqn(e) }.getOrNull()?.let {
             return RNode.Name(Binding.ObjectRef(it, sel), span(e))
+        }
+        // A nested SINGLETON reached through a resolved outer (`PathFillType.Companion`, a named
+        // `Duration.Companion`, `Outer.Factory`). `typeDenotationFqn` rejects those on purpose - an explicitly
+        // spelled companion is an INSTANCE, and the editor must offer its members as instance members - but the
+        // singleton is exactly what a reference here should denote. Without this the receiver lowers as a VALUE,
+        // where a bare type name already denotes its companion, and the trailing selector then reads a property
+        // of the companion it IS: "no readable property `Companion` on ...PathFillType$Companion", which is the
+        // whole `path(...)` of a generated icon (`pathFillType = PathFillType.Companion.NonZero`).
+        val outerFqn = runCatching { resolver.typeDenotationFqn(e.receiverExpression) }.getOrNull()
+        if (outerFqn != null) {
+            val nested = "$outerFqn.$sel"
+            if (runCatching { service.isKnownType(nested) }.getOrDefault(false)) {
+                return RNode.Name(Binding.ObjectRef(nested, sel), span(e))
+            }
         }
         if (sel.firstOrNull()?.isUpperCase() == true) {
             val text = e.text
@@ -1374,6 +1389,12 @@ class KotlinTreeResolver(
         val name = e.callableReference.getReferencedName()
         val receiverExpr = e.receiverExpression
         if (receiverExpr == null) {
+            // `::localFn` — a local function is ALREADY a closure held in a slot, so the reference IS that value:
+            // no forwarding lambda is needed (and none could be built — there is no compiled target to dispatch
+            // into). Checked before the top-level lookup because a local shadows a same-named top-level function.
+            if (localFunctionsInScope(e, e.textRange.startOffset, name).any { it.receiverTypeReference == null }) {
+                resolveLocal(name)?.let { return RNode.Name(it, span) }
+            }
             // `::foo` — a top-level function, else `::Type` — a constructor reference.
             service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.METHOD }?.let {
                 return synthRefLambda(toCallable(it), DispatchKind.TOP_LEVEL, receiverNode = null, arity = it.paramTypes.size, span = span)
@@ -1565,6 +1586,19 @@ class KotlinTreeResolver(
                 return RNode.Call(synthMember("invoke"), DispatchKind.INVOKE, recv, lowerArgs(call), csk(call.textRange.startOffset), span(call))
             }
         }
+        // A LOCAL EXTENSION function called on its receiver (`fun String.twice()` … then `"ab".twice()`). It lives
+        // in a local slot like any other local function — there is no compiled facade to dispatch into — so this
+        // is an `invoke` on that value with the receiver passed as the LEADING argument, filling the receiver
+        // slot [localFunctionNode] reserves. Guarded by the PSI so only a genuine local extension takes this path.
+        if (receiverNode != null && bareCalleeName != null &&
+            localFunctionsInScope(call, call.textRange.startOffset, bareCalleeName).any { it.receiverTypeReference != null }
+        ) {
+            resolveLocal(bareCalleeName)?.let { binding ->
+                val fnValue = RNode.Name(binding, span(call))
+                val args = listOf(RArg(receiverNode)) + lowerArgs(call)
+                return RNode.Call(synthMember("invoke"), DispatchKind.INVOKE, fnValue, args, csk(call.textRange.startOffset), span(call))
+            }
+        }
         checkNamedArguments(call)
         // A coroutine suspend intrinsic the interpreter models (`delay`/`yield`/`withContext`/`coroutineScope`/
         // …). These frequently DON'T resolve to a clean Call: `delay`'s overloads are ambiguous across coroutines
@@ -1704,6 +1738,33 @@ class KotlinTreeResolver(
                     if (service.isSourceClass(typeFqn) && !service.isObject(typeFqn)) {
                         val callee = ResolvedCallable.Source(callName, "$typeFqn/$arity", emptyList(), isConstructor = true)
                         return RNode.Call(callee, DispatchKind.CONSTRUCTOR, null, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+                    }
+                    // A name that resolves to a type the runtime CANNOT instantiate — an `interface`, or an
+                    // `abstract`/`sealed` class — and that a top-level FACTORY function of the same name RETURNS
+                    // is a call to that factory, however the overload resolution above tied out. Compose ships a
+                    // family of these: `FontFamily(vararg Font)` over the sealed `FontFamily`, `PaddingValues(all:
+                    // Dp)` over the `PaddingValues` interface. Fabricating the constructor instead is what
+                    // rendered `FontFamily(Font(googleFont = …))` as `InstantiationException: Can't instantiate
+                    // abstract class …FontFamily` mid-composition. The reflective dispatcher re-resolves the
+                    // overload from the ACTUAL argument values, so picking by arity here is enough. A
+                    // non-instantiable name WITHOUT such a factory keeps the constructor path: that is how a
+                    // `fun interface` SAM constructor (`BoundsTransform { _, _ -> … }`) is encoded, and the
+                    // interpreter realizes it as a proxy over the single abstract method.
+                    if (service.isNonInstantiableType(typeFqn) == true) {
+                        val factories = runCatching { service.topLevelByName(callName) }.getOrDefault(emptyList())
+                            .filter {
+                                it.kind == SymbolKind.METHOD && !it.origin.fromSource &&
+                                    it.declaringClassFqn != null &&
+                                    (it.type as? KotlinType)?.qualifiedName == typeFqn
+                            }
+                        val byArity = factories.filter { it.paramTypes.size == arity || it.varargParamIndex in 0..arity }
+                            .ifEmpty { factories.filter { it.paramTypes.size >= arity } }
+                        byArity.firstOrNull()?.let { factory ->
+                            return RNode.Call(
+                                toCallable(factory), DispatchKind.TOP_LEVEL, null, lowerArgs(call),
+                                csk(call.textRange.startOffset), span(call),
+                            )
+                        }
                     }
                     // Only fabricate a reflective constructor when there's POSITIVE evidence the name is a
                     // constructible type: a known/loadable type, or a name being THROWN
@@ -2290,8 +2351,11 @@ class KotlinTreeResolver(
      * its body as LOCAL (not a non-local return from the enclosing function). The name is bound in the enclosing
      * block scope BEFORE the body is lowered, so the function can call itself (recursion resolves through the
      * invoke-on-local path in [callNode]); the body + params are lowered in a fresh pushed scope, exactly like a
-     * lambda. Not modeled: default parameter values, and a forward reference to a sibling local function declared
-     * later in the same block (a backward reference / self-recursion works).
+     * lambda. Parameters go through [loweredValueParams], so declared DEFAULTS and a `vararg` are carried on the
+     * [RParam]s and honoured at call time exactly as a top-level function's are. An EXTENSION local
+     * (`fun String.twice()`) binds its receiver to a leading slot and pushes a receiver scope, so `this` and
+     * bare-member access in the body resolve to it. Not modeled: a forward reference to a sibling local function
+     * declared later in the same block — which Kotlin rejects too (a backward reference / self-recursion works).
      */
     private fun localFunctionNode(fn: KtNamedFunction): RNode {
         val name = fn.name ?: return unsupported("local function without a name", fn)
@@ -2299,15 +2363,21 @@ class KotlinTreeResolver(
         // Bind the name in the ENCLOSING scope first so the body (recursion) and later statements resolve it.
         bind(name, Binding.Local(slot, name, mutable = false))
         scopes.addLast(HashMap())
-        val params = fn.valueParameters.map { p ->
-            val pSlot = newSlot()
-            val pName = p.name ?: "_"
-            bind(pName, Binding.Local(pSlot, pName, mutable = false))
-            RParam(pSlot, pName, service.typeFromText(p.typeReference?.text, resolver.fileContext))
+        // An extension local's receiver takes the FIRST slot, matching the extension-dispatch convention the
+        // caller uses (the receiver value is passed as the head of the argument list — see [callNode]).
+        val recvType = fn.receiverTypeReference?.text?.let { service.typeFromText(it, resolver.fileContext) }
+        val receiverSlot = if (fn.receiverTypeReference != null) newSlot() else null
+        var pushedReceiver = false
+        if (receiverSlot != null && recvType != null) {
+            receiverScopes.addLast(ReceiverScope(receiverSlot, recvType, fn.name)); pushedReceiver = true
         }
+        val valueParams = loweredValueParams(fn.valueParameters)
+        val params = if (receiverSlot != null)
+            listOf(RParam(receiverSlot, "<this>", recvType)) + valueParams else valueParams
         val body = fn.bodyBlockExpression?.let { lowerBlock(it) }
             ?: fn.bodyExpression?.let { lower(it) }
             ?: emptyBlock(fn)
+        if (pushedReceiver) receiverScopes.removeLast()
         scopes.removeLast()
         val lambda = RNode.Lambda(params, body, captures = emptyList(), source = span(fn), isLocalFunction = true)
         return RNode.LocalVar(slot, name, mutable = false, lambda, span(fn))

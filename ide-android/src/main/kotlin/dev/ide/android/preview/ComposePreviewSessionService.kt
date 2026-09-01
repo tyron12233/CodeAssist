@@ -26,6 +26,7 @@ import dev.ide.android.support.AndroidSupport
 import dev.ide.android.support.resources.ResourceModel
 import dev.ide.android.support.tasks.InProcessDexGate
 import dev.ide.core.LoweredComposePreview
+import dev.ide.interp.PreviewSandboxPolicy
 import dev.ide.core.preview.ComposePreviewWireCodec
 import dev.ide.interp.PreviewResourceResolver
 import dev.ide.interp.compose.ComposePreviewRenderer
@@ -92,6 +93,7 @@ class ComposePreviewSessionService : Service() {
             night: Boolean,
             wrapContent: Boolean,
             frameDir: String?,
+            sandbox: Array<out String>?,
             cb: IComposePreviewCallback?,
         ): Int = runCatching {
             val lowered = ComposePreviewWireCodec.decode(File(blobFile!!).readBytes())
@@ -102,6 +104,7 @@ class ComposePreviewSessionService : Service() {
                 resDirs = resRoots?.filter { it.isNotBlank() }.orEmpty(),
                 namespace = packageName?.takeIf { it.isNotBlank() },
                 wrapContent = wrapContent,
+                sandbox = sandbox?.toList().orEmpty(),
             )
             session.start(lowered)
             sessions[id] = session
@@ -257,7 +260,13 @@ class ComposePreviewSessionService : Service() {
         val resDirs: List<String>,
         val namespace: String?,
         val wrapContent: Boolean = false,
+        /** [dev.ide.interp.SandboxCategory] ids the project restricts; empty = unrestricted. */
+        val sandbox: List<String> = emptyList(),
     ) {
+        /** The policy the renderer runs under. Built once per session — it memoizes its per-callee decisions and
+         *  accumulates the findings the IDE displays, so it must NOT be rebuilt per composition pass. */
+        private val sandboxPolicy: PreviewSandboxPolicy? =
+            sandbox.takeIf { it.isNotEmpty() }?.let { PreviewSandboxPolicy.fromIds(it) }
         private var surface = newSurface()
         private val programState = mutableStateOf<LoweredComposePreview?>(null)
         // Last content size reported to the IDE (surface px), so a wrap preview only re-emits onContentSize when the
@@ -270,6 +279,8 @@ class ComposePreviewSessionService : Service() {
         @Volatile private var currentResources: PreviewResourceResolver? = null
         private val seq = AtomicLong(0)
         @Volatile private var lastError: String? = null
+        @Volatile private var lastPartial: String? = null
+        @Volatile private var lastFindings: List<String> = emptyList()
 
         private fun newSurface() = OffscreenComposeSurface(applicationContext, width, height, (density * 160f).toInt().coerceAtLeast(1))
 
@@ -310,8 +321,24 @@ class ComposePreviewSessionService : Service() {
                         CompositionLocalProvider(LocalConfiguration provides cfg) {
                             // currentResources is set (with night baked in) before nightState flips, so this
                             // remount reads the night-matched resolver.
-                            val renderer = remember { ComposePreviewRenderer(resources = currentResources, libraryExecutor = executor) }
+                            val renderer = remember {
+                                ComposePreviewRenderer(
+                                    resources = currentResources,
+                                    hooks = sandboxPolicy,
+                                    libraryExecutor = executor,
+                                )
+                            }
                             val onErr: @Composable (Throwable) -> Unit = { t -> reportError(t) }
+                            // Was `{}` in both Render calls below — a content lambda that threw left the preview
+                            // drawing with a hole in it and the IDE told the user nothing, while the SAME code
+                            // rendered in-process reported "Preview partially rendered". Route it over the wire.
+                            val onPartial: (Throwable?) -> Unit = { t ->
+                                reportPartialError(t)
+                                // Drain the sandbox in the same place the in-process host does — after every
+                                // composition pass — so a blocked call reaches the chip. A blocked call is
+                                // STUBBED, so the preview looks fine and this is the only sign of it.
+                                reportSandboxFindings()
+                            }
                             if (wrapContent) {
                                 // Wrap-to-content preview: measure the composable at its INTRINSIC size, bounded by
                                 // the surface (width x height) as a MAX — the ComposeView already fills the surface,
@@ -324,10 +351,10 @@ class ComposePreviewSessionService : Service() {
                                         .wrapContentSize(Alignment.TopStart)
                                         .onSizeChanged { reportContentSize(it.width, it.height) },
                                 ) {
-                                    renderer.Render(p.entry, p.program, p.classes, emptyList(), onErr) {}
+                                    renderer.Render(p.entry, p.program, p.classes, emptyList(), onErr, onPartial)
                                 }
                             } else {
-                                renderer.Render(p.entry, p.program, p.classes, emptyList(), onErr) {}
+                                renderer.Render(p.entry, p.program, p.classes, emptyList(), onErr, onPartial)
                             }
                         }
                     }
@@ -403,6 +430,30 @@ class ComposePreviewSessionService : Service() {
             val s = seq.incrementAndGet()
             runCatching { cb.onFrameBuffer(hb, w, h, s) }
                 .onFailure { log.warn("compose session $id hardware frame push failed", it) }
+        }
+
+        /**
+         * Report a NON-fatal content-lambda failure (null clears it). Deduped by message like [reportError]: the
+         * interpreter re-runs on every recomposition pass and hands over a fresh Throwable each time, so an
+         * un-deduped report would fire a Binder call per frame for a deterministically-failing preview.
+         */
+        private fun reportPartialError(t: Throwable?) {
+            val msg = t?.let { "${it.javaClass.simpleName}: ${it.message ?: ""}".trim() }
+            if (msg != lastPartial) {
+                lastPartial = msg
+                runCatching { cb.onPartialError(msg) }
+            }
+        }
+
+        /** Report the blocked calls recorded so far (deduped against the last set — the policy accumulates, so
+         *  most passes report an unchanged list and must not spend a Binder call on it). */
+        private fun reportSandboxFindings() {
+            val policy = sandboxPolicy ?: return
+            val encoded = policy.findings().map { "${it.category.id}\t${it.member}" }
+            if (encoded != lastFindings) {
+                lastFindings = encoded
+                runCatching { cb.onSandboxFindings(encoded.toTypedArray()) }
+            }
         }
 
         private fun reportError(t: Throwable) {

@@ -171,6 +171,154 @@ class JavaDiagnosticsTest {
     }
 
     @Test
+    fun genericInferenceDoesNotAbortTheAnalysis() {
+        // IntelliJ's InferenceSession reads a registry key whose default is declared in the Java PLUGIN
+        // descriptor, which this host does not load. An undefined key throws, and the throw escaped the whole
+        // pass, so any generic call with a lambda argument left the file with NO diagnostics at all. The keys
+        // are contributed at environment standup (IntellijPsiHost); this pins the end-to-end effect.
+        val d = diagnose(
+            """
+            package com.foo;
+            import java.util.List;
+            import java.util.Map;
+            import java.util.Optional;
+            import java.util.Comparator;
+            import java.util.stream.Collectors;
+            import java.util.stream.Stream;
+            class Use {
+                Map<String, List<Integer>> group(List<String> xs) {
+                    return xs.stream()
+                        .filter(s -> !s.isEmpty())
+                        .collect(Collectors.groupingBy(s -> s.substring(0, 1), Collectors.mapping(String::length, Collectors.toList())));
+                }
+                Optional<String> longest(List<String> xs) { return xs.stream().max(Comparator.comparing(String::length)); }
+                <T> List<T> concat(List<? extends T> a, List<? extends T> b) {
+                    return Stream.concat(a.stream(), b.stream()).collect(Collectors.toList());
+                }
+            }
+            """.trimIndent()
+        ).diagnostics
+        assertTrue(d.isEmpty(), "valid generic/stream code must analyze cleanly; got ${d.map { "${it.code}: ${it.message}" }}")
+
+        // And the pass keeps working on a file that mixes inference with real errors.
+        val errors = diagnose(
+            """
+            package com.foo;
+            import java.util.List;
+            class Use {
+                void m(List<String> xs) { xs.stream().map(s -> { System.out.println(s); }); }
+                void n() { undefinedCall(); }
+            }
+            """.trimIndent()
+        ).diagnostics
+        assertTrue(
+            errors.any { it.code == JavaDiagnosticCodes.MISSING_RETURN } &&
+                errors.any { it.code == JavaDiagnosticCodes.UNRESOLVED },
+            "errors alongside inference must still be reported; got ${errors.map { "${it.code}: ${it.message}" }}",
+        )
+    }
+
+    @Test
+    fun boundedTypeParametersAreNotUnimplementedAbstractFalsePositives() {
+        // A type parameter is a PsiClass whose supertypes are its bounds, so `<T extends Runnable>` used to
+        // read as a concrete class that never implements run().
+        val ok = codes(
+            """
+            package com.foo;
+            import java.util.List;
+            import java.util.function.Consumer;
+            class Use<T extends Comparable<T>> {
+                <U extends Runnable> void run(U u) { u.run(); }
+                <V extends Comparable<V> & Cloneable> V pick(List<V> vs) { return vs.get(0); }
+            }
+            abstract class Node<S extends Node<S>> {
+                abstract S self();
+                S chain(Consumer<S> c) { c.accept(self()); return self(); }
+            }
+            """.trimIndent(),
+            JavaDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED,
+        )
+        assertTrue(ok.isEmpty(), "a bounded type parameter must not be flagged; got ${ok.map { it.message }}")
+
+        // A real class that leaves an inherited abstract method unimplemented still is.
+        val real = codes(
+            "package com.foo;\nclass Use implements Runnable { }", JavaDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED,
+        )
+        assertTrue(real.isNotEmpty(), "a class missing an abstract method should still be flagged; got ${real.map { it.message }}")
+    }
+
+    @Test
+    fun lambdaMissingReturnIsReported() {
+        // A block-bodied lambda body is not a PsiMethod, and the enclosing method's flow treats it as an
+        // opaque step, so these used to go unreported. The expected type comes from the target type.
+        for (body in listOf(
+            "void m() { java.util.function.Supplier<Integer> s = () -> { }; }",
+            "void m(boolean c) { java.util.function.Supplier<Integer> s = () -> { if (c) return 1; }; }",
+            "void m() { java.util.function.Function<String,Integer> f = s -> { System.out.println(s); }; }",
+            "void m(java.util.List<String> xs) { xs.sort((a, b) -> { System.out.println(a); }); }",
+            "void m() { java.util.function.Supplier<java.util.function.Supplier<Integer>> s = () -> { return () -> { }; }; }",
+            "void m() { java.util.function.Supplier<Integer> s = () -> { while (true) { break; } }; }",
+        )) {
+            val d = codes("package com.foo;\nclass Use { $body }", JavaDiagnosticCodes.MISSING_RETURN)
+            assertTrue(d.size == 1, "expected one missing return in `$body`; got ${d.map { it.message }}")
+        }
+
+        // A project-declared functional interface, not just the java.util.function ones.
+        val custom = codes(
+            "package com.foo;\ninterface Calc { int of(int a); }\nclass Use { void m() { Calc c = a -> { System.out.println(a); }; } }",
+            JavaDiagnosticCodes.MISSING_RETURN,
+        )
+        assertTrue(custom.size == 1, "a custom functional interface should be checked too; got ${custom.map { it.message }}")
+    }
+
+    @Test
+    fun lambdaReturnsAreNotFalsePositives() {
+        val ok = codes(
+            """
+            package com.foo;
+            import java.util.List;
+            import java.util.function.Function;
+            import java.util.function.Supplier;
+            import java.util.concurrent.Callable;
+            class Use {
+                void voidTarget() { Runnable r = () -> { System.out.println(1); }; }         // void: nothing owed
+                void empty() { Runnable r = () -> { }; }
+                void expressionBody() { Supplier<Integer> s = () -> 1; }                     // no block to analyze
+                void returns() { Supplier<Integer> s = () -> { return 1; }; }
+                void bothBranches(boolean c) { Supplier<Integer> s = () -> { if (c) return 1; else return 2; }; }
+                void throwsInstead() { Supplier<Integer> s = () -> { throw new IllegalStateException(); }; }
+                void neverCompletes() { Supplier<Integer> s = () -> { while (true) { } }; }  // cannot complete normally
+                void tryFinally() { Supplier<Integer> s = () -> { try { return 1; } finally { System.out.println(1); } }; }
+                void everyCase(int k) { Supplier<Integer> s = () -> { switch (k) { case 1: return 1; default: return 0; } }; }
+                void guarded() { Function<String,Integer> f = s -> { if (s == null) return 0; return s.length(); }; }
+                void checkedTarget() { Callable<Integer> c = () -> { return 1; }; }
+                void nested() { Supplier<Supplier<Integer>> s = () -> { return () -> { return 1; }; }; }
+                void inArgument(List<String> xs) { xs.forEach(s -> { System.out.println(s); }); }
+                void inAnonymousClass() { Object o = new Object() { void f() { Supplier<Integer> s = () -> { return 1; }; } }; }
+                <T> void typeParam(T t) { Supplier<T> s = () -> { return t; }; }
+            }
+            """.trimIndent(),
+            JavaDiagnosticCodes.MISSING_RETURN,
+        )
+        assertTrue(ok.isEmpty(), "lambdas that do return (or owe nothing) must not be flagged; got ${ok.map { it.message }}")
+    }
+
+    @Test
+    fun lambdaMissingReturnBacksOffWithoutAUsableTargetType() {
+        // No functional interface return type to compare against, or a body whose recovered flow cannot be
+        // trusted: the check stays silent rather than guessing.
+        for (body in listOf(
+            "void m() { Undefined u = () -> { }; }",                                          // unresolved target
+            "void m() { Undefined u = () -> { int y = 1; }; }",
+            "void m() { java.util.function.Supplier s = () -> { return 1; }; }",              // raw target
+            "void m() { java.util.function.Supplier<Integer> s = () -> { return }; }",        // syntax error in body
+        )) {
+            val d = codes("package com.foo;\nclass Use { $body }", JavaDiagnosticCodes.MISSING_RETURN)
+            assertTrue(d.isEmpty(), "expected no missing-return verdict for `$body`; got ${d.map { it.message }}")
+        }
+    }
+
+    @Test
     fun completeReturnsAreNotFalsePositives() {
         val ok = codes(
             """
@@ -522,6 +670,153 @@ class JavaDiagnosticsTest {
             JavaDiagnosticCodes.NOT_INITIALIZED,
         )
         assertTrue(ok.isEmpty(), "a definitely-assigned local captured by a nested scope must not be flagged; got ${ok.map { it.message }}")
+    }
+
+    @Test
+    fun localDeclaredAndAssignedInsideANestedScopeIsNotFalsePositive() {
+        // The mirror of the capture case: a local declared AND assigned inside a lambda / anonymous-class /
+        // local-class body. The ENCLOSING method's flow sees only a synthetic read of it (a nested body is
+        // opaque there), so a whole-method verdict called every such local uninitialized, which is what a
+        // listener or lambda that declares its own local looks like.
+        val ok = codes(
+            """
+            package com.foo;
+            import java.util.function.Supplier;
+            class Use {
+                void lambda() {
+                    Runnable r = () -> { int y; y = 1; System.out.println(y); };
+                }
+                void lambdaBranching(boolean c) {
+                    Runnable r = () -> { int y; if (c) y = 1; else y = 2; System.out.println(y); };
+                }
+                void anon() {
+                    Runnable r = new Runnable() {
+                        @Override public void run() { String s; try { s = "a"; } catch (RuntimeException e) { s = "b"; } System.out.println(s); }
+                    };
+                }
+                void localClass() {
+                    class L { void f() { int y; y = 1; System.out.println(y); } }
+                }
+                void nested() {
+                    Runnable r = new Runnable() {
+                        @Override public void run() { Runnable q = () -> { int y; y = 1; System.out.println(y); }; }
+                    };
+                }
+                void blankFinal() {
+                    Runnable r = () -> { final int y; y = 1; System.out.println(y); };
+                }
+            }
+            """.trimIndent(),
+            JavaDiagnosticCodes.NOT_INITIALIZED,
+        )
+        assertTrue(ok.isEmpty(), "a local assigned inside its own nested scope must not be flagged; got ${ok.map { it.message }}")
+    }
+
+    @Test
+    fun readBeforeWriteInsideANestedScopeIsReportedExactlyOnce() {
+        // Every executable scope is analyzed on its own, so the genuine problem is still found, and reported
+        // once, by the scope that owns the variable (it used to come out twice, from both flows).
+        val lambda = codes(
+            "package com.foo;\nclass Use { void m() { Runnable r = () -> { int y; System.out.println(y); }; } }",
+            JavaDiagnosticCodes.NOT_INITIALIZED,
+        )
+        assertTrue(lambda.size == 1 && lambda.first().message.contains("'y'"), "lambda-local read-before-write, once; got ${lambda.map { it.message }}")
+
+        val anon = codes(
+            "package com.foo;\nclass Use { void m() { Runnable r = new Runnable() { public void run() { int y; System.out.println(y); } }; } }",
+            JavaDiagnosticCodes.NOT_INITIALIZED,
+        )
+        assertTrue(anon.size == 1 && anon.first().message.contains("'y'"), "anon-class-local read-before-write, once; got ${anon.map { it.message }}")
+
+        // A capture that genuinely isn't definitely assigned at the capture site is still an error.
+        val capture = codes(
+            "package com.foo;\nclass Use { void m() { int x; Runnable r = () -> System.out.println(x); x = 1; } }",
+            JavaDiagnosticCodes.NOT_INITIALIZED,
+        )
+        assertTrue(capture.isNotEmpty(), "a capture of a not-yet-assigned local must still be flagged; got ${capture.map { it.message }}")
+    }
+
+    @Test
+    fun initializerBlockLocalsAreAnalyzed() {
+        // Instance / static initializer blocks are executable scopes of their own; before, they were never
+        // flow-analyzed at all.
+        val ok = codes(
+            "package com.foo;\nclass Use { { int y; y = 1; System.out.println(y); } static { int z; z = 2; System.out.println(z); } }",
+            JavaDiagnosticCodes.NOT_INITIALIZED,
+        )
+        assertTrue(ok.isEmpty(), "assigned initializer-block locals must be clean; got ${ok.map { it.message }}")
+
+        val bad = codes(
+            "package com.foo;\nclass Use { { int y; System.out.println(y); } }", JavaDiagnosticCodes.NOT_INITIALIZED,
+        )
+        assertTrue(bad.isNotEmpty(), "an uninitialized initializer-block local should be flagged; got ${bad.map { it.message }}")
+    }
+
+    @Test
+    fun blankFinalAssignedTwiceInsideALambdaIsReportedAsReassignment() {
+        val d = codes(
+            "package com.foo;\nclass Use { void m() { Runnable r = () -> { final int y; y = 1; y = 2; System.out.println(y); }; } }",
+            JavaDiagnosticCodes.FINAL_REASSIGNMENT, JavaDiagnosticCodes.NOT_INITIALIZED,
+        )
+        assertTrue(
+            d.size == 1 && d.first().code == JavaDiagnosticCodes.FINAL_REASSIGNMENT,
+            "double-assigned blank final in a lambda is a reassignment, not an uninitialized read; got ${d.map { "${it.code}: ${it.message}" }}",
+        )
+    }
+
+    @Test
+    fun constantIfConditionIsNotAnUnreachableStatement() {
+        // JLS 14.21 exempts `if` from constant folding on purpose: the carve-out that makes `if (DEBUG)`
+        // legal conditional compilation. Only reachability gets the no-constant-evaluate flow; definite
+        // assignment keeps the constant-evaluating one (JLS 16.1 does fold there, see the sibling test).
+        val ok = codes(
+            """
+            package com.foo;
+            class Use {
+                static final boolean DEBUG = false;
+                void off() { if (DEBUG) { System.out.println("dbg"); } System.out.println("on"); }
+                void on(boolean c) { if (true) { System.out.println(1); } else { System.out.println(2); } }
+                void off2() { if (false) { System.out.println(1); } }
+            }
+            """.trimIndent(),
+            JavaDiagnosticCodes.UNREACHABLE,
+        )
+        assertTrue(ok.isEmpty(), "a constant `if` condition must not make its arm unreachable; got ${ok.map { it.message }}")
+    }
+
+    @Test
+    fun genuinelyUnreachableCodeIsStillReported() {
+        // `while (false)` has no `if`-style exemption, and code after a jump is unreachable either way.
+        for (body in listOf(
+            "void m() { while (false) { System.out.println(1); } }",
+            "void m() { return; System.out.println(1); }",
+            "void m() { for (;;) { break; System.out.println(1); } }",
+        )) {
+            val d = codes("package com.foo;\nclass Use { $body }", JavaDiagnosticCodes.UNREACHABLE)
+            assertTrue(d.isNotEmpty(), "unreachable code should be flagged in `$body`; got ${d.map { it.message }}")
+        }
+        // Unreachable code inside a lambda body is found now that the body is its own flow.
+        val inLambda = codes(
+            "package com.foo;\nclass Use { void m() { Runnable r = () -> { System.out.println(1); return; System.out.println(2); }; } }",
+            JavaDiagnosticCodes.UNREACHABLE,
+        )
+        assertTrue(inLambda.isNotEmpty(), "unreachable code inside a lambda should be flagged; got ${inLambda.map { it.message }}")
+    }
+
+    @Test
+    fun definiteAssignmentStillFoldsConstantConditions() {
+        // JLS 16.1: `if (true) a = 1;` leaves `a` definitely assigned; `if (false) a = 1;` does not.
+        val ok = codes(
+            "package com.foo;\nclass Use { void m() { int a; if (true) a = 1; System.out.println(a); } }",
+            JavaDiagnosticCodes.NOT_INITIALIZED,
+        )
+        assertTrue(ok.isEmpty(), "`if (true) a = 1;` definitely assigns a; got ${ok.map { it.message }}")
+
+        val bad = codes(
+            "package com.foo;\nclass Use { void m() { int a; if (false) a = 1; System.out.println(a); } }",
+            JavaDiagnosticCodes.NOT_INITIALIZED,
+        )
+        assertTrue(bad.isNotEmpty(), "`if (false) a = 1;` leaves a unassigned; got ${bad.map { it.message }}")
     }
 
     // --- abstract instantiation ---------------------------------------------------------------------------

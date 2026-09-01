@@ -11,6 +11,9 @@ import dev.ide.ui.backend.IdeBackend
 /** App-global preference: whether the user wants ads shown (default true). Flipped by the disable-ads toggle. */
 const val ADS_ENABLED_PREF = "ads.enabled"
 
+/** The [AdHost.installStamp] the stored [ADS_ENABLED_PREF] value belongs to — see [AdController]. */
+const val ADS_ENABLED_STAMP_PREF = "ads.enabled.stamp"
+
 /** Show a tutorials interstitial on every Nth finished lesson (see [AdController.shouldShowLessonInterstitial]). */
 private const val LESSON_INTERSTITIAL_EVERY = 2
 
@@ -20,14 +23,15 @@ private const val LESSON_INTERSTITIAL_EVERY = 2
  * "remove ads" purchase: removing ads is free (the toggle), SuperSU-style, and supporting the project is a
  * separate donation link. Instances are created once in [dev.ide.ui.CodeAssistApp] and provided through
  * [LocalAds]; screens read the controller via [rememberAds] rather than threading it through every parameter.
+ *
+ * The preference survives every app launch but NOT an install or update: a build whose [AdHost.installStamp]
+ * differs from the one the stored value belongs to starts with ads back on (see [initialAdsEnabled]).
  */
 class AdController(
     private val backend: IdeBackend,
     val host: AdHost,
 ) {
-    var adsEnabled by mutableStateOf(
-        backend.settings.preference(ADS_ENABLED_PREF)?.toBooleanStrictOrNull() ?: true
-    )
+    var adsEnabled by mutableStateOf(initialAdsEnabled(backend, host))
         private set
 
     /** Ads render only when the host has an ad network AND the user hasn't turned them off. */
@@ -64,6 +68,24 @@ class AdController(
         lessonFinishes++
         return lessonFinishes % LESSON_INTERSTITIAL_EVERY == 0
     }
+}
+
+/**
+ * The ads-enabled value a freshly created [AdController] starts from, resetting it to on once per installed
+ * build. Ads being free to turn off only works if each update gets to ask again, so a stored "off" choice is
+ * kept for as long as the app keeps the same [AdHost.installStamp] (every launch of one installation) and
+ * dropped when that stamp changes (a fresh install or an update). The new stamp is recorded at the same time,
+ * so the reset happens once and the user's next choice sticks until the next update. Hosts that can't identify
+ * the build (a null stamp — desktop) never reset.
+ */
+private fun initialAdsEnabled(backend: IdeBackend, host: AdHost): Boolean {
+    val stamp = host.installStamp
+    if (stamp != null && backend.settings.preference(ADS_ENABLED_STAMP_PREF) != stamp) {
+        backend.settings.setPreference(ADS_ENABLED_PREF, true.toString())
+        backend.settings.setPreference(ADS_ENABLED_STAMP_PREF, stamp)
+        return true
+    }
+    return backend.settings.preference(ADS_ENABLED_PREF)?.toBooleanStrictOrNull() ?: true
 }
 
 /**

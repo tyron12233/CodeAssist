@@ -1052,6 +1052,48 @@ class MavenDependencyResolverTest {
 
     // ---- fixture helpers ----------------------------------------------------------------------
 
+    /**
+     * Adding a repository must let a previously-unresolvable coordinate resolve, WITHOUT a restart. TWO
+     * caches remember the absence, both keyed by the coordinate alone, so both survived the repository list
+     * changing under them: the on-disk 404 record, and the in-memory effective-POM memo
+     * (`Optional.empty()`). Clearing only the former still never reached the network — which is why
+     * `DependencyService.forgetNegativeResolutionCaches` clears both. Reported as "the repositories don't
+     * get updated when re-adding the dependency".
+     */
+    @Test
+    fun aRepositoryAddedAfterAFailedResolveIsActuallyConsulted() {
+        val files = FakeRepo()
+        // Published ONLY in the extra repository, so the first resolve genuinely cannot find it.
+        files.putAt(EXTRA, "late", "1.0")
+
+        val tmp = createTempDirectory("deps-test")
+        val cache = ResolverCache(tmp)
+        val resolver = MavenDependencyResolver(cache, LocalFileSystem(tmp)::fileFor, files)
+        val bothRepos = listOf(repo, Repository("extra", EXTRA))
+        fun resolveLate(repos: List<Repository>) = runBlocking {
+            resolver.resolve(listOf(coord("late", "1.0")), repos, ConflictPolicy.NEWEST, noProgress)
+        }
+
+        val first = resolveLate(listOf(repo))
+        assertTrue(first.resolved.isEmpty(), "the artifact is absent from the only repo, so nothing resolves")
+        assertEquals(listOf("late"), first.unresolved.map { it.name })
+
+        // Clearing the on-disk 404s alone is NOT enough: the in-memory "no POM" memo keeps the retry off the
+        // network for the rest of the session, however many repositories are added.
+        cache.clearMisses()
+        assertEquals(
+            listOf("late"), resolveLate(bothRepos).unresolved.map { it.name },
+            "guards the half of the fix that is easy to drop: the in-memory memo must be cleared too",
+        )
+
+        // Both cleared, as a repository add/remove now does — the new repository is finally consulted.
+        cache.clearMisses()
+        resolver.forgetAbsentArtifacts()
+        val healed = resolveLate(bothRepos)
+        assertTrue(healed.unresolved.isEmpty(), "unexpected unresolved after adding the repo: ${healed.unresolved}")
+        assertEquals(listOf("late"), healed.resolved.map { it.coordinate.name })
+    }
+
     private fun newResolver(files: FakeRepo): Pair<MavenDependencyResolver, Path> {
         val tmp = createTempDirectory("deps-test")
         val lfs = LocalFileSystem(tmp)
@@ -1084,6 +1126,13 @@ class MavenDependencyResolverTest {
     private inner class FakeRepo : ArtifactFetcher {
         private val byUrl = HashMap<String, ByteArray>()
         override fun fetch(url: String): ByteArray? = byUrl[url]
+
+        /** Publish under an arbitrary repository base, so a coordinate can exist in one repo and not another. */
+        fun putAt(base: String, name: String, version: String, group: String = "g") {
+            val rel = "${group.replace('.', '/')}/$name/$version/$name-$version"
+            byUrl["$base/$rel.pom"] = pom(group, name, version, "jar", emptyList()).toByteArray()
+            byUrl["$base/$rel.jar"] = emptyJar()
+        }
 
         fun put(name: String, version: String, packaging: String = "jar", deps: List<Dep> = emptyList(), jarBytes: ByteArray = emptyJar(), group: String = "g") {
             byUrl[url(group, name, version, "pom")] = pom(group, name, version, packaging, deps).toByteArray()
@@ -1300,5 +1349,6 @@ class MavenDependencyResolverTest {
     private companion object {
         const val BASE = "https://fixture/repo"
         const val GOOGLE = "https://fixture/google"
+        const val EXTRA = "https://fixture/extra"
     }
 }

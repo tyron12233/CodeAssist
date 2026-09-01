@@ -23,7 +23,7 @@ import java.nio.file.Paths
  * Resolved lazily on first use; self-falls-back to in-process R8 when forking isn't usable (no launcher,
  * missing asset, or no grantable `-Xmx` at which R8 loads) — so a device where this can't work behaves
  * exactly as before. The actual invocation reuses [R8Subprocess] (same CLI arg-building as the desktop path),
- * with the `dalvikvm64` launcher, R8's dexes as the `-cp`, and a big `-Xmx`.
+ * with the `dalvikvm64` launcher, the bundled R8 asset as the `-cp`, and a big `-Xmx`.
  */
 class ForkedR8Shrinker(
     context: Context,
@@ -61,22 +61,28 @@ class ForkedR8Shrinker(
         }
         val launcher = R8ForkSupport.launcher()
             ?: return forkUnavailable("no forked-VM launcher on this device")
-        val dexes = R8ForkSupport.extractR8Dexes(appContext)
+        val toolClasspath = R8ForkSupport.extractR8Zip(appContext)
             ?: return forkUnavailable("R8 runtime asset unavailable")
         // The requested max heap, then a ladder of smaller heaps to step down to if the device can't grant it.
         // Per-candidate capability check (heap accepted AND R8 loads).
         val requested = (maxHeapMbProvider() ?: DEFAULT_XMX_MB).coerceAtLeast(MIN_XMX_MB)
-        val candidates = (listOf(requested) + FALLBACK_LADDER.filter { it < requested }).distinct()
+        // Drop the heaps this device's RAM can't back before trying any: a VM that can't reserve its region
+        // space ABORTS, and the OS files that abort under this package as a native crash.
+        val candidates = R8ForkSupport.affordableHeaps(
+            appContext, (listOf(requested) + FALLBACK_LADDER.filter { it < requested }).distinct()
+        )
+        if (candidates.isEmpty())
+            return forkUnavailable("${R8ForkSupport.totalMemMb(appContext)}MB of device RAM can't back a forked VM heap")
         for (xmx in candidates) {
-            if (R8ForkSupport.canFork(launcher, dexes, xmx)) {
+            if (R8ForkSupport.canFork(launcher, toolClasspath, xmx)) {
                 note = if (xmx < requested) {
                     log.warn("forked-R8: requested ${requested}MB exceeds this device's limit; R8 runs at ${xmx}MB instead")
                     "R8: forked VM, ${xmx}MB heap (requested ${requested}MB exceeds the device limit)"
                 } else {
-                    log.info("forked-R8: R8 runs in a forked $launcher -Xmx${xmx}m (${dexes.size} dex) — above the app heap cap")
+                    log.info("forked-R8: R8 runs in a forked $launcher -Xmx${xmx}m (${toolClasspath.name}) — above the app heap cap")
                     "R8: forked VM, ${xmx}MB heap (vs the ${Runtime.getRuntime().maxMemory() / MB}MB app limit)"
                 }
-                return R8Subprocess(dexes.map { it.toPath() }, Paths.get(launcher), listOf("-Xmx${xmx}m"))
+                return R8Subprocess(listOf(toolClasspath.toPath()), Paths.get(launcher), listOf("-Xmx${xmx}m"))
             }
         }
         return forkUnavailable("the device wouldn't start a forked VM at ${candidates.last()}MB+")

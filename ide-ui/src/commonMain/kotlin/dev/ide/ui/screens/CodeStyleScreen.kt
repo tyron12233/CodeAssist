@@ -16,12 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -110,14 +105,13 @@ import dev.ide.ui.generated.resources.codestyle_wrapping_and_braces
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
-private const val LANG_JAVA = "java"
+internal const val LANG_JAVA = "java"
 private const val LANG_KOTLIN = "kotlin"
-private const val PRESET_CUSTOM = "custom"
-private const val FORMAT_ON_SAVE_KEY = "settings.codeStyle.formatOnSave"
+internal const val PRESET_CUSTOM = "custom"
+internal const val FORMAT_ON_SAVE_KEY = "settings.codeStyle.formatOnSave"
 
 /**
  * The dedicated Code Style screen: a per-language formatting profile (Java / Kotlin), a preset, the detailed
@@ -131,39 +125,12 @@ private const val FORMAT_ON_SAVE_KEY = "settings.codeStyle.formatOnSave"
  */
 @Composable
 fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit) {
-    val scope = rememberCoroutineScope()
     val iconBox = if (isMobilePlatform) 42 else 34
 
-    var language by remember { mutableStateOf(LANG_JAVA) }
-    var style by remember { mutableStateOf(UiCodeStyle()) }
-    var formatOnSave by remember { mutableStateOf(backend.settings.settings().formatOnSave) }
-    var preview by remember { mutableStateOf("") }
-
-    // Load the persisted profile when the language changes.
-    LaunchedEffect(language) { style = backend.settings.codeStyle(language) }
-
-    // Live preview: re-format the sample shortly after the profile settles (key change cancels the prior run,
-    // which debounces rapid slider drags). The formatter is engine-backed, so it's skipped with no project open.
-    LaunchedEffect(language, style, hasProject) {
-        if (!hasProject) { preview = ""; return@LaunchedEffect }
-        delay(120)
-        preview = runCatching { backend.settings.formatStylePreview(language, style) }.getOrDefault("")
-    }
-
-    // Persist + adopt a new profile (any control edit flips the preset to Custom so the change takes effect).
-    fun update(next: UiCodeStyle) {
-        style = next
-        backend.settings.setCodeStyle(language, next)
-    }
-
-    fun edit(transform: UiCodeStyle.() -> UiCodeStyle) {
-        val base = displayStyle(style)
-        update(base.transform().copy(preset = PRESET_CUSTOM))
-    }
-
-    val display = displayStyle(style)
-    val javaOnly = language == LANG_JAVA
-    val custom = style.preset == PRESET_CUSTOM
+    val state = rememberCodeStyleScreenState(backend, hasProject)
+    val display = state.display
+    val javaOnly = state.javaOnly
+    val custom = state.custom
 
     ExpressiveScaffold(title = stringResource(Res.string.codestyle_title), onBack = onBack) { innerPadding ->
         Column(
@@ -172,22 +139,21 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
         ) {
             SettingsCard(null) {
                 SettingsChoiceRow(
-                    stringResource(Res.string.codestyle_language), stringResource(Res.string.codestyle_language_desc), language,
+                    stringResource(Res.string.codestyle_language), stringResource(Res.string.codestyle_language_desc), state.language,
                     listOf(LANG_JAVA to stringResource(Res.string.codestyle_lang_java), LANG_KOTLIN to stringResource(Res.string.codestyle_lang_kotlin)),
-                ) { language = it }
+                ) { state.selectLanguage(it) }
                 SettingsDivider()
                 SettingsChoiceRow(
-                    stringResource(Res.string.codestyle_style), stringResource(Res.string.codestyle_style_desc), style.preset,
-                    presetOptions(language),
-                ) { picked -> update(if (picked == PRESET_CUSTOM) display.copy(preset = PRESET_CUSTOM) else presetDefaults(picked)) }
+                    stringResource(Res.string.codestyle_style), stringResource(Res.string.codestyle_style_desc), state.style.preset,
+                    presetOptions(state.language),
+                ) { picked -> state.update(if (picked == PRESET_CUSTOM) display.copy(preset = PRESET_CUSTOM) else presetDefaults(picked)) }
                 SettingsDivider()
-                SettingsToggleRow(stringResource(Res.string.codestyle_reformat_on_save), stringResource(Res.string.codestyle_reformat_on_save_desc), formatOnSave) {
-                    formatOnSave = it
-                    backend.settings.setPreference(FORMAT_ON_SAVE_KEY, it.toString())
+                SettingsToggleRow(stringResource(Res.string.codestyle_reformat_on_save), stringResource(Res.string.codestyle_reformat_on_save_desc), state.formatOnSave) {
+                    state.updateFormatOnSave(it)
                 }
             }
 
-            PreviewCard(preview, language, hasProject)
+            PreviewCard(state.preview, state.language, hasProject)
 
             if (!javaOnly) {
                 Text(
@@ -199,76 +165,76 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
 
             if (custom) {
                 SettingsCard(stringResource(Res.string.codestyle_indentation)) {
-                    SettingsSliderRow(stringResource(Res.string.codestyle_indent_size), stringResource(Res.string.codestyle_indent_size_desc), display.indentSize, 1, 8, 1, null) { edit { copy(indentSize = it) } }
+                    SettingsSliderRow(stringResource(Res.string.codestyle_indent_size), stringResource(Res.string.codestyle_indent_size_desc), display.indentSize, 1, 8, 1, null) { state.edit { copy(indentSize = it) } }
                     if (javaOnly) {
                         SettingsDivider()
-                        SettingsSliderRow(stringResource(Res.string.codestyle_continuation_indent), stringResource(Res.string.codestyle_continuation_indent_desc), display.continuationIndent, 1, 16, 1, null) { edit { copy(continuationIndent = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_continuation_indent), stringResource(Res.string.codestyle_continuation_indent_desc), display.continuationIndent, 1, 16, 1, null) { state.edit { copy(continuationIndent = it) } }
                         SettingsDivider()
-                        SettingsSliderRow(stringResource(Res.string.codestyle_line_width), stringResource(Res.string.codestyle_line_width_desc), display.maxLineLength, 60, 200, 10, null) { edit { copy(maxLineLength = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_line_width), stringResource(Res.string.codestyle_line_width_desc), display.maxLineLength, 60, 200, 10, null) { state.edit { copy(maxLineLength = it) } }
                     }
                     SettingsDivider()
-                    SettingsToggleRow(stringResource(Res.string.codestyle_indent_with_tabs), stringResource(Res.string.codestyle_indent_with_tabs_desc), display.useTabs) { edit { copy(useTabs = it) } }
+                    SettingsToggleRow(stringResource(Res.string.codestyle_indent_with_tabs), stringResource(Res.string.codestyle_indent_with_tabs_desc), display.useTabs) { state.edit { copy(useTabs = it) } }
                 }
 
                 if (javaOnly) {
                     SettingsCard(stringResource(Res.string.codestyle_wrapping_and_braces)) {
-                        SettingsChoiceRow(stringResource(Res.string.codestyle_brace_placement), null, display.braceStyle, listOf("endOfLine" to stringResource(Res.string.codestyle_brace_end_of_line), "nextLine" to stringResource(Res.string.codestyle_brace_next_line))) { edit { copy(braceStyle = it) } }
+                        SettingsChoiceRow(stringResource(Res.string.codestyle_brace_placement), null, display.braceStyle, listOf("endOfLine" to stringResource(Res.string.codestyle_brace_end_of_line), "nextLine" to stringResource(Res.string.codestyle_brace_next_line))) { state.edit { copy(braceStyle = it) } }
                         SettingsDivider()
-                        SettingsChoiceRow(stringResource(Res.string.codestyle_method_parameters), null, display.wrapMethodParameters, wrapOptions()) { edit { copy(wrapMethodParameters = it) } }
+                        SettingsChoiceRow(stringResource(Res.string.codestyle_method_parameters), null, display.wrapMethodParameters, wrapOptions()) { state.edit { copy(wrapMethodParameters = it) } }
                         SettingsDivider()
-                        SettingsChoiceRow(stringResource(Res.string.codestyle_method_arguments), null, display.wrapMethodArguments, wrapOptions()) { edit { copy(wrapMethodArguments = it) } }
+                        SettingsChoiceRow(stringResource(Res.string.codestyle_method_arguments), null, display.wrapMethodArguments, wrapOptions()) { state.edit { copy(wrapMethodArguments = it) } }
                         SettingsDivider()
-                        SettingsChoiceRow(stringResource(Res.string.codestyle_chained_calls), null, display.wrapChainedCalls, wrapOptions()) { edit { copy(wrapChainedCalls = it) } }
+                        SettingsChoiceRow(stringResource(Res.string.codestyle_chained_calls), null, display.wrapChainedCalls, wrapOptions()) { state.edit { copy(wrapChainedCalls = it) } }
                         SettingsDivider()
-                        SettingsChoiceRow(stringResource(Res.string.codestyle_binary_expressions), null, display.wrapBinaryExpressions, wrapOptions()) { edit { copy(wrapBinaryExpressions = it) } }
+                        SettingsChoiceRow(stringResource(Res.string.codestyle_binary_expressions), null, display.wrapBinaryExpressions, wrapOptions()) { state.edit { copy(wrapBinaryExpressions = it) } }
                     }
                 }
 
                 // Inline spacing. The first five rules are honored by Kotlin too (token-level rewriting); the
                 // rest need Java's full formatter, so they are Java-only.
                 SettingsCard(stringResource(Res.string.codestyle_spaces)) {
-                    SettingsToggleRow(stringResource(Res.string.codestyle_within_parens), stringResource(Res.string.codestyle_within_parens_desc), display.spaceWithinParens) { edit { copy(spaceWithinParens = it) } }
+                    SettingsToggleRow(stringResource(Res.string.codestyle_within_parens), stringResource(Res.string.codestyle_within_parens_desc), display.spaceWithinParens) { state.edit { copy(spaceWithinParens = it) } }
                     SettingsDivider()
-                    SettingsToggleRow(stringResource(Res.string.codestyle_after_comma), stringResource(Res.string.codestyle_after_comma_desc), display.spaceAfterComma) { edit { copy(spaceAfterComma = it) } }
+                    SettingsToggleRow(stringResource(Res.string.codestyle_after_comma), stringResource(Res.string.codestyle_after_comma_desc), display.spaceAfterComma) { state.edit { copy(spaceAfterComma = it) } }
                     SettingsDivider()
-                    SettingsToggleRow(stringResource(Res.string.codestyle_around_operators), stringResource(Res.string.codestyle_around_operators_desc), display.spaceAroundOperators) { edit { copy(spaceAroundOperators = it) } }
+                    SettingsToggleRow(stringResource(Res.string.codestyle_around_operators), stringResource(Res.string.codestyle_around_operators_desc), display.spaceAroundOperators) { state.edit { copy(spaceAroundOperators = it) } }
                     SettingsDivider()
-                    SettingsToggleRow(stringResource(Res.string.codestyle_before_brace), stringResource(Res.string.codestyle_before_brace_desc), display.spaceBeforeBrace) { edit { copy(spaceBeforeBrace = it) } }
+                    SettingsToggleRow(stringResource(Res.string.codestyle_before_brace), stringResource(Res.string.codestyle_before_brace_desc), display.spaceBeforeBrace) { state.edit { copy(spaceBeforeBrace = it) } }
                     SettingsDivider()
-                    SettingsToggleRow(stringResource(Res.string.codestyle_around_lambda_arrow), stringResource(Res.string.codestyle_around_lambda_arrow_desc), display.spaceAroundLambdaArrow) { edit { copy(spaceAroundLambdaArrow = it) } }
+                    SettingsToggleRow(stringResource(Res.string.codestyle_around_lambda_arrow), stringResource(Res.string.codestyle_around_lambda_arrow_desc), display.spaceAroundLambdaArrow) { state.edit { copy(spaceAroundLambdaArrow = it) } }
                     if (javaOnly) {
                         SettingsDivider()
-                        SettingsToggleRow(stringResource(Res.string.codestyle_before_parens), stringResource(Res.string.codestyle_before_parens_desc), display.spaceBeforeParens) { edit { copy(spaceBeforeParens = it) } }
+                        SettingsToggleRow(stringResource(Res.string.codestyle_before_parens), stringResource(Res.string.codestyle_before_parens_desc), display.spaceBeforeParens) { state.edit { copy(spaceBeforeParens = it) } }
                         SettingsDivider()
-                        SettingsToggleRow(stringResource(Res.string.codestyle_before_semicolon), stringResource(Res.string.codestyle_before_semicolon_desc), display.spaceBeforeSemicolon) { edit { copy(spaceBeforeSemicolon = it) } }
+                        SettingsToggleRow(stringResource(Res.string.codestyle_before_semicolon), stringResource(Res.string.codestyle_before_semicolon_desc), display.spaceBeforeSemicolon) { state.edit { copy(spaceBeforeSemicolon = it) } }
                         SettingsDivider()
-                        SettingsToggleRow(stringResource(Res.string.codestyle_around_ternary), stringResource(Res.string.codestyle_around_ternary_desc), display.spaceAroundTernary) { edit { copy(spaceAroundTernary = it) } }
+                        SettingsToggleRow(stringResource(Res.string.codestyle_around_ternary), stringResource(Res.string.codestyle_around_ternary_desc), display.spaceAroundTernary) { state.edit { copy(spaceAroundTernary = it) } }
                         SettingsDivider()
-                        SettingsToggleRow(stringResource(Res.string.codestyle_after_type_cast), stringResource(Res.string.codestyle_after_type_cast_desc), display.spaceAfterTypeCast) { edit { copy(spaceAfterTypeCast = it) } }
+                        SettingsToggleRow(stringResource(Res.string.codestyle_after_type_cast), stringResource(Res.string.codestyle_after_type_cast_desc), display.spaceAfterTypeCast) { state.edit { copy(spaceAfterTypeCast = it) } }
                     }
                 }
 
                 SettingsCard(stringResource(Res.string.codestyle_blank_lines)) {
-                    SettingsSliderRow(stringResource(Res.string.codestyle_keep_at_most), stringResource(Res.string.codestyle_keep_at_most_desc), display.blankLinesToKeep, 0, 5, 1, null) { edit { copy(blankLinesToKeep = it) } }
+                    SettingsSliderRow(stringResource(Res.string.codestyle_keep_at_most), stringResource(Res.string.codestyle_keep_at_most_desc), display.blankLinesToKeep, 0, 5, 1, null) { state.edit { copy(blankLinesToKeep = it) } }
                     if (javaOnly) {
                         SettingsDivider()
-                        SettingsSliderRow(stringResource(Res.string.codestyle_after_imports), null, display.blankLinesAfterImports, 0, 5, 1, null) { edit { copy(blankLinesAfterImports = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_after_imports), null, display.blankLinesAfterImports, 0, 5, 1, null) { state.edit { copy(blankLinesAfterImports = it) } }
                         SettingsDivider()
-                        SettingsSliderRow(stringResource(Res.string.codestyle_before_method), null, display.blankLinesBeforeMethod, 0, 5, 1, null) { edit { copy(blankLinesBeforeMethod = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_before_method), null, display.blankLinesBeforeMethod, 0, 5, 1, null) { state.edit { copy(blankLinesBeforeMethod = it) } }
                         SettingsDivider()
-                        SettingsSliderRow(stringResource(Res.string.codestyle_before_field), null, display.blankLinesBeforeField, 0, 5, 1, null) { edit { copy(blankLinesBeforeField = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_before_field), null, display.blankLinesBeforeField, 0, 5, 1, null) { state.edit { copy(blankLinesBeforeField = it) } }
                         SettingsDivider()
-                        SettingsSliderRow(stringResource(Res.string.codestyle_before_first_member), null, display.blankLinesBeforeFirstMember, 0, 5, 1, null) { edit { copy(blankLinesBeforeFirstMember = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_before_first_member), null, display.blankLinesBeforeFirstMember, 0, 5, 1, null) { state.edit { copy(blankLinesBeforeFirstMember = it) } }
                         SettingsDivider()
-                        SettingsSliderRow(stringResource(Res.string.codestyle_between_types), null, display.blankLinesBetweenTypes, 0, 5, 1, null) { edit { copy(blankLinesBetweenTypes = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_between_types), null, display.blankLinesBetweenTypes, 0, 5, 1, null) { state.edit { copy(blankLinesBetweenTypes = it) } }
                     }
                 }
 
                 if (javaOnly) {
                     SettingsCard(stringResource(Res.string.codestyle_comments)) {
-                        SettingsToggleRow(stringResource(Res.string.codestyle_format_comments), stringResource(Res.string.codestyle_format_comments_desc), display.formatComments) { edit { copy(formatComments = it) } }
+                        SettingsToggleRow(stringResource(Res.string.codestyle_format_comments), stringResource(Res.string.codestyle_format_comments_desc), display.formatComments) { state.edit { copy(formatComments = it) } }
                         SettingsDivider()
-                        SettingsToggleRow(stringResource(Res.string.codestyle_wrap_comments), stringResource(Res.string.codestyle_wrap_comments_desc), display.wrapComments) { edit { copy(wrapComments = it) } }
+                        SettingsToggleRow(stringResource(Res.string.codestyle_wrap_comments), stringResource(Res.string.codestyle_wrap_comments_desc), display.wrapComments) { state.edit { copy(wrapComments = it) } }
                     }
                 }
             }
@@ -329,7 +295,7 @@ private fun wrapOptions(): List<Pair<String, String>> =
     )
 
 /** What the controls display: a named preset shows its canonical values; Custom shows the stored fields. */
-private fun displayStyle(style: UiCodeStyle): UiCodeStyle =
+internal fun displayStyle(style: UiCodeStyle): UiCodeStyle =
     if (style.preset == PRESET_CUSTOM) style else presetDefaults(style.preset)
 
 /** The canonical values for a named preset (presets differ only in indentation; the rest are shared). */

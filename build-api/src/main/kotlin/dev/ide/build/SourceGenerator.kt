@@ -54,6 +54,13 @@ class SourceGenRequest(
      * populates it from the module's direct library dependencies.
      */
     val declaredDependencies: List<String> = emptyList(),
+    /**
+     * Generator-defined warning ids the user has explicitly ACCEPTED for this module, so a problem the
+     * generator would otherwise refuse to run with is reported and skipped instead of failing the build. The
+     * IDE surfaces such a problem as an editor banner with an "I understand" action, and that choice is
+     * persisted on the module and arrives here. Empty ⇒ every problem the generator finds is blocking.
+     */
+    val acceptedWarnings: Set<String> = emptySet(),
 )
 
 class SourceGenResult(val success: Boolean, val messages: List<String> = emptyList()) {

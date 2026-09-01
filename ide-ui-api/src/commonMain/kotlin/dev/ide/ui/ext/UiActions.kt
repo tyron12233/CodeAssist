@@ -55,6 +55,9 @@ object UiDestinations {
     const val PROJECTS = "projects"
     const val DEPENDENCIES = "dependencies"
     const val CODE_STYLE = "codeStyle"
+
+    /** The Icon Manager: browse and import icons, and edit the app icon. */
+    const val ICONS = "icons"
 }
 
 /**

@@ -5,10 +5,13 @@ import dev.ide.android.support.tasks.Aapt2LinkTask
 import dev.ide.android.support.tasks.AndroidCompileTask
 import dev.ide.android.support.tasks.AndroidKotlinCompileTask
 import dev.ide.android.support.tasks.CheckAarMetadataTask
+import dev.ide.android.support.aidl.AidlCompiler
+import dev.ide.android.support.tasks.CompileAidlTask
 import dev.ide.android.support.tasks.ConvertResourcesTask
 import dev.ide.android.support.tasks.DexArchiveBuilderTask
 import dev.ide.android.support.tasks.DexExternalLibsTask
 import dev.ide.android.support.tasks.DexMergeTask
+import dev.ide.android.support.tasks.GenerateAarRJarTask
 import dev.ide.android.support.tasks.GenerateLibraryRTask
 import dev.ide.android.support.tasks.GenerateRJarTask
 import dev.ide.android.support.tasks.PackageAarTask
@@ -25,8 +28,10 @@ import dev.ide.android.support.tasks.PackageApkTask
 import dev.ide.android.support.tasks.PackagingRules
 import dev.ide.android.support.tasks.ProcessGoogleServicesTask
 import dev.ide.android.support.tasks.R8MinifyTask
+import dev.ide.android.support.tasks.SharedLibraryDexer
 import dev.ide.android.support.tasks.SignApkTask
 import dev.ide.android.support.tasks.SignBundleTask
+import dev.ide.android.support.tasks.TransformHiltClassesTask
 import dev.ide.android.support.tools.Aapt2
 import dev.ide.android.support.tools.Aapt2Subprocess
 import dev.ide.android.support.tools.AndroidAppLogRuntime
@@ -50,17 +55,21 @@ import dev.ide.android.support.tools.ResourceShrink
 import dev.ide.android.support.tools.R8Subprocess
 import dev.ide.android.support.tools.Shrinker
 import dev.ide.android.support.tools.SigningConfig
+import dev.ide.build.BuildContext
+import dev.ide.build.BuildEnv
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSystem
 import dev.ide.build.SourceGenerator
-import dev.ide.build.SyncResult
 import dev.ide.build.Task
 import dev.ide.build.TaskDescriptor
 import dev.ide.build.TaskGraph
 import dev.ide.build.TaskName
 import dev.ide.build.TaskContainer
+import dev.ide.build.engine.DefaultBuildEnv
 import dev.ide.build.engine.DefaultTaskContainer
+import dev.ide.build.engine.SimpleBuildConfiguration
+import dev.ide.build.engine.applyBuildPlugins
 import dev.ide.build.engine.GenerateSourcesTask
 import dev.ide.build.engine.JarTask
 import dev.ide.build.engine.LifecycleTask
@@ -75,12 +84,12 @@ import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
 import dev.ide.model.LanguageLevel
+import dev.ide.model.LibraryDependency
 import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
 import dev.ide.model.ModuleType
 import dev.ide.model.Project
-import dev.ide.platform.ProgressReporter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -161,8 +170,6 @@ class AndroidBuildSystem(
     private val compileBootclasspath: List<Path> =
         listOf(sdk.androidJar) + listOfNotNull(sdk.coreLambdaStubs.takeIf { Files.exists(it) })
 
-    override suspend fun sync(project: Project, progress: ProgressReporter): SyncResult = SyncResult(true, emptyList())
-
     override fun supports(moduleType: ModuleType): Boolean = moduleType.id.startsWith("android")
 
     override fun tasks(project: Project): List<TaskDescriptor> =
@@ -180,7 +187,15 @@ class AndroidBuildSystem(
             }
         }.distinctBy { it.name }
 
-    override fun createBuildGraph(project: Project, request: BuildRequest): TaskGraph {
+    override fun createBuildGraph(project: Project, request: BuildRequest): TaskGraph =
+        createBuildGraph(project, request, BuildContext(env = env(project)))
+
+    /** The environment for a graph the host realized without one: the project root plus the Android platform
+     *  classpath every module in this graph compiles against. */
+    private fun env(project: Project): BuildEnv =
+        DefaultBuildEnv(Paths.get(project.rootDir.path), bootClasspathFor = { compileBootclasspath })
+
+    override fun createBuildGraph(project: Project, request: BuildRequest, ctx: BuildContext): TaskGraph {
         val byId = project.modules.associateBy { it.id }
         val targets = (if (request.targets.isEmpty()) project.modules.map { it.id } else request.targets)
             .mapNotNull { byId[it] }
@@ -213,6 +228,9 @@ class AndroidBuildSystem(
                 appendApp(tasks, target, variant, request.goal, byId)
             }
         }
+        // Contributed build logic (BUILD_PLUGIN_EP) lands after every android/java task is registered, so it
+        // can wire by name to them (`:app:assembleDebug`, `:app:compileJava`); realize once afterwards.
+        applyBuildPlugins(SimpleBuildConfiguration(project, request, tasks, id, ctx.env), ctx.plugins)
         return tasks.build()
     }
 
@@ -286,7 +304,11 @@ class AndroidBuildSystem(
         // the ${applicationId} manifest placeholder Firebase/Play Services authorities depend on. Same
         // computation the run/launch + app-log-capture paths use (AndroidVariants.applicationId), one source.
         val applicationId = AndroidVariants.applicationId(facet, variant)
-        val manifestPlaceholders = mapOf("applicationId" to applicationId, "packageName" to facet.namespace)
+        // The built-in applicationId/packageName plus the placeholders the module declares (defaultConfig +
+        // flavors + build type). A dependency's manifest routinely REQUIRES one of the module's: the Myket
+        // billing client names `${marketApplicationId}`/`${marketPermission}`, and an unresolved placeholder
+        // fails the aapt2 link, so a declared value has to reach the merge.
+        val manifestPlaceholders = AndroidVariants.manifestPlaceholders(facet, variant)
         // Library manifests to merge, in decreasing priority: local android-lib modules, then external AARs.
         val depLibManifests = depAndroidLibs.mapNotNull { lib ->
             val libFacet = lib.facets.get(AndroidFacet.KEY) ?: return@mapNotNull null
@@ -313,7 +335,9 @@ class AndroidBuildSystem(
         // contributed (`generators` empty ⇒ no task, `sourceRoots` unchanged, build byte-identical).
         val generateSources: TaskName? = if (generators.isNotEmpty()) {
             val gs = step("generateSources")
-            tasks.task(gs, directDepCompiles + directDepKotlin) { GenerateSourcesTask(app, gs, generators, layout.kspGen) { kotlinClasspath } }
+            tasks.task(gs, directDepCompiles + directDepKotlin) {
+                GenerateSourcesTask(app, gs, generators, layout.kspGen, { kotlinClasspath }, acceptedGeneratorWarnings(app))
+            }
             gs
         } else null
         val genSourceRoots = sourceRoots + listOfNotNull(generateSources?.let { layout.kspGen })
@@ -337,6 +361,26 @@ class AndroidBuildSystem(
         val vbGenDirs = listOfNotNull(viewBinding).map { layout.viewBindingGen }
         val vbDep = listOfNotNull(viewBinding)
 
+        // AIDL: `.aidl` under the variant's aidl roots becomes the Binder interface/Stub/Proxy Java, in a
+        // generated root both compile tasks read. There is no `buildFeatures` flag to turn this on (AGP has
+        // one; a mobile IDE where a silently-skipped file is hard to diagnose is better served by just
+        // compiling what is there): a module with no `.aidl` registers no task and builds byte-identically.
+        // Dependency modules' and AARs' aidl folders are IMPORT roots: they contribute the parcelable and
+        // interface declarations this module's files may reference, without being generated a second time.
+        val aidlSourceRoots = roots(variant, ContentRole.AIDL)
+        val aidlImportRoots = depAndroidLibs.flatMap { depRoots(it, ContentRole.AIDL) } + libs.aidlDirs
+        val compileAidl = if (hasAidlSources(aidlSourceRoots)) step("compileAidl") else null
+        if (compileAidl != null) {
+            val aidlClasspath = compileBootclasspath + libs.compileJars
+            tasks.task(compileAidl) {
+                CompileAidlTask(
+                    compileAidl, aidlSourceRoots, aidlImportRoots, sdk.frameworkAidl, { aidlClasspath }, layout.aidlGen,
+                )
+            }
+        }
+        val aidlGenDirs = listOfNotNull(compileAidl).map { layout.aidlGen }
+        val aidlDep = listOfNotNull(compileAidl)
+
         // google-services.json (when present) generates res that the merge consumes, so it runs first.
         val mergeResDeps = if (gmsJson != null) {
             val processGms = step("processGoogleServices")
@@ -350,7 +394,7 @@ class AndroidBuildSystem(
         // (AGP's checkAarMetadata). Gates processManifest so a violation stops the build with a clear message.
         val checkAarMeta = step("checkAarMetadata")
         tasks.task(checkAarMeta) {
-            CheckAarMetadataTask(checkAarMeta, libs.aarMetadata, facet.compileSdk, layout.aarMetadataCheck)
+            CheckAarMetadataTask(checkAarMeta, libs.aarMetadata, facet.compileSdk, layout.aarMetadataCheck, sdk.androidJar)
         }
         // Merge dependency-library + AAR manifests into the app manifest (so their components/permissions
         // land in the APK), substituting ${applicationId} etc. The linked manifest is the merged one.
@@ -402,7 +446,7 @@ class AndroidBuildSystem(
         // Package the generated R.java (app + every --extra-package) as R.jar bytecode instead of compiling it.
         tasks.task(generateRFile, listOf(aapt2Link)) { GenerateRJarTask(generateRFile, layout.genJava, layout.rJar) }
         if (appHasKotlin) {
-            tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin + vbDep + listOfNotNull(generateSources)) {
+            tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin + vbDep + aidlDep + listOfNotNull(generateSources)) {
                 AndroidKotlinCompileTask(
                     app,
                     compileKotlin,
@@ -414,7 +458,7 @@ class AndroidBuildSystem(
                     bootClasspath,
                     kotlin,
                     plugins,
-                    extraGenDirs = vbGenDirs,
+                    extraGenDirs = vbGenDirs + aidlGenDirs,
                 )
             }
         }
@@ -423,7 +467,7 @@ class AndroidBuildSystem(
         // classpath, not as compiled source. Non-R generated files (e.g. Manifest.java) are still compiled.
         tasks.task(
             compile,
-            listOf(aapt2Link, generateRFile) + directDepCompiles + (if (appHasKotlin) listOf(compileKotlin) else emptyList()) + vbDep + listOfNotNull(generateSources)
+            listOf(aapt2Link, generateRFile) + directDepCompiles + (if (appHasKotlin) listOf(compileKotlin) else emptyList()) + vbDep + aidlDep + listOfNotNull(generateSources)
         ) {
             AndroidCompileTask(
                 compile,
@@ -433,13 +477,27 @@ class AndroidBuildSystem(
                 layout.classes,
                 level,
                 bootClasspath,
-                extraGenDirs = vbGenDirs,
+                extraGenDirs = vbGenDirs + aidlGenDirs,
             )
         }
         // The app's project-scope dex covers both the Java and (when present) the Kotlin output.
         val appProjectClasses = listOf(layout.classes) + if (appHasKotlin) listOf(layout.kotlinClasses) else emptyList()
 
         if (goal == BuildGoal.COMPILE_ONLY) return
+
+        // Hilt: rewrite each `@AndroidEntryPoint`/`@HiltAndroidApp` class to extend its generated `Hilt_`
+        // sibling: the half of Hilt that the Gradle plugin (which this build system has no equivalent of)
+        // contributes, and which the processor option the IDE passes it promises will happen. The rewritten
+        // copy REPLACES the raw compile output as the dex/R8 input; the raw dirs stay untouched, so they
+        // remain the compile classpath and the compile tasks keep their up-to-date check.
+        val transformHilt = if (usesHilt(app)) step("transformHiltClasses") else null
+        if (transformHilt != null) {
+            val deps = listOf(compile) + if (appHasKotlin) listOf(compileKotlin) else emptyList()
+            tasks.task(transformHilt, deps) {
+                TransformHiltClassesTask(transformHilt, appProjectClasses, layout.hiltClasses)
+            }
+        }
+        val dexProjectClasses = if (transformHilt != null) listOf(layout.hiltClasses) else appProjectClasses
 
         val pkg = step("packageApk")
         val sign = step("sign")
@@ -523,9 +581,9 @@ class AndroidBuildSystem(
             val resourceShrink = if (shrinkResources) ResourceShrink(layout.protoAp, layout.shrunkProtoAp) else null
 
             val minifyTask = TaskName(":${app.name}:minify${v}WithR8")
-            tasks.task(minifyTask, listOf(aapt2Link, generateRFile, compile) + moduleJarProducers) {
+            tasks.task(minifyTask, listOf(aapt2Link, generateRFile, compile) + listOfNotNull(transformHilt) + moduleJarProducers) {
                 R8MinifyTask(
-                    minifyTask, appProjectClasses + subProjectJars + externalJars + rJars, sdk.androidJar, facet.minSdk,
+                    minifyTask, dexProjectClasses + subProjectJars + externalJars + rJars, sdk.androidJar, facet.minSdk,
                     keepRuleFiles, inlineRules, facet.r8FullMode,
                     layout.dexArchives.resolve("r8-staging"), layout.dex, shrinker,
                     mappingOutput = layout.mappingTxt,
@@ -555,8 +613,8 @@ class AndroidBuildSystem(
             // fork helps it too. Otherwise R stays in dexBuilder + the project merge (AGP's scope for R).
             val forkedR = dexExtOnePass
             val dexBuilder = step("dexBuilder")
-            tasks.task(dexBuilder, listOf(compile, generateRFile) + moduleJarProducers) {
-                DexArchiveBuilderTask(dexBuilder, appProjectClasses, subProjectJars, externalJars, sdk.androidJar,
+            tasks.task(dexBuilder, listOf(compile, generateRFile) + listOfNotNull(transformHilt) + moduleJarProducers) {
+                DexArchiveBuilderTask(dexBuilder, dexProjectClasses, subProjectJars, externalJars, sdk.androidJar,
                     facet.minSdk, release, layout.dexArchives.resolve("project.jar"),
                     layout.projectArchives, layout.subArchives, layout.extArchives, dexer, dexCacheRoot,
                     desugaredLibConfig = desugarJson,
@@ -708,8 +766,16 @@ class AndroidBuildSystem(
         val facet = m.facets.get(AndroidFacet.KEY)!!
         // Upstream modules' Kotlin output (sibling of their Java output) joins this lib's compile classpath.
         val upstreamKotlin = moduleOutputs.map { it.resolveSibling("kotlin-classes") }
-        val classpath = ArrayList(compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin)
-        val compileDeps = directModuleDeps(m, byId).map { TaskName(":${it.name}:compileJava") }.toMutableList()
+        // Non-transitive R: a library's own `R` holds only its own resources, so reading a DEPENDENCY
+        // library's resource means naming that module's package (`com.example.base.R.string.x`). Each
+        // dependency lib's compile-only R.jar therefore joins this classpath — the artifact AGP puts on a
+        // library's compile classpath for exactly this. Compile-only like the module's own R: never dexed
+        // here, because the app regenerates every package's final R when it links (`--extra-packages`).
+        val depAndroidLibs = moduleClosure(m, byId).filter { it.facets.get(AndroidFacet.KEY) != null }
+        val depRJars = depAndroidLibs.map { rJarOf(it) }
+        val depRTasks = depAndroidLibs.map { TaskName(":${it.name}:compileR") }
+        val classpath = ArrayList(compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin + depRJars)
+        val compileDeps = (directModuleDeps(m, byId).map { TaskName(":${it.name}:compileJava") } + depRTasks).toMutableList()
         val sourceRoots = srcRoots(ContentRole.SOURCE)
 
         val rRoot = buildDir.resolve("intermediates").resolve("r")
@@ -737,6 +803,18 @@ class AndroidBuildSystem(
         tasks.task(compileR, listOf(generateR)) { GenerateRJarTask(compileR, rRoot.resolve("gen"), rJar) }
         classpath.add(rJar); compileDeps.add(compileR)
 
+        // The same problem one level out: an AAR ships no `R` either, so a library reading
+        // `com.google.android.material.R.attr.x` needs one generated from that AAR's `R.txt`. An app gets these
+        // free from its own link (`--extra-packages`); a library links only its own resources, so it doesn't.
+        // Dormant when no dependency AAR declares resources — no task, no classpath entry.
+        val aarSymbols = libs.aarSymbols.map { it.packageName to it.rTxt }
+        val aarRJar = if (aarSymbols.isEmpty()) null else rRoot.resolve("aar-R.jar")
+        if (aarRJar != null) {
+            val generateAarR = TaskName(":${m.name}:generateAarR")
+            tasks.task(generateAarR) { GenerateAarRJarTask(generateAarR, aarSymbols, aarRJar) }
+            classpath.add(aarRJar); compileDeps.add(generateAarR)
+        }
+
         // buildFeatures { viewBinding }: a lib generates bindings from its OWN layouts (against its own R) and,
         // unlike R, they are real code — compiled into the lib's output, so they dex into the AAR/jar.
         val vbDir = rRoot.resolve("gen-view-binding")
@@ -749,6 +827,24 @@ class AndroidBuildSystem(
         }
         val libVbGenDirs = listOfNotNull(libViewBinding).map { vbDir }
 
+        // AIDL for a library: same generation as an app's, and the result is real code. It compiles into the
+        // library's own output, so the stubs dex into the AAR/jar. The library's `aidl/` folder is ALSO
+        // packaged into its AAR (see [appendAar]) so a consumer can import its declarations.
+        val aidlSourceRoots = srcRoots(ContentRole.AIDL)
+        val aidlGen = buildDir.resolve("intermediates").resolve("aidl")
+        val libCompileAidl = if (hasAidlSources(aidlSourceRoots)) TaskName(":${m.name}:compileAidl") else null
+        if (libCompileAidl != null) {
+            val aidlImportRoots = directModuleDeps(m, byId).flatMap { moduleRoots(it, ContentRole.AIDL) } + libs.aidlDirs
+            val aidlClasspath = compileBootclasspath + libs.compileJars
+            tasks.task(libCompileAidl) {
+                CompileAidlTask(
+                    libCompileAidl, aidlSourceRoots, aidlImportRoots, sdk.frameworkAidl, { aidlClasspath }, aidlGen,
+                )
+            }
+            compileDeps.add(libCompileAidl)
+        }
+        val libAidlGenDirs = listOfNotNull(libCompileAidl).map { aidlGen }
+
         // generateSources (KSP etc.) for the lib: emit into its variant `generated/ksp` root ahead of compile;
         // that root joins the compile source roots so generated code compiles into the AAR/jar. KSP `libraries`
         // = the lib's base compile classpath (snapshot now; R/kotlin-classes are added later and aren't needed).
@@ -758,7 +854,7 @@ class AndroidBuildSystem(
             val gs = TaskName(":${m.name}:generateSources")
             val genClasspath = classpath.toList()
             val gsDeps = compileDeps.toList()
-            tasks.task(gs, gsDeps) { GenerateSourcesTask(m, gs, generators, kspGen) { genClasspath } }
+            tasks.task(gs, gsDeps) { GenerateSourcesTask(m, gs, generators, kspGen, { genClasspath }, acceptedGeneratorWarnings(m)) }
             compileDeps.add(gs)
             gs
         } else null
@@ -772,9 +868,10 @@ class AndroidBuildSystem(
         if (libHasKotlin) {
             val compileKotlin = TaskName(":${m.name}:compileKotlin")
             val depKotlin = directModuleDeps(m, byId).filter { moduleHasKotlin(it) }.map { TaskName(":${it.name}:compileKotlin") }
-            val kotlinCp = compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin + listOf(rJar)
+            val kotlinCp = compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin +
+                depRJars + listOfNotNull(aarRJar) + listOf(rJar)
             tasks.task(compileKotlin, listOf(compileR) + compileDeps.filter { it != compileR } + depKotlin) {
-                AndroidKotlinCompileTask(m, compileKotlin, libGenSourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, bootClasspath, kotlin, plugins, extraGenDirs = libVbGenDirs)
+                AndroidKotlinCompileTask(m, compileKotlin, libGenSourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, bootClasspath, kotlin, plugins, extraGenDirs = libVbGenDirs + libAidlGenDirs)
             }
             classpath.add(libKotlin); compileDeps.add(compileKotlin)
         }
@@ -789,7 +886,7 @@ class AndroidBuildSystem(
                 classesOut,
                 level,
                 bootClasspath,
-                extraGenDirs = libVbGenDirs,
+                extraGenDirs = libVbGenDirs + libAidlGenDirs,
             )
         }
         val procRes = TaskName(":${m.name}:processResources")
@@ -797,9 +894,19 @@ class AndroidBuildSystem(
         val classes = TaskName(":${m.name}:classes")
         val classDirs = listOf(classesOut) + if (libHasKotlin) listOf(libKotlin) else emptyList()
         tasks.task(classes, listOf(compile, procRes)) { LifecycleTask(classes, trackedDirs = classDirs + buildDir.resolve("resources")) }
+        // A library's own `@AndroidEntryPoint` fragments/views need the same superclass rewrite as an app's,
+        // and its `jar` is what the consuming app dexes (and what `assembleAar` packages), so the rewritten
+        // copy is what gets jarred. The raw class dirs stay the compile classpath for dependent modules.
+        val transformHilt = if (usesHilt(m)) TaskName(":${m.name}:transformHiltClasses") else null
+        val hiltClasses = buildDir.resolve("intermediates").resolve("hilt-classes")
+        if (transformHilt != null) {
+            tasks.task(transformHilt, listOf(classes)) { TransformHiltClassesTask(transformHilt, classDirs, hiltClasses) }
+        }
         if (withJar) {
             val jar = TaskName(":${m.name}:jar")
-            tasks.task(jar, listOf(classes)) { JarTask(jar, classDirs, jarPath(m)) }
+            tasks.task(jar, listOf(classes) + listOfNotNull(transformHilt)) {
+                JarTask(jar, if (transformHilt != null) listOf(hiltClasses) else classDirs, jarPath(m))
+            }
         }
     }
 
@@ -834,6 +941,7 @@ class AndroidBuildSystem(
                 rTxt = rRoot.resolve("R.txt"),
                 assetsDirs = srcRoots(ContentRole.ASSETS),
                 jniLibDirs = srcRoots(ContentRole.JNI_LIBS),
+                aidlDirs = srcRoots(ContentRole.AIDL),
                 consumerProguardFiles = consumerProguard,
                 inlineProguardRules = inlineProguard,
                 compileSdk = facet.compileSdk,
@@ -849,6 +957,18 @@ class AndroidBuildSystem(
     private fun directModuleDeps(m: Module, byId: Map<ModuleId, Module>): List<Module> =
         m.dependencies.filterIsInstance<ModuleDependency>().mapNotNull { byId[it.target] }
 
+    /** Where [registerAndroidLibrary] writes an android-lib's compile-only `R.jar` (see its `rRoot`). */
+    private fun rJarOf(m: Module): Path =
+        Paths.get(m.outputDir.path).parent.resolve("intermediates").resolve("r").resolve("R.jar")
+
+    /**
+     * Source-generator warnings [m] has accepted, for [dev.ide.build.SourceGenRequest.acceptedWarnings]: the
+     * KSP processor ids whose bundled-vs-declared runtime mismatch the user chose to build through. Read here
+     * rather than in the engine, since this is the layer that knows the Android facet.
+     */
+    private fun acceptedGeneratorWarnings(m: Module): Set<String> =
+        m.facets.get(AndroidFacet.KEY)?.buildFeatures?.kspRuntimeMismatchAccepted ?: emptySet()
+
     /** The signing config for [module]'s [buildType] variant — the resolver's answer, else the default debug [signing]. */
     private fun signingFor(module: Module, buildType: String): SigningConfig =
         signingResolver?.invoke(module, buildType) ?: signing
@@ -860,7 +980,29 @@ class AndroidBuildSystem(
     /** True if module [m] carries Kotlin sources (and Kotlin compilation is wired). */
     private fun moduleHasKotlin(m: Module): Boolean = kotlin != null && containsKotlin(moduleRoots(m, ContentRole.SOURCE))
 
+    /**
+     * True when [m] **directly declares** the Hilt Android runtime, so its compiled classes need the
+     * `@AndroidEntryPoint` superclass rewrite ([dev.ide.android.support.tools.HiltEntryPoints]).
+     *
+     * Gated on the declared coordinate rather than a classpath probe for two reasons: it is the same
+     * explicit-opt-in rule that decides whether the bundled Hilt KSP processor runs at all (a module that only
+     * reaches Hilt transitively generates no `Hilt_` classes, so there is nothing to rewrite), and it is model
+     * data, available while the task graph is being built, where a probe would have to open every dependency
+     * jar and would read an AAR that a first, clean build has not exploded yet.
+     */
+    private fun usesHilt(m: Module): Boolean = m.dependencies
+        .filterIsInstance<LibraryDependency>()
+        .any { it.library.name.split(':').take(2).joinToString(":") == HILT_ANDROID_COORDINATE }
+
     /** A module's content roots tagged with [role], across its non-test source sets. */
+    /**
+     * True when any of [roots] actually holds a `.aidl` file. AIDL generation is auto-detected rather than
+     * flag-gated, so this is what decides whether the task exists at all. An empty (or absent) `aidl/`
+     * folder must leave the graph exactly as it was.
+     */
+    private fun hasAidlSources(roots: List<Path>): Boolean =
+        roots.any { AidlCompiler.aidlFilesUnder(it).isNotEmpty() }
+
     private fun moduleRoots(m: Module, role: ContentRole): List<Path> =
         m.sourceSets.filter { it.scope != DependencyScope.TEST_IMPLEMENTATION }
             .flatMap { it.contentRoots }
@@ -875,6 +1017,78 @@ class AndroidBuildSystem(
         }
         visit(app)
         return out.values.toList()
+    }
+
+    /**
+     * Dex [app]'s external libraries into the shared cross-project dex cache WITHOUT running a build, so that a
+     * later build (or layout-preview render) finds them already dexed instead of paying for them at the moment the
+     * user asked for something. Cold library dexing dominates a first build, and it is the one part that depends on
+     * nothing having been compiled first — which is what makes warming it ahead of time possible at all.
+     *
+     * Deliberately narrow. It runs the SAME [SharedLibraryDexer] over the SAME cache under the SAME key the build
+     * uses, so whatever it banks a build reuses verbatim (and vice versa) — but it archives into [warmRoot], NOT
+     * the build's own `extArchives`, so it can never leave a half-written bucket where a build would read one.
+     * Publishing into the shared cache is already staged-and-renamed with first-writer-wins, so a build dexing the
+     * same library at the same time is safe.
+     *
+     * Cancellation is the caller's: [checkCanceled] is consulted between libraries, and whatever completed before
+     * that point stays in the cache (each library is banked as it finishes), so a warm that is interrupted still
+     * leaves the next build less to do.
+     *
+     * It runs ONLY where a hit is guaranteed ([SharedLibraryDexer.cacheKeyIsOwnContentOnly]). At minSdk 26+ with no
+     * core-library desugaring, a library's cache key is its own content alone and these buckets are reused by any
+     * build of any project. Below that the key folds in a digest of the whole library set, and the warm cannot know
+     * the set the next build will resolve — an instrumented debug build, the default Run flow, appends the app-log
+     * bridge runtime — so it would dex every library into buckets that build then ignores and dexes again. That is
+     * not a smaller win, it is double the work plus contention for the cores, heap and [InProcessDexGate] credits
+     * the build needs, which is how it doubled build times on such a project.
+     *
+     * Where it does run it takes a ONE-worker budget rather than planning against the whole device. Warming has no
+     * deadline and a build does, so background work must not be able to take the dex gate out from under one.
+     *
+     * Returns how many libraries it had to dex (0 when the cache was already warm for this library set), or -1 when
+     * there is nothing to warm: not an Android module, no shared cache configured, no external libraries, or a
+     * desugaring cache key the next build would miss.
+     */
+    suspend fun warmLibraryDexCache(
+        app: Module,
+        variantName: String,
+        warmRoot: Path,
+        log: (String) -> Unit = {},
+        checkCanceled: () -> Unit = {},
+    ): Int {
+        val facet = app.facets.get(AndroidFacet.KEY) ?: return -1
+        val cache = dexCacheRoot ?: return -1
+        // Checked from the facet, before anything is resolved or hashed: on a desugaring module this is also the
+        // path that would re-read every library's zip directory on every armed warm, since computeUniverse builds
+        // its class-name map whenever desugaring is needed.
+        if (facet.minSdk < SharedLibraryDexer.DESUGAR_FREE_MIN_API || facet.coreLibraryDesugaringEnabled) {
+            log("dex cache warm: skipped — minSdk ${facet.minSdk} keys the cache on the whole library set, so a build would miss these buckets")
+            return -1
+        }
+        val variant = AndroidVariants.select(app, variantName)
+        // The build's own explosion root, so an AAR the build already exploded is reused rather than re-exploded.
+        val libs = AndroidLibraries.resolve(app, Layout(app, variantName).explodedAar, variant?.configurations)
+        if (libs.dexJars.isEmpty()) return -1
+        Files.createDirectories(warmRoot)
+        // Debug: the variant a first build and the layout preview both consume. A release build minifies through
+        // R8 instead and shares none of these buckets, so warming it would be wasted work.
+        val release = false
+        val desugarJson = (if (facet.coreLibraryDesugaringEnabled) desugarLib else null)
+            ?.extractConfigJson(warmRoot.resolve("desugar.json"))
+        val universe = SharedLibraryDexer.computeUniverse(libs.dexJars, warmRoot, facet.minSdk, desugarJson)
+        val missing = SharedLibraryDexer.undexedLibraries(libs.dexJars, universe, cache, facet.minSdk, release)
+        if (missing.isEmpty()) return 0
+        log("dex cache warm: ${missing.size} of ${libs.dexJars.size} library(ies) not dexed yet")
+        val libDexer = SharedLibraryDexer(
+            dexer, sdk.androidJar, facet.minSdk, release, cache, desugarJson,
+            log = log, checkCanceled = checkCanceled,
+        )
+        // One worker, one thread: a warm has no deadline and a build does, so this must never hold the fan-out a
+        // build would otherwise get. It also bounds how long cancellation takes — checkCanceled lands between
+        // libraries, so a wider budget leaves that many D8 calls still running after a build has started.
+        libDexer.dexScope(libs.dexJars, warmRoot.resolve("ext"), universe, SharedLibraryDexer.ScopeBudget(1, 1))
+        return missing.size
     }
 
     private fun roots(variant: AndroidVariant, role: ContentRole): List<Path> =
@@ -901,11 +1115,15 @@ class AndroidBuildSystem(
         // AGP's compile_and_runtime_not_namespaced_r_class_jar: the R classes as bytecode, not compiled R.java.
         val rJar: Path = inter.resolve("compile_and_runtime_not_namespaced_r_class_jar").resolve("R.jar")
         val viewBindingGen: Path = inter.resolve("gen-view-binding")  // ViewBinding <Layout>Binding.java
+        val aidlGen: Path = inter.resolve("gen-aidl")  // compileAidl output: the Binder interface/Stub/Proxy .java
         // KSP source-generation output root (AGP's build/generated/ksp/<variant>); KSP emits kotlin/ + java/
         // under it, added to the compile source roots so both are compiled + indexed like hand-written code.
         val kspGen: Path = moduleDirField.resolve("build").resolve("generated").resolve("ksp").resolve(variantName)
         val classes: Path = inter.resolve("classes")
         val kotlinClasses: Path = inter.resolve("kotlin-classes")   // K2 output (dexed as project scope)
+        // transformHiltClasses output: `classes` + `kotlin-classes` copied with Hilt's `@AndroidEntryPoint`
+        // superclass rewrite applied. Replaces both as the dex/R8 input when the module uses Hilt.
+        val hiltClasses: Path = inter.resolve("hilt-classes")
         val dexArchives: Path = inter.resolve("dex-archives")   // dexBuilder scope roots + the project staging jar
         val projectArchives: Path = dexArchives.resolve("project")  // dexBuilder: app classes, per content hash
         val subArchives: Path = dexArchives.resolve("sub")          // dexBuilder: sub-module jars, per content hash
@@ -946,6 +1164,10 @@ class AndroidBuildSystem(
     }
 
     companion object {
+        /** The `group:name` of the Hilt runtime that carries `@AndroidEntryPoint`: the module's opt-in
+         *  signal for the entry-point rewrite (see [usesHilt]). */
+        private const val HILT_ANDROID_COORDINATE = "com.google.dagger:hilt-android"
+
         private fun String.cap() = replaceFirstChar { it.uppercase() }
 
         /** The signed-APK output path for [module] + [variantName] (matches [Layout.signedApk]) — so a host

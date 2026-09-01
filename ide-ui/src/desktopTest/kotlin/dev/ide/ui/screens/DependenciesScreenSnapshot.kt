@@ -17,6 +17,10 @@ import dev.ide.ui.backend.UiVersionConflict
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.FileActions
+import androidx.compose.ui.text.font.FontFamily
 import kotlin.test.Test
 
 /**
@@ -69,6 +73,30 @@ class DependenciesScreenSnapshot {
     fun renderDeclaredTab() {
         // 860x1480 @ density 2 ≈ 430x740dp, a realistic phone width (just under the desktop two-pane breakpoint).
         snapshot("dependencies-declared.png", 860, 1480, FakeBackend())
+    }
+
+    /** The Add flow with an empty query: one search field, one options line, then the quick-adds and the
+     *  two non-search sources. Previously five stacked chip rows sat above the results. */
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun renderAddDependency() {
+        val scene = ImageComposeScene(width = 860, height = 1240, density = Density(2f)) {
+            CodeAssistTheme(dark = true) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    val pane = rememberDependenciesPaneState(FakeBackend(), "app")
+                    AddDependencyContent(pane, FontFamily.Monospace, FileActions.None, Modifier.padding(16.dp))
+                }
+            }
+        }
+        try {
+            scene.render(); scene.render(50_000_000L); scene.render(150_000_000L)
+            val img = scene.render(300_000_000L)
+            val png = img.encodeToData(EncodedImageFormat.PNG)!!.bytes
+            File("$OUT_DIR/dependencies-add.png").apply { parentFile?.mkdirs() }.writeBytes(png)
+            println("wrote snapshot: $OUT_DIR/dependencies-add.png (${png.size} bytes)")
+        } finally {
+            scene.close()
+        }
     }
 
     @OptIn(ExperimentalComposeUiApi::class)

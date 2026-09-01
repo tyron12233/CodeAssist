@@ -258,14 +258,19 @@ class Vm(
     }
 
     /** Run [body], turning an interpreted exception that reached the top of the call into a real throwable: a
-     *  thrown real [Throwable] is rethrown as-is; a thrown interpreted [VmObject] is wrapped so callers still
-     *  get a failure rather than an opaque internal signal. */
+     *  thrown real [Throwable] is rethrown as-is, and an interpreted one ([VmObject], necessarily over a real
+     *  `Throwable` supertype) surfaces as its peer, which IS that real throwable — so the caller sees the
+     *  program's own exception type and message. Anything else is wrapped so callers still get a failure rather
+     *  than an opaque internal signal. */
     private inline fun <T> surfacing(body: () -> T): T =
         try {
             body()
         } catch (ve: VmException) {
             when (val v = ve.value) {
                 is Throwable -> throw v
+                is VmObject -> throw (peerOf(v) as? Throwable
+                    ?: RuntimeException("uninterpreted exception escaped: ${v.vmClass.name}"))
+
                 else -> throw RuntimeException("uninterpreted exception escaped: $v")
             }
         }
@@ -686,12 +691,22 @@ class Vm(
         }
         // The class chain is walked before the interfaces, so a final class method is recorded before the same
         // signature is seen abstract on an interface.
+        // Its interfaces are collected as we go: an ABSTRACT superclass can leave an interface method
+        // unimplemented, and that method is still the peer's to satisfy even though the interpreted class does
+        // not name the interface itself. `GoogleFontImpl : AndroidFont(…)` is the case that surfaced it —
+        // `AndroidFont` implements `Font` but declares neither `weight` nor `style`, so with only the class
+        // chain and the class's OWN interfaces in scope, `Font.getWeight()` reached neither `methods` nor
+        // `abstractStubs` and the peer inherited it still abstract: `AbstractMethodError` the first time
+        // Compose's `FontMatcher` asked a downloadable font for its weight.
+        val inheritedIfaces = ArrayList<Class<*>>()
         var c: Class<*>? = superClass
         while (c != null) {
-            c.declaredMethods.forEach(::consider); c = c.superclass
+            c.declaredMethods.forEach(::consider)
+            inheritedIfaces.addAll(c.interfaces)
+            c = c.superclass
         }
         val seenIfaces = HashSet<Class<*>>()
-        val queue = ArrayDeque(interfaces)
+        val queue = ArrayDeque(interfaces + inheritedIfaces)
         while (queue.isNotEmpty()) {
             val iface = queue.removeFirst()
             if (!seenIfaces.add(iface)) continue

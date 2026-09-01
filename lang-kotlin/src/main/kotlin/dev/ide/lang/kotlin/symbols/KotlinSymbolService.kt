@@ -202,6 +202,12 @@ class KotlinSymbolService(
     // only carries extensions whose declared receiver IS a supertype). Powers [receiverSupertypeArgs].
     private val supertypeArgTemplateMemo = ConcurrentHashMap<String, List<TypeRef>>()
 
+    // The same template memo for a SOURCE sub type, dropped with the other source memos: its chain — and the
+    // arguments it passes up — changes on edit. A classpath sub type cannot reach project source (the classpath
+    // can't extend your code), so its template stays in the session-stable map above.
+    @Volatile
+    private var sourceSupertypeArgTemplateMemo = ConcurrentHashMap<String, List<TypeRef>>()
+
     // Per-(receiver-target, name-prefix) memo of the classpath extension-index query. Like the classpath
     // supertype memo, this is session-stable: the persistent `kotlin.callables` index can't gain a project
     // extension (the classpath can't extend your code), and any re-index rebuilds this whole service. The
@@ -396,6 +402,7 @@ class KotlinSymbolService(
             cachedModel = null
             sourceSupertypeMemo =
                 ConcurrentHashMap() // only SOURCE chains can change; classpath memo stays warm
+            sourceSupertypeArgTemplateMemo = ConcurrentHashMap()
             sourceOwnMembersMemo =
                 ConcurrentHashMap() // a source type's members change on edit; classpath memo stays warm
         }
@@ -418,6 +425,7 @@ class KotlinSymbolService(
             cachedModel = null
             sourceSupertypeMemo =
                 ConcurrentHashMap() // only SOURCE chains can change; classpath memo stays warm
+            sourceSupertypeArgTemplateMemo = ConcurrentHashMap()
             sourceOwnMembersMemo =
                 ConcurrentHashMap() // a source type's members change on edit; classpath memo stays warm
         }
@@ -926,18 +934,29 @@ class KotlinSymbolService(
         index?.exactAll<ClassNameValue>(CLASS_NAMES, simple)
             ?.firstOrNull { it.origin == IndexOrigin.SOURCE && it.fqn.substringBeforeLast('.', "") == samePkg }
             ?.let { return it.fqn }
-        // 5. A top-level synthetic class by simple name (e.g. `R` → `com.example.R`); nested types (`R.layout`)
-        //    are reached through their outer, never resolved bare.
-        synthetic().topLevelFqns.firstOrNull { it.substringAfterLast('.') == simple }
-            ?.let { return it }
-        // 6. A star-imported package, then Kotlin's implicit default star imports (kotlin.*, java.lang, …):
-        //    a simple name is visible if it lives in one of these packages.
         val starPackages =
             (ctx?.imports?.filter { it.isStar }?.map { it.packageName } ?: emptyList()) +
                     DefaultImports.STAR_PACKAGES
+        // 5. A top-level synthetic class (Android `R`/`BuildConfig`, a ViewBinding) by simple name; nested
+        //    types (`R.layout`) are reached through their outer, never resolved bare. Being generated changes
+        //    nothing about SCOPE: like a source class it resolves bare only from its own package, and needs an
+        //    import anywhere else. An explicit import already resolved it at step 2 (a synthetic FQN satisfies
+        //    [isKnownType]), so what remains here is the same-package case and a star import of its package,
+        //    which the step-6 loop below cannot cover, since a synthetic has no type shape to probe.
+        //    Resolving one from ANY package, as this did, is why `R.string.app_name` in a subpackage read as
+        //    fine in the editor and then failed to compile.
+        synthetic().topLevelFqns.firstOrNull {
+            it.substringAfterLast('.') == simple &&
+                it.substringBeforeLast('.', "").let { pkg -> pkg == samePkg || pkg in starPackages }
+        }?.let { return it }
+        // 6. A star-imported package, then Kotlin's implicit default star imports (kotlin.*, java.lang, …):
+        //    a simple name is visible if it lives in one of these packages.
         for (pkg in starPackages) { // existence via the type-shape index (self-gates in dumb mode); no live probe when wired
             val cand = "$pkg.$simple"
-            if (typeShape(cand) != null) return cand
+            // The module model is consulted alongside the type-shape index because a project SOURCE class has
+            // no shape (nothing compiled it yet), so a star-imported one would otherwise never resolve here,
+            // the way the same-package step above already handles.
+            if (cand in model().classByFqn || typeShape(cand) != null) return cand
         }
         // 7. An explicit import whose target is not a known type and that nothing local shadowed: return its FQN
         // 7a. A NESTED type reached by SIMPLE name from within an enclosing class (`Plan` inside `class Game {
@@ -1170,7 +1189,13 @@ class KotlinSymbolService(
             val syntheticPlugin = syntheticInstanceMembers(rc)
             val inherited = rc.superTypeTexts.mapNotNull { resolveTypeName(it, rc.ctx) }
                 .flatMap { ownAndInherited(it, emptyList(), visited) }
-            return own + synthetic + syntheticPlugin + inherited
+            // …and the supertypes the compiler adds that source never writes down ([implicitSupertypes]).
+            // LAST, so an explicit supertype's override (or the class's own member) is found before the
+            // inherited default — the enumeration is order-sensitive, first match wins.
+            val implicit = implicitSupertypes(rc, fqn).flatMap { (superFqn, args) ->
+                ownAndInherited(superFqn, args, visited)
+            }
+            return own + synthetic + syntheticPlugin + inherited + implicit
         }
         // `kotlin.Throwable` is a mapped built-in whose `.kotlin_builtins` shape is intentionally minimal
         // (`message`, `cause`); the rest of its API — `stackTrace`, `printStackTrace`, `localizedMessage`,
@@ -1243,6 +1268,22 @@ class KotlinSymbolService(
         return index?.exact<ClassNameValue>(JAVA_CLASS_NAMES, fqn.substringAfterLast('.'))
             ?.any { it.fqn == fqn && it.origin == IndexOrigin.SOURCE } == true
     }
+
+    /**
+     * The supertypes a source declaration has WITHOUT writing them — as (fqn, type arguments) pairs, to walk
+     * alongside its declared ones. A classpath binary carries these explicitly (a Kotlin `@Metadata` enum lists
+     * `kotlin.Enum<E>`, every JVM class lists `java.lang.Object`), which is why a LIBRARY enum's `name`
+     * resolved all along while a source `enum class` reported "Unresolved reference: name":
+     *  - an `enum class` extends `kotlin.Enum<Self>` — `name`, `ordinal`, `compareTo(other: E)`. The self type
+     *    is passed as the argument so `compareTo` binds to the enum rather than staying an unbound `E`.
+     *  - every classifier extends `kotlin.Any` — `equals`, `hashCode`, `toString`. Interfaces and objects
+     *    included: `Any`'s members are callable on any reference.
+     * The shared `visited` set makes this idempotent — a class that already reaches `Any` through a declared
+     * supertype (or an enum, which reaches it through `Enum`) enumerates it once.
+     */
+    private fun implicitSupertypes(rc: RawClass, fqn: String): List<Pair<String, List<TypeRef>>> =
+        if (rc.isEnum) listOf("kotlin.Enum" to listOf(typeByFqn(fqn)), "kotlin.Any" to emptyList())
+        else listOf("kotlin.Any" to emptyList())
 
     /** The compiler-synthesized static members of a (source) enum [fqn]: `values(): Array<E>`,
      *  `valueOf(value: String): E`, and `entries: List<E>` (the `EnumEntries<E>`, modeled as a `List` for member
@@ -1438,6 +1479,46 @@ class KotlinSymbolService(
             .map { bindExtensionReceiver(it, fqn, typeArgs) }
     }
 
+    /**
+     * Member extensions an `import` can bring into scope, applicable to a receiver in [receiverTargets] and
+     * matching [namePrefix]: those declared in a PROJECT-SOURCE singleton container, an `object` (incl. a
+     * nested one) or a `companion object`. That is the only member-extension shape an import reaches (a plain
+     * class's needs a dispatch receiver), and it is how the widespread "extensions namespaced in an object"
+     * idiom is meant to be used:
+     *
+     * ```
+     * object StringUtils { fun String.twice() = this + this }   // one file
+     * import util.StringUtils.twice                             // another
+     * "a".twice()
+     * ```
+     *
+     * COMPLETION-ONLY: these are NOT in scope until the import exists, so resolution/diagnostics must keep
+     * flagging an un-imported call (the offer carries the import edit, which is what makes accepting it
+     * resolve; see `KotlinResolver.scopeMemberExtensions` case (c) for the in-scope path). Each symbol
+     * carries its container as [KotlinSymbol.declaringClassFqn]: the import line is spelled from it.
+     *
+     * A CLASSPATH container's member extensions are deliberately absent, since they are already receiver-keyed in
+     * `kotlin.callables`, so [extensionsFor] returns them and only the import edit was missing.
+     */
+    fun importableSingletonExtensions(
+        receiverTargets: Set<String>,
+        namePrefix: String,
+    ): List<KotlinSymbol> {
+        val candidates = model().singletonExtensions
+        if (candidates.isEmpty() || receiverTargets.isEmpty()) return emptyList()
+        val m = PrefixMatcher(namePrefix)
+        val out = ArrayList<KotlinSymbol>()
+        for ((rc, mem) in candidates) {
+            // Name first: the receiver-text resolution below is the expensive half, and a keystroke's prefix
+            // rules out nearly every candidate.
+            if (namePrefix.isNotEmpty() && !m.matches(mem.name)) continue
+            val recvFqn = resolveTypeName(mem.receiverText ?: continue, mem.ctx, rc.fqn) ?: continue
+            if (recvFqn !in receiverTargets) continue
+            out += toSymbol(mem, rc.fqn, rc.typeParameterNames, declaringFqn = rc.fqn)
+        }
+        return out
+    }
+
     /** True for a callable in a Kotlin compiler/runtime *implementation* package (`kotlin.jvm.internal`,
      *  `kotlin.coroutines.jvm.internal`, `kotlin.internal`, `kotlin.reflect.jvm.internal`). These are public in
      *  bytecode (so not flagged `internal`) but are never user-facing API, so they must not appear in
@@ -1544,8 +1625,29 @@ class KotlinSymbolService(
         return typeShape(fqn)?.isObject == true
     }
 
-    /** The companion object's FQN (`androidx…Color.Companion`) for [typeFqnRaw], or null if it has none. */
-    private fun companionObjectFqn(typeFqnRaw: String): String? {
+    /**
+     * Whether [typeFqnRaw] is a singleton `object`, **including a companion object** (which [isObject]
+     * deliberately excludes, since a bare `Foo.` reference there denotes the class, not the companion).
+     *
+     * Used to decide whether an imported member is reachable without a dispatch receiver: a member of a
+     * singleton is, so `import okhttp3.MediaType.Companion.toMediaType` puts that member extension in scope,
+     * whereas a member extension of a regular class can never be imported.
+     */
+    fun isSingletonObject(typeFqnRaw: String): Boolean {
+        val fqn = Builtins.kotlinTypeFor(typeFqnRaw) ?: typeFqnRaw
+        model().classByFqn[fqn]?.let { return it.isObject }
+        if (typeShape(fqn)?.isObject == true) return true
+        // A CLASSPATH companion's own shape does not come back with `isObject` set (bytecode/`@Metadata` model
+        // it as a nested class), so ask the ENCLOSING class whether this is its companion. Exact rather than a
+        // "the simple name is Companion" guess, so a named `companion object Factory` is recognized too.
+        val outer = fqn.substringBeforeLast('.', "")
+        return outer.isNotEmpty() && companionObjectFqn(outer) == fqn
+    }
+
+    /** The companion object's FQN for [typeFqnRaw] (`androidx…Color` → `androidx…Color.Companion`, a
+     *  named one `kotlinx.coroutines.CoroutineName` → `kotlinx.coroutines.CoroutineName.Key`), or null if it
+     *  has none. */
+    internal fun companionObjectFqn(typeFqnRaw: String): String? {
         val fqn = Builtins.kotlinTypeFor(typeFqnRaw) ?: typeFqnRaw
         model().classByFqn[fqn]?.let { return it.companionObjectName?.let { name -> "$fqn.$name" } }
         return typeShape(fqn)?.companionObjectName?.let { "$fqn.$it" }
@@ -1885,8 +1987,12 @@ class KotlinSymbolService(
         subArgs: List<TypeRef>,
         superFqn: String
     ): List<TypeRef>? {
-        val params = (builtinShape(subFqn) ?: typeShape(subFqn))?.typeParameters ?: return null
-        val template = supertypeArgTemplateMemo.getOrPut("$subFqn $superFqn") {
+        val sourceClass = model().classByFqn[subFqn]
+        val params = (builtinShape(subFqn) ?: typeShape(subFqn))?.typeParameters
+            ?: sourceClass?.typeParameterNames
+            ?: return null
+        val memo = if (sourceClass != null) sourceSupertypeArgTemplateMemo else supertypeArgTemplateMemo
+        val template = memo.getOrPut("$subFqn $superFqn") {
             val paramRefs = params.map { KotlinType(it, isTypeParameter = true, context = this) }
             walkSupertypeArgs(subFqn, paramRefs, superFqn, HashSet())
                 ?: return null // don't cache a non-supertype
@@ -1906,10 +2012,15 @@ class KotlinSymbolService(
     ): List<TypeRef>? {
         if (subFqn == superFqn) return subArgs
         if (!visited.add(subFqn)) return null
-        val shape = builtinShape(subFqn) ?: typeShape(subFqn) ?: return null
-        val subst = if (subArgs.isEmpty() || shape.typeParameters.isEmpty()) emptyMap()
-        else shape.typeParameters.zip(subArgs).toMap()
-        for (sup in shape.supertypes) {
+        // A classpath/builtin type carries its supertypes pre-resolved WITH their arguments; a SOURCE type
+        // records them as declaration text, so resolve those here — otherwise a project `object K : Key<Tag>`
+        // projected onto nothing and a `Key<E>` parameter never bound E.
+        val shape = builtinShape(subFqn) ?: typeShape(subFqn)
+        val params = shape?.typeParameters ?: model().classByFqn[subFqn]?.typeParameterNames ?: return null
+        val supertypes = shape?.supertypes ?: sourceSupertypeRefs(subFqn)
+        val subst = if (subArgs.isEmpty() || params.isEmpty()) emptyMap()
+        else params.zip(subArgs).toMap()
+        for (sup in supertypes) {
             val supK = sup as? KotlinType ?: continue
             val supFqn = Builtins.kotlinTypeFor(supK.qualifiedName) ?: supK.qualifiedName
             val supArgs = if (subst.isEmpty()) supK.typeArguments else supK.typeArguments.map {
@@ -1921,6 +2032,17 @@ class KotlinSymbolService(
             walkSupertypeArgs(supFqn, supArgs, superFqn, visited)?.let { return it }
         }
         return null
+    }
+
+    /** A SOURCE class's supertypes as resolved refs, keeping their type ARGUMENTS (`: Key<Tag>` →
+     *  `demo.Key<demo.Tag>`). The source model records a supertype as its declaration TEXT — the type-reference
+     *  text only, so there is no constructor-argument list to strip. An argument naming one of the class's OWN
+     *  type parameters is marked as such (`interface MutableStateFlow<T> : Flow<T>` → `Flow<T-as-parameter>`),
+     *  which is what lets the walk substitute the receiver's arguments through it. */
+    private fun sourceSupertypeRefs(fqn: String): List<TypeRef> {
+        val rc = model().classByFqn[fqn] ?: return emptyList()
+        val tps = rc.typeParameterNames.toHashSet()
+        return rc.superTypeTexts.mapNotNull { markTypeParameters(typeFromText(it, rc.ctx, fqn), tps) }
     }
 
     /** Apply type-parameter [bindings] to a symbol's return/param/receiver-arg types. */
@@ -2101,14 +2223,37 @@ class KotlinSymbolService(
     }
 
     /**
-     * Fully-qualified names worth importing for an unresolved simple [name]: top-level callables
-     * (functions/properties — `androidx.compose.runtime.remember`, `…mutableStateOf`) plus types
-     * (classes/objects/interfaces). De-duplicated and sorted; powers the "Import …" quick-fix on a
-     * `kt.unresolved` reference. Best-effort — a candidate without a derivable package is dropped.
+     * Fully-qualified names worth importing for an unresolved simple [name]: the importable callables
+     * ([importableCallablesNamed] — functions/properties, `androidx.compose.runtime.remember`,
+     * `…mutableStateOf`) plus types (classes/objects/interfaces). De-duplicated and sorted; powers the
+     * "Import …" quick-fix on a `kt.unresolved` reference. Best-effort — a candidate without a derivable
+     * package is dropped.
      */
     fun importCandidates(name: String): List<String> {
         if (name.isEmpty()) return emptyList()
         val out = LinkedHashSet<String>()
+        importableCallablesNamed(name).forEach { (fqn, _) -> out += fqn }
+        typeNamesByPrefix(name).forEach { s ->
+            val fqn = s.type?.qualifiedName
+            if (fqn != null && '.' in fqn && fqn.substringAfterLast('.') == name) out += fqn
+        }
+        return out.sorted()
+    }
+
+    /**
+     * The CALLABLE half of [importCandidates], each candidate paired with its [KotlinSymbol]: every importable
+     * function/property named exactly [name] (top-level, extension, or singleton member), with the FQN an
+     * `import` line would spell.
+     *
+     * The symbol is the point. A caller that must judge whether importing a candidate could ACTUALLY fix the
+     * code — the argument-mismatch fix asking "would this overload's receiver and parameters accept this
+     * call?" — cannot answer that from an FQN string. [importCandidates] itself only needs the names, so it
+     * keeps returning them (sorted + de-duplicated, types included). Not de-duplicated here: two overloads
+     * share one FQN and must stay separately judgeable.
+     */
+    fun importableCallablesNamed(name: String): List<Pair<String, KotlinSymbol>> {
+        if (name.isEmpty()) return emptyList()
+        val out = ArrayList<Pair<String, KotlinSymbol>>()
         topLevelByName(name).forEach { s ->
             // A `private` top-level is file-scoped: it can't be imported (or qualified) from another file, so
             // never offer it as an import candidate. [topLevelByName] deliberately keeps private for same-file
@@ -2117,7 +2262,14 @@ class KotlinSymbolService(
             if (Modifier.PRIVATE in s.modifiers) return@forEach
             val pkg =
                 s.packageName ?: s.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null }
-            if (pkg != null) out += "$pkg.$name"
+            if (pkg != null) out += "$pkg.$name" to s
+        }
+        // Project-source EXTENSIONS: receiver-keyed in the model, so [topLevelByName]'s `top:`-only view never
+        // holds one, and the `name:` index keys below only answer once the file has been re-indexed. Without
+        // this, the Import fix on an unresolved use of a just-written extension had nothing to offer.
+        model().extensions.forEach { rc ->
+            if (rc.name == name && rc.visibility != "private")
+                rc.ctx.packageName.ifEmpty { null }?.let { out += "$it.$name" to toSymbol(rc, null) }
         }
         // Extensions named [name] regardless of receiver (the receiver-blind `name:` keys) — so an
         // unresolved `x.shout()` can offer `import demo.shout` even though extensions are receiver-keyed.
@@ -2127,20 +2279,23 @@ class KotlinSymbolService(
                         KotlinSourceCallableIndex.id,
                         KotlinCallableIndex.nameKey(name)
                     ))
-                .forEach { shape -> shape.packageName?.let { out += "$it.$name" } }
+                .forEach { shape ->
+                    shape.packageName?.let { out += "$it.$name" to shape.toSymbol(this) }
+                }
         }
-        typeNamesByPrefix(name).forEach { s ->
-            val fqn = s.type?.qualifiedName
-            if (fqn != null && '.' in fqn && fqn.substringAfterLast('.') == name) out += fqn
-        }
-        // Members of a project companion object, importable by their simple name through the enclosing type
-        // (`import …MainActivity.Companion.TAG`) — companion members are accessible statically, so a bare
-        // unresolved `TAG` can offer its companion import (mirrors an `object` member's static import).
+        // Members of a project SINGLETON, a `companion object` (`import …MainActivity.Companion.TAG`) or a
+        // plain `object` (`import util.Config.DEBUG`, `import util.StringUtils.twice`), are importable by
+        // their simple name through the container, so a bare unresolved `TAG` / an unresolved `"a".twice()`
+        // can offer that import. A member EXTENSION is included on purpose: importing it through its
+        // singleton is the only way to reach it (the "extensions namespaced in an object" idiom).
         model().classByFqn.values.forEach { rc ->
-            if (rc.isCompanion && rc.members.any { it.name == name && it.visibility != "private" })
-                out += "${rc.fqn}.$name"
+            if (!rc.isObject || rc.isLocal || rc.isPrivate) return@forEach
+            rc.members.forEach { mem ->
+                if (mem.name == name && mem.visibility != "private")
+                    out += "${rc.fqn}.$name" to toSymbol(mem, rc.fqn, rc.typeParameterNames, declaringFqn = rc.fqn)
+            }
         }
-        return out.sorted()
+        return out
     }
 
     /**
@@ -2154,6 +2309,44 @@ class KotlinSymbolService(
         name.isNotEmpty() &&
                 index?.exactAll<ClassNameValue>(CLASS_NAMES, name)
                     ?.any { it.origin == IndexOrigin.LIBRARY } == true
+
+    /**
+     * Whether a contributed SYNTHETIC top-level class has simple [name] (Android `R`/`BuildConfig`, a
+     * ViewBinding). The counterpart of [hasLibraryType] for classes that exist in the editor without existing
+     * on the classpath: they are never in the class-name index, so the index-backed evidence misses them.
+     *
+     * A generated class resolves bare only from its OWN package, exactly like a source class, so this is the
+     * evidence that separates `R.string.app_name` in a file the namespace package (fine) from the same line in
+     * a subpackage or a different package (which needs `import <namespace>.R` and does not compile without it).
+     * Contribution is the whole signal: when no provider contributed an `R`, nothing here claims to know
+     * whether the name is real, and the caller backs off.
+     */
+    fun hasSyntheticType(name: String): Boolean =
+        name.isNotEmpty() && synthetic().topLevelFqns.any { it.substringAfterLast('.') == name }
+
+    /**
+     * Whether a project SOURCE type with simple [name] exists that a file could `import` (Kotlin from the
+     * module model, Java from the SOURCE-origin class-name index). The third evidence predicate beside
+     * [hasLibraryType] and [hasSyntheticType], and the one that covers a type declared right there in the
+     * project: a different-package project type needs an import exactly as a library type does, so
+     * `Holder.TAG` from a sibling package does not compile without `import demo.Holder`.
+     *
+     * Restricted to types that are actually importable, so the evidence matches what the "Import …" quick-fix
+     * can offer: a `private` top-level is file-scoped, a local class is body-scoped, and a companion is reached
+     * through its owner. Callers reach this only after the name failed to resolve in scope, so a same-package
+     * or imported type never gets here.
+     */
+    fun hasProjectSourceType(name: String): Boolean {
+        if (name.isEmpty()) return false
+        if (model().classByFqn.values.any {
+                it.simpleName == name && !it.isCompanion && !it.isLocal && !it.isPrivate
+            }
+        ) return true
+        // A project JAVA source class: no `.class` on disk while editing, so the index (SOURCE origin) is the
+        // only place it exists. Empty until the index is ready, which lands on the back-off side.
+        return index?.exactAll<ClassNameValue>(CLASS_NAMES, name)
+            ?.any { it.origin == IndexOrigin.SOURCE && it.fqn.substringAfterLast('.') == name } == true
+    }
 
     /**
      * Whether the classpath/source knows a type with exactly this [fqn], resolved by NAME (index-backed). Unlike
@@ -2203,6 +2396,43 @@ class KotlinSymbolService(
         }
         return out
     }
+
+    /**
+     * The package-level callables named [name] declared in package [pkg] — exactly what `import pkg.name`
+     * brings into scope: top-level functions/properties AND extensions (also package-level). The symbol-level
+     * counterpart of [callablePackages], which answers only "which packages"; the import line's semantic
+     * highlighting needs the symbol itself, so `import kotlinx.coroutines.withContext` can color its leaf as
+     * the `suspend` FUNCTION it names rather than leaving it to the lexer's shape guess. Same three sources
+     * (project model, the callable indexes, the index-free scan) as [callablePackages].
+     */
+    fun packageCallables(pkg: String, name: String): List<KotlinSymbol> {
+        if (name.isEmpty()) return emptyList()
+        val out = ArrayList<KotlinSymbol>()
+        topLevelByName(name).filterTo(out) { packageOf(it) == pkg }
+        model().extensions.filter { it.name == name && it.ctx.packageName == pkg }
+            .forEach { out += toSymbol(it, null) }
+        val idx = index
+        if (idx != null) {
+            for (id in listOf(
+                KotlinCallableIndex.id,
+                KotlinSourceCallableIndex.id,
+                KotlinBuiltinCallableIndex.id
+            )) {
+                idx.exact<CallableShape>(id, KotlinCallableIndex.nameKey(name))
+                    .forEach { if (it.packageName == pkg) out += it.toSymbol(this) }
+            }
+        } else {
+            reader.scan(this).extensionsByReceiver.values.forEach { syms ->
+                syms.forEach { if (it.name == name && packageOf(it) == pkg) out += it }
+            }
+        }
+        return out
+    }
+
+    /** A callable's declaring package: its own [KotlinSymbol.packageName], else the package of the JVM facade
+     *  it compiles into (`kotlinx.coroutines.BuildersKt` → `kotlinx.coroutines`). Null when neither is known. */
+    private fun packageOf(sym: KotlinSymbol): String? =
+        sym.packageName ?: sym.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null }
 
     /**
      * Packages declaring an EXTENSION callable (function/property) named [name] — the extension-only half of
@@ -2429,6 +2659,21 @@ class KotlinSymbolService(
                 out.getOrPut(seg) { KotlinSymbol(seg, SymbolKind.PACKAGE, origin = SOURCE) }
         }
         return out.values.take(limit)
+    }
+
+    /**
+     * Whether [name] is a known ROOT package segment (`kotlin`, `kotlinx`, `androidx`, `com`, a project source
+     * package root) — the "this bare name qualifies a package, not a value" signal. The leftmost segment of a
+     * fully-qualified reference (`kotlinx.coroutines.delay(1)`) parses as a qualified expression's RECEIVER, so
+     * the unresolved-reference check consults this before flagging one. Classpath packages come from the
+     * `java.packages`/`kotlin.packages` indexes — which key EVERY package prefix, so the root segment is a
+     * key of its own — and project ones from the live model (the index lags the buffer). An exact-key query,
+     * not [rootPackages]' prefix/camel-hump matching.
+     */
+    fun isRootPackage(name: String): Boolean {
+        if (name.isEmpty()) return false
+        if (index?.exactAll<String>(PACKAGES, name)?.any() == true) return true
+        return model().classByFqn.keys.any { it.startsWith("$name.") }
     }
 
     /**
@@ -2796,6 +3041,12 @@ class KotlinSymbolService(
     fun isSourceClass(fqn: String): Boolean = fqn in model().classByFqn
     fun sourceClass(fqn: String): RawClass? = model().classByFqn[fqn]
 
+    /** The companion object's FQN when [fqn] is a PROJECT-SOURCE class that declares one; null otherwise (no
+     *  companion, or a classpath type, whose companion the binary paths already cover). One model-map lookup,
+     *  so the per-keystroke member-extension scope walk can ask it per enclosing class. */
+    fun sourceCompanionFqn(fqn: String): String? =
+        model().classByFqn[fqn]?.companionObjectName?.let { "$fqn.$it" }
+
     /**
      * A user-facing display name for a synthetic local/anonymous type key (`$L<ordinal>`): a local
      * `class`/`object`'s real name, or `<anonymous>` (with its single declared supertype — `<anonymous :
@@ -2896,7 +3147,11 @@ class KotlinSymbolService(
     private fun toSymbol(
         rc: RawCallable,
         ownerFqn: String?,
-        ownerTypeParams: List<String> = emptyList()
+        ownerTypeParams: List<String> = emptyList(),
+        /** Sets [KotlinSymbol.declaringClassFqn], normally null for a source member (nothing has compiled it
+         *  into a class yet), but the CONTAINER is load-bearing for a singleton's member extension: it is what
+         *  the `import util.StringUtils.twice` line is spelled from. See [importableSingletonExtensions]. */
+        declaringFqn: String? = null,
     ): KotlinSymbol {
         // Mark BOTH the callable's own type parameters AND the enclosing class's (`class Box<T> { val value: T }`):
         // a member type that references the class's `T` must be a type parameter so a `Box<String>` receiver can
@@ -2965,6 +3220,7 @@ class KotlinSymbolService(
             paramHasDefault = if (rc.isFunction) rc.paramHasDefault else emptyList(),
             // Top-level callables (no owner) carry their package for import-visibility; members don't.
             packageName = if (ownerFqn == null) rc.ctx.packageName.ifEmpty { null } else null,
+            declaringClassFqn = declaringFqn,
             declarationNode = rc.node,
         )
     }

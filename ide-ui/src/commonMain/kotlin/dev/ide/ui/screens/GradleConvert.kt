@@ -45,6 +45,12 @@ import dev.ide.ui.generated.resources.gradle_convert_title
 import dev.ide.ui.generated.resources.gradle_convert_undo
 import dev.ide.ui.generated.resources.gradle_convert_working
 import dev.ide.ui.generated.resources.gradle_converted
+import dev.ide.ui.generated.resources.import_source_title
+import dev.ide.ui.generated.resources.import_source_message
+import dev.ide.ui.generated.resources.import_source_folder
+import dev.ide.ui.generated.resources.import_source_folder_desc
+import dev.ide.ui.generated.resources.import_source_package
+import dev.ide.ui.generated.resources.import_source_package_desc
 import dev.ide.ui.generated.resources.import_gradle_mode_compat
 import dev.ide.ui.generated.resources.import_gradle_mode_compat_desc
 import dev.ide.ui.generated.resources.import_gradle_mode_convert
@@ -94,6 +100,50 @@ internal fun GradleImportModeDialog(
                 description = stringResource(Res.string.import_gradle_mode_convert_desc),
                 accent = true,
                 onClick = onConvert,
+            )
+        }
+    }
+}
+
+/**
+ * "Import project": which SOURCE the project comes from. The two live behind different host APIs
+ * ([dev.ide.ui.backend.FileActions.pickDirectory] vs [dev.ide.ui.backend.FileActions.pickFile]), so the
+ * choice has to be made before a picker can be launched. Options the host cannot service are hidden rather
+ * than shown failing.
+ */
+@Composable
+internal fun ImportSourceDialog(
+    visible: Boolean,
+    canPickFolder: Boolean,
+    canPickPackage: Boolean,
+    onFolder: () -> Unit,
+    onPackage: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    CenteredDialog(visible = visible, onDismiss = onDismiss) {
+        DialogCard {
+            Text(
+                stringResource(Res.string.import_source_title),
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                stringResource(Res.string.import_source_message),
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.size(4.dp))
+            if (canPickFolder) ModeOption(
+                icon = CaIcons.folderOpen,
+                title = stringResource(Res.string.import_source_folder),
+                description = stringResource(Res.string.import_source_folder_desc),
+                onClick = onFolder,
+            )
+            if (canPickPackage) ModeOption(
+                icon = CaIcons.pkg,
+                title = stringResource(Res.string.import_source_package),
+                description = stringResource(Res.string.import_source_package_desc),
+                accent = true,
+                onClick = onPackage,
             )
         }
     }

@@ -134,15 +134,23 @@ class ForkedD8Dexer(
             return fallback
         }
         val launcher = R8ForkSupport.launcher() ?: return inProcess("no forked-VM launcher")
-        val dexes = R8ForkSupport.extractR8Dexes(appContext) ?: return inProcess("R8 runtime asset unavailable")
+        val toolClasspath = R8ForkSupport.extractR8Zip(appContext) ?: return inProcess("R8 runtime asset unavailable")
         val requested = (maxHeapMbProvider() ?: DEFAULT_XMX_MB).coerceAtLeast(MIN_XMX_MB)
-        val candidates = (listOf(requested) + FALLBACK_LADDER.filter { it < requested }).distinct()
+        // Drop the heaps this device's RAM can't back before trying any: a VM that can't reserve its region
+        // space ABORTS, and the OS files that abort under this package as a native crash.
+        val candidates = R8ForkSupport.affordableHeaps(
+            appContext, (listOf(requested) + FALLBACK_LADDER.filter { it < requested }).distinct()
+        )
+        if (candidates.isEmpty())
+            return inProcess("${R8ForkSupport.totalMemMb(appContext)}MB of device RAM can't back a forked VM heap")
         for (xmx in candidates) {
-            if (R8ForkSupport.canFork(launcher, dexes, xmx)) {
+            if (R8ForkSupport.canFork(launcher, toolClasspath, xmx)) {
                 note = "dex merge: forked VM, ${xmx}MB heap"
                 forkXmxMb = xmx
-                log.info("forked-D8 merge: runs in a forked $launcher -Xmx${xmx}m (${dexes.size} dex)")
-                return D8Dexer(dexes.map { it.toPath() }, Paths.get(launcher), listOf("-Xmx${xmx}m"))
+                log.info("forked-D8 merge: runs in a forked $launcher -Xmx${xmx}m (${toolClasspath.name})")
+                // The tool classpath is the bundled R8 asset, not a jar a version marker can be read from;
+                // state its global-synthetics support (R8 8) rather than have it probed.
+                return D8Dexer(listOf(toolClasspath.toPath()), Paths.get(launcher), listOf("-Xmx${xmx}m"), supportsGlobalSynthetics = true)
             }
         }
         return inProcess("the device wouldn't start a forked VM at ${candidates.last()}MB+")

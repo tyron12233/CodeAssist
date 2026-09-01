@@ -11,6 +11,7 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipFile
 
@@ -306,11 +307,22 @@ class ClasspathReader(
         }
     }
 
+    /** Write [data] atomically: a reader must see either the whole entry or none of it. Several processes can
+     *  share one cache dir (the IDE and the preview process; parallel test workers), so a half-written file
+     *  is a real state — and a torn read is worse than a miss, since the length prefixes it decodes are then
+     *  garbage. Write to a unique sibling and move it into place. */
     private fun writeJarData(file: Path, data: JarScanData) {
-        DataOutputStream(BufferedOutputStream(Files.newOutputStream(file))).use { out ->
-            out.writeInt(FORMAT_VERSION)
-            writeList(out, data.extensions)
-            writeList(out, data.topLevel)
+        val tmp = Files.createTempFile(file.parent, file.fileName.toString(), ".tmp")
+        try {
+            DataOutputStream(BufferedOutputStream(Files.newOutputStream(tmp))).use { out ->
+                out.writeInt(FORMAT_VERSION)
+                writeList(out, data.extensions)
+                writeList(out, data.topLevel)
+            }
+            Files.move(tmp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } catch (t: Throwable) {
+            Files.deleteIfExists(tmp)
+            throw t // the caller treats a failed write as "no cache entry", never as a failure to scan
         }
     }
 

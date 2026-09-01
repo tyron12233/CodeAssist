@@ -27,6 +27,15 @@ object Bench {
     @Volatile
     var sink: Long = 0
 
+    /**
+     * `-Dbench.quick=true` — one warmup and one timed batch instead of the full schedule, cutting the
+     * measured work by roughly 5×. For iterating on a suite locally: it still exercises every code path, but
+     * a single batch is far more exposed to machine noise, so [RegressionSuite] downgrades its gates to
+     * printed warnings and records no baselines in this mode. Never produce committed numbers with it.
+     */
+    @JvmField
+    val quick: Boolean = System.getProperty("bench.quick").let { it != null && it != "false" }
+
     /** The HotSpot per-thread allocation counter, or null on a VM that doesn't expose it. */
     @PublishedApi
     internal val allocBean: ThreadMXBean? =
@@ -35,13 +44,15 @@ object Bench {
     /** True when [allocPerOp] can actually measure (HotSpot/JBR); false elsewhere. */
     val allocMeasurable: Boolean get() = allocBean != null
 
-    /** Min ns/op over [runs] batches of [ops] calls, after [warmup] untimed calls. Lower is better. */
+    /** Min ns/op over [runs] batches of [ops] calls, after [warmup] untimed calls. Lower is better.
+     *  Under [quick], one warmup and one batch. */
     inline fun nsPerOp(warmup: Int = 3, runs: Int = 5, ops: Int = 8, op: () -> Long): Double {
         var s = 0L
-        repeat(warmup) { s += op() }
+        repeat(if (quick) 1 else warmup) { s += op() }
         var best = Long.MAX_VALUE
         var r = 0
-        while (r < runs) {
+        val batches = if (quick) 1 else runs
+        while (r < batches) {
             val t0 = System.nanoTime()
             var i = 0
             while (i < ops) { s += op(); i++ }

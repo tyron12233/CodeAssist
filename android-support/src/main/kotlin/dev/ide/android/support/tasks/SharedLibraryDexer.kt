@@ -47,6 +47,16 @@ class SharedLibraryDexer(
         val desugaringNeeded: Boolean,
     )
 
+    /**
+     * A worker budget SHARED by scopes being archived at the same time. Each scope sizing itself against the whole
+     * machine would multiply the fan-out by the number of concurrent scopes; drawing workers from one gate instead
+     * keeps total concurrency at what the largest scope would have used alone, which is what the heap model behind
+     * [DexConcurrency.archivePlan] was calibrated for.
+     */
+    class ScopeBudget(val workers: Int, val threadsPerInvocation: Int) {
+        internal val gate = Semaphore(workers.coerceAtLeast(1))
+    }
+
     /** A cache key for the desugaring config: empty when disabled (byte-identical namespaces to a
      *  no-desugaring build), a content hash when enabled (toggling busts stale dex). */
     fun desugarConfigKey(): String = desugarConfigKey(desugaredLibConfig)
@@ -68,37 +78,52 @@ class SharedLibraryDexer(
     fun computeUniverse(libJars: List<Path>, hashCacheDir: Path, extraDexJars: List<Path> = emptyList()): Universe =
         computeUniverse(libJars, hashCacheDir, minApi, desugaredLibConfig, extraDexJars)
 
+    /** One library the scope has to dex: its content hash, the jar, and its `.class` entries (needed for the
+     *  desugaring-classpath exclusion and the post-dex completeness check). Held only for MISSES. */
+    private class Miss(val hash: String, val jar: Path, val classes: Set<String>)
+
     /**
      * Archive each of [jars] into `<root>/<contentHash>/`. Three tiers of reuse, then dex only the true misses,
-     * in parallel bounded by [DexConcurrency] (or the off-heap plan): 1) the module bucket is complete → reuse;
-     * 2) the shared cross-project cache has it → copy; 3) dex it once, then seed the shared cache. [u] is the
-     * shared desugaring universe from [computeUniverse].
+     * in parallel bounded by [DexConcurrency] (or the off-heap plan, or a caller-supplied [budget] shared with
+     * other scopes dexing at the same time): 1) the module bucket is complete → reuse; 2) the shared cross-project
+     * cache has it → copy; 3) dex it once, then seed the shared cache. [u] is the shared desugaring universe from
+     * [computeUniverse].
      */
-    suspend fun dexScope(jars: List<Path>, root: Path, u: Universe): Boolean {
+    suspend fun dexScope(jars: List<Path>, root: Path, u: Universe, budget: ScopeBudget? = null): Boolean {
         Files.createDirectories(root)
-        val byHash = LinkedHashMap<String, Path>()               // content hash -> a jar (dedups copies)
-        val classesByHash = HashMap<String, Set<String>>()       // content hash -> the jar's `.class` entries
-        // Skip jars with no class entries (a resource-only AAR's classes.jar): they dex to nothing, and an
-        // empty/zero-entry jar can't be opened by ART's zip layer — never hand it to D8.
-        for (jar in jars) u.hashOf[jar]?.let { h ->
-            val cls = DexArchives.classNamesOf(jar)
-            if (cls.isNotEmpty() && byHash.putIfAbsent(h, jar) == null) classesByHash[h] = cls
+        // One pass over the scope: dedup by content hash, collect the buckets worth keeping, and collect the
+        // MISSES to dex. A bucket carrying a completeness sentinel is accepted without opening its jar at all
+        // ([DexArchives.bucketVerified]) — so a warm scope no longer reads every library's zip directory and stats
+        // one file per class, and no class-name set is retained for a library it isn't going to dex.
+        val keep = HashSet<String>()
+        val todo = ArrayList<Miss>()
+        for (jar in jars) {
+            val hash = u.hashOf[jar] ?: continue
+            if (!keep.add(hash)) continue                        // content-identical jars share one bucket
+            val bucket = root.resolve(hash)
+            if (DexArchives.bucketVerified(bucket)) continue
+            val classes = DexArchives.classNamesOf(jar)
+            // Skip jars with no class entries (a resource-only AAR's classes.jar): they dex to nothing, and an
+            // empty/zero-entry jar can't be opened by ART's zip layer — never hand it to D8. Dropping the hash
+            // again keeps them out of [keep], exactly as when they never entered the map.
+            if (classes.isEmpty()) { keep.remove(hash); continue }
+            if (!DexArchives.bucketComplete(bucket) { classes }) todo.add(Miss(hash, jar, classes))
         }
-        val keep = byHash.keys.toHashSet()
-        // Dispatch LARGEST-first (by class count): with a bounded worker pool, starting the big/straggler libraries
-        // early packs the parallel schedule tighter, so a slow library isn't left running alone at the tail while
-        // other cores idle (measured: one lib ~6.6s vs ~0.7s avg). Byte-identical output; only scheduling changes.
-        val todo =
-            byHash.entries.filter { !DexArchives.bucketComplete(root.resolve(it.key), classesByHash[it.key] ?: emptySet()) }
-                .sortedByDescending { classesByHash[it.key]?.size ?: 0 }
         if (todo.isEmpty()) {
             DexArchives.prune(root, keep); return true
         }
+        // Dispatch LARGEST-first (by class count): with a bounded worker pool, starting the big/straggler libraries
+        // early packs the parallel schedule tighter, so a slow library isn't left running alone at the tail while
+        // other cores idle (measured: one lib ~6.6s vs ~0.7s avg). Byte-identical output; only scheduling changes.
+        todo.sortByDescending { it.classes.size }
 
         val offHeap = dexer as? OffHeapArchiveDexer
         val workers: Int
         val threadsPer: Int
-        if (offHeap != null) {
+        if (budget != null) {
+            // Concurrently-running scopes share one budget so the fan-out isn't multiplied per scope.
+            workers = budget.workers; threadsPer = budget.threadsPerInvocation
+        } else if (offHeap != null) {
             val p = offHeap.offHeapArchivePlan(todo.size); workers = p.concurrency; threadsPer = p.threadsPerInvocation
         } else {
             // In-process archiving with shared classpath providers: each worker is light (one library's working
@@ -106,7 +131,7 @@ class SharedLibraryDexer(
             // serializes on a phone (it assumed each worker loads android.jar itself). See [archivePlan].
             val p = DexConcurrency.archivePlan(todo.size); workers = p.workers; threadsPer = p.threadsPerInvocation
         }
-        val sem = Semaphore(workers.coerceAtLeast(1))
+        val sem = budget?.gate ?: Semaphore(workers.coerceAtLeast(1))
         val ok = AtomicBoolean(true)
         // Perf instrumentation: parallelism factor (sum-per-lib / wall) + per-lib cost, so a benchmark can see
         // whether the fresh-dex cost is under-parallelized, per-lib D8 compute, or dominated by a few big libs.
@@ -115,16 +140,16 @@ class SharedLibraryDexer(
         val wallStart = System.nanoTime()
         log("dexScope ${root.fileName}: dexing ${todo.size} lib(s), $workers worker(s) x $threadsPer thread(s), desugar=${u.desugaringNeeded}")
         coroutineScope {
-            todo.map { (hash, jar) ->
+            todo.map { miss ->
                 async(Dispatchers.IO) {
                     sem.withPermit {
                         checkCanceled()
                         // Desugaring classpath = the library universe minus this jar's own content (by hash) and
                         // class-deduped (so a different jar can't redefine this jar's types, nor any type twice).
-                        val others = u.universeByHash.filterKeys { it != hash }.values
-                        val classpath = DexArchives.classpathFor(others, u.classesOf, exclude = u.classesOf[jar] ?: emptySet())
+                        val others = u.universeByHash.filterKeys { it != miss.hash }.values
+                        val classpath = DexArchives.classpathFor(others, u.classesOf, exclude = u.classesOf[miss.jar] ?: emptySet())
                         val t0 = System.nanoTime()
-                        val okOne = dexOneLibrary(jar, root.resolve(hash), hash, classpath, u.desugarDigest, threadsPer, offHeap, classesByHash[hash] ?: emptySet())
+                        val okOne = dexOneLibrary(miss.jar, root.resolve(miss.hash), miss.hash, classpath, u.desugarDigest, threadsPer, offHeap, miss.classes)
                         val ms = (System.nanoTime() - t0) / 1_000_000
                         sumMs.addAndGet(ms); maxMs.updateAndGet { maxOf(it, ms) }
                         if (!okOne) ok.set(false)
@@ -147,7 +172,13 @@ class SharedLibraryDexer(
     ): Boolean {
         val shared = dexCacheRoot?.resolve(cacheTag(desugarDigest))?.resolve(hash)
         if (shared != null && DexArchives.bucketComplete(shared, jarClasses)) {
-            DexArchives.clearDir(bucket); DexArchives.copyDir(shared, bucket)
+            DexArchives.clearDir(bucket)
+            val copiedDex = DexArchives.copyDir(shared, bucket)
+            // The copy source was just verified complete and [copyDir] either finishes or throws, so the module
+            // bucket is now provably complete too — record it against what actually landed on disk, which also
+            // covers the case where the shared bucket predates sentinels. The count comes from the copy's own walk;
+            // re-walking each bucket here cost ~0.4s of a ~6s build across a 51-library classpath.
+            DexArchives.markBucketVerified(bucket, copiedDex)
             log("dex cache hit: ${jar.fileName}")
             return true
         }
@@ -180,8 +211,11 @@ class SharedLibraryDexer(
             log("error: $msg")
             return false
         }
+        // The per-class check above just proved this bucket complete; record it so no later build (or preview
+        // readiness scan) has to prove it again. Written BEFORE publishing so the shared copy carries it too.
+        DexArchives.markBucketVerified(bucket)
         if (shared != null && !DexArchives.bucketComplete(shared, jarClasses)) {
-            DexArchives.clearDir(shared); DexArchives.publishToCache(bucket, shared)
+            DexArchives.replaceInCache(bucket, shared)
         }
         return true
     }
@@ -194,6 +228,24 @@ class SharedLibraryDexer(
     fun cacheTag(desugarDigest: String): String = cacheTag(minApi, release, desugarDigest)
 
     companion object {
+        /** At and above this `minApi`, D8 desugars nothing by itself, so a library's dex depends only on the
+         *  library. Below it (or with core-library desugaring on) the output depends on the desugaring
+         *  CLASSPATH too, which is why the cache key has to fold the whole library set. */
+        const val DESUGAR_FREE_MIN_API = 26
+
+        /**
+         * Whether the shared-cache key for [minApi] and this desugaring config depends ONLY on a library's own
+         * content, so any two dexings of that library land in the same bucket.
+         *
+         * When it does not — the `-cp<digest>` component of [cacheTag], which folds a digest of the whole
+         * library universe — a bucket written for one library set is unreachable to a build whose set differs
+         * by a single jar. Anything that dexes AHEAD of a build has to check this: it cannot know the exact set
+         * the next build will resolve (an instrumented debug build appends the app-log bridge runtime), so
+         * without the guarantee it is writing buckets that build will ignore and dex again.
+         */
+        fun cacheKeyIsOwnContentOnly(minApi: Int, desugaredLibConfig: Path?): Boolean =
+            minApi >= DESUGAR_FREE_MIN_API && desugarConfigKey(desugaredLibConfig).isEmpty()
+
         /**
          * Static [computeUniverse] — builds the desugaring universe with no [Dexer]/instance. The layout-preview
          * readiness check ([undexedLibraries]) calls this; the instance overload delegates here, so the universe
@@ -211,7 +263,7 @@ class SharedLibraryDexer(
             val universeByHash = LinkedHashMap<String, Path>()
             for (j in libUniverse) hashOf[j]?.let { universeByHash.putIfAbsent(it, j) }
             val cfgKey = desugarConfigKey(desugaredLibConfig)
-            val desugaringNeeded = minApi < 26 || cfgKey.isNotEmpty()
+            val desugaringNeeded = minApi < DESUGAR_FREE_MIN_API || cfgKey.isNotEmpty()
             val classesOf =
                 if (desugaringNeeded) universeByHash.values.associateWith { DexArchives.classNamesOf(it) } else emptyMap()
             val desugarDigest = if (!desugaringNeeded) "" else {
@@ -241,10 +293,12 @@ class SharedLibraryDexer(
             for (jar in jars) {
                 val h = u.hashOf[jar] ?: continue
                 if (!seen.add(h)) continue                    // content-identical jars share one bucket
+                val bucket = dexCacheRoot.resolve(tag).resolve(h)
+                if (DexArchives.bucketVerified(bucket)) continue   // already dexed; no need to open the jar
                 val cls = DexArchives.classNamesOf(jar)
                 if (cls.isEmpty()) continue                   // a resource-only jar dexes to nothing → never "undexed"
                 // NB `out += jar` binds List<Path>.plus(Iterable) since a Path IS Iterable<Path> — use add().
-                if (!DexArchives.bucketComplete(dexCacheRoot.resolve(tag).resolve(h), cls)) out.add(jar)
+                if (!DexArchives.bucketComplete(bucket) { cls }) out.add(jar)
             }
             return out
         }
@@ -299,9 +353,12 @@ class SharedLibraryDexer(
                 for (jar in jars) {
                     val h = u.hashOf[jar] ?: continue
                     if (!seen.add(h)) continue                    // content-identical jars share one bucket
+                    val bucket = dexCacheRoot.resolve(tag).resolve(h)
+                    // A verified bucket was dexed, so it had classes: counts as dexed without opening the jar.
+                    if (DexArchives.bucketVerified(bucket)) { dexed++; continue }
                     val cls = DexArchives.classNamesOf(jar)
                     if (cls.isEmpty()) continue                   // a resource-only jar dexes to nothing → neither
-                    if (DexArchives.bucketComplete(dexCacheRoot.resolve(tag).resolve(h), cls)) dexed++ else undexed.add(jar)
+                    if (DexArchives.bucketComplete(bucket) { cls }) dexed++ else undexed.add(jar)
                 }
             }
             scan(externalJars, ext)

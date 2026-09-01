@@ -1,6 +1,8 @@
 package dev.ide.ui.screens
 
 import dev.ide.ui.theme.Ide
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -41,7 +43,14 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -50,7 +59,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
@@ -84,7 +92,6 @@ import dev.ide.ui.backend.UiRunConfig
 import dev.ide.ui.backend.UiSourceSetInfo
 import dev.ide.ui.components.AddSourceRootDialog
 import dev.ide.ui.components.AddSourceRootRequest
-import dev.ide.ui.components.CaSwitch
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.DropdownOverlay
 import dev.ide.ui.components.GlassMaterial
@@ -96,6 +103,8 @@ import dev.ide.ui.generated.resources.add
 import dev.ide.ui.generated.resources.back
 import dev.ide.ui.generated.resources.cancel
 import dev.ide.ui.generated.resources.create
+import dev.ide.ui.generated.resources.modcfg_discard
+import dev.ide.ui.generated.resources.modcfg_unsaved_changes
 import dev.ide.ui.generated.resources.remove
 import dev.ide.ui.generated.resources.modcfg_add_placeholder
 import dev.ide.ui.generated.resources.modcfg_add_row
@@ -170,14 +179,8 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
-
-private data class ConfigToast(val text: String, val error: Boolean)
-
-/** A sentinel substituted into a composable-resolved format template so a callback can fill in a runtime arg. */
-private const val ARG_TOKEN = "\u0000"
 
 /** The tabs of a module's detail view. */
 enum class ModulesTab(val label: StringResource) {
@@ -237,58 +240,39 @@ private fun ModulesHeader(title: String, icon: ImageVector, onBack: () -> Unit, 
 
 @Composable
 private fun ModulesList(backend: IdeBackend, codeFont: FontFamily, onOpen: (String) -> Unit, onBack: () -> Unit) {
-    var modules by remember { mutableStateOf(backend.modules.configurableModules()) }
-    var newOpen by remember { mutableStateOf(false) }
-    var pendingRemove by remember { mutableStateOf<String?>(null) }
-    var toast by remember { mutableStateOf<ConfigToast?>(null) }
-    val scope = rememberCoroutineScope()
-    // Resolved here (composable) so the "Removed <name>" toast can be built from the non-composable confirm callback.
-    val removedTemplate = stringResource(Res.string.modcfg_removed, ARG_TOKEN)
-    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
+    val state = rememberModulesListState(backend)
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize()) {
             ModulesHeader(stringResource(Res.string.modcfg_title_modules), CaIcons.layers, onBack) {
-                IconButtonCa(CaIcons.plus, stringResource(Res.string.modcfg_new_module_action), onClick = { newOpen = true }, active = true)
+                IconButtonCa(CaIcons.plus, stringResource(Res.string.modcfg_new_module_action), onClick = state::openNewModule, active = true)
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-            if (modules.isEmpty()) {
+            if (state.modules.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(stringResource(Res.string.modcfg_no_modules), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(modules, key = { it.name }) { m ->
-                        ModuleListItem(m, onOpen = { onOpen(m.name) }, onRemove = { pendingRemove = m.name })
+                    items(state.modules, key = { it.name }) { m ->
+                        ModuleListItem(m, onOpen = { onOpen(m.name) }, onRemove = { state.askRemove(m.name) })
                     }
                 }
             }
         }
         NewModuleDialog(
-            visible = newOpen,
+            visible = state.newModuleOpen,
             backend = backend,
             codeFont = codeFont,
-            onDismiss = { newOpen = false },
-            onCreate = { name, typeId, level, facetValues ->
-                scope.launch {
-                    val r = backend.modules.createModule(name, typeId, level, facetValues)
-                    toast = ConfigToast(r.message, error = !r.success)
-                    if (r.success) { newOpen = false; modules = backend.modules.configurableModules() }
-                }
-            },
+            onDismiss = state::closeNewModule,
+            onCreate = state::createModule,
         )
         ConfirmModuleRemove(
-            moduleName = pendingRemove,
-            onDismiss = { pendingRemove = null },
-            onConfirm = {
-                val name = pendingRemove
-                if (name != null && backend.modules.removeModule(name)) {
-                    toast = ConfigToast(removedTemplate.replace(ARG_TOKEN, name), error = false); modules = backend.modules.configurableModules()
-                }
-                pendingRemove = null
-            },
+            moduleName = state.pendingRemove,
+            onDismiss = state::cancelRemove,
+            onConfirm = state::confirmRemove,
         )
-        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+        ConfigToastHost(state.toast, Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -335,17 +319,25 @@ private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: Mo
 
 @Composable
 private fun ModuleTabRow(tab: ModulesTab, onSelect: (ModulesTab) -> Unit) {
-    // Scrolls horizontally so the tab strip never clips on a narrow phone (Settings · Build Features · Signing · Dependencies).
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // A real M3 tab strip: scrollable so it never clips on a narrow phone (Settings · Build Features ·
+    // Compiler plugins · Packaging · Signing · Dependencies), with the selected-tab indicator M3 draws for it.
+    PrimaryScrollableTabRow(
+        selectedTabIndex = ModulesTab.entries.indexOf(tab),
+        edgePadding = 12.dp,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
         ModulesTab.entries.forEach { t ->
-            val sel = t == tab
-            val bg by animateColorAsState(if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.FAST), label = "tabBg")
-            Box(
-                Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null) { onSelect(t) }
-                    .padding(horizontal = 16.dp, vertical = 7.dp),
-            ) {
-                Text(stringResource(t.label), color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            }
+            Tab(
+                selected = t == tab,
+                onClick = { onSelect(t) },
+                // BOTH colours must be given: M3's `Tab` defaults `unselectedContentColor` to
+                // `selectedContentColor`, so leaving them out paints every tab the row's content colour and
+                // the selection reads only from the indicator — which is off-screen whenever the strip is
+                // scrolled away from the active tab.
+                selectedContentColor = MaterialTheme.colorScheme.primary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = { Text(stringResource(t.label), style = MaterialTheme.typography.titleSmall, maxLines = 1) },
+            )
         }
     }
 }
@@ -354,24 +346,12 @@ private fun ModuleTabRow(tab: ModulesTab, onSelect: (ModulesTab) -> Unit) {
 
 @Composable
 private fun BuildFeaturesPane(backend: IdeBackend, moduleName: String, modifier: Modifier) {
-    var features by remember(moduleName) { mutableStateOf<UiBuildFeatures?>(null) }
-    var loading by remember(moduleName) { mutableStateOf(true) }
-    var busy by remember(moduleName) { mutableStateOf<String?>(null) } // the feature id currently toggling
-    var reloadKey by remember(moduleName) { mutableStateOf(0) }
-    var toast by remember { mutableStateOf<ConfigToast?>(null) }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(moduleName, reloadKey) {
-        loading = true
-        features = runCatching { backend.modules.getBuildFeatures(moduleName) }.getOrNull()
-        loading = false
-    }
-    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
+    val state = rememberBuildFeaturesState(backend, moduleName)
 
     Box(modifier) {
-        val f = features
+        val f = state.model
         when {
-            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
+            state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
             f == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
                 Text(
                     stringResource(Res.string.modcfg_build_features_android_only),
@@ -392,43 +372,31 @@ private fun BuildFeaturesPane(backend: IdeBackend, moduleName: String, modifier:
                 items(f.features, key = { it.id }) { feature ->
                     BuildFeatureRow(
                         feature = feature,
-                        working = busy == feature.id,
-                        switchEnabled = busy == null,
-                    ) { enabled ->
-                        if (busy == null) {
-                            busy = feature.id
-                            scope.launch {
-                                val r = backend.modules.setBuildFeature(moduleName, feature.id, enabled)
-                                toast = ConfigToast(r.message, error = !r.success)
-                                busy = null
-                                if (r.success) reloadKey++
-                            }
-                        }
-                    }
+                        working = state.busyId == feature.id,
+                        switchEnabled = state.idle,
+                    ) { enabled -> state.setEnabled(feature.id, enabled) }
                 }
             }
         }
-        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+        ConfigToastHost(state.toast, Modifier.align(Alignment.BottomCenter))
     }
 }
 
 @Composable
 private fun BuildFeatureRow(feature: UiBuildFeature, working: Boolean, switchEnabled: Boolean, onToggle: (Boolean) -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(feature.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                Text(feature.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(feature.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                    Text(feature.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (working) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+                else Switch(checked = feature.enabled, onCheckedChange = { if (switchEnabled) onToggle(it) }, enabled = switchEnabled)
             }
-            if (working) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
-            else CaSwitch(feature.enabled) { if (switchEnabled) onToggle(it) }
-        }
-        feature.note?.let {
-            Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+            feature.note?.let {
+                Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
 }
@@ -437,24 +405,12 @@ private fun BuildFeatureRow(feature: UiBuildFeature, working: Boolean, switchEna
 
 @Composable
 private fun CompilerPluginsPane(backend: IdeBackend, moduleName: String, modifier: Modifier) {
-    var plugins by remember(moduleName) { mutableStateOf<UiCompilerPlugins?>(null) }
-    var loading by remember(moduleName) { mutableStateOf(true) }
-    var busy by remember(moduleName) { mutableStateOf<String?>(null) } // the plugin id currently toggling
-    var reloadKey by remember(moduleName) { mutableStateOf(0) }
-    var toast by remember { mutableStateOf<ConfigToast?>(null) }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(moduleName, reloadKey) {
-        loading = true
-        plugins = runCatching { backend.modules.getCompilerPlugins(moduleName) }.getOrNull()
-        loading = false
-    }
-    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
+    val state = rememberCompilerPluginsState(backend, moduleName)
 
     Box(modifier) {
-        val p = plugins
+        val p = state.model
         when {
-            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
+            state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
             p == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
                 Text(
                     stringResource(Res.string.modcfg_compiler_plugins_android_only),
@@ -475,40 +431,27 @@ private fun CompilerPluginsPane(backend: IdeBackend, moduleName: String, modifie
                 items(p.plugins, key = { it.id }) { plugin ->
                     CompilerPluginRow(
                         plugin = plugin,
-                        working = busy == plugin.id,
-                        switchEnabled = busy == null,
-                    ) { enabled ->
-                        if (busy == null) {
-                            busy = plugin.id
-                            scope.launch {
-                                val r = backend.modules.setCompilerPlugin(moduleName, plugin.id, enabled)
-                                toast = ConfigToast(r.message, error = !r.success)
-                                busy = null
-                                if (r.success) reloadKey++
-                            }
-                        }
-                    }
+                        working = state.busyId == plugin.id,
+                        switchEnabled = state.idle,
+                    ) { enabled -> state.setEnabled(plugin.id, enabled) }
                 }
             }
         }
-        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+        ConfigToastHost(state.toast, Modifier.align(Alignment.BottomCenter))
     }
 }
 
 @Composable
 private fun CompilerPluginRow(plugin: UiCompilerPlugin, working: Boolean, switchEnabled: Boolean, onToggle: (Boolean) -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+    OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(plugin.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Text(plugin.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
                 Text(plugin.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
             if (working) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
-            else CaSwitch(plugin.enabled) { if (switchEnabled) onToggle(it) }
+            else Switch(checked = plugin.enabled, onCheckedChange = { if (switchEnabled) onToggle(it) }, enabled = switchEnabled)
         }
         // "Active on the classpath" badge — the real build behavior, which can differ from the toggle when the
         // runtime came in transitively (a dependency pulling it in applies the plugin even if not toggled here).
@@ -521,6 +464,7 @@ private fun CompilerPluginRow(plugin: UiCompilerPlugin, working: Boolean, switch
         plugin.note?.let {
             Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         }
+        }
     }
 }
 
@@ -528,39 +472,12 @@ private fun CompilerPluginRow(plugin: UiCompilerPlugin, working: Boolean, switch
 
 @Composable
 private fun PackagingPane(backend: IdeBackend, moduleName: String, codeFont: FontFamily, modifier: Modifier) {
-    var options by remember(moduleName) { mutableStateOf<UiPackagingOptions?>(null) }
-    var loading by remember(moduleName) { mutableStateOf(true) }
-    var reloadKey by remember(moduleName) { mutableStateOf(0) }
-    var saving by remember(moduleName) { mutableStateOf(false) }
-    var toast by remember { mutableStateOf<ConfigToast?>(null) }
-    val scope = rememberCoroutineScope()
-
-    // Editable copies of every list, seeded from the loaded options (re-seeded on reload).
-    val resExcludes = remember(moduleName, reloadKey) { mutableStateListOf<String>() }
-    val resPickFirsts = remember(moduleName, reloadKey) { mutableStateListOf<String>() }
-    val resMerges = remember(moduleName, reloadKey) { mutableStateListOf<String>() }
-    val jniExcludes = remember(moduleName, reloadKey) { mutableStateListOf<String>() }
-    val jniPickFirsts = remember(moduleName, reloadKey) { mutableStateListOf<String>() }
-
-    LaunchedEffect(moduleName, reloadKey) {
-        loading = true
-        val o = runCatching { backend.modules.getPackagingOptions(moduleName) }.getOrNull()
-        options = o
-        if (o != null) {
-            resExcludes.clear(); resExcludes.addAll(o.resources.excludes)
-            resPickFirsts.clear(); resPickFirsts.addAll(o.resources.pickFirsts)
-            resMerges.clear(); resMerges.addAll(o.resources.merges)
-            jniExcludes.clear(); jniExcludes.addAll(o.jniLibs.excludes)
-            jniPickFirsts.clear(); jniPickFirsts.addAll(o.jniLibs.pickFirsts)
-        }
-        loading = false
-    }
-    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
+    val state = rememberPackagingPaneState(backend, moduleName)
 
     Box(modifier) {
-        val o = options
+        val o = state.options
         when {
-            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
+            state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
             o == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
                 Text(stringResource(Res.string.modcfg_packaging_android_only), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
             }
@@ -569,40 +486,26 @@ private fun PackagingPane(backend: IdeBackend, moduleName: String, codeFont: Fon
                 Text(stringResource(Res.string.modcfg_packaging_glob_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
 
                 SectionCard(stringResource(Res.string.modcfg_packaging_resources)) {
-                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_excludes), stringResource(Res.string.modcfg_packaging_excludes_desc), resExcludes, codeFont)
-                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_pick_first), stringResource(Res.string.modcfg_packaging_pick_first_desc), resPickFirsts, codeFont)
-                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_merge), stringResource(Res.string.modcfg_packaging_merge_desc), resMerges, codeFont)
+                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_excludes), stringResource(Res.string.modcfg_packaging_excludes_desc), state.resourceExcludes, codeFont)
+                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_pick_first), stringResource(Res.string.modcfg_packaging_pick_first_desc), state.resourcePickFirsts, codeFont)
+                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_merge), stringResource(Res.string.modcfg_packaging_merge_desc), state.resourceMerges, codeFont)
                     DefaultsDisclosure(stringResource(Res.string.modcfg_packaging_default_excludes), o.defaultResourceExcludes, codeFont)
                     DefaultsDisclosure(stringResource(Res.string.modcfg_packaging_default_merges), o.defaultResourceMerges, codeFont)
                 }
 
                 SectionCard(stringResource(Res.string.modcfg_packaging_jni)) {
                     Text(stringResource(Res.string.modcfg_packaging_jni_note), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
-                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_excludes), stringResource(Res.string.modcfg_packaging_excludes_desc), jniExcludes, codeFont)
-                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_pick_first), stringResource(Res.string.modcfg_packaging_pick_first_desc), jniPickFirsts, codeFont)
+                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_excludes), stringResource(Res.string.modcfg_packaging_excludes_desc), state.jniExcludes, codeFont)
+                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_pick_first), stringResource(Res.string.modcfg_packaging_pick_first_desc), state.jniPickFirsts, codeFont)
                 }
 
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
-                    if (saving) CircularProgressIndicator(Modifier.size(20.dp).padding(end = 4.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
-                    PrimaryButton(stringResource(Res.string.modcfg_save), icon = CaIcons.check, onClick = {
-                        if (!saving) {
-                            saving = true
-                            scope.launch {
-                                val r = backend.modules.updatePackagingOptions(
-                                    moduleName,
-                                    UiPackagingRules(resExcludes.toList(), resPickFirsts.toList(), resMerges.toList()),
-                                    UiPackagingRules(jniExcludes.toList(), jniPickFirsts.toList()),
-                                )
-                                toast = ConfigToast(r.message, error = !r.success)
-                                saving = false
-                                if (r.success) reloadKey++
-                            }
-                        }
-                    })
+                    if (state.saving) CircularProgressIndicator(Modifier.size(20.dp).padding(end = 4.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+                    PrimaryButton(stringResource(Res.string.modcfg_save), icon = CaIcons.check, onClick = state::save)
                 }
             }
         }
-        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+        ConfigToastHost(state.toast, Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -638,24 +541,12 @@ private fun DefaultsDisclosure(label: String, patterns: List<String>, codeFont: 
 
 @Composable
 private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreManager: () -> Unit, modifier: Modifier) {
-    var data by remember(moduleName) { mutableStateOf<UiSigningAssignments?>(null) }
-    var loading by remember(moduleName) { mutableStateOf(true) }
-    var reloadKey by remember(moduleName) { mutableStateOf(0) }
-    var busy by remember(moduleName) { mutableStateOf(false) }
-    var toast by remember { mutableStateOf<ConfigToast?>(null) }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(moduleName, reloadKey) {
-        loading = true
-        data = runCatching { backend.signing.signingAssignments(moduleName) }.getOrNull()
-        loading = false
-    }
-    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
+    val state = rememberSigningPaneState(backend, moduleName)
 
     Box(modifier) {
-        val d = data
+        val d = state.assignments
         when {
-            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
+            state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
             d == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
                 Text(stringResource(Res.string.modcfg_signing_android_only), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
             }
@@ -682,17 +573,7 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
                     }
                 }
                 items(d.assignments, key = { it.buildType }) { a ->
-                    BuildTypeSigningRow(a, d.keystores, busy) { keystoreId ->
-                        if (!busy) {
-                            busy = true
-                            scope.launch {
-                                val r = backend.signing.assignSigning(moduleName, a.buildType, keystoreId)
-                                toast = ConfigToast(r.message, error = !r.success)
-                                busy = false
-                                if (r.success) reloadKey++
-                            }
-                        }
-                    }
+                    BuildTypeSigningRow(a, d.keystores, state.busy) { keystoreId -> state.assign(a.buildType, keystoreId) }
                 }
                 if (d.keystores.isEmpty()) item("empty") {
                     Text(stringResource(Res.string.modcfg_keystores_empty),
@@ -700,7 +581,7 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
                 }
             }
         }
-        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+        ConfigToastHost(state.toast, Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -724,74 +605,35 @@ private fun BuildTypeSigningRow(assignment: UiSigningAssignment, keystores: List
 
 @Composable
 private fun SigningPill(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest, tween(Motion.FAST), label = "pillBg")
-    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-    Row(
-        Modifier.background(bg, RoundedCornerShape(Ca.radius.pill))
-            .clickable(remember { MutableInteractionSource() }, null, enabled = enabled) { onClick() }
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        if (selected) Icon(CaIcons.check, null, Modifier.size(13.dp), tint = fg)
-        Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = fg)
-    }
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        enabled = enabled,
+        label = { Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1) },
+        // The chip's own leading check is the M3 selected affordance, so the hand-drawn one goes.
+        leadingIcon = if (selected) ({ Icon(CaIcons.check, null, Modifier.size(16.dp)) }) else null,
+        shape = RoundedCornerShape(Ca.radius.pill),
+    )
 }
 
 @Composable
 private fun ModuleSettingsTab(backend: IdeBackend, moduleName: String, codeFont: FontFamily, modifier: Modifier) {
-    var config by remember(moduleName) { mutableStateOf<UiModuleConfig?>(null) }
-    var loading by remember(moduleName) { mutableStateOf(false) }
-    var reloadKey by remember(moduleName) { mutableStateOf(0) }
-    var toast by remember { mutableStateOf<ConfigToast?>(null) }
-    var addRootOpen by remember { mutableStateOf(false) }
-    var missingProguard by remember(moduleName) { mutableStateOf<List<UiMissingProguardFile>>(emptyList()) }
-    val scope = rememberCoroutineScope()
-    val fsEpoch by backend.files.fileSystemEpoch.collectAsState()
-    // Resolved here (composable) so the create-proguard toasts can be built from the non-composable callback.
-    val createdTemplate = stringResource(Res.string.modcfg_created, ARG_TOKEN)
-    val couldntCreateTemplate = stringResource(Res.string.modcfg_couldnt_create, ARG_TOKEN)
-
-    LaunchedEffect(moduleName, reloadKey) {
-        loading = true
-        config = runCatching { backend.modules.getModuleConfig(moduleName) }.getOrNull()
-        missingProguard = runCatching { backend.modules.missingProguardFiles(moduleName) }.getOrDefault(emptyList())
-        loading = false
-    }
-    // A proguard keep-rule file created/deleted elsewhere (the file tree's New File, an external edit) flips
-    // the "missing proguard file" warning without touching the module config — refresh just that, no flash.
-    LaunchedEffect(moduleName, fsEpoch) {
-        missingProguard = runCatching { backend.modules.missingProguardFiles(moduleName) }.getOrDefault(emptyList())
-    }
-    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
+    val state = rememberModuleSettingsState(backend, moduleName)
 
     Box(modifier) {
         ConfigBody(
-            config, loading, codeFont, backend.project.rootPath, missingProguard, Modifier.fillMaxSize(),
-            onAddSourceRoot = { addRootOpen = true },
-            onRemoveSourceRoot = { set, root -> if (backend.modules.removeSourceRoot(moduleName, set, root)) reloadKey++ },
-            onCreateProguard = { entry ->
-                scope.launch {
-                    val created = backend.modules.createProguardFile(moduleName, entry)
-                    toast = ConfigToast(
-                        (if (created != null) createdTemplate else couldntCreateTemplate).replace(ARG_TOKEN, entry),
-                        error = created == null,
-                    )
-                    if (created != null) reloadKey++
-                }
-            },
-        ) { edit ->
-            scope.launch {
-                val r = backend.modules.updateModuleConfig(moduleName, edit)
-                toast = ConfigToast(r.message, error = !r.success)
-                if (r.success) reloadKey++
-            }
-        }
-        AddSourceRootDialog(
-            request = if (addRootOpen) AddSourceRootRequest(moduleName, backend.modules.moduleSourceSets(moduleName)) else null,
-            onDismiss = { addRootOpen = false },
-            onAdd = { module, set, dirName, role -> if (backend.modules.addSourceRoot(module, set, dirName, role) != null) reloadKey++ },
+            state.config, state.loading, codeFont, backend.project.rootPath, state.missingProguard, Modifier.fillMaxSize(),
+            onAddSourceRoot = state::openAddSourceRoot,
+            onRemoveSourceRoot = state::removeSourceRoot,
+            onCreateProguard = state::createProguardFile,
+            onSave = state::applyEdit,
         )
-        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+        AddSourceRootDialog(
+            request = if (state.addRootOpen) AddSourceRootRequest(moduleName, state.sourceSets) else null,
+            onDismiss = state::closeAddSourceRoot,
+            onAdd = state::addSourceRoot,
+        )
+        ConfigToastHost(state.toast, Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -938,15 +780,31 @@ private fun ConfigForm(
     onCreateProguard: (entry: String) -> Unit,
     onSave: (UiModuleConfigEdit) -> Unit,
 ) {
-    // Editable state, rebuilt whenever a fresh config is loaded (e.g. after a save).
-    var level by remember(config) { mutableStateOf(config.languageLevel) }
-    var sdk by remember(config) { mutableStateOf(config.platformSdk) } // "" = follow the module-type default
-    val forms = remember(config) { config.facets.map { it.toForm() } }
-    val mainClass = remember(config) { mutableStateOf(config.runConfig?.mainClass ?: "") }
+    // Editable state, rebuilt whenever a fresh config is loaded (e.g. after a save) — and whenever [revision]
+    // moves, which is how Discard throws the edits away: everything below is re-derived from `config`.
+    var revision by remember(config) { mutableStateOf(0) }
+    var level by remember(config, revision) { mutableStateOf(config.languageLevel) }
+    var sdk by remember(config, revision) { mutableStateOf(config.platformSdk) } // "" = follow the module-type default
+    val forms = remember(config, revision) { config.facets.map { it.toForm() } }
+    val mainClass = remember(config, revision) { mutableStateOf(config.runConfig?.mainClass ?: "") }
+    // The facet values as loaded, snapshotted the moment the forms are built. Facet edits were previously
+    // invisible to the dirty check, so changing a namespace / minSdk / versionCode left the form looking
+    // untouched — which is fatal once the Save affordance only appears when something HAS changed.
+    val baselineFacets = remember(config, revision) { forms.associate { it.table to it.toValues() } }
+    val facetValues = forms.associate { it.table to it.toValues() }
     val dirty = level != config.languageLevel || sdk != config.platformSdk ||
-        (config.runConfig != null && mainClass.value.trim() != config.runConfig!!.mainClass)
+        (config.runConfig != null && mainClass.value.trim() != config.runConfig!!.mainClass) ||
+        facetValues != baselineFacets
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    fun edit() = UiModuleConfigEdit(
+        languageLevel = level,
+        facetValues = facetValues,
+        mainClass = if (config.runConfig != null) mainClass.value.trim() else null,
+        platformSdk = sdk,
+    )
+
+    Column(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // ---- General ----
         item("general") {
             SectionCard(stringResource(Res.string.modcfg_section_general)) {
@@ -999,17 +857,36 @@ private fun ConfigForm(
         // ---- Facet panels (generic) ----
         items(forms, key = { it.table }) { form -> FacetPanel(form, codeFont) }
 
-        item("save") {
-            Row(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp), horizontalArrangement = Arrangement.End) {
-                PrimaryButton(stringResource(if (dirty) Res.string.modcfg_save_changes else Res.string.modcfg_save), icon = CaIcons.check, onClick = {
-                    onSave(UiModuleConfigEdit(
-                        languageLevel = level,
-                        facetValues = forms.associate { it.table to it.toValues() },
-                        mainClass = if (config.runConfig != null) mainClass.value.trim() else null,
-                        platformSdk = sdk,
-                    ))
-                })
-            }
+    }
+        // Pinned, not the last row of the form: the Save button used to sit below every facet panel, so on an
+        // Android module you had to scroll past a screenful of fields to discover that your edits needed
+        // saving at all. It slides in the moment anything differs from the loaded config and stays put.
+        AnimatedVisibility(
+            visible = dirty,
+            enter = slideInVertically(tween(Motion.FAST)) { it } + fadeIn(tween(Motion.FAST)),
+            exit = slideOutVertically(tween(Motion.FAST)) { it } + fadeOut(tween(Motion.FAST)),
+        ) {
+            SaveBar(onDiscard = { revision++ }, onSave = { onSave(edit()) })
+        }
+    }
+}
+
+/** The pinned unsaved-changes bar: what changed, a way back, and the commit. */
+@Composable
+private fun SaveBar(onDiscard: () -> Unit, onSave: () -> Unit) {
+    Surface(tonalElevation = 3.dp, shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(CaIcons.info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                stringResource(Res.string.modcfg_unsaved_changes),
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            TextButton(onClick = onDiscard) { Text(stringResource(Res.string.modcfg_discard)) }
+            Button(onClick = onSave) { Text(stringResource(Res.string.modcfg_save)) }
         }
     }
 }
@@ -1118,16 +995,16 @@ private fun CreateRuleButton(onClick: () -> Unit) {
 
 @Composable
 private fun SectionCard(title: String, action: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(title.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            action?.invoke()
+    OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // titleSmall in the section colour, not an uppercased micro-label: M3 section headers are
+                // read as headings, and SMALL CAPS at labelSmall is the hardest thing on the screen to scan.
+                Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                action?.invoke()
+            }
+            content()
         }
-        content()
     }
 }
 
@@ -1226,33 +1103,20 @@ private fun LabeledField(label: String, content: @Composable () -> Unit) {
 
 @Composable
 private fun BoxedTextField(state: MutableState<String>, codeFont: FontFamily, numeric: Boolean = false) {
-    Box(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 10.dp),
-    ) {
-        BasicTextField(
-            value = state.value,
-            onValueChange = { state.value = if (numeric) it.filter { c -> c.isDigit() } else it },
-            singleLine = true,
-            keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
-            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
+    OutlinedTextField(
+        value = state.value,
+        onValueChange = { state.value = if (numeric) it.filter { c -> c.isDigit() } else it },
+        singleLine = true,
+        keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont),
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
 private fun ToggleSwitch(on: Boolean, onToggle: (Boolean) -> Unit) {
-    val bg by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest, tween(Motion.FAST), label = "switchBg")
-    val align = if (on) Alignment.CenterEnd else Alignment.CenterStart
-    Box(
-        Modifier.size(width = 44.dp, height = 26.dp).background(bg, RoundedCornerShape(Ca.radius.pill))
-            .clickable(remember { MutableInteractionSource() }, null) { onToggle(!on) }.padding(3.dp),
-        contentAlignment = align,
-    ) {
-        Box(Modifier.size(20.dp).background(MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(Ca.radius.pill)))
-    }
+    Switch(checked = on, onCheckedChange = onToggle)
 }
 
 @Composable
@@ -1331,13 +1195,21 @@ private fun AddRowButton(label: String, onClick: () -> Unit) {
 
 @Composable
 private fun LevelChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.FAST), label = "levelBg")
-    Box(
-        Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-    ) {
-        Text(label, color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-    }
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1) },
+        shape = RoundedCornerShape(Ca.radius.pill),
+    )
+}
+
+/** The user-facing text of a pane's reported outcome. */
+@Composable
+private fun ConfigToast.message(): String = when (this) {
+    is ConfigToast.Message -> text
+    is ConfigToast.Removed -> stringResource(Res.string.modcfg_removed, name)
+    is ConfigToast.Created -> stringResource(Res.string.modcfg_created, name)
+    is ConfigToast.CreateFailed -> stringResource(Res.string.modcfg_couldnt_create, name)
 }
 
 @Composable
@@ -1355,7 +1227,7 @@ private fun ConfigToastHost(toast: ConfigToast?, modifier: Modifier) {
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(if (t?.error == true) CaIcons.warning else CaIcons.check, null, Modifier.size(16.dp), tint = if (t?.error == true) MaterialTheme.colorScheme.error else Ide.colors.run)
-                Text(t?.text ?: "", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                Text(t?.message() ?: "", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             }
         }
     }

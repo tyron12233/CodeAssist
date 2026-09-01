@@ -11,7 +11,8 @@ import javax.xml.parsers.DocumentBuilderFactory
  * and is fully unit-testable with [DrawableResolver.NONE].
  *
  * Coverage: `<shape>` (rectangle/oval/line/ring · solid/gradient/stroke/corners/size), `<vector>` (viewport
- * + `<path>`/`<group>`), `<selector>`, `<layer-list>`, `<color>`, `<ripple>`, `<inset>`, `<clip>`/`<scale>`/
+ * + a `<path>`/`<group>` tree with transforms, `<clip-path>` and fill rules), `<selector>`, `<layer-list>`,
+ * `<color>`, `<ripple>`, `<inset>`, `<clip>`/`<scale>`/
  * `<rotate>` (unwrap), and `<bitmap>`/`<nine-patch>` / `@drawable` refs to image files. Unknown roots become
  * [DrawablePreview.Unsupported] rather than throwing.
  */
@@ -132,8 +133,9 @@ object DrawablePreviewParser {
     // --- vector ----------------------------------------------------------------------------------------
 
     private fun parseVector(el: Element, r: DrawableResolver): DrawablePreview {
-        val paths = ArrayList<VectorPath>()
-        collectPaths(el, r, paths)
+        val children = parseVectorNodes(el, r, 0)
+        // A `<clip-path>` directly under `<vector>` clips the whole drawable; model it as an outer group.
+        val rootClip = clipPathOf(el)
         return DrawablePreview.Vector(
             VectorSpec(
                 widthDp = dp(androidAttr(el, "width"), r).ifZero(24f),
@@ -141,30 +143,66 @@ object DrawablePreviewParser {
                 viewportWidth = androidAttr(el, "viewportWidth")?.toFloatOrNull()?.takeIf { it > 0 } ?: 24f,
                 viewportHeight = androidAttr(el, "viewportHeight")?.toFloatOrNull()?.takeIf { it > 0 } ?: 24f,
                 rootAlpha = androidAttr(el, "alpha")?.toFloatOrNull() ?: 1f,
-                paths = paths,
+                nodes = if (rootClip == null) children
+                else listOf(VectorGroup(children = children, clipPathData = rootClip)),
             ),
         )
     }
 
-    /** Recursively gather `<path>` elements (group transforms ignored — fine for a static preview). */
-    private fun collectPaths(el: Element, r: DrawableResolver, out: MutableList<VectorPath>) {
+    /** The `<path>`/`<group>` children of a `<vector>` or `<group>`, in draw order, keeping the nesting. */
+    private fun parseVectorNodes(el: Element, r: DrawableResolver, depth: Int): List<VectorNode> {
+        if (depth > MAX_DEPTH) return emptyList()
+        val out = ArrayList<VectorNode>()
         for (child in elements(el)) {
             when (child.tagName.substringAfterLast(':')) {
-                "path" -> {
-                    val data = androidAttr(child, "pathData") ?: continue
-                    out += VectorPath(
-                        pathData = data,
-                        fillColor = colorToken(androidAttr(child, "fillColor"), r),
-                        strokeColor = colorToken(androidAttr(child, "strokeColor"), r),
-                        strokeWidthVp = androidAttr(child, "strokeWidth")?.toFloatOrNull() ?: 0f,
-                        fillAlpha = androidAttr(child, "fillAlpha")?.toFloatOrNull() ?: 1f,
-                        strokeAlpha = androidAttr(child, "strokeAlpha")?.toFloatOrNull() ?: 1f,
-                    )
-                }
-                "group" -> collectPaths(child, r, out)
+                "path" -> parseVectorPath(child, r)?.let { out += it }
+                "group" -> out += parseVectorGroup(child, r, depth + 1)
             }
         }
+        return out
     }
+
+    private fun parseVectorPath(el: Element, r: DrawableResolver): VectorPath? {
+        val data = androidAttr(el, "pathData") ?: return null
+        return VectorPath(
+            pathData = data,
+            fillColor = colorToken(androidAttr(el, "fillColor"), r),
+            strokeColor = colorToken(androidAttr(el, "strokeColor"), r),
+            strokeWidthVp = androidAttr(el, "strokeWidth")?.toFloatOrNull() ?: 0f,
+            fillAlpha = androidAttr(el, "fillAlpha")?.toFloatOrNull() ?: 1f,
+            strokeAlpha = androidAttr(el, "strokeAlpha")?.toFloatOrNull() ?: 1f,
+            fillRule = if (androidAttr(el, "fillType").equals("evenOdd", ignoreCase = true))
+                FillRule.EVEN_ODD else FillRule.NON_ZERO,
+            strokeCap = when (androidAttr(el, "strokeLineCap")?.lowercase()) {
+                "round" -> StrokeCap.ROUND
+                "square" -> StrokeCap.SQUARE
+                else -> StrokeCap.BUTT
+            },
+            strokeJoin = when (androidAttr(el, "strokeLineJoin")?.lowercase()) {
+                "round" -> StrokeJoin.ROUND
+                "bevel" -> StrokeJoin.BEVEL
+                else -> StrokeJoin.MITER
+            },
+            strokeMiter = androidAttr(el, "strokeMiterLimit")?.toFloatOrNull() ?: 4f,
+        )
+    }
+
+    private fun parseVectorGroup(el: Element, r: DrawableResolver, depth: Int): VectorGroup = VectorGroup(
+        children = parseVectorNodes(el, r, depth),
+        translateX = androidAttr(el, "translateX")?.toFloatOrNull() ?: 0f,
+        translateY = androidAttr(el, "translateY")?.toFloatOrNull() ?: 0f,
+        scaleX = androidAttr(el, "scaleX")?.toFloatOrNull() ?: 1f,
+        scaleY = androidAttr(el, "scaleY")?.toFloatOrNull() ?: 1f,
+        rotation = androidAttr(el, "rotation")?.toFloatOrNull() ?: 0f,
+        pivotX = androidAttr(el, "pivotX")?.toFloatOrNull() ?: 0f,
+        pivotY = androidAttr(el, "pivotY")?.toFloatOrNull() ?: 0f,
+        clipPathData = clipPathOf(el),
+    )
+
+    /** The `<clip-path android:pathData>` declared directly under [el], or null. */
+    private fun clipPathOf(el: Element): String? = elements(el)
+        .firstOrNull { it.tagName.substringAfterLast(':') == "clip-path" }
+        ?.let { androidAttr(it, "pathData") }
 
     // --- selector / layer-list / composites ------------------------------------------------------------
 

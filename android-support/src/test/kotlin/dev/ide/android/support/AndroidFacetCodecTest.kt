@@ -19,6 +19,10 @@ class AndroidFacetCodecTest {
         manifest = "src/main/AndroidManifest.xml",
         versionCode = 12,
         versionName = "3.4.1",
+        manifestPlaceholders = mapOf(
+            "marketApplicationId" to "ir.mservices.market",
+            "marketBindAddress" to "ir.mservices.market.InAppBillingService.BIND",
+        ),
         isApplication = true,
         flavorDimensions = listOf("tier"),
         buildTypes = listOf(
@@ -29,16 +33,24 @@ class AndroidFacetCodecTest {
                 consumerProguardFiles = listOf("consumer-rules.pro"),
                 proguardRules = listOf("-dontwarn com.example.**", "-keep class com.example.Api { *; }"),
                 versionNameSuffix = "-rel",
+                manifestPlaceholders = mapOf("marketApplicationId" to "ir.mservices.market.release"),
                 signingConfig = "release",
             ),
         ),
         productFlavors = listOf(
             ProductFlavor("free", dimension = "tier", applicationIdSuffix = ".free"),
-            ProductFlavor("paid", dimension = "tier", applicationId = "com.example.paid"),
+            ProductFlavor(
+                "paid", dimension = "tier", applicationId = "com.example.paid",
+                manifestPlaceholders = mapOf("tierName" to "paid"),
+            ),
         ),
         r8FullMode = false,
         coreLibraryDesugaringEnabled = true,
-        buildFeatures = BuildFeatures(viewBinding = true, compose = true, parcelize = true, serialization = true, kspProcessors = setOf("room", "moshi")),
+        buildFeatures = BuildFeatures(
+            viewBinding = true, compose = true, parcelize = true, serialization = true,
+            kspProcessors = setOf("room", "moshi"),
+            kspRuntimeMismatchAccepted = setOf("hilt"),
+        ),
         packaging = AndroidPackaging(
             resources = ResourcePackaging(
                 excludes = linkedSetOf("/META-INF/extra.txt"),
@@ -84,11 +96,31 @@ class AndroidFacetCodecTest {
         assertEquals(true, values["serialization"])
         // Enabled KSP processors persist as a sorted string array.
         assertEquals(listOf("moshi", "room"), values["kspProcessors"])
+        // An accepted runtime mismatch ("build anyway") has to persist too: the build process reloads this
+        // facet, and losing the flag would put it back to refusing to generate.
+        assertEquals(listOf("hilt"), values["kspRuntimeMismatchAccepted"])
         // shrinkResources is always emitted (like minifyEnabled) so the Module Settings UI can render a
         // toggle to turn it ON — a key omitted when false would leave no control for it.
         assertEquals(false, bts[0]["shrinkResources"])
         // Other defaults are still omitted (no rules): absent keys, not empty.
         assertEquals(null, bts[0]["proguardFiles"])
+        // Manifest placeholders persist as `key=value` strings, not as an inline table: the Module Settings tab
+        // renders a string list as an editable list but a nested map as a raw text box it would then corrupt.
+        assertEquals(
+            listOf(
+                "marketApplicationId=ir.mservices.market",
+                "marketBindAddress=ir.mservices.market.InAppBillingService.BIND",
+            ),
+            values["manifestPlaceholders"],
+        )
+        assertEquals(listOf("marketApplicationId=ir.mservices.market.release"), bts[1]["manifestPlaceholders"])
+        assertEquals(null, bts[0]["manifestPlaceholders"], "a build type that declares none has no key")
+        // The module-level key is always present, though, so Module Settings has a list to add the first
+        // entry to (a placeholder a dependency needs is otherwise unaddable without editing module.toml).
+        assertEquals(
+            emptyList<String>(),
+            AndroidFacetCodec.encode(AndroidFacet(namespace = "com.example.app", compileSdk = 34))["manifestPlaceholders"],
+        )
     }
 
     @Test
@@ -100,6 +132,7 @@ class AndroidFacetCodecTest {
         assertEquals(null, values["parcelize"])
         assertEquals(null, values["serialization"])
         assertEquals(null, values["kspProcessors"])
+        assertEquals(null, values["kspRuntimeMismatchAccepted"])
         assertEquals(BuildFeatures(), AndroidFacetCodec.decode(values).buildFeatures)
     }
 

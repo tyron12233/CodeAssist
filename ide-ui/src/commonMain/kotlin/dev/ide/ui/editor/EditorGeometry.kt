@@ -51,6 +51,11 @@ internal class EditorGeometry(private val session: EditorSession) {
     /** The file's declarations, fetched debounced by the host; drives sticky headers + their hit-testing. */
     lateinit var editorStructure: MutableState<List<UiFileSymbol>>
 
+    /** Furthest right edge (content-space px, gutter excluded) reached by an inline diagnostic chip that sticks
+     *  out past the end of its line — folded into [contentWidth] so horizontal scrolling can reveal the whole
+     *  chip. The chips overlay writes it after measuring; 0 when no chip overhangs the text. */
+    val chipExtent: MutableFloatState = mutableFloatStateOf(0f)
+
     private lateinit var wrapModel: WrapModel
 
     // ---- per-frame inputs, refreshed by rememberEditorGeometry ----
@@ -117,9 +122,12 @@ internal class EditorGeometry(private val session: EditorSession) {
     fun contentHeight() = metrics.padTop + vlayout.totalRows * metrics.lineHeight + metrics.padBottom
 
     fun contentWidth() = if (wrapActive) viewport.value.width.toFloat()
-    else metrics.padLeft + max(
-        render.renderCache.measuredMaxWidth,
-        session.maxLineChars * metrics.charWidth,
+    else max(
+        metrics.padLeft + max(
+            render.renderCache.measuredMaxWidth,
+            session.maxLineChars * metrics.charWidth,
+        ),
+        chipExtent.floatValue, // a diagnostic chip overhanging its line extends the scrollable width
     ) + metrics.padRight
 
     fun maxV() = (contentHeight() - viewport.value.height).coerceAtLeast(0f)
@@ -323,8 +331,11 @@ internal fun rememberEditorGeometry(
     }
     state.hScroll = rememberScrollableState { delta ->
         val old = hOffset.floatValue
-        val new = (old + delta).coerceIn(0f, state.maxH())
+        val mH = state.maxH()
+        val new = (old + delta).coerceIn(0f, mH)
         hOffset.floatValue = new
+        session.hScrollOffsetPx = new
+        session.hScrollMaxPx = mH
         new - old
     }
     // Two-axis (free) scrolling: one state pans both offsets from a single drag, so a diagonal swipe moves
@@ -335,8 +346,11 @@ internal fun rememberEditorGeometry(
         val newV = (oldV - delta.y).coerceIn(0f, state.maxV())
         vOffset.floatValue = newV
         val oldH = hOffset.floatValue
-        val newH = (oldH - delta.x).coerceIn(0f, state.maxH())
+        val mH = state.maxH()
+        val newH = (oldH - delta.x).coerceIn(0f, mH)
         hOffset.floatValue = newH
+        session.hScrollOffsetPx = newH
+        session.hScrollMaxPx = mH
         Offset(oldH - newH, oldV - newV)
     }
 
@@ -346,6 +360,8 @@ internal fun rememberEditorGeometry(
     LaunchedEffect(
         render.codeStyle,
         session.doc.lineCount,
+        session.maxLineChars,
+        state.chipExtent.floatValue,
         session.foldRegions,
         state.viewport.value,
         wordWrap,
@@ -354,7 +370,13 @@ internal fun rememberEditorGeometry(
     ) {
         if (wordWrap) hOffset.floatValue = 0f // wrapped: there is no horizontal scroll
         vOffset.floatValue = vOffset.floatValue.coerceIn(0f, state.maxV())
-        hOffset.floatValue = hOffset.floatValue.coerceIn(0f, state.maxH())
+        val mH = state.maxH()
+        hOffset.floatValue = hOffset.floatValue.coerceIn(0f, mH)
+        // Seed the extent mirror so an outside gesture (the right tool-window swipe) can defer to the editor
+        // even before the first scroll — otherwise a leftward swipe on a just-opened long-line file would be
+        // grabbed by the drawer instead of scrolling the code.
+        session.hScrollOffsetPx = hOffset.floatValue
+        session.hScrollMaxPx = mH
     }
 
     // If the caret lands inside a collapsed fold (go-to-definition, rename, programmatic navigation), reveal it.

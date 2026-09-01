@@ -27,6 +27,7 @@ import dev.ide.core.backend.BlockBackend
 import dev.ide.core.backend.BuildBackend
 import dev.ide.core.backend.CustomizationBackend
 import dev.ide.core.backend.DependencyBackend
+import dev.ide.core.backend.IconBackend
 import dev.ide.core.backend.DiagnosticsBackend
 import dev.ide.core.backend.EditorBackend
 import dev.ide.core.backend.stackTraceString
@@ -41,6 +42,7 @@ import dev.ide.core.backend.SdkBackend
 import dev.ide.core.backend.SearchBackend
 import dev.ide.core.backend.SettingsBackend
 import dev.ide.core.backend.SigningBackend
+import dev.ide.core.backend.VcsBackend
 import dev.ide.platform.EngineBreadcrumb
 import dev.ide.platform.EngineCanceledException
 import dev.ide.platform.EnginePhase
@@ -257,8 +259,31 @@ class IdeServicesBackend(
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     override fun <T> engineFlow(default: T, select: (IdeServices) -> StateFlow<T>): StateFlow<T> =
         _projectEpoch
-            .flatMapLatest { activeServices?.let(select) ?: MutableStateFlow(default) }
+            .flatMapLatest { engineSelect(default, select) }
             .stateIn(engineScope, SharingStarted.Eagerly, default)
+
+    /**
+     * [select] against the currently active engine, degrading to a constant [default] when there is no project
+     * or the engine can no longer serve it.
+     *
+     * The guard is not defensive padding. [select] is arbitrary engine code -- `runner(it).buildState` resolves
+     * the WORKSPACE-scoped build service, whose factory resolves [ENGINE_CONTEXT] -- and it runs on
+     * [engineScope], not on the caller. Once a container has been disposed its registrations are gone and every
+     * lookup is a hard `error("no service registered")`, which in a flow is not a stale value but process
+     * death. Telemetry has that exact stack (`ServiceContainerImpl.getService` under this `flatMapLatest`)
+     * across 3.5 through 3.9, always on a build or permission surface. The interleaving that leaves a disposed
+     * engine reachable here is NOT pinned down -- [swapEngine] publishes `activeServices` before the epoch bump
+     * and only closes the outgoing engine afterwards, so a straight read should see the live one -- but the
+     * boundary is right either way: a project that is going away has nothing to report, and [default] is the
+     * honest answer.
+     */
+    private fun <T> engineSelect(default: T, select: (IdeServices) -> StateFlow<T>): StateFlow<T> {
+        val services = activeServices ?: return MutableStateFlow(default)
+        return runCatching { select(services) }.getOrElse { t ->
+            log.warn("engine flow unavailable (project closing or engine disposed)", t)
+            MutableStateFlow(default)
+        }
+    }
 
     /** Aggregates per-keystroke latencies (completion/analysis) into periodic summary events. */
     private val perf = PerfSampler { name, props -> track(name, props) }
@@ -303,6 +328,7 @@ class IdeServicesBackend(
     override val settings: SettingsService = SettingsBackend(this)
     override val customize: dev.ide.ui.backend.CustomizationService = CustomizationBackend(this)
     override val actions: ActionService = ActionBackend(this)
+    override val icons: dev.ide.ui.backend.IconService = IconBackend(this)
     // The AI agent is a disablable, non-essential plugin ([AgentPlugin.ID]). When the user turns it off in
     // Settings > Plugins the plugin isn't loaded, so we hand the UI the no-op service — the chat panel, the
     // sparkle toggle, and the agent loop all disappear (the UI keys these surfaces off this being Unsupported).
@@ -310,6 +336,13 @@ class IdeServicesBackend(
     override val agent: dev.ide.ui.backend.AgentService =
         if (manager?.env?.pluginCatalog?.isEnabled(AgentPlugin.ID) != false) AgentBackend(this)
         else dev.ide.ui.backend.AgentService.Unsupported
+
+    // Version control is a disablable, non-essential plugin ([VcsPlugin.ID]). When it is off the plugin isn't
+    // loaded, so the UI is handed the no-op service and every Git surface disappears. A manager-less backend
+    // (tests / single-project) has no catalog, so it stays wired.
+    override val vcs: dev.ide.ui.backend.VcsService =
+        if (manager?.env?.pluginCatalog?.isEnabled(VcsPlugin.ID) != false) VcsBackend(this)
+        else dev.ide.ui.backend.VcsService.Unsupported
 
     // The Compose UI facets of the enabled built-in plugins (see BuiltInPlugins). The shell registers them into
     // UiPluginHost; a disabled plugin's facet isn't in this list, so its UI never appears. Empty with no manager.
@@ -569,6 +602,8 @@ class IdeServicesBackend(
         runCatching { perf.flushAll() } // drain partial latency windows so the last session's samples ship
         runCatching { analytics.flush() }
         runCatching { analytics.close() }
+        // The version-control backend holds an open repository handle and its own refresh coroutine.
+        runCatching { (vcs as? VcsBackend)?.close() }
         activeServices?.close()
         runCatching { engineExecutor.shutdown() } // stop the dedicated ide-engine thread on teardown
         // Clean shutdown ⇒ drop the crash breadcrumb, so a file that survives to the next launch means the

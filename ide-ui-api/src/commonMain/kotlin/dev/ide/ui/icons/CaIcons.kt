@@ -70,6 +70,7 @@ object CaIcons {
     val close = build("close", s("M6 6l12 12M18 6L6 18"))
     val check = build("check", s("M5 12.5l4.5 4.5L19 6.5"))
     val plus = build("plus", s("M12 5v14M5 12h14"))
+    val minus = build("minus", s("M5 12h14"))
     val search = build("search", circle(11f, 11f, 6.5f), s("M16 16l4.5 4.5"))
     val command = build(
         "command",
@@ -140,6 +141,20 @@ object CaIcons {
     val code = build("code", s("M9 8l-4 4 4 4M15 8l4 4-4 4"))
     val eye = build("eye", s("M2.5 12s3.4-6.3 9.5-6.3S21.5 12 21.5 12 18.1 18.3 12 18.3 2.5 12 2.5 12z"), circle(12f, 12f, 2.7f))
     val gitBranch = build("git-branch", circle(7f, 6f, 2.5f), circle(7f, 18f, 2.5f), circle(17f, 9f, 2.5f), s("M7 8.5v7M17 11.5c0 3-4 2.5-7 4"))
+    /** A commit on a line: the history / log surface. */
+    val gitCommit = build("git-commit", circle(12f, 12f, 3.2f), s("M3 12h5.8M15.2 12H21"))
+    /** Two lines converging into one: a merge. */
+    val gitMerge = build("git-merge", circle(7f, 6f, 2.5f), circle(7f, 18f, 2.5f), circle(17f, 15f, 2.5f), s("M7 8.5v7M7 10.5c0 3 3.5 4.5 7.3 4.5"))
+    /** A branch line ending in an arrow into a box: a pull request. */
+    val gitPullRequest = build("git-pull-request", circle(6.5f, 6f, 2.5f), circle(6.5f, 18f, 2.5f), circle(17.5f, 18f, 2.5f), s("M6.5 8.5v7M17.5 15.5V9a2.5 2.5 0 0 0-2.5-2.5h-3.5"), s("M13 4l-1.8 2.5L13 9"))
+    /** A downward arrow into a tray: pull / fetch. */
+    val cloudDownload = build("cloud-download", s("M7.5 15.5A3.5 3.5 0 0 1 8 8.6a4.7 4.7 0 0 1 8.9 1.1 3.2 3.2 0 0 1-.4 6.3"), s("M12 11.5v7M9 16l3 3 3-3"))
+    /** An upward arrow out of a cloud: push. */
+    val cloudUpload = build("cloud-upload", s("M7.5 16.5A3.5 3.5 0 0 1 8 9.6a4.7 4.7 0 0 1 8.9 1.1 3.2 3.2 0 0 1-.4 6.3"), s("M12 19.5v-7M9 15l3-3 3 3"))
+    /** A head and shoulders: an account. */
+    val account = build("account", circle(12f, 8.5f, 3.4f), s("M5.5 19.5a6.5 6.5 0 0 1 13 0"))
+    /** A stack of trays: the stash. */
+    val stash = build("stash", s("M4 8.5l8-4 8 4-8 4z"), s("M4 12.5l8 4 8-4"), s("M4 16.5l8 4 8-4"))
     val pin = build("pin", s("M9 4h6l-.8 5 2.3 2.5h-9L9.8 9z"), s("M12 13.5V20"))
     /** A closed padlock (shackle latched on both sides) — the preview "lock the view" toggle when active. */
     val lock = build("lock", roundRect(5f, 11f, 14f, 9f, 2f), s("M8 11V8a4 4 0 0 1 8 0v3"))

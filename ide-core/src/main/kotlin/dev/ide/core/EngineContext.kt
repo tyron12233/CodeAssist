@@ -7,7 +7,7 @@ import dev.ide.core.services.DependencyService
 import dev.ide.index.IndexService
 import dev.ide.lang.LanguageId
 import dev.ide.lang.SourceAnalyzer
-import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
+import dev.ide.lang.kotlin.compile.KotlinCompilerBackend
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.model.Module
 import dev.ide.model.Project
@@ -53,7 +53,7 @@ internal interface EngineContext {
     val dependencies: DependencyService
 
     /** APPLICATION-scoped warm K2 compiler (shared across projects); the build drives its incremental wrapper. */
-    val kotlinJvmCompiler: KotlinJvmCompiler
+    val kotlinJvmCompiler: KotlinCompilerBackend
 
     /** The compile bootclasspath (android.jar + desugar stubs on device, empty on desktop). Shared by the
      *  build, the analyzer, and the Kotlin compiler warm-up. */

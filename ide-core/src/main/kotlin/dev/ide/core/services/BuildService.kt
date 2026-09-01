@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import dev.ide.android.support.AndroidBuildSystem
 import dev.ide.android.support.AndroidFacet
@@ -16,7 +17,9 @@ import dev.ide.android.support.tools.AndroidAppLogRuntime
 import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.android.support.tools.SigningConfig
+import dev.ide.build.BUILD_PLUGIN_EP
 import dev.ide.build.BUILD_SYSTEM_EP
+import dev.ide.build.BuildContext
 import dev.ide.build.BuildDiagnostic
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildLogEntry
@@ -25,15 +28,18 @@ import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSeverity
 import dev.ide.build.CyclicTaskDependencyException
 import dev.ide.build.RUN_TASK_PROVIDER_EP
+import dev.ide.build.RunAction
 import dev.ide.build.SOURCE_GENERATOR_EP
 import dev.ide.build.SourceGenerator
 import dev.ide.build.TaskGraph
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
+import dev.ide.build.engine.DefaultBuildEnv
 import dev.ide.build.engine.GuardCategory
 import dev.ide.build.engine.Guards
 import dev.ide.build.engine.PermissionBroker
 import dev.ide.build.engine.ProgramIo
+import dev.ide.build.engine.RunWindow
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.TaskStatus
@@ -57,8 +63,11 @@ import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
 import dev.ide.model.LibraryRef
 import dev.ide.model.Module
+import dev.ide.model.event.ProjectModelListener
+import dev.ide.model.event.ProjectModelTopics
 import dev.ide.model.module
 import dev.ide.platform.Disposable
+import dev.ide.platform.MessageBusConnection
 import dev.ide.ui.backend.BuildDiagnosticUi
 import dev.ide.ui.backend.BuildLogLine
 import dev.ide.ui.backend.BuildState
@@ -66,6 +75,7 @@ import dev.ide.ui.backend.BuildStepUi
 import dev.ide.ui.backend.ConsoleChunk
 import dev.ide.ui.backend.ConsoleChunkKind
 import dev.ide.ui.backend.RunConsoleUi
+import dev.ide.ui.backend.RunFrameUi
 import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.RunTaskOption
@@ -117,8 +127,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
 
     // Plugin-facing build/run lifecycle events on the app bus (docs: IdeEventTopics). Guarded so a throwing
     // subscriber can never break a build/run; these fire on the build coroutine or the interpreter thread.
-    private fun publishBuild(event: BuildEvent) =
-        runCatching { ctx.platform.messageBus.syncPublisher(IdeEventTopics.BUILD).onBuildEvent(event) }
+    private fun publishBuild(event: BuildEvent) = runCatching {
+        ctx.platform.messageBus.syncPublisher(IdeEventTopics.BUILD).onBuildEvent(event)
+    }
 
     private fun publishRun(event: RunEvent) =
         runCatching { ctx.platform.messageBus.syncPublisher(IdeEventTopics.RUN).onRunEvent(event) }
@@ -160,7 +171,8 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
      *  → a plain library jar. Best-effort: a resolution failure just omits `Main-Class`. */
     private fun jarMainClass(module: Module): String? {
         if (!isConsoleRunModule(module)) return null
-        return runCatching { runnableMainFor(module) }.getOrNull()?.takeIf { !it.instance }?.mainClass
+        return runCatching { runnableMainFor(module) }.getOrNull()
+            ?.takeIf { !it.instance }?.mainClass
     }
 
     /**
@@ -223,7 +235,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                 // Evaluated per build graph, so toggling the setting takes effect on the next build (no restart).
                 appLogRuntime = {
                     t.appLogRuntimeJar?.takeIf { t.appLogEnabled() }?.let {
-                        AndroidAppLogRuntime(it, AndroidAppLogRuntime.DEFAULT_PROVIDER_CLASS, AndroidAppLogRuntime.DEFAULT_AUTHORITY_SUFFIX)
+                        AndroidAppLogRuntime(
+                            it,
+                            AndroidAppLogRuntime.DEFAULT_PROVIDER_CLASS,
+                            AndroidAppLogRuntime.DEFAULT_AUTHORITY_SUFFIX
+                        )
                     }
                 },
             )
@@ -245,6 +261,35 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         )
     }
 
+    /**
+     * Background warm of the shared library-dex cache. Cold library dexing is the bulk of a first build (measured
+     * on-device with a 51-library Compose app: ~35s of a ~45s build, against ~6s once the cache is warm), and it
+     * needs nothing compiled first — so it can happen after a dependency resolution instead of while the user waits
+     * on a build they just asked for.
+     *
+     * Driven off the model/library event stream, which is what a finished dependency resolution publishes on (see
+     * `WorkspaceEventHub.librariesChanged`). Coalesced: a burst of commits arms one delayed job, each arming
+     * cancelling the last, so opening a project warms once rather than per event.
+     *
+     * A real build always wins. The warm is cancelled when one starts, never begins while one is running, and stops
+     * between libraries once one does — and because every library is banked to the shared cache as it completes, a
+     * cancelled warm still leaves the next build less to do.
+     */
+    private var dexWarmJob: Job? = null
+
+    private val dexWarmConnection: MessageBusConnection = ctx.store.bus.connect().also { conn ->
+        // A throwing subscriber aborts the model commit that published the event (the bus rethrows), so this must
+        // do nothing but arm a timer, and must not throw doing it.
+        conn.subscribe(ProjectModelTopics.CHANGES, ProjectModelListener { runCatching { scheduleDexWarm() } })
+    }
+
+    init {
+        // This service is created lazily (on the first build/run state read), which can land AFTER the project's
+        // dependency resolution already published — so arm once here too, or the project-open warm, the one that
+        // matters most, would wait for some later model change.
+        runCatching { scheduleDexWarm() }
+    }
+
     private val buildCache = BuildCache(ctx.store.rootPath.resolve(".platform/caches/build"))
     private val _buildState = MutableStateFlow(BuildState())
     val buildState: StateFlow<BuildState> get() = _buildState
@@ -252,12 +297,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     /** Logcat-style logs from the running debug app, mapped from the [dev.ide.core.AppLogChannel] port's
      *  snapshot to the UI DTO. Empty flow off-device. Coalesced upstream (~10/s), so the per-emit list map is
      *  bounded by the channel's ring-buffer cap. */
-    val appLog: StateFlow<AppLogUi> = (ctx.appLogChannel?.logs ?: MutableStateFlow(AppLogSnapshot()))
-        .map { it.toUi() }
-        .stateIn(buildScope, SharingStarted.Eagerly, AppLogUi())
+    val appLog: StateFlow<AppLogUi> =
+        (ctx.appLogChannel?.logs ?: MutableStateFlow(AppLogSnapshot())).map { it.toUi() }
+            .stateIn(buildScope, SharingStarted.Eagerly, AppLogUi())
 
     /** Clear the app-log buffer (the Logcat tab's Clear action). */
-    fun clearAppLog() { ctx.appLogChannel?.clear() }
+    fun clearAppLog() {
+        ctx.appLogChannel?.clear()
+    }
 
     @Volatile
     private var buildCtx: SimpleTaskContext? = null
@@ -273,6 +320,30 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
 
     @Volatile
     private var currentRunIo: RunProgramIo? = null
+
+    /** Set while a WINDOWED program is running: the way input on its frame reaches it. */
+    private var currentRunWindow: RunWindow? = null
+
+    /** Forward a pointer event on the run surface into a windowed program. Ignored for a console run. */
+    fun sendRunPointer(action: Int, x: Float, y: Float) {
+        currentRunWindow?.pointer(action, x, y)
+    }
+
+    /** Forward a scroll on the run surface into a windowed program. Ignored for a console run. */
+    fun sendRunScroll(x: Float, y: Float, notches: Int) {
+        currentRunWindow?.scroll(x, y, notches)
+    }
+
+    /** Forward a key event into a windowed program. Ignored for a console run. */
+    fun sendRunKey(action: Int, keyCode: Int, keyChar: Char) {
+        currentRunWindow?.key(action, keyCode, keyChar)
+    }
+
+    /** Tell a windowed program the size its window is being drawn at, so it paints at exactly that size
+     *  instead of being scaled to fit. */
+    fun setRunSurfaceSize(widthPx: Int, heightPx: Int) {
+        currentRunWindow?.resize(widthPx, heightPx)
+    }
 
     /** Feed a line of input to the running program (newline appended) and echo it into the transcript. */
     fun sendRunInput(text: String) {
@@ -339,6 +410,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         }
         currentRunIo?.input?.close()
         currentRunIo = null
+        currentRunWindow = null
     }
 
     /** The host's [ProgramIo] for a console run: routes the program's output into [runConsole], provides a
@@ -354,6 +426,16 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             if (_runConsole.value?.id == sessionId) appendConsoleChunk(
                 ConsoleChunkKind.OUTPUT, text
             )
+        }
+
+        override fun frame(path: String, width: Int, height: Int, seq: Long) {
+            _runConsole.update {
+                if (it?.id == sessionId) it.copy(frame = RunFrameUi(path, width, height, seq)) else it
+            }
+        }
+
+        override fun windowed(window: RunWindow) {
+            if (_runConsole.value?.id == sessionId) currentRunWindow = window
         }
 
         override fun started() {
@@ -489,9 +571,58 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
      * registration rather than a host edit here.
      */
     internal fun buildSystemFor(moduleType: dev.ide.model.ModuleType): dev.ide.build.BuildSystem? =
-        buildSystem.takeIf { it.supports(moduleType) }
-            ?: androidBuild?.takeIf { it.supports(moduleType) }
-            ?: ctx.platform.extensions.extensions(BUILD_SYSTEM_EP).firstOrNull { it.supports(moduleType) }
+        buildSystem.takeIf { it.supports(moduleType) } ?: androidBuild?.takeIf {
+            it.supports(moduleType)
+        } ?: ctx.platform.extensions.extensions(BUILD_SYSTEM_EP)
+            .firstOrNull { it.supports(moduleType) }
+
+    /**
+     * The build system BOUND to [project]: a contributed [BUILD_SYSTEM_EP] system whose id matches
+     * [dev.ide.model.Project.buildSystemId] owns that project's builds outright, ahead of the built-ins. This
+     * is how a foreign build system takes over a project its importer claimed. Null when nothing is bound
+     * (the usual case), and the per-module-type selection above applies instead.
+     */
+    internal fun buildSystemFor(project: dev.ide.model.Project): dev.ide.build.BuildSystem? =
+        ctx.platform.extensions.extensions(BUILD_SYSTEM_EP)
+            .lastOrNull { it.id == project.buildSystemId }
+
+    /**
+     * The per-graph [BuildContext]: the build logic plugins contributed to [BUILD_PLUGIN_EP] plus the host's
+     * paths and per-module platform classpath. Read at graph time rather than cached, so a plugin enabled
+     * after the project opened contributes to the next build.
+     */
+    private fun buildContext(): BuildContext = BuildContext(
+        plugins = ctx.platform.extensions.extensions(BUILD_PLUGIN_EP),
+        env = DefaultBuildEnv(ctx.workspaceRoot, ctx.sharedCachesRoot) { ctx.bootClasspathFor(it) },
+        extensions = ctx.platform.extensions,
+    )
+
+    /**
+     * The executable form of a Run row the host itself doesn't own: one contributed by the project's bound
+     * build system, or by a [RunTaskProvider]. Returns the name to label the build with and the action, or
+     * null when nobody claims [id]. A contributor that throws while building its action is left to the
+     * caller's handler, which reports it as a failed start rather than as an unknown task.
+     */
+    private fun contributedAction(id: String): Pair<String, RunAction>? {
+        val context = buildContext()
+        for (project in ctx.store.workspace.projects) {
+            val system = buildSystemFor(project) ?: continue
+            val spec = project.runTasksSafely(system).firstOrNull { it.id == id } ?: continue
+            system.actionFor(spec, project, context)?.let { return project.name to it }
+        }
+        for (provider in ctx.platform.extensions.extensions(RUN_TASK_PROVIDER_EP)) {
+            for (module in ctx.modules()) {
+                val spec = provider.tasksFor(module).firstOrNull { it.id == id } ?: continue
+                val project = ctx.projectOf(module) ?: continue
+                provider.actionFor(spec, project, module, context)?.let { return module.name to it }
+            }
+        }
+        return null
+    }
+
+    /** A contributed build system's rows, never letting a broken extension break the Run picker. */
+    private fun dev.ide.model.Project.runTasksSafely(system: dev.ide.build.BuildSystem) =
+        runCatching { system.runTasks(this) }.getOrDefault(emptyList())
 
     /** Tasks the UI's Run picker offers: a `run` for each runnable console (Java/Kotlin) module + Android
      *  `assemble<Variant>`. A module is runnable when its Run configuration names a main class, or one is
@@ -501,7 +632,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         // every such module offers — so a library module (no main) is still buildable from the Run picker.
         for (m in ctx.modules()) {
             if (!isConsoleRunModule(m)) continue
-            if (runnableMainFor(m) != null) add(RunTaskOption("run:${m.name}", "Run ${m.name}", "run"))
+            if (runnableMainFor(m) != null) add(
+                RunTaskOption(
+                    "run:${m.name}", "Run ${m.name}", "run"
+                )
+            )
             add(RunTaskOption("build:${m.name}", "Build ${m.name}", "build"))
         }
         for (m in ctx.modules().filter { it.type.id == "android-app" }) {
@@ -530,14 +665,35 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         for (m in ctx.modules().filter { it.type.id == "android-lib" }) {
             for (v in AndroidVariants.compute(m)) {
                 val cap = v.name.replaceFirstChar { it.uppercase() }
-                add(RunTaskOption("assembleAar:${m.name}:${v.name}", "assembleAar$cap (.aar) · ${m.name}", "android"))
+                add(
+                    RunTaskOption(
+                        "assembleAar:${m.name}:${v.name}",
+                        "assembleAar$cap (.aar) · ${m.name}",
+                        "android"
+                    )
+                )
             }
         }
-        // Plugin-contributed run-task options (RUN_TASK_PROVIDER_EP), merged after the built-ins. A provider
-        // reuses a built-in id prefix (build:/run:/assemble:) to execute through the existing id dispatch below.
+        // A contributed build system bound to a project lists its own tasks, so a foreign build system's
+        // targets appear here and dispatch back to it through BuildSystem.actionFor.
+        for (project in ctx.store.workspace.projects) {
+            val system = buildSystemFor(project) ?: continue
+            for (spec in project.runTasksSafely(system)) add(
+                RunTaskOption(
+                    spec.id, spec.label, spec.group
+                )
+            )
+        }
+        // Plugin-contributed run-task options (RUN_TASK_PROVIDER_EP), merged after the built-ins. An id with a
+        // built-in prefix (build:/run:/assemble:) runs through the host's pipeline; any other id is dispatched
+        // back to the provider's RunTaskProvider.actionFor.
         val providers = ctx.platform.extensions.extensions(RUN_TASK_PROVIDER_EP)
         for (m in ctx.modules()) {
-            for (spec in providers.flatMap { it.tasksFor(m) }) add(RunTaskOption(spec.id, spec.label, spec.group))
+            for (spec in providers.flatMap { it.tasksFor(m) }) add(
+                RunTaskOption(
+                    spec.id, spec.label, spec.group
+                )
+            )
         }
     }
 
@@ -548,7 +704,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             // optimistic Running for ITS request, and a silent drop here would leave it waiting forever on
             // deltas that never come.
             _buildState.update {
-                it.copy(log = it.log + logLine("Run request ignored — a build is already running.", UiLogLevel.Warn))
+                it.copy(
+                    log = it.log + logLine(
+                        "Run request ignored — a build is already running.", UiLogLevel.Warn
+                    )
+                )
             }
             return
         }
@@ -560,13 +720,15 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             when {
                 id.startsWith("run:") -> {
                     val moduleName = id.removePrefix("run:")
-                    val module = ctx.modules().firstOrNull { it.name == moduleName }
-                        ?: return fail("No module '$moduleName'.")
+                    val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return fail(
+                        "No module '$moduleName'."
+                    )
                     val target = runnableMainFor(module)
                         ?: return fail("No runnable main() found for ${module.name}. Set one in Module Settings ▸ Run.")
                     val mainClass = target.mainClass
                     unresolvedBlocker(module)?.let { return fail(it) }
-                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
+                    val project = ctx.projectOf(module)
+                        ?: return fail("Internal error: no project for module '${module.name}'.")
                     // Start an interactive console session: program stdio + stdin flow through this ProgramIo
                     // into the full-screen Run terminal.
                     val sessionId = runConsoleSeq.incrementAndGet()
@@ -576,12 +738,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     // The console program runs on the bytecode VM (both desktop and device): its compiled
                     // classpath is interpreted directly, so there is no dexing and no dynamic class loading.
                     launch(
-                        module.name,
-                        buildSystem.createInterpretRunGraph(
-                            project, module, mainClass, ctx.programInterpreter, programIo = io, instanceMain = target.instance
-                        ),
-                        "> Run $mainClass",
-                        onComplete = ::finalizeRunConsole
+                        module.name, buildSystem.createInterpretRunGraph(
+                            project,
+                            module,
+                            mainClass,
+                            ctx.programInterpreter,
+                            programIo = io,
+                            instanceMain = target.instance
+                        ), "> Run $mainClass", onComplete = ::finalizeRunConsole
                     )
                 }
 
@@ -593,11 +757,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val android = androidBuild
                         ?: return fail("Android SDK (platform + build-tools) not found — install one to assemble Android modules.")
-                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
+                    val project = ctx.projectOf(module)
+                        ?: return fail("Internal error: no project for module '${module.name}'.")
                     val graph = android.createBuildGraph(
-                        project, BuildRequest(
+                        project,
+                        BuildRequest(
                             listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE
-                        )
+                        ),
+                        buildContext(),
                     )
                     launch(
                         module.name,
@@ -615,11 +782,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val android = androidBuild
                         ?: return fail("Android SDK (platform + build-tools) not found — install one to bundle Android modules.")
-                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
+                    val project = ctx.projectOf(module)
+                        ?: return fail("Internal error: no project for module '${module.name}'.")
                     val graph = android.createBuildGraph(
-                        project, BuildRequest(
+                        project,
+                        BuildRequest(
                             listOf(module.id), VariantSelector(variant), BuildGoal.BUNDLE
-                        )
+                        ),
+                        buildContext(),
                     )
                     val aab = AndroidBuildSystem.signedAabPath(module, variant)
                     launch(
@@ -638,13 +808,21 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val android = androidBuild
                         ?: return fail("Android SDK (platform + build-tools) not found — install one to assemble Android modules.")
-                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
+                    val project = ctx.projectOf(module)
+                        ?: return fail("Internal error: no project for module '${module.name}'.")
                     val graph = android.createBuildGraph(
-                        project, BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE)
+                        project,
+                        BuildRequest(
+                            listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE
+                        ),
+                        buildContext(),
                     )
                     val aar = AndroidBuildSystem.aarPath(module, variant)
                     launch(
-                        module.name, graph, "> assembleAar $variant (.aar) · ${module.name}", firstBuildDexBanner(module)
+                        module.name,
+                        graph,
+                        "> assembleAar $variant (.aar) · ${module.name}",
+                        firstBuildDexBanner(module)
                     ) { log -> log("Packaged AAR: $aar") }
                 }
 
@@ -660,11 +838,19 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val android = androidBuild
                         ?: return fail("Android SDK (platform + build-tools) not found — install one to prepare the preview.")
-                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
+                    val project = ctx.projectOf(module)
+                        ?: return fail("Internal error: no project for module '${module.name}'.")
                     val graph = android.createBuildGraph(
-                        project, BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.DEX)
+                        project,
+                        BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.DEX),
+                        buildContext(),
                     )
-                    launch(module.name, graph, "> prepare libraries (dex) $variant · ${module.name}", firstBuildDexBanner(module)) { log ->
+                    launch(
+                        module.name,
+                        graph,
+                        "> prepare libraries (dex) $variant · ${module.name}",
+                        firstBuildDexBanner(module)
+                    ) { log ->
                         log("Libraries prepared — the layout preview can now render.")
                     }
                 }
@@ -673,16 +859,26 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                 // the only way to build it from the Run picker.
                 id.startsWith("build:") -> {
                     val moduleName = id.removePrefix("build:")
-                    val module = ctx.modules().firstOrNull { it.name == moduleName }
-                        ?: return fail("No module '$moduleName'.")
-                    unresolvedBlocker(module)?.let { return fail(it) }
-                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
-                    val bs = buildSystemFor(module.type)
-                        ?: return fail("No build system supports module type '${module.type.id}'.")
-                    val graph = bs.createBuildGraph(
-                        project, BuildRequest(listOf(module.id), VariantSelector(ctx.activeVariant(module)), BuildGoal.ASSEMBLE)
+                    val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return fail(
+                        "No module '$moduleName'."
                     )
-                    launch(module.name, graph, "> build ${module.name}") { log -> log("Built: ${jarPath(module)}") }
+                    unresolvedBlocker(module)?.let { return fail(it) }
+                    val project = ctx.projectOf(module)
+                        ?: return fail("Internal error: no project for module '${module.name}'.")
+                    val bs = buildSystemFor(project) ?: buildSystemFor(module.type)
+                    ?: return fail("No build system supports module type '${module.type.id}'.")
+                    val graph = bs.createBuildGraph(
+                        project,
+                        BuildRequest(
+                            listOf(module.id),
+                            VariantSelector(ctx.activeVariant(module)),
+                            BuildGoal.ASSEMBLE
+                        ),
+                        buildContext(),
+                    )
+                    launch(
+                        module.name, graph, "> build ${module.name}"
+                    ) { log -> log("Built: ${jarPath(module)}") }
                 }
 
                 id.startsWith("androidRun:") -> {
@@ -702,11 +898,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     // app IDs), so logs are captured whether the app is launched from here OR the device launcher.
                     val launchPkg = AndroidVariants.select(module, variant)
                         ?.let { AndroidVariants.applicationId(facet, it) } ?: facet.namespace
-                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
+                    val project = ctx.projectOf(module)
+                        ?: return fail("Internal error: no project for module '${module.name}'.")
                     val graph = android.createBuildGraph(
-                        project, BuildRequest(
+                        project,
+                        BuildRequest(
                             listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE
-                        )
+                        ),
+                        buildContext(),
                     )
                     val apk = AndroidBuildSystem.signedApkPath(module, variant)
                     // On a successful build, install + launch (the OS shows its own install-confirmation).
@@ -718,7 +917,19 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     ) { log -> installer.installAndLaunch(apk, launchPkg, log) }
                 }
 
-                else -> fail("Unknown task: $id")
+                // Not one of the host's own ids: hand it to whoever contributed it (a plugin build system for
+                // this project, or a RunTaskProvider). Its graph runs through the same executor and console.
+                else -> {
+                    val contributed = contributedAction(id) ?: return fail("Unknown task: $id")
+                    val (label, action) = contributed
+                    launch(
+                        label,
+                        action.graph,
+                        action.header,
+                        action.banner,
+                        onSuccess = action.onSuccess
+                    )
+                }
             }
         } catch (e: CyclicTaskDependencyException) {
             fail("Build configuration error — cyclic task dependency: ${e.cycle.joinToString(" → ") { it.value }}")
@@ -752,7 +963,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             elapsedMs = 0
         )
         // A pre-start failure (bad config, missing tool) never produced a diagnostic, so bucket it accordingly.
-        publishBuild(BuildEvent.Finished(module = "", succeeded = false, failureKind = BuildFailureKind.NO_DIAGNOSTIC, message = message))
+        publishBuild(
+            BuildEvent.Finished(
+                module = "",
+                succeeded = false,
+                failureKind = BuildFailureKind.NO_DIAGNOSTIC,
+                message = message
+            )
+        )
         finalizeRunConsole(succeeded = false) // unstick a run console if a run failed before its program started
     }
 
@@ -769,8 +987,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         val notes = ArrayList<String>()
         val dexCache = (ctx.sharedCachesRoot ?: ctx.store.rootPath).resolve("caches").resolve("dex")
         if (depCount >= FIRST_BUILD_DEX_BANNER_THRESHOLD && !dexCacheHasEntries(dexCache)) {
-            notes += "First build — dexing $depCount libraries from scratch (there's no dex cache yet), so this " +
-                "build is slower than usual. The next build reuses the cached dex and will be much faster."
+            notes += "First build — dexing $depCount libraries from scratch (there's no dex cache yet), so this " + "build is slower than usual. The next build reuses the cached dex and will be much faster."
         }
         // Desugaring hint: below API 26, D8 must desugar every library on-device and the library dex cache is
         // keyed by the whole classpath, so a big (e.g. Compose) project re-dexes all its libraries whenever a
@@ -778,9 +995,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         // cross-project bucket. Surfaced once per build so the user can weigh raising minSdk.
         val minSdk = module.facets.get(AndroidFacet.KEY)?.minSdk
         if (minSdk != null && minSdk in 21..25 && depCount >= FIRST_BUILD_DEX_BANNER_THRESHOLD) {
-            notes += "This module's minSdk is $minSdk. Below API 26, on-device dexing must desugar the whole " +
-                "library classpath, which is significantly slower and re-dexes every library when dependencies " +
-                "change. If your app can require API 26+, raising minSdk makes library dexing far faster and cacheable."
+            notes += "This module's minSdk is $minSdk. Below API 26, on-device dexing must desugar the whole " + "library classpath, which is significantly slower and re-dexes every library when dependencies " + "change. If your app can require API 26+, raising minSdk makes library dexing far faster and cacheable."
         }
         return notes.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
     }
@@ -789,6 +1004,57 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     private fun dexCacheHasEntries(dir: Path): Boolean = Files.isDirectory(dir) && runCatching {
         Files.walk(dir).use { s -> s.anyMatch { it.toString().endsWith(".dex") } }
     }.getOrDefault(false)
+
+    /**
+     * Arm the background library-dex warm (see [dexWarmJob]), replacing any previously armed one. Runs on the
+     * publishing thread, so it stays a coroutine launch and nothing else: the opt-in check, the SDK probe behind
+     * [androidBuild] and every filesystem touch happen inside the job, after the delay.
+     *
+     * The pref is read INSIDE the job rather than here. [ctx.projectPref] parses the project properties file, and
+     * this is armed from every model change — most of which arrive in bursts while a build publishes — so reading
+     * it on the publishing thread would charge every project a file read per change for a feature that is off by
+     * default and would never run. Reading it late also means toggling the pref takes effect without a restart.
+     */
+    private fun scheduleDexWarm() {
+        val previous = dexWarmJob
+        dexWarmJob = buildScope.launch {
+            previous?.cancelAndJoin()
+            delay(DEX_WARM_DELAY_MS)          // let a burst of commits (and the resolution behind them) settle
+            if (ctx.projectPref(DEX_WARM_PREF) != "true") return@launch
+            if (buildJob?.isActive == true) return@launch
+            try {
+                warmLibraryDexCaches()
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                // Warming is best-effort: it makes a later build faster and can never make one incorrect, so a
+                // failure here is a log line, not a user-visible error.
+                memLog.info("dex warm: skipped (${t.message ?: t.javaClass.simpleName})")
+            }
+        }
+    }
+
+    /** Dex each Android module's not-yet-dexed libraries into the shared cache, newest interruption wins. */
+    private suspend fun warmLibraryDexCaches() {
+        val android = androidBuild ?: return
+        val warmRoot = (ctx.sharedCachesRoot ?: ctx.store.rootPath).resolve("caches").resolve("dex-warm")
+        for (module in ctx.modules()) {
+            if (module.facets.get(AndroidFacet.KEY) == null) continue
+            if (unresolvedBlocker(module) != null) continue      // its classpath isn't resolved yet; nothing to dex
+            if (buildJob?.isActive == true) return               // a real build took over; it warms the cache itself
+            val variant = ctx.activeVariant(module)
+            val dexed = android.warmLibraryDexCache(
+                module, variant, warmRoot.resolve(module.name),
+                log = { memLog.info("dex warm ${module.name}: $it") },
+                checkCanceled = {
+                    if (buildJob?.isActive == true) throw kotlinx.coroutines.CancellationException("build started")
+                },
+            )
+            if (dexed > 0) {
+                memLog.info("dex warm: ${module.name} $variant — dexed $dexed library(ies) into the shared cache")
+            }
+        }
+    }
 
     /** Stream [graph] execution into [buildState] (shared by run + assemble). [onSuccess] (e.g. install +
      *  launch an APK) runs after a successful build, receiving the console log appender. [onComplete] runs
@@ -801,6 +1067,10 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         onComplete: ((succeeded: Boolean) -> Unit)? = null,
         onSuccess: (suspend (log: (String) -> Unit) -> Unit)? = null,
     ) {
+        // A build the user asked for outranks the background dex warm: stop it so the two aren't competing for the
+        // same cores, heap and dex cache. Cancellation lands between libraries, and the build's own dexing reuses
+        // whatever the warm already banked.
+        dexWarmJob?.cancel()
         val order = graph.topologicalLevels().flatten()
             .map { BuildStepUi(it.name.value, StepStatus.Pending) }
         _buildState.value = BuildState(
@@ -862,7 +1132,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     // names the in-flight task(s) so a hard OOM that kills the process mid-task still leaves a
                     // logcat trail whose last `heap [...]` line pins the task at the ceiling and its heap.
                     if (ticks % MEM_HEARTBEAT_EVERY_SAMPLES == 0 && runningTasks.isNotEmpty()) {
-                        memLog.info("heap [${runningTasks.joinToString(",")}]: ${MemSample.now().fmt()} (peak ${peak.peak().usedMb}MB)")
+                        memLog.info(
+                            "heap [${runningTasks.joinToString(",")}]: ${
+                                MemSample.now().fmt()
+                            } (peak ${peak.peak().usedMb}MB)"
+                        )
                     }
                     ticks++
                     delay(MEM_SAMPLE_INTERVAL_MS)
@@ -921,7 +1195,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                 BuildEvent.Finished(
                     module = moduleName,
                     succeeded = succeeded,
-                    failureKind = if (succeeded) null else BuildFailureKind.classify(finalState.diagnostics, finalState.log),
+                    failureKind = if (succeeded) null else BuildFailureKind.classify(
+                        finalState.diagnostics, finalState.log
+                    ),
                     message = if (succeeded) null else finalState.log.lastOrNull { it.level == UiLogLevel.Error }?.message,
                 )
             )
@@ -946,7 +1222,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             ) else it
         }
         if (wasRunning) {
-            publishBuild(BuildEvent.Finished(module = _buildState.value.moduleName, succeeded = false, failureKind = null, message = "Stopped."))
+            publishBuild(
+                BuildEvent.Finished(
+                    module = _buildState.value.moduleName,
+                    succeeded = false,
+                    failureKind = null,
+                    message = "Stopped."
+                )
+            )
         }
     }
 
@@ -1007,8 +1290,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         }
     }
 
-    private fun AppLogSnapshot.toUi(): AppLogUi =
-        AppLogUi(lines = entries.map { it.toUi() }, connected = connected, packageName = packageName)
+    private fun AppLogSnapshot.toUi(): AppLogUi = AppLogUi(
+        lines = entries.map { it.toUi() }, connected = connected, packageName = packageName
+    )
 
     private fun AppLogEntry.toUi(): AppLogLineUi = AppLogLineUi(
         message = message,
@@ -1043,8 +1327,8 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     /** A build-blocking message when [module] (or a module it depends on) has unresolved declared dependencies,
      *  else null. A build can't succeed against a missing classpath, so we refuse with a clear, actionable why. */
     private fun unresolvedBlocker(module: Module): String? {
-        val bad =
-            ctx.moduleBuildClosure(module).flatMap { m -> ctx.dependencies.declaredUnresolved(m).map { m.name to it } }
+        val bad = ctx.moduleBuildClosure(module)
+            .flatMap { m -> ctx.dependencies.declaredUnresolved(m).map { m.name to it } }
         if (bad.isEmpty()) return null
         val lines = bad.joinToString("\n") { (mod, coord) -> "  • $coord  ($mod)" }
         val n = bad.size
@@ -1057,9 +1341,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
      *  scanned on disk rather than via the index — for the programmatic run-and-capture path, whose sources are
      *  written straight to disk, so a stale index entry can't misname the class to launch. */
     private fun runnableMainFor(module: Module, live: Boolean = false): RunTarget? {
-        val detected = if (live) MainClassDetection.detectLive(ctx, module) else MainClassDetection.detect(ctx, module)
+        val detected =
+            if (live) MainClassDetection.detectLive(ctx, module) else MainClassDetection.detect(
+                ctx, module
+            )
         val override = ctx.mainClassOverride(module)
-        if (override != null) return detected.firstOrNull { it.mainClass == override } ?: RunTarget(override, instance = false)
+        if (override != null) return detected.firstOrNull { it.mainClass == override } ?: RunTarget(
+            override, instance = false
+        )
         return detected.firstOrNull()
     }
 
@@ -1072,23 +1361,41 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
      * bounded by [timeoutMs]. The run sandbox is auto-allowed for the duration so a lesson snippet never
      * blocks on a permission prompt.
      */
-    suspend fun runAndCapture(moduleName: String, stdin: String = "", timeoutMs: Long = 60_000): RunCapture {
+    suspend fun runAndCapture(
+        moduleName: String, stdin: String = "", timeoutMs: Long = 60_000
+    ): RunCapture {
         ctx.flushOpenDocuments()
         runCatching { ctx.ensureKotlinStdlib() }
-        val module = ctx.modules().firstOrNull { it.name == moduleName }
-            ?: return RunCapture(false, false, "", null, listOf("No module '$moduleName'."))
+        val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return RunCapture(
+            false,
+            false,
+            "",
+            null,
+            listOf("No module '$moduleName'.")
+        )
         // Detect the main from the just-flushed disk sources, not the index: this path writes the module's
         // sources directly (the Learn checker overwrites its `Main` per exercise), so the persisted index can
         // still name a since-deleted class ("Could not find or load main class com.example.app.Main").
-        val target = runnableMainFor(module, live = true)
-            ?: return RunCapture(false, false, "", null, listOf("No runnable main() found in ${module.name}."))
+        val target = runnableMainFor(module, live = true) ?: return RunCapture(
+            false, false, "", null, listOf("No runnable main() found in ${module.name}.")
+        )
         unresolvedBlocker(module)?.let { return RunCapture(false, false, "", null, listOf(it)) }
-        val project = ctx.projectOf(module)
-            ?: return RunCapture(false, false, "", null, listOf("No project for ${module.name}."))
+        val project = ctx.projectOf(module) ?: return RunCapture(
+            false,
+            false,
+            "",
+            null,
+            listOf("No project for ${module.name}.")
+        )
 
         val io = CaptureProgramIo(stdin)
         val graph = buildSystem.createInterpretRunGraph(
-            project, module, target.mainClass, ctx.programInterpreter, programIo = io, instanceMain = target.instance
+            project,
+            module,
+            target.mainClass,
+            ctx.programInterpreter,
+            programIo = io,
+            instanceMain = target.instance
         )
 
         val diags = java.util.Collections.synchronizedList(mutableListOf<String>())
@@ -1101,42 +1408,69 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         val timedOut: Boolean
         try {
             timedOut = withContext(Dispatchers.IO) {
-                withTimeoutOrNull(timeoutMs) { exec.execute(graph, taskCtx, maxParallel = 2) } == null
+                withTimeoutOrNull(timeoutMs) {
+                    exec.execute(
+                        graph, taskCtx, maxParallel = 2
+                    )
+                } == null
             }
         } catch (c: kotlinx.coroutines.CancellationException) {
             throw c
         } catch (e: Throwable) {
             Guards.broker = prevBroker
             io.close()
-            return RunCapture(io.started, io.exited, io.output(), io.exitCode, diags + (e.message ?: e.toString()))
+            return RunCapture(
+                io.started, io.exited, io.output(), io.exitCode, diags + (e.message ?: e.toString())
+            )
         } finally {
             if (Guards.broker === AllowAllBroker) Guards.broker = prevBroker
             io.close()
         }
-        val extra = if (timedOut && !io.exited) listOf("The program didn't finish within ${timeoutMs / 1000}s.") else emptyList()
+        val extra =
+            if (timedOut && !io.exited) listOf("The program didn't finish within ${timeoutMs / 1000}s.") else emptyList()
         return RunCapture(io.started, io.exited, io.output(), io.exitCode, diags + extra)
     }
 
     /** A build-engine diagnostic → a compact one-line message (with location when known). */
     private fun diagLine(d: BuildDiagnostic): String {
         val loc = d.location
-        val where = loc?.let { "${Paths.get(it.path).fileName}${if (it.line > 0) ":${it.line}" else ""}: " } ?: ""
+        val where =
+            loc?.let { "${Paths.get(it.path).fileName}${if (it.line > 0) ":${it.line}" else ""}: " }
+                ?: ""
         return where + d.message
     }
 
     /** A [ProgramIo] that buffers stdout, feeds a canned [stdinText] then EOFs, and records lifecycle. */
     private class CaptureProgramIo(stdinText: String) : ProgramIo {
         private val buf = StringBuilder()
-        private val stdinStream = java.io.ByteArrayInputStream(stdinText.toByteArray(Charsets.UTF_8))
-        @Volatile var started = false; private set
-        @Volatile var exited = false; private set
-        @Volatile var exitCode: Int? = null; private set
+        private val stdinStream =
+            java.io.ByteArrayInputStream(stdinText.toByteArray(Charsets.UTF_8))
+
+        @Volatile
+        var started = false; private set
+
+        @Volatile
+        var exited = false; private set
+
+        @Volatile
+        var exitCode: Int? = null; private set
         override val stdin: InputStream get() = stdinStream
-        override fun stdout(text: String) { synchronized(buf) { if (buf.length < CAPTURE_MAX) buf.append(text) } }
-        override fun started() { started = true }
-        override fun exited(code: Int) { exited = true; exitCode = code }
+        override fun stdout(text: String) {
+            synchronized(buf) { if (buf.length < CAPTURE_MAX) buf.append(text) }
+        }
+
+        override fun started() {
+            started = true
+        }
+
+        override fun exited(code: Int) {
+            exited = true; exitCode = code
+        }
+
         fun output(): String = synchronized(buf) { buf.toString() }
-        fun close() { runCatching { stdinStream.close() } }
+        fun close() {
+            runCatching { stdinStream.close() }
+        }
     }
 
     /** Allow every guarded call — a learning snippet the user typed runs in a trusted sandbox, never prompts. */
@@ -1150,12 +1484,24 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         currentRunIo?.input?.close()
         pendingAnswer?.offer(UiPermissionDecision.DENY)
         if (Guards.broker === permissionBroker) Guards.broker = null
+        runCatching { dexWarmConnection.dispose() }
         buildScope.cancel()
     }
 
     private companion object {
         /** Below this many library deps, dexing is quick enough that the first-build notice is just noise. */
         private const val FIRST_BUILD_DEX_BANNER_THRESHOLD = 8
+
+        /** Project pref that turns the background library-dex warm ON (`"true"`); OFF by default. It costs CPU
+         *  after a dependency change, which a user on battery may not want to spend ahead of a build — and while
+         *  it was on by default it doubled build times on projects where it overlapped a build, so it stays
+         *  opt-in until the overlap is measured on a device rather than an emulator. */
+        private const val DEX_WARM_PREF = "build.dexWarm"
+
+        /** How long after the last model/library change the warm starts. Long enough that a project open (many
+         *  commits, then the finished resolution) arms it once, and that a user who immediately hits Run gets the
+         *  machine to themselves. */
+        private const val DEX_WARM_DELAY_MS = 15_000L
 
         /** Coalesce console output into chunks up to this size; cap the retained transcript so an interactive
          *  program's output is otherwise unbounded. */

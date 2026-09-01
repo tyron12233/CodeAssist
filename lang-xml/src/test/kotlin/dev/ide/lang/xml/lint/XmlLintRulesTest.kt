@@ -120,6 +120,111 @@ class XmlLintRulesTest {
     }
 
     @Test
+    fun flagsUnresolvedElementWithRenameRangesForBothTags() {
+        // The checker is the only authority on existence; the rule locates the element and the spans a
+        // rename has to rewrite (start tag AND end tag).
+        val checker = XmlTagChecker { _, tag, _ ->
+            if (tag == "TextVeiw") TagInfo.Unresolved(listOf("TextView")) else TagInfo.Recognized(container = true)
+        }
+        val xml = "<LinearLayout><TextVeiw></TextVeiw></LinearLayout>"
+        val hit = XmlLintRules.tagProblems(parse(xml), "res/layout/a.xml", checker)
+            .filterIsInstance<XmlLintRules.TagProblem.Unresolved>().single()
+        assertEquals("TextVeiw", hit.tag)
+        assertEquals(listOf("TextView"), hit.suggestions)
+        assertEquals(2, hit.nameRanges.size, "the start tag and the end tag are both renamed")
+        assertTrue(hit.nameRanges.all { xml.substring(it.start, it.end) == "TextVeiw" }, hit.nameRanges.toString())
+        // A self-closing element has only the one name to rewrite.
+        val selfClosed = XmlLintRules.tagProblems(parse("<LinearLayout><TextVeiw/></LinearLayout>"), "p", checker)
+            .filterIsInstance<XmlLintRules.TagProblem.Unresolved>().single()
+        assertEquals(1, selfClosed.nameRanges.size)
+    }
+
+    @Test
+    fun flagsChildrenOfANonContainerButNotTheInflatersOwnChildTags() {
+        val checker = XmlTagChecker { _, tag, _ ->
+            TagInfo.Recognized(container = tag == "LinearLayout")
+        }
+        val problems = XmlLintRules.tagProblems(
+            parse("<LinearLayout><TextView><Button/><requestFocus/></TextView></LinearLayout>"),
+            "res/layout/a.xml", checker,
+        ).filterIsInstance<XmlLintRules.TagProblem.IllegalChild>()
+        assertEquals(listOf("Button"), problems.map { it.child }, "requestFocus is legal inside any view")
+        assertEquals("TextView", problems.single().tag)
+        // An unknown containment (null) is never flagged.
+        assertTrue(
+            XmlLintRules.tagProblems(
+                parse("<fragment><Button/></fragment>"), "res/layout/a.xml",
+                XmlTagChecker { _, _, _ -> TagInfo.Recognized(container = null) },
+            ).isEmpty(),
+        )
+    }
+
+    @Test
+    fun flagsInflaterStructureRules() {
+        fun kinds(xml: String) = XmlLintRules.structureProblems(parse(xml)).map { it.kind }
+        assertEquals(
+            listOf(XmlLintRules.StructureProblem.Kind.INCLUDE_WITHOUT_LAYOUT),
+            kinds("<FrameLayout><include/></FrameLayout>"),
+        )
+        assertTrue(kinds("""<FrameLayout><include layout="@layout/other"/></FrameLayout>""").isEmpty())
+        assertEquals(
+            listOf(XmlLintRules.StructureProblem.Kind.MERGE_NOT_ROOT),
+            kinds("<FrameLayout><merge/></FrameLayout>"),
+        )
+        assertTrue(kinds("<merge><TextView/></merge>").isEmpty(), "a root merge is the point of merge")
+        assertTrue(kinds("<layout><merge/></layout>").isEmpty(), "data binding wraps the real root")
+        assertEquals(
+            listOf(XmlLintRules.StructureProblem.Kind.FRAGMENT_WITHOUT_CLASS),
+            kinds("<FrameLayout><fragment/></FrameLayout>"),
+        )
+        assertTrue(kinds("""<FrameLayout><fragment android:name="a.B"/></FrameLayout>""").isEmpty())
+        assertTrue(kinds("""<FrameLayout><fragment class="a.B"/></FrameLayout>""").isEmpty())
+    }
+
+    @Test
+    fun flagsRepeatedIdDeclarationsOnly() {
+        val xml = """
+            <LinearLayout>
+                <TextView android:id="@+id/title"/>
+                <TextView android:id="@+id/title"/>
+                <TextView android:id="@+id/other" android:labelFor="@id/title"/>
+            </LinearLayout>
+        """.trimIndent()
+        val dups = XmlLintRules.duplicateIds(parse(xml))
+        assertEquals(listOf("title"), dups.map { it.id }, "only the second @+id declaration is flagged")
+        assertEquals("@+id/title", xml.substring(dups[0].range.start, dups[0].range.end))
+    }
+
+    @Test
+    fun flagsValuesEntriesWithoutANameAndDuplicatesPerRClass() {
+        val xml = """
+            <resources>
+                <string name="app_name">A</string>
+                <string name="app_name">B</string>
+                <string>C</string>
+                <color name="app_name">#fff</color>
+                <string-array name="items"><item>x</item></string-array>
+                <array name="items"><item>y</item></array>
+                <eat-comment/>
+            </resources>
+        """.trimIndent()
+        val hits = XmlLintRules.resourceEntries(parse(xml))
+        val missing = hits.filter { it.kind == XmlLintRules.ResourceEntryProblem.Kind.MISSING_NAME }
+        val dups = hits.filter { it.kind == XmlLintRules.ResourceEntryProblem.Kind.DUPLICATE }
+        assertEquals(listOf("string"), missing.map { it.tag }, "only the nameless <string> lacks a name")
+        // app_name collides for <string>, but the same name under <color> is a different R class; the array
+        // family shares one R class, so <array>/<string-array> DO collide.
+        assertEquals(listOf("string" to "app_name", "array" to "items"), dups.map { it.tag to it.name })
+        // <item> children of an array are not declarations, so their missing name is not a problem.
+        assertTrue(hits.none { it.tag == "item" })
+    }
+
+    @Test
+    fun valuesRulesIgnoreANonResourcesRoot() {
+        assertTrue(XmlLintRules.resourceEntries(parse("<LinearLayout><TextView/></LinearLayout>")).isEmpty())
+    }
+
+    @Test
     fun skipsNamespaceDeclarationsToolsAndUnprefixedAttributes() {
         // A checker that would flag everything if the rule let it through.
         val checker = XmlAttributeChecker { _, _, _, _ -> AttrInfo.NotAllowed }

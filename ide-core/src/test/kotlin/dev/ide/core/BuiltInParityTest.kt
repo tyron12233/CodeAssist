@@ -53,8 +53,8 @@ class BuiltInParityTest {
     }
 
     @Test
-    fun `synthetic-class providers are registered (BuildConfig, ViewBinding, Kotlin, R)`() {
-        assertEquals(4, ext.extensions(SYNTHETIC_CLASS_EP).size)
+    fun `synthetic-class providers are registered (BuildConfig, ViewBinding, AIDL, Kotlin, R)`() {
+        assertEquals(5, ext.extensions(SYNTHETIC_CLASS_EP).size)
     }
 
     @Test
@@ -64,10 +64,11 @@ class BuiltInParityTest {
         val workspaceServices = setOf(
             "ide.service.signing", "ide.service.search", "ide.service.blocks", "ide.service.actions",
             "ide.service.dependencies", "ide.service.modules", "ide.service.build",
-            "ide.service.languageFeatures", "ide.service.androidResources", "ide.service.refactor",
-            "ide.service.kotlinEditor", "ide.service.composePreview",
+            "ide.service.projectSync", "ide.service.languageFeatures", "ide.service.androidResources",
+            "ide.service.refactor", "ide.service.kotlinEditor", "ide.service.composePreview",
+            "ide.service.icons",
         )
-        assertEquals(moduleAnalyzers + workspaceServices, byId.keys, "exactly the 15 engine services")
+        assertEquals(moduleAnalyzers + workspaceServices, byId.keys, "exactly the 17 engine services")
         moduleAnalyzers.forEach { assertEquals(ServiceScopeLevel.MODULE, byId.getValue(it).level, it) }
         workspaceServices.forEach { assertEquals(ServiceScopeLevel.WORKSPACE, byId.getValue(it).level, it) }
     }
@@ -80,10 +81,11 @@ class BuiltInParityTest {
     @Test
     fun `file-type mappings route built-in extensions incl the backend-less types`() {
         val mappings = ext.extensions(FILE_TYPE_EP).sortedBy { it.order }
-        assertEquals(5, mappings.size, "java, xml, kotlin, proguard, markdown")
+        assertEquals(6, mappings.size, "java, xml, kotlin, proguard, aidl, markdown")
         fun langOf(name: String): LanguageId? = mappings.firstOrNull { it.matches(name) }?.language
         // The backend-less types must resolve off Java so the diagnostics engine never analyses them as Java.
         assertEquals(LanguageId("proguard"), langOf("rules.pro"))
+        assertEquals(LanguageId("aidl"), langOf("IThing.aidl"))
         assertEquals(LanguageId("markdown"), langOf("README.md"))
         assertEquals(LanguageId("java"), langOf("Main.java"))
         assertNull(langOf("Makefile"), "an unmapped file falls through to the host's Java default")

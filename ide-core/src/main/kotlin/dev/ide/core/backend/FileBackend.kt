@@ -209,12 +209,15 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         return dir.parent?.fileName?.toString() == ".platform" && name == "caches"
     }
 
-    /** A surfaced content root. `SOURCE`/`GENERATED` roots are package contexts (compactable, new-class
-     *  targets); everything else (`res/`, `assets/`, resources) is a plain folder tree. */
+    /** A surfaced content root. `SOURCE`/`GENERATED`/`AIDL` roots are package contexts (compactable,
+     *  new-file targets); everything else (`res/`, `assets/`, resources) is a plain folder tree. */
     private fun sourceRootNode(info: TreeRootInfo, module: Module, workspaceRoot: Path): TreeNode {
-        val packageRoot = ContentRole.SOURCE in info.roles || ContentRole.GENERATED in info.roles
+        // `.aidl` files are laid out by package exactly like Java, and AIDL resolves imports through that
+        // layout, so an `aidl/` root reads far better compacted into packages than as nested folders.
+        val aidl = ContentRole.AIDL in info.roles
+        val packageRoot = ContentRole.SOURCE in info.roles || ContentRole.GENERATED in info.roles || aidl
         val label = runCatching { workspaceRoot.relativize(info.path).toString() }.getOrDefault(info.path.toString())
-        val children = if (packageRoot) packageChildren(info.path, info.path, module)
+        val children = if (packageRoot) packageChildren(info.path, info.path, module, aidl)
         else resourceChildren(info.path, info.roles, module)
         return TreeNode(
             id = "root:${info.path}",
@@ -226,14 +229,17 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
             sourceRootPath = if (packageRoot) info.path.toString() else null,
             // The Android res root is an XML new-file target (the dialog routes into res/<kind>/).
             resDirPath = if (ContentRole.ANDROID_RES in info.roles) info.path.toString() else null,
+            aidlRootPath = if (aidl) info.path.toString() else null,
             dirPath = info.path.toString(),
         )
     }
 
-    /** Direct children of a Java/Kotlin package context: package nodes + any default-package files. */
-    private fun packageChildren(dir: Path, sourceRoot: Path, module: Module): List<TreeNode> {
+    /** Direct children of a package context: package nodes + any default-package files. [aidl] marks the
+     *  root as an `aidl/` one, so the nodes below it offer AIDL templates instead of Java/Kotlin ones. */
+    private fun packageChildren(dir: Path, sourceRoot: Path, module: Module, aidl: Boolean): List<TreeNode> {
         val (dirs, files) = childPartition(dir)
-        return dirs.map { packageNode(it, sourceRoot, module) } + files.map { fileNode(it, module, sourceRoot = sourceRoot) }
+        return dirs.map { packageNode(it, sourceRoot, module, aidl) } +
+            files.map { fileNode(it, module, sourceRoot = sourceRoot, aidlRoot = if (aidl) sourceRoot else null) }
     }
 
     /**
@@ -242,7 +248,7 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
      * `com.tyron.codeassist` node. The chain's [PackageSegment]s (one per level, each with its dotted
      * package and directory) are kept so a New-Class action can target any intermediate level.
      */
-    private fun packageNode(startDir: Path, sourceRoot: Path, module: Module): TreeNode {
+    private fun packageNode(startDir: Path, sourceRoot: Path, module: Module, aidl: Boolean): TreeNode {
         val segments = ArrayList<PackageSegment>()
         var cur = startDir
         while (true) {
@@ -253,7 +259,8 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         }
         val displayName = (startDir.parent ?: sourceRoot).relativize(cur).toString().replace(File.separatorChar, '.')
         val (dirs, files) = childPartition(cur)
-        val children = dirs.map { packageNode(it, sourceRoot, module) } + files.map { fileNode(it, module, sourceRoot = sourceRoot) }
+        val children = dirs.map { packageNode(it, sourceRoot, module, aidl) } +
+            files.map { fileNode(it, module, sourceRoot = sourceRoot, aidlRoot = if (aidl) sourceRoot else null) }
         return TreeNode(
             id = "pkg:$cur",
             name = displayName,
@@ -262,6 +269,7 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
             iconId = ctx.services.iconFor(IconTarget.PackageDir(segments.last().packageName)) ?: "package",
             children = children,
             sourceRootPath = sourceRoot.toString(),
+            aidlRootPath = if (aidl) sourceRoot.toString() else null,
             packageSegments = segments,
             dirPath = cur.toString(),
         )
@@ -285,7 +293,13 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         dirPath = dir.toString(),
     )
 
-    private fun fileNode(file: Path, module: Module?, moduleRoots: Map<Path, String> = emptyMap(), sourceRoot: Path? = null): TreeNode {
+    private fun fileNode(
+        file: Path,
+        module: Module?,
+        moduleRoots: Map<Path, String> = emptyMap(),
+        sourceRoot: Path? = null,
+        aidlRoot: Path? = null,
+    ): TreeNode {
         val name = file.fileName.toString()
         // A `module.toml` opens the Module Settings editor (not a text view) for the module it configures —
         // resolved via the prebuilt root map (All-Files view) or the owning module (Project view).
@@ -303,6 +317,7 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
             // A file in a Java/Kotlin package carries its source root so the "New ▸" menu can offer a typed
             // class/file alongside it (created in the same package).
             sourceRootPath = sourceRoot?.toString(),
+            aidlRootPath = aidlRoot?.toString(),
         )
     }
 
@@ -318,10 +333,11 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
     /** Sort key so a module's roots list sources first, then resources, android-res, assets. */
     private fun Set<ContentRole>.rootRank(): Int = when {
         ContentRole.SOURCE in this || ContentRole.GENERATED in this -> 0
-        ContentRole.RESOURCE in this -> 1
-        ContentRole.ANDROID_RES in this -> 2
-        ContentRole.ASSETS in this -> 3
-        else -> 4
+        ContentRole.AIDL in this -> 1
+        ContentRole.RESOURCE in this -> 2
+        ContentRole.ANDROID_RES in this -> 3
+        ContentRole.ASSETS in this -> 4
+        else -> 5
     }
 
     override fun createFile(dirPath: String, fileName: String, content: String): String? =
@@ -365,11 +381,15 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
     override fun createSourceFile(dirPath: String, name: String, template: UiNewFileTemplate): String? {
         val typeName = name.trim()
         if (typeName.isEmpty() || !typeName.first().isLetter() || !typeName.all { it.isLetterOrDigit() || it == '_' }) return null
-        val isKotlin = template.name.startsWith("Kotlin")
+        val extension = when {
+            template.name.startsWith("Kotlin") -> "kt"
+            template.name.startsWith("Aidl") -> "aidl"
+            else -> "java"
+        }
         val dir = Paths.get(dirPath)
         val pkg = ctx.services.packageOf(dir).orEmpty()
         val content = sourceTemplate(template, typeName, pkg)
-        return writeNewFile(dirPath, "$typeName.${if (isKotlin) "kt" else "java"}") { it.writeText(content) }
+        return writeNewFile(dirPath, "$typeName.$extension") { it.writeText(content) }
     }
 
     /** The body for a typed [UiNewFileTemplate], with the resolved [pkg] declaration prepended. */
@@ -388,6 +408,10 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
             UiNewFileTemplate.KotlinDataClass -> ktPkg + "data class $name(\n)\n"
             UiNewFileTemplate.KotlinEnum -> ktPkg + "enum class $name {\n}\n"
             UiNewFileTemplate.KotlinObject -> ktPkg + "object $name\n"
+            UiNewFileTemplate.AidlInterface -> javaPkg + "interface $name {\n}\n"
+            // A bare `parcelable Foo;` declares that a hand-written Parcelable exists; that (not a structured
+            // parcelable) is what an app almost always wants, so it is what the template scaffolds.
+            UiNewFileTemplate.AidlParcelable -> javaPkg + "parcelable $name;\n"
         }
     }
 

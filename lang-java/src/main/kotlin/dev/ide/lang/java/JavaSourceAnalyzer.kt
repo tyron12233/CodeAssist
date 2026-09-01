@@ -78,20 +78,24 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
 
     override val jdkHome: java.nio.file.Path? = env.jdkHome?.toPath()
 
-    /** Attached library/SDK SOURCE archives. Seeded from the compilation context and grown by the host via
-     *  [addSourceJars] / [addSourceDirs] (JDK `src.zip`, Android `sources/`) — mirrors the JDT analyzer. */
+    /** Attached library/SDK SOURCE archives. Seeded by [JavaLanguageBackend] from the compilation context
+     *  (`-sources.jar`s + the derived JDK `src.zip` / Android `sources/`) and grown by the host via
+     *  [addSourceJars] / [addSourceDirs] for the roots it alone knows. Mirrors the JDT analyzer. */
     override var librarySourceArchives: List<java.nio.file.Path> = emptyList()
         private set
 
-    /** Host hook: attach library/JDK source archives (parity with `JdtSourceAnalyzer.addSourceJars`). */
-    fun addSourceJars(extra: List<java.nio.file.Path>) {
+    /** Attach a mixed list of source archives and dirs (whatever exists), deduped. */
+    fun addSourceArchives(extra: List<java.nio.file.Path>) {
         librarySourceArchives = (librarySourceArchives + extra.filter { java.nio.file.Files.exists(it) }).distinct()
     }
 
+    /** Host hook: attach library/JDK source archives (parity with `JdtSourceAnalyzer.addSourceJars`). */
+    fun addSourceJars(extra: List<java.nio.file.Path>) =
+        addSourceArchives(extra.filter { java.nio.file.Files.isRegularFile(it) })
+
     /** Host hook: attach SDK source dirs (parity with `JdtSourceAnalyzer.addSourceDirs`). */
-    fun addSourceDirs(extra: List<java.nio.file.Path>) {
-        librarySourceArchives = (librarySourceArchives + extra.filter { java.nio.file.Files.exists(it) }).distinct()
-    }
+    fun addSourceDirs(extra: List<java.nio.file.Path>) =
+        addSourceArchives(extra.filter { java.nio.file.Files.isDirectory(it) })
 
     /** The workspace index, injected by the host (ide-core) after construction; powers unimported-type /
      *  auto-import completion via the `java.classNames` index (mirrors the JDT/Kotlin analyzers). */

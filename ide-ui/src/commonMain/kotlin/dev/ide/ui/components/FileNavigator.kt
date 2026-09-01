@@ -91,8 +91,10 @@ import dev.ide.ui.generated.resources.filetree_rename
 import dev.ide.ui.generated.resources.filetree_move
 import dev.ide.ui.generated.resources.filetree_copy
 import dev.ide.ui.generated.resources.filetree_delete
+import dev.ide.ui.generated.resources.filetree_aidl_file
 import dev.ide.ui.generated.resources.filetree_java_class
 import dev.ide.ui.generated.resources.filetree_kotlin_file
+import dev.ide.ui.generated.resources.filetree_image_asset
 import dev.ide.ui.generated.resources.filetree_resource_file
 import dev.ide.ui.generated.resources.filetree_file
 import dev.ide.ui.generated.resources.filetree_directory
@@ -133,6 +135,8 @@ fun FileNavigator(
     onNewFolder: (dirPath: String, segments: List<PackageSegment>) -> Unit = { _, _ -> },
     /** Create a new Android XML resource for a `res/` node (the templated dialog). */
     onNewResource: (TreeNode) -> Unit = {},
+    /** Open the Icon Manager scoped to a `res/` node, to add an image or vector asset there. */
+    onNewImageAsset: (TreeNode) -> Unit = {},
     /** Create a new typed source file (Java class / Kotlin file) in [dirPath]; [segments] as in [onNewFile]. */
     onNewSource: (dirPath: String, lang: NewSourceLang, segments: List<PackageSegment>) -> Unit = { _, _, _ -> },
     onViewDependencies: (TreeNode) -> Unit = {},
@@ -277,6 +281,7 @@ fun FileNavigator(
                         onNewFile,
                         onNewFolder,
                         onNewResource,
+                        onNewImageAsset,
                         onNewSource,
                         onViewDependencies,
                         onConfigureModule,
@@ -517,6 +522,7 @@ private fun TreeRowContent(
     onNewFile: (dirPath: String, segments: List<PackageSegment>) -> Unit,
     onNewFolder: (dirPath: String, segments: List<PackageSegment>) -> Unit,
     onNewResource: (TreeNode) -> Unit,
+    onNewImageAsset: (TreeNode) -> Unit,
     onNewSource: (dirPath: String, lang: NewSourceLang, segments: List<PackageSegment>) -> Unit,
     onViewDependencies: (TreeNode) -> Unit,
     onConfigureModule: (TreeNode) -> Unit,
@@ -676,6 +682,7 @@ private fun TreeRowContent(
                         onNewFile,
                         onNewFolder,
                         onNewResource,
+                        onNewImageAsset,
                         onNewSource
                     )
                 // Share is shown for the active file (touch path) or any file on hover (desktop).
@@ -738,6 +745,7 @@ private fun TreeRowContent(
                     onNewFile,
                     onNewFolder,
                     onNewResource,
+                    onNewImageAsset,
                     onNewSource
                 ) { menuOpen = false }
             }
@@ -847,6 +855,7 @@ private fun NewActionItems(
     onNewFile: (dirPath: String, segments: List<PackageSegment>) -> Unit,
     onNewFolder: (dirPath: String, segments: List<PackageSegment>) -> Unit,
     onNewResource: (TreeNode) -> Unit,
+    onNewImageAsset: (TreeNode) -> Unit,
     onNewSource: (dirPath: String, lang: NewSourceLang, segments: List<PackageSegment>) -> Unit,
     close: () -> Unit,
 ) {
@@ -854,25 +863,40 @@ private fun NewActionItems(
     // plain folder / res context.
     val segs = node.packageSegments
     if (isSourceContext && targetDir != null) {
-        FileActionItem(CaIcons.code, stringResource(Res.string.filetree_java_class)) {
-            close(); onNewSource(
-            targetDir,
-            NewSourceLang.Java,
-            segs
-        )
-        }
-        FileActionItem(CaIcons.code, stringResource(Res.string.filetree_kotlin_file)) {
-            close(); onNewSource(
-            targetDir,
-            NewSourceLang.Kotlin,
-            segs
-        )
+        // An `aidl/` root is a package context too, but a Java class does not belong in one, so it offers
+        // the AIDL templates instead.
+        if (node.aidlRootPath != null) {
+            FileActionItem(CaIcons.code, stringResource(Res.string.filetree_aidl_file)) {
+                close(); onNewSource(targetDir, NewSourceLang.Aidl, segs)
+            }
+        } else {
+            FileActionItem(CaIcons.code, stringResource(Res.string.filetree_java_class)) {
+                close(); onNewSource(
+                targetDir,
+                NewSourceLang.Java,
+                segs
+            )
+            }
+            FileActionItem(CaIcons.code, stringResource(Res.string.filetree_kotlin_file)) {
+                close(); onNewSource(
+                targetDir,
+                NewSourceLang.Kotlin,
+                segs
+            )
+            }
         }
     }
-    if (canNewResource) FileActionItem(
-        CaIcons.image,
-        stringResource(Res.string.filetree_resource_file)
-    ) { close(); onNewResource(node) }
+    if (canNewResource) {
+        FileActionItem(
+            CaIcons.image,
+            stringResource(Res.string.filetree_resource_file)
+        ) { close(); onNewResource(node) }
+        // The Icon Manager, opened on this very res/ directory: an asset added here needs no target picking.
+        FileActionItem(
+            CaIcons.star,
+            stringResource(Res.string.filetree_image_asset)
+        ) { close(); onNewImageAsset(node) }
+    }
     if (targetDir != null) {
         FileActionItem(CaIcons.plus, stringResource(Res.string.filetree_file)) { close(); onNewFile(targetDir, segs) }
         FileActionItem(CaIcons.folder, stringResource(Res.string.filetree_directory)) { close(); onNewFolder(targetDir, segs) }
@@ -890,6 +914,7 @@ private fun NewHoverButton(
     onNewFile: (dirPath: String, segments: List<PackageSegment>) -> Unit,
     onNewFolder: (dirPath: String, segments: List<PackageSegment>) -> Unit,
     onNewResource: (TreeNode) -> Unit,
+    onNewImageAsset: (TreeNode) -> Unit,
     onNewSource: (dirPath: String, lang: NewSourceLang, segments: List<PackageSegment>) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
@@ -904,6 +929,7 @@ private fun NewHoverButton(
                 onNewFile,
                 onNewFolder,
                 onNewResource,
+                onNewImageAsset,
                 onNewSource
             ) { open = false }
         }
@@ -967,7 +993,8 @@ private fun SegmentedPathLabel(
                             onNewFile,
                             onNewFolder,
                             onNewResource,
-                            onNewSource
+                            onNewImageAsset = {},
+                            onNewSource = onNewSource,
                         ) { open = false }
                     }
                 }

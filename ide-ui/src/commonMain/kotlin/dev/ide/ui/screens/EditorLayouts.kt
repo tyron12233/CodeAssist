@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.IdeUiState
 import dev.ide.ui.LeftPanelId
+import dev.ide.ui.LocalPluginNavigator
 import dev.ide.ui.actions.dispatchAction
 import dev.ide.ui.backend.BuildState
 import dev.ide.ui.backend.CustomizationActions
@@ -52,7 +53,6 @@ import dev.ide.ui.components.ActivityRail
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.BuildConsole
 import dev.ide.ui.components.BuildDock
-import dev.ide.ui.components.ComingSoon
 import dev.ide.ui.components.DockBarHeight
 import dev.ide.ui.components.FileNavigator
 import dev.ide.ui.components.FileOpKind
@@ -75,9 +75,6 @@ import dev.ide.ui.generated.resources.buildc_build
 import dev.ide.ui.generated.resources.edchrome_files
 import dev.ide.ui.generated.resources.edchrome_more
 import dev.ide.ui.generated.resources.edchrome_settings_and_tools
-import dev.ide.ui.generated.resources.edchrome_source
-import dev.ide.ui.generated.resources.edsheet_source_control
-import dev.ide.ui.generated.resources.edsheet_source_control_desc
 import dev.ide.ui.generated.resources.search
 import dev.ide.ui.generated.resources.structure_title
 import dev.ide.ui.icons.CaIcons
@@ -126,6 +123,7 @@ internal fun buildLeftPanels(
     onNewFile: (String, List<PackageSegment>) -> Unit,
     onNewFolder: (String, List<PackageSegment>) -> Unit,
     onNewResource: (TreeNode) -> Unit,
+    onNewImageAsset: (TreeNode) -> Unit,
     onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit,
     onFileOp: (TreeNode, FileOpKind) -> Unit,
     onOpenDependencies: (String?) -> Unit,
@@ -135,9 +133,6 @@ internal fun buildLeftPanels(
     val filesTitle = stringResource(Res.string.edchrome_files)
     val searchTitle = stringResource(Res.string.search)
     val structureTitle = stringResource(Res.string.structure_title)
-    val sourceTitle = stringResource(Res.string.edchrome_source)
-    val sourceDesc = stringResource(Res.string.edsheet_source_control_desc)
-    val sourceHeading = stringResource(Res.string.edsheet_source_control)
 
     // Remembered HERE (the panel host stays composed while the drawer/left panel is swapped) rather than inside
     // SearchScreen, so a search survives navigating to a result and reopening Search for the next occurrence.
@@ -146,7 +141,7 @@ internal fun buildLeftPanels(
     val builtIns = listOf(
         SidebarPanel(LeftPanelId.FILES, filesTitle, CaIcons.docText, order = 10) {
             FilesPanelContent(
-                state, fileActions, onNewFile, onNewFolder, onNewResource, onNewSource,
+                state, fileActions, onNewFile, onNewFolder, onNewResource, onNewImageAsset, onNewSource,
                 onFileOp, onOpenDependencies, onOpenModuleConfig, closeDrawer,
             )
         },
@@ -162,15 +157,10 @@ internal fun buildLeftPanels(
         SidebarPanel(LeftPanelId.STRUCTURE, structureTitle, CaIcons.code, order = 30) {
             StructureOutline(state, onNavigated = closeDrawer, modifier = Modifier.fillMaxSize())
         },
-        SidebarPanel(LeftPanelId.SOURCE, sourceTitle, CaIcons.gitBranch, order = 40) {
-            ComingSoon(
-                icon = CaIcons.gitBranch,
-                title = sourceHeading,
-                description = sourceDesc,
-                modifier = Modifier.fillMaxSize(),
-            )
-        },
     )
+    // The source-control panel is contributed by the version-control plugin (it registers under
+    // LeftPanelId.SOURCE, so it takes this rail slot and the phone bottom-nav slot that maps to it). With the
+    // plugin disabled there is simply no such panel, rather than a placeholder promising one.
     val plugins = pluginPanels(ToolWindowAnchor.LEFT, state.backend, state.active?.path)
     return (builtIns + plugins).sortedWith(compareBy({ it.order }, { it.title }))
 }
@@ -199,6 +189,7 @@ private fun FilesPanelContent(
     onNewFile: (String, List<PackageSegment>) -> Unit,
     onNewFolder: (String, List<PackageSegment>) -> Unit,
     onNewResource: (TreeNode) -> Unit,
+    onNewImageAsset: (TreeNode) -> Unit,
     onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit,
     onFileOp: (TreeNode, FileOpKind) -> Unit,
     onOpenDependencies: (String?) -> Unit,
@@ -207,6 +198,7 @@ private fun FilesPanelContent(
 ) {
     val project = state.backend.project
     val fileCtxScope = rememberCoroutineScope()
+    val pluginNavigator = LocalPluginNavigator.current
     FileNavigator(
         root = state.tree,
         moduleCount = project.moduleCount,
@@ -216,6 +208,7 @@ private fun FilesPanelContent(
         onNewFile = onNewFile,
         onNewFolder = onNewFolder,
         onNewResource = onNewResource,
+        onNewImageAsset = onNewImageAsset,
         onNewSource = onNewSource,
         onViewDependencies = { node -> closeDrawer(); onOpenDependencies(node.moduleConfigName ?: node.name) },
         onConfigureModule = { node -> closeDrawer(); onOpenModuleConfig(node.moduleConfigName ?: node.name) },
@@ -239,7 +232,11 @@ private fun FilesPanelContent(
         },
         onContextAction = { id, node ->
             fileCtxScope.launch {
-                state.dispatchAction(id, UiActionContext(place = UiActionPlaces.FILE_CONTEXT, contextPath = node.filePath ?: node.dirPath))
+                state.dispatchAction(
+                    id,
+                    UiActionContext(place = UiActionPlaces.FILE_CONTEXT, contextPath = node.filePath ?: node.dirPath),
+                    navigate = pluginNavigator,
+                )
             }
         },
         onOpenInFiles = if (fileActions.canReveal) ({ (state.tree.dirPath ?: state.backend.projects.storageRootPath())?.let { fileActions.reveal(it) } }) else null,
@@ -260,11 +257,13 @@ internal fun ExpandedLayout(
     state: IdeUiState,
     onToggleTheme: () -> Unit,
     onOpenHub: () -> Unit,
+    onOpenIconManager: () -> Unit,
     indexStatus: IndexUiStatus,
     buildState: BuildState,
     onNewFile: (String, List<PackageSegment>) -> Unit,
     onNewFolder: (String, List<PackageSegment>) -> Unit,
     onNewResource: (TreeNode) -> Unit,
+    onNewImageAsset: (TreeNode) -> Unit,
     onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit,
     onFileOp: (TreeNode, FileOpKind) -> Unit,
     onOpenDependencies: (String?) -> Unit,
@@ -275,7 +274,7 @@ internal fun ExpandedLayout(
     val project = state.backend.project
     val leftPanels = buildLeftPanels(
         state, fileActions, indexStatus.building,
-        onNewFile, onNewFolder, onNewResource, onNewSource, onFileOp, onOpenDependencies, onOpenModuleConfig,
+        onNewFile, onNewFolder, onNewResource, onNewImageAsset, onNewSource, onFileOp, onOpenDependencies, onOpenModuleConfig,
         closeDrawer = {}, // desktop panes are persistent — never auto-collapse
     )
     val rightPanels = pluginPanels(ToolWindowAnchor.RIGHT, state.backend, state.active?.path)
@@ -366,8 +365,8 @@ internal fun ExpandedLayout(
                 )
             }
         }
-        DestinationSheets(state, compact = false, onOpenModuleConfig, onToggleTheme, onOpenHub, onCloseProject, fileActions)
-        PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenDependencies)
+        DestinationSheets(state, compact = false, onOpenModuleConfig, onToggleTheme, onOpenHub, onOpenIconManager, onCloseProject, fileActions)
+        PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenIconManager, onOpenDependencies)
     }
 }
 
@@ -382,11 +381,13 @@ internal fun CompactLayout(
     state: IdeUiState,
     onToggleTheme: () -> Unit,
     onOpenHub: () -> Unit,
+    onOpenIconManager: () -> Unit,
     indexStatus: IndexUiStatus,
     buildState: BuildState,
     onNewFile: (String, List<PackageSegment>) -> Unit,
     onNewFolder: (String, List<PackageSegment>) -> Unit,
     onNewResource: (TreeNode) -> Unit,
+    onNewImageAsset: (TreeNode) -> Unit,
     onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit,
     onFileOp: (TreeNode, FileOpKind) -> Unit,
     onOpenDependencies: (String?) -> Unit,
@@ -411,7 +412,7 @@ internal fun CompactLayout(
     }
     val leftPanels = buildLeftPanels(
         state, fileActions, indexStatus.building,
-        onNewFile, onNewFolder, onNewResource, onNewSource, onFileOp, onOpenDependencies, onOpenModuleConfig,
+        onNewFile, onNewFolder, onNewResource, onNewImageAsset, onNewSource, onFileOp, onOpenDependencies, onOpenModuleConfig,
         closeDrawer = { state.selectedLeftPanel = null }, // a navigating action closes the drawer on phone
     )
     Box(Modifier.fillMaxSize()) {
@@ -483,7 +484,13 @@ internal fun CompactLayout(
                         dockHint = false
                         state.backend.settings.setPreference(DOCK_HINT_PREF, "true")
                     },
-                    bar = { BottomNav(selected = state.bottomNavSelection(), onSelect = { state.onBottomNav(it) }) },
+                    bar = {
+                        BottomNav(
+                            selected = state.bottomNavSelection(),
+                            onSelect = { state.onBottomNav(it) },
+                            showSource = leftPanels.any { it.id == LeftPanelId.SOURCE },
+                        )
+                    },
                 ) {
                     val appLog by state.backend.build.appLog.collectAsState()
                     BuildConsole(
@@ -503,8 +510,8 @@ internal fun CompactLayout(
             }
         }
 
-        DestinationSheets(state, compact = true, onOpenModuleConfig, onToggleTheme, onOpenHub, onCloseProject, fileActions)
-        PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenDependencies)
+        DestinationSheets(state, compact = true, onOpenModuleConfig, onToggleTheme, onOpenHub, onOpenIconManager, onCloseProject, fileActions)
+        PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenIconManager, onOpenDependencies)
         // Right-edge tool-window drawer (the phone counterpart of the desktop right pane + rail). Self-gates on
         // there being a RIGHT tool window, so it lays down nothing when no plugin contributes one.
         RightToolOverlay(state)

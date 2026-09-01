@@ -121,19 +121,7 @@ object JavaBytecode {
                 }
                 val isCtor = name == "<init>"
                 val t = Type.getMethodType(descriptor)
-                // The param display keeps `[]` (so a vararg/array param is visible to the arg-count check).
-                val displayParams = t.argumentTypes.mapIndexed { i, at ->
-                    "p$i: ${
-                        at.className.substringAfterLast('.')
-                    }"
-                }
                 val classFqn = selfName?.replace('/', '.')?.replace('$', '.')
-                val display = if (isCtor) "(${displayParams.joinToString(", ")})"
-                else "(${displayParams.joinToString(", ")}): ${
-                    t.returnType.className.substringAfterLast(
-                        '.'
-                    )
-                }"
                 val (retType, paramTypes, methodTypeParams, methodBounds) = if (sig != null) parseMethodSignature(
                     sig,
                     ctx
@@ -145,24 +133,56 @@ object JavaBytecode {
                     t.argumentTypes.map { at -> erased(at, ctx) },
                     emptyList(), emptyList(),
                 )
-                members += KotlinSymbol(
-                    // A constructor is keyed by the simple class name (matching the @Metadata decode) and types
-                    // to the class itself, so a call site can validate its arguments; `.`-completion excludes it.
-                    name = if (isCtor) classFqn?.substringAfterLast('.') ?: "<init>" else name,
-                    kind = if (isCtor) SymbolKind.CONSTRUCTOR else SymbolKind.METHOD,
-                    type = if (isCtor) classFqn?.let { KotlinType(it, context = ctx) } else retType,
-                    modifiers = mods(access),
-                    origin = BINARY,
-                    signature = display,
-                    typeParameters = methodTypeParams,
-                    typeParameterBounds = methodBounds,
-                    paramTypes = paramTypes,
-                    declaringClassFqn = classFqn,
-                    isDeprecated = access and Opcodes.ACC_DEPRECATED != 0,
-                    // ACC_VARARGS ⇒ the LAST parameter is a vararg (`String...`), so it absorbs trailing args.
-                    varargParamIndex = if (access and Opcodes.ACC_VARARGS != 0) paramTypes.size - 1 else -1,
-                )
-                return null
+                // Real parameter names when the class was compiled with `-parameters` (the MethodParameters
+                // attribute); `p0`/`p1` otherwise. Collected via visitParameter, so the symbol can only be
+                // built once the visitor ends. The alternative, the LocalVariableTable, lives inside the Code
+                // attribute that SKIP_CODE drops, and reading it would mean parsing every method body.
+                return object : MethodVisitor(Opcodes.ASM9) {
+                    private val declared = ArrayList<String>()
+
+                    override fun visitParameter(paramName: String?, paramAccess: Int) {
+                        declared += paramName.orEmpty()
+                    }
+
+                    override fun visitEnd() {
+                        // Positional with the descriptor or not usable at all: javac emits an entry per
+                        // descriptor parameter (synthesized/mandated ones included), but a rewritten or
+                        // truncated attribute would silently shift every name onto the wrong type.
+                        val real = declared.size == t.argumentTypes.size && declared.all { it.isNotBlank() }
+                        val paramNames = if (real) declared.toList() else emptyList()
+                        // The param display keeps `[]` (so a vararg/array param is visible to the arg-count check).
+                        val displayParams = t.argumentTypes.mapIndexed { i, at ->
+                            "${paramNames.getOrNull(i) ?: "p$i"}: ${at.className.substringAfterLast('.')}"
+                        }
+                        val display = if (isCtor) "(${displayParams.joinToString(", ")})"
+                        else "(${displayParams.joinToString(", ")}): ${
+                            t.returnType.className.substringAfterLast(
+                                '.'
+                            )
+                        }"
+                        members += KotlinSymbol(
+                            // A constructor is keyed by the simple class name (matching the @Metadata decode) and
+                            // types to the class itself, so a call site can validate its arguments;
+                            // `.`-completion excludes it.
+                            name = if (isCtor) classFqn?.substringAfterLast('.') ?: "<init>" else name,
+                            kind = if (isCtor) SymbolKind.CONSTRUCTOR else SymbolKind.METHOD,
+                            type = if (isCtor) classFqn?.let { KotlinType(it, context = ctx) } else retType,
+                            modifiers = mods(access),
+                            origin = BINARY,
+                            signature = display,
+                            typeParameters = methodTypeParams,
+                            typeParameterBounds = methodBounds,
+                            paramTypes = paramTypes,
+                            // Left EMPTY when the attribute is absent, never filled with `p0`/`p1`: that is the
+                            // signal the source-doc enrichment keys off to splice the real names in.
+                            paramNames = paramNames,
+                            declaringClassFqn = classFqn,
+                            isDeprecated = access and Opcodes.ACC_DEPRECATED != 0,
+                            // ACC_VARARGS ⇒ the LAST parameter is a vararg (`String...`), so it absorbs trailing args.
+                            varargParamIndex = if (access and Opcodes.ACC_VARARGS != 0) paramTypes.size - 1 else -1,
+                        )
+                    }
+                }
             }
 
             override fun visitField(
@@ -182,7 +202,16 @@ object JavaBytecode {
                 )
                 return null
             }
-        }, ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES)
+            // NOT SKIP_DEBUG: ASM gates the MethodParameters attribute (the real parameter names) on it.
+            // Dropping the flag adds no work of its own here: the LineNumberTable/LocalVariableTable it would
+            // otherwise skip live inside the Code attribute, which SKIP_CODE drops wholesale either way.
+            // Returning a MethodVisitor at all is the real cost: ASM skips every method attribute when
+            // visitMethod returns null, so it now walks method ANNOTATIONS to hand them to a visitor that
+            // ignores them. Bounded and worth it: that walk is proportional to annotation bytes, not method
+            // bodies (~19% of android.jar's classes carry any), and it is what buys real names for the ~6% of
+            // android.jar and the many library jars (protobuf-java, sdk-common, intellij-core) built with
+            // `-parameters`, none of which need a `-sources.jar` attached to be named any more.
+        }, ClassReader.SKIP_CODE or ClassReader.SKIP_FRAMES)
         return JavaShape(
             typeParams, typeParamBounds, superTypes, members,
             isInterface = classAccess and Opcodes.ACC_INTERFACE != 0,
@@ -274,7 +303,7 @@ object JavaBytecode {
 
     /**
      * Builds one [KotlinType] from a type-signature position and reports it to [sink]. A type variable
-     * becomes an `isTypeParameter` type keyed by its name (`T`); an array nests under `kotlin.Array`; a
+     * becomes an `isTypeParameter` type keyed by its name (`T`); an array goes through [arrayType]; a
      * wildcard contributes its bound (`? extends X` / `? super X` → `X`, unbounded `?` → `Any`); a class
      * type accumulates its arguments and reports on [visitEnd].
      */
@@ -291,11 +320,7 @@ object JavaBytecode {
             sink(KotlinType(name, isTypeParameter = true, context = ctx))
 
         override fun visitArrayType(): SignatureVisitor = TypeSigVisitor(ctx) { el ->
-            sink(
-                KotlinType(
-                    "kotlin.Array", listOf(el), context = ctx
-                )
-            )
+            sink(arrayType(el, ctx))
         }
 
         override fun visitClassType(name: String) {
@@ -325,7 +350,7 @@ object JavaBytecode {
     }
 
     /** An erased ASM [Type] (the no-generic-signature path) as a [KotlinType]: JVM primitives mapped to their
-     *  Kotlin classifier (`int`→`kotlin.Int`), arrays to `kotlin.Array<elem>`, references by FQN. */
+     *  Kotlin classifier (`int`→`kotlin.Int`), arrays through [arrayType], references by FQN. */
     private fun erased(t: Type, ctx: KotlinTypeContext?): KotlinType = when (t.sort) {
         Type.VOID -> KotlinType("kotlin.Unit", context = ctx)
         Type.BOOLEAN -> KotlinType("kotlin.Boolean", context = ctx)
@@ -336,7 +361,9 @@ object JavaBytecode {
         Type.FLOAT -> KotlinType("kotlin.Float", context = ctx)
         Type.LONG -> KotlinType("kotlin.Long", context = ctx)
         Type.DOUBLE -> KotlinType("kotlin.Double", context = ctx)
-        Type.ARRAY -> KotlinType("kotlin.Array", listOf(erased(t.elementType, ctx)), context = ctx)
+        // `Type.elementType` strips EVERY dimension (`[[B` → `byte`), so re-wrap once per dimension: a
+        // `byte[][]` is `Array<ByteArray>`, not the single-level type a bare elementType would produce.
+        Type.ARRAY -> (1..t.dimensions).fold(erased(t.elementType, ctx)) { el, _ -> arrayType(el, ctx) }
         // ASM's `Type.className` keeps the binary `$` nested separator (`android.view.ViewGroup$LayoutParams`),
         // but every other type FQN in the model is dot-form: the class self-FQN (`selfName.replace('$', '.')`),
         // the generic-signature path ([TypeSigVisitor]), and `typeFromText`. A nested library type reached
@@ -345,6 +372,29 @@ object JavaBytecode {
         // false-flagged a mismatch (both resolve, so the check didn't back off). Normalize to dot-form to match.
         else -> KotlinType(t.className.replace('$', '.'), context = ctx)
     }
+
+    /**
+     * The Kotlin type of a JVM array whose element decoded to [el]. A PRIMITIVE element maps to Kotlin's
+     * SPECIALISED array class (`byte[]` → `ByteArray`, `int[]` → `IntArray`), never `Array<Byte>`/`Array<Int>`:
+     * that specialised class IS the Kotlin type of the parameter, so `outputStream.write(byteArray)` type-checks
+     * instead of the argument check reporting "inferred type is ByteArray but Array<Byte> was expected" (and the
+     * mismatch quick-fix then offering an unrelated same-named extension to import). Everything else — a
+     * reference element, a type variable (`T[]` → `Array<T>`), a nested array (`byte[][]` → `Array<ByteArray>`)
+     * — nests under `kotlin.Array<E>`.
+     */
+    private fun arrayType(el: KotlinType, ctx: KotlinTypeContext?): KotlinType {
+        val specialised = if (el.isTypeParameter || el.nullable) null else PRIMITIVE_ARRAYS[el.qualifiedName]
+        return if (specialised != null) KotlinType(specialised, context = ctx)
+        else KotlinType("kotlin.Array", listOf(el), context = ctx)
+    }
+
+    /** A Kotlin primitive classifier → the specialised array class a JVM array of it maps to (see [arrayType]). */
+    private val PRIMITIVE_ARRAYS = mapOf(
+        "kotlin.Int" to "kotlin.IntArray", "kotlin.Long" to "kotlin.LongArray",
+        "kotlin.Short" to "kotlin.ShortArray", "kotlin.Byte" to "kotlin.ByteArray",
+        "kotlin.Char" to "kotlin.CharArray", "kotlin.Boolean" to "kotlin.BooleanArray",
+        "kotlin.Float" to "kotlin.FloatArray", "kotlin.Double" to "kotlin.DoubleArray",
+    )
 
     private fun primitive(descriptor: Char, ctx: KotlinTypeContext?): KotlinType = KotlinType(
         when (descriptor) {

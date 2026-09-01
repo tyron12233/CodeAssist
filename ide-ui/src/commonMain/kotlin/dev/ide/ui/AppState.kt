@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.text.TextRange
 import dev.ide.ui.backend.IdeBackend
@@ -20,8 +21,10 @@ import dev.ide.ui.backend.UiNewFileTemplate
 import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiSettings
+import dev.ide.ui.backend.UiTextEdit
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.RangeEdit
+import dev.ide.ui.editor.core.mapOffsetThroughEdits
 import dev.ide.ui.editor.languageFor
 import dev.ide.ui.editor.preview.PreviewKind
 import dev.ide.ui.editor.preview.previewKindOf
@@ -32,14 +35,20 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Top-level screens, ordered by depth so the transition helper can infer direction: a move to a
  * higher-ordinal screen animates "forward" (deeper), a lower one "back".
  */
-enum class Screen { Projects, CreateProject, ImportProject, ExportProject, Editor, Hub, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, Settings, CodeStyle, EditorSymbols, Plugins, Storage, LessonTrack, LessonPlayer, StoreItem }
+enum class Screen { Projects, CreateProject, ImportProject, ExportProject, Editor, Hub, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, IconManager, AppIconStudio, Settings, CodeStyle, EditorSymbols, Plugins, Storage, LessonTrack, LessonPlayer, StoreItem, PluginScreen }
 
 /**
  * The home screen's bottom-navigation destinations (the landing surface shown on [Screen.Projects]): the
@@ -104,6 +113,14 @@ class OpenFile(
     /** For a `library://…` tab: how its text was obtained (`source`/`decompiled_java`/`decompiled_kotlin`),
      *  driving the read-only banner + the "Decompile to Java" affordance. Null for a normal disk file. */
     val libraryKind: String? = null,
+    /** Stable, unique tab id — the editor tab strip keys its `LazyRow` on this, NOT on [path]. Two tabs can
+     *  momentarily hold the same path (a re-point after a rename/move, or a concurrent open on a slow device),
+     *  and a duplicate LazyList key hard-crashes the measure pass (`measureLazyList` precondition). A per-tab
+     *  id makes that impossible by construction; [AppState.dedupeTabsByPath] still reconciles the logical
+     *  duplicate. Defaults to a fresh id; re-point sites that replace a tab's OpenFile in place for the SAME
+     *  logical tab pass the old id so the tab keeps its strip identity (no crossfade) across the swap. Assigned
+     *  on the UI thread (every OpenFile is built inside a Main-dispatched launch), so the counter needs no sync. */
+    val tabId: Long = nextTabId(),
 ) {
     val session = EditorSession(initial, languageFor(name), editable = !readOnly)
     var modified by mutableStateOf(false)
@@ -141,7 +158,18 @@ class OpenFile(
 
     /** Rebase the saved baseline after a successful save. */
     fun onSaved(text: String) { savedText = text; modified = false }
+
+    companion object {
+        // Monotonic tab-id source. Bumped only from OpenFile construction, which always happens on the UI
+        // thread (see [tabId]), so a plain counter is race-free without atomics.
+        private var tabIdSeq = 0L
+        private fun nextTabId(): Long = ++tabIdSeq
+    }
 }
+
+/** The open-tab session bits that, when any change, should reschedule the debounced tab save (so the persisted
+ *  session tracks the caret / scroll / view surface, not just which files are open). */
+private data class TabSessionKey(val path: String, val caret: Int, val scrollLine: Int, val viewMode: EditorViewMode)
 
 /** Placeholder root shown until the real tree finishes building off the main thread — renders as an empty pane. */
 private val EMPTY_TREE = TreeNode(id = "loading", name = "", kind = NodeKind.Workspace, filePath = null, iconId = "workspace")
@@ -200,6 +228,83 @@ class IdeUiState(
 
     /** Cancel in-flight async work (file opens). Call when this state leaves composition. */
     fun dispose() { scope.cancel() }
+
+    /**
+     * The per-project bridges between this state and the backend, running for as long as the caller's
+     * coroutine lives (the host launches one per project, so they all stop together when the project is
+     * swapped out): restore the last tab session and keep it persisted, publish the editor-lifecycle events
+     * plugins listen for, persist the file-tree expansion, and re-read files written outside the editor.
+     */
+    suspend fun runSessionEffects(): Unit = coroutineScope {
+        launch { restoreAndPersistTabs() }
+        launch { publishActiveEditor() }
+        launch { publishSelection() }
+        launch { persistTreeExpansion() }
+        launch { syncExternalWrites() }
+    }
+
+    // Reopen the tabs from the last session with this project; if there were none, land on a sensible first
+    // file so entering the editor shows real code. Then persist tab changes (debounced) so they reopen next
+    // launch: `drop(1)` skips the just-restored state, and `collectLatest` cancels the pending write when
+    // another tab change lands within the debounce window.
+    private suspend fun restoreAndPersistTabs() {
+        ensureTreeLoaded() // build the real file tree off the main thread before it's shown / walked
+        if (!restoreTabs()) {
+            defaultFile()?.let { node -> node.filePath?.let { open(it, node.name) } }
+        }
+        snapshotFlow {
+            // Re-emit when the tab set, the active tab, OR any tab's caret / scroll / view mode changes, so the
+            // persisted session records where the user is, not only which files are open.
+            openFiles.map {
+                TabSessionKey(it.path, it.session.selection.start, it.session.viewportTopLine, it.viewMode)
+            } to activeIndex
+        }.drop(1).collectLatest {
+            delay(600.milliseconds)
+            val snapshot = tabsSnapshot() // read the Compose session state on the main thread,
+            withContext(ioDispatcher) { backend.projects.saveOpenTabs(snapshot) } // then write off it
+        }
+    }
+
+    // Editor-lifecycle events for plugins: the engine republishes these on the message bus
+    // (IdeEventTopics.EDITOR) and they are no-ops when nothing subscribes. The focused file, whenever it
+    // changes (null once the last tab closes):
+    private suspend fun publishActiveEditor() {
+        snapshotFlow { active?.path }
+            .distinctUntilChanged()
+            .collect { backend.editor.onActiveEditorChanged(it) }
+    }
+
+    // The caret/selection, debounced so it fires on settle rather than on every keystroke (collectLatest
+    // cancels the pending delay when the selection moves again).
+    private suspend fun publishSelection() {
+        snapshotFlow {
+            active?.let { Triple(it.path, it.session.selection.start, it.session.selection.end) }
+        }.distinctUntilChanged().collectLatest { sel ->
+            if (sel == null) return@collectLatest
+            delay(150.milliseconds)
+            backend.editor.onSelectionChanged(sel.first, sel.second, sel.third)
+        }
+    }
+
+    // Persist the file-tree expansion (debounced) so the tree reopens the same way next launch, keyed per
+    // project + view mode. `drop(1)` skips the seeded initial state; `collectLatest` coalesces rapid toggles.
+    private suspend fun persistTreeExpansion() {
+        snapshotFlow { treeMode to expandedTreeSnapshot() }.drop(1).collectLatest { (mode, ids) ->
+            delay(300.milliseconds)
+            backend.files.saveExpandedTreeState(mode, ids.toList())
+        }
+    }
+
+    // External file writes (e.g. an agent edit, or an "Open with" import the UI didn't drive) re-read the tree
+    // AND re-sync any clean open editor tab whose file changed on disk.
+    private suspend fun syncExternalWrites() {
+        backend.files.fileSystemEpoch.collect { fsEpoch ->
+            if (fsEpoch > 0) {
+                refreshTree()
+                syncOpenTabsFromDisk()
+            }
+        }
+    }
 
     // ---- sidebar panels (the LEFT + RIGHT activity rails) ----
     // Both sides are a list of `SidebarPanel`s (built-in + plugin tool windows); the rail shows one icon per
@@ -362,6 +467,8 @@ class IdeUiState(
     var wordWrapEnabled by mutableStateOf(false)
     /** Indent wrapped continuation rows to the line's own indent (IntelliJ-style); only when wrapping. */
     var wrapIndentEnabled by mutableStateOf(true)
+    /** Draggable bar along the editor's bottom edge while a line runs past the view; none while wrapping. */
+    var horizontalScrollbarEnabled by mutableStateOf(true)
     /** Free (two-axis) touch scrolling: a single drag pans both axes at once (off = orientation-locked). */
     var twoAxisScrollEnabled by mutableStateOf(true)
     /** Two-finger pinch zooms the code font (Ctrl-+/-/0 always works regardless). */
@@ -429,6 +536,7 @@ class IdeUiState(
         reparseDelayMs = s.reparseDelayMs
         wordWrapEnabled = s.wordWrap
         wrapIndentEnabled = s.wrapIndent
+        horizontalScrollbarEnabled = s.horizontalScrollbar
         twoAxisScrollEnabled = s.twoAxisScroll
         pinchZoomEnabled = s.pinchZoom
         softKeyboardSuggestions = s.softKeyboardSuggestions
@@ -537,6 +645,31 @@ class IdeUiState(
     }
 
     /** Open [path] and move the caret to 1-based [line]/[column] — the build console's jump-to-diagnostic. */
+    /**
+     * Apply [edits] to the active tab, returning false when there is no editable tab. This is how a
+     * full-screen tool (the Icon Manager) contributes source to the editor: it drives the same session the
+     * editor is showing, so undo and the caret behave as if the text had been typed.
+     *
+     * Edits land back to front so an earlier one cannot shift a later one's offsets, and the caret ends up
+     * after the highest-offset insertion (the snippet at the cursor) rather than after whichever import was
+     * written last.
+     */
+    fun applyEdits(edits: List<UiTextEdit>): Boolean {
+        val session = active?.session ?: return false
+        val ordered = edits.filter { it.newText.isNotEmpty() || it.end > it.start }.sortedByDescending { it.start }
+        if (ordered.isEmpty()) return false
+
+        var caret = ordered.first().let { it.start + it.newText.length }
+        ordered.forEachIndexed { index, edit ->
+            val end = edit.end.coerceAtLeast(edit.start)
+            session.replaceRange(edit.start, end, edit.newText, TextRange(edit.start + edit.newText.length))
+            // Every edit after the first sits earlier in the file, so it shifts the caret by its own delta.
+            if (index > 0) caret += edit.newText.length - (end - edit.start)
+        }
+        session.setCaret(caret)
+        return true
+    }
+
     fun openAtLine(path: String, line: Int, column: Int) {
         val name = path.substringAfterLast('/').substringAfterLast('\\')
         scope.launch {
@@ -614,9 +747,7 @@ class IdeUiState(
             val st = e.start.coerceIn(0, len)
             RangeEdit(st, e.end.coerceIn(st, len), e.newText, st + e.newText.length)
         }
-        var caret = caretBefore
-        for (e in edits) if (e.start <= caret) caret += e.text.length - (e.end - e.start)
-        session.applyEdits(edits, TextRange(caret.coerceAtLeast(0)))
+        session.applyEdits(edits, TextRange(mapOffsetThroughEdits(caretBefore, edits)))
     }
 
     /** Save the active tab (Cmd/Ctrl-S, toolbar). */
@@ -736,7 +867,7 @@ class IdeUiState(
                 val text = readTabText(diskPath) ?: continue
                 if (!followsFileRename && text == f.savedText) continue // untouched → preserve session/undo/caret
                 val name = diskPath.substringAfterLast('/').substringAfterLast('\\')
-                openFiles[i] = OpenFile(diskPath, name, text)
+                openFiles[i] = OpenFile(diskPath, name, text, tabId = f.tabId)
                 backend.editor.updateDocument(diskPath, text)
             }
             dedupeTabsByPath()
@@ -762,7 +893,7 @@ class IdeUiState(
                 val i = openFiles.indexOf(f)
                 if (i < 0 || openFiles[i].modified) continue
                 val name = f.path.substringAfterLast('/').substringAfterLast('\\')
-                openFiles[i] = OpenFile(f.path, name, text)
+                openFiles[i] = OpenFile(f.path, name, text, tabId = f.tabId)
                 backend.editor.updateDocument(f.path, text)
             }
         }
@@ -817,6 +948,7 @@ class IdeUiState(
         scope.launch {
             val newPath = withContext(ioDispatcher) { backend.files.movePath(path, destDir) } ?: return@launch
             rebaseTabs(path, newPath) // re-read moved tabs off the main thread
+            refreshCleanTabs() // a move rewrites importers' package/import lines — reflect that in open tabs
             loadTree()
         }
     }
@@ -848,7 +980,7 @@ class IdeUiState(
             }
             val text = readTabText(rebased) ?: continue
             val name = rebased.substringAfterLast('/').substringAfterLast('\\')
-            openFiles[i] = OpenFile(rebased, name, text)
+            openFiles[i] = OpenFile(rebased, name, text, tabId = openFiles[i].tabId)
             backend.editor.updateDocument(rebased, text)
         }
         dedupeTabsByPath()
@@ -859,9 +991,10 @@ class IdeUiState(
      *
      * Re-pointing a tab after a rename or move ([rebaseTabs], [reloadAfterRename]) can land it on a path that
      * another tab already holds: renaming `a/Foo.kt` over an open `a/Bar.kt`, or moving a directory into one
-     * whose files are already open. Two tabs for one path are not merely redundant, since the tab strip keys
-     * its lazy row by path and a repeated key throws (`Key "…" was already used`), taking the whole editor
-     * down. The backend is NOT told the file closed, because the kept tab still has it open.
+     * whose files are already open. Two tabs for one path are wrong (edits/saves would fight over one file), so
+     * they are collapsed here. The tab strip itself no longer crashes on the transient duplicate — it keys its
+     * lazy row by [OpenFile.tabId], not path — but the logical duplicate must still be reconciled. The backend
+     * is NOT told the file closed, because the kept tab still has it open.
      */
     private fun dedupeTabsByPath() {
         val seen = HashSet<String>()
@@ -882,7 +1015,7 @@ class IdeUiState(
             if (f.modified) continue
             val text = readTabText(f.path) ?: continue
             if (text == f.savedText) continue
-            openFiles[i] = OpenFile(f.path, f.name, text)
+            openFiles[i] = OpenFile(f.path, f.name, text, tabId = f.tabId)
             backend.editor.updateDocument(f.path, text)
         }
     }

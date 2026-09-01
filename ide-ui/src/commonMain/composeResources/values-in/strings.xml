@@ -264,8 +264,6 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="sig_more">+%1$d lainnya</string>
     <string name="sig_peek_tip">Ketuk untuk mengintip definisi lengkap</string>
     <string name="sig_peek_collapse">Ketuk untuk menciutkan</string>
-    <string name="edsheet_source_control">Kontrol Sumber</string>
-    <string name="edsheet_source_control_desc">Integrasi Git. Staging, diff, commit &amp; push ada dalam rencana.</string>
     <string name="symbolbar_move_line_up">Pindahkan baris ke atas</string>
     <string name="symbolbar_move_line_down">Pindahkan baris ke bawah</string>
     <string name="symbolbar_duplicate_line">Duplikat baris</string>
@@ -276,7 +274,6 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="breadcrumb_preview">Pratinjau</string>
     <string name="breadcrumb_split">Terpisah</string>
     <string name="edchrome_files">File</string>
-    <string name="edchrome_source">Sumber</string>
     <string name="edchrome_more">Lainnya</string>
     <string name="edchrome_settings_and_tools">Setelan &amp; Alat</string>
     <string name="edchrome_toggle_navigator">Alihkan navigator</string>
@@ -484,7 +481,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     </plurals>
     <string name="edoverlay_rename_kind">Ganti nama %1$s</string>
     <string name="edoverlay_renaming">Mengganti nama…</string>
-    <string name="edoverlay_rename_hint">Enter untuk mengganti nama \'%1$s\', Esc untuk batal</string>
+    <string name="edoverlay_rename_hint">Enter untuk mengganti nama '%1$s', Esc untuk batal</string>
     <string name="edoverlay_go_to_line">Ke baris</string>
     <string name="edoverlay_go_to_line_hint">Baris 1-%1$d  (baris atau baris:kolom)</string>
     <string name="edoverlay_no_documentation">Tidak ada dokumentasi</string>
@@ -547,14 +544,14 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="newfile_custom_folder_hint">mis. proto  ·  templates</string>
     <string name="newfile_treat_as">Perlakukan sebagai</string>
     <string name="newfile_created_at">Dibuat di %1$s</string>
-    <string name="fileop_rename_title">Ganti nama \'%1$s\'</string>
+    <string name="fileop_rename_title">Ganti nama '%1$s'</string>
     <string name="fileop_new_name">Nama baru</string>
-    <string name="fileop_delete_dir_title">Hapus \'%1$s\' dan isinya?</string>
-    <string name="fileop_delete_file_title">Hapus \'%1$s\'?</string>
+    <string name="fileop_delete_dir_title">Hapus '%1$s' dan isinya?</string>
+    <string name="fileop_delete_file_title">Hapus '%1$s'?</string>
     <string name="fileop_delete_dir_body">Ini menghapus folder dan semua yang ada di dalamnya secara permanen. Tindakan ini tidak dapat dibatalkan.</string>
     <string name="fileop_delete_file_body">Ini menghapus file secara permanen. Tindakan ini tidak dapat dibatalkan.</string>
-    <string name="fileop_move_title">Pindahkan \'%1$s\' ke…</string>
-    <string name="fileop_copy_title">Salin \'%1$s\' ke…</string>
+    <string name="fileop_move_title">Pindahkan '%1$s' ke…</string>
+    <string name="fileop_copy_title">Salin '%1$s' ke…</string>
     <string name="fileop_empty_folder">Folder ini kosong.</string>
     <string name="fileop_move_here">Pindahkan ke sini</string>
     <string name="fileop_copy_here">Salin ke sini</string>
@@ -695,12 +692,9 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="dep_remove_exclusion">Hapus pengecualian</string>
     <string name="dep_excluded">dikecualikan</string>
     <string name="dep_add_dependency">Tambah dependensi</string>
-    <string name="dep_search_bom_hint">Cari BOM, atau ketik group:name:version, mis. androidx.compose:compose-bom:…</string>
-    <string name="dep_search_library_hint">Cari Maven Central, atau ketik group:name[:version]…</string>
     <string name="dep_scope">cakupan</string>
     <string name="dep_variant">varian</string>
     <string name="dep_all_variants">Semua varian</string>
-    <string name="dep_suggested">disarankan</string>
     <string name="dep_adding">Menambahkan %1$s</string>
     <string name="dep_resolving_transitive">Menyelesaikan dependensi transitif…</string>
     <string name="dep_no_other_modules">Tidak ada modul lain untuk dijadikan dependensi.</string>
@@ -728,7 +722,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="dep_loading_versions">Memuat versi…</string>
     <string name="dep_versions_load_failed">Tidak dapat memuat versi, ketik satu di atas.</string>
     <string name="dep_selected">Dipilih</string>
-    <string name="dep_variant_only_tooltip">Hanya di varian \'%1$s\'</string>
+    <string name="dep_variant_only_tooltip">Hanya di varian '%1$s'</string>
     <string name="dep_version_conflict_tooltip">Konflik versi: %1$s → menggunakan %2$s</string>
     <string name="dep_version_conflict">Konflik versi</string>
     <string name="dep_extra_auto_resolved">+%1$d diselesaikan otomatis</string>
@@ -784,7 +778,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="modcfg_created">Membuat %1$s</string>
     <string name="modcfg_couldnt_create">Tidak dapat membuat %1$s</string>
     <string name="modcfg_remove_module">Hapus modul</string>
-    <string name="modcfg_remove_module_content">Hapus \'%1$s\' dari proyek? File-nya tetap ada di disk; dependensi modul lain terhadapnya akan dihapus.</string>
+    <string name="modcfg_remove_module_content">Hapus '%1$s' dari proyek? File-nya tetap ada di disk; dependensi modul lain terhadapnya akan dihapus.</string>
     <string name="modcfg_remove">Hapus</string>
     <string name="modcfg_no_module_types">Tidak ada tipe modul tersedia.</string>
     <string name="modcfg_new_module">Modul baru</string>
@@ -957,7 +951,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="set_editor_pinch">Cubit untuk zoom</string>
     <string name="set_editor_pinch_desc">Cubit dengan dua jari untuk mengubah ukuran font kode</string>
     <string name="set_editor_kbd_suggest">Saran keyboard</string>
-    <string name="set_editor_kbd_suggest_desc">Biarkan keyboard lunak melakukan koreksi otomatis, memberi saran, dan spasi otomatis (keyboard normal). Matikan untuk input kode mentah, agar \'.\' yang diketik tidak mendapat spasi yang disisipkan otomatis, dengan konsekuensi kehilangan strip saran.</string>
+    <string name="set_editor_kbd_suggest_desc">Biarkan keyboard lunak melakukan koreksi otomatis, memberi saran, dan spasi otomatis (keyboard normal). Matikan untuk input kode mentah, agar '.' yang diketik tidak mendapat spasi yang disisipkan otomatis, dengan konsekuensi kehilangan strip saran.</string>
     <string name="set_completion_auto">Tampilkan saran otomatis</string>
     <string name="set_completion_auto_desc">Munculkan daftar saat mengetik (nonaktif = hanya Ctrl-Space)</string>
     <string name="set_completion_postfix">Template postfix</string>

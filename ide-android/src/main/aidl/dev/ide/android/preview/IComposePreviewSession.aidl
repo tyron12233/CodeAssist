@@ -26,10 +26,15 @@ interface IComposePreviewSession {
     // its INTRINSIC size (bounded by [widthPx]x[heightPx] as a max, mirroring the in-process card) and its size
     // reported via cb.onContentSize so the IDE crops the frame + sizes the card to the content; false = the
     // content fills the fixed [widthPx]x[heightPx] surface (a device/@Preview(widthDp/heightDp) preview).
+    // [sandbox] = the SandboxCategory ids the project restricts (file access, network, ...). :preview builds a
+    // PreviewSandboxPolicy from them and hands it to the renderer as its InterpreterHooks. This is NOT optional
+    // polish: the renderer's `hooks` default is null = UNRESTRICTED, so before this the isolated path ignored
+    // the project's preview-sandbox settings entirely while the in-process path enforced them -- and isolation
+    // is the default. Blocked calls are reported back via cb.onSandboxFindings.
     int open(
         String blobFile, in String[] classpath, in String[] resRoots, String packageName, int minApi,
         int widthPx, int heightPx, float density, boolean night, boolean wrapContent, String frameDir,
-        IComposePreviewCallback cb);
+        in String[] sandbox, IComposePreviewCallback cb);
 
     // Live edit: push a re-lowered program into the running session; it re-renders (remembered state survives).
     // oneway — the IDE must never block on it: the service hops to its (possibly-busy) render thread to apply the
