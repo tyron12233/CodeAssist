@@ -381,10 +381,12 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         themeMode = themeMode,
         accent = when (accent) {
             IdeSettings.ACCENT_DYNAMIC -> UiAccent.Dynamic
+            IdeSettings.ACCENT_LIME -> UiAccent.Lime
             IdeSettings.ACCENT_TEAL -> UiAccent.Teal
             IdeSettings.ACCENT_ORANGE -> UiAccent.Orange
             IdeSettings.ACCENT_CUSTOM -> UiAccent.Custom
-            else -> UiAccent.Violet
+            IdeSettings.ACCENT_VIOLET -> UiAccent.Violet
+            else -> UiAccent.Lime
         },
         customAccentColor = accentColor,
         editorFontScale = editorFontScale,

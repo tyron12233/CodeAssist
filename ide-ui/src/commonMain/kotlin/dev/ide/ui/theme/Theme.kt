@@ -30,7 +30,11 @@ import dev.ide.ui.platform.dynamicColorSchemeOrNull
  * [bridgedTo], so the editor tracks the expressive theme while its code-specific tones stay bespoke.
  */
 
-enum class CaAccent { Violet, Teal, Orange }
+/**
+ * The preset accent palettes. [Lime] is the default and the one the app's identity is built on: unlike
+ * the other three it brings its own warm neutral ramp rather than tinting the shared one.
+ */
+enum class CaAccent { Lime, Violet, Teal, Orange }
 
 @Immutable
 data class SyntaxColors(
@@ -262,6 +266,10 @@ private fun lightColors(accent: Color, accentStrong: Color) = CodeAssistColors(
 )
 
 fun caColors(dark: Boolean, accent: CaAccent): CodeAssistColors = when {
+    // Lime: the editor takes the scheme's primary, which reads as a bright chartreuse caret/selection on
+    // dark and a deep olive on light.
+    dark && accent == CaAccent.Lime -> darkColors(Color(0xFFCDF14A), Color(0xFFB4D93A))
+    !dark && accent == CaAccent.Lime -> lightColors(Color(0xFF465700), Color(0xFF354200))
     dark && accent == CaAccent.Violet -> darkColors(Color(0xFFB487F7), Color(0xFFA06BFF))
     dark && accent == CaAccent.Teal -> darkColors(Color(0xFF5CCFE6), Color(0xFF3FBDD9))
     // Legacy CodeAssist orange (the Darcula `#CC7832` from the classic `<>` logo).
@@ -356,7 +364,7 @@ private fun CodeAssistColors.toIdeColors(): IdeColors = IdeColors(
 @Composable
 fun CodeAssistTheme(
     dark: Boolean = true,
-    accent: CaAccent = CaAccent.Violet,
+    accent: CaAccent = CaAccent.Lime,
     /** A user-chosen custom seed color. When set it overrides the preset [accent] palette and wallpaper
      *  dynamic color — the whole expressive scheme is generated from this seed. */
     seedColor: Color? = null,

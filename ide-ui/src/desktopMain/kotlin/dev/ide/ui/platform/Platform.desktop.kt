@@ -8,3 +8,5 @@ actual val isMobilePlatform: Boolean = false
 actual val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 
 actual fun nowMillis(): Long = System.currentTimeMillis()
+
+actual fun localHourOfDay(): Int = java.time.LocalTime.now().hour

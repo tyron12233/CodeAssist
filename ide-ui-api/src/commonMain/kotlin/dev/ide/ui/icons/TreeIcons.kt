@@ -46,6 +46,15 @@ object TreeIcons {
     /** The icon for [iconId], or a muted file glyph if none is registered. */
     fun resolve(iconId: String): TreeIcon = registry[iconId] ?: fallback
 
+    /**
+     * Whether [iconId] has real branded art, rather than resolving to the generic fallback.
+     *
+     * A file tree wants the muted fallback for anything it does not recognise. Other surfaces do not: the
+     * store's tiles would rather fall through to their own icon vocabulary than draw a blank page glyph,
+     * and they cannot tell the difference from [resolve] alone.
+     */
+    fun isRegistered(iconId: String): Boolean = iconId in registry
+
     /** Android brand green — android modules, `res/`, and the manifest. */
     private val androidGreen = Color(0xFF3DDC84)
 

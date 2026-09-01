@@ -23,3 +23,11 @@ expect val ioDispatcher: CoroutineDispatcher
  * `System.currentTimeMillis()` isn't visible in `commonMain`, so it's bridged through expect/actual.
  */
 expect fun nowMillis(): Long
+
+/**
+ * The local hour of day, 0..23. Drives the Home screen's time-of-day greeting.
+ *
+ * Separate from [nowMillis] because turning an epoch into a *local* hour needs the platform's time zone,
+ * and that is exactly the part `commonMain` cannot see.
+ */
+expect fun localHourOfDay(): Int

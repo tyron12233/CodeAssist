@@ -503,10 +503,46 @@ We never collect your code, file or project names, which features you use, or an
     <!-- home/store/learn/search/logs/palette — reuses projects, join_the_community -->
     <string name="home_store">Explore</string>
     <string name="home_learn">Learn</string>
+    <!-- Home / Projects tab, Material 3 Expressive redesign -->
+    <string name="home_your_projects">Your projects</string>
+    <string name="home_good_morning">Good morning</string>
+    <string name="home_good_afternoon">Good afternoon</string>
+    <string name="home_good_evening">Good evening</string>
+    <string name="home_new_project">New project</string>
+    <string name="home_new_project_subtitle">Scaffolds are generated locally, with no network needed.</string>
+    <string name="home_import_project">Import a project</string>
+    <string name="home_clone_repository">Clone from Git</string>
+    <string name="home_from_store">Start from a store template</string>
+    <string name="home_seg_projects">Projects</string>
+    <string name="home_seg_updates">Updates</string>
+    <string name="home_seg_saved">Saved</string>
+    <string name="home_empty_list">Nothing in this list</string>
+    <string name="home_open">Open</string>
+    <string name="home_open_named">Open %1$s</string>
+    <string name="home_share">Share</string>
+    <string name="home_delete">Delete</string>
+    <string name="home_dismiss">Dismiss</string>
+    <string name="home_resume_title">Pick up where you left off</string>
+    <string name="home_account_title">Account and tools</string>
+    <string name="home_settings_tools">Settings and tools</string>
+    <string name="home_open_in_files">Open storage in Files</string>
+    <string name="home_backup">Back up projects</string>
+    <string name="home_star_github">Star on GitHub</string>
+    <string name="home_sponsor">Sponsor CodeAssist</string>
+    <string name="home_feedback">Send feedback</string>
+    <string name="home_legacy_recovery">Projects from an older version can be recovered.</string>
     <string name="store_title">Explore</string>
     <string name="store_subtitle">Templates and sample projects to start from</string>
     <string name="store_settings_and_tools">Settings &amp; tools</string>
     <string name="store_search_hint">Search templates and samples</string>
+    <!-- Explore tab, Material 3 Expressive redesign -->
+    <string name="store_search_placeholder">Templates, sample apps, plugins</string>
+    <string name="store_browse_by_kind">Browse by kind</string>
+    <string name="store_see_all">See all</string>
+    <string name="store_install">Install</string>
+    <string name="store_use">Use</string>
+    <string name="store_open">Open</string>
+    <string name="store_no_results">No projects match "%1$s"</string>
     <string name="store_all">All</string>
     <string name="store_unavailable">Explore unavailable</string>
     <string name="store_unavailable_content">Explore isn't available in this build.</string>
@@ -520,11 +556,26 @@ We never collect your code, file or project names, which features you use, or an
     <string name="store_item_about">About</string>
     <string name="store_item_whats_included">What you get</string>
     <string name="store_item_details">Details</string>
+    <string name="store_item_size">Size</string>
+    <string name="store_item_version">Version</string>
+    <!-- Hero figure labels: lowercase, because they read as captions under a number, not as headings -->
+    <string name="store_hero_installs">installs</string>
+    <string name="store_hero_download">download</string>
+    <string name="store_install_project">Install project</string>
+    <string name="store_open_in_editor">Open in editor</string>
+    <string name="store_item_reviews">%1$d reviews</string>
+    <string name="store_item_tab_overview">Overview</string>
+    <string name="store_item_tab_readme">README</string>
+    <string name="store_item_tab_reviews">Ratings and reviews</string>
+    <string name="store_item_tab_changelog">Changelog</string>
     <string name="store_item_type">Type</string>
     <string name="store_item_language">Language</string>
     <string name="store_item_publisher">Publisher</string>
     <string name="store_item_downloads">Downloads</string>
     <string name="store_installing">Installing…</string>
+    <string name="store_downloading_pct">%1$d%%</string>
+    <string name="store_unpacking">Unpacking…</string>
+    <string name="store_retry">Retry</string>
     <string name="store_get">Get</string>
     <string name="store_kind_template">Template</string>
     <string name="store_kind_sample">Sample</string>
@@ -548,6 +599,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="learn_review">Review</string>
     <string name="learn_continue">Continue</string>
     <string name="learn_completed">Completed</string>
+    <!-- Learn tab, Material 3 Expressive redesign -->
+    <string name="learn_lessons_done">%1$d lessons done</string>
+    <string name="learn_module_meta">%1$d of %2$d lessons · %3$d min</string>
+    <string name="learn_resume_lesson">Resume lesson %1$d</string>
     <string name="learn_minutes">%1$d min</string>
     <string name="learn_lessons_progress">%1$d / %2$d lessons</string>
     <string name="learn_step_progress">Step %1$d of %2$d</string>

@@ -145,12 +145,87 @@ private val OrangeDark = AccentRoles(
     tertiaryContainer = Color(0xFF434A21), onTertiaryContainer = Color(0xFFDFE7B0),
 )
 
+// ---- Lime / plum: a COMPLETE scheme, not an accent over the shared neutrals ----
+//
+// The other three presets layer accent roles onto one violet-leaning neutral ramp. This one cannot: its
+// neutrals are deliberately WARM (a yellow-leaning off-white in light, a green-black in dark), and that
+// warmth is half of what makes the palette read as itself. Swapping only the accent roles onto the shared
+// cool ramp produces lime on grey, which is a different and much worse design.
+//
+// Values come from the Home/Explore/Learn design, and are the Material Theme Builder output for the
+// source colors primary #A6D400 (lime) and tertiary #6C3E85 (plum) over a warm neutral.
+
+private val LimeLight = lightColorScheme(
+    primary = Color(0xFF465700), onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFC7EE45), onPrimaryContainer = Color(0xFF131F00),
+    inversePrimary = Color(0xFFCDF14A),
+    secondary = Color(0xFF5A6146), onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFDEE5C3), onSecondaryContainer = Color(0xFF181E08),
+    tertiary = Color(0xFF6C3E85), onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFF2D9FF), onTertiaryContainer = Color(0xFF280B3B),
+    background = Color(0xFFFBFAED),
+    onBackground = Color(0xFF1B1C15),
+    surface = Color(0xFFFBFAED),
+    onSurface = Color(0xFF1B1C15),
+    surfaceVariant = Color(0xFFE4E3D7),
+    onSurfaceVariant = Color(0xFF45483A),
+    surfaceTint = Color(0xFF465700),
+    inverseSurface = Color(0xFF303129),
+    inverseOnSurface = Color(0xFFF2F1E4),
+    outline = Color(0xFF767966),
+    outlineVariant = Color(0xFFC6C9B2),
+    scrim = Color(0xFF000000),
+    surfaceBright = Color(0xFFFBFAED),
+    surfaceDim = Color(0xFFDCDBCE),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFF5F4E7),
+    surfaceContainer = Color(0xFFEFEEE2),
+    surfaceContainerHigh = Color(0xFFEAE9DC),
+    surfaceContainerHighest = Color(0xFFE4E3D7),
+    error = Color(0xFF8F4C38), onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFFDBD1), onErrorContainer = Color(0xFF3A0B01),
+)
+
+private val LimeDark = darkColorScheme(
+    primary = Color(0xFFCDF14A), onPrimary = Color(0xFF232D00),
+    primaryContainer = Color(0xFF344200), onPrimaryContainer = Color(0xFFE4FF74),
+    inversePrimary = Color(0xFF465700),
+    secondary = Color(0xFFC2C9A5), onSecondary = Color(0xFF2C331B),
+    secondaryContainer = Color(0xFF424937), onSecondaryContainer = Color(0xFFDEE5C3),
+    tertiary = Color(0xFFDEB8F5), onTertiary = Color(0xFF3B1E4F),
+    tertiaryContainer = Color(0xFF53306B), onTertiaryContainer = Color(0xFFF2D9FF),
+    background = Color(0xFF12140C),
+    onBackground = Color(0xFFE3E3D6),
+    surface = Color(0xFF12140C),
+    onSurface = Color(0xFFE3E3D6),
+    surfaceVariant = Color(0xFF45483A),
+    onSurfaceVariant = Color(0xFFC6C9B2),
+    surfaceTint = Color(0xFFCDF14A),
+    inverseSurface = Color(0xFFE3E3D6),
+    inverseOnSurface = Color(0xFF303129),
+    outline = Color(0xFF90937E),
+    outlineVariant = Color(0xFF45483A),
+    scrim = Color(0xFF000000),
+    surfaceBright = Color(0xFF383A2F),
+    surfaceDim = Color(0xFF12140C),
+    surfaceContainerLowest = Color(0xFF0C0F07),
+    surfaceContainerLow = Color(0xFF1A1C14),
+    surfaceContainer = Color(0xFF1F2118),
+    surfaceContainerHigh = Color(0xFF292B22),
+    surfaceContainerHighest = Color(0xFF34362C),
+    error = Color(0xFFFFB4A2), onError = Color(0xFF561F0F),
+    errorContainer = Color(0xFF723523), onErrorContainer = Color(0xFFFFDBD1),
+)
+
 /** The fixed expressive [ColorScheme] for an [accent] in the given mode (the non-dynamic fallback). */
 fun expressiveColorScheme(accent: CaAccent, dark: Boolean): ColorScheme {
+    // Lime carries its own neutrals (see above) and returns early; the rest share one ramp.
+    if (accent == CaAccent.Lime) return if (dark) LimeDark else LimeLight
     val roles = when (accent) {
         CaAccent.Violet -> if (dark) VioletDark else VioletLight
         CaAccent.Teal -> if (dark) TealDark else TealLight
         CaAccent.Orange -> if (dark) OrangeDark else OrangeLight
+        CaAccent.Lime -> error("handled above")
     }
     return (if (dark) NeutralDark else NeutralLight).withAccent(roles)
 }

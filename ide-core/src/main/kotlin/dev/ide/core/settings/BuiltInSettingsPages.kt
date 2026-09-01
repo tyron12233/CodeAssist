@@ -151,6 +151,7 @@ object BuiltInSettingsPages {
                 default = d.accent,
                 options = listOf(
                     SettingControl.Choice.Option(IdeSettings.ACCENT_DYNAMIC, "Dynamic"),
+                    SettingControl.Choice.Option(IdeSettings.ACCENT_LIME, "Lime"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_VIOLET, "Violet"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_TEAL, "Teal"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_ORANGE, "Orange (Legacy)"),

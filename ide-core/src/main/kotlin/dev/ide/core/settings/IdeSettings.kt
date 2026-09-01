@@ -17,8 +17,8 @@ data class IdeSettings(
     // ---- appearance ----
     /** [THEME_LIGHT], [THEME_DARK], or [THEME_SYSTEM] (follow the OS). */
     val themeMode: String = THEME_DARK,
-    /** [ACCENT_VIOLET], [ACCENT_TEAL], [ACCENT_ORANGE], or [ACCENT_CUSTOM] (the accent swaps the theme ships). */
-    val accent: String = ACCENT_VIOLET,
+    /** [ACCENT_LIME] (the default), [ACCENT_VIOLET], [ACCENT_TEAL], [ACCENT_ORANGE], or [ACCENT_CUSTOM]. */
+    val accent: String = ACCENT_LIME,
     /** Seed for [ACCENT_CUSTOM] — an `0xAARRGGBB` ARGB long. Ignored unless [accent] is custom. */
     val accentColor: Long = 0xFF8B5CF6L,
 
@@ -82,6 +82,7 @@ data class IdeSettings(
         const val THEME_DARK = "dark"
         const val THEME_SYSTEM = "system"
         const val ACCENT_DYNAMIC = "dynamic"
+        const val ACCENT_LIME = "lime"
         const val ACCENT_VIOLET = "violet"
         const val ACCENT_TEAL = "teal"
         const val ACCENT_ORANGE = "orange"

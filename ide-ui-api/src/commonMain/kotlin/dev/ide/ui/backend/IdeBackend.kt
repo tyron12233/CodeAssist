@@ -220,6 +220,8 @@ data class UiStoreItem(
     val title: String,
     val summary: String,
     val description: String = summary,
+    /** First sentence of [description], truncated server-side so clients agree where it ends. */
+    val blurb: String? = null,
     val category: String,
     val iconId: String = "file",
     val tags: List<String> = emptyList(),
@@ -228,6 +230,23 @@ data class UiStoreItem(
     val accentColor: Long? = null,
     /** Downloads / stars, shown as a soft stat on the card. Negative hides it. */
     val installs: Int = -1,
+    /** Mean rating out of 5. Negative hides the rating entirely, which is what a catalog with no ratings
+     *  yet reports — a card showing "0.0 stars" would read as "rated badly", not as "not rated". */
+    val rating: Float = -1f,
+    /** How many ratings [rating] averages over. */
+    val ratingCount: Int = 0,
+    /** The published version, `X.Y.Z`. Null for a bundled item, which has no version of its own. */
+    val version: String? = null,
+    /** Download size of the item's payload in bytes. Negative hides the figure. */
+    val downloadBytes: Long = -1,
+    /** Whether the publisher carries the verified badge. */
+    val verified: Boolean = false,
+    /** The item's README, rendered on its own tab. Null hides the tab rather than showing an empty one. */
+    val readme: String? = null,
+    /** Release notes for [version], rendered on its own tab. Null hides the tab. */
+    val changelog: String? = null,
+    /** ISO 8601 publish time; the UI renders the relative string ("Published 3 days ago"). */
+    val publishedAt: String? = null,
     /** For a [UiStoreItemKind.Template] item: the template id the Create-Project flow opens with. */
     val templateId: String? = null,
     val available: Boolean = true,
@@ -1654,7 +1673,7 @@ enum class UiSeverity { Error, Warning, Info, Hint }
 data class UiSettings(
     /** "light" | "dark" | "system". */
     val themeMode: String = "dark",
-    val accent: UiAccent = UiAccent.Violet,
+    val accent: UiAccent = UiAccent.Lime,
     /** The seed color for [UiAccent.Custom], as an `0xAARRGGBB` ARGB long. Ignored unless accent is Custom. */
     val customAccentColor: Long = 0xFF8B5CF6L,
     val editorFontScale: Float = 1f,
@@ -1704,7 +1723,7 @@ data class UiSettings(
  * [Dynamic] follows the device wallpaper (Material You, Android 12+; falls back to Violet elsewhere). A
  * preset / Custom always overrides wallpaper dynamic color.
  */
-enum class UiAccent { Dynamic, Violet, Teal, Orange, Custom }
+enum class UiAccent { Dynamic, Lime, Violet, Teal, Orange, Custom }
 
 /**
  * A per-language code style profile the Code Style screen edits. Values are plain strings/ints/bools (preset,
