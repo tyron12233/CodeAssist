@@ -624,8 +624,18 @@ class CodeAssistAppState(
         screen = Screen.StoreItem
     }
 
-    /** The publish flow. Full screen, not a sheet: it is a form with a file listing above it. */
-    fun openSubmitProject() {
+    /** The project the publish flow should start from, when it was reached with one already chosen. */
+    var submitProject: ProjectInfo? by mutableStateOf(null)
+        private set
+
+    /**
+     * The publish flow. Full screen, not a sheet: it is a form with a file listing above it.
+     *
+     * [project] is set when the user already chose one — arriving from Share, for instance — so the flow
+     * does not ask again for something they just picked.
+     */
+    fun openSubmitProject(project: ProjectInfo? = null) {
+        submitProject = project
         screen = Screen.SubmitProject
     }
 

@@ -119,7 +119,9 @@ internal fun AppNavGraph(
                         onDone = app::finishExport,
                         // The other way to share the same project. Hidden when this build cannot publish.
                         onPublish = if (backend.store.submissionsAvailable()) {
-                            { app.finishExport(); app.openSubmitProject() }
+                            // `target` is the project this export flow was opened for, so publishing
+                            // continues with it rather than asking again.
+                            { app.finishExport(); app.openSubmitProject(target) }
                         } else {
                             null
                         },
@@ -161,6 +163,7 @@ internal fun AppNavGraph(
 
             Screen.SubmitProject -> SubmitProjectScreen(
                 backend = backend,
+                initialProject = app.submitProject,
                 onBack = { app.navigateTo(Screen.Projects) },
                 // Back to Explore on success: the submission now shows there as "under review", which is
                 // the only place its state is visible.
@@ -196,6 +199,7 @@ internal fun AppNavGraph(
                     // Signing in to review needs a browser; null on a host that cannot open one, which the
                     // sheet reports rather than working around.
                     onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
+                    onOpenPublisher = { handle -> app.openPublisher(handle) },
                 )
             }
 

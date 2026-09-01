@@ -734,9 +734,14 @@ private fun ScreenshotsCard(backend: IdeBackend, fileActions: FileActions, state
     }
 }
 
-/** One picked screenshot: its thumbnail (decoded off the main thread) with a remove button. */
+/**
+ * One picked screenshot: its thumbnail (decoded off the main thread) with a remove button.
+ *
+ * `internal` so the publish flow shows screenshots the same way the export flow does. They are the same act
+ * — choosing the images people will see — and two pickers would drift.
+ */
 @Composable
-private fun ScreenshotThumb(backend: IdeBackend, path: String, onRemove: () -> Unit) {
+internal fun ScreenshotThumb(backend: IdeBackend, path: String, onRemove: () -> Unit) {
     val bitmap by produceState<ImageBitmap?>(null, path) {
         val bytes = backend.projects.imageBytes(path)
         value = bytes?.let { withContext(Dispatchers.Default) { decodeImageBytes(it) } }

@@ -54,6 +54,12 @@ import dev.ide.ui.generated.resources.submit_send
 import dev.ide.ui.generated.resources.submit_sending
 import dev.ide.ui.generated.resources.submit_title
 import dev.ide.ui.icons.CaSymbols
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.mutableStateListOf
+import dev.ide.ui.generated.resources.submit_add_screenshot
+import dev.ide.ui.generated.resources.submit_screenshots
+import dev.ide.ui.generated.resources.submit_screenshots_desc
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -70,12 +76,23 @@ fun SubmitProjectScreen(
     onBack: () -> Unit,
     onSubmitted: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Picks image files for the screenshots. Null hides the picker on a host that cannot. */
+    fileActions: dev.ide.ui.backend.FileActions? = null,
+    /**
+     * The project to publish, when the caller already knows it.
+     *
+     * Set when this was reached from Share, where a project was just chosen — asking again for something
+     * the user picked one screen ago is the kind of step that makes a flow feel like paperwork.
+     */
+    initialProject: ProjectInfo? = null,
 ) {
-    var chosen by remember { mutableStateOf<ProjectInfo?>(null) }
+    var chosen by remember(initialProject?.rootPath) { mutableStateOf(initialProject) }
     var packaged by remember { mutableStateOf<UiPackagedProject?>(null) }
     var packing by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf(UiSubmissionDraft()) }
     var categories by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    // The images people will actually judge the project by. Same picker the export flow uses.
+    val screenshots = remember(chosen?.rootPath) { mutableStateListOf<String>() }
     var sending by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     // Resolved here rather than inside the click handler: a string resource needs composition.
@@ -147,6 +164,36 @@ fun SubmitProjectScreen(
                         Field(stringResource(Res.string.submit_field_tags), draft.tags.joinToString(", ")) { raw ->
                             draft = draft.copy(tags = raw.split(',').map { it.trim() }.filter { it.isNotEmpty() })
                         }
+                        Spacer(Modifier.height(18.dp))
+                        Eyebrow(stringResource(Res.string.submit_screenshots))
+                        Spacer(Modifier.height(4.dp))
+                        Body(stringResource(Res.string.submit_screenshots_desc))
+                        if (screenshots.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Row(
+                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                screenshots.forEach { path ->
+                                    ScreenshotThumb(backend, path) { screenshots.remove(path) }
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(
+                            onClick = {
+                                fileActions?.pickFile(listOf("png", "jpg", "jpeg", "webp")) { path ->
+                                    if (path != null && screenshots.size < MAX_SUBMIT_SCREENSHOTS) {
+                                        screenshots += path
+                                    }
+                                }
+                            },
+                            // Hidden rather than disabled when the host cannot pick files: there is nothing
+                            // the user could do to make it work.
+                            enabled = fileActions != null && screenshots.size < MAX_SUBMIT_SCREENSHOTS,
+                        ) {
+                            Text(stringResource(Res.string.submit_add_screenshot))
+                        }
                         Spacer(Modifier.height(14.dp))
                         Eyebrow(stringResource(Res.string.submit_field_category))
                         Spacer(Modifier.height(8.dp))
@@ -204,7 +251,10 @@ fun SubmitProjectScreen(
     LaunchedEffect(sending) {
         if (!sending) return@LaunchedEffect
         val archive = packaged ?: return@LaunchedEffect
-        val result = runCatching { backend.store.submit(draft, archive) }.getOrNull()
+        // The picker holds the screenshots in its own list so removing one does not rebuild the draft on
+        // every tap; they join it here, at the one point that matters.
+        val request = draft.copy(screenshotPaths = screenshots.toList())
+        val result = runCatching { backend.store.submit(request, archive) }.getOrNull()
         sending = false
         message = result?.message
         if (result?.success == true) onSubmitted()
@@ -282,3 +332,6 @@ private fun formatSize(bytes: Long): String = when {
     bytes >= 1024 -> "${bytes / 1024} KB"
     else -> "$bytes B"
 }
+
+/** Matches the database CHECK and the submission service's own cap. */
+private const val MAX_SUBMIT_SCREENSHOTS = 6

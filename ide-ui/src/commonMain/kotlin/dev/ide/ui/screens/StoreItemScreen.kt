@@ -105,7 +105,13 @@ import dev.ide.ui.theme.cardShape
 import dev.ide.ui.theme.tonalPair
 import kotlinx.coroutines.launch
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import dev.ide.ui.editor.preview.decodeImageBytes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import dev.ide.ui.components.RatingSummary
 import dev.ide.ui.components.ReviewCard
 import dev.ide.ui.generated.resources.notif_days
@@ -151,6 +157,8 @@ fun StoreItemScreen(
     onToggleSaved: (() -> Unit)? = null,
     /** Opens a URL in a browser, for signing in from the reviews tab. Null hides sign-in. */
     onOpenUrl: ((String) -> Unit)? = null,
+    /** Opens the publisher's profile by handle. Null leaves the author line as plain text. */
+    onOpenPublisher: ((String) -> Unit)? = null,
 ) {
     if (item == null) { onBack(); return }
     val scope = rememberCoroutineScope()
@@ -173,6 +181,7 @@ fun StoreItemScreen(
     var reviewsRefresh by remember(item.id) { mutableStateOf(0) }
     var myReview by remember(item.id) { mutableStateOf<dev.ide.ui.backend.UiStoreReview?>(null) }
     var lightbox by remember(item.id) { mutableStateOf(-1) }
+    val shots = rememberResolvedScreenshots(backend, item)
 
     // The hero's tint is stable per item rather than per list position: this screen shows one card, so
     // there is no run to rotate through. Hashing the id keeps a given item the same colour every visit.
@@ -189,7 +198,7 @@ fun StoreItemScreen(
                 onShare = onShare?.let { { it(item) } },
             )
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
-                item("hero") { DetailHero(item, pair) }
+                item("hero") { DetailHero(item, pair, onOpenPublisher) }
                 item("cta") {
                     InstallRow(
                         item = item,
@@ -216,7 +225,7 @@ fun StoreItemScreen(
                 }
 
                 when (tab) {
-                    StoreTab.Overview -> overview(item) { lightbox = it }
+                    StoreTab.Overview -> overview(backend, item, shots) { lightbox = it }
                     StoreTab.Readme -> item("readme") { ProseCard(item.readme.orEmpty()) }
                     StoreTab.Changelog -> item("changelog") { ChangelogCard(item) }
                     StoreTab.Reviews -> item("reviews") {
@@ -233,7 +242,14 @@ fun StoreItemScreen(
             }
         }
         if (lightbox >= 0) {
-            ScreenshotLightbox(item, lightbox, onClose = { lightbox = -1 }, onIndex = { lightbox = it })
+            ScreenshotLightbox(
+                backend,
+                item,
+                shots,
+                lightbox,
+                onClose = { lightbox = -1 },
+                onIndex = { lightbox = it },
+            )
         }
         if (reviewSheet) {
             ReviewSheet(
@@ -265,16 +281,21 @@ fun StoreItemScreen(
  */
 @Composable
 private fun ScreenshotLightbox(
+    backend: IdeBackend,
     item: UiStoreItem,
+    resolved: List<String>,
     index: Int,
     onClose: () -> Unit,
     onIndex: (Int) -> Unit,
 ) {
     val c = MaterialTheme.colorScheme
-    val real = remember(item) { item.screenshots.filter { hasSamplePreview(it) } }
+    val real = resolved
     val shots: List<String?> = when {
         real.isNotEmpty() -> real
         hasSamplePreview(item.previewKey) -> listOf(item.previewKey!!)
+        // Remote shots that have not been fetched yet: hold their places so the strip does not change
+        // length under the reader when the images land.
+        item.screenshots.isNotEmpty() -> List(item.screenshots.size) { null }
         else -> listOf(null, null)
     }
     val current = index.coerceIn(0, shots.lastIndex)
@@ -308,10 +329,16 @@ private fun ScreenshotLightbox(
             Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp), contentAlignment = Alignment.Center) {
                 Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(CodeMotifColors.Chrome)) {
                     val key = shots[current]
-                    if (key != null) {
-                        SamplePreview(key, Modifier.fillMaxWidth().height(340.dp))
-                    } else {
-                        CodePanel(item, current)
+                    when {
+                        key == null -> CodePanel(item, current)
+                        hasSamplePreview(key) -> SamplePreview(key, Modifier.fillMaxWidth().height(340.dp))
+                        // Fit, not crop: the viewer is where the whole screenshot has to be legible.
+                        else -> ShotImage(
+                            backend,
+                            key,
+                            ContentScale.Fit,
+                            Modifier.fillMaxWidth().height(340.dp),
+                        )
                     }
                 }
             }
@@ -430,7 +457,11 @@ internal fun DetailTopBar(
  * one element that has to read as an app icon does, against a field of the same hue.
  */
 @Composable
-private fun DetailHero(item: UiStoreItem, pair: TonalPair) {
+private fun DetailHero(
+    item: UiStoreItem,
+    pair: TonalPair,
+    onOpenPublisher: ((String) -> Unit)? = null,
+) {
     Surface(
         shape = RoundedCornerShape(32.dp),
         color = pair.container,
@@ -469,8 +500,19 @@ private fun DetailHero(item: UiStoreItem, pair: TonalPair) {
                             color = pair.onContainer,
                         )
                         if (item.author != null) {
+                            // Tappable only when there is a handle to open: a bundled item's "author" is
+                            // CodeAssist itself, which has no profile, and a dead tap target is worse than
+                            // plain text.
+                            val handle = item.authorHandle
                             Row(
-                                Modifier.padding(top = 6.dp),
+                                Modifier.padding(top = 6.dp)
+                                    .then(
+                                        if (handle != null && onOpenPublisher != null) {
+                                            Modifier.clickable { onOpenPublisher(handle) }
+                                        } else {
+                                            Modifier
+                                        },
+                                    ),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                             ) {
@@ -481,6 +523,14 @@ private fun DetailHero(item: UiStoreItem, pair: TonalPair) {
                                 )
                                 if (item.verified) {
                                     Symbol(CaSymbols.verified, contentDescription = null, size = 15.dp, tint = pair.onContainer)
+                                }
+                                if (handle != null && onOpenPublisher != null) {
+                                    Symbol(
+                                        CaSymbols.chevronRight,
+                                        contentDescription = null,
+                                        size = 14.dp,
+                                        tint = pair.onContainer.copy(alpha = 0.7f),
+                                    )
                                 }
                             }
                         }
@@ -702,10 +752,15 @@ private fun TabRowPills(tabs: List<StoreTab>, selected: StoreTab, onSelect: (Sto
  * Emitted as [LazyColumn] items rather than one composable so a long description does not force the
  * whole tab to compose before the first pixel.
  */
-private fun LazyListScope.overview(item: UiStoreItem, onOpenShot: (Int) -> Unit) {
+private fun LazyListScope.overview(
+    backend: IdeBackend,
+    item: UiStoreItem,
+    shots: List<String>,
+    onOpenShot: (Int) -> Unit,
+) {
     // Only offered when the item actually has artwork; see ScreenshotCarousel.
     if (item.screenshots.isNotEmpty() || item.previewKey != null) {
-        item("shots") { ScreenshotCarousel(item, onOpenShot) }
+        item("shots") { ScreenshotCarousel(backend, item, onOpenShot, shots) }
     }
     item("about") {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 22.dp)) {
@@ -754,12 +809,20 @@ private fun LazyListScope.overview(item: UiStoreItem, onOpenShot: (Int) -> Unit)
  * have no screenshots", which is exactly what it would be saying.
  */
 @Composable
-private fun ScreenshotCarousel(item: UiStoreItem, onOpen: (Int) -> Unit) {
+private fun ScreenshotCarousel(
+    backend: IdeBackend,
+    item: UiStoreItem,
+    onOpen: (Int) -> Unit,
+    resolved: List<String>,
+) {
     val c = MaterialTheme.colorScheme
-    val real = remember(item) { item.screenshots.filter { hasSamplePreview(it) } }
+    val real = resolved
     val shots: List<String?> = when {
         real.isNotEmpty() -> real
         hasSamplePreview(item.previewKey) -> listOf(item.previewKey!!)
+        // Remote shots that have not been fetched yet: hold their places so the strip does not change
+        // length under the reader when the images land.
+        item.screenshots.isNotEmpty() -> List(item.screenshots.size) { null }
         else -> listOf(null, null)  // motif stand-ins
     }
     val listState = rememberLazyListState()
@@ -777,10 +840,10 @@ private fun ScreenshotCarousel(item: UiStoreItem, onOpen: (Int) -> Unit) {
                     .background(CodeMotifColors.Chrome)
                     .clickable { onOpen(i) },
             ) {
-                if (key != null) {
-                    SamplePreview(key, Modifier.fillMaxSize())
-                } else {
-                    CodePanel(item, i)
+                when {
+                    key == null -> CodePanel(item, i)
+                    hasSamplePreview(key) -> SamplePreview(key, Modifier.fillMaxSize())
+                    else -> ShotImage(backend, key, ContentScale.Crop, Modifier.fillMaxSize())
                 }
                 Box(
                     Modifier.align(Alignment.BottomEnd).padding(9.dp)
@@ -1267,5 +1330,52 @@ private fun relativeAge(postedAtMs: Long, now: Long): String? {
         minutes < 60 -> stringResource(Res.string.notif_minutes, minutes.toInt())
         minutes < 60 * 24 -> stringResource(Res.string.notif_hours, (minutes / 60).toInt())
         else -> stringResource(Res.string.notif_days, (minutes / (60 * 24)).toInt())
+    }
+}
+
+/**
+ * The screenshots this item can actually draw, as either a built-in preview key or a local file path.
+ *
+ * A published project's screenshots arrive as storage paths, and both galleries decode files rather than
+ * URLs, so each remote path is fetched once and cached (see `StoreService.screenshotFile`). Anything that
+ * fails to fetch is dropped rather than left as a gap: the strip shows what it has.
+ */
+@Composable
+private fun rememberResolvedScreenshots(backend: IdeBackend, item: UiStoreItem): List<String> {
+    val resolved by produceState(emptyList<String>(), item.id, backend) {
+        // Built-ins are already renderable and need no round trip.
+        val builtIn = item.screenshots.filter { hasSamplePreview(it) }
+        val remote = item.screenshots.filterNot { hasSamplePreview(it) }
+        value = builtIn
+        if (remote.isEmpty()) return@produceState
+        val cached = remote.mapNotNull { runCatching { backend.store.screenshotFile(it) }.getOrNull() }
+        value = builtIn + cached
+    }
+    return resolved
+}
+
+/**
+ * A screenshot that lives on disk, decoded off the composition thread.
+ *
+ * Published screenshots reach the galleries as cached files (see [rememberResolvedScreenshots]), so this
+ * is the file-backed twin of [SamplePreview]. Until the decode lands, and if it fails outright, the space
+ * stays the flat chrome the surrounding cards already use rather than flashing a spinner.
+ */
+@Composable
+private fun ShotImage(
+    backend: IdeBackend,
+    path: String,
+    scale: ContentScale,
+    modifier: Modifier = Modifier,
+) {
+    val bitmap by produceState<ImageBitmap?>(null, path) {
+        val bytes = backend.projects.imageBytes(path)
+        value = bytes?.let { withContext(Dispatchers.Default) { decodeImageBytes(it) } }
+    }
+    val bmp = bitmap
+    if (bmp != null) {
+        Image(bmp, contentDescription = null, modifier = modifier, contentScale = scale)
+    } else {
+        Box(modifier.background(CodeMotifColors.Chrome))
     }
 }
