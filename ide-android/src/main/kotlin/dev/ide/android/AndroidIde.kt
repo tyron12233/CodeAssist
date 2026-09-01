@@ -459,9 +459,10 @@ object AndroidIde {
     /**
      * The store's account service.
      *
-     * GitHub only for now: Google needs its own OAuth client on the Supabase project, and offering a
-     * button that cannot succeed is worse than not offering it. Add [dev.ide.store.StoreProvider.GOOGLE]
-     * here once that client exists.
+     * Both providers are listed because both are configured on the project and this build can complete
+     * either. Which are actually OFFERED is the backend's call, read from `store_auth_providers` and
+     * intersected with this list — Google ships switched off there while its consent screen awaits Google's
+     * review, and turning it on later needs no app release.
      */
     /**
      * Ask FCM for this install's token and hand it to the store backend.
@@ -511,7 +512,10 @@ object AndroidIde {
             apiKey = key,
             // The deep link the manifest's intent-filter receives.
             redirectUrl = dev.ide.store.StoreAuth.ANDROID_REDIRECT,
-            enabledProviders = listOf(dev.ide.store.StoreProvider.GITHUB),
+            enabledProviders = listOf(
+                dev.ide.store.StoreProvider.GITHUB,
+                dev.ide.store.StoreProvider.GOOGLE,
+            ),
         )
     }
 

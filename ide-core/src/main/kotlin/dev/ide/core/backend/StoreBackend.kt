@@ -178,6 +178,28 @@ internal class StoreBackend(
     override suspend fun voteReview(itemId: String, authorId: String, helpful: Boolean): String? =
         withContext(storeIo) { reviewState.vote(itemId, authorId, helpful) }
 
+    override suspend fun replyToReview(itemId: String, authorId: String, body: String): String? =
+        withContext(storeIo) { reviewState.reply(itemId, authorId, body) }
+
+    override suspend fun deleteReply(itemId: String, authorId: String): String? =
+        withContext(storeIo) { reviewState.deleteReply(itemId, authorId) }
+
+    override suspend fun reportReview(
+        itemId: String,
+        authorId: String,
+        reason: dev.ide.ui.backend.UiReportReason,
+        detail: String?,
+    ): String? = withContext(storeIo) { reviewState.report(itemId, authorId, reason, detail) }
+
+    override suspend fun reportItem(
+        itemId: String,
+        reason: dev.ide.ui.backend.UiReportReason,
+        detail: String?,
+    ): String? = withContext(storeIo) { reviewState.reportItem(itemId, reason, detail) }
+
+    override suspend fun setReviewHidden(itemId: String, authorId: String, hidden: Boolean): String? =
+        withContext(storeIo) { reviewState.setHidden(itemId, authorId, hidden) }
+
     /** The version the catalog last advertised for [itemId], when it said. */
     private fun versionOf(itemId: String): String? = payloads[itemId]?.version
 
@@ -186,11 +208,22 @@ internal class StoreBackend(
     // Delegated: sign-in state depends on the account port and nothing else in the IDE, so it lives in a
     // class that can be built and tested without a project, an engine or a host.
 
-    private val accountState = StoreAccounts(accounts)
+    private val accountState = StoreAccounts(accounts, source)
 
     override fun authProviders(): List<String> = accountState.authProviders()
 
     override fun authState(): kotlinx.coroutines.flow.StateFlow<UiStoreAuthState> = accountState.authState()
+
+    /**
+     * Ask the backend which providers to offer, then report them.
+     *
+     * Called when a sign-in surface opens rather than at startup: it is the only moment the answer matters,
+     * and it means a provider enabled server-side appears on the next sheet open without an app release.
+     */
+    override suspend fun refreshAuthProviders(): List<String> = withContext(storeIo) {
+        accountState.refreshProviders()
+        accountState.authProviders()
+    }
 
     override fun beginSignIn(provider: String): String? = accountState.beginSignIn(provider)
 

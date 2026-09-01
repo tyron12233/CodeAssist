@@ -666,6 +666,13 @@ interface ProjectService {
     fun compatibilityInfo(): UiCompatibilityInfo? = null
 
     /**
+     * Details for the currently-open project when it was adopted from a folder nothing recognized, or null
+     * for any project the IDE or an importer authored. Drives the editor's "opened for editing only" notice,
+     * see [UiUnrecognizedProject].
+     */
+    fun unrecognizedProjectInfo(): UiUnrecognizedProject? = null
+
+    /**
      * Re-read the open project's build files into the model (modules, dependencies, Android config), then
      * re-resolve dependencies and re-index. Slow (parses plus network resolution), so it suspends off the main
      * thread. No-op returning `ok = false` for a project whose model the IDE itself owns.
@@ -854,6 +861,15 @@ interface StoreService {
      */
     fun authProviders(): List<String> = emptyList()
 
+    /**
+     * Ask the backend which providers to offer, and return the result.
+     *
+     * [authProviders] answers from cache so it can be read during composition; this is the call that
+     * refreshes it. A provider turned on server-side therefore appears the next time a sign-in surface
+     * opens, with no app release — which is how a provider awaiting external approval ships disabled.
+     */
+    suspend fun refreshAuthProviders(): List<String> = authProviders()
+
     /** The live sign-in state. Safe to collect during composition. */
     fun authState(): kotlinx.coroutines.flow.StateFlow<UiStoreAuthState> =
         kotlinx.coroutines.flow.MutableStateFlow(UiStoreAuthState())
@@ -973,6 +989,41 @@ interface StoreService {
 
     /** Mark a review useful, or take it back. Returns null on success or a message to show. */
     suspend fun voteReview(itemId: String, authorId: String, helpful: Boolean): String? =
+        "Reviews are not available in this build"
+
+    /**
+     * Answer a review as the project's publisher. Returns null on success, or a message to show.
+     *
+     * Only offered when [UiReviewPage.canReply]; the backend refuses anyone else and says why.
+     */
+    suspend fun replyToReview(itemId: String, authorId: String, body: String): String? =
+        "Reviews are not available in this build"
+
+    suspend fun deleteReply(itemId: String, authorId: String): String? =
+        "Reviews are not available in this build"
+
+    /**
+     * Flag a review for a moderator. Returns null on success, or a message to show.
+     *
+     * Reporting the same thing twice succeeds quietly: a reporter cannot read the queue, so telling them it
+     * was already reported would only invite them to try again.
+     */
+    suspend fun reportReview(
+        itemId: String,
+        authorId: String,
+        reason: UiReportReason,
+        detail: String? = null,
+    ): String? = "Reviews are not available in this build"
+
+    /** Flag a whole project rather than one of its reviews. */
+    suspend fun reportItem(
+        itemId: String,
+        reason: UiReportReason,
+        detail: String? = null,
+    ): String? = "Reviews are not available in this build"
+
+    /** Hide or restore a review. Only offered when [UiReviewPage.canModerate]. */
+    suspend fun setReviewHidden(itemId: String, authorId: String, hidden: Boolean): String? =
         "Reviews are not available in this build"
 
     companion object {

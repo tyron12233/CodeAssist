@@ -225,6 +225,16 @@ interface StoreCatalogSource {
     fun setTopics(installId: String, token: String, topics: List<String>): StoreResult<Unit> =
         StoreResult.Unavailable("No store endpoint")
 
+    /**
+     * Which sign-in providers the backend currently allows, as wire names.
+     *
+     * Asked rather than assumed: a provider can be configured on the project but deliberately withheld —
+     * Google's consent screen awaiting review, for instance — and that decision has to be changeable
+     * without an app release. Unknown names are ignored by the caller, so a new provider can be introduced
+     * backend-first.
+     */
+    fun authProviders(): StoreResult<List<String>> = StoreResult.Unavailable("No store endpoint")
+
     /** Forget a device. Called when the token rotates or the user opts out of push entirely. */
     fun forgetDevice(token: String): StoreResult<Unit> = StoreResult.Unavailable("No store endpoint")
 
@@ -243,6 +253,7 @@ interface StoreCatalogSource {
             override fun forgetDevice(token: String) = StoreResult.Unavailable<Unit>("No store endpoint")
             override fun setTopics(installId: String, token: String, topics: List<String>) =
                 StoreResult.Unavailable<Unit>("No store endpoint")
+            override fun authProviders() = StoreResult.Unavailable<List<String>>("No store endpoint")
             override fun downloadPayload(storagePath: String, expectedSha256: String?, expectedBytes: Long, into: java.io.File, onProgress: (Float) -> Unit) =
                 StoreResult.Unavailable<Unit>("No store endpoint")
             override fun recordInstall(slug: String, installId: String) = Unit

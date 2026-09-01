@@ -185,6 +185,18 @@ class SupabaseStoreSource(
         }
     }
 
+    override fun authProviders(): StoreResult<List<String>> =
+        when (val r = rpc("store_auth_providers", "{}")) {
+            is StoreResult.Ok -> {
+                val names = JsonReader.arr(JsonReader.parseOrNull(r.value)).mapNotNull { it as? String }
+                // An empty list would mean "nobody can sign in", which is a real answer the backend is
+                // entitled to give (every provider withheld), so it is passed through rather than defaulted.
+                StoreResult.Ok(names)
+            }
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+
     /** GET a PostgREST path. Same error mapping as [rpc]: a 5xx reads as offline, not as a bad request. */
     private fun get(path: String): StoreResult<String> {
         return try {

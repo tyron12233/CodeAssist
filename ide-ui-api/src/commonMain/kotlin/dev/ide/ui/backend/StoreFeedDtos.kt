@@ -340,6 +340,18 @@ data class UiReviewPage(
     val loading: Boolean = false,
     /** Set when the page could not be fetched; shown verbatim. */
     val error: String? = null,
+    /** Whether the reader publishes this project, and so may answer its reviews. Decided by the backend. */
+    val canReply: Boolean = false,
+    /** Whether the reader is a moderator, and so may hide a review. */
+    val canModerate: Boolean = false,
 ) {
     val hasAny: Boolean get() = count > 0 || mine != null
 }
+
+/**
+ * Why something is being reported.
+ *
+ * A fixed set rather than free text: a moderator triaging a queue needs to sort by kind, and "other"
+ * carries the detail field for everything that does not fit.
+ */
+enum class UiReportReason { MALWARE, SPAM, COPYRIGHT, INAPPROPRIATE, BROKEN, OTHER }

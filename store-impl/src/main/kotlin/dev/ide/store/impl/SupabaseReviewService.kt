@@ -88,6 +88,66 @@ class SupabaseReviewService(
             ),
         )
 
+    override fun reply(itemSlug: String, authorId: String, body: String): StoreResult<Unit> =
+        unit(
+            rpc(
+                "store_reply_to_review",
+                """{"p_slug":${jsonStr(itemSlug)},"p_author":${jsonStr(authorId)},"p_body":${jsonStr(body)}}""",
+            ),
+        )
+
+    override fun deleteReply(itemSlug: String, authorId: String): StoreResult<Unit> =
+        unit(
+            rpc(
+                "store_delete_my_reply",
+                """{"p_slug":${jsonStr(itemSlug)},"p_author":${jsonStr(authorId)}}""",
+            ),
+        )
+
+    override fun report(
+        itemSlug: String,
+        authorId: String,
+        reason: dev.ide.store.ReportReason,
+        detail: String?,
+    ): StoreResult<Unit> = unit(
+        rpc(
+            "store_report_review",
+            buildString {
+                append('{')
+                append(""""p_slug":""").append(jsonStr(itemSlug)).append(',')
+                append(""""p_author":""").append(jsonStr(authorId)).append(',')
+                append(""""p_reason":""").append(jsonStr(reason.wire)).append(',')
+                append(""""p_detail":""").append(detail?.let { jsonStr(it) } ?: "null")
+                append('}')
+            },
+        ),
+    )
+
+    override fun reportItem(
+        itemSlug: String,
+        reason: dev.ide.store.ReportReason,
+        detail: String?,
+    ): StoreResult<Unit> = unit(
+        rpc(
+            "store_report_item",
+            buildString {
+                append('{')
+                append(""""p_slug":""").append(jsonStr(itemSlug)).append(',')
+                append(""""p_reason":""").append(jsonStr(reason.wire)).append(',')
+                append(""""p_detail":""").append(detail?.let { jsonStr(it) } ?: "null")
+                append('}')
+            },
+        ),
+    )
+
+    override fun setReviewHidden(itemSlug: String, authorId: String, hidden: Boolean): StoreResult<Unit> =
+        unit(
+            rpc(
+                "store_set_review_visibility",
+                """{"p_slug":${jsonStr(itemSlug)},"p_author":${jsonStr(authorId)},"p_hidden":$hidden}""",
+            ),
+        )
+
     private fun unit(result: StoreResult<String>): StoreResult<Unit> = when (result) {
         is StoreResult.Ok -> StoreResult.Ok(Unit)
         is StoreResult.Unavailable -> StoreResult.Unavailable(result.reason)
@@ -114,7 +174,10 @@ class SupabaseReviewService(
                 ?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
             when {
                 code in 200..299 -> StoreResult.Ok(text)
-                code == 401 || code == 403 -> StoreResult.Failed("Sign in to do that", code)
+                // 401 is genuinely "not signed in"; 403 is "signed in, but not allowed", and the backend's
+                // own message says which — telling a signed-in publisher to sign in would be nonsense.
+                code == 401 -> StoreResult.Failed("Sign in to do that", code)
+                code == 403 -> StoreResult.Failed(errorMessage(text) ?: "You cannot do that", code)
                 code == 429 || code >= 500 -> StoreResult.Unavailable("Store unavailable (HTTP $code)")
                 else -> StoreResult.Failed(errorMessage(text) ?: "Store rejected the request", code)
             }
@@ -141,6 +204,8 @@ class SupabaseReviewService(
                 distribution = parseDistribution(JsonReader.obj(root)?.get("distribution")),
                 mine = JsonReader.obj(root)?.get("mine")?.let { parseReview(it)?.copy(mine = true) },
                 reviews = JsonReader.arr(JsonReader.obj(root)?.get("reviews")).mapNotNull { parseReview(it) },
+                canReply = JsonReader.bool(root, "canReply", false),
+                canModerate = JsonReader.bool(root, "canModerate", false),
             )
         }
 

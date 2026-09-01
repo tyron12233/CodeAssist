@@ -34,6 +34,18 @@ import dev.ide.ui.generated.resources.reviews_reply
 import dev.ide.ui.generated.resources.reviews_yours
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.Symbol
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import dev.ide.ui.generated.resources.review_actions
+import dev.ide.ui.generated.resources.review_hide
+import dev.ide.ui.generated.resources.review_reply
+import dev.ide.ui.generated.resources.review_reply_delete
+import dev.ide.ui.generated.resources.review_reply_edit
+import dev.ide.ui.generated.resources.review_report
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -123,7 +135,20 @@ fun ReviewCard(
     relativeTime: String?,
     onVote: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier,
+    /**
+     * Report this review. Null hides the action — for the reader's own review, and when signed out, since
+     * the backend refuses both and offering the option would only produce a refusal.
+     */
+    onReport: (() -> Unit)? = null,
+    /** Answer it as the publisher. Null unless the backend said this reader publishes the project. */
+    onReply: (() -> Unit)? = null,
+    /** Remove the publisher's answer. Null when there is no reply, or the reader did not write it. */
+    onDeleteReply: (() -> Unit)? = null,
+    /** Hide or restore it. Null unless the backend said this reader moderates. */
+    onSetHidden: ((Boolean) -> Unit)? = null,
 ) {
+    var menuOpen by remember(review.authorId) { mutableStateOf(false) }
+    val hasMenu = onReport != null || onReply != null || onSetHidden != null || onDeleteReply != null
     val c = MaterialTheme.colorScheme
     Surface(
         shape = RoundedCornerShape(20.dp),
@@ -170,6 +195,67 @@ fun ReviewCard(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = c.outline,
                             )
+                        }
+                    }
+                }
+                if (hasMenu) {
+                    Box {
+                        Surface(
+                            onClick = { menuOpen = true },
+                            shape = CircleShape,
+                            color = androidx.compose.ui.graphics.Color.Transparent,
+                            contentColor = c.onSurfaceVariant,
+                            modifier = Modifier.size(30.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Symbol(
+                                    CaSymbols.moreVert,
+                                    contentDescription = stringResource(Res.string.review_actions),
+                                    size = 16.dp,
+                                    tint = c.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            onReply?.let { reply ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            stringResource(
+                                                if (review.reply != null) {
+                                                    Res.string.review_reply_edit
+                                                } else {
+                                                    Res.string.review_reply
+                                                },
+                                            ),
+                                        )
+                                    },
+                                    onClick = { menuOpen = false; reply() },
+                                )
+                            }
+                            onDeleteReply?.let { drop ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(Res.string.review_reply_delete)) },
+                                    onClick = { menuOpen = false; drop() },
+                                )
+                            }
+                            onSetHidden?.let { setHidden ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            stringResource(Res.string.review_hide),
+                                            color = c.error,
+                                        )
+                                    },
+                                    onClick = { menuOpen = false; setHidden(true) },
+                                )
+                            }
+                            onReport?.let { report ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(Res.string.review_report)) },
+                                    onClick = { menuOpen = false; report() },
+                                )
+                            }
                         }
                     }
                 }

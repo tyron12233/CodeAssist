@@ -16,9 +16,39 @@ import dev.ide.ui.backend.UiStoreAuthState
  */
 internal class StoreAccounts(
     private val accounts: dev.ide.store.StoreAccountService,
+    /** Asked which providers the backend currently allows. Null keeps whatever the build supports. */
+    private val source: dev.ide.store.StoreCatalogSource? = null,
 ) {
 
-    fun authProviders(): List<String> = accounts.providers().map { it.wire }
+    /**
+     * The providers the backend allows, once it has been asked.
+     *
+     * Null until [refreshProviders] answers, and the build's own list is used until then: a sheet opening
+     * before the network replies should offer the provider that has always worked rather than nothing. A
+     * backend that answers with fewer providers narrows the list; it never widens it beyond what this build
+     * can actually perform.
+     */
+    private var allowed: List<String>? = null
+
+    /**
+     * Ask the backend which providers to offer. Cheap, and safe to call every time a sign-in surface opens.
+     *
+     * Failure is deliberately silent: not knowing is not the same as nobody being allowed, and hiding the
+     * only working sign-in button because a settings read timed out would be worse than being slightly out
+     * of date.
+     */
+    fun refreshProviders() {
+        val result = source?.authProviders() ?: return
+        if (result is dev.ide.store.StoreResult.Ok) allowed = result.value
+    }
+
+    fun authProviders(): List<String> {
+        val supported = accounts.providers().map { it.wire }
+        val gate = allowed ?: return supported
+        // Intersected, not replaced: the backend decides what is *permitted* and the build decides what is
+        // *possible*, and offering a provider this build cannot complete would be a dead button.
+        return supported.filter { it in gate }
+    }
 
     fun authState(): kotlinx.coroutines.flow.StateFlow<UiStoreAuthState> = authStateFlow
 

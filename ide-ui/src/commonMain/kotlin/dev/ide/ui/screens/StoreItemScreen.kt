@@ -121,6 +121,8 @@ import dev.ide.ui.generated.resources.reviews_sort_recent
 import dev.ide.ui.generated.resources.reviews_title
 import dev.ide.ui.generated.resources.reviews_unavailable
 import dev.ide.ui.generated.resources.reviews_write
+import dev.ide.ui.generated.resources.review_hidden_done
+import dev.ide.ui.generated.resources.review_reported
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -1066,11 +1068,17 @@ private fun ReviewsPanel(
 ) {
     val c = MaterialTheme.colorScheme
     var sort by remember(item.id) { mutableStateOf(dev.ide.ui.backend.UiReviewSort.HELPFUL) }
-    // Bumped when a vote lands, so the list refetches and shows the real count rather than a guess.
+    // Bumped when a vote, report, reply or hide lands, so the list refetches rather than guessing.
     var voteEpoch by remember(item.id) { mutableStateOf(0) }
+    var reportTarget by remember(item.id) { mutableStateOf<dev.ide.ui.backend.UiStoreReview?>(null) }
+    var replyTarget by remember(item.id) { mutableStateOf<dev.ide.ui.backend.UiStoreReview?>(null) }
+    // What just happened, said once. Not an error, so it does not belong in the page's error slot.
+    var actionNote by remember(item.id) { mutableStateOf<String?>(null) }
     val signedIn = backend.store.authState().collectAsState().value.signedIn
     val scope = rememberCoroutineScope()
     val now = remember(refresh) { dev.ide.ui.platform.nowMillis() }
+    val reportedNote = stringResource(Res.string.review_reported)
+    val hiddenNote = stringResource(Res.string.review_hidden_done)
 
     if (!backend.store.reviewsAvailable()) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
@@ -1181,9 +1189,60 @@ private fun ReviewsPanel(
                 } else {
                     { onNeedSignIn() }
                 },
+                // Signed out, the backend refuses a report, so the action asks for sign-in instead of
+                // offering something that cannot work.
+                onReport = if (signedIn) ({ reportTarget = review }) else ({ onNeedSignIn() }),
+                onReply = if (current.canReply) ({ replyTarget = review }) else null,
+                onDeleteReply = if (current.canReply && review.reply != null) {
+                    {
+                        scope.launch {
+                            backend.store.deleteReply(item.id, review.authorId)
+                            voteEpoch++
+                        }
+                        Unit
+                    }
+                } else {
+                    null
+                },
+                onSetHidden = if (current.canModerate) {
+                    { hidden ->
+                        scope.launch {
+                            val error = backend.store.setReviewHidden(item.id, review.authorId, hidden)
+                            actionNote = error ?: hiddenNote
+                            voteEpoch++
+                        }
+                        Unit
+                    }
+                } else {
+                    null
+                },
             )
         }
+        actionNote?.let {
+            Spacer(Modifier.height(12.dp))
+            Text(it, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
+        }
         Spacer(Modifier.height(28.dp))
+    }
+
+    reportTarget?.let { target ->
+        ReportReviewSheet(
+            backend = backend,
+            itemId = item.id,
+            authorId = target.authorId,
+            onDismiss = { reportTarget = null },
+            onReported = { reportTarget = null; actionNote = reportedNote },
+        )
+    }
+    replyTarget?.let { target ->
+        ReplyToReviewSheet(
+            backend = backend,
+            itemId = item.id,
+            authorId = target.authorId,
+            existing = target.reply,
+            onDismiss = { replyTarget = null },
+            onReplied = { replyTarget = null; voteEpoch++ },
+        )
     }
 }
 

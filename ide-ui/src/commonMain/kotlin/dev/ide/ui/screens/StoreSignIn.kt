@@ -40,10 +40,15 @@ import dev.ide.ui.generated.resources.store_signin_waiting_body
 import dev.ide.ui.generated.resources.store_signin_waiting_title
 import dev.ide.ui.generated.resources.store_signin_why
 import dev.ide.ui.generated.resources.submit_send
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import dev.ide.ui.generated.resources.store_signin_google
 import org.jetbrains.compose.resources.stringResource
 
-/** The provider wire name; the store deliberately supports GitHub first, Google later. */
 private const val GITHUB = "github"
+private const val GOOGLE = "google"
 
 /**
  * The store's sign-in sheet.
@@ -66,7 +71,12 @@ fun StoreSignInSheet(
     onOpenUrl: ((String) -> Unit)?,
 ) {
     val state by backend.store.authState().collectAsState()
-    val providers = backend.store.authProviders()
+    // Cached value first so the sheet paints immediately, then whatever the backend currently permits. A
+    // provider enabled server-side appears here on the next open, with no app release.
+    var providers by remember { mutableStateOf(backend.store.authProviders()) }
+    LaunchedEffect(backend) {
+        providers = runCatching { backend.store.refreshAuthProviders() }.getOrDefault(providers)
+    }
     val sheetState = rememberModalBottomSheetState()
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -117,6 +127,15 @@ fun StoreSignInSheet(
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
+                    if (GOOGLE in providers) {
+                        Spacer(Modifier.height(8.dp))
+                        PrimaryActionButton(
+                            label = stringResource(Res.string.store_signin_google),
+                            glyph = CaSymbols.accountCircle,
+                            onClick = { backend.store.beginSignIn(GOOGLE)?.let(onOpenUrl) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     Spacer(Modifier.height(6.dp))
                     TextButton(onClick = onDismiss) { Text(stringResource(Res.string.store_signin_dismiss)) }
                 }
@@ -129,7 +148,15 @@ fun StoreSignInSheet(
                     // No progress bar here: the app cannot see what the browser is doing, and a moving bar
                     // would be claiming progress it does not have.
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { backend.store.beginSignIn(GITHUB)?.let(onOpenUrl) }) {
+                        TextButton(
+                            onClick = {
+                                // Whichever provider this build is offering, not GitHub by name: with
+                                // Google enabled, a Google sign-in must reopen Google.
+                                providers.firstOrNull()?.let { p ->
+                                    backend.store.beginSignIn(p)?.let(onOpenUrl)
+                                }
+                            },
+                        ) {
                             Text(stringResource(Res.string.store_signin_reopen))
                         }
                         TextButton(onClick = onDismiss) {

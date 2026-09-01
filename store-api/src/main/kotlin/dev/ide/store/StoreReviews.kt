@@ -59,7 +59,26 @@ data class RemoteReviewPage(
     val distribution: Map<Int, Int> = emptyMap(),
     val mine: RemoteReview? = null,
     val reviews: List<RemoteReview> = emptyList(),
+    /**
+     * Whether the caller is this project's publisher, and so may answer its reviews.
+     *
+     * Decided by the backend, not guessed here: a reply button that appears for everyone and fails for
+     * almost everyone is worse than no button.
+     */
+    val canReply: Boolean = false,
+    /** Whether the caller is a moderator, and so may hide a review. */
+    val canModerate: Boolean = false,
 )
+
+/** Why something was reported. The set the backend accepts; anything else is refused. */
+enum class ReportReason(val wire: String) {
+    MALWARE("malware"),
+    SPAM("spam"),
+    COPYRIGHT("copyright"),
+    INAPPROPRIATE("inappropriate"),
+    BROKEN("broken"),
+    OTHER("other"),
+}
 
 interface StoreReviewService {
     fun reviewsAvailable(): Boolean = false
@@ -89,6 +108,42 @@ interface StoreReviewService {
 
     /** Mark a review useful, or take it back. [authorId] identifies the review; ids come from [reviews]. */
     fun vote(itemSlug: String, authorId: String, helpful: Boolean): StoreResult<Unit> =
+        StoreResult.Unavailable("No store endpoint")
+
+    /**
+     * Answer a review as the project's publisher. One reply per review, so this edits an existing one.
+     *
+     * Refused for anyone else, with a message saying so rather than a permission error, because the
+     * affordance can outlive the state that justified it.
+     */
+    fun reply(itemSlug: String, authorId: String, body: String): StoreResult<Unit> =
+        StoreResult.Unavailable("No store endpoint")
+
+    fun deleteReply(itemSlug: String, authorId: String): StoreResult<Unit> =
+        StoreResult.Unavailable("No store endpoint")
+
+    /**
+     * Flag a review for a moderator.
+     *
+     * Reporting twice is the same report and reports the same thing, so a repeat succeeds quietly. The
+     * reporter can never read the queue back, which is why nothing here returns its state.
+     */
+    fun report(
+        itemSlug: String,
+        authorId: String,
+        reason: ReportReason,
+        detail: String? = null,
+    ): StoreResult<Unit> = StoreResult.Unavailable("No store endpoint")
+
+    /** Flag a whole project rather than one of its reviews. */
+    fun reportItem(
+        itemSlug: String,
+        reason: ReportReason,
+        detail: String? = null,
+    ): StoreResult<Unit> = StoreResult.Unavailable("No store endpoint")
+
+    /** Hide or restore a review. Moderators only; the backend refuses anyone else. */
+    fun setReviewHidden(itemSlug: String, authorId: String, hidden: Boolean): StoreResult<Unit> =
         StoreResult.Unavailable("No store endpoint")
 
     companion object {
