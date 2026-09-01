@@ -111,6 +111,8 @@ fun ExploreFeed(
     onViewListing: () -> Unit = {},
     notifyOnLaunch: Boolean = false,
     onNotifyChange: (Boolean) -> Unit = {},
+    /** Why the last notify toggle did not take. Shown in place of the switch's supporting line. */
+    notifyMessage: String? = null,
     /** Opens the account sheet. Null hides the entry, for a host with no sign-in. */
     onAccount: (() -> Unit)? = null,
     signedIn: Boolean = false,
@@ -132,6 +134,7 @@ fun ExploreFeed(
             onViewListing = onViewListing,
             notifyOnLaunch = notifyOnLaunch,
             onNotifyChange = onNotifyChange,
+            notifyMessage = notifyMessage,
             modifier = modifier,
         )
         return
@@ -526,6 +529,7 @@ private fun ExploreEmpty(
     onViewSubmissionNotes: () -> Unit,
     onViewListing: () -> Unit,
     notifyOnLaunch: Boolean,
+    notifyMessage: String? = null,
     onNotifyChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -605,7 +609,11 @@ private fun ExploreEmpty(
 
             item("notify") {
                 Spacer(Modifier.height(22.dp))
-                NotifySwitchRow(checked = notifyOnLaunch, onCheckedChange = onNotifyChange)
+                NotifySwitchRow(
+                    checked = notifyOnLaunch,
+                    onCheckedChange = onNotifyChange,
+                    message = notifyMessage,
+                )
             }
         }
     }

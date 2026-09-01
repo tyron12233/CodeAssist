@@ -45,3 +45,51 @@ class StoreAuthRedirectTest {
         assertTrue(StoreAuth.isAuthRedirect(StoreAuth.ANDROID_REDIRECT))
     }
 }
+
+/**
+ * The provider-refusal message, which is what a real GitHub App with no email permission produces.
+ *
+ * Kept as its own test because the raw GoTrue text ("Error getting user profile from external provider")
+ * reads like the user's fault, and the whole point of the mapping is that it is not.
+ */
+class StoreAuthErrorMessageTest {
+
+    private fun completeWith(errorDescription: String): String {
+        val service = SupabaseAccountService(
+            url = "https://example.supabase.co",
+            apiKey = "publishable-key-for-the-test",
+            redirectUrl = dev.ide.store.StoreAuth.ANDROID_REDIRECT,
+        )
+        val encoded = errorDescription.replace(" ", "+")
+        val result = service.complete(
+            "${dev.ide.store.StoreAuth.ANDROID_REDIRECT}#error=server_error&error_description=$encoded",
+        )
+        return (result as dev.ide.store.StoreResult.Failed).message
+    }
+
+    @Test
+    fun aProviderThatWithholdsTheEmailIsExplainedAsConfigurationNotUserError() {
+        val message = completeWith("Error getting user profile from external provider")
+        kotlin.test.assertTrue(
+            "configuration problem" in message,
+            "the message should say it is not the user's fault: $message",
+        )
+        kotlin.test.assertTrue("email" in message.lowercase(), message)
+    }
+
+    @Test
+    fun theEmailVariantOfTheSameFailureIsAlsoExplained() {
+        val message = completeWith("Error getting user email from external provider")
+        kotlin.test.assertTrue("configuration problem" in message, message)
+    }
+
+    /** Everything else keeps the backend's own words, which are usually the actionable ones. */
+    @Test
+    fun otherFailuresArePassedThroughUnchanged() {
+        kotlin.test.assertEquals("access_denied", completeWith("access_denied"))
+        kotlin.test.assertEquals(
+            "Unable to exchange external code",
+            completeWith("Unable to exchange external code"),
+        )
+    }
+}

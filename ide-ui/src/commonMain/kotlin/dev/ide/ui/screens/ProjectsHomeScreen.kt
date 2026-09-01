@@ -101,6 +101,15 @@ import dev.ide.ui.theme.tonalPair
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TextButton
+import dev.ide.ui.generated.resources.home_cancel
+import dev.ide.ui.generated.resources.home_delete_confirm_action
+import dev.ide.ui.generated.resources.home_delete_confirm_body
+import dev.ide.ui.generated.resources.home_delete_confirm_title
+import dev.ide.ui.generated.resources.home_more_actions
 import org.jetbrains.compose.resources.stringResource
 
 /** Which list the Home screen's segment chips are showing. */
@@ -153,6 +162,8 @@ fun ProjectsHomeScreen(
     loadIcon: (suspend (ProjectInfo) -> UiProjectIcon?)? = null,
 ) {
     var segment by remember { mutableStateOf(HomeSegment.Projects) }
+    // Deleting wipes the project from disk and nothing else in this flow asks first.
+    var pendingDelete by remember { mutableStateOf<ProjectInfo?>(null) }
     var sheet by remember { mutableStateOf<HomeSheet?>(null) }
     val now = remember(projects) { nowMillis() }
     val ordered = remember(projects) { projects.sortedByDescending { it.lastOpened } }
@@ -227,6 +238,12 @@ fun ProjectsHomeScreen(
                         onSecondary = onExportProject?.let { export -> { export(project) } }
                             ?: onDeleteProject?.let { del -> { del(project) } },
                         secondaryIsDelete = onExportProject == null && onDeleteProject != null,
+                        // Only when export took the visible slot; otherwise delete IS the secondary button.
+                        onDelete = if (onExportProject != null && onDeleteProject != null) {
+                            { pendingDelete = project }
+                        } else {
+                            null
+                        },
                     )
                 }
             } else {
@@ -258,6 +275,34 @@ fun ProjectsHomeScreen(
             onStarOnGitHub = onStarOnGitHub?.let { { sheet = null; it() } },
         )
         null -> Unit
+    }
+
+    // Deleting is irreversible and removes files from disk, so it asks. The project's name is in the
+    // question rather than a generic "this project", because the wrong one is the mistake worth preventing.
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(Res.string.home_delete_confirm_title, target.name)) },
+            text = { Text(stringResource(Res.string.home_delete_confirm_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDelete = null
+                        onDeleteProject?.invoke(target)
+                    },
+                ) {
+                    Text(
+                        stringResource(Res.string.home_delete_confirm_action),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text(stringResource(Res.string.home_cancel))
+                }
+            },
+        )
     }
 }
 
@@ -376,7 +421,14 @@ private fun LocalProjectCard(
     onOpen: () -> Unit,
     onSecondary: (() -> Unit)?,
     secondaryIsDelete: Boolean,
+    /**
+     * Deleting the project. Its own control rather than sharing the secondary slot: the card had one slot
+     * and export always filled it, so delete was unreachable — there was no way to remove a project from
+     * the app at all.
+     */
+    onDelete: (() -> Unit)? = null,
 ) {
+    var menuOpen by remember(project.rootPath) { mutableStateOf(false) }
     val c = MaterialTheme.colorScheme
     val pair = tonalPair(index)
     val glyph = symbolForProject(project)
@@ -462,6 +514,38 @@ private fun LocalProjectCard(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(stringResource(Res.string.home_open), style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                    if (onDelete != null) {
+                        Box {
+                            Surface(
+                                onClick = { menuOpen = true },
+                                shape = CircleShape,
+                                color = androidx.compose.ui.graphics.Color.Transparent,
+                                contentColor = c.onSurfaceVariant,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, c.outline),
+                                modifier = Modifier.height(40.dp),
+                            ) {
+                                Box(Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+                                    Symbol(
+                                        CaSymbols.moreVert,
+                                        contentDescription = stringResource(Res.string.home_more_actions),
+                                        size = 18.dp,
+                                        tint = c.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            stringResource(Res.string.home_delete),
+                                            color = c.error,
+                                        )
+                                    },
+                                    onClick = { menuOpen = false; onDelete() },
+                                )
+                            }
                         }
                     }
                     if (onSecondary != null) {

@@ -216,6 +216,15 @@ interface StoreCatalogSource {
         topics: List<String> = emptyList(),
     ): StoreResult<Unit> = StoreResult.Unavailable("No store endpoint")
 
+    /**
+     * Replace this device's broadcast topic subscriptions.
+     *
+     * Server-side rather than FCM topics on purpose: an unsubscribe has to actually hold, and a client that
+     * manages its own topic membership can only be trusted to add itself, never to leave.
+     */
+    fun setTopics(installId: String, token: String, topics: List<String>): StoreResult<Unit> =
+        StoreResult.Unavailable("No store endpoint")
+
     /** Forget a device. Called when the token rotates or the user opts out of push entirely. */
     fun forgetDevice(token: String): StoreResult<Unit> = StoreResult.Unavailable("No store endpoint")
 
@@ -232,6 +241,8 @@ interface StoreCatalogSource {
             override fun registerDevice(installId: String, token: String, platform: String, appBuild: Int?, topics: List<String>) =
                 StoreResult.Unavailable<Unit>("No store endpoint")
             override fun forgetDevice(token: String) = StoreResult.Unavailable<Unit>("No store endpoint")
+            override fun setTopics(installId: String, token: String, topics: List<String>) =
+                StoreResult.Unavailable<Unit>("No store endpoint")
             override fun downloadPayload(storagePath: String, expectedSha256: String?, expectedBytes: Long, into: java.io.File, onProgress: (Float) -> Unit) =
                 StoreResult.Unavailable<Unit>("No store endpoint")
             override fun recordInstall(slug: String, installId: String) = Unit

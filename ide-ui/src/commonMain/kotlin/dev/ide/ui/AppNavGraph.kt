@@ -22,6 +22,7 @@ import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.screens.NotificationBell
 import dev.ide.ui.screens.NotificationsSheet
+import dev.ide.ui.screens.PublishingGuideScreen
 import dev.ide.ui.screens.StoreSignInSheet
 import dev.ide.ui.screens.SubmitProjectScreen
 import dev.ide.ui.screens.CodeStyleScreen
@@ -115,6 +116,12 @@ internal fun AppNavGraph(
                         onSaveCopy = if (fileActions.canExport) ({ path -> fileActions.exportFile(path) }) else null,
                         onShare = if (fileActions.canShare) ({ path -> fileActions.share(path) }) else null,
                         onDone = app::finishExport,
+                        // The other way to share the same project. Hidden when this build cannot publish.
+                        onPublish = if (backend.store.submissionsAvailable()) {
+                            { app.finishExport(); app.openSubmitProject() }
+                        } else {
+                            null
+                        },
                     )
                 }
             }
@@ -134,6 +141,11 @@ internal fun AppNavGraph(
                 inlayHintsEnabled = state.inlayHintsEnabled,
                 host = state.composePreviewHost,
                 onExit = app::exitLessonPlayer,
+            )
+
+            Screen.PublishingGuide -> PublishingGuideScreen(
+                onBack = { app.navigateTo(Screen.Projects) },
+                onPublish = if (backend.store.submissionsAvailable()) ({ app.openSubmitProject() }) else null,
             )
 
             Screen.SubmitProject -> SubmitProjectScreen(
@@ -444,6 +456,9 @@ private fun ProjectPickerRoute(
 private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
     // Publishing asks for an account at the moment it is needed, not at launch.
     var signInVisible by remember { mutableStateOf(false) }
+    var notifyLaunch by remember(app.backend) { mutableStateOf(app.backend.store.launchNotificationEnabled()) }
+    var notifyMessage by remember { mutableStateOf<String?>(null) }
+    val storeScope = rememberCoroutineScope()
     // Ask for the server-driven feed once per epoch. Null means there is no remote store to reach —
     // NOT that the store is empty — so the bundled catalog screen takes over. Those are opposite
     // claims and must not render the same page.
@@ -480,9 +495,22 @@ private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
         bundled = bundledItems,
         onUseBundled = { item -> item.templateId?.let(app::createProject) },
         onPublish = { signInVisible = true },
+        // The switch was inert: nothing was passed, so it defaulted to false and a no-op handler. It now
+        // reflects and writes a real broadcast subscription on the device row.
+        notifyOnLaunch = notifyLaunch,
+        notifyMessage = notifyMessage,
+        onNotifyChange = { wanted ->
+            storeScope.launch {
+                val error = app.backend.store.setLaunchNotification(wanted)
+                // Only follow the server: a switch that flips on its own would claim a subscription the
+                // backend never accepted.
+                if (error == null) notifyLaunch = wanted
+                notifyMessage = error
+            }
+        },
         onAccount = if (app.backend.store.authProviders().isNotEmpty()) ({ signInVisible = true }) else null,
         signedIn = app.backend.store.authState().collectAsState().value.signedIn,
-        onHowItWorks = { app.openHub(Screen.Projects) },
+        onHowItWorks = { app.openPublishingGuide() },
     )
     if (signInVisible) {
         StoreSignInSheet(

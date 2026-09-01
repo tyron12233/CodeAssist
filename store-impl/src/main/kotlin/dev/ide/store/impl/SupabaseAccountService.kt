@@ -95,8 +95,8 @@ class SupabaseAccountService(
     override fun complete(redirect: String): StoreResult<StoreAccount> {
         if (!configured) return StoreResult.Unavailable("Sign-in is not configured in this build")
         val params = redirectParams(redirect)
-        params["error_description"]?.let { return StoreResult.Failed(it) }
-        params["error"]?.let { return StoreResult.Failed(it) }
+        params["error_description"]?.let { return StoreResult.Failed(explain(it)) }
+        params["error"]?.let { return StoreResult.Failed(explain(it)) }
 
         // Implicit flow: the tokens are already in the fragment, so there is nothing to exchange.
         val direct = params["access_token"]
@@ -208,6 +208,28 @@ class SupabaseAccountService(
             }
         } catch (e: Exception) {
             StoreResult.Unavailable(e.message ?: "Network unavailable")
+        }
+    }
+
+    /**
+     * Turn a provider failure into something the person reading it can act on.
+     *
+     * The raw text is kept where it is already clear. The one case worth translating is the provider
+     * refusing to hand over an email: GoTrue reports it as "Error getting user profile from external
+     * provider", which reads like the user did something wrong when it is entirely a configuration
+     * problem — a GitHub App that has not been granted the "Email addresses" account permission, whose
+     * token then gets a 403 "Resource not accessible by integration" on `/user/emails`. Sign-in cannot
+     * succeed without an email, so there is nothing for the user to retry.
+     */
+    private fun explain(raw: String): String {
+        val lower = raw.lowercase()
+        val providerRefusedIdentity = "external provider" in lower &&
+            ("profile" in lower || "email" in lower)
+        return if (providerRefusedIdentity) {
+            "GitHub did not share an email address, so sign-in could not complete. " +
+                "This is a configuration problem with the app, not with your account."
+        } else {
+            raw
         }
     }
 

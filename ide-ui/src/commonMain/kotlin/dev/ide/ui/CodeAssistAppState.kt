@@ -629,6 +629,11 @@ class CodeAssistAppState(
         screen = Screen.SubmitProject
     }
 
+    /** What publishing does, before committing to it. Previously this link opened Settings and explained nothing. */
+    fun openPublishingGuide() {
+        screen = Screen.PublishingGuide
+    }
+
     /**
      * Act on a tapped notification.
      *
@@ -719,6 +724,7 @@ class CodeAssistAppState(
             // The store item detail returns to the Explore tab (still selected on Projects).
             screen == Screen.StoreItem -> screen = Screen.Projects
             screen == Screen.SubmitProject -> screen = Screen.Projects
+            screen == Screen.PublishingGuide -> screen = Screen.Projects
 
             screen == Screen.CreateProject -> screen = Screen.Projects
             screen == Screen.ImportProject -> cancelImportPreview()

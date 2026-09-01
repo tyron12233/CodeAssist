@@ -481,6 +481,10 @@ object AndroidIde {
                 .addOnSuccessListener { token ->
                     if (token.isNullOrBlank()) return@addOnSuccessListener
                     PendingPushes.storeToken(appContext, token)
+                    // Also into the project manager's preferences, where the engine can read it: managing a
+                    // topic subscription needs the token, and the engine has no access to this service's
+                    // own SharedPreferences.
+                    runCatching { manager.setPreference("store.push.token", token) }
                     if (!PendingPushes.tokenNeedsRegistering(appContext, token)) return@addOnSuccessListener
                     Thread({
                         val result = source.registerDevice(

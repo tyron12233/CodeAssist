@@ -147,6 +147,8 @@ import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.generated.resources.publish_from_share
+import dev.ide.ui.generated.resources.publish_from_share_body
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 
@@ -415,6 +417,14 @@ fun ExportProjectScreen(
     onSaveCopy: ((String) -> Unit)?,
     onShare: ((String) -> Unit)?,
     onDone: () -> Unit,
+    /**
+     * Publish this project to the store instead of exporting a file. Null when this build cannot publish.
+     *
+     * Offered here because "share" and "publish" are the same intent at different scales: one person gets a
+     * `.caproj`, everyone gets it from Explore. Someone who reached this screen wanting to hand the project
+     * to others had no way to discover the second option.
+     */
+    onPublish: (() -> Unit)? = null,
 ) {
     val state = rememberExportProjectState(backend, project, initialAuthor, onAuthorRemembered)
     val phase = state.phase
@@ -448,7 +458,7 @@ fun ExportProjectScreen(
     ) { padding ->
         Crossfade(targetState = phase, modifier = Modifier.fillMaxSize().padding(padding), label = "export-phase") { p ->
             when (p) {
-                ExportPhase.Configure -> ExportConfigure(backend, project, fileActions, state)
+                ExportPhase.Configure -> ExportConfigure(backend, project, fileActions, state, onPublish)
                 ExportPhase.Exporting -> BusyView(stringResource(Res.string.export_exporting))
                 is ExportPhase.Done -> ExportSuccess(p.path, p.notes, state.format, onReveal, onSaveCopy, onShare)
                 ExportPhase.Failed -> Column(
@@ -468,12 +478,43 @@ private fun ExportConfigure(
     project: ProjectInfo,
     fileActions: FileActions,
     state: ExportProjectState,
+    onPublish: (() -> Unit)? = null,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = Ca.spacing.s4).padding(bottom = Ca.spacing.s4),
         verticalArrangement = Arrangement.spacedBy(Ca.spacing.s4),
     ) {
+        // Above the export options, because it is the choice between two routes rather than a setting of
+        // one: the rest of this screen is only relevant once you have decided on a file.
+        if (onPublish != null) {
+            Card(
+                onClick = onPublish,
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ),
+            ) {
+                Row(
+                    Modifier.padding(Ca.spacing.s4),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s3),
+                ) {
+                    Icon(CaIcons.cloudUpload, null, Modifier.size(22.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            stringResource(Res.string.publish_from_share),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            stringResource(Res.string.publish_from_share_body),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        }
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s3),

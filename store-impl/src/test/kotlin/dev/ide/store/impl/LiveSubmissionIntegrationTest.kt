@@ -82,6 +82,47 @@ class LiveSubmissionIntegrationTest {
         return svc
     }
 
+    /**
+     * Delete the items previous runs of THIS test created.
+     *
+     * Withdrawing a version does not remove the item, so each run left one behind and after ten runs the
+     * account sat permanently at the per-publisher item cap — the suite passed on a fresh database and
+     * failed forever after. Matched on the test's own slug prefixes so it can never touch real content, and
+     * done through psql because a submitter has no delete privilege on `store_items`, correctly.
+     *
+     * The uploaded archives stay in the local uploads bucket; they are a few KB in a dev container and
+     * nothing reads them once the row is gone.
+     */
+    private fun deleteTestItems(email: String) {
+        runCatching {
+            ProcessBuilder(
+                "docker", "exec", "supabase_db_codeassist", "psql", "-U", "postgres", "-c",
+                """
+                delete from store_items i
+                 using auth.users u
+                 where i.publisher_id = u.id
+                   and u.email = '$email'
+                   and (i.slug like 'live-test-%' or i.slug like 'duplicate-probe-%' or i.slug like 'quota-probe-%');
+                """.trimIndent(),
+            ).redirectErrorStream(true).start().waitFor()
+        }
+    }
+
+    /**
+     * Withdraw everything this account has pending, so a submitting test starts from a known state.
+     *
+     * Without this the suite only passes against a fresh database: the pending quota is three, the
+     * quota-probe test deliberately fills it, and every earlier run leaves rows behind. A live test that
+     * needs a pristine backend is a test that stops being run.
+     */
+    private fun clearPending(service: SupabaseSubmissionService) {
+        val mine = service.mine()
+        if (mine !is StoreResult.Ok) return
+        mine.value.filter { it.status == "pending" }.forEach { pending ->
+            service.withdraw(pending.itemSlug, pending.version)
+        }
+    }
+
     private fun sampleProject(): File {
         val root = kotlin.io.path.createTempDirectory("ca-live-submit-").toFile().also { temps += it }
         File(root, "settings.gradle.kts").writeText("include(\":app\")")
@@ -101,6 +142,8 @@ class LiveSubmissionIntegrationTest {
         val accounts = accountsFor(bob)
         val service = SupabaseSubmissionService(baseUrl, anonKey, accounts)
         assertTrue(service.submissionsAvailable())
+        deleteTestItems("bob@example.com")
+        clearPending(service)
 
         val packed = service.pack(sampleProject().absolutePath)
         assertTrue(packed is StoreResult.Ok, "pack failed: $packed")
@@ -152,9 +195,11 @@ class LiveSubmissionIntegrationTest {
         val alice = userId("alice@example.com") ?: return
         val accounts = accountsFor(alice)
         val service = SupabaseSubmissionService(baseUrl, anonKey, accounts)
+        deleteTestItems("alice@example.com")
+        clearPending(service)
         val packed = service.pack(sampleProject().absolutePath)
         if (packed !is StoreResult.Ok) return
-        // Alice already sits at or near her limits from the SQL-level tests; push until one is refused and
+        // Push until one is refused and
         // assert the refusal is a readable sentence rather than a raw SQLSTATE.
         val run = System.nanoTime()
         var refusal: String? = null
@@ -188,6 +233,8 @@ class LiveSubmissionIntegrationTest {
         if (!stackUp()) return
         val bob = userId("bob@example.com") ?: return
         val service = SupabaseSubmissionService(baseUrl, anonKey, accountsFor(bob))
+        deleteTestItems("bob@example.com")
+        clearPending(service)
         val packed = service.pack(sampleProject().absolutePath)
         if (packed !is StoreResult.Ok) return
         val title = "Duplicate Probe ${System.nanoTime()}"

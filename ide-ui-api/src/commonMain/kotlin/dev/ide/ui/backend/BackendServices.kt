@@ -926,6 +926,25 @@ interface StoreService {
 
     // ---- ratings and reviews ----
 
+    // ---- launch notification ----
+
+    /**
+     * Whether this install asked to be told when projects arrive in the store.
+     *
+     * Local, so the switch renders correctly offline and on first paint; the server side is a broadcast
+     * topic on the device row.
+     */
+    fun launchNotificationEnabled(): Boolean = false
+
+    /**
+     * Turn the "tell me when projects arrive" subscription on or off.
+     *
+     * Returns null on success, or a message to show. It can fail for a mundane reason — no network, or push
+     * never configured — and a switch that silently flips back is worse than one that says why.
+     */
+    suspend fun setLaunchNotification(enabled: Boolean): String? =
+        "Notifications are not available in this build"
+
     /** Whether reviews can be read at all. False hides the tab rather than showing an empty one. */
     fun reviewsAvailable(): Boolean = false
 

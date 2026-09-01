@@ -119,6 +119,35 @@ internal class StoreBackend(
         runCatching { source.recordInstall(id, installId) }
     }
 
+    // ---- launch notification ----
+
+    override fun launchNotificationEnabled(): Boolean =
+        ctx.manager?.preference(LAUNCH_NOTIFY_PREF) == "true"
+
+    /**
+     * Subscribe or unsubscribe from the "projects have arrived" broadcast.
+     *
+     * The preference is written only when the server accepted the change, so a switch that appears on
+     * cannot mean a device the backend will never notify. Without a push token there is nothing to
+     * subscribe — that is a real answer, not a failure to hide.
+     */
+    override suspend fun setLaunchNotification(enabled: Boolean): String? = withContext(storeIo) {
+        val installId = ctx.manager?.preference(INSTALL_ID_PREF)
+            ?: return@withContext "This build has no install id to register"
+        val token = ctx.manager?.preference(PUSH_TOKEN_PREF)
+            ?: return@withContext "Push isn't set up on this device yet"
+
+        val topics = if (enabled) listOf(LAUNCH_TOPIC) else emptyList()
+        when (val result = source.setTopics(installId, token, topics)) {
+            is dev.ide.store.StoreResult.Ok -> {
+                ctx.manager?.setPreference(LAUNCH_NOTIFY_PREF, enabled.toString())
+                null
+            }
+            is dev.ide.store.StoreResult.Unavailable -> result.reason
+            is dev.ide.store.StoreResult.Failed -> result.message
+        }
+    }
+
     // ---- ratings and reviews ----
 
     private val reviewState = StoreReviews(reviewService)
@@ -405,6 +434,15 @@ internal class StoreBackend(
 
         /** The anonymous install id the analytics service already generates; reused for install dedupe. */
         const val INSTALL_ID_PREF = "analytics.install.id"
+
+        /** Whether this install asked to hear about new projects. Mirrors the server-side topic. */
+        const val LAUNCH_NOTIFY_PREF = "store.notify.launch"
+
+        /** Where the host parks the FCM token; the engine reads it to manage subscriptions. */
+        const val PUSH_TOKEN_PREF = "store.push.token"
+
+        /** The broadcast topic name, matched by `store_push_claim`'s topic join. */
+        const val LAUNCH_TOPIC = "store-launch"
 
         /** Sample template ids that ship a built-in preview screenshot ([UiStoreItem.previewKey]). */
         val PREVIEW_SAMPLES = setOf("sample-snake", "sample-tictactoe", "sample-memory", "sample-2048")

@@ -236,6 +236,15 @@ class SupabaseStoreSource(
         }
     }
 
+    /**
+     * Re-register with a new topic list.
+     *
+     * The same RPC as registration, because the row is keyed by token and the upsert replaces `topics`
+     * wholesale — so subscribing and unsubscribing are one call with a different list.
+     */
+    override fun setTopics(installId: String, token: String, topics: List<String>): StoreResult<Unit> =
+        registerDevice(installId = installId, token = token, topics = topics)
+
     override fun forgetDevice(token: String): StoreResult<Unit> =
         when (val r = rpc("store_forget_device", """{"p_token":${jsonStr(token)}}""")) {
             is StoreResult.Ok -> StoreResult.Ok(Unit)

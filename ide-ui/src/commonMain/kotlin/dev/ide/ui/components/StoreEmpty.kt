@@ -216,6 +216,13 @@ fun NotifySwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Why the last toggle did not take, if it did not.
+     *
+     * Needed because the switch only follows the server: without this, a failed subscription looks exactly
+     * like a switch that does nothing, which is the complaint that prompted wiring it up in the first place.
+     */
+    message: String? = null,
 ) {
     val c = MaterialTheme.colorScheme
     Surface(
@@ -236,9 +243,11 @@ fun NotifySwitchRow(
                     color = c.onSurface,
                 )
                 Text(
-                    "One notification, only for the first batch.",
+                    message ?: "One notification, only for the first batch.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = c.onSurfaceVariant,
+                    // The failure takes over the supporting line rather than adding a row: it replaces the
+                    // promise it just failed to keep.
+                    color = if (message != null) c.error else c.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
