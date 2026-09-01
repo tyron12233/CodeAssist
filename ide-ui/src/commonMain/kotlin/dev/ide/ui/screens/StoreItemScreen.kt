@@ -65,6 +65,7 @@ import dev.ide.ui.components.CodeMotifColors
 import dev.ide.ui.components.Eyebrow
 import dev.ide.ui.components.MonoChip
 import dev.ide.ui.components.PillChip
+import dev.ide.ui.components.PrimaryActionButton
 import dev.ide.ui.components.SupportingOnContainer
 import dev.ide.ui.components.TemplateGlyph
 import dev.ide.ui.components.installLabel
@@ -103,6 +104,23 @@ import dev.ide.ui.theme.TonalPair
 import dev.ide.ui.theme.cardShape
 import dev.ide.ui.theme.tonalPair
 import kotlinx.coroutines.launch
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.produceState
+import dev.ide.ui.components.RatingSummary
+import dev.ide.ui.components.ReviewCard
+import dev.ide.ui.generated.resources.notif_days
+import dev.ide.ui.generated.resources.notif_hours
+import dev.ide.ui.generated.resources.notif_just_now
+import dev.ide.ui.generated.resources.notif_minutes
+import dev.ide.ui.generated.resources.reviews_edit
+import dev.ide.ui.generated.resources.reviews_none
+import dev.ide.ui.generated.resources.reviews_none_body
+import dev.ide.ui.generated.resources.reviews_signin_to_write
+import dev.ide.ui.generated.resources.reviews_sort_helpful
+import dev.ide.ui.generated.resources.reviews_sort_recent
+import dev.ide.ui.generated.resources.reviews_title
+import dev.ide.ui.generated.resources.reviews_unavailable
+import dev.ide.ui.generated.resources.reviews_write
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -128,6 +146,8 @@ fun StoreItemScreen(
     onShare: ((UiStoreItem) -> Unit)? = null,
     isSaved: Boolean = false,
     onToggleSaved: (() -> Unit)? = null,
+    /** Opens a URL in a browser, for signing in from the reviews tab. Null hides sign-in. */
+    onOpenUrl: ((String) -> Unit)? = null,
 ) {
     if (item == null) { onBack(); return }
     val scope = rememberCoroutineScope()
@@ -144,6 +164,11 @@ fun StoreItemScreen(
     }
     var message by remember(item.id) { mutableStateOf<String?>(null) }
     var tab by remember(item.id) { mutableStateOf(StoreTab.Overview) }
+    var reviewSheet by remember(item.id) { mutableStateOf(false) }
+    var signInForReview by remember(item.id) { mutableStateOf(false) }
+    // Bumped after a write so the panel refetches; the aggregate changes too, so re-reading is the point.
+    var reviewsRefresh by remember(item.id) { mutableStateOf(0) }
+    var myReview by remember(item.id) { mutableStateOf<dev.ide.ui.backend.UiStoreReview?>(null) }
     var lightbox by remember(item.id) { mutableStateOf(-1) }
 
     // The hero's tint is stable per item rather than per list position: this screen shows one card, so
@@ -191,12 +216,38 @@ fun StoreItemScreen(
                     StoreTab.Overview -> overview(item) { lightbox = it }
                     StoreTab.Readme -> item("readme") { ProseCard(item.readme.orEmpty()) }
                     StoreTab.Changelog -> item("changelog") { ChangelogCard(item) }
-                    StoreTab.Reviews -> item("reviews") { RatingsPanel(item) }
+                    StoreTab.Reviews -> item("reviews") {
+                        ReviewsPanel(
+                            backend = backend,
+                            item = item,
+                            onWrite = { reviewSheet = true },
+                            onNeedSignIn = { signInForReview = true },
+                            refresh = reviewsRefresh,
+                            onPage = { myReview = it.mine },
+                        )
+                    }
                 }
             }
         }
         if (lightbox >= 0) {
             ScreenshotLightbox(item, lightbox, onClose = { lightbox = -1 }, onIndex = { lightbox = it })
+        }
+        if (reviewSheet) {
+            ReviewSheet(
+                backend = backend,
+                itemId = item.id,
+                existing = myReview,
+                onDismiss = { reviewSheet = false },
+                onDone = { reviewSheet = false; reviewsRefresh++ },
+            )
+        }
+        if (signInForReview) {
+            StoreSignInSheet(
+                backend = backend,
+                onDismiss = { signInForReview = false },
+                // Signing in from here should land back on the review, so the sheet opens once it succeeds.
+                onOpenUrl = onOpenUrl,
+            )
         }
     }
 }
@@ -307,7 +358,9 @@ private enum class StoreTab { Overview, Readme, Reviews, Changelog }
 private fun availableTabs(item: UiStoreItem): List<StoreTab> = buildList {
     add(StoreTab.Overview)
     if (!item.readme.isNullOrBlank()) add(StoreTab.Readme)
-    if (item.ratingCount > 0) add(StoreTab.Reviews)
+    // Always offered, not only when reviews exist: an item with none needs somewhere for the first one to
+    // be written, and the panel draws its own empty state.
+    add(StoreTab.Reviews)
     if (!item.changelog.isNullOrBlank()) add(StoreTab.Changelog)
 }
 
@@ -993,4 +1046,156 @@ private fun histogramShare(average: Float, star: Int): Float {
 private fun fileNameFor(item: UiStoreItem, index: Int): String {
     val ext = if (item.language.equals("Java", ignoreCase = true)) "java" else "kt"
     return listOf("App.$ext", "build.gradle.kts", "Main.$ext", "README.md")[index % 4]
+}
+
+/**
+ * The reviews tab.
+ *
+ * One fetch fills everything: the average, the distribution, the reader's own review pinned on top, and the
+ * rest of the list. Writing is gated on a session, and the gate is checked here rather than in the sheet so
+ * the button can say "sign in" instead of opening a form that will be refused.
+ */
+@Composable
+private fun ReviewsPanel(
+    backend: IdeBackend,
+    item: UiStoreItem,
+    onWrite: () -> Unit,
+    onNeedSignIn: () -> Unit,
+    refresh: Int,
+    onPage: (dev.ide.ui.backend.UiReviewPage) -> Unit,
+) {
+    val c = MaterialTheme.colorScheme
+    var sort by remember(item.id) { mutableStateOf(dev.ide.ui.backend.UiReviewSort.HELPFUL) }
+    // Bumped when a vote lands, so the list refetches and shows the real count rather than a guess.
+    var voteEpoch by remember(item.id) { mutableStateOf(0) }
+    val signedIn = backend.store.authState().collectAsState().value.signedIn
+    val scope = rememberCoroutineScope()
+    val now = remember(refresh) { dev.ide.ui.platform.nowMillis() }
+
+    if (!backend.store.reviewsAvailable()) {
+        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+            Text(
+                stringResource(Res.string.reviews_unavailable),
+                style = MaterialTheme.typography.bodyMedium,
+                color = c.onSurfaceVariant,
+            )
+        }
+        return
+    }
+
+    val page by produceState(
+        dev.ide.ui.backend.UiReviewPage(loading = true),
+        item.id, sort, refresh, voteEpoch, backend,
+    ) {
+        value = dev.ide.ui.backend.UiReviewPage(loading = true)
+        val fetched = runCatching { backend.store.reviews(item.id, sort) }.getOrNull()
+            ?: dev.ide.ui.backend.UiReviewPage(error = "Could not load reviews")
+        value = fetched
+        onPage(fetched)
+    }
+    val current = page
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 24.dp)) {
+        Text(
+            stringResource(Res.string.reviews_title),
+            style = MaterialTheme.typography.headlineSmall,
+            color = c.onSurface,
+        )
+
+        if (current.loading) {
+            Spacer(Modifier.height(16.dp))
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+            return@Column
+        }
+        current.error?.let {
+            Spacer(Modifier.height(10.dp))
+            // The backend's own words: offline reads differently from refused, and the reader can act on it.
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = c.error)
+        }
+
+        if (current.hasAny) {
+            Spacer(Modifier.height(16.dp))
+            RatingSummary(current.average, current.count, current.distribution)
+            Spacer(Modifier.height(18.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PillChip(
+                    label = stringResource(Res.string.reviews_sort_helpful),
+                    selected = sort == dev.ide.ui.backend.UiReviewSort.HELPFUL,
+                    onClick = { sort = dev.ide.ui.backend.UiReviewSort.HELPFUL },
+                )
+                PillChip(
+                    label = stringResource(Res.string.reviews_sort_recent),
+                    selected = sort == dev.ide.ui.backend.UiReviewSort.RECENT,
+                    onClick = { sort = dev.ide.ui.backend.UiReviewSort.RECENT },
+                )
+            }
+        } else if (current.error == null) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                stringResource(Res.string.reviews_none),
+                style = MaterialTheme.typography.titleMedium,
+                color = c.onSurface,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                stringResource(Res.string.reviews_none_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = c.onSurfaceVariant,
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+        PrimaryActionButton(
+            label = stringResource(
+                when {
+                    !signedIn -> Res.string.reviews_signin_to_write
+                    current.mine != null -> Res.string.reviews_edit
+                    else -> Res.string.reviews_write
+                },
+            ),
+            glyph = CaSymbols.rateReview,
+            onClick = { if (signedIn) onWrite() else onNeedSignIn() },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        // The reader's own review first, then everyone else's.
+        current.mine?.let { mine ->
+            Spacer(Modifier.height(16.dp))
+            ReviewCard(mine, relativeTime = relativeAge(mine.postedAtMs, now), onVote = null)
+        }
+        current.reviews.forEach { review ->
+            Spacer(Modifier.height(12.dp))
+            ReviewCard(
+                review = review,
+                relativeTime = relativeAge(review.postedAtMs, now),
+                onVote = if (signedIn) {
+                    { helpful ->
+                        scope.launch {
+                            runCatching { backend.store.voteReview(item.id, review.authorId, helpful) }
+                            // Refetch rather than flipping locally: the count is the interesting part and
+                            // only the server knows it, so guessing would show a number that could be wrong.
+                            voteEpoch++
+                        }
+                        Unit
+                    }
+                } else {
+                    { onNeedSignIn() }
+                },
+            )
+        }
+        Spacer(Modifier.height(28.dp))
+    }
+}
+
+/** "3 d ago" style age, or null when the backend sent no usable timestamp. */
+@Composable
+private fun relativeAge(postedAtMs: Long, now: Long): String? {
+    if (postedAtMs <= 0L) return null
+    val minutes = ((now - postedAtMs).coerceAtLeast(0)) / 60_000
+    return when {
+        minutes < 1 -> stringResource(Res.string.notif_just_now)
+        minutes < 60 -> stringResource(Res.string.notif_minutes, minutes.toInt())
+        minutes < 60 * 24 -> stringResource(Res.string.notif_hours, (minutes / 60).toInt())
+        else -> stringResource(Res.string.notif_days, (minutes / (60 * 24)).toInt())
+    }
 }

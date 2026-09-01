@@ -21,6 +21,7 @@ import dev.ide.core.ANALYTICS_SERVICE
 import dev.ide.core.NOTIFICATION_PRESENTER
 import dev.ide.core.STORE_ACCOUNT_SERVICE
 import dev.ide.core.STORE_CATALOG_SOURCE
+import dev.ide.core.STORE_REVIEW_SERVICE
 import dev.ide.core.STORE_SUBMISSION_SERVICE
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
@@ -108,6 +109,11 @@ object AndroidIde {
         manager.applicationContainer.registerServiceIfAbsent(STORE_ACCOUNT_SERVICE) { storeAccounts }
         manager.applicationContainer.registerServiceIfAbsent(STORE_SUBMISSION_SERVICE) {
             buildStoreSubmissions(supabaseAccounts)
+        }
+        // Reviews: readable signed out, writable signed in, so it takes the account service when there is
+        // one and still works without.
+        manager.applicationContainer.registerServiceIfAbsent(STORE_REVIEW_SERVICE) {
+            buildStoreReviews(supabaseAccounts)
         }
         val backend = IdeServicesBackend(
             initial = null, manager = manager,
@@ -503,6 +509,17 @@ object AndroidIde {
             redirectUrl = dev.ide.store.StoreAuth.ANDROID_REDIRECT,
             enabledProviders = listOf(dev.ide.store.StoreProvider.GITHUB),
         )
+    }
+
+    private fun buildStoreReviews(
+        accounts: dev.ide.store.impl.SupabaseAccountService?,
+    ): dev.ide.store.StoreReviewService {
+        val url = BuildConfig.SUPABASE_URL
+        val key = BuildConfig.SUPABASE_KEY
+        if (url.isBlank() || key.isBlank()) return dev.ide.store.StoreReviewService.Unsupported
+        // A null account service is fine: reads work with the publishable key, and a write returns
+        // "Sign in to do that", which is what the UI wants to hear.
+        return dev.ide.store.impl.SupabaseReviewService(url, key, accounts)
     }
 
     /** Submitting needs the live session, so it takes the concrete account service, not the port. */

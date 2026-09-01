@@ -42,6 +42,8 @@ internal class StoreBackend(
         dev.ide.store.StoreSubmissionService.Unsupported,
     /** Told when a submission's review state changes. Null in tests and on hosts with no storage. */
     private val notifications: NotificationCenter? = null,
+    private val reviewService: dev.ide.store.StoreReviewService =
+        dev.ide.store.StoreReviewService.Unsupported,
 ) : StoreService {
 
     private fun templates(): List<ProjectTemplate> =
@@ -116,6 +118,39 @@ internal class StoreBackend(
         val installId = ctx.manager?.preference(INSTALL_ID_PREF) ?: return
         runCatching { source.recordInstall(id, installId) }
     }
+
+    // ---- ratings and reviews ----
+
+    private val reviewState = StoreReviews(reviewService)
+
+    override fun reviewsAvailable(): Boolean = reviewState.available()
+
+    override suspend fun reviews(
+        itemId: String,
+        sort: dev.ide.ui.backend.UiReviewSort,
+        limit: Int,
+    ): dev.ide.ui.backend.UiReviewPage = withContext(storeIo) { reviewState.page(itemId, sort, limit) }
+
+    override suspend fun rate(itemId: String, stars: Int, review: String?): String? = withContext(storeIo) {
+        // The versions are context the reader never types but a publisher wants: which build of the IDE and
+        // which release of the project the review is about.
+        reviewState.rate(
+            itemId = itemId,
+            stars = stars,
+            review = review,
+            appVersion = source.appBuild?.toString(),
+            itemVersion = versionOf(itemId),
+        )
+    }
+
+    override suspend fun deleteMyReview(itemId: String): Boolean =
+        withContext(storeIo) { reviewState.deleteMine(itemId) }
+
+    override suspend fun voteReview(itemId: String, authorId: String, helpful: Boolean): String? =
+        withContext(storeIo) { reviewState.vote(itemId, authorId, helpful) }
+
+    /** The version the catalog last advertised for [itemId], when it said. */
+    private fun versionOf(itemId: String): String? = payloads[itemId]?.version
 
     // ---- accounts ----
     //
@@ -310,7 +345,8 @@ internal class StoreBackend(
     private fun rememberPayloads(feed: dev.ide.store.StoreFeed) {
         feed.allItems.forEach { item ->
             val path = item.storagePath ?: return@forEach
-            payloads[item.id] = StoreInstaller.Payload(item.id, path, item.sha256, item.sizeBytes, item.title)
+            payloads[item.id] =
+                StoreInstaller.Payload(item.id, path, item.sha256, item.sizeBytes, item.title, item.version)
         }
     }
 

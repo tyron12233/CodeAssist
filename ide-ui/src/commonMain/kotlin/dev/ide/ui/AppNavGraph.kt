@@ -159,6 +159,9 @@ internal fun AppNavGraph(
                     onToggleSaved = app.storeItem?.let { current ->
                         { saved = StoreFavorites.toggle(backend, current.id) }
                     },
+                    // Signing in to review needs a browser; null on a host that cannot open one, which the
+                    // sheet reports rather than working around.
+                    onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
                 )
             }
 

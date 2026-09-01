@@ -924,6 +924,38 @@ interface StoreService {
     /** Withdraw a still-pending submission. */
     suspend fun withdrawSubmission(itemId: String, version: String): Boolean = false
 
+    // ---- ratings and reviews ----
+
+    /** Whether reviews can be read at all. False hides the tab rather than showing an empty one. */
+    fun reviewsAvailable(): Boolean = false
+
+    /**
+     * The reviews panel for an item.
+     *
+     * Signed out still returns a page: reviews are part of the catalog, and only [UiReviewPage.mine] and
+     * the per-review `votedByMe` flags need a session.
+     */
+    suspend fun reviews(
+        itemId: String,
+        sort: UiReviewSort = UiReviewSort.HELPFUL,
+        limit: Int = 20,
+    ): UiReviewPage = UiReviewPage()
+
+    /**
+     * Leave or replace the reader's review. One per account per project, so this edits rather than adds.
+     *
+     * Returns null on success, or a message to show. A signed-out caller gets the sign-in message rather
+     * than silence, because the UI's next move is to offer sign-in.
+     */
+    suspend fun rate(itemId: String, stars: Int, review: String? = null): String? =
+        "Reviews are not available in this build"
+
+    suspend fun deleteMyReview(itemId: String): Boolean = false
+
+    /** Mark a review useful, or take it back. Returns null on success or a message to show. */
+    suspend fun voteReview(itemId: String, authorId: String, helpful: Boolean): String? =
+        "Reviews are not available in this build"
+
     companion object {
         /** A store that advertises nothing — the default for backends that wire no catalog. */
         val Unsupported: StoreService = object : StoreService {}

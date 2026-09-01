@@ -364,8 +364,15 @@ class IdeServicesBackend(
         manager?.applicationContainer?.getServiceOrNull(STORE_SUBMISSION_SERVICE)
             ?: dev.ide.store.StoreSubmissionService.Unsupported
 
-    override val store: StoreService =
-        StoreBackend(this, storeCatalogSource, storeAccountService, storeSubmissionService, notificationCenter)
+    /** Ratings and reviews, resolved like the rest of the store ports. */
+    private val storeReviewService: dev.ide.store.StoreReviewService =
+        manager?.applicationContainer?.getServiceOrNull(STORE_REVIEW_SERVICE)
+            ?: dev.ide.store.StoreReviewService.Unsupported
+
+    override val store: StoreService = StoreBackend(
+        this, storeCatalogSource, storeAccountService, storeSubmissionService, notificationCenter,
+        storeReviewService,
+    )
     // Held as the concrete type so the Compose preview host can reach its ide-core-only lesson-lowering methods
     // ([lowerLessonComposePreview]) that return an ide-core type the [LearnService] UI interface can't name.
     private val learnBackend = LearnBackend(this)

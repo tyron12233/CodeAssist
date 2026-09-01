@@ -31,6 +31,8 @@ internal class StoreInstaller(
         val sha256: String?,
         val sizeBytes: Long,
         val title: String,
+        /** The catalog's version string, so a review can say which release it is about. */
+        val version: String? = null,
     )
 
     /**

@@ -54,6 +54,9 @@ val STORE_ACCOUNT_SERVICE = ServiceKey<dev.ide.store.StoreAccountService>("platf
  *  browsing needs neither, so a host can wire the catalog without wiring publishing at all. */
 val STORE_SUBMISSION_SERVICE = ServiceKey<dev.ide.store.StoreSubmissionService>("platform.storeSubmissions")
 
+/** Ratings and reviews. Reads are anonymous; writes need the account service, so the launcher builds both. */
+val STORE_REVIEW_SERVICE = ServiceKey<dev.ide.store.StoreReviewService>("platform.storeReviews")
+
 /**
  * A host that can raise an OS-level notification.
  *

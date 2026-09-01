@@ -293,3 +293,53 @@ data class UiSubmitResult(
     val message: String,
     val submission: UiStoreSubmission? = null,
 )
+
+// ---- ratings and reviews ----
+
+/** How the review list is ordered. */
+enum class UiReviewSort { HELPFUL, RECENT }
+
+/**
+ * One review.
+ *
+ * [authorName] is null for a reviewer who has never published: the display name lives on the publisher
+ * row, so the UI shows a neutral label rather than inventing one from an id.
+ */
+data class UiStoreReview(
+    val authorId: String,
+    val authorName: String? = null,
+    val authorHandle: String? = null,
+    val verified: Boolean = false,
+    val stars: Int,
+    val review: String? = null,
+    val helpful: Int = 0,
+    val votedByMe: Boolean = false,
+    val appVersion: String? = null,
+    val itemVersion: String? = null,
+    /** Epoch millis, resolved by the engine; 0 when the backend sent nothing parseable. */
+    val postedAtMs: Long = 0L,
+    /** The publisher's answer to this review. */
+    val reply: String? = null,
+    val mine: Boolean = false,
+)
+
+/**
+ * Everything the reviews panel draws.
+ *
+ * [average] and [count] come from the reviews themselves, so the headline agrees with the list beneath it;
+ * the item's own rating fields are for ranking and can lag. [mine] is separate so the UI can pin the
+ * reader's own review above the rest.
+ */
+data class UiReviewPage(
+    val average: Float = -1f,
+    val count: Int = 0,
+    /** Stars 1..5 to how many reviews gave them; absent means zero. */
+    val distribution: Map<Int, Int> = emptyMap(),
+    val mine: UiStoreReview? = null,
+    val reviews: List<UiStoreReview> = emptyList(),
+    val loading: Boolean = false,
+    /** Set when the page could not be fetched; shown verbatim. */
+    val error: String? = null,
+) {
+    val hasAny: Boolean get() = count > 0 || mine != null
+}
