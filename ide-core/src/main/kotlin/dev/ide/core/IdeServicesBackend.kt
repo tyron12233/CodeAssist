@@ -329,6 +329,17 @@ class IdeServicesBackend(
     }
 
     override val notifications: dev.ide.ui.backend.NotificationService = notificationCenter
+
+    /**
+     * Hand over notifications the host received while this engine did not exist.
+     *
+     * The push path needs it: FCM wakes the process with no engine, the platform layer builds the
+     * notification and parks it, and this is where those land. Public because the launcher is in another
+     * module, and narrow on purpose — posting anything else is the engine's own business.
+     */
+    fun adoptHostNotifications(incoming: List<dev.ide.ui.backend.UiNotification>) {
+        notificationCenter.adopt(incoming)
+    }
     override val editor: EditorService = EditorBackend(this)
     override val blocks: BlockService = BlockBackend(this)
     override val preview: PreviewService = PreviewBackend(this)

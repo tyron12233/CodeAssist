@@ -26,6 +26,8 @@ trove4j = "1.0.20200330"  # gnu.trove.* — IntelliJ-core dependency the Kotlin 
 desugarJdkLibs = "2.1.5"  # com.android.tools:desugar_jdk_libs — core-library desugaring (temporarily enabled)
 bouncycastle = "1.78.1"   # org.bouncycastle — in-process keystore creation (keypair + self-signed X.509) on ART (no keytool)
 playServicesAds = "25.4.0"  # com.google.android.gms:play-services-ads — AdMob native ads + mediation (Android launcher only). 25.4.0 is the floor the current native-capable mediation adapters require.
+firebaseBom = "34.1.0"       # com.google.firebase:firebase-bom — aligns firebase-messaging; push notifications only.
+googleServices = "4.4.2"     # com.google.gms.google-services — processes google-services.json. Applied ONLY when that file exists.
 userMessagingPlatform = "4.0.0"        # com.google.android.ump — UMP/GDPR consent SDK; gathers consent before MobileAds.initialize (mediation prerequisite, EEA/UK)
 admobMediationMeta = "6.22.0.0"        # com.google.ads.mediation:facebook — Meta Audience Network adapter (native-capable)
 admobMediationPangle = "8.2.0.4.0"     # com.google.ads.mediation:pangle — Pangle adapter (native-capable)
@@ -137,6 +139,11 @@ bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = 
 # AdMob native ads, Android launcher only (:ide-android). Ads are rendered through the AdHost seam; no other
 # module links this. Test ad unit IDs are used until real ones are provided.
 play-services-ads = { module = "com.google.android.gms:play-services-ads", version.ref = "playServicesAds" }
+# Firebase Cloud Messaging, Android launcher only (:ide-android). Push is delivered as DATA-only messages
+# that the app turns into notifications itself, so the in-app notification center stays the record of what
+# the user was told. The BOM pins the messaging artifact.
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
+firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 # UMP consent SDK + AdMob mediation adapters (Android launcher only). The adapters let Meta/Pangle/Mintegral
 # BID to fill the SAME native ad slots AdMob already serves — higher eCPM through network competition, no new
 # ad placements. Only NATIVE-capable networks are wired (AppLovin removed native inventory, so it would fill
@@ -189,6 +196,9 @@ hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "dag
 hilt-core = { module = "com.google.dagger:hilt-core", version.ref = "dagger" }
 
 [plugins]
+# Reads google-services.json into resources. Applied conditionally by :ide-android — a build without that
+# file (any contributor's checkout) must still work, with push simply inert.
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

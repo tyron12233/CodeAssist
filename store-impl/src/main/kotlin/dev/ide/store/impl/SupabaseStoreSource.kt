@@ -208,6 +208,41 @@ class SupabaseStoreSource(
         }
     }
 
+    /**
+     * Register for push. Fire-and-forget in effect: a failure means this launch is not push-reachable,
+     * which the next launch retries, and nothing the user is doing should fail because of it.
+     */
+    override fun registerDevice(
+        installId: String,
+        token: String,
+        platform: String,
+        appBuild: Int?,
+        topics: List<String>,
+    ): StoreResult<Unit> {
+        val body = buildString {
+            append('{')
+            append(""""p_install_id":""").append(jsonStr(installId)).append(',')
+            append(""""p_token":""").append(jsonStr(token)).append(',')
+            append(""""p_platform":""").append(jsonStr(platform)).append(',')
+            append(""""p_app_build":""").append(appBuild?.toString() ?: "null").append(',')
+            append(""""p_topics":[""")
+            topics.forEachIndexed { i, t -> if (i > 0) append(','); append(jsonStr(t)) }
+            append("]}")
+        }
+        return when (val r = rpc("store_register_device", body)) {
+            is StoreResult.Ok -> StoreResult.Ok(Unit)
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+    }
+
+    override fun forgetDevice(token: String): StoreResult<Unit> =
+        when (val r = rpc("store_forget_device", """{"p_token":${jsonStr(token)}}""")) {
+            is StoreResult.Ok -> StoreResult.Ok(Unit)
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+
     /** POST to a PostgREST RPC endpoint, returning the raw response body. */
     private fun rpc(name: String, body: String): StoreResult<String> {
         if (!configured) return StoreResult.Unavailable("No store endpoint configured")

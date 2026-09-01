@@ -55,3 +55,10 @@ discord_release_*.txt
 
 # Supabase backend for the Projects Store (untracked: migrations, keys, admin page)
 supabase/
+
+# Firebase config for the launcher (push notifications). Untracked by default: it carries a Firebase API
+# key, and this repo is public. The key is package- and signature-restricted by Google and cannot SEND a
+# push (that needs the service account, which lives in a Supabase secret), so committing it is defensible —
+# but it is a decision to make deliberately rather than by accident, and it cannot be un-published once it
+# is in the history. Builds without it simply have push disabled.
+ide-android/google-services.json

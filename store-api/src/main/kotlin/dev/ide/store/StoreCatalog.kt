@@ -200,6 +200,25 @@ interface StoreCatalogSource {
     fun categories(): StoreResult<List<Pair<String, String>>> =
         StoreResult.Unavailable("No store endpoint")
 
+    /**
+     * Register this device for push, keyed by its FCM [token].
+     *
+     * [installId] is the anonymous analytics install id, not an account: a review decision has to reach a
+     * device whose user is signed out, which is the common case days after submitting. The backend binds
+     * the row to an account by itself when the call carries a session, so the client never asserts who it
+     * is. [topics] are broadcast subscriptions, enforced server-side so an unsubscribe actually holds.
+     */
+    fun registerDevice(
+        installId: String,
+        token: String,
+        platform: String = "android",
+        appBuild: Int? = null,
+        topics: List<String> = emptyList(),
+    ): StoreResult<Unit> = StoreResult.Unavailable("No store endpoint")
+
+    /** Forget a device. Called when the token rotates or the user opts out of push entirely. */
+    fun forgetDevice(token: String): StoreResult<Unit> = StoreResult.Unavailable("No store endpoint")
+
     fun recordInstall(slug: String, installId: String)
 
     companion object {
@@ -210,6 +229,9 @@ interface StoreCatalogSource {
             override fun search(query: StoreQuery, appBuild: Int) = StoreResult.Unavailable<List<RemoteStoreItem>>("No store endpoint")
             override fun feedDocument(seedSlug: String?) = StoreResult.Unavailable<String>("No store endpoint")
             override fun categories() = StoreResult.Unavailable<List<Pair<String, String>>>("No store endpoint")
+            override fun registerDevice(installId: String, token: String, platform: String, appBuild: Int?, topics: List<String>) =
+                StoreResult.Unavailable<Unit>("No store endpoint")
+            override fun forgetDevice(token: String) = StoreResult.Unavailable<Unit>("No store endpoint")
             override fun downloadPayload(storagePath: String, expectedSha256: String?, expectedBytes: Long, into: java.io.File, onProgress: (Float) -> Unit) =
                 StoreResult.Unavailable<Unit>("No store endpoint")
             override fun recordInstall(slug: String, installId: String) = Unit

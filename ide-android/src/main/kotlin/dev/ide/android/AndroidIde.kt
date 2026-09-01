@@ -127,6 +127,12 @@ object AndroidIde {
         // Process-wide uncaught-exception handler: report app_crash + surface the non-fatal dialog + keep the
         // app alive (the MainActivity main-thread guard handles the UI looper). See IdeServicesBackend.
         backend.installCrashReporting()
+        // Notifications that arrived by push while no engine existed (see CodeAssistMessagingService).
+        runCatching { backend.adoptHostNotifications(PendingPushes.drain(appContext)) }
+        // Register this device for push. Off the main thread and best-effort: a launch that cannot reach
+        // the backend is simply not push-reachable until the next one, and nothing the user is doing should
+        // wait on it or fail because of it.
+        registerForPush(appContext, manager)
         // cold_start: time the whole on-device bootstrap (asset copy + project load + engine init). Emitted
         // once per launch for users who consented; no-op otherwise. Also serves as the per-launch anchor.
         if (backend.diagnostics.analyticsConsent() == true) {
@@ -451,6 +457,41 @@ object AndroidIde {
      * button that cannot succeed is worse than not offering it. Add [dev.ide.store.StoreProvider.GOOGLE]
      * here once that client exists.
      */
+    /**
+     * Ask FCM for this install's token and hand it to the store backend.
+     *
+     * Silent no-op when Firebase was never configured: without google-services.json there is no
+     * FirebaseApp, `getInstance()` throws, and a build with no push is a supported configuration rather
+     * than an error worth reporting.
+     */
+    private fun registerForPush(appContext: Context, manager: ProjectManager) {
+        val source = runCatching { buildStoreSource() }.getOrNull() ?: return
+        if (!source.configured()) return
+        if (com.google.firebase.FirebaseApp.getApps(appContext).isEmpty()) return
+        val installId = manager.preference("analytics.install.id") ?: return
+
+        runCatching {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token ->
+                    if (token.isNullOrBlank()) return@addOnSuccessListener
+                    PendingPushes.storeToken(appContext, token)
+                    if (!PendingPushes.tokenNeedsRegistering(appContext, token)) return@addOnSuccessListener
+                    Thread({
+                        val result = source.registerDevice(
+                            installId = installId,
+                            token = token,
+                            platform = "android",
+                            appBuild = BuildConfig.VERSION_CODE,
+                        )
+                        // Only mark it registered on success, so a failed launch retries on the next one.
+                        if (result is dev.ide.store.StoreResult.Ok) {
+                            PendingPushes.markTokenRegistered(appContext, token)
+                        }
+                    }, "push-register").apply { isDaemon = true }.start()
+                }
+        }
+    }
+
     private fun buildStoreAccounts(): dev.ide.store.impl.SupabaseAccountService? {
         val url = BuildConfig.SUPABASE_URL
         val key = BuildConfig.SUPABASE_KEY

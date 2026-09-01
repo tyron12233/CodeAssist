@@ -199,6 +199,81 @@ and a tab:	end"""
         assertEquals(1, c.notifications().value.size)
     }
 
+    // ---- adopt(): notifications the host built while no engine existed (the push path) ----
+
+    @Test
+    fun adoptedPushesKeepTheirOwnArrivalTimeAndOrdering() {
+        val c = center(dir())
+        c.post(UiNotificationKind.BUILD, "Built this morning")   // clock-based, newest so far
+        val lastNight = UiNotification(
+            id = "p1", kind = UiNotificationKind.STORE_SUBMISSION, title = "Approved overnight",
+            timestampMs = 5L, key = "submission:x:1.0.0",
+        )
+        c.adopt(listOf(lastNight))
+
+        val titles = c.notifications().value.map { it.title }
+        assertEquals(listOf("Built this morning", "Approved overnight"), titles,
+            "an overnight push belongs below this morning's entry, not on top because it was adopted later")
+        assertEquals(5L, c.notifications().value.last().timestampMs, "the arrival time must not be re-stamped")
+        assertEquals(2, c.unreadCount().value)
+    }
+
+    /** The tray already showed it; adopting must not produce a second copy of the same fact. */
+    @Test
+    fun adoptingReplacesAnEntryWithTheSameKey() {
+        val c = center(dir())
+        c.post(UiNotificationKind.STORE_SUBMISSION, "In review", key = "submission:x:1.0.0")
+        c.adopt(
+            listOf(
+                UiNotification(
+                    id = "submission:x:1.0.0", kind = UiNotificationKind.STORE_SUBMISSION,
+                    title = "Approved", timestampMs = 9_000L, key = "submission:x:1.0.0",
+                ),
+            ),
+        )
+        assertEquals(1, c.notifications().value.size)
+        assertEquals("Approved", c.notifications().value.single().title)
+    }
+
+    @Test
+    fun adoptedPushesPersistLikeAnyOther() {
+        val root = dir()
+        center(root).adopt(
+            listOf(
+                UiNotification(
+                    id = "p9", kind = UiNotificationKind.STORE_SUBMISSION, title = "Approved while closed",
+                    body = "Looks good", timestampMs = 1234L,
+                    target = UiNotificationTarget.StoreItem("aurora"), key = "submission:aurora:2.0.0",
+                ),
+            ),
+        )
+        val reopened = center(root).notifications().value.single()
+        assertEquals("Approved while closed", reopened.title)
+        assertEquals(UiNotificationTarget.StoreItem("aurora"), reopened.target)
+        assertEquals(1234L, reopened.timestampMs)
+        assertFalse(reopened.read)
+    }
+
+    @Test
+    fun adoptingNothingIsANoOp() {
+        val c = center(dir())
+        c.post(UiNotificationKind.SYSTEM, "A")
+        val before = c.notifications().value
+        c.adopt(emptyList())
+        assertEquals(before, c.notifications().value)
+    }
+
+    /** A backlog bigger than the cap must not push the cap open. */
+    @Test
+    fun adoptingRespectsTheCap() {
+        val c = center(dir())
+        repeat(80) { c.post(UiNotificationKind.BUILD, "Build $it") }
+        c.adopt((1..60).map {
+            UiNotification(id = "p$it", kind = UiNotificationKind.SYSTEM, title = "Push $it", timestampMs = 900_000L + it)
+        })
+        assertEquals(100, c.notifications().value.size)
+    }
+
     /** No storage is a real host configuration (tests, a desktop with no home), not an error. */
     @Test
     fun worksWithNoStorageAtAll() {

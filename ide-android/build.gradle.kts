@@ -25,6 +25,43 @@ plugins {
     // ALL — see buildSrc dev.ide.build.kotlinc). No-op until the device spike (KotlinCompilerArtSpikeTest)
     // discovers the first breakage and a pass is added to ArtPatchPasses.
     id("dev.ide.kotlinc-art")
+    // Firebase, for push notifications. Declared but NOT applied here: the plugin fails the build when
+    // google-services.json is missing, and a contributor cloning this repo has no reason to hold our
+    // Firebase config. It is applied below only when that file exists; with it absent FirebaseApp never
+    // initializes and the push code stays dormant, which the messaging service checks for rather than
+    // assuming. (`file(...)` is not callable inside a `plugins` block, which is the other reason this is
+    // two steps.)
+    alias(libs.plugins.google.services) apply false
+}
+
+// firebase-common:22 depends on androidx.datastore, which drags in kotlin-parcelize-runtime and with it the
+// deprecated `kotlin-android-extensions-runtime`. Its `kotlinx.android.parcel.*` annotations also live in
+// `parcelize-compiler-plugin-for-ide`, which this app dexes deliberately (see the dependency below) so the
+// on-device Kotlin compiler can build a user's @Parcelize classes — so two jars declare the same classes and
+// `checkDebugDuplicateClasses` fails.
+//
+// Dropping the AndroidX-side copy is the right half to lose: those annotations stay available from the
+// plugin jar, and the runtime a *user's* app needs is added to their project by its own Build Features
+// toggle, never from this classpath. Scoped to the app's own compile/runtime classpaths rather than every
+// configuration, because this build file also has configurations whose whole job is collecting jars to ship
+// to the device, and those must keep resolving exactly what they ask for.
+configurations.matching {
+    it.name.endsWith("CompileClasspath") || it.name.endsWith("RuntimeClasspath")
+}.configureEach {
+    // Both halves of the Parcelize runtime: `kotlin-parcelize-runtime` owns `kotlinx.parcelize.*` and pulls
+    // in `kotlin-android-extensions-runtime`, which owns the older `kotlinx.android.parcel.*`. The
+    // `-for-ide` plugin jar contains BOTH sets, so excluding only one leaves the other colliding — which is
+    // exactly what happened on the first attempt.
+    exclude(group = "org.jetbrains.kotlin", module = "kotlin-parcelize-runtime")
+    exclude(group = "org.jetbrains.kotlin", module = "kotlin-android-extensions-runtime")
+}
+
+// See the note in `plugins`: push is configured only in a checkout that has the Firebase config.
+val hasFirebaseConfig = file("google-services.json").exists()
+if (hasFirebaseConfig) {
+    apply(plugin = "com.google.gms.google-services")
+} else {
+    logger.lifecycle("ide-android: no google-services.json — building without push notifications.")
 }
 
 // --- ecj-on-ART patch ----------------------------------------------------------------------------
@@ -1047,6 +1084,12 @@ dependencies {
     // app already dexes full protobuf (via :android-support's bundletool), and the two share the com.google.
     // protobuf.* package, so keeping both is a D8 duplicate-class failure. The ads SDK's protobuf touchpoints
     // are API-compatible with the full runtime already present.
+    // FCM, for push notifications. Present unconditionally so the messaging code compiles in every
+    // checkout; without google-services.json the SDK has no project to talk to and stays dormant, which
+    // is exactly what a contributor's build should do.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+
     implementation(libs.play.services.ads) {
         exclude(group = "com.google.protobuf", module = "protobuf-javalite")
     }

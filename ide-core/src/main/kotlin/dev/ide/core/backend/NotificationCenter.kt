@@ -68,6 +68,27 @@ internal class NotificationCenter(
         return notification
     }
 
+    /**
+     * Take notifications the host built while the engine did not exist.
+     *
+     * A push wakes the app's process with no engine running, so the platform layer builds the notification
+     * itself and parks it; this folds those in on the next start. Their original fields are preserved
+     * rather than re-stamped: the interesting thing about them is when they actually arrived, which may be
+     * hours before this call.
+     */
+    fun adopt(incoming: List<UiNotification>) {
+        if (incoming.isEmpty()) return
+        val keys = incoming.mapNotNull { it.key }.toSet()
+        val ids = incoming.map { it.id }.toSet()
+        // Same replacement rule as post(): one entry per keyed fact, and never two rows for one id. Sets
+        // rather than a scan per element, since a backlog can be the whole cap.
+        val kept = state.value.filterNot { (it.key != null && it.key in keys) || it.id in ids }
+        // Ordered by when they actually arrived, not by when they were adopted: a push from last night
+        // belongs below one from this morning even though both land in the same call.
+        state.value = (incoming + kept).sortedByDescending { it.timestampMs }.take(MAX_KEPT)
+        afterChange()
+    }
+
     override fun markRead(id: String) {
         state.value = state.value.map { if (it.id == id) it.copy(read = true) else it }
         afterChange()

@@ -130,6 +130,17 @@
             </intent-filter>
         </activity>
 
+        <!-- Push notifications. The messages are data-only, so the app builds the tray entry itself and the
+             in-app notification center stays the record of what the user was shown. Dormant in a checkout
+             without google-services.json: FirebaseApp never initializes and nothing is delivered. -->
+        <service
+                android:name=".CodeAssistMessagingService"
+                android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <!-- Phase-2 build-process-isolation skeleton (docs/build-process-isolation.md): the build/run daemon
              runs in its own ":build" OS process so a build OOM or a user-program crash kills only it, not
              the IDE. A plain bound service for now; the foreground service + notification is Phase 5. -->
