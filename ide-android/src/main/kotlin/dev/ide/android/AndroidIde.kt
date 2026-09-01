@@ -18,7 +18,9 @@ import dev.ide.analytics.impl.AnalyticsLogSink
 import dev.ide.analytics.impl.DefaultAnalyticsService
 import dev.ide.analytics.impl.SupabaseSink
 import dev.ide.core.ANALYTICS_SERVICE
+import dev.ide.core.STORE_ACCOUNT_SERVICE
 import dev.ide.core.STORE_CATALOG_SOURCE
+import dev.ide.core.STORE_SUBMISSION_SERVICE
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
 import dev.ide.core.settings.BuiltInSettingsPages
@@ -92,6 +94,15 @@ object AndroidIde {
         // reason as analytics: it is built from transport config the manager knows nothing about. An empty
         // URL or key leaves it unconfigured and the store falls back to the bundled catalog.
         manager.applicationContainer.registerServiceIfAbsent(STORE_CATALOG_SOURCE) { buildStoreSource() }
+        // Sign-in and submissions. Built here too, and held so MainActivity can hand the OAuth deep link
+        // straight to the instance the engine is using rather than a second one with no session in it.
+        val supabaseAccounts = buildStoreAccounts()
+        val storeAccounts: dev.ide.store.StoreAccountService =
+            supabaseAccounts ?: dev.ide.store.StoreAccountService.Unsupported
+        manager.applicationContainer.registerServiceIfAbsent(STORE_ACCOUNT_SERVICE) { storeAccounts }
+        manager.applicationContainer.registerServiceIfAbsent(STORE_SUBMISSION_SERVICE) {
+            buildStoreSubmissions(supabaseAccounts)
+        }
         val backend = IdeServicesBackend(
             initial = null, manager = manager,
             buildRunnerFactory = { svc ->
@@ -427,6 +438,38 @@ object AndroidIde {
      * An empty URL or key returns the unconfigured source, so a fork can build with no endpoint and the
      * store simply shows the bundled catalog.
      */
+    /**
+     * The store's account service.
+     *
+     * GitHub only for now: Google needs its own OAuth client on the Supabase project, and offering a
+     * button that cannot succeed is worse than not offering it. Add [dev.ide.store.StoreProvider.GOOGLE]
+     * here once that client exists.
+     */
+    private fun buildStoreAccounts(): dev.ide.store.impl.SupabaseAccountService? {
+        val url = BuildConfig.SUPABASE_URL
+        val key = BuildConfig.SUPABASE_KEY
+        if (url.isBlank() || key.isBlank()) return null
+        return dev.ide.store.impl.SupabaseAccountService(
+            url = url,
+            apiKey = key,
+            // The deep link the manifest's intent-filter receives.
+            redirectUrl = dev.ide.store.StoreAuth.ANDROID_REDIRECT,
+            enabledProviders = listOf(dev.ide.store.StoreProvider.GITHUB),
+        )
+    }
+
+    /** Submitting needs the live session, so it takes the concrete account service, not the port. */
+    private fun buildStoreSubmissions(
+        accounts: dev.ide.store.impl.SupabaseAccountService?,
+    ): dev.ide.store.StoreSubmissionService {
+        if (accounts == null) return dev.ide.store.StoreSubmissionService.Unsupported
+        return dev.ide.store.impl.SupabaseSubmissionService(
+            BuildConfig.SUPABASE_URL,
+            BuildConfig.SUPABASE_KEY,
+            accounts,
+        )
+    }
+
     private fun buildStoreSource(): dev.ide.store.StoreCatalogSource {
         val url = BuildConfig.SUPABASE_URL
         val key = BuildConfig.SUPABASE_KEY

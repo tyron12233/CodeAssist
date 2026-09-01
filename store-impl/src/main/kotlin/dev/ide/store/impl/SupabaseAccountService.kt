@@ -55,9 +55,18 @@ class SupabaseAccountService(
     /** The URL the provider redirects back to. Must be registered in the Supabase dashboard. */
     private val redirectUrl: String,
     private val tokens: StoreTokenStore = StoreTokenStore.inMemory(),
+    /**
+     * Which providers have an OAuth app on the Supabase project. Only these are offered, because a
+     * provider that is not configured there answers the authorize call with an error page.
+     */
+    private val enabledProviders: List<dev.ide.store.StoreProvider> =
+        listOf(dev.ide.store.StoreProvider.GITHUB),
     private val connectTimeoutMs: Int = 10_000,
     private val readTimeoutMs: Int = 20_000,
 ) : StoreAccountService {
+
+    override fun providers(): List<dev.ide.store.StoreProvider> =
+        if (configured) enabledProviders else emptyList()
 
     private val base = url.trimEnd('/')
     private val configured = url.isNotBlank() && apiKey.isNotBlank() && redirectUrl.isNotBlank()

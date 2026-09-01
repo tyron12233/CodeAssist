@@ -9,6 +9,9 @@ import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreItemKind
 import dev.ide.ui.backend.UiInstallProgress
 import dev.ide.ui.backend.UiInstallState
+import dev.ide.ui.backend.UiSignInPhase
+import dev.ide.ui.backend.UiStoreAccount
+import dev.ide.ui.backend.UiStoreAuthState
 import dev.ide.ui.backend.UiStoreFeed
 import dev.ide.ui.backend.UiStoreSection
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +37,9 @@ import kotlinx.coroutines.withContext
 internal class StoreBackend(
     private val ctx: BackendContext,
     private val source: dev.ide.store.StoreCatalogSource = dev.ide.store.StoreCatalogSource.Unconfigured,
+    private val accounts: dev.ide.store.StoreAccountService = dev.ide.store.StoreAccountService.Unsupported,
+    private val submissions: dev.ide.store.StoreSubmissionService =
+        dev.ide.store.StoreSubmissionService.Unsupported,
 ) : StoreService {
 
     private fun templates(): List<ProjectTemplate> =
@@ -108,6 +114,53 @@ internal class StoreBackend(
         val installId = ctx.manager?.preference(INSTALL_ID_PREF) ?: return
         runCatching { source.recordInstall(id, installId) }
     }
+
+    // ---- accounts ----
+    //
+    // Delegated: sign-in state depends on the account port and nothing else in the IDE, so it lives in a
+    // class that can be built and tested without a project, an engine or a host.
+
+    private val accountState = StoreAccounts(accounts)
+
+    override fun authProviders(): List<String> = accountState.authProviders()
+
+    override fun authState(): kotlinx.coroutines.flow.StateFlow<UiStoreAuthState> = accountState.authState()
+
+    override fun beginSignIn(provider: String): String? = accountState.beginSignIn(provider)
+
+    override fun completeSignIn(redirect: String) = accountState.completeSignIn(redirect)
+
+    override fun signOut() = accountState.signOut()
+
+    // ---- submitting ----
+
+    private val submissionState = StoreSubmissions(submissions)
+
+    override fun submissionsAvailable(): Boolean = submissionState.available()
+
+    override suspend fun packProject(rootPath: String): dev.ide.ui.backend.UiPackagedProject? =
+        withContext(storeIo) { submissionState.pack(rootPath) }
+
+    override suspend fun packFailure(rootPath: String): String? = submissionState.packError(rootPath)
+
+    override suspend fun submitCategories(): List<Pair<String, String>> = withContext(storeIo) {
+        when (val result = source.categories()) {
+            is dev.ide.store.StoreResult.Ok -> result.value
+            // No list means the form cannot offer a valid slug, so it offers none rather than guessing.
+            else -> emptyList()
+        }
+    }
+
+    override suspend fun submit(
+        draft: dev.ide.ui.backend.UiSubmissionDraft,
+        packaged: dev.ide.ui.backend.UiPackagedProject,
+    ): dev.ide.ui.backend.UiSubmitResult = withContext(storeIo) { submissionState.submit(draft, packaged) }
+
+    override suspend fun mySubmissions(): List<dev.ide.ui.backend.UiStoreSubmission> =
+        withContext(storeIo) { submissionState.mine() }
+
+    override suspend fun withdrawSubmission(itemId: String, version: String): Boolean =
+        withContext(storeIo) { submissionState.withdraw(itemId, version) }
 
     /**
      * The bundled catalog keyed by the id a remote row would use, for the overlay.

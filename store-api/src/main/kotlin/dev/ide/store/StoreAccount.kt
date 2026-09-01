@@ -28,6 +28,34 @@ data class StoreAccount(
 )
 
 /**
+ * Where a provider sends the user back to, defined once.
+ *
+ * The scheme has to agree in three places that cannot check each other: the Android manifest's
+ * intent-filter, the Supabase project's allow-list, and the activity that has to recognise the incoming
+ * link as a sign-in rather than a file to open. A typo in any one of them fails at runtime only, so they
+ * all read from here.
+ */
+object StoreAuth {
+    /** The Android deep link. Must match the intent-filter and Supabase's `additional_redirect_urls`. */
+    const val ANDROID_REDIRECT = "codeassist://auth-callback"
+
+    /** The desktop loopback redirect, for a host that can run a one-shot local listener. */
+    const val DESKTOP_REDIRECT = "http://127.0.0.1:8976/auth-callback"
+
+    const val SCHEME = "codeassist"
+    const val HOST = "auth-callback"
+
+    /**
+     * Whether [url] is a sign-in redirect coming back into the app.
+     *
+     * Checked by prefix rather than parsed, because the tokens arrive in the fragment and a URI parser is
+     * not needed to tell a sign-in from a file.
+     */
+    fun isAuthRedirect(url: String?): Boolean =
+        url != null && url.startsWith("$SCHEME://$HOST", ignoreCase = true)
+}
+
+/**
  * One step of an OAuth sign-in.
  *
  * The flow cannot complete in one call: the client has to open a browser, the user consents, and the
@@ -49,6 +77,15 @@ data class StoreAuthChallenge(
  */
 interface StoreAccountService {
     fun authAvailable(): Boolean = false
+
+    /**
+     * The providers this build can actually sign in with.
+     *
+     * Not the same as [StoreProvider.entries]: a provider needs an OAuth app registered on the Supabase
+     * project before it works, and offering a button that cannot succeed is worse than not offering it.
+     * The launcher decides, because it is what knows which credentials were configured.
+     */
+    fun providers(): List<StoreProvider> = emptyList()
 
     /** The signed-in account, or null. Cheap and safe to call during composition. */
     fun current(): StoreAccount? = null

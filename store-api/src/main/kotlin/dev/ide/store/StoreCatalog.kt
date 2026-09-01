@@ -189,6 +189,17 @@ interface StoreCatalogSource {
      * [installId] is the anonymous UUID the app already generates for analytics — not an account, not a
      * device id. Fire-and-forget: a failure here must never block an install.
      */
+    /**
+     * The categories a submission may declare, as (slug, title).
+     *
+     * Read separately from the feed rather than lifted out of it: the feed's category shelf is a
+     * merchandising surface that does not exist in every mode (an empty store has no shelves at all), and
+     * an empty store is exactly when the first submission is made. The slug is what the backend stores, so
+     * the form has to have it and cannot infer it from a display title.
+     */
+    fun categories(): StoreResult<List<Pair<String, String>>> =
+        StoreResult.Unavailable("No store endpoint")
+
     fun recordInstall(slug: String, installId: String)
 
     companion object {
@@ -198,6 +209,7 @@ interface StoreCatalogSource {
             override fun catalog(appBuild: Int) = StoreResult.Unavailable<RemoteCatalog>("No store endpoint")
             override fun search(query: StoreQuery, appBuild: Int) = StoreResult.Unavailable<List<RemoteStoreItem>>("No store endpoint")
             override fun feedDocument(seedSlug: String?) = StoreResult.Unavailable<String>("No store endpoint")
+            override fun categories() = StoreResult.Unavailable<List<Pair<String, String>>>("No store endpoint")
             override fun downloadPayload(storagePath: String, expectedSha256: String?, expectedBytes: Long, into: java.io.File, onProgress: (Float) -> Unit) =
                 StoreResult.Unavailable<Unit>("No store endpoint")
             override fun recordInstall(slug: String, installId: String) = Unit

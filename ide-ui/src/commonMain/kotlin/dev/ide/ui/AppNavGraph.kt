@@ -20,6 +20,8 @@ import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.ext.ScreenContext
 import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.navigation.ScreenHost
+import dev.ide.ui.screens.StoreSignInSheet
+import dev.ide.ui.screens.SubmitProjectScreen
 import dev.ide.ui.screens.CodeStyleScreen
 import dev.ide.ui.screens.CreateProjectScreen
 import dev.ide.ui.screens.EditorScreen
@@ -130,6 +132,14 @@ internal fun AppNavGraph(
                 inlayHintsEnabled = state.inlayHintsEnabled,
                 host = state.composePreviewHost,
                 onExit = app::exitLessonPlayer,
+            )
+
+            Screen.SubmitProject -> SubmitProjectScreen(
+                backend = backend,
+                onBack = { app.navigateTo(Screen.Projects) },
+                // Back to Explore on success: the submission now shows there as "under review", which is
+                // the only place its state is visible.
+                onSubmitted = { app.navigateTo(Screen.Projects) },
             )
 
             Screen.StoreItem -> {
@@ -359,7 +369,7 @@ private fun HomeRoute(app: CodeAssistAppState, fileActions: FileActions) {
         tab = app.homeTab,
         onSelectTab = app::selectHomeTab,
         projectsContent = { ProjectPickerRoute(app, fileActions, projects) },
-        storeContent = { StoreRoute(app) },
+        storeContent = { StoreRoute(app, fileActions) },
         learnContent = { LearnRoute(app, fileActions) },
     )
 }
@@ -414,7 +424,9 @@ private fun ProjectPickerRoute(
 }
 
 @Composable
-private fun StoreRoute(app: CodeAssistAppState) {
+private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
+    // Publishing asks for an account at the moment it is needed, not at launch.
+    var signInVisible by remember { mutableStateOf(false) }
     // Ask for the server-driven feed once per epoch. Null means there is no remote store to reach —
     // NOT that the store is empty — so the bundled catalog screen takes over. Those are opposite
     // claims and must not render the same page.
@@ -450,9 +462,20 @@ private fun StoreRoute(app: CodeAssistAppState) {
         onOpenSearch = { app.selectHomeTab(dev.ide.ui.HomeTab.Store) },
         bundled = bundledItems,
         onUseBundled = { item -> item.templateId?.let(app::createProject) },
-        onPublish = { app.openHub(Screen.Projects) },
+        onPublish = { signInVisible = true },
+        onAccount = if (app.backend.store.authProviders().isNotEmpty()) ({ signInVisible = true }) else null,
+        signedIn = app.backend.store.authState().collectAsState().value.signedIn,
         onHowItWorks = { app.openHub(Screen.Projects) },
     )
+    if (signInVisible) {
+        StoreSignInSheet(
+            backend = app.backend,
+            onDismiss = { signInVisible = false },
+            onSubmitProject = if (app.backend.store.submissionsAvailable()) ({ app.openSubmitProject() }) else null,
+            // Null when the host cannot open a browser, which the sheet reports rather than working around.
+            onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
+        )
+    }
 }
 
 @Composable

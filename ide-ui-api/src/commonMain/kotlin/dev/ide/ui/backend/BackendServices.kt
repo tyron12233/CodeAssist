@@ -844,6 +844,86 @@ interface StoreService {
      */
     fun recordInstall(id: String) {}
 
+    // ---- accounts (publishing only; browsing and installing never need one) ----
+
+    /**
+     * Which providers this build can sign in with, as their wire names ("github").
+     *
+     * Empty means sign-in is unavailable and the UI must not offer it: a provider needs an OAuth app
+     * registered on the backend, and a button that cannot succeed is worse than no button.
+     */
+    fun authProviders(): List<String> = emptyList()
+
+    /** The live sign-in state. Safe to collect during composition. */
+    fun authState(): kotlinx.coroutines.flow.StateFlow<UiStoreAuthState> =
+        kotlinx.coroutines.flow.MutableStateFlow(UiStoreAuthState())
+
+    /**
+     * Start a sign-in and return the URL the caller must open in a browser, or null if it cannot start.
+     *
+     * The engine does not open the browser itself: on Android that is a custom tab owned by the activity,
+     * and on desktop it is the system handler, neither of which the engine can reach.
+     */
+    fun beginSignIn(provider: String): String? = null
+
+    /**
+     * Finish a sign-in from the redirect the provider sent back to the app.
+     *
+     * Called by the host that receives the deep link, not by a screen. Returns immediately and reports
+     * through [authState], because the token exchange is a network call and the redirect can arrive while
+     * no store screen is on top, or before the UI exists at all.
+     */
+    fun completeSignIn(redirect: String) {}
+
+    fun signOut() {}
+
+    // ---- submitting ----
+
+    /**
+     * Whether this build can publish at all. False hides every publish entry point.
+     *
+     * Separate from [authProviders] because they fail differently: no provider means nobody can sign in,
+     * while no submission service means a signed-in user still cannot upload.
+     */
+    fun submissionsAvailable(): Boolean = false
+
+    /**
+     * Zip a project for submission, without uploading anything.
+     *
+     * Deliberately its own step: packaging is local and cheap to redo, and its result is what the submit
+     * screen shows before the user commits to publishing. That is what makes "here is exactly what will be
+     * uploaded, and here is what was left out" possible.
+     */
+    suspend fun packProject(rootPath: String): UiPackagedProject? = null
+
+    /**
+     * Why the last [packProject] of [rootPath] failed, or null if it succeeded.
+     *
+     * Separate from [packProject]'s null so the screen can explain an empty result. Packaging fails for
+     * specific, actionable reasons ("too large", "every file was excluded") and dropping them would leave
+     * the user with a blank panel.
+     */
+    suspend fun packFailure(rootPath: String): String? = null
+
+    /**
+     * The categories a submission may declare, as (slug, title).
+     *
+     * Read from the backend rather than hardcoded: the slug is what it stores, and the list is content the
+     * store owns. Not taken from the Explore feed, because an empty store has no category shelf and an
+     * empty store is exactly when the first submission happens.
+     */
+    suspend fun submitCategories(): List<Pair<String, String>> = emptyList()
+
+    /** Upload a packaged project and create the pending submission. Requires a signed-in account. */
+    suspend fun submit(draft: UiSubmissionDraft, packaged: UiPackagedProject): UiSubmitResult =
+        UiSubmitResult(false, "Publishing is not available in this build")
+
+    /** The signed-in account's own submissions, newest first. Empty when signed out. */
+    suspend fun mySubmissions(): List<UiStoreSubmission> = emptyList()
+
+    /** Withdraw a still-pending submission. */
+    suspend fun withdrawSubmission(itemId: String, version: String): Boolean = false
+
     companion object {
         /** A store that advertises nothing — the default for backends that wire no catalog. */
         val Unsupported: StoreService = object : StoreService {}

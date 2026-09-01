@@ -43,3 +43,13 @@ val ANALYTICS_SERVICE = ServiceKey<AnalyticsService>("platform.analytics")
  *  Supabase config, for the same reason as [ANALYTICS_SERVICE]. Absent (desktop / tests) resolves to
  *  [dev.ide.store.StoreCatalogSource.Unconfigured], and the store falls back to the bundled catalog. */
 val STORE_CATALOG_SOURCE = ServiceKey<dev.ide.store.StoreCatalogSource>("platform.storeCatalog")
+
+/** The store's OAuth account service. Registered by the launcher, which is the only place that knows both
+ *  the Supabase config and the redirect this host can actually receive: a deep link on Android, a loopback
+ *  URL on desktop. Absent resolves to a service that reports sign-in unavailable, so browsing still works
+ *  on a build with no auth configured. */
+val STORE_ACCOUNT_SERVICE = ServiceKey<dev.ide.store.StoreAccountService>("platform.storeAccounts")
+
+/** Submissions. Separate from [STORE_ACCOUNT_SERVICE] because submitting needs a signed-in session and
+ *  browsing needs neither, so a host can wire the catalog without wiring publishing at all. */
+val STORE_SUBMISSION_SERVICE = ServiceKey<dev.ide.store.StoreSubmissionService>("platform.storeSubmissions")

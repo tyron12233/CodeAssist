@@ -114,6 +114,20 @@
                 <data android:mimeType="*/*" />
                 <data android:pathPattern=".*\\.caproj" />
             </intent-filter>
+            <!-- The Projects Store's OAuth redirect. The provider sends the user to Supabase, which
+                 redirects here with the session in the fragment. The scheme is also declared in
+                 dev.ide.store.StoreAuth and allow-listed on the Supabase project; all three must agree.
+                 MainActivity recognises this link and hands it to the account service rather than
+                 treating it as a file to open. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                        android:host="auth-callback"
+                        android:scheme="codeassist" />
+            </intent-filter>
         </activity>
 
         <!-- Phase-2 build-process-isolation skeleton (docs/build-process-isolation.md): the build/run daemon

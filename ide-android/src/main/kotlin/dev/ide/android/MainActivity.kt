@@ -47,13 +47,24 @@ class MainActivity : ComponentActivity() {
     /** UMP consent flow (gathers ad consent before AdMob init; drives the "Manage ad consent" Settings entry). */
     private val adConsent by lazy { AdConsentManager(this) }
 
+    /**
+     * A store sign-in redirect that arrived before the engine finished booting.
+     *
+     * The browser can come back while `bootstrap` is still running (it runs off the main thread and takes
+     * seconds on a cold start), and the account service does not exist until it finishes, so the link is
+     * held here and delivered when the session appears.
+     */
+    private var pendingAuthRedirect: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Edge-to-edge with default (auto) bar styles; the system-bar ICON appearance is then driven reactively
         // by the app theme via `PlatformSystemBars` (light icons in dark mode, dark icons in light mode) — a fixed
         // `SystemBarStyle.dark` here forced light icons even in light mode.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        inbound.value = extractStream(intent)
+        // Before extractStream: a sign-in redirect is an ACTION_VIEW with a URI, which would otherwise be
+        // taken for a file to import.
+        if (!takeAuthRedirect(intent)) inbound.value = extractStream(intent)
         // Gather UMP consent BEFORE initializing the Ads SDK (mediation + EEA/UK requirement); only initialize
         // once consent allows ad requests. Failure resolves too, so a consent hiccup never blocks the IDE.
         adConsent.gather(this) { if (adConsent.canRequestAds) initAds(applicationContext) }
@@ -64,6 +75,8 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 runCatching { withContext(Dispatchers.IO) { AndroidIde.bootstrap(applicationContext) } }.onSuccess { s ->
                     session = s; backend = s.backend
+                    // A redirect that landed mid-bootstrap now has somewhere to go.
+                    deliverAuthRedirect()
                 }.onFailure { e -> error = e.stackTraceToString() }
             }
 
@@ -239,7 +252,40 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (takeAuthRedirect(intent)) return
         extractStream(intent)?.let { inbound.value = it }
+    }
+
+    /**
+     * Claim [intent] if it is a store sign-in redirect, and return whether it was claimed.
+     *
+     * The URI is cleared off the intent once claimed: the activity is also the handler for `file` and
+     * `content` VIEW intents, and a stale `codeassist://auth-callback` sitting in `getIntent()` would be
+     * read as a file to import on the next configuration change. The tokens are in the fragment, so the
+     * link is also not something to keep around.
+     */
+    private fun takeAuthRedirect(intent: Intent?): Boolean {
+        if (intent?.action != Intent.ACTION_VIEW) return false
+        val url = intent.data?.toString()
+        if (!dev.ide.store.StoreAuth.isAuthRedirect(url)) return false
+        pendingAuthRedirect = url
+        intent.data = null
+        deliverAuthRedirect()
+        return true
+    }
+
+    /**
+     * Hand a held redirect to the engine.
+     *
+     * Through the store service rather than the account port directly, so the sign-in state has one owner:
+     * the engine reports the outcome on its auth flow, which is what any screen is watching. Returns
+     * immediately; the token exchange happens off this thread.
+     */
+    private fun deliverAuthRedirect() {
+        val store = session?.backend?.store ?: return
+        val url = pendingAuthRedirect ?: return
+        pendingAuthRedirect = null
+        store.completeSignIn(url)
     }
 
     override fun onDestroy() {

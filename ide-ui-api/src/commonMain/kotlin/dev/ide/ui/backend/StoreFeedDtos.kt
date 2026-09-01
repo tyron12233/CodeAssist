@@ -194,3 +194,83 @@ data class UiInstallProgress(
     /** Why it failed, for [UiInstallState.FAILED]. */
     val message: String? = null,
 )
+
+// ---- Store accounts ----
+
+/**
+ * The signed-in store account.
+ *
+ * [handle] and [displayName] come from the publisher row rather than the OAuth profile, and stay null
+ * until the account has published something: the publisher row is created on first submit, not at sign-up.
+ * So a freshly signed-in account legitimately has nothing but an id.
+ */
+data class UiStoreAccount(
+    val userId: String,
+    val email: String? = null,
+    val handle: String? = null,
+    val displayName: String? = null,
+    val avatarUrl: String? = null,
+    val verified: Boolean = false,
+    val isAdmin: Boolean = false,
+) {
+    /** What to show for this account, falling back through the fields that may not be set yet. */
+    val label: String get() = displayName ?: handle ?: email ?: "Signed in"
+}
+
+/**
+ * Where a sign-in has got to.
+ *
+ * [AwaitingBrowser] is its own phase because the app genuinely cannot tell what is happening during it:
+ * the user is in a browser, may take a minute, and may simply never come back. A UI that showed a
+ * spinner would be claiming progress it cannot observe.
+ */
+enum class UiSignInPhase { SignedOut, AwaitingBrowser, Completing, SignedIn, Failed }
+
+/** [message] carries the reason in [UiSignInPhase.Failed], for the UI to show verbatim. */
+data class UiStoreAuthState(
+    val phase: UiSignInPhase = UiSignInPhase.SignedOut,
+    val account: UiStoreAccount? = null,
+    val message: String? = null,
+) {
+    val signedIn: Boolean get() = account != null
+}
+
+// ---- submitting ----
+
+/**
+ * The result of packaging a project, shown before anything is uploaded.
+ *
+ * [excluded] is the point of this screen, not a footnote: the archive is about to be made public, and the
+ * packager drops keystores, `local.properties`, `.env` and `google-services.json`. Showing what was left
+ * out is how the user can tell that happened, rather than trusting it silently.
+ */
+data class UiPackagedProject(
+    val rootPath: String,
+    val fileCount: Int,
+    val totalBytes: Long,
+    val sha256: String,
+    val excluded: List<String>,
+    /** Where the built zip is; the engine uploads and deletes it. Not shown to the user. */
+    val archivePath: String,
+)
+
+/** What the submit form collects. Mirrors the engine's request, minus anything the engine can derive. */
+data class UiSubmissionDraft(
+    val title: String = "",
+    val summary: String = "",
+    val description: String = "",
+    val category: String = "",
+    val language: String? = null,
+    val tags: List<String> = emptyList(),
+    val version: String = "1.0.0",
+    /** Set to publish a new version of an item you already own; null creates a new one. */
+    val itemSlug: String? = null,
+    val changelog: String? = null,
+)
+
+/** [message] is shown verbatim on failure: the backend's quota and validation messages are user-facing. */
+data class UiSubmitResult(
+    val success: Boolean,
+    val message: String,
+    val submission: UiStoreSubmission? = null,
+)

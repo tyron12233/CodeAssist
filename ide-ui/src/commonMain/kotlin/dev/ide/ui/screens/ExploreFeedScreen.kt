@@ -37,6 +37,8 @@ import dev.ide.ui.backend.UiStoreFeed
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreMode
 import dev.ide.ui.backend.UiStorePublisher
+import dev.ide.ui.generated.resources.store_signin_title
+import dev.ide.ui.components.SquareToneButton
 import dev.ide.ui.components.inFlight
 import dev.ide.ui.components.installActionLabel
 import dev.ide.ui.components.AdSlot
@@ -109,6 +111,9 @@ fun ExploreFeed(
     onViewListing: () -> Unit = {},
     notifyOnLaunch: Boolean = false,
     onNotifyChange: (Boolean) -> Unit = {},
+    /** Opens the account sheet. Null hides the entry, for a host with no sign-in. */
+    onAccount: (() -> Unit)? = null,
+    signedIn: Boolean = false,
 ) {
     // Empty is a FIXED layout rather than a server-driven one: the feed carries no renderable sections
     // by definition, so the client composes the zero-data page and reads only storeState + bundled from
@@ -145,6 +150,8 @@ fun ExploreFeed(
                     // itself and a number would just be noise.
                     count = feed.state.publishedProjectCount.takeIf { feed.mode != UiStoreMode.POPULATED },
                     onOpenSearch = { onOpenSearch(null) },
+                    onAccount = onAccount,
+                    signedIn = signedIn,
                 )
             }
 
@@ -277,7 +284,19 @@ fun ExploreFeed(
 }
 
 @Composable
-private fun ExploreHeader(count: Int?, onOpenSearch: () -> Unit) {
+private fun ExploreHeader(
+    count: Int?,
+    onOpenSearch: () -> Unit,
+    /**
+     * The account / publish entry, or null where the host cannot sign in.
+     *
+     * It belongs in the header rather than only in the publish pitch: the pitch appears in the empty and
+     * sparse feeds and disappears once the store fills up, which would leave a populated store with no way
+     * to publish to it at all.
+     */
+    onAccount: (() -> Unit)? = null,
+    signedIn: Boolean = false,
+) {
     Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
@@ -287,6 +306,15 @@ private fun ExploreHeader(count: Int?, onOpenSearch: () -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             if (count != null) StoreCountBadge(count)
+            if (onAccount != null) {
+                SquareToneButton(
+                    // A filled account glyph once there is an identity behind it, an outline before.
+                    glyph = if (signedIn) CaSymbols.accountCircle else CaSymbols.person,
+                    contentDescription = stringResource(Res.string.store_signin_title),
+                    onClick = onAccount,
+                    size = 46.dp,
+                )
+            }
         }
         SearchEntry(onClick = onOpenSearch, modifier = Modifier.padding(top = 14.dp))
     }

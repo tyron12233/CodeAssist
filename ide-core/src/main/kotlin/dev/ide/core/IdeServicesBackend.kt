@@ -324,7 +324,18 @@ class IdeServicesBackend(
         manager?.applicationContainer?.getServiceOrNull(STORE_CATALOG_SOURCE)
             ?: dev.ide.store.StoreCatalogSource.Unconfigured
 
-    override val store: StoreService = StoreBackend(this, storeCatalogSource)
+    /** Sign-in, resolved the same way. Absent → the store is readable but not publishable. */
+    private val storeAccountService: dev.ide.store.StoreAccountService =
+        manager?.applicationContainer?.getServiceOrNull(STORE_ACCOUNT_SERVICE)
+            ?: dev.ide.store.StoreAccountService.Unsupported
+
+    /** Publishing, resolved the same way. Absent → the store is readable but not publishable. */
+    private val storeSubmissionService: dev.ide.store.StoreSubmissionService =
+        manager?.applicationContainer?.getServiceOrNull(STORE_SUBMISSION_SERVICE)
+            ?: dev.ide.store.StoreSubmissionService.Unsupported
+
+    override val store: StoreService =
+        StoreBackend(this, storeCatalogSource, storeAccountService, storeSubmissionService)
     // Held as the concrete type so the Compose preview host can reach its ide-core-only lesson-lowering methods
     // ([lowerLessonComposePreview]) that return an ide-core type the [LearnService] UI interface can't name.
     private val learnBackend = LearnBackend(this)

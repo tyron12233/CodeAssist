@@ -312,12 +312,12 @@ private fun availableTabs(item: UiStoreItem): List<StoreTab> = buildList {
 }
 
 @Composable
-private fun DetailTopBar(
+internal fun DetailTopBar(
     title: String,
     isSaved: Boolean,
     onBack: () -> Unit,
-    onToggleSaved: (() -> Unit)?,
-    onShare: (() -> Unit)?,
+    onToggleSaved: (() -> Unit)? = null,
+    onShare: (() -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
     Row(

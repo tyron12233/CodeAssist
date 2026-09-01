@@ -164,6 +164,50 @@ class SupabaseStoreSource(
         }
     }
 
+    /**
+     * The submittable categories, straight off the table.
+     *
+     * A plain table read rather than an RPC because that is all it is: `store_categories` is granted
+     * `select` to anon and its read policy is unconditional, so there is nothing for a function to add.
+     */
+    override fun categories(): StoreResult<List<Pair<String, String>>> {
+        if (!configured) return StoreResult.Unavailable("No store endpoint configured")
+        return when (val body = get("/rest/v1/store_categories?select=slug,title&order=sort_order")) {
+            is StoreResult.Ok -> {
+                val rows = JsonReader.arr(JsonReader.parseOrNull(body.value)).mapNotNull { row ->
+                    val slug = JsonReader.str(row, "slug") ?: return@mapNotNull null
+                    slug to (JsonReader.str(row, "title") ?: slug)
+                }
+                if (rows.isEmpty()) StoreResult.Unavailable("No categories") else StoreResult.Ok(rows)
+            }
+            is StoreResult.Unavailable -> StoreResult.Unavailable(body.reason)
+            is StoreResult.Failed -> StoreResult.Failed(body.message, body.status)
+        }
+    }
+
+    /** GET a PostgREST path. Same error mapping as [rpc]: a 5xx reads as offline, not as a bad request. */
+    private fun get(path: String): StoreResult<String> {
+        return try {
+            val conn = (URL("$base$path").openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = connectTimeoutMs
+                readTimeout = readTimeoutMs
+                setRequestProperty("apikey", apiKey)
+                setRequestProperty("Authorization", "Bearer $apiKey")
+            }
+            val code = conn.responseCode
+            val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
+            when {
+                code in 200..299 -> StoreResult.Ok(text)
+                code == 429 || code >= 500 -> StoreResult.Unavailable("Store unavailable (HTTP $code)")
+                else -> StoreResult.Failed(errorMessage(text) ?: "Store rejected the request", code)
+            }
+        } catch (e: Exception) {
+            StoreResult.Unavailable(e.message ?: "Network unavailable")
+        }
+    }
+
     /** POST to a PostgREST RPC endpoint, returning the raw response body. */
     private fun rpc(name: String, body: String): StoreResult<String> {
         if (!configured) return StoreResult.Unavailable("No store endpoint configured")

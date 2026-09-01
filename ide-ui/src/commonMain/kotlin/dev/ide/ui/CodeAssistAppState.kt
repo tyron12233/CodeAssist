@@ -624,6 +624,11 @@ class CodeAssistAppState(
         screen = Screen.StoreItem
     }
 
+    /** The publish flow. Full screen, not a sheet: it is a form with a file listing above it. */
+    fun openSubmitProject() {
+        screen = Screen.SubmitProject
+    }
+
     // ---- first-launch sheets ----
 
     fun dismissMigration() {
@@ -685,6 +690,7 @@ class CodeAssistAppState(
             screen == Screen.LessonTrack -> exitLessonTrack()
             // The store item detail returns to the Explore tab (still selected on Projects).
             screen == Screen.StoreItem -> screen = Screen.Projects
+            screen == Screen.SubmitProject -> screen = Screen.Projects
 
             screen == Screen.CreateProject -> screen = Screen.Projects
             screen == Screen.ImportProject -> cancelImportPreview()
