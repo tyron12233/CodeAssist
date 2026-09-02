@@ -1660,7 +1660,9 @@ class KotlinSymbolService(
      * (`kotlin.collections.List` → `java.util.List`) for both, matching the live `javaShape` lookup. Returns
      * null for a non-classpath type (handled elsewhere: source model, built-ins, synthetic, Java source index).
      */
-    private fun typeShape(fqn: String): TypeShape? {
+    private fun typeShape(fqn: String): TypeShape? = typeShape(fqn, aliasDepth = 0)
+
+    private fun typeShape(fqn: String, aliasDepth: Int): TypeShape? {
         // The type-shape index is keyed by dot-form FQNs, but a binary's supertype FQN arrives in bytecode
         // `$`-nested form (e.g. `FrameLayout.LayoutParams`'s super is `android.view.ViewGroup$MarginLayoutParams`).
         // Normalize so an inherited-member walk up a nested-class chain doesn't miss the index — otherwise it
@@ -1675,11 +1677,29 @@ class KotlinSymbolService(
             // Empty until the index is ready ("dumb mode"); a genuine post-ready miss simply doesn't resolve
             // until the next re-index rather than triggering a jar read.
             if (!idx.status.ready) return null
-            return idx.exact<TypeShape>(TYPE_SHAPE, lookupFqn).firstOrNull()?.withContext(this)
+            idx.exact<TypeShape>(TYPE_SHAPE, lookupFqn).firstOrNull()?.let { return it.withContext(this) }
+            return aliasedShape(lookupFqn, aliasDepth)
         }
         // No index wired (standalone / tests): live decode/bytecode is the only classpath source.
         reader.decoded(dotFqn, this)?.let { return TypeShape.of(it, this) }
-        return javaShape(lookupFqn)?.let { TypeShape.of(it) }
+        javaShape(lookupFqn)?.let { return TypeShape.of(it) }
+        return aliasedShape(lookupFqn, aliasDepth)
+    }
+
+    /**
+     * The shape a LIBRARY `typealias` named [fqn] stands for: its target's shape. A top-level typealias has no
+     * `.class` of its own (it lives in its file facade's `@Metadata`), so no shape is stored under its own name
+     * and `androidx.compose.ui.graphics.Shader` resolved to nothing. Its members, supertypes and very existence
+     * come from `android.graphics.Shader`, the type it expands to. The alias target is carried
+     * by the per-package [KotlinPackageDeclIndex] entry. Mirrors the mapped-type redirect one step up
+     * ([Builtins.javaTypeFor]): the name changes, the type is the same. [aliasDepth] bounds an alias chain (and
+     * a cyclic one, which a corrupt index could present).
+     */
+    private fun aliasedShape(fqn: String, aliasDepth: Int): TypeShape? {
+        if (aliasDepth >= MAX_ALIAS_DEPTH) return null
+        val target = libraryTypeAliasTarget(fqn) ?: return null
+        if (target == fqn) return null
+        return typeShape(target, aliasDepth + 1)
     }
 
     /**
@@ -2356,8 +2376,37 @@ class KotlinSymbolService(
      */
     fun typeFqnKnown(fqn: String): Boolean {
         if (isKnownType(fqn)) return true
-        return index?.exactAll<ClassNameValue>(CLASS_NAMES, fqn.substringAfterLast('.'))
-            ?.any { it.fqn == fqn } == true
+        if (index?.exactAll<ClassNameValue>(CLASS_NAMES, fqn.substringAfterLast('.'))
+                ?.any { it.fqn == fqn } == true
+        ) return true
+        return libraryClassifierInPackage(fqn)
+    }
+
+    /**
+     * Whether a LIBRARY package declares a top-level classifier with this [fqn] according to the per-package
+     * [KotlinPackageDeclIndex]. The class-name index is built one `.class` entry at a time, and a top-level
+     * `typealias` has no `.class` of its own (it lives in its file facade's `@Metadata`), so a library alias is
+     * absent from it: `import androidx.compose.ui.graphics.Shader` (`actual typealias Shader =
+     * android.graphics.Shader`) read as a dead import. `kotlin.pkgDecls` does enumerate such aliases, as
+     * classifiers carrying their facade. Package-keyed, so the answer stays package-precise: an alias declared
+     * in `kotlinx.coroutines` does not make `kotlinx.coroutines.flow.<same name>` resolve.
+     */
+    private fun libraryClassifierInPackage(fqn: String): Boolean =
+        libraryClassifier(fqn) != null
+
+    /** The FQN a LIBRARY `typealias` [fqn] expands to, or null when [fqn] is not a library alias (or its
+     *  expansion names no classifier). See [aliasedShape]. */
+    private fun libraryTypeAliasTarget(fqn: String): String? = libraryClassifier(fqn)?.aliasTarget
+
+    /** The [KotlinPackageDeclIndex] entry for the top-level classifier [fqn], or null when the library packages
+     *  declare no such classifier. Package-keyed, hence package-precise. */
+    private fun libraryClassifier(fqn: String): PkgDecl? {
+        val idx = index ?: return null
+        val pkg = fqn.substringBeforeLast('.', "")
+        if (pkg.isEmpty()) return null
+        val name = fqn.substringAfterLast('.')
+        return idx.exact<PkgDecl>(KotlinPackageDeclIndex.id, pkg)
+            .firstOrNull { it.classifier && it.name == name }
     }
 
     /**
@@ -3383,6 +3432,9 @@ class KotlinSymbolService(
         // class is handled by the source model, not this branch).
         private val JAVA_CLASS_NAMES = ClassNameIndex.JAVA
         private val TYPE_SHAPE = IndexId("kotlin.typeShape")
+
+        /** How far a library `typealias` chain is followed to a real shape (see [aliasedShape]). */
+        private const val MAX_ALIAS_DEPTH = 3
         private val BUILTINS = IndexId("kotlin.builtins")
         private val PACKAGES = PackagesIndex.ALL
         private val PACKAGE_TYPES = PackageTypesIndex.ALL

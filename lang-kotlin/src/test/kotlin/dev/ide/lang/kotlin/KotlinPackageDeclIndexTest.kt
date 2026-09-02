@@ -69,6 +69,11 @@ class KotlinPackageDeclIndexTest {
     @Test
     fun codecRoundTrips() {
         val v = PkgDecl("foo", classifier = false, facade = "a.b.FooKt")
+        val alias = PkgDecl("Shader", classifier = true, facade = "a.b.ShaderKt", aliasTarget = "android.graphics.Shader")
+        val aliasBack = roundTrip(alias)
+        assertEquals(alias.name, aliasBack.name)
+        assertEquals(alias.facade, aliasBack.facade)
+        assertEquals(alias.aliasTarget, aliasBack.aliasTarget)
         val bos = ByteArrayOutputStream()
         DataOutputStream(bos).use { PkgDeclExternalizer.write(it, v) }
         val back = DataInputStream(ByteArrayInputStream(bos.toByteArray())).use { PkgDeclExternalizer.read(it) }
@@ -78,6 +83,13 @@ class KotlinPackageDeclIndexTest {
         // classifier form: null facade round-trips as null (not "")
         val c = DataInputStream(ByteArrayInputStream(ByteArrayOutputStream().also { b -> DataOutputStream(b).use { PkgDeclExternalizer.write(it, PkgDecl("C", true, null)) } }.toByteArray())).use { PkgDeclExternalizer.read(it) }
         assertEquals(null, c.facade)
+        assertEquals(null, c.aliasTarget, "a non-alias round-trips with no target (not \"\")")
+    }
+
+    private fun roundTrip(value: PkgDecl): PkgDecl {
+        val bos = ByteArrayOutputStream()
+        DataOutputStream(bos).use { PkgDeclExternalizer.write(it, value) }
+        return DataInputStream(ByteArrayInputStream(bos.toByteArray())).use { PkgDeclExternalizer.read(it) }
     }
 
     @Test
@@ -90,6 +102,20 @@ class KotlinPackageDeclIndexTest {
         val typeAliases = entries.values.flatten().filter { it.classifier && it.facade != null }
         println("coroutines top-level typealiases (sample): ${typeAliases.take(20).map { "${it.name}@${it.facade}" }}")
         assertTrue(typeAliases.isNotEmpty(), "coroutines must contribute top-level typealias classifier entries (facade-carried)")
+        // The type an alias EXPANDS to rides along: it is where the alias's members and supertypes live, so a
+        // resolver can treat the alias as that type instead of resolving it to nothing.
+        // The package also declares a `CancellationException(...)` factory FUNCTION, so the classifier half of
+        // the name is the entry to read.
+        val cancellation = assertNotNull(
+            entries["kotlinx.coroutines"]?.firstOrNull { it.classifier && it.name == "CancellationException" },
+            "kotlinx.coroutines.CancellationException must enumerate as a classifier",
+        )
+        assertEquals("java.util.concurrent.CancellationException", cancellation.aliasTarget, "the alias target")
+    }
+
+    @Test
+    fun aRealClassCarriesNoAliasTarget() {
+        assertEquals(null, served["kotlin"].orEmpty().first { it.name == "Pair" }.aliasTarget)
     }
 
     companion object {

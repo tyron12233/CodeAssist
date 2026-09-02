@@ -77,14 +77,22 @@ object KotlinMetadata {
         /** A `sealed` class/interface's DIRECT subclass FQNs (`km.sealedSubclasses`), for `when`-exhaustiveness
          *  over a library sealed type; empty otherwise. */
         val sealedSubclasses: List<String> = emptyList(),
-        /** For a file/multi-file facade: the simple names of its top-level `typealias` declarations. A typealias
-         *  has no `.class` of its own (it lives in the facade's `@Metadata`), so it is enumerated + resolved
-         *  through the facade, unlike a real class. Empty for a class. */
-        val typeAliasNames: List<String> = emptyList(),
+        /** For a file/multi-file facade: its top-level `typealias` declarations. A typealias has no `.class` of
+         *  its own (it lives in the facade's `@Metadata`), so it is enumerated + resolved through the facade,
+         *  unlike a real class. Empty for a class. */
+        val typeAliases: List<TypeAliasDecl> = emptyList(),
     ) {
         /** Just the supertype classifier FQNs — for the supertype walk that doesn't need type arguments. */
         val supertypeFqns: List<String> get() = supertypes.mapNotNull { (it as? KotlinType)?.qualifiedName }
     }
+
+    /**
+     * A top-level `typealias` a facade declares: its [name] and the FQN of the classifier its EXPANSION names
+     * (`Shader` in androidx.compose.ui.graphics expands to `android.graphics.Shader`; a function-type alias
+     * expands to `kotlin.FunctionN`). [expandedFqn] is null when the expansion is not a classifier (a bare type
+     * parameter). An alias chain is already collapsed: `expandedType` is the fully expanded type.
+     */
+    class TypeAliasDecl(val name: String, val expandedFqn: String?)
 
     fun isKotlin(classBytes: ByteArray): Boolean = extractBytes(classBytes) != null
 
@@ -434,7 +442,7 @@ object KotlinMetadata {
             top,
             ext,
             facadeClassFqn = facadeFqn,
-            typeAliasNames = km.typeAliases.map { it.name })
+            typeAliases = km.typeAliases.map { TypeAliasDecl(it.name, classifierFqn(it.expandedType)) })
     }
 
     private fun funcSymbol(

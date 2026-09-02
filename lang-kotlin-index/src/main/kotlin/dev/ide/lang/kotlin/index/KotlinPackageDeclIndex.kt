@@ -41,7 +41,7 @@ import java.io.DataOutput
 object KotlinPackageDeclIndex : IndexExtension<String, PkgDecl> {
     override val id = IndexId("kotlin.pkgDecls")
     override val version =
-        2 // v2: + top-level typealiases (classifier entries carrying their facade FQN)
+        3 // v2: + top-level typealiases (classifier entries carrying their facade FQN); v3: + their alias target
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = PkgDeclExternalizer
     override val matching = MatchingMode.PREFIX_ONLY
@@ -84,10 +84,11 @@ object KotlinPackageDeclIndex : IndexExtension<String, PkgDecl> {
             // Top-level typealiases are classifiers, but they have no `.class` of their own — they live in this
             // facade's @Metadata. Emit them as classifier entries CARRYING the facade, so the provider decompiles
             // the facade (not a nonexistent `.class`) to recover the KtTypeAlias, and the classifier name-set
-            // includes them (else `mayHaveTopLevelClassifier` prunes a library typealias).
-            decoded.typeAliasNames.forEach { ta ->
+            // includes them (else `mayHaveTopLevelClassifier` prunes a library typealias). Each also carries the
+            // type it expands to, the one datum a resolver needs to treat the alias AS that type.
+            decoded.typeAliases.forEach { ta ->
                 out.getOrPut(pkg) { ArrayList() }
-                    .add(PkgDecl(ta, classifier = true, facade = facade))
+                    .add(PkgDecl(ta.name, classifier = true, facade = facade, aliasTarget = ta.expandedFqn))
             }
         }
         return out
@@ -105,6 +106,11 @@ class PkgDecl(
     val name: String,
     val classifier: Boolean,
     val facade: String?,
+    /** For a `typealias` entry: the FQN of the classifier it expands to (`androidx.compose.ui.graphics.Shader`
+     *  → `android.graphics.Shader`), which is where its members and supertypes actually live. Null for a real
+     *  class/object/interface/enum/annotation, for a callable, and for an alias whose expansion names no
+     *  classifier. */
+    val aliasTarget: String? = null,
 )
 
 /** Context-free codec for a [PkgDecl]. */
@@ -113,12 +119,14 @@ object PkgDeclExternalizer : Externalizer<PkgDecl> {
         out.writeUTF(value.name)
         out.writeBoolean(value.classifier)
         out.writeUTF(value.facade ?: "")
+        out.writeUTF(value.aliasTarget ?: "")
     }
 
     override fun read(inp: DataInput): PkgDecl {
         val name = inp.readUTF()
         val classifier = inp.readBoolean()
         val facade = inp.readUTF().ifEmpty { null }
-        return PkgDecl(name, classifier, facade)
+        val aliasTarget = inp.readUTF().ifEmpty { null }
+        return PkgDecl(name, classifier, facade, aliasTarget)
     }
 }
