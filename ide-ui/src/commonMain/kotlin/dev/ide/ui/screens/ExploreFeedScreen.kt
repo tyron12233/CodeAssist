@@ -37,6 +37,20 @@ import dev.ide.ui.backend.UiStoreFeed
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreMode
 import dev.ide.ui.backend.UiStorePublisher
+import dev.ide.ui.generated.resources.store_bundled_subtitle
+import dev.ide.ui.generated.resources.store_bundled_title
+import dev.ide.ui.generated.resources.store_catalogue_subtitle
+import dev.ide.ui.generated.resources.store_collections_title
+import dev.ide.ui.generated.resources.store_ghost_next_title
+import dev.ide.ui.generated.resources.store_ghost_section_subtitle
+import dev.ide.ui.generated.resources.store_ghost_section_title
+import dev.ide.ui.generated.resources.store_ghostspec_charts_note
+import dev.ide.ui.generated.resources.store_ghostspec_collections_note
+import dev.ide.ui.generated.resources.store_ghostspec_rec_note
+import dev.ide.ui.generated.resources.store_ghostspec_rec_title
+import dev.ide.ui.generated.resources.store_how_publishing_title
+import dev.ide.ui.generated.resources.store_meta_offline
+import dev.ide.ui.generated.resources.store_top_charts
 import dev.ide.ui.generated.resources.store_signin_title
 import dev.ide.ui.components.SquareToneButton
 import dev.ide.ui.components.inFlight
@@ -64,6 +78,7 @@ import dev.ide.ui.components.StoreCountBadge
 import dev.ide.ui.components.TrendingTicker
 import dev.ide.ui.components.chartMeta
 import dev.ide.ui.components.motifFor
+import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.tonalPair
 import dev.ide.ui.generated.resources.Res
@@ -210,7 +225,7 @@ fun ExploreFeed(
 
                     is UiFeedSection.Catalogue -> {
                         item("head_${section.id}") {
-                            SectionHeader(section.title, subtitle = "newest first")
+                            SectionHeader(section.title, subtitle = stringResource(Res.string.store_catalogue_subtitle))
                         }
                         itemsIndexed(section.items, key = { _, it -> "cat_${it.id}" }) { i, item ->
                             Spacer(Modifier.height(12.dp))
@@ -243,15 +258,15 @@ fun ExploreFeed(
                         if (bundled.isNotEmpty()) {
                             item("head_${section.id}") {
                                 SectionHeader(
-                                    "Bundled with your IDE",
-                                    subtitle = "Offline scaffolds that ship with the install.",
+                                    stringResource(Res.string.store_bundled_title),
+                                    subtitle = stringResource(Res.string.store_bundled_subtitle),
                                 )
                             }
                             itemsIndexed(bundled, key = { _, it -> "bundled_${it.id}" }) { i, item ->
                                 Spacer(Modifier.height(10.dp))
                                 BundledTemplateRow(
                                     title = item.title,
-                                    meta = listOfNotNull(item.language, "offline").joinToString(" · "),
+                                    meta = listOfNotNull(item.language, stringResource(Res.string.store_meta_offline)).joinToString(" · "),
                                     iconId = item.iconId,
                                     index = i,
                                     onUse = { onUseBundled(item) },
@@ -263,8 +278,8 @@ fun ExploreFeed(
                     is UiFeedSection.GhostShelves -> {
                         item("head_${section.id}") {
                             SectionHeader(
-                                "What unlocks as the store grows",
-                                subtitle = "Each shelf switches on when it has enough to rank.",
+                                stringResource(Res.string.store_ghost_section_title),
+                                subtitle = stringResource(Res.string.store_ghost_section_subtitle),
                             )
                         }
                         itemsIndexed(section.shelves, key = { _, it -> "ghost_${it.key}" }) { _, shelf ->
@@ -372,7 +387,7 @@ private fun ChartsSection(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                "Top charts",
+                stringResource(Res.string.store_top_charts),
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
@@ -481,24 +496,25 @@ private data class GhostSpec(
     val slotCount: Int,
 )
 
+@Composable
 private fun ghostSpec(key: String, need: Int): GhostSpec = when (key) {
     "charts" -> GhostSpec(
-        title = "Top charts",
-        note = "Ranking starts at $need projects — a chart of four is just the list above.",
+        title = stringResource(Res.string.store_top_charts),
+        note = stringResource(Res.string.store_ghostspec_charts_note, need),
         glyph = CaSymbols.trendingUp,
         slotHeight = 46.dp,
         slotCount = 3,
     )
     "collections" -> GhostSpec(
-        title = "Collections",
-        note = "The team builds a collection once there are enough projects to theme one.",
+        title = stringResource(Res.string.store_collections_title),
+        note = stringResource(Res.string.store_ghostspec_collections_note),
         glyph = CaSymbols.rocketLaunch,
         slotHeight = 72.dp,
         slotCount = 2,
     )
     else -> GhostSpec(
-        title = "Because you installed…",
-        note = "Recommendations need install history across several projects.",
+        title = stringResource(Res.string.store_ghostspec_rec_title),
+        note = stringResource(Res.string.store_ghostspec_rec_note),
         glyph = CaSymbols.hub,
         slotHeight = 60.dp,
         slotCount = 3,
@@ -568,22 +584,22 @@ private fun ExploreEmpty(
                         modifier = Modifier.padding(top = 4.dp),
                     )
                 }
-                item("steps_head") { SectionHeader("How publishing works") }
-                item("steps") { PublishingSteps(defaultPublishSteps) }
+                item("steps_head") { SectionHeader(stringResource(Res.string.store_how_publishing_title)) }
+                item("steps") { PublishingSteps(defaultPublishSteps()) }
             }
 
             if (bundled.isNotEmpty()) {
                 item("bundled_head") {
                     SectionHeader(
-                        "Bundled with your IDE",
-                        subtitle = "Offline scaffolds that ship with the install.",
+                        stringResource(Res.string.store_bundled_title),
+                        subtitle = stringResource(Res.string.store_bundled_subtitle),
                     )
                 }
                 itemsIndexed(bundled, key = { _, it -> "bundled_${it.id}" }) { i, item ->
                     Spacer(Modifier.height(10.dp))
                     BundledTemplateRow(
                         title = item.title,
-                        meta = listOfNotNull(item.language, "offline").joinToString(" · "),
+                        meta = listOfNotNull(item.language, stringResource(Res.string.store_meta_offline)).joinToString(" · "),
                         iconId = item.iconId,
                         index = i,
                         onUse = { onUseBundled(item) },
@@ -591,7 +607,7 @@ private fun ExploreEmpty(
                 }
             }
 
-            item("ghosts_head") { SectionHeader("What lands here next") }
+            item("ghosts_head") { SectionHeader(stringResource(Res.string.store_ghost_next_title)) }
             // No progress counters here: at zero there is nothing to be partway toward, so each note
             // states the CONDITION that fills the shelf instead.
             itemsIndexed(EMPTY_GHOSTS, key = { _, k -> "ghost_$k" }) { _, key ->
