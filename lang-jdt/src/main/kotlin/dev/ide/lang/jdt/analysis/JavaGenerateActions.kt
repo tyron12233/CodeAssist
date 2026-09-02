@@ -45,12 +45,12 @@ class GenerateConstructorActionProvider : ActionProvider {
             return emptyList()
         }
         return listOf(
-            generated("Generate constructor", site) { indent ->
+            generated("Generate constructor", site) { member, body ->
                 val params = site.fields.joinToString(", ") { "${it.type} ${it.name}" }
                 buildString {
-                    append("$indent public ${site.name}($params) {\n")
-                    for (f in site.fields) append("$indent     this.${f.name} = ${f.name};\n")
-                    append("$indent }\n")
+                    append("${member}public ${site.name}($params) {\n")
+                    for (f in site.fields) append("${body}this.${f.name} = ${f.name};\n")
+                    append("$member}\n")
                 }
             },
         )
@@ -68,23 +68,23 @@ class GenerateEqualsHashCodeActionProvider : ActionProvider {
             return emptyList()
         }
         return listOf(
-            generated("Generate 'equals()' and 'hashCode()'", site) { indent ->
+            generated("Generate 'equals()' and 'hashCode()'", site) { member, body ->
                 buildString {
-                    append("$indent @Override\n")
-                    append("$indent public boolean equals(Object o) {\n")
-                    append("$indent     if (this == o) return true;\n")
-                    append("$indent     if (o == null || getClass() != o.getClass()) return false;\n")
-                    append("$indent     ${site.name} that = (${site.name}) o;\n")
-                    for (f in site.fields) append("$indent     if (${comparison(f)}) return false;\n")
-                    append("$indent     return true;\n")
-                    append("$indent }\n")
+                    append("${member}@Override\n")
+                    append("${member}public boolean equals(Object o) {\n")
+                    append("${body}if (this == o) return true;\n")
+                    append("${body}if (o == null || getClass() != o.getClass()) return false;\n")
+                    append("$body${site.name} that = (${site.name}) o;\n")
+                    for (f in site.fields) append("${body}if (${comparison(f)}) return false;\n")
+                    append("${body}return true;\n")
+                    append("$member}\n")
                     append('\n')
-                    append("$indent @Override\n")
-                    append("$indent public int hashCode() {\n")
-                    append("$indent     int result = 1;\n")
-                    for (f in site.fields) append("$indent     result = 31 * result + ${hashOf(f)};\n")
-                    append("$indent     return result;\n")
-                    append("$indent }\n")
+                    append("${member}@Override\n")
+                    append("${member}public int hashCode() {\n")
+                    append("${body}int result = 1;\n")
+                    for (f in site.fields) append("${body}result = 31 * result + ${hashOf(f)};\n")
+                    append("${body}return result;\n")
+                    append("$member}\n")
                 }
             },
         )
@@ -117,17 +117,17 @@ class GenerateToStringActionProvider : ActionProvider {
         if (site.fields.isEmpty()) return emptyList()
         if (site.type.methods.any { it.name.identifier == "toString" }) return emptyList()
         return listOf(
-            generated("Generate 'toString()'", site) { indent ->
+            generated("Generate 'toString()'", site) { member, body ->
                 val parts = site.fields.mapIndexed { i, f ->
                     val lead = if (i == 0) "" else ", "
                     val value = if (f.isArray) "java.util.Arrays.toString(${f.name})" else f.name
                     "\"$lead${f.name}=\" + $value"
                 }
                 buildString {
-                    append("$indent @Override\n")
-                    append("$indent public String toString() {\n")
-                    append("$indent     return \"${site.name}{\" + ${parts.joinToString(" + ")} + \"}\";\n")
-                    append("$indent }\n")
+                    append("${member}@Override\n")
+                    append("${member}public String toString() {\n")
+                    append("${body}return \"${site.name}{\" + ${parts.joinToString(" + ")} + \"}\";\n")
+                    append("$member}\n")
                 }
             },
         )
@@ -144,19 +144,19 @@ class GenerateAccessorsActionProvider : ActionProvider {
         val missing = site.fields.filter { accessorName("get", it) !in existing && accessorName("is", it) !in existing }
         if (missing.isEmpty()) return emptyList()
         return listOf(
-            generated("Generate getters and setters", site) { indent ->
+            generated("Generate getters and setters", site) { member, body ->
                 buildString {
                     for (f in missing) {
                         val suffix = f.name.replaceFirstChar { it.uppercaseChar() }
                         val prefix = if (f.type == "boolean") "is" else "get"
-                        append("$indent public ${f.type} $prefix$suffix() {\n")
-                        append("$indent     return ${f.name};\n")
-                        append("$indent }\n")
+                        append("${member}public ${f.type} $prefix$suffix() {\n")
+                        append("${body}return ${f.name};\n")
+                        append("$member}\n")
                         append('\n')
                         if (!site.finalFields.contains(f.name)) {
-                            append("$indent public void set$suffix(${f.type} ${f.name}) {\n")
-                            append("$indent     this.${f.name} = ${f.name};\n")
-                            append("$indent }\n")
+                            append("${member}public void set$suffix(${f.type} ${f.name}) {\n")
+                            append("${body}this.${f.name} = ${f.name};\n")
+                            append("$member}\n")
                             append('\n')
                         }
                     }
@@ -235,23 +235,35 @@ private fun generationSite(ctx: EditorActionContext): Site? {
     return Site(decl, name, fields, finals, close, indent)
 }
 
-/** A [QuickFix] inserting [render]'s member text at [Site.insertAt], with a blank line before it. */
-private fun generated(title: String, site: Site, render: (indent: String) -> String): QuickFix =
-    object : QuickFix {
-        override val title = title
-        override val kind = CodeActionKind.REFACTOR
-        override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit {
-            val text = ctx.target.parsed.text()
-            val at = site.insertAt.coerceIn(0, text.length)
-            // One blank line between the last member and the new one, unless the body is empty.
-            val needsBlank = precedingIsMember(text, at)
-            val body = render(site.indent)
-            return WorkspaceEdit.of(
-                ctx.target.file,
-                DocumentEdit(at, 0, (if (needsBlank) "\n" else "") + body + site.indent),
-            )
-        }
+/**
+ * A [QuickFix] inserting a generated member at [Site.insertAt], with a blank line before it when the class
+ * body is not empty.
+ *
+ * [render] is handed the two indents it needs: `member` for a member's own lines and `body` for the
+ * statements inside it, both derived from the class's indentation so a nested class generates correctly.
+ */
+private fun generated(
+    title: String,
+    site: Site,
+    render: (member: String, body: String) -> String,
+): QuickFix = object : QuickFix {
+    override val title = title
+    override val kind = CodeActionKind.REFACTOR
+    override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit {
+        val text = ctx.target.parsed.text()
+        val at = site.insertAt.coerceIn(0, text.length)
+        val needsBlank = precedingIsMember(text, at)
+        val member = site.indent + INDENT
+        val generated = render(member, member + INDENT)
+        return WorkspaceEdit.of(
+            ctx.target.file,
+            DocumentEdit(at, 0, (if (needsBlank) "\n" else "") + generated + site.indent),
+        )
     }
+}
+
+/** One indentation level in generated code. */
+private const val INDENT = "    "
 
 /** True when the text before [at] holds a member, i.e. the class body is not empty. */
 private fun precedingIsMember(text: CharSequence, at: Int): Boolean {

@@ -37,9 +37,10 @@ class JavaGenerateActionsTest {
     @Test
     fun generatesAConstructorAssigningEveryInstanceField() {
         val out = apply(person, GenerateConstructorActionProvider())
-        assertTrue("public Person(String name, int age) {" in out, out)
-        assertTrue("this.name = name;" in out, out)
-        assertTrue("this.age = age;" in out, out)
+        assertTrue("\n    public Person(String name, int age) {" in out, "member indent:\n$out")
+        assertTrue("\n        this.name = name;" in out, "body indent:\n$out")
+        assertTrue("\n        this.age = age;" in out, out)
+        assertTrue("\n    }\n" in out, "closing brace indent:\n$out")
     }
 
     @Test
@@ -96,9 +97,10 @@ class JavaGenerateActionsTest {
     @Test
     fun generatesAGetterForEveryFieldAndASetterForTheMutableOnes() {
         val out = apply(person, GenerateAccessorsActionProvider())
-        assertTrue("public String getName() {" in out, out)
-        assertTrue("public int getAge() {" in out, out)
-        assertTrue("public void setAge(int age) {" in out, out)
+        assertTrue("\n    public String getName() {" in out, "member indent:\n$out")
+        assertTrue("\n        return name;" in out, "body indent:\n$out")
+        assertTrue("\n    public int getAge() {" in out, out)
+        assertTrue("\n    public void setAge(int age) {" in out, out)
         // `name` is final, so it gets no setter.
         assertTrue("setName" !in out, "a final field must not get a setter:\n$out")
     }
@@ -140,6 +142,14 @@ class JavaGenerateActionsTest {
         for (p in providers()) {
             assertTrue(titles(src, p).isEmpty(), "${p::class.simpleName} offered for a field-less class")
         }
+    }
+
+    @Test
+    fun aNestedClassGeneratesAtItsOwnIndentation() {
+        val src = "package app;\nclass Outer {\n    static class Inner {\n        int a;\n        |\n    }\n}\n"
+        val out = apply(src, GenerateToStringActionProvider())
+        assertTrue("\n        @Override" in out, "member indent follows the nested class:\n$out")
+        assertTrue("\n            return \"Inner{\"" in out, "body indent:\n$out")
     }
 
     private fun providers(): List<ActionProvider> = listOf(

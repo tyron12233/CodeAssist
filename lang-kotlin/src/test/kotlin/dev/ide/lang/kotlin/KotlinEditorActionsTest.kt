@@ -12,6 +12,8 @@ import dev.ide.lang.dom.TextRange
 import dev.ide.lang.kotlin.analysis.KotlinBracesActionProvider
 import dev.ide.lang.kotlin.analysis.KotlinExplicitTypeActionProvider
 import dev.ide.lang.kotlin.analysis.KotlinExtractFunctionActionProvider
+import dev.ide.lang.kotlin.analysis.KotlinGenerateEqualsActionProvider
+import dev.ide.lang.kotlin.analysis.KotlinGenerateToStringActionProvider
 import dev.ide.lang.kotlin.analysis.KotlinFunctionBodyActionProvider
 import dev.ide.lang.kotlin.analysis.KotlinIntroduceVariableActionProvider
 import dev.ide.lang.kotlin.analysis.KotlinSurroundActionProvider
@@ -240,6 +242,86 @@ class KotlinEditorActionsTest {
             KotlinExplicitTypeActionProvider(),
         )
         assertTrue(titles.isEmpty(), "nothing to infer from, got $titles")
+    }
+
+    // ---- generate members -------------------------------------------------------------------------
+
+    @Test
+    fun generatesEqualsAndHashCodeOverEveryProperty() {
+        val result = apply(
+            "package demo\nclass P(val a: Int, val b: String) {\n    |\n}\n",
+            KotlinGenerateEqualsActionProvider(),
+            "Generate 'equals()' and 'hashCode()'",
+        )
+        assertTrue("\n    override fun equals(other: Any?): Boolean {" in result, "member indent:\n$result")
+        assertTrue("\n        if (this === other) return true" in result, "body indent:\n$result")
+        assertTrue("if (other !is P) return false" in result, result)
+        assertTrue("if (a != other.a) return false" in result, result)
+        assertTrue("if (b != other.b) return false" in result, result)
+        assertTrue("override fun hashCode(): Int {" in result, result)
+        // `Any?.hashCode()` needs a null-safe call, and the first property seeds the accumulator.
+        assertTrue("var result = (a?.hashCode() ?: 0)" in result, result)
+        assertTrue("result = 31 * result + (b?.hashCode() ?: 0)" in result, result)
+    }
+
+    @Test
+    fun generatesToStringInTheDataClassShape() {
+        val result = apply(
+            "package demo\nclass P(val a: Int) {\n    |\n}\n",
+            KotlinGenerateToStringActionProvider(),
+            "Generate 'toString()'",
+        )
+        assertTrue("""override fun toString(): String = "P(a=${'$'}a)"""" in result, result)
+    }
+
+    @Test
+    fun aDataClassGetsThemFromTheCompiler() {
+        val src = "package demo\ndata class P(val a: Int) {\n    |\n}\n"
+        assertTrue(titles(src, KotlinGenerateEqualsActionProvider()).isEmpty())
+        assertTrue(titles(src, KotlinGenerateToStringActionProvider()).isEmpty())
+    }
+
+    @Test
+    fun anExistingMemberIsNotGeneratedTwice() {
+        val src = "package demo\nclass P(val a: Int) {\n    override fun toString(): String = \"P\"\n    |\n}\n"
+        assertTrue(titles(src, KotlinGenerateToStringActionProvider()).isEmpty())
+    }
+
+    @Test
+    fun aBodylessClassGainsOneAroundTheGeneratedMember() {
+        val result = apply(
+            "package demo\nclass |P(val a: Int)\n",
+            KotlinGenerateToStringActionProvider(),
+            "Generate 'toString()'",
+        )
+        assertEquals(
+            "package demo\nclass P(val a: Int) {\n    override fun toString(): String = \"P(a=${'$'}a)\"\n}\n",
+            result,
+        )
+    }
+
+    @Test
+    fun bodyPropertiesCountAlongsideConstructorOnes() {
+        val result = apply(
+            "package demo\nclass P(val a: Int) {\n    val b: Int = 2\n    |\n}\n",
+            KotlinGenerateToStringActionProvider(),
+            "Generate 'toString()'",
+        )
+        assertTrue("P(a=${'$'}a, b=${'$'}b)" in result, result)
+    }
+
+    @Test
+    fun nothingIsGeneratedInsideAFunctionBody() {
+        val src = "package demo\nclass P(val a: Int) {\n    fun m() {\n        |\n    }\n}\n"
+        assertTrue(titles(src, KotlinGenerateEqualsActionProvider()).isEmpty())
+        assertTrue(titles(src, KotlinGenerateToStringActionProvider()).isEmpty())
+    }
+
+    @Test
+    fun aPropertylessClassHasNothingToGenerate() {
+        val src = "package demo\nclass P {\n    |\n}\n"
+        assertTrue(titles(src, KotlinGenerateEqualsActionProvider()).isEmpty())
+        assertTrue(titles(src, KotlinGenerateToStringActionProvider()).isEmpty())
     }
 
     // ---- extract function -------------------------------------------------------------------------
