@@ -127,6 +127,20 @@ internal class VmArray(val elementDescriptor: String, val data: Array<Any?>) {
         /** An array of [length] elements of [elementDescriptor], each set to its type default. */
         fun of(elementDescriptor: String, length: Int): VmArray =
             VmArray(elementDescriptor, Array(length) { Descriptors.defaultValue(elementDescriptor) })
+
+        /** A multi-dimensional array of type [arrayDescriptor] (`[[LFoo;`), with [dims] giving the length of
+         *  each dimension to allocate. Fewer dims than the descriptor has dimensions allocates only the outer
+         *  ones and leaves the inner arrays null, as `new int[2][]` does. */
+        fun multi(arrayDescriptor: String, dims: IntArray): VmArray = multi(arrayDescriptor, dims, 0)
+
+        private fun multi(arrayDescriptor: String, dims: IntArray, depth: Int): VmArray {
+            val elementDescriptor = arrayDescriptor.substring(1) // strip one leading '['
+            val arr = of(elementDescriptor, dims[depth])
+            if (depth + 1 < dims.size) {
+                for (i in 0 until dims[depth]) arr.data[i] = multi(elementDescriptor, dims, depth + 1)
+            }
+            return arr
+        }
     }
 }
 

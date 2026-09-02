@@ -8,6 +8,7 @@ import dev.ide.jvm.fixtures.Construct
 import dev.ide.jvm.fixtures.Lambdas
 import dev.ide.jvm.fixtures.Objects
 import dev.ide.jvm.fixtures.Recover
+import dev.ide.jvm.fixtures.ReflectArray
 import dev.ide.jvm.fixtures.Statics
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,6 +32,7 @@ class VmInterpreterTest {
     private val CONSTRUCT = "dev/ide/jvm/fixtures/Construct"
     private val CLASSLIT = "dev/ide/jvm/fixtures/ClassLit"
     private val RECOVER = "dev/ide/jvm/fixtures/Recover"
+    private val RARRAY = "dev/ide/jvm/fixtures/ReflectArray"
 
     private fun call(owner: String, name: String, desc: String, vararg args: Any?): Any? =
         vm.invokeStatic(owner, name, desc, args.toList())
@@ -252,5 +254,51 @@ class VmInterpreterTest {
     @Test fun platformMutatesInterpretedArrayInPlace() {
         assertEquals(Recover.sortFirst(3, 1, 2), call(RECOVER, "sortFirst", "(III)I", 3, 1, 2), "Arrays.sort in place")
         for (n in listOf(0, 4)) assertEquals(Recover.fillSum(n, 7), call(RECOVER, "fillSum", "(II)I", n, 7), "Arrays.fill in place")
+    }
+
+    // ---- arrays whose element type is an interpreted class ----------------------------------------
+
+    @Test fun reflectivelyCreatedArrayOfAnInterpretedType() {
+        // `(Segment[]) Array.newInstance(Segment.class, size)`, then fill it with `new Segment(...)`: the shape
+        // Spring's ConcurrentReferenceHashMap builds its segment table with. The component Class only STANDS FOR
+        // the interpreted type, so a real array of it can hold nothing the program creates.
+        for (n in listOf(0, 1, 4)) {
+            assertEquals(ReflectArray.segmentTotal(n), call(RARRAY, "segmentTotal", "(I)I", n), "segmentTotal($n)")
+        }
+    }
+
+    @Test fun reflectiveGetAndSetOnAnArrayOfAnInterpretedType() {
+        for (n in listOf(0, 3)) {
+            assertEquals(ReflectArray.reflectiveElementAccess(n), call(RARRAY, "reflectiveElementAccess", "(I)I", n), "access($n)")
+        }
+    }
+
+    @Test fun reflectivelyCreatedMultiDimensionalArrayOfAnInterpretedType() {
+        assertEquals(ReflectArray.matrixTotal(3, 2), call(RARRAY, "matrixTotal", "(II)I", 3, 2))
+    }
+
+    @Test fun nestedArrayOfAnInterpretedTypeCrossesTheBridge() {
+        assertEquals(ReflectArray.nestedArrayAcrossTheBridge(2, 3), call(RARRAY, "nestedArrayAcrossTheBridge", "(II)I", 2, 3))
+    }
+
+    @Test fun reflectiveArrayOfARealComponentTypeStaysReal() {
+        for (n in listOf(0, 3)) {
+            assertEquals(ReflectArray.realComponentType(n), call(RARRAY, "realComponentType", "(I)Ljava/lang/String;", n), "names($n)")
+        }
+    }
+
+    @Test fun platformSortsAReflectiveArrayOfInterpretedElements() {
+        assertEquals(ReflectArray.sortedByWeight(4), call(RARRAY, "sortedByWeight", "(I)I", 4))
+    }
+
+    @Test fun classLiteralForAnArrayOfAnInterpretedType() {
+        // `Segment[].class`: there is no real class of that name, so the literal is a real array of the
+        // interpreted type's reflection class, and reports that class as its component type.
+        assertEquals(ReflectArray.arrayClassLiteral(), (call(RARRAY, "arrayClassLiteral", "()Z") as Int) != 0)
+        assertEquals(ReflectArray.arrayClassByName(), (call(RARRAY, "arrayClassByName", "()Z") as Int) != 0, "literal == Class.forName")
+    }
+
+    @Test fun reflectiveArrayWhoseComponentTypeIsAnArrayOfAnInterpretedType() {
+        assertEquals(ReflectArray.nestedReflectiveArray(2, 3), call(RARRAY, "nestedReflectiveArray", "(II)I", 2, 3))
     }
 }

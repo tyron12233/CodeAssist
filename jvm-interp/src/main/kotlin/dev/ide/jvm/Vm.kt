@@ -395,12 +395,46 @@ class Vm(
             val ctorArgs = (args.getOrNull(0) as? Array<*>)?.toList() ?: emptyList()
             return Reflected(constructReflectively(internal, ctorArgs))
         }
+        // Array.newInstance(C, length) / (C, dimensions) where C is the reflection class STANDING FOR an
+        // interpreted type: a real array of that stand-in could hold nothing the program creates (its elements
+        // are interpreted instances, or their peers, never the stand-in itself), so the array is the
+        // interpreter's own, with the interpreted element type. This is how Spring's
+        // ConcurrentReferenceHashMap allocates its segment table: `(Segment[]) newInstance(Segment.class, n)`.
+        if (owner == "java/lang/reflect/Array" && receiver == null && name == "newInstance") {
+            val component = args.getOrNull(0) as? Class<*> ?: return null
+            val element = interpretedElementDescriptor(component) ?: return null // a real component type
+            val dims = when (val d = args.getOrNull(1)) {
+                is Int -> intArrayOf(d)
+                is IntArray -> d.takeIf { it.isNotEmpty() } ?: return null // let the real call raise its own error
+                else -> return null
+            }
+            return Reflected(VmArray.multi("[".repeat(dims.size) + element, dims))
+        }
         return null
     }
 
+    /** The interpreted element descriptor an array-component [Class] stands for: `Ldev/ide/Foo;` for the
+     *  reflection class of an interpreted type, `[Ldev/ide/Foo;` for an array of one (what `Foo[].class`
+     *  yields), or null when the component type is real. */
+    private fun interpretedElementDescriptor(component: Class<*>): String? = when {
+        component.isArray -> interpretedElementDescriptor(component.componentType)?.let { "[$it" }
+        else -> peerFactory.interpretedNameOf(component)?.let { "L$it;" }
+    }
+
     /** The real [Class] that stands for interpreted type [internalName] in reflection (its stub constructors
-     *  mirror the interpreted class's public constructors), or null when the type is not interpreted. */
+     *  mirror the interpreted class's public constructors), or null when the type is not interpreted. An ARRAY
+     *  name (`[Ldev/ide/Foo;`) stands for an interpreted type when its element type does, and is then a real
+     *  array of the element's reflection class, so `Foo[].class.getComponentType() == Foo.class`. */
     internal fun classForInterpreted(internalName: String): Class<*>? {
+        if (internalName.startsWith("[")) {
+            val element = internalName.substring(1)
+            val elementName = when {
+                element.startsWith("[") -> element // a nested array
+                element.startsWith("L") -> element.substring(1, element.length - 1)
+                else -> return null // a primitive element type: the array class is a real one
+            }
+            return classForInterpreted(elementName)?.let { arrayClassOf(it) }
+        }
         val cls = resolve(internalName) ?: return null
         val ctors = cls.methods
             .filter { it.name == "<init>" && it.access and Opcodes.ACC_PUBLIC != 0 }
@@ -495,12 +529,21 @@ class Vm(
         "B" -> Byte::class.javaPrimitiveType!!
         "C" -> Char::class.javaPrimitiveType!!
         "S" -> Short::class.javaPrimitiveType!!
-        else -> if (descriptor.startsWith("[")) loadReal(descriptor) else {
+        else -> if (descriptor.startsWith("[")) arrayClassOf(realComponentType(descriptor.substring(1))) else {
             val internalName = descriptor.substring(1, descriptor.length - 1)
             val cls = resolve(internalName)
             if (cls != null) loadReal(realSuperName(cls)) else loadReal(internalName)
         }
     }
+
+    /** The real array class with [component] as its component type. A nested array's element type is resolved
+     *  through [realComponentType] rather than by loading the descriptor's own name, because an interpreted
+     *  element type has no real class of that name to load, and a host classpath that happens to carry one
+     *  carries the wrong class (the elements crossing the bridge are peers of the interpreted type's real
+     *  supertype). Allocating an empty array names the class on every runtime, unlike `Class.arrayType`, which
+     *  is API 33+ on Android. */
+    private fun arrayClassOf(component: Class<*>): Class<*> =
+        java.lang.reflect.Array.newInstance(component, 0).javaClass
 
     /** Create the peer for [o] at the interpreted `super(...)` call into a real supertype, invoking that exact
      *  superclass constructor with the given (interpreter-representation) arguments. A trivial class (no real
@@ -637,7 +680,9 @@ class Vm(
      *  reflection class — the same object `loadClass`/`Class.forName` return for it and that
      *  [interceptReflection] recognises, so `X.class` and a reflectively-loaded `X` compare equal. */
     internal fun classLiteral(type: Type): Any = when {
-        type.sort == Type.ARRAY -> Class.forName(type.descriptor.replace('/', '.'), false, loader)
+        type.sort == Type.ARRAY -> classForInterpreted(type.descriptor)
+            ?: Class.forName(type.descriptor.replace('/', '.'), false, loader)
+
         else -> classForInterpreted(type.internalName) ?: loadReal(type.internalName)
     }
 

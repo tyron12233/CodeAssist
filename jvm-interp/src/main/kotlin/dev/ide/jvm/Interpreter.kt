@@ -1696,14 +1696,6 @@ internal class Interpreter(private val vm: Vm) {
     private fun multiArray(insn: MultiANewArrayInsnNode, frame: Frame): VmArray {
         val dims = IntArray(insn.dims)
         for (i in insn.dims - 1 downTo 0) dims[i] = frame.popI()
-        return buildMultiArray(insn.desc, dims, 0)
-    }
-
-    private fun buildMultiArray(arrayDesc: String, dims: IntArray, depth: Int): VmArray {
-        val elementDesc = arrayDesc.substring(1) // strip one leading '['
-        val arr = VmArray.of(elementDesc, dims[depth])
-        if (depth + 1 < dims.size) for (i in 0 until dims[depth]) arr.data[i] =
-            buildMultiArray(elementDesc, dims, depth + 1)
-        return arr
+        return VmArray.multi(insn.desc, dims)
     }
 }
