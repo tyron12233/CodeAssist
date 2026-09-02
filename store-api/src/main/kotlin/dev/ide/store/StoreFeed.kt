@@ -83,8 +83,19 @@ data class ChartEntry(
     val delta: Int? get() = previousRank?.let { it - rank }
 }
 
-/** One tab of the Top charts shelf. */
-data class ChartTab(val key: String, val label: String, val entries: List<ChartEntry>)
+/**
+ * One tab of the Top charts shelf.
+ *
+ * [metric] is what the tab ranks on, sent by the server rather than inferred from [key]: the row's meta
+ * line has to name the thing being ranked, and a client that switched on the key alone would silently
+ * label a newly-added tab with install counts it is not ordered by.
+ */
+data class ChartTab(
+    val key: String,
+    val label: String,
+    val entries: List<ChartEntry>,
+    val metric: String? = null,
+)
 
 /** An editorial shelf. The title is an outcome ("Ship your first Android app"), never a category. */
 data class StoreCollection(
@@ -113,9 +124,43 @@ data class StorePublisher(
     val followerCount: Int = 0,
 )
 
-/** One ghost shelf's progress toward switching on. */
-data class GhostShelf(val key: String, val have: Int, val need: Int) {
+/**
+ * One ghost shelf's progress toward switching on.
+ *
+ * [title] and [note] come from the shelf the server is actually gating, so a shelf added to the registry
+ * appears here with its own copy instead of falling back to a generic card. The client keeps hand-written
+ * copy for the shelves it knows and uses these otherwise.
+ */
+data class GhostShelf(
+    val key: String,
+    val have: Int,
+    val need: Int,
+    val title: String? = null,
+    val note: String? = null,
+) {
     val remaining: Int get() = (need - have).coerceAtLeast(0)
+}
+
+/**
+ * How a shelf is drawn.
+ *
+ * The server picks it per shelf, which is what makes a new shelf able to arrive with a new look and no
+ * app release. An unrecognised value falls back to [ROWS] rather than dropping the section: losing a
+ * shelf because this build does not know its *look* would throw away content the server meant to show,
+ * which is the opposite of the rule that governs unknown section types.
+ */
+enum class ShelfLayout {
+    ROWS, CAROUSEL, POSTER, GRID, RANK;
+
+    companion object {
+        fun of(raw: String?): ShelfLayout = when (raw?.lowercase()) {
+            "carousel" -> CAROUSEL
+            "poster" -> POSTER
+            "grid" -> GRID
+            "rank" -> RANK
+            else -> ROWS
+        }
+    }
 }
 
 /**
@@ -138,6 +183,7 @@ sealed interface StoreSection {
         val tabs: List<ChartTab>,
         /** When the ranking was computed. The "live" dot is honest only because this is shown. */
         val computedAt: String? = null,
+        val title: String? = null,
     ) : StoreSection
 
     data class Collections(
@@ -164,10 +210,20 @@ sealed interface StoreSection {
 
     data class Spotlight(override val id: String, val publisher: StorePublisher) : StoreSection
 
-    /** A plain titled list ("New & updated"). */
-    data class ItemList(
+    /**
+     * A merchandised shelf: a title and a list of projects, drawn the way [layout] says.
+     *
+     * This is the section type the shelf registry emits for everything that is not one of the three
+     * shapes carrying data a generic shelf has nowhere to put (the hero, the sparse catalogue's `order`,
+     * and the personalized shelf's seed). Adding a shelf server-side needs no new type here.
+     */
+    data class Shelf(
         override val id: String,
-        val title: String,
+        val title: String?,
+        val subtitle: String? = null,
+        val eyebrow: String? = null,
+        val iconKey: String? = null,
+        val layout: ShelfLayout = ShelfLayout.ROWS,
         val items: List<RemoteStoreItem>,
     ) : StoreSection
 
@@ -211,7 +267,7 @@ data class StoreFeed(
             when (it) {
                 is StoreSection.Featured -> it.items
                 is StoreSection.Personalized -> it.items
-                is StoreSection.ItemList -> it.items
+                is StoreSection.Shelf -> it.items
                 is StoreSection.Catalogue -> it.items
                 is StoreSection.Charts -> it.tabs.flatMap { t -> t.entries.map { e -> e.project } }
                 else -> emptyList()

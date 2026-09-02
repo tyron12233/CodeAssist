@@ -1,5 +1,6 @@
 package dev.ide.model.impl
 
+import dev.ide.model.FacetCodec
 import dev.ide.model.Facet
 import dev.ide.model.FacetKey
 import dev.ide.platform.PluginId

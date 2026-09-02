@@ -1,3 +1,6 @@
+// Copyright (C) 2026 tyron12233
+// SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
+// See LICENSE-EXCEPTION: a plugin linking against this file may use any license.
 package dev.ide.plugin
 
 import dev.ide.platform.PluginId
@@ -8,6 +11,22 @@ import dev.ide.platform.PluginId
  * fail later as a linkage error. Bumped whenever the SPI changes incompatibly.
  */
 const val PLUGIN_API_VERSION: Int = 1
+
+/**
+ * The version the SPI artifacts are published under, so a project that compiles against them can be
+ * scaffolded with a coordinate that resolves:
+ *
+ * ```
+ * compileOnly("io.github.tyron12233:plugin-api:1.0.0")
+ * compileOnly("io.github.tyron12233:platform-core:1.0.0")
+ * ```
+ *
+ * Independent of the IDE's own version, because the SPI changes far less often than the app ships.
+ * Whether a plugin is *compatible* is decided by [PLUGIN_API_VERSION] and the manifest's
+ * [PluginManifest.minHostVersion], never by this coordinate. The publishing configuration reads this
+ * constant, so what a scaffolded project asks for and what is actually published cannot drift.
+ */
+const val PLUGIN_SPI_VERSION: String = "1.0.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry

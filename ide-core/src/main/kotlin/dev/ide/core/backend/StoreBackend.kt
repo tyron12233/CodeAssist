@@ -86,7 +86,11 @@ internal class StoreBackend(
         if (!source.configured()) return null
         return withContext(dev.ide.core.backend.storeIo) {
             val bundled = bundledBySlug()
-            when (val result = source.feedDocument(seedItemId)) {
+            // The caller rarely knows a seed — the Explore route has none to give — so fall back to the
+            // device's own most recent install. Without this the personalized shelf is unreachable in the
+            // shipping app however well the server computes it, which is what it was.
+            val seed = seedItemId ?: history.mostRecent()
+            when (val result = source.feedDocument(seed)) {
                 is dev.ide.store.StoreResult.Ok -> {
                     val parsed = dev.ide.store.impl.StoreFeedParser.parse(result.value)
                     if (parsed == null) {
@@ -114,9 +118,17 @@ internal class StoreBackend(
      * happen: the count belongs to a finished install, not to a tap.
      */
     override fun recordInstall(id: String) {
+        // Remembered before the network call and regardless of it: the seed is about this device, and a
+        // store that cannot be reached is exactly when the cached feed still needs one.
+        history.remember(id)
         if (!source.configured()) return
         val installId = ctx.manager?.preference(INSTALL_ID_PREF) ?: return
         runCatching { source.recordInstall(id, installId) }
+    }
+
+    /** Beside the feed cache it is read with, because the two are read on the same request. */
+    private val history = StoreInstallHistory {
+        ctx.manager?.storageRoot?.let { java.io.File(it.toFile(), "store/installed.txt") }
     }
 
     // ---- likes, and the Saved shelf they back ----

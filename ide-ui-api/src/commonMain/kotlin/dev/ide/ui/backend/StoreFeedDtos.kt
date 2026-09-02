@@ -45,7 +45,18 @@ data class UiChartEntry(
     val delta: Int? get() = previousRank?.let { it - rank }
 }
 
-data class UiChartTab(val key: String, val label: String, val entries: List<UiChartEntry>)
+/**
+ * One tab of the Top charts shelf.
+ *
+ * [metric] names what the tab ranks on. It is server-sent rather than derived from [key] so a tab added
+ * to the store does not silently label itself with a count it is not ordered by.
+ */
+data class UiChartTab(
+    val key: String,
+    val label: String,
+    val entries: List<UiChartEntry>,
+    val metric: String? = null,
+)
 
 /** An editorial shelf. The title is an outcome, never a category. */
 data class UiStoreCollection(
@@ -70,8 +81,27 @@ data class UiStorePublisher(
     val followerCount: Int = 0,
 )
 
-/** One ghost shelf's progress toward switching on. */
-data class UiGhostShelf(val key: String, val have: Int, val need: Int)
+/**
+ * One ghost shelf's progress toward switching on.
+ *
+ * [title] and [note] come from the shelf being gated, so a shelf added server-side shows its own copy
+ * instead of a generic card. The screen keeps hand-written copy for the shelves it knows about.
+ */
+data class UiGhostShelf(
+    val key: String,
+    val have: Int,
+    val need: Int,
+    val title: String? = null,
+    val note: String? = null,
+)
+
+/**
+ * How a shelf is drawn.
+ *
+ * Chosen per shelf by the server, which is what lets a new shelf arrive with a new look and no app
+ * release. Anything unrecognised has already become [ROWS] by the time it reaches here.
+ */
+enum class UiShelfLayout { ROWS, CAROUSEL, POSTER, GRID, RANK }
 
 /** A section of the feed. Sealed so the screen's `when` is exhaustive over what it can draw. */
 sealed interface UiFeedSection {
@@ -84,6 +114,7 @@ sealed interface UiFeedSection {
         override val id: String,
         val tabs: List<UiChartTab>,
         val computedAt: String? = null,
+        val title: String? = null,
     ) : UiFeedSection
 
     data class Collections(
@@ -110,7 +141,21 @@ sealed interface UiFeedSection {
 
     data class Spotlight(override val id: String, val publisher: UiStorePublisher) : UiFeedSection
 
-    data class ItemList(override val id: String, val title: String, val items: List<UiStoreItem>) : UiFeedSection
+    /**
+     * A merchandised shelf: a title and a list of projects, drawn the way [layout] says.
+     *
+     * One section type covers every server-defined shelf, so adding "Most liked" or a seasonal promotion
+     * needs a row in the store's shelf registry and nothing here.
+     */
+    data class Shelf(
+        override val id: String,
+        val title: String?,
+        val subtitle: String? = null,
+        val eyebrow: String? = null,
+        val iconId: String? = null,
+        val layout: UiShelfLayout = UiShelfLayout.ROWS,
+        val items: List<UiStoreItem>,
+    ) : UiFeedSection
 
     /** The sparse state's single list: everything, newest first. */
     data class Catalogue(
@@ -146,7 +191,7 @@ data class UiStoreFeed(
         get() = sections.flatMap { section ->
             when (section) {
                 is UiFeedSection.Featured -> section.items
-                is UiFeedSection.ItemList -> section.items
+                is UiFeedSection.Shelf -> section.items
                 is UiFeedSection.Catalogue -> section.items
                 is UiFeedSection.Personalized -> section.items
                 is UiFeedSection.Charts -> section.tabs.flatMap { tab -> tab.entries.map { it.item } }

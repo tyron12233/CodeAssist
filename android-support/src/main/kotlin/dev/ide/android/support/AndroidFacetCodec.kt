@@ -1,6 +1,6 @@
 package dev.ide.android.support
 
-import dev.ide.model.impl.FacetCodec
+import dev.ide.model.FacetCodec
 
 /**
  * Round-trips [AndroidFacet] through the `[android]` table of `module.toml`. Persistence stores a facet

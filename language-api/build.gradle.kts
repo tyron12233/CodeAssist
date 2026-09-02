@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
     `java-library`
+    // Published for plugin authors to compile against; see the convention plugin for the coordinate.
+    id("dev.ide.spi-publish")
 }
 
 // language-api -> project-model-api, vfs-api, platform-core. ClasspathSnapshot, VirtualFile and

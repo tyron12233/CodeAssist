@@ -54,6 +54,8 @@ internal class WorkspaceImpl(private val store: ProjectModelStore) : Workspace {
     override val libraryTable: LibraryTable get() = LibraryTableImpl(store, projectId = null)
     override val sdkTable: SdkTable get() = SdkTableImpl(store.data.sdks, store)
     override fun <T : Any> service(key: ServiceKey<T>): T = store.workspaceContainer.getService(key)
+    override fun <T : Any> serviceOrNull(key: ServiceKey<T>): T? =
+        store.workspaceContainer.getServiceOrNull(key)
     override fun beginModification(): WorkspaceTransaction = WorkspaceTransactionImpl(store)
 }
 

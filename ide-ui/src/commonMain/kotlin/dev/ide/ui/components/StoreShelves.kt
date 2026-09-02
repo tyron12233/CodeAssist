@@ -141,11 +141,15 @@ private fun IconStack(iconIds: List<String>, pair: TonalPair) {
 }
 
 /**
- * A 146 dp poster for the personalized row.
+ * A 146 dp poster for a horizontal shelf.
  *
  * Art block on top, name and rating below — the shape that lets a row of these read as a shelf of things
  * rather than a list of rows. The language badge is inverted against the art so it stays legible on any
  * of the three tonal colours.
+ *
+ * [fillWidth] drops the fixed width so the same card can sit in a grid cell. The width has to be
+ * conditional rather than left to the caller's modifier: `.width()` applied here would override any
+ * `weight` the caller passed, and the grid cell would silently stay 146 dp wide.
  */
 @Composable
 fun PosterCard(
@@ -153,13 +157,14 @@ fun PosterCard(
     index: Int,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
+    fillWidth: Boolean = false,
 ) {
     val c = MaterialTheme.colorScheme
     // +1 so a poster row never starts on the same tint as the shelf above it.
     val pair = tonalPair(index + 1)
     val interaction = remember { MutableInteractionSource() }
     Column(
-        modifier.width(146.dp).clickable(
+        modifier.then(if (fillWidth) Modifier else Modifier.width(146.dp)).clickable(
             interactionSource = interaction,
             indication = null,
             onClick = onOpen,

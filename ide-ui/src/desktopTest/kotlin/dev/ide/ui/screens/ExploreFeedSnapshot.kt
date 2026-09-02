@@ -15,6 +15,7 @@ import dev.ide.ui.backend.UiChartEntry
 import dev.ide.ui.backend.UiChartTab
 import dev.ide.ui.backend.UiFeedSection
 import dev.ide.ui.backend.UiGhostShelf
+import dev.ide.ui.backend.UiShelfLayout
 import dev.ide.ui.backend.UiStoreCollection
 import dev.ide.ui.backend.UiStoreFeed
 import dev.ide.ui.backend.UiStoreItem
@@ -106,11 +107,15 @@ class ExploreFeedSnapshot {
                             UiChartEntry(3, 3, catalogue[3]),   // flat
                             UiChartEntry(4, null, catalogue[2]), // new entrant
                         ),
+                        metric = "installs",
                     ),
-                    UiChartTab("top_rated", "Top rated", listOf(UiChartEntry(1, 1, catalogue[0]))),
-                    UiChartTab("new", "New", listOf(UiChartEntry(1, null, catalogue[2]))),
+                    UiChartTab("top_rated", "Top rated", listOf(UiChartEntry(1, 1, catalogue[0])), "rating"),
+                    UiChartTab("new", "New", listOf(UiChartEntry(1, null, catalogue[2])), "recency"),
+                    // A tab this build has no hardcoded copy for: its meta line comes from `metric`.
+                    UiChartTab("most_liked", "Most liked", listOf(UiChartEntry(1, 2, catalogue[1])), "likes"),
                 ),
                 computedAt = "2026-09-01T09:00:00Z",
+                title = "Top charts",
             ),
             UiFeedSection.Collections(
                 "curated", "Collections", "curated by the team",
@@ -132,7 +137,30 @@ class ExploreFeedSnapshot {
                     verified = true, projectCount = 14, installCount = 92_000, rating = 4.7f, followerCount = 128,
                 ),
             ),
-            UiFeedSection.ItemList("new-updated", "New & updated", catalogue),
+            // One section type, every look the server can ask for. Rendering all five in one frame is
+            // what makes "a new shelf needs no app release" checkable rather than a claim.
+            UiFeedSection.Shelf(
+                id = "editors-choice", title = "Editor's Choice", eyebrow = "Editorial",
+                subtitle = "Hand-picked by the review team",
+                layout = UiShelfLayout.POSTER, items = catalogue,
+            ),
+            UiFeedSection.Shelf(
+                id = "most-liked", title = "Most liked",
+                subtitle = "What the community keeps coming back to",
+                layout = UiShelfLayout.CAROUSEL, items = catalogue,
+            ),
+            UiFeedSection.Shelf(
+                id = "kotlin-picks", title = "Kotlin picks",
+                layout = UiShelfLayout.GRID, items = catalogue,
+            ),
+            UiFeedSection.Shelf(
+                id = "all-time", title = "All time",
+                layout = UiShelfLayout.RANK, items = catalogue,
+            ),
+            UiFeedSection.Shelf(
+                id = "new-updated", title = "New & updated",
+                layout = UiShelfLayout.ROWS, items = catalogue,
+            ),
         ),
     )
 
@@ -151,7 +179,7 @@ class ExploreFeedSnapshot {
 
     @Test fun sparseDark() = snapshot("explore-sparse-dark.png", sparseFeed, dark = true, height = 4600)
     @Test fun sparseLight() = snapshot("explore-sparse-light.png", sparseFeed, dark = false, height = 3600)
-    @Test fun populatedDark() = snapshot("explore-pop-dark.png", populatedFeed, dark = true, height = 4200)
+    @Test fun populatedDark() = snapshot("explore-pop-dark.png", populatedFeed, dark = true, height = 7200)
     @Test fun emptyDark() = snapshot("explore-empty-dark.png", emptyFeed, dark = true, height = 2600)
     @Test fun emptyLight() = snapshot("explore-empty-light.png", emptyFeed, dark = false, height = 2600)
 

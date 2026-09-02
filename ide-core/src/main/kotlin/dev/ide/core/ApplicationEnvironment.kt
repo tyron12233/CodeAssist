@@ -12,6 +12,7 @@ import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.external.DiscoveredPlugin
 import dev.ide.plugin.external.PluginOrigin
 import dev.ide.plugin.external.PluginSource
+import dev.ide.plugin.external.RejectedPlugin
 import dev.ide.plugin.PLUGIN_API_VERSION
 import dev.ide.plugin.impl.ExternalPluginLoader
 import dev.ide.plugin.impl.PluginCatalog
@@ -56,9 +57,16 @@ class ApplicationEnvironment(
     /** Where installed (non built-in) plugins come from. Empty on desktop and in tests, so the environment
      *  loads exactly the built-ins and nothing a third party wrote. */
     pluginSources: List<PluginSource> = emptyList(),
+    /**
+     * Installed-plugin ids the user has accepted. An installed plugin absent from this set does not load:
+     * finding a plugin app on the device is not the user agreeing to run its code inside this process, so
+     * the decision is asked for rather than assumed. Built-ins are unaffected.
+     */
+    consentedPluginIds: Set<String> = emptySet(),
     /** The running IDE's version, checked against an installed plugin's `minHostVersion`. Null skips
-     *  that check (the host did not supply a version). */
-    hostVersion: String? = null,
+     *  that check (the host did not supply a version). Also read by the editor's manifest checks, so an
+     *  authored `minHostVersion` is judged against the same value the loader uses. */
+    val hostVersion: String? = null,
 ) : AutoCloseable {
 
     /** The app substrate: app-global extension registry + message bus + model lock. */
@@ -79,7 +87,7 @@ class ApplicationEnvironment(
 
     /** Drives the IDE's built-in plugins onto [platform]'s app-global registry. The app-wide message bus is
      *  passed so a plugin's registrar can publish/subscribe on the same bus the engine's events flow through. */
-    private val pluginManager = PluginManager(platform.extensions, platform.messageBus)
+    private val pluginManager = PluginManager(platform.extensions, platform.messageBus, hostVersion)
 
     /**
      * The built-in plugin catalog: every built-in plus which are active, given the host's persisted disabled
@@ -95,6 +103,15 @@ class ApplicationEnvironment(
      * one that did not load.
      */
     val installedPlugins: List<InstalledPlugin>
+
+    /**
+     * Plugin packages a [PluginSource] found this launch but could not offer for loading: a missing or
+     * malformed packaged manifest, or an id another plugin already holds. They have no usable manifest, so no
+     * catalog entry and no enable/disable choice. The Plugins settings screen lists them under Installed with
+     * their reason, so a plugin the user installed and the IDE could not read stays visible instead of
+     * looking like one the IDE never saw.
+     */
+    val rejectedPlugins: List<RejectedPlugin>
 
     /**
      * The Compose UI facets ([dev.ide.ui.ext.UiPlugin]) of the ENABLED built-in plugins, in load order. The
@@ -116,12 +133,15 @@ class ApplicationEnvironment(
         // Discovery reads manifests only. Nothing a source found runs before the catalog has applied the
         // user's disabled set, so a plugin the user turned off never gets a classloader, let alone a
         // register() call.
-        val discovered = discover(pluginSources, builtInIds)
+        val scan = discover(pluginSources, builtInIds)
+        val discovered = scan.usable
+        rejectedPlugins = scan.rejected
         val failures = LinkedHashMap<String, String>()
         pluginCatalog = PluginCatalog(
             all = builtIns.map { it.engine.manifest } + discovered.map { it.manifest },
             disabledIds = disabledPluginIds,
             externalIds = discovered.mapTo(HashSet()) { it.manifest.id },
+            consentedIds = consentedPluginIds,
         )
 
         val enabledBuiltIns = builtIns.filter { pluginCatalog.isEnabled(it.engine.manifest.id) }
@@ -167,14 +187,23 @@ class ApplicationEnvironment(
         container.registerServiceIfAbsent(PROJECT_TEMPLATES) { ProjectTemplateRegistry(platform.extensions) }
     }
 
+    /** One discovery pass: the plugins the host can go on to load, and the ones it cannot. */
+    private class Scan(val usable: List<DiscoveredPlugin>, val rejected: List<RejectedPlugin>)
+
     /**
-     * Every source's plugins, with anything unusable dropped before it can reach the catalog: a source that
-     * throws, a manifest that claims a built-in's id, and a second plugin claiming an id already taken.
+     * Every source's plugins, split so nothing unusable can reach the catalog. A source that throws is
+     * skipped whole. A manifest claiming an id that a built-in or an earlier plugin already holds is rejected
+     * rather than dropped, so the reason reaches the user instead of only the log.
+     *
+     * Ids collide case-insensitively. An id keeps the case it was written in (it is compared exactly
+     * everywhere else, including `dependsOn`), but two plugins whose ids differ only in capitalisation would
+     * be indistinguishable in the Plugins screen, so the second one is rejected.
      */
-    private fun discover(sources: List<PluginSource>, builtInIds: Set<String>): List<DiscoveredPlugin> {
-        if (sources.isEmpty()) return emptyList()
-        val seen = HashSet(builtInIds)
-        val out = ArrayList<DiscoveredPlugin>()
+    private fun discover(sources: List<PluginSource>, builtInIds: Set<String>): Scan {
+        if (sources.isEmpty()) return Scan(emptyList(), emptyList())
+        val seen = builtInIds.mapTo(HashSet()) { it.lowercase() }
+        val usable = ArrayList<DiscoveredPlugin>()
+        val rejected = ArrayList<RejectedPlugin>()
         for (source in sources) {
             val found = try {
                 source.discover()
@@ -182,15 +211,26 @@ class ApplicationEnvironment(
                 log.warn("plugin source '${source.id}' failed to enumerate installed plugins", t)
                 continue
             }
-            for (plugin in found) {
-                if (!seen.add(plugin.manifest.id)) {
-                    log.warn("ignoring plugin from ${plugin.origin.label}: id '${plugin.manifest.id}' is taken")
-                    continue
+            for (candidate in found) {
+                when (candidate) {
+                    is RejectedPlugin -> rejected += candidate
+                    is DiscoveredPlugin -> {
+                        val id = candidate.manifest.id
+                        if (seen.add(id.lowercase())) {
+                            usable += candidate
+                        } else {
+                            log.warn("ignoring plugin from ${candidate.origin.label}: id '$id' is taken")
+                            rejected += RejectedPlugin(
+                                origin = candidate.origin,
+                                reason = "the plugin id '$id' is already in use",
+                                name = candidate.manifest.name,
+                            )
+                        }
+                    }
                 }
-                out += plugin
             }
         }
-        return out
+        return Scan(usable, rejected)
     }
 
     private companion object {

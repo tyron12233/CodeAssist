@@ -144,6 +144,14 @@ fun ChartRow(
     onOpen: () -> Unit,
     onAction: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * False on a ranked shelf that is not a chart.
+     *
+     * Such a shelf has no previous snapshot behind it, and a null `previousRank` means "new entrant" —
+     * so drawing the indicator anyway would put a climbing arrow on every row of a list that has never
+     * been ranked before.
+     */
+    showMovement: Boolean = true,
 ) {
     val c = MaterialTheme.colorScheme
     Row(
@@ -166,7 +174,7 @@ fun ChartRow(
                 ),
                 color = if (entry.rank == 1) c.primary else c.onSurfaceVariant,
             )
-            Movement(entry)
+            if (showMovement) Movement(entry)
         }
         TemplateIcon(
             iconId = entry.item.iconId,
@@ -245,6 +253,7 @@ fun ChartCard(
     onOpen: (UiChartEntry) -> Unit,
     onAction: (UiChartEntry) -> Unit,
     modifier: Modifier = Modifier,
+    showMovement: Boolean = true,
 ) {
     Surface(
         shape = RoundedCornerShape(28.dp),
@@ -260,6 +269,7 @@ fun ChartCard(
                     actionLabel = actionFor(e),
                     onOpen = { onOpen(e) },
                     onAction = { onAction(e) },
+                    showMovement = showMovement,
                 )
             }
         }
@@ -269,17 +279,25 @@ fun ChartCard(
 /**
  * The meta line changes per tab, because each tab is ranking on a different thing and the row should say
  * which. Showing installs under "Top rated" would leave the ranking unexplained.
+ *
+ * [metric] is the server's word for what the tab ranks on, not the tab's key. A store that adds a tab
+ * says what it ranks on in the feed; keying this on the tab name instead would send every new tab down
+ * the installs branch and quietly mislabel it.
  */
-fun chartMeta(entry: UiChartEntry, tabKey: String): String {
+fun chartMeta(entry: UiChartEntry, metric: String): String {
     val item = entry.item
-    return when (tabKey) {
-        "top_rated" -> buildString {
+    return when (metric) {
+        "likes", "most_liked" -> listOfNotNull(
+            item.likes.takeIf { it > 0 }?.let { countLabel(it, "like") },
+            item.language,
+        ).joinToString(" · ").ifBlank { item.category }
+        "rating", "top_rated" -> buildString {
             append(item.rating.takeIf { it >= 0f }?.let { formatRating(it) } ?: "Not rated yet")
             if (item.ratingCount > 0) append(" · ").append(countLabel(item.ratingCount, "review"))
         }
-        // "New" ranks on recency, so the row names the kind and language rather than a count that
-        // would not explain the ordering.
-        "new" -> listOfNotNull(kindWord(item), item.language).joinToString(" · ").ifBlank { item.category }
+        // Recency ranks on time, so the row names the kind and language rather than a count that would
+        // not explain the ordering.
+        "recency", "new" -> listOfNotNull(kindWord(item), item.language).joinToString(" · ").ifBlank { item.category }
         else -> listOfNotNull(
             item.installs.takeIf { it >= 0 }?.let { installsLabel(it) },
             item.language,

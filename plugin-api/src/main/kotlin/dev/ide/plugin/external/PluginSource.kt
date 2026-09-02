@@ -1,3 +1,6 @@
+// Copyright (C) 2026 tyron12233
+// SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
+// See LICENSE-EXCEPTION: a plugin linking against this file may use any license.
 package dev.ide.plugin.external
 
 import dev.ide.plugin.PluginManifest
@@ -18,17 +21,27 @@ data class PluginOrigin(
 )
 
 /**
+ * Something a [PluginSource] found: either a [DiscoveredPlugin] the host can go on to load, or a
+ * [RejectedPlugin] it cannot. Both are reported, because a plugin app the user installed and the IDE then
+ * dropped in silence is indistinguishable from one the IDE never saw.
+ */
+sealed interface PluginCandidate {
+    /** Where this candidate came from. */
+    val origin: PluginOrigin
+}
+
+/**
  * A plugin a [PluginSource] found but has not loaded: its parsed manifest plus the means to materialise its
  * code. Discovery is deliberately code-free, so the host can build the enable/disable catalogue, honour the
  * user's disabled set, and render the Plugins screen without executing anything a third party wrote.
  * [classLoader] is called only for a plugin that survives that pass.
  */
-interface DiscoveredPlugin {
+interface DiscoveredPlugin : PluginCandidate {
     /** The plugin's declared identity, parsed from its packaged manifest, not from its code. */
     val manifest: PluginManifest
 
     /** Where this plugin came from. */
-    val origin: PluginOrigin
+    override val origin: PluginOrigin
 
     /**
      * Build the classloader the plugin's [PluginManifest.entryPoints] are instantiated from. The parent must
@@ -42,6 +55,20 @@ interface DiscoveredPlugin {
 }
 
 /**
+ * A plugin a source found but cannot offer for loading, with the user-facing [reason]. It has no usable
+ * manifest, so there is no id to attribute contributions to or to persist an enable/disable choice against,
+ * and it never reaches the plugin catalogue. It is carried only so the Plugins settings screen can show that
+ * the IDE saw this plugin and why it was not used.
+ */
+data class RejectedPlugin(
+    override val origin: PluginOrigin,
+    /** What is wrong with the plugin, phrased for the user. */
+    val reason: String,
+    /** The best display name the source could read (an app label), falling back to the package name. */
+    val name: String = origin.label,
+) : PluginCandidate
+
+/**
  * A place installed plugins come from. The host holds zero or more, queries each at startup, and merges what
  * they return with its built-ins into one catalogue.
  *
@@ -53,6 +80,9 @@ interface PluginSource {
     /** Stable id of this source, recorded on every [PluginOrigin] it produces. */
     val id: String
 
-    /** Every plugin this source can currently see, in no particular order. */
-    fun discover(): List<DiscoveredPlugin>
+    /**
+     * Every plugin this source can currently see, in no particular order, including any it found but could
+     * not turn into a [DiscoveredPlugin].
+     */
+    fun discover(): List<PluginCandidate>
 }

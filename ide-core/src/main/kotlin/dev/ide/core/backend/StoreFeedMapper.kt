@@ -3,6 +3,7 @@ package dev.ide.core.backend
 import dev.ide.store.ChartEntry
 import dev.ide.store.RemoteItemKind
 import dev.ide.store.RemoteStoreItem
+import dev.ide.store.ShelfLayout
 import dev.ide.store.StoreFeed
 import dev.ide.store.StoreMode
 import dev.ide.store.StoreSection
@@ -10,6 +11,7 @@ import dev.ide.ui.backend.UiChartEntry
 import dev.ide.ui.backend.UiChartTab
 import dev.ide.ui.backend.UiFeedSection
 import dev.ide.ui.backend.UiGhostShelf
+import dev.ide.ui.backend.UiShelfLayout
 import dev.ide.ui.backend.UiStoreCollection
 import dev.ide.ui.backend.UiStoreFeed
 import dev.ide.ui.backend.UiStoreItem
@@ -66,9 +68,10 @@ internal object StoreFeedMapper {
         is StoreSection.Charts -> UiFeedSection.Charts(
             id = section.id,
             tabs = section.tabs.map { tab ->
-                UiChartTab(tab.key, tab.label, tab.entries.map { it.toUi(bundled) })
+                UiChartTab(tab.key, tab.label, tab.entries.map { it.toUi(bundled) }, tab.metric)
             },
             computedAt = section.computedAt,
+            title = section.title,
         )
 
         is StoreSection.Collections -> UiFeedSection.Collections(
@@ -116,8 +119,21 @@ internal object StoreFeedMapper {
             ),
         )
 
-        is StoreSection.ItemList ->
-            UiFeedSection.ItemList(section.id, section.title, section.items.map { it.toUi(bundled) })
+        is StoreSection.Shelf -> UiFeedSection.Shelf(
+            id = section.id,
+            title = section.title,
+            subtitle = section.subtitle,
+            eyebrow = section.eyebrow,
+            iconId = section.iconKey,
+            layout = when (section.layout) {
+                ShelfLayout.ROWS -> UiShelfLayout.ROWS
+                ShelfLayout.CAROUSEL -> UiShelfLayout.CAROUSEL
+                ShelfLayout.POSTER -> UiShelfLayout.POSTER
+                ShelfLayout.GRID -> UiShelfLayout.GRID
+                ShelfLayout.RANK -> UiShelfLayout.RANK
+            },
+            items = section.items.map { it.toUi(bundled) },
+        )
 
         is StoreSection.Catalogue ->
             UiFeedSection.Catalogue(section.id, section.title, section.items.map { it.toUi(bundled) })
@@ -128,7 +144,7 @@ internal object StoreFeedMapper {
 
         is StoreSection.GhostShelves -> UiFeedSection.GhostShelves(
             id = section.id,
-            shelves = section.shelves.map { UiGhostShelf(it.key, it.have, it.need) },
+            shelves = section.shelves.map { UiGhostShelf(it.key, it.have, it.need, it.title, it.note) },
         )
     }
 

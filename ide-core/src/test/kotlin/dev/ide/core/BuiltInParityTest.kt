@@ -70,8 +70,11 @@ class BuiltInParityTest {
             "ide.service.projectSync", "ide.service.languageFeatures", "ide.service.androidResources",
             "ide.service.refactor", "ide.service.kotlinEditor", "ide.service.composePreview",
             "ide.service.icons",
+            // The android plugin's shared resource-repository cache, which the synthetic `R` resolves through
+            // the workspace it is handed rather than through the open project.
+            "android.resourceRepository",
         )
-        assertEquals(moduleAnalyzers + workspaceServices, byId.keys, "exactly the 15 engine services")
+        assertEquals(moduleAnalyzers + workspaceServices, byId.keys, "exactly the 16 engine services")
         moduleAnalyzers.forEach { assertEquals(ServiceScopeLevel.MODULE, byId.getValue(it).level, it) }
         workspaceServices.forEach { assertEquals(ServiceScopeLevel.WORKSPACE, byId.getValue(it).level, it) }
     }

@@ -28,6 +28,7 @@ import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSeverity
 import dev.ide.build.CyclicTaskDependencyException
 import dev.ide.build.RUN_TASK_PROVIDER_EP
+import dev.ide.core.plugins.PluginProject
 import dev.ide.build.RunAction
 import dev.ide.build.SOURCE_GENERATOR_EP
 import dev.ide.build.SourceGenerator
@@ -645,7 +646,10 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                 // On device, the android Run builds + installs + launches; on desktop it stops at assemble.
                 if (ctx.apkInstaller != null) add(
                     RunTaskOption(
-                        "androidRun:${m.name}:${v.name}", "Run $cap · ${m.name}", "android"
+                        "androidRun:${m.name}:${v.name}",
+                        if (PluginProject.isPluginModule(m)) "Install plugin $cap · ${m.name}"
+                        else "Run $cap · ${m.name}",
+                        "android",
                     )
                 )
                 else add(
@@ -908,13 +912,27 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                         buildContext(),
                     )
                     val apk = AndroidBuildSystem.signedApkPath(module, variant)
+                    // A plugin module installs like any app, but what happens next is different: the IDE
+                    // reads installed plugins once at startup, so the newly installed code is not live until
+                    // the next launch. Say so at the point the user is looking, rather than leaving them to
+                    // wonder why nothing changed.
+                    val isPlugin = PluginProject.isPluginModule(module)
+                    val label = if (isPlugin) "Install plugin" else "Run"
                     // On a successful build, install + launch (the OS shows its own install-confirmation).
                     launch(
                         module.name,
                         graph,
-                        "> Run $variant · ${module.name}",
+                        "> $label $variant · ${module.name}",
                         firstBuildDexBanner(module)
-                    ) { log -> installer.installAndLaunch(apk, launchPkg, log) }
+                    ) { log ->
+                        installer.installAndLaunch(apk, launchPkg, log)
+                        if (isPlugin) {
+                            log("")
+                            log("Installed as a plugin. Plugins load at startup, so restart CodeAssist to")
+                            log("pick this one up; it then appears under Settings > Plugins > Installed,")
+                            log("with the reason on its row if it could not be loaded.")
+                        }
+                    }
                 }
 
                 // Not one of the host's own ids: hand it to whoever contributed it (a plugin build system for

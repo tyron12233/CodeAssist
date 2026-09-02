@@ -23,6 +23,9 @@ class PluginManager(
     /** The bus handed to each plugin's [PluginRegistrationImpl] so it can publish/subscribe. Defaults to a
      *  private bus (standalone tests); the host passes its application-wide `PlatformCore.messageBus`. */
     private val bus: MessageBus = MessageBusImpl(),
+    /** The running IDE's version, exposed to each plugin as [PluginRegistration.hostVersion]. Null in a
+     *  standalone test and on a host that has no version to report. */
+    private val hostVersion: String? = null,
 ) {
 
     private class Loaded(val plugin: Plugin, val teardown: CompositeDisposable)
@@ -78,7 +81,7 @@ class PluginManager(
         // registry that only unload() can sweep, and unload() needs the entry to find them.
         loaded[id] = Loaded(plugin, teardown)
         try {
-            plugin.register(PluginRegistrationImpl(id, registry, teardown, bus))
+            plugin.register(PluginRegistrationImpl(id, registry, teardown, bus, hostVersion))
         } catch (t: Throwable) {
             unload(id)
             throw t

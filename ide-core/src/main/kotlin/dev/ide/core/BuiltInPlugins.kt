@@ -2,11 +2,13 @@ package dev.ide.core
 
 import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ANALYZER_EP
+import dev.ide.android.support.ANDROID_RESOURCE_REPOSITORY
 import dev.ide.android.support.AndroidAidlProvider
 import dev.ide.android.support.AndroidBuildConfigProvider
 import dev.ide.android.support.AndroidRClassProvider
 import dev.ide.android.support.AndroidSupport
 import dev.ide.android.support.AndroidViewBindingProvider
+import dev.ide.android.support.ResourceRepositorySource
 import dev.ide.android.support.index.AndroidResourceIndex
 import dev.ide.android.support.metadata.AndroidSdkMetadata
 import dev.ide.block.BLOCK_MAPPING_EP
@@ -97,6 +99,9 @@ import dev.ide.model.impl.DefaultFileIconProvider
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.FileIconRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
+import dev.ide.core.analysis.PluginManifestAnalyzer
+import dev.ide.core.completion.PluginManifestCompletion
+import dev.ide.core.templates.CodeAssistPluginTemplate
 import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.model.module
 import dev.ide.model.sync.BUILD_FILE_WRITER_EP
@@ -130,9 +135,11 @@ import dev.ide.ui.ext.UiPlugin
  *    backends `dependsOn` it. `java-psi-language` loads next, so `JavaLanguageBackend` is index 0 on
  *    [LANGUAGE_BACKEND_EP] — the resolution fallback `backendFor` relies on. Both are essential.
  *
- * Contributions that must reach the currently-open project (synthetic-R, the acceptance-stats weigher, the XML
- * resource host, the app-compat action, the command actions) take [ApplicationEnvironment] and read
- * `env.activeEngine` lazily at callback time — never during `register`.
+ * Contributions that must reach the currently-open project (the acceptance-stats weigher, the XML resource
+ * host, the app-compat action, the command actions) take [ApplicationEnvironment] and read `env.activeEngine`
+ * lazily at callback time, never during `register`. Prefer a scoped service where the contribution is handed
+ * a [dev.ide.model.Workspace] or [dev.ide.model.Module] to resolve through, as the synthetic `R` does: that
+ * reads the model actually being asked about instead of whichever project is open.
  */
 /**
  * One built-in feature's UNIFIED registration: its engine [Plugin] (the identity — manifest/id/enabled state
@@ -155,8 +162,9 @@ object BuiltInPlugins {
         BuiltInPlugin(KspSupportPlugin(env)),
         BuiltInPlugin(GradleSupportPlugin()),
         BuiltInPlugin(BlocksPlugin()),
-        BuiltInPlugin(AndroidSupportPlugin(env, codecs)),
+        BuiltInPlugin(AndroidSupportPlugin(codecs)),
         BuiltInPlugin(SamplesPlugin()),
+        BuiltInPlugin(PluginDevPlugin(env)),
         BuiltInPlugin(CompletionBuiltinsPlugin(env)),
         BuiltInPlugin(IndexingPlugin()),
         BuiltInPlugin(JdtAnalysisPlugin()),
@@ -418,11 +426,10 @@ private class KspSupportPlugin(private val env: ApplicationEnvironment) : Plugin
 /**
  * The android-support plugin: module types + the AndroidFacet codec + tree icons + templates + Compose sample
  * games (via the [AndroidSupport] facades, which attribute to `PluginId("android-support")`), the static
- * synthetic classes (BuildConfig, ViewBinding), and the light synthetic `R` resolved from the active engine's
- * shared resource repository.
+ * synthetic classes (BuildConfig, ViewBinding), and the light synthetic `R`, which reads the engine's shared
+ * resource repositories through the workspace-scoped [ANDROID_RESOURCE_REPOSITORY] this plugin publishes.
  */
 private class AndroidSupportPlugin(
-    private val env: ApplicationEnvironment,
     private val codecs: FacetCodecRegistry,
 ) : Plugin {
     override val manifest = PluginManifest(
@@ -436,11 +443,17 @@ private class AndroidSupportPlugin(
             AndroidSupport.registerTemplates(ProjectTemplateRegistry(ext))
             AndroidSupport.registerComposeSamples(ProjectTemplateRegistry(ext))
         }
+
         reg.register(SYNTHETIC_CLASS_EP, AndroidBuildConfigProvider())
         reg.register(SYNTHETIC_CLASS_EP, AndroidViewBindingProvider())
-        reg.register(
-            SYNTHETIC_CLASS_EP,
-            AndroidRClassProvider { m, _ -> env.activeEngine?.resourceRepo(m) })
+        // The engine's cached, buffer-aware resource repositories, published on the workspace being asked
+        // about. The synthetic `R` resolves it through the [Workspace] it is handed, so it always reads the
+        // cache of the project it is generating for rather than whichever project happens to be open.
+        reg.service(ANDROID_RESOURCE_REPOSITORY, ServiceScopeLevel.WORKSPACE) {
+            val ctx = getService(ENGINE_CONTEXT)
+            ResourceRepositorySource { module, _ -> ctx.resourceRepo(module) }
+        }
+        reg.register(SYNTHETIC_CLASS_EP, AndroidRClassProvider())
         reg.register(SYNTHETIC_CLASS_EP, AndroidAidlProvider())
         // Editor diagnostics for `.aidl`, through the same parser and generator the build runs, so an
         // invalid interface is flagged as it is typed rather than at the next build.
@@ -465,6 +478,42 @@ private class SamplesPlugin : Plugin {
             templates.register(CalculatorSampleTemplate, pid)
             templates.register(NotesSampleTemplate, pid)
             templates.register(WeatherSampleTemplate, pid)
+        }
+    }
+}
+
+/**
+ * Authoring plugins for this IDE: the Create-Project template that scaffolds one as its own app.
+ *
+ * Depends on `android-support` because a plugin project is an Android app module, so the `android-app`
+ * module type has to be registered before the template can resolve it.
+ */
+private class PluginDevPlugin(private val env: ApplicationEnvironment) : Plugin {
+    override val manifest = PluginManifest(
+        id = "plugin-development", name = "Plugin Development",
+        description = "Author CodeAssist plugins: the Create-Project template for a plugin packaged as its " +
+            "own app, and editor checks for its packaged manifest.",
+        dependsOn = listOf("android-support"),
+    )
+    override fun register(reg: PluginRegistration) {
+        reg.contributeVia { ext, pid ->
+            ProjectTemplateRegistry(ext).register(CodeAssistPluginTemplate, pid)
+            // Runs the checks the loader makes, while the manifest is being edited rather than on whoever
+            // installs the built plugin.
+            ext.register(ANALYZER_EP, PluginManifestAnalyzer { env.hostVersion }, pid)
+            // Completion in the same file. The project is resolved lazily through the active engine: this
+            // registration is app-global, while the index it reads belongs to whichever project is open.
+            ext.register(
+                COMPLETION_CONTRIBUTOR_EP,
+                CompletionContribution(
+                    PluginManifestCompletion(
+                        knownPluginIds = { env.pluginCatalog.all.map { m -> m.id }.sorted() },
+                        index = { env.activeEngine?.indexService },
+                    ),
+                    languages = setOf(LanguageId("text")),
+                ),
+                pid,
+            )
         }
     }
 }

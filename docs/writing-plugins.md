@@ -28,6 +28,7 @@ packaging rather than a different SPI; see [Ship your plugin as its own app](#15
 15. [Ship your plugin as its own app](#15-ship-your-plugin-as-its-own-app)
 16. [Appendix A: extension point index](#appendix-a-extension-point-index)
 17. [Appendix B: class index](#appendix-b-class-index)
+18. [Appendix C: service index](#appendix-c-service-index)
 
 ---
 
@@ -243,6 +244,7 @@ interface PluginRegistration {
     val messageBus: MessageBus
     fun busConnection(): MessageBusConnection
     fun logger(tag: String): Logger
+    val hostVersion: String?
 }
 ```
 
@@ -255,6 +257,7 @@ interface PluginRegistration {
 | `messageBus` | **Publish**: your own `Topic`s, or the IDE's lifecycle topics |
 | `busConnection()` | **Subscribe**: returns a connection already tracked for unload. A raw `messageBus.connect()` is not tracked, and its subscriptions outlive an unload |
 | `logger(tag)` | A `Logger` whose records carry your plugin id, so the in-app Logs viewer can filter by plugin. Attribution is stamped by the platform and cannot be forged |
+| `hostVersion` | The running IDE's version, or null when the host supplied none. The same value the loader compares against `minHostVersion`, so a runtime branch and a declared floor agree about what they are running on. Prefer `minHostVersion` to refuse an old IDE outright; read this to adapt behaviour or report the host |
 
 ### 3.4 `PluginManager`
 
@@ -499,6 +502,9 @@ override fun register(reg: PluginRegistration) {
 }
 ```
 
+`ENGINE_CONTEXT` is `internal` to `:ide-core`, so that exact line compiles in a built-in plugin only. An
+installed plugin can name a narrower set of keys; see [What you can resolve](#what-you-can-resolve).
+
 The factory's receiver is [`ServiceScope`](../platform-core/src/main/kotlin/dev/ide/platform/Services.kt),
 which gives you:
 
@@ -532,6 +538,75 @@ which is the case on desktop and in a standalone test with no host. Use the same
 hosts provide. The keys are declared in
 [`PlatformPorts.kt`](../ide-core/src/main/kotlin/dev/ide/core/PlatformPorts.kt) (most are `internal` today;
 `ANALYTICS_SERVICE` is public).
+
+### Getting an instance of a service
+
+`register()` cannot resolve one, and that is structural rather than a missing API. It runs inside
+[`ApplicationEnvironment`](../ide-core/src/main/kotlin/dev/ide/core/ApplicationEnvironment.kt)'s constructor,
+once at startup, before any project is open, so no workspace container exists yet and there is nothing to
+resolve. No built-in resolves a service there either. Register something that is handed a scope later, and
+resolve at that point. Three shapes cover it.
+
+**From your own service factory.** The factory is lazy: it runs on first resolution, when the scope it is
+registered at exists. This is where a service's own dependencies belong.
+
+```kotlin
+reg.service(MY_SERVICE, ServiceScopeLevel.WORKSPACE) {
+    MyService(workspace(), getService(SOME_OTHER_KEY))
+}
+```
+
+**From a `Module` or `Workspace`.** Both carry a public `service(key)` lookup, and `Module.service` walks
+MODULE, then WORKSPACE, then APPLICATION, so one call reaches any scope. `Workspace.serviceOrNull(key)` is
+the same lookup for a capability whose absence is normal, so a consumer can fall back instead of throwing:
+
+```kotlin
+reg.register(ANALYZER_EP, object : FileAnalyzer {
+    override suspend fun analyze(target: AnalysisTarget): List<Diagnostic> {
+        val mine = target.module.service(MY_SERVICE)
+        val index = target.index            // IndexService, handed to you directly
+        ...
+    }
+})
+```
+
+What the callbacks hand you to resolve through:
+
+| From | You get |
+| --- | --- |
+| `AnalysisTarget` (analyzers, `QuickFixProvider`, `ActionProvider`) | `.module`, `.index` (`IndexService`), `.resolver` (`SourceAnalyzer`), `.parsed`, `.file` |
+| `ProjectAnalysisScope` (project analyzers, batch lint) | `.modules`, `.index` |
+| `SyntheticClassContext` | `.module`, `.workspace` |
+| A `ServiceFactory` | `module()`, `workspace()`, `getService(key)` |
+
+`ActionContext` is the exception: a `UI_ACTION_EP` command is given `projectRoot`, `activeFilePath` and the
+selection as plain strings and offsets, with no model object, so it can resolve nothing. An action that needs
+services fits better on `ACTION_PROVIDER_EP`, which is given an `AnalysisTarget`.
+
+**From the message bus**, when what you need is the transition rather than the object:
+`reg.busConnection().subscribe(topic, listener)`, auto-unsubscribed on unload. See
+[section 7](#7-listen-to-ide-events-and-log).
+
+### What you can resolve
+
+A key is usable only if you can name its type, and that differs by tier:
+
+| Tier | Can name |
+| --- | --- |
+| Built-in (a module in this build) | Every key in [Appendix C](#appendix-c-service-index), `internal` ones included |
+| Installed (its own APK) | Keys from the published SPI artifacts, plus keys it or another plugin declares |
+
+The published SPI declares exactly one service key, `WORKSPACE_SERVICE`. Every engine service lives in
+`:ide-core`, which is not published, so an installed plugin cannot name one today even where the key itself
+is public. Its route to the engine is extension points and the contexts they pass, not service resolution.
+
+Plugin-to-plugin sharing does work in both tiers: declare a `ServiceKey` in an artifact both sides compile
+against, register the service, and have the consumer list you in `dependsOn` so your `register()` runs
+first.
+
+Container lookup is by the key's string id, so a forged `ServiceKey<Any>("ide.service.build")` does return
+the real instance. Do not do this. The type is `internal`, so what you get back is `Any` plus reflection
+against a shape that carries no compatibility promise.
 
 ---
 
@@ -1372,6 +1447,20 @@ Everything above is the internal tier, where a plugin is a module inside the IDE
 **separate Android app the user installs**: the IDE finds it through the package manager, reads its manifest,
 and loads its classes off the installed APK. The `Plugin` you wrote does not change; only its packaging does.
 
+A complete, buildable example of everything in this section is
+[`samples/hello-plugin`](../samples/hello-plugin): `./gradlew :samples:hello-plugin:installDebug`. Its
+[README](../samples/hello-plugin/README.md) also covers what changes when the plugin is a project of its own
+rather than a module of this build.
+
+You can also write one inside CodeAssist itself. **New project > Plugin > CodeAssist Plugin** scaffolds
+everything below, wired up: it asks for a plugin id and whether to contribute a command, a settings page or
+both, then generates the packaged manifest, the marker activity, and the entry point, with the SPI already
+declared as a `compileOnly` dependency. While editing `codeassist_plugin.toml` the IDE runs the same checks
+the loader makes (a malformed id, an `apiVersion` this build does not load, a `minHostVersion` newer than the
+running IDE, an entry point that names no class or a class that does not implement `Plugin`, a missing marker
+activity), and completes the manifest's keys, the plugin ids available to `dependsOn`, and the `Plugin`
+implementations in the project.
+
 Three things go into the plugin app.
 
 **1. The plugin manifest**, as `res/raw/codeassist_plugin.toml`. This is `PluginManifest` in TOML, and it is
@@ -1383,15 +1472,21 @@ id = "com.example.hello"
 name = "Hello"
 version = "1.0.0"
 apiVersion = 1
-description = "Adds a Hello tool window."
+description = "Adds a Hello command and a settings page."
 entryPoints = ["com.example.hello.HelloPlugin"]
 dependsOn = ["kotlin-language"]
-capabilities = ["ui.toolWindow"]
+capabilities = ["ui.action", "ui.settingsPage"]
 minHostVersion = "3.11.0"
 ```
 
-`apiVersion` must match the IDE's `PLUGIN_API_VERSION`, and `minHostVersion` is compared against the running
-IDE's version; a mismatch is reported on the plugin's row in the Plugins screen rather than failing silently.
+`id` must match `[A-Za-z0-9][A-Za-z0-9._-]*`, the same shape as an `applicationId` or a Java package, which
+is normally where it comes from. Case is part of the id, so write it the same way wherever another plugin
+names it in `dependsOn`; two plugins whose ids differ only in capitalisation count as a clash and the second
+is rejected. `apiVersion` must match the IDE's `PLUGIN_API_VERSION`, and `minHostVersion` is compared against
+the running IDE's version. Anything wrong here, including an unparseable file or an id another plugin already
+holds, is reported on the plugin's row in the Plugins screen rather than failing silently; a plugin listed
+there with a reason and no switch is one the IDE found but could not read.
+
 `essential` and `trusted` are ignored here: those are the IDE's to decide.
 
 **2. A marker activity** in the app's `AndroidManifest.xml`, which is how the IDE finds the app at all, and
@@ -1408,15 +1503,71 @@ which doubles as your app's own screen:
 </activity>
 ```
 
+### What a separately-packaged plugin can reach
+
+The engine SPI is published, so the extension points in these modules are available to a plugin app:
+
+```kotlin
+compileOnly("io.github.tyron12233:plugin-api:1.0.0")        // actions, menus, palette commands
+compileOnly("io.github.tyron12233:platform-core:1.0.0")     // scoped services, settings pages, logging
+compileOnly("io.github.tyron12233:project-model-api:1.0.0") // module types, templates, facets + codecs, file icons
+compileOnly("io.github.tyron12233:language-api:1.0.0")      // file types, completion, postfix, synthetic classes
+compileOnly("io.github.tyron12233:analysis-api:1.0.0")      // analyzers, diagnostics, quick fixes, intentions
+compileOnly("io.github.tyron12233:index-api:1.0.0")         // persisted indexes
+compileOnly("io.github.tyron12233:build-api:1.0.0")         // build systems, build plugins, source generators
+```
+
+Take only the ones you use; each brings the ones below it transitively.
+
+The **Compose UI** surfaces described in [section 10](#10-contribute-ui) are the exception: tool windows,
+screens, overlays and view modes live in `ide-ui-api`, which is not published, so those are reachable from a
+built-in plugin only. An installed plugin's visible surfaces are actions, menus, palette commands and
+settings pages.
+
 **3. Your plugin classes**, compiled against the plugin SPI as `compileOnly`. The IDE's classloader is the
 parent of your plugin's, so the SPI, the Kotlin stdlib, and the Compose runtime resolve to the IDE's copies.
 Bundling your own copy of any of them does nothing: the parent wins, and shipping a mismatched version is how
 you get a linkage error reported against your plugin.
 
+The SPI is published, so it is an ordinary dependency:
+
+```kotlin
+dependencies {
+    compileOnly("io.github.tyron12233:plugin-api:1.0.0")
+    compileOnly("io.github.tyron12233:platform-core:1.0.0")
+}
+```
+
+Those two modules are GPL-3.0-or-later **with** the Classpath exception, which is what lets your plugin carry
+whatever license you choose; the rest of CodeAssist is plain GPL-3.0-or-later. The SPI version is independent
+of the IDE's, and `PLUGIN_SPI_VERSION` in `plugin-api` is the value a scaffolded project is generated with.
+
+Compile with the Kotlin version the IDE was built with, or the SPI's metadata is unreadable. Under AGP 9
+Kotlin is built into `com.android.application` and the `org.jetbrains.kotlin.android` plugin is rejected, so
+the version is set on the build tools instead:
+
+```kotlin
+@file:OptIn(
+    org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class,
+    org.jetbrains.kotlin.buildtools.api.ExperimentalBuildToolsApi::class,
+)
+
+kotlin {
+    compilerVersion.set("2.4.0")
+}
+```
+
+with `kotlin.compiler.runViaBuildToolsApi=true` in `gradle.properties`. Without both, the build fails on
+`Module was compiled with an incompatible version of Kotlin`.
+
 What to expect at runtime:
 
 - Your plugin loads in the IDE's process, under its UID and its granted permissions. Class loading isolates
   versions, not privileges.
+- Your plugin does not run when it is installed. The IDE lists it and asks first, showing the capabilities
+  the manifest declares, the signing certificate of the installed package, and a plain statement that a
+  plugin is not sandboxed; it loads only once the user allows it. Discovery is not consent, so declare
+  `capabilities` accurately: it is what the user reads before deciding.
 - Changing your plugin's enabled state takes effect on the IDE's next launch; the manager loads once at
   startup and does not hot-swap.
 - If your entry point throws, your plugin is rolled back and skipped with the reason shown on its row. The
@@ -1564,3 +1715,82 @@ See also [extension-points.md](extension-points.md) for how the built-ins are wi
 | Version Control | [VcsPlugin.kt](../ide-core/src/main/kotlin/dev/ide/core/VcsPlugin.kt) | [VcsUiPlugin.kt](../vcs-ui/src/commonMain/kotlin/dev/ide/vcs/ui/VcsUiPlugin.kt) |
 | AI Agent | [AgentPlugin.kt](../ide-core/src/main/kotlin/dev/ide/core/AgentPlugin.kt) | [AgentUiPlugin.kt](../agent-ui/src/commonMain/kotlin/dev/ide/agent/ui/AgentUiPlugin.kt) |
 | Block Editor, Kotlin, Java, Android, and the rest | [BuiltInPlugins.kt](../ide-core/src/main/kotlin/dev/ide/core/BuiltInPlugins.kt) | none |
+
+---
+
+## Appendix C: service index
+
+Every service key the IDE registers, what it is for, and who can name it. Resolve one with `getService` /
+`getServiceOrNull` from a service factory, or with `Module.service(key)` / `Workspace.service(key)` from an
+extension point callback. See [Getting an instance of a service](#getting-an-instance-of-a-service).
+
+### Published SPI
+
+| Key | Scope | For |
+| --- | --- | --- |
+| `dev.ide.model.WORKSPACE_SERVICE` | WORKSPACE | The bound `Workspace`. The `ServiceScope.workspace()` helper is this lookup |
+
+The only service key in the published SPI, so it is the only one an installed plugin can name.
+
+### Engine services: [`IdeServices.kt`](../ide-core/src/main/kotlin/dev/ide/core/IdeServices.kt)
+
+The open project's decomposed concerns, registered by `IdeCoreServicesPlugin` in
+[`BuiltInPlugins.kt`](../ide-core/src/main/kotlin/dev/ide/core/BuiltInPlugins.kt) and resolved from the
+workspace container. All are `internal` to `:ide-core`: built-in plugins only.
+
+| Key | Scope | For |
+| --- | --- | --- |
+| `ENGINE_CONTEXT` | WORKSPACE | The engine's shared-infrastructure surface. What every service below is built from |
+| `MODULE_ANALYZERS` | MODULE | This module's source analyzers, one per language, built on first use |
+| `BUILD_SERVICE` | WORKSPACE | Build and run orchestration, for the native Java/Kotlin and the Android builds |
+| `MODULE_SERVICE` | WORKSPACE | Module configuration and management, behind the Module Settings editor |
+| `DEPENDENCY_SERVICE` | WORKSPACE | Maven dependencies: add, resolve, conflicts, BOM platforms |
+| `PROJECT_SYNC_SERVICE` | WORKSPACE | Re-importing a project whose model comes from a foreign build system |
+| `SEARCH_SERVICE` | WORKSPACE | Go-to-symbol and member search over the index, plus find-in-files |
+| `REFACTOR_SERVICE` | WORKSPACE | The Java rename refactoring |
+| `LANGUAGE_FEATURE_SERVICE` | WORKSPACE | On-demand editor features that delegate to a language backend |
+| `KOTLIN_EDITOR_SERVICE` | WORKSPACE | Kotlin-analyzer-backed editor queries |
+| `ANDROID_RESOURCE_SERVICE` | WORKSPACE | Android resource navigation and preview |
+| `COMPOSE_PREVIEW_SERVICE` | WORKSPACE | The on-device Compose `@Preview` interpreter path |
+| `ICON_MANAGER_SERVICE` | WORKSPACE | Browsable icon repositories and a module's existing drawables |
+| `SIGNING_SERVICE` | WORKSPACE | The keystore registry and APK signing configuration |
+| `BLOCK_SERVICE` | WORKSPACE | The projectional (block) editor's projection of a buffer |
+| `ACTION_MANAGER` | WORKSPACE | Resolves and dispatches what is contributed to `UI_ACTION_EP` / `ACTION_GROUP_EP` |
+| `APP_SDK_MANAGER` | APPLICATION | One SDK download queue across every project; resolvable with no project open |
+| `APP_KEYSTORE_REGISTRY` | APPLICATION | One keystore registry across every project |
+| `PROJECT_TEMPLATES` | APPLICATION | The Create-Project template registry, enumerable before a project exists |
+
+### Plugin-owned services
+
+Registered by a built-in plugin rather than by the engine, in the plugin's own module. Public, but the module
+is unpublished, so still built-in only.
+
+| Key | Scope | Declared in | For |
+| --- | --- | --- | --- |
+| `ANDROID_RESOURCE_REPOSITORY` | WORKSPACE | `:android-support` | The shared, buffer-aware merged `ResourceRepository` cache for a workspace. The synthetic `R` resolves it through the `Workspace` it is handed, and parses directly when a host publishes none. A worked example of a plugin publishing a capability other code resolves by key |
+
+### Platform ports: [`PlatformPorts.kt`](../ide-core/src/main/kotlin/dev/ide/core/PlatformPorts.kt)
+
+APPLICATION-scoped host capabilities the engine needs but does not own. The launcher registers whichever it
+supplies; an absent one resolves to null, so **`getServiceOrNull` is always the call here** and the consumer
+falls back to an in-process default. Absent is the normal state on desktop and in tests.
+
+| Key | Visibility | For |
+| --- | --- | --- |
+| `PROGRAM_INTERPRETER` | internal | Runs a compiled program through the bytecode VM |
+| `APK_INSTALLER` | internal | Installs a built APK on the device |
+| `APP_LOG_CHANNEL` | internal | Forwards the running app's log back into the IDE |
+| `CUSTOM_VIEW_RUNTIME` | internal | Renders a project's own custom `View` for layout preview |
+| `REAL_VIEW_RUNTIME` | internal | The real-view preview inspector |
+| `KOTLIN_PLUGIN_LOADER` | internal | Loads dexed Kotlin compiler plugins |
+| `KOTLIN_COMPILER_BACKEND` | internal | The on-device kotlinc, as a persistent forked VM |
+| `ANDROID_DEVICE_TOOLS` | internal | aapt2, R8/D8 and the rest of the Android toolchain |
+| `ANALYTICS_SERVICE` | public | Opt-in usage analytics; absent resolves to a no-op service |
+| `STORE_CATALOG_SOURCE` | public | The remote Projects Store catalog |
+| `STORE_ACCOUNT_SERVICE` | public | The store's OAuth sign-in |
+| `STORE_SUBMISSION_SERVICE` | public | Store submissions, which need a signed-in session |
+| `STORE_REVIEW_SERVICE` | public | Store ratings and reviews |
+| `NOTIFICATION_PRESENTER` | public | Raises an OS-level notification |
+
+The public keys here are public so a launcher can register them from outside `:ide-core`, not because they
+are part of the plugin SPI. `:ide-core` is unpublished, so an installed plugin cannot name them either.

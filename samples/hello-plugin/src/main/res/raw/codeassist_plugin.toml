@@ -1,0 +1,9 @@
+[plugin]
+id = "com.example.hello"
+name = "Hello Plugin"
+version = "1.0.0"
+apiVersion = 1
+description = "Sample plugin shipped as its own app: a settings page and a palette command."
+entryPoints = ["com.example.hello.HelloPlugin"]
+capabilities = ["ui.settingsPage", "ui.action"]
+minHostVersion = "3.12.0"

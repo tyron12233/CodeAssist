@@ -1040,6 +1040,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="storage_cat_other_desc">Keystores, backups, and app data</string>
     <string name="plugins_restart_hint">Restart to apply your plugin changes.</string>
     <string name="plugins_required">Required</string>
+    <string name="plugins_review">Review</string>
     <string name="plugins_requires">Requires %1$s</string>
     <string name="plugins_tab_builtin">Built-in</string>
     <string name="plugins_tab_installed">Installed</string>

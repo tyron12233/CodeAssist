@@ -21,7 +21,8 @@ import kotlin.test.Test
 /**
  * Renders [PluginsScreen] off-screen to a PNG so its layout (the Built-in / Installed tab strip with its
  * counts, essential "Required" pills vs switches, the dependency line, versions, an installed plugin's origin
- * and load failure) can be eyeballed without launching the app; also guards that it renders without a runtime
+ * load failure, and a plugin whose manifest could not be read at all, which gets a reason and no switch) can
+ * be eyeballed without launching the app; also guards that it renders without a runtime
  * layout error. The Installed tab is reached by a real click on the tab, so the switch is exercised the way a
  * user reaches it rather than by poking state.
  */
@@ -44,6 +45,18 @@ class PluginsScreenSnapshot {
                 "com.example.stale", "Stale Plugin", "0.9.0", "Built against an older plugin API.",
                 essential = false, enabled = true, builtIn = false, origin = "com.example.stale",
                 error = "built for plugin API 0, this version of the IDE loads API 1",
+            ),
+            UiPluginInfo(
+                "com.example.pending", "Pending Plugin", "1.0.0", "Found on the device, not yet allowed to run.",
+                essential = false, enabled = false, builtIn = false, origin = "com.example.pending",
+                needsConsent = true, capabilities = listOf("ui.action", "fs.read"),
+                signature = "a".repeat(64),
+            ),
+            UiPluginInfo(
+                "com.example.broken", "Broken Plugin", "", "",
+                essential = false, enabled = false, builtIn = false, origin = "com.example.broken",
+                error = "plugin id 'com.Example.Broken' must be lowercase letters, digits, '.', '-' or '_'",
+                togglable = false,
             ),
         )
     }

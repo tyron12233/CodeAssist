@@ -67,6 +67,8 @@ enum class TemplateCategory(val displayName: String) {
     ANDROID("Android"),
     JAVA("Java"),
     KOTLIN("Kotlin"),
+    /** Projects that extend the IDE itself rather than targeting a device. */
+    PLUGIN("Plugin"),
     OTHER("Other"),
 }
 

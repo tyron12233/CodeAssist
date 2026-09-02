@@ -17,6 +17,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,11 +33,13 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiPluginInfo
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.CaSwitch
+import dev.ide.ui.components.PluginConsent
 import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.plugins_failed
 import dev.ide.ui.generated.resources.plugins_installed_empty
 import dev.ide.ui.generated.resources.plugins_required
+import dev.ide.ui.generated.resources.plugins_review
 import dev.ide.ui.generated.resources.plugins_requires
 import dev.ide.ui.generated.resources.plugins_restart_hint
 import dev.ide.ui.generated.resources.plugins_tab_builtin
@@ -55,7 +59,8 @@ private enum class PluginTab(val label: StringResource) {
 /**
  * The Plugins settings screen: enable or disable the plugins this build loaded, split across two tabs.
  * **Built-in** plugins ship inside the IDE; **Installed** ones came from a separate app the user installed and
- * carry the package they came from, plus the reason any of them failed to load. Each tab's count is on its
+ * carry the package they came from, plus the reason any of them failed to load. A plugin app whose manifest
+ * the IDE could not read is listed there too, with its reason and no switch. Each tab's count is on its
  * label, so an installed plugin is visible without switching. Essential plugins are shown locked (a "Required"
  * pill instead of a switch), which never applies to an installed plugin. A change is persisted immediately
  * (app-global) but applied on the next launch, so a restart hint appears once anything is toggled.
@@ -65,6 +70,9 @@ fun PluginsScreen(backend: IdeBackend, onBack: () -> Unit) {
     var plugins by remember { mutableStateOf(backend.settings.pluginCatalog()) }
     var changed by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PluginTab.BuiltIn) }
+    // The plugin whose consent sheet is open. Nothing loads while this is unanswered, so the sheet is a
+    // gate rather than a notification.
+    var asking by remember { mutableStateOf<UiPluginInfo?>(null) }
 
     val builtIn = plugins.filter { it.builtIn }
     val installed = plugins.filterNot { it.builtIn }
@@ -84,16 +92,32 @@ fun PluginsScreen(backend: IdeBackend, onBack: () -> Unit) {
                     EmptyInstalled()
                 } else {
                     for (p in shown) {
-                        PluginRow(p) { enabled ->
-                            backend.settings.setPluginEnabled(p.id, enabled)
-                            plugins = backend.settings.pluginCatalog()
-                            changed = true
-                        }
+                        PluginRow(
+                            p,
+                            onReview = { asking = p },
+                            onToggle = { enabled ->
+                                backend.settings.setPluginEnabled(p.id, enabled)
+                                plugins = backend.settings.pluginCatalog()
+                                changed = true
+                            },
+                        )
                     }
                 }
                 AdSlot(AdPlacement.SETTINGS)
             }
         }
+    }
+
+    asking?.let { plugin ->
+        PluginConsentDialog(
+            plugin = plugin,
+            onAnswer = { granted ->
+                backend.settings.setPluginConsent(plugin.id, granted)
+                plugins = backend.settings.pluginCatalog()
+                changed = true
+                asking = null
+            },
+        )
     }
 }
 
@@ -162,7 +186,7 @@ private fun RestartHint() {
 }
 
 @Composable
-private fun PluginRow(p: UiPluginInfo, onToggle: (Boolean) -> Unit) {
+private fun PluginRow(p: UiPluginInfo, onReview: () -> Unit, onToggle: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
@@ -182,6 +206,13 @@ private fun PluginRow(p: UiPluginInfo, onToggle: (Boolean) -> Unit) {
             if (meta.isNotEmpty()) {
                 Text(meta.joinToString("  ·  "), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
             }
+            if (p.needsConsent) {
+                Text(
+                    "Not running yet. Review what it can do before allowing it.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             p.error?.let {
                 Text(
                     stringResource(Res.string.plugins_failed, it),
@@ -190,7 +221,25 @@ private fun PluginRow(p: UiPluginInfo, onToggle: (Boolean) -> Unit) {
                 )
             }
         }
-        if (p.essential) RequiredPill() else CaSwitch(p.enabled, onToggle)
+        // A plugin the IDE could not read has no id to toggle, so its row carries only its reason. One
+        // awaiting an answer gets Review rather than a switch: a switch would say "off", when the truth is
+        // that nothing has been decided and it has never run.
+        when {
+            p.essential -> RequiredPill()
+            p.needsConsent -> TextButton(onReview) { Text(stringResource(Res.string.plugins_review)) }
+            p.togglable -> CaSwitch(p.enabled, onToggle)
+        }
+    }
+}
+
+/** The consent gate, as a modal the user has to answer before the plugin is allowed to load. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun PluginConsentDialog(plugin: UiPluginInfo, onAnswer: (Boolean) -> Unit) {
+    // Dismissing without answering leaves the plugin exactly as it was: still not running, still asked
+    // about next time. Only the two explicit buttons record a decision.
+    BasicAlertDialog(onDismissRequest = { onAnswer(false) }) {
+        PluginConsent(plugin, onRefuse = { onAnswer(false) }, onAccept = { onAnswer(true) })
     }
 }
 

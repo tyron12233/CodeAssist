@@ -1,0 +1,39 @@
+CodeAssist plugin SPI linking exception
+=======================================
+
+CodeAssist as a whole is licensed under the GNU General Public License, version 3
+or later, as stated in LICENSE. This file adds a linking exception that applies to
+the plugin SPI only, so that a plugin does not have to adopt the IDE's license.
+
+The exception covers exactly these two modules, and nothing else in this
+repository:
+
+  * plugin-api    (published as io.github.tyron12233:plugin-api)
+  * platform-core (published as io.github.tyron12233:platform-core)
+
+Every source file covered by the exception carries the SPDX identifier
+
+  GPL-3.0-or-later WITH Classpath-exception-2.0
+
+and the exception is the standard Classpath exception, version 2.0, reproduced
+below. In practical terms: a CodeAssist plugin that compiles against these two
+modules and is loaded into the IDE may be released under any license, including a
+proprietary one. Modifying the two modules themselves is still governed by the
+GPL, as is the rest of CodeAssist.
+
+Classpath-exception-2.0
+-----------------------
+
+Linking this library statically or dynamically with other modules is making a
+combined work based on this library. Thus, the terms and conditions of the GNU
+General Public License cover the whole combination.
+
+As a special exception, the copyright holders of this library give you permission
+to link this library with independent modules to produce an executable,
+regardless of the license terms of these independent modules, and to copy and
+distribute the resulting executable under terms of your choice, provided that you
+also meet, for each linked independent module, the terms and conditions of the
+license of that module. An independent module is a module which is not derived
+from or based on this library. If you modify this library, you may extend this
+exception to your version of the library, but you are not obligated to do so. If
+you do not wish to do so, delete this exception statement from your version.

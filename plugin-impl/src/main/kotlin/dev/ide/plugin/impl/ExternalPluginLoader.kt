@@ -3,6 +3,7 @@ package dev.ide.plugin.impl
 import dev.ide.plugin.Plugin
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.PluginRegistration
+import dev.ide.plugin.PluginVersions
 import dev.ide.plugin.external.DiscoveredPlugin
 
 /**
@@ -45,7 +46,7 @@ class ExternalPluginLoader(
             )
         }
         val min = manifest.minHostVersion
-        if (min != null && hostVersion != null && compareVersions(hostVersion, min) < 0) {
+        if (!PluginVersions.satisfies(hostVersion, min)) {
             return Result.Failed(manifest, "requires CodeAssist $min or newer")
         }
         if (manifest.entryPoints.isEmpty()) {
@@ -109,21 +110,5 @@ class ExternalPluginLoader(
         override val manifest: PluginManifest get() = parts.first().manifest
         override fun register(reg: PluginRegistration) = parts.forEach { it.register(reg) }
         override fun dispose() = parts.asReversed().forEach { runCatching { it.dispose() } }
-    }
-
-    private companion object {
-        /** Dotted-numeric comparison, ignoring any trailing qualifier ("3.11.0-beta1" compares as 3.11.0). */
-        fun compareVersions(a: String, b: String): Int {
-            val left = parts(a)
-            val right = parts(b)
-            for (i in 0 until maxOf(left.size, right.size)) {
-                val c = (left.getOrNull(i) ?: 0).compareTo(right.getOrNull(i) ?: 0)
-                if (c != 0) return c
-            }
-            return 0
-        }
-
-        fun parts(v: String): List<Int> =
-            v.substringBefore('-').split('.').map { it.trim().toIntOrNull() ?: 0 }
     }
 }

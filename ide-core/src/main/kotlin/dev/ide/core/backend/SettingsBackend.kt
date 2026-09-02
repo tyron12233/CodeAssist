@@ -43,20 +43,58 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         val manager = ctx.manager ?: return emptyList()
         val catalog = manager.env.pluginCatalog
         val disabled = manager.disabledPlugins()
+        // Read from the PERSISTED sets, not from the catalog. The catalog is the decision as it stood at
+        // startup (it is what actually loaded), so reading consent off it would leave a row still saying
+        // "not running yet" straight after the user allowed it. `enabled` already works this way.
+        val consented = manager.consentedPlugins()
         val installed = manager.env.installedPlugins.associateBy { it.manifest.id }
-        return catalog.all
-            .map { m ->
-                val fromSource = installed[m.id]
-                val essential = catalog.isEssential(m.id)
-                UiPluginInfo(
-                    id = m.id, name = m.name, version = m.version, description = m.description,
-                    essential = essential, enabled = essential || m.id !in disabled, dependsOn = m.dependsOn,
-                    builtIn = fromSource == null,
-                    origin = fromSource?.origin?.label ?: "",
-                    error = fromSource?.error,
-                )
-            }
+        val catalogued = catalog.all.map { m ->
+            val fromSource = installed[m.id]
+            val essential = catalog.isEssential(m.id)
+            UiPluginInfo(
+                id = m.id, name = m.name, version = m.version, description = m.description,
+                essential = essential, enabled = essential || m.id !in disabled, dependsOn = m.dependsOn,
+                builtIn = fromSource == null,
+                origin = fromSource?.origin?.label ?: "",
+                error = fromSource?.error,
+                needsConsent = fromSource != null && m.id !in consented && m.id !in disabled,
+                capabilities = m.capabilities,
+                // The certificate of the package as installed, from the package manager, not a claim the
+                // plugin makes about itself.
+                signature = fromSource?.origin?.signature,
+            )
+        }
+        // Plugins with no usable manifest are not in the catalog and have no id to persist a choice against,
+        // so they list as informational rows. The origin is dropped when it is the name already shown, which
+        // is what happens when the app's own label could not be read.
+        val unusable = manager.env.rejectedPlugins.map { r ->
+            UiPluginInfo(
+                id = r.origin.label, name = r.name, version = "", description = "",
+                essential = false, enabled = false, builtIn = false,
+                origin = r.origin.label.takeIf { it != r.name } ?: "",
+                error = r.reason, togglable = false,
+            )
+        }
+        return (catalogued + unusable)
             .sortedWith(compareByDescending<UiPluginInfo> { it.essential }.thenBy { it.name.lowercase() })
+    }
+
+    override fun setPluginConsent(id: String, granted: Boolean) {
+        val manager = ctx.manager ?: return
+        val consented = manager.consentedPlugins().toMutableSet()
+        val disabled = manager.disabledPlugins().toMutableSet()
+        if (granted) {
+            // Accepting also clears an earlier refusal, so a change of mind does not leave it disabled.
+            consented.add(id)
+            disabled.remove(id)
+        } else {
+            // A refusal is recorded as a disable as well: that is what stops the question coming back, and
+            // it reads correctly in the list as a plugin that is off.
+            consented.remove(id)
+            disabled.add(id)
+        }
+        manager.setConsentedPlugins(consented)
+        manager.setDisabledPlugins(disabled)
     }
 
     override fun setPluginEnabled(id: String, enabled: Boolean) {

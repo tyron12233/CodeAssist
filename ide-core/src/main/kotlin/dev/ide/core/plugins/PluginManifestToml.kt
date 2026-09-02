@@ -38,7 +38,7 @@ object PluginManifestToml {
         val table = (doc["plugin"] as? Map<*, *>) ?: doc
 
         val id = string(table, "id") ?: throw IllegalArgumentException("manifest has no 'id'")
-        require(ID.matches(id)) { "plugin id '$id' must be lowercase letters, digits, '.', '-' or '_'" }
+        require(ID.matches(id)) { "plugin id '$id' must be letters, digits, '.', '-' or '_'" }
         val entryPoints = strings(table, "entryPoints")
         require(entryPoints.isNotEmpty()) { "plugin '$id' declares no 'entryPoints'" }
 
@@ -57,7 +57,15 @@ object PluginManifestToml {
         )
     }
 
-    private val ID = Regex("[a-z0-9][a-z0-9._-]*")
+    /**
+     * The shape of a plugin id. Deliberately as permissive as an Android `applicationId` or a Java package,
+     * since that is what a plugin id is normally derived from: rejecting the capitals in a name like
+     * `com.exampleApp.plugin` would refuse an id the author has every reason to expect works. Case is part of
+     * the id, so it must be written the same way wherever another plugin names it in `dependsOn`; two ids
+     * that differ only in case are treated as one and the second is rejected, so no two plugins can be
+     * distinguished only by capitalisation.
+     */
+    private val ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]*")
 
     private fun string(table: Map<*, *>, key: String): String? =
         (table[key] as? String)?.trim()?.ifEmpty { null }

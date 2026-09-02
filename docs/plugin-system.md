@@ -183,19 +183,35 @@ Three types carry the tier (`plugin-api`, `dev.ide.plugin.external`):
 ```kotlin
 interface PluginSource {                       // a place installed plugins come from
     val id: String
-    fun discover(): List<DiscoveredPlugin>
+    fun discover(): List<PluginCandidate>
 }
 
-interface DiscoveredPlugin {                   // found, not yet loaded
-    val manifest: PluginManifest               // parsed from the package, not from its code
+sealed interface PluginCandidate {             // what a source found
     val origin: PluginOrigin                   // source id + package name + signing certificate
+}
+
+interface DiscoveredPlugin : PluginCandidate { // found, not yet loaded
+    val manifest: PluginManifest               // parsed from the package, not from its code
     fun classLoader(): ClassLoader             // called only for an enabled plugin
 }
+
+data class RejectedPlugin(                     // found, and not loadable
+    override val origin: PluginOrigin,
+    val reason: String,                        // shown on the plugin's row
+    val name: String = origin.label,
+) : PluginCandidate
 ```
 
 **Discovery reads manifests, not code.** A source returns manifests only; `ApplicationEnvironment` merges them
 with the built-ins into the one `PluginCatalog`, applies the user's disabled set, and only then asks a
 surviving plugin for a classloader. A plugin the user turned off never gets one, let alone a `register` call.
+
+**A plugin that cannot be read is reported, not dropped.** A missing or malformed packaged manifest, and an id
+a built-in or an earlier plugin already holds, produce a `RejectedPlugin` rather than a silent skip. Such a
+plugin has no usable manifest, so no id to attribute contributions to and no enable/disable choice to persist:
+it stays out of the catalogue and is carried on `ApplicationEnvironment.rejectedPlugins`, which the Plugins
+screen lists under Installed with its reason and no switch. Without this, a plugin the user installed and the
+IDE could not parse is indistinguishable from one the IDE never saw.
 
 **The manifest is the same shape as a built-in's.** Built-ins carry `PluginManifest` as a Kotlin literal;
 an installed plugin ships it as TOML, which `PluginManifestToml` (`ide-core`) is the only reader of. Two
@@ -214,6 +230,10 @@ dependsOn = ["kotlin-language"]
 capabilities = ["ui.toolWindow"]
 minHostVersion = "3.11.0"
 ```
+
+`id` must match `[A-Za-z0-9][A-Za-z0-9._-]*`, the shape of an `applicationId` or a Java package. It is
+compared exactly wherever it is used, `dependsOn` included; only the clash check is case-insensitive, so two
+plugins cannot be distinguished by capitalisation alone.
 
 **Loading is failure-tolerant end to end.** `ExternalPluginLoader` (`plugin-impl`) checks `apiVersion` against
 `PLUGIN_API_VERSION` and `minHostVersion` against the running IDE, builds the classloader, and instantiates
@@ -259,6 +279,19 @@ the Compose runtime bind to the IDE's copies and cannot be shadowed by a second 
 `ApkPluginSource` records the package's signing certificate on the `PluginOrigin` and can be constrained to an
 installer allowlist, which is what a trust model reads; nothing else consumes either yet.
 
+A working plugin app is in [`samples/hello-plugin`](../samples/hello-plugin), built as a module of this
+repository so it cannot drift from the SPI it compiles against.
+
+**Authoring one in the IDE.** The `plugin-development` built-in plugin contributes the Create-Project
+template (`CodeAssistPluginTemplate`), the manifest checks (`PluginManifestAnalyzer`) and the manifest
+completion (`PluginManifestCompletion`). A module counts as a plugin when it packages a
+`res/raw/codeassist_plugin.toml`, which `PluginProject` decides: the packaged manifest is what discovery
+reads on another install, so it is the one marker that cannot disagree with reality, and a facet recording
+the same fact in `module.toml` could. The SPI reaches a scaffolded project as the published
+`io.github.tyron12233:plugin-api` / `:platform-core` coordinates at `PLUGIN_SPI_VERSION`, declared
+`compileOnly` because the IDE supplies them at runtime through the parent classloader. `PluginVersions` holds
+the `minHostVersion` comparison, so the editor's verdict and the loader's cannot differ.
+
 **Isolation.** An installed plugin runs in the IDE's process, under its UID and its granted permissions.
 Classloader separation is a versioning boundary, not a security one. The capability field in the manifest is
 parsed and carried, but nothing reads it yet.
@@ -275,3 +308,10 @@ parsed and carried, but nothing reads it yet.
   screens, editor view modes, UI actions, tree icons) so UI contributions flow through the same plugin model.
 - **Remaining host capabilities:** the `IdeServicesBackend`-layer ports (analytics, the build-runner factory,
   the notifications gate) and the build-system / run-task selectors are not yet EP- or service-modelled.
+- **Engine services for the external tier:** an installed plugin can register a service but cannot resolve one
+  of the IDE's. Every engine key is `internal` to `ide-core`, and even the public ones (`ANALYTICS_SERVICE`,
+  `NOTIFICATION_PRESENTER`, the Store ports) sit in an unpublished module, so `WORKSPACE_SERVICE` is the only
+  service key the published SPI carries. Closing this means either promoting a narrowed interface plus its key
+  into an `*-api` module, or growing the host facade that `PluginRegistration.hostVersion` starts, which is
+  also where `capabilities` enforcement would land. The full inventory, and what each tier can name, is in
+  [writing-plugins.md, Appendix C](writing-plugins.md#appendix-c-service-index).

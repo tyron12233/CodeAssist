@@ -2,6 +2,7 @@ package dev.ide.android.plugins
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
@@ -11,8 +12,10 @@ import dev.ide.core.plugins.PluginManifestToml
 import dev.ide.platform.log.Log
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.external.DiscoveredPlugin
+import dev.ide.plugin.external.PluginCandidate
 import dev.ide.plugin.external.PluginOrigin
 import dev.ide.plugin.external.PluginSource
+import dev.ide.plugin.external.RejectedPlugin
 import java.io.File
 import java.security.MessageDigest
 
@@ -60,7 +63,7 @@ class ApkPluginSource(
 
     override val id: String get() = SOURCE_ID
 
-    override fun discover(): List<DiscoveredPlugin> {
+    override fun discover(): List<PluginCandidate> {
         val matches = try {
             packages.queryIntentActivities(Intent(PLUGIN_ACTION), PackageManager.GET_META_DATA)
         } catch (t: Throwable) {
@@ -70,21 +73,22 @@ class ApkPluginSource(
         return matches.mapNotNull { read(it) }
     }
 
-    /** Parse one match into a [DiscoveredPlugin], or null with a logged reason if it is not usable. */
-    private fun read(match: ResolveInfo): DiscoveredPlugin? {
+    /**
+     * Parse one match into a [DiscoveredPlugin], or into a [RejectedPlugin] carrying why it cannot be used.
+     * Null only for a match that is not a third-party plugin app at all.
+     */
+    private fun read(match: ResolveInfo): PluginCandidate? {
         val activity = match.activityInfo ?: return null
         val pkg = activity.packageName
         // A plugin app cannot be the IDE itself: that would load the host's own classes a second time.
         if (pkg == appContext.packageName) return null
         if (installerAllowlist.isNotEmpty() && installerOf(pkg) !in installerAllowlist) {
-            log.warn("ignoring plugin app $pkg: not installed by an accepted installer")
-            return null
+            return reject(activity, "not installed by an accepted installer")
         }
 
         val resourceId = activity.metaData?.getInt(META_MANIFEST, 0) ?: 0
         if (resourceId == 0) {
-            log.warn("ignoring plugin app $pkg: no '$META_MANIFEST' meta-data")
-            return null
+            return reject(activity, "the app declares no '$META_MANIFEST' meta-data")
         }
 
         val manifest = try {
@@ -93,8 +97,7 @@ class ApkPluginSource(
                 .use { it.readBytes().toString(Charsets.UTF_8) }
             PluginManifestToml.parse(text)
         } catch (t: Throwable) {
-            log.warn("ignoring plugin app $pkg: ${t.message ?: t::class.java.name}")
-            return null
+            return reject(activity, t.message ?: t::class.java.name)
         }
 
         val signature = signatureOf(pkg)
@@ -105,6 +108,28 @@ class ApkPluginSource(
             packages = packages,
             parent = javaClass.classLoader,
         )
+    }
+
+    /**
+     * A plugin app that was found but cannot be loaded. The reason travels with it to the Plugins screen, so
+     * a malformed manifest shows up as a row the user can read instead of as nothing at all. No signing
+     * certificate is read: nothing about a rejected plugin is trusted, so there is no decision to make.
+     */
+    private fun reject(activity: ActivityInfo, reason: String): RejectedPlugin {
+        val pkg = activity.packageName
+        log.warn("cannot use plugin app $pkg: $reason")
+        return RejectedPlugin(
+            origin = PluginOrigin(SOURCE_ID, pkg),
+            reason = reason,
+            name = labelOf(activity.applicationInfo) ?: pkg,
+        )
+    }
+
+    /** The plugin app's own display label, or null when it cannot be read. */
+    private fun labelOf(app: ApplicationInfo): String? = try {
+        packages.getApplicationLabel(app).toString().trim().ifEmpty { null }
+    } catch (t: Throwable) {
+        null
     }
 
     /** Lowercase hex SHA-256 of the package's first signing certificate, or null if it cannot be read. */

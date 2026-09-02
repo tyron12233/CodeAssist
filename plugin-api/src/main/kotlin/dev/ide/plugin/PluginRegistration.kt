@@ -1,3 +1,6 @@
+// Copyright (C) 2026 tyron12233
+// SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
+// See LICENSE-EXCEPTION: a plugin linking against this file may use any license.
 package dev.ide.plugin
 
 import dev.ide.platform.Disposable
@@ -51,4 +54,15 @@ interface PluginRegistration {
     /** A [Logger] whose records are attributed to this plugin (via [pluginId]) so the in-app Logs viewer can
      *  filter by plugin. The attribution is set by the platform and cannot be forged by the caller. */
     fun logger(tag: String): Logger
+
+    /**
+     * The running IDE's version, or null when the host supplied none (the desktop launcher, a standalone
+     * test). This is the same value the loader compares against a manifest's `minHostVersion`, so a plugin
+     * that branches on it and one that declares a floor agree about what they are running on.
+     *
+     * Prefer `minHostVersion` for "I need a newer IDE than this": the loader refuses to load the plugin and
+     * puts the reason on its row in the Plugins screen, which no runtime check can do. Read this for the
+     * softer cases, such as adapting behaviour or reporting the host in a diagnostic.
+     */
+    val hostVersion: String? get() = null
 }

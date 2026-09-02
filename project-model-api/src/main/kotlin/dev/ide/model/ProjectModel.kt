@@ -53,6 +53,15 @@ interface Workspace {
     val libraryTable: LibraryTable          // workspace-scoped, shared libraries
     val sdkTable: SdkTable
     fun <T : Any> service(key: ServiceKey<T>): T
+
+    /**
+     * Like [service], but null when nothing up the scope chain defines [key], for an optional capability
+     * whose absence is normal: a host that registered no implementation, or a standalone test with no
+     * container behind it. The default answers null, so an implementation backed by a real
+     * [dev.ide.platform.ServiceContainer] must override it (the IDE's does).
+     */
+    fun <T : Any> serviceOrNull(key: ServiceKey<T>): T? = null
+
     fun beginModification(): WorkspaceTransaction
 }
 

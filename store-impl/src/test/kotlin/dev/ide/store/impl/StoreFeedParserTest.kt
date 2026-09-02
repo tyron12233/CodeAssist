@@ -1,5 +1,6 @@
 package dev.ide.store.impl
 
+import dev.ide.store.ShelfLayout
 import dev.ide.store.StoreMode
 import dev.ide.store.StoreSection
 import kotlin.test.Test
@@ -77,7 +78,13 @@ class StoreFeedParserTest {
     @Test
     fun ghostShelvesCarryHaveAndNeed() {
         val g = feed("explore-sparse.json").sections.filterIsInstance<StoreSection.GhostShelves>().single()
-        assertEquals(setOf("charts", "collections", "recommendations"), g.shelves.map { it.key }.toSet())
+        // Derived from the shelf registry rather than a fixed list: every gated shelf is here, keyed on
+        // the threshold it waits for, so adding one to the registry adds it to this list by itself.
+        assertTrue(
+            g.shelves.map { it.key }.containsAll(listOf("charts", "collections", "recommendations")),
+            "got ${g.shelves.map { it.key }}",
+        )
+        assertEquals(g.shelves.map { it.key }.distinct(), g.shelves.map { it.key }, "one card per gate")
         g.shelves.forEach {
             assertTrue(it.need > it.have, "${it.key}: a ghost shelf must still be short of its threshold")
             assertEquals(it.need - it.have, it.remaining)
@@ -128,20 +135,92 @@ class StoreFeedParserTest {
         assertEquals(StoreMode.POPULATED, f.mode)
         assertTrue(f.state.publishedProjectCount >= f.state.thresholds.charts)
         assertEquals(
-            listOf("trending-terms", "editorial-hero", "top-charts", "curated", "kinds", "because", "publisher", "new-updated"),
+            listOf(
+                "trending-terms", "editorial-hero", "editors-choice", "top-charts", "curated",
+                "most-liked", "kinds", "because", "publisher", "new-updated",
+            ),
             f.sections.map { it.id },
         )
     }
 
+    /**
+     * The registry's generic shelf, and the reason it exists: the look comes from the feed.
+     *
+     * `editors-choice` and `most-liked` are the same section type carrying different layouts, so neither
+     * needed a type of its own on the way in.
+     */
     @Test
-    fun chartsHaveThreeTabsAndRankedEntries() {
+    fun serverDefinedShelvesCarryTheirOwnLayout() {
+        val shelves = feed("explore-populated.json").sections.filterIsInstance<StoreSection.Shelf>()
+        assertEquals(listOf("editors-choice", "most-liked", "new-updated"), shelves.map { it.id })
+        assertEquals(ShelfLayout.POSTER, shelves.first { it.id == "editors-choice" }.layout)
+        assertEquals(ShelfLayout.CAROUSEL, shelves.first { it.id == "most-liked" }.layout)
+        // Sent as `list` rather than `shelf`, and it must arrive here identically either way — that is
+        // what keeps an already-published client rendering this shelf after the server migrates.
+        assertEquals(ShelfLayout.ROWS, shelves.first { it.id == "new-updated" }.layout)
+        assertEquals("Editor's Choice", shelves.first { it.id == "editors-choice" }.title)
+        assertEquals("Editorial", shelves.first { it.id == "editors-choice" }.eyebrow)
+        shelves.forEach { assertTrue(it.items.isNotEmpty(), "${it.id} arrived empty") }
+    }
+
+    /**
+     * A layout this build has never heard of falls back to a list rather than dropping the shelf.
+     *
+     * The opposite of the unknown-TYPE rule, and deliberately so: an unknown type is a shape the client
+     * cannot draw at all, while an unknown layout is content it can draw plainly.
+     */
+    @Test
+    fun anUnknownLayoutDegradesToRowsRatherThanDroppingTheShelf() {
+        val json = """
+        {"version":4,"mode":"populated","storeState":{"publishedProjectCount":12},
+         "sections":[{"type":"shelf","id":"promo","layout":"parallax_diorama","title":"Promo",
+                      "items":[{"id":"x","kind":"sample","title":"T","summary":"s","category":"java"}]}]}
+        """.trimIndent()
+        val shelf = assertNotNull(StoreFeedParser.parse(json)).sections.single() as StoreSection.Shelf
+        assertEquals(ShelfLayout.ROWS, shelf.layout)
+        assertEquals(1, shelf.items.size)
+    }
+
+    /**
+     * `list` is the wire type a `rows` shelf still goes out as, so that a build which predates `shelf`
+     * keeps rendering "New & updated". Both spellings must land on the same thing here.
+     */
+    @Test
+    fun theOlderListSectionStillParsesAsARowsShelf() {
+        val json = """
+        {"version":3,"mode":"populated","storeState":{"publishedProjectCount":12},
+         "sections":[{"type":"list","id":"new-updated","title":"New & updated",
+                      "items":[{"id":"y","kind":"sample","title":"Y","summary":"s","category":"java"}]}]}
+        """.trimIndent()
+        val shelf = assertNotNull(StoreFeedParser.parse(json)).sections.single() as StoreSection.Shelf
+        assertEquals("New & updated", shelf.title)
+        assertEquals(ShelfLayout.ROWS, shelf.layout)
+    }
+
+    @Test
+    fun chartTabsAreServerDefinedAndNameWhatTheyRankOn() {
         val c = feed("explore-populated.json").sections.filterIsInstance<StoreSection.Charts>().single()
-        assertEquals(listOf("trending", "top_rated", "new"), c.tabs.map { it.key })
+        assertEquals(listOf("trending", "top_rated", "new", "most_liked"), c.tabs.map { it.key })
+        // The metric, not the key, is what the row's meta line reads: a tab added server-side must not
+        // silently label itself with a count it is not ordered by.
+        assertEquals(
+            listOf("installs", "rating", "recency", "likes"),
+            c.tabs.map { it.metric },
+        )
         assertNotNull(c.computedAt, "the live dot is only honest because computedAt is shown")
-        val trending = c.tabs.first { it.key == "trending" }
-        assertTrue(trending.entries.isNotEmpty())
-        // Ranks are 1-based and contiguous.
-        assertEquals((1..trending.entries.size).toList(), trending.entries.map { it.rank })
+        c.tabs.forEach { tab ->
+            assertTrue(tab.entries.isNotEmpty(), "${tab.key} arrived empty")
+            // Ranks are 1-based and contiguous.
+            assertEquals((1..tab.entries.size).toList(), tab.entries.map { it.rank }, tab.key)
+        }
+    }
+
+    /** The fixture is captured across a snapshot boundary, so at least one row has actually moved. */
+    @Test
+    fun theFixtureContainsRealChartMovement() {
+        val c = feed("explore-populated.json").sections.filterIsInstance<StoreSection.Charts>().single()
+        val moved = c.tabs.flatMap { it.entries }.mapNotNull { it.delta }.filter { it != 0 }
+        assertTrue(moved.isNotEmpty(), "no rank changed; the fixture cannot exercise the movement arrow")
     }
 
     /** The delta arithmetic the movement indicator depends on. */
@@ -164,6 +243,7 @@ class StoreFeedParserTest {
         val p = feed("explore-populated.json").sections.filterIsInstance<StoreSection.Personalized>().single()
         assertTrue(p.items.size >= StoreFeedParser.MIN_PERSONALIZED, "got ${p.items.size}")
         assertEquals("kmp-starter", p.seedProjectId)
+        assertTrue(p.items.none { it.id == "kmp-starter" }, "the seed cannot recommend itself")
         assertTrue(p.title.startsWith("Because you installed "), p.title)
     }
 

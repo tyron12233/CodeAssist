@@ -5,6 +5,7 @@ import dev.ide.store.ChartEntry
 import dev.ide.store.ChartTab
 import dev.ide.store.GhostShelf
 import dev.ide.store.RemoteCategory
+import dev.ide.store.ShelfLayout
 import dev.ide.store.StoreCollection
 import dev.ide.store.StoreFeed
 import dev.ide.store.StoreMode
@@ -69,7 +70,14 @@ object StoreFeedParser {
                 .mapNotNull(::parseChartTab)
                 // Every tab empty means the chart has nothing to say, whatever the server sent.
                 .takeIf { tabs -> tabs.any { it.entries.isNotEmpty() } }
-                ?.let { StoreSection.Charts(id, it, JsonReader.str(v, "computedAt")) }
+                ?.let {
+                    StoreSection.Charts(
+                        id = id,
+                        tabs = it,
+                        computedAt = JsonReader.str(v, "computedAt"),
+                        title = JsonReader.str(v, "title"),
+                    )
+                }
 
             "collections" -> items.mapNotNull(::parseCollection)
                 .takeIf { it.isNotEmpty() }
@@ -105,9 +113,22 @@ object StoreFeedParser {
             "spotlight" -> parsePublisher(JsonReader.obj(v)?.get("publisher"))
                 ?.let { StoreSection.Spotlight(id, it) }
 
-            "list" -> items.mapNotNull(SupabaseStoreSource::parseItem)
+            // The registry's generic shelf. `list` is the pre-registry spelling of the same thing and is
+            // still accepted, so a client that has shipped this build keeps working against a server that
+            // has not been migrated yet.
+            "shelf", "list" -> items.mapNotNull(SupabaseStoreSource::parseItem)
                 .takeIf { it.isNotEmpty() }
-                ?.let { StoreSection.ItemList(id, JsonReader.str(v, "title") ?: "Projects", it) }
+                ?.let {
+                    StoreSection.Shelf(
+                        id = id,
+                        title = JsonReader.str(v, "title"),
+                        subtitle = JsonReader.str(v, "subtitle"),
+                        eyebrow = JsonReader.str(v, "eyebrow"),
+                        iconKey = JsonReader.str(v, "iconKey"),
+                        layout = ShelfLayout.of(JsonReader.str(v, "layout")),
+                        items = it,
+                    )
+                }
 
             "catalogue" -> items.mapNotNull(SupabaseStoreSource::parseItem)
                 .takeIf { it.isNotEmpty() }
@@ -141,6 +162,7 @@ object StoreFeedParser {
             key = key,
             label = JsonReader.str(v, "label") ?: key,
             entries = JsonReader.arr(JsonReader.obj(v)?.get("entries")).mapNotNull(::parseChartEntry),
+            metric = JsonReader.str(v, "metric"),
         )
     }
 
@@ -199,7 +221,13 @@ object StoreFeedParser {
 
     private fun parseGhost(v: Any?): GhostShelf? {
         val key = JsonReader.str(v, "key") ?: return null
-        return GhostShelf(key = key, have = JsonReader.int(v, "have"), need = JsonReader.int(v, "need"))
+        return GhostShelf(
+            key = key,
+            have = JsonReader.int(v, "have"),
+            need = JsonReader.int(v, "need"),
+            title = JsonReader.str(v, "title"),
+            note = JsonReader.str(v, "note"),
+        )
     }
 
     /** The contract's floor for a personalized shelf. */

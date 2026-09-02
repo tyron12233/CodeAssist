@@ -1209,6 +1209,22 @@ data class UiPluginInfo(
     val origin: String = "",
     /** Why an installed plugin did not load this launch, or null if it loaded. */
     val error: String? = null,
+    /** False when the plugin has no usable manifest, so there is no id to persist an enable/disable choice
+     *  against. The row is informational and [error] says what is wrong with it. */
+    val togglable: Boolean = true,
+
+    /**
+     * True for an installed plugin the user has not been asked about yet. It is not loaded, and the Plugins
+     * screen asks before it ever runs: discovering a plugin app is not consent to execute it inside the IDE.
+     */
+    val needsConsent: Boolean = false,
+    /** What the plugin's manifest declares it does. Unenforced, so it is shown as a claim. */
+    val capabilities: List<String> = emptyList(),
+    /**
+     * Hex SHA-256 of the signing certificate of the installed package, read from the package manager rather
+     * than from anything the plugin declares. Null when it could not be read.
+     */
+    val signature: String? = null,
 )
 
 /** IDE settings, the extensible settings pages, the inspection catalogue, and app preferences. */
@@ -1252,6 +1268,12 @@ interface SettingsService {
     /** Enable or disable built-in plugin [id]. Persisted app-globally and applied on the next launch; a no-op
      *  for an essential plugin. */
     fun setPluginEnabled(id: String, enabled: Boolean) {}
+
+    /**
+     * Record the user's answer for an installed plugin. Granting lets it load from the next launch; refusing
+     * disables it, which is also what stops the question being asked again.
+     */
+    fun setPluginConsent(id: String, granted: Boolean) {}
 }
 
 // ---------------------------------------------------------------------------

@@ -83,6 +83,18 @@ class PluginManifestTomlTest {
     }
 
     @Test
+    fun `accepts the capitals an applicationId or a Java package would carry`() {
+        val m = PluginManifestToml.parse(
+            """
+            id = "kz.codingOnTheMoon.mypreciousplugin"
+            entryPoints = ["kz.codingOnTheMoon.mypreciousplugin.MyPreciousPlugIn"]
+            """.trimIndent()
+        )
+        // The id keeps the case it was written in: it is the identity, not a display name.
+        assertEquals("kz.codingOnTheMoon.mypreciousplugin", m.id)
+    }
+
+    @Test
     fun `rejects an id that is not a plain identifier`() {
         assertFailsWith<IllegalArgumentException> {
             PluginManifestToml.parse(

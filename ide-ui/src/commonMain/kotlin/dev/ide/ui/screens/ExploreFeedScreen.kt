@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.UiChartEntry
 import dev.ide.ui.backend.UiFeedSection
+import dev.ide.ui.backend.UiShelfLayout
 import dev.ide.ui.backend.UiStoreCollection
 import dev.ide.ui.backend.UiStoreFeed
 import dev.ide.ui.backend.UiStoreItem
@@ -198,15 +199,8 @@ fun ExploreFeed(
                         }
                     }
 
-                    is UiFeedSection.ItemList -> {
-                        item("head_${section.id}") { SectionHeader(section.title) }
-                        itemsIndexed(section.items, key = { _, it -> "${section.id}_${it.id}" }) { i, item ->
-                            StoreItemRow(item, i, onOpenItem, onInstallItem, installing[item.id])
-                        }
-                        item("ad_${section.id}") {
-                            AdSlot(AdPlacement.STORE, Modifier.padding(horizontal = 20.dp).padding(top = 16.dp))
-                        }
-                    }
+                    is UiFeedSection.Shelf ->
+                        shelfSection(section, onOpenItem, onInstallItem, installing)
 
                     is UiFeedSection.Catalogue -> {
                         item("head_${section.id}") {
@@ -272,8 +266,12 @@ fun ExploreFeed(
                             val spec = ghostSpec(shelf.key, shelf.need)
                             GhostShelfCard(
                                 shelf = shelf,
-                                title = spec.title,
-                                note = spec.note,
+                                // The hand-written copy wins where there is any; a shelf added to the
+                                // registry that this build has never heard of still gets its own words
+                                // rather than the generic card.
+                                title = spec.title ?: shelf.title ?: "Coming soon",
+                                note = spec.note ?: shelf.note
+                                    ?: "Switches on at ${shelf.need} projects.",
                                 glyph = spec.glyph,
                                 slotHeight = spec.slotHeight,
                                 slotCount = spec.slotCount,
@@ -372,7 +370,7 @@ private fun ChartsSection(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                "Top charts",
+                section.title ?: "Top charts",
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
@@ -383,7 +381,8 @@ private fun ChartsSection(
         Spacer(Modifier.height(12.dp))
         ChartCard(
             entries = tab.entries,
-            metaFor = { chartMeta(it, tab.key) },
+            // The tab says what it ranks on; the key is only a fallback for a server that predates it.
+            metaFor = { chartMeta(it, tab.metric ?: tab.key) },
             actionFor = { installActionLabel(it.item, installing[it.item.id]) },
             onOpen = { onOpenItem(it.item) },
             onAction = { if (!installing[it.item.id].inFlight) onInstallItem(it.item) },
@@ -443,6 +442,145 @@ private fun PersonalizedRow(section: UiFeedSection.Personalized, onOpenItem: (Ui
     }
 }
 
+/**
+ * A server-defined shelf, drawn the way its layout says.
+ *
+ * This is the whole reason the store can gain a shelf without an app release: the feed decides the
+ * title, the contents and the look, and the only thing fixed here is the vocabulary of looks. A layout
+ * this build does not know has already become [UiShelfLayout.ROWS] in the parser, so there is no
+ * "unknown layout" case to handle — a new look degrades to a list rather than to nothing.
+ */
+private fun LazyListScope.shelfSection(
+    section: UiFeedSection.Shelf,
+    onOpenItem: (UiStoreItem) -> Unit,
+    onInstallItem: (UiStoreItem) -> Unit,
+    installing: Map<String, dev.ide.ui.backend.UiInstallProgress>,
+) {
+    item("head_${section.id}") { ShelfHeader(section) }
+
+    when (section.layout) {
+        // One lazy item per row, so a long list is not composed all at once.
+        UiShelfLayout.ROWS -> {
+            itemsIndexed(section.items, key = { _, it -> "${section.id}_${it.id}" }) { i, item ->
+                StoreItemRow(item, i, onOpenItem, onInstallItem, installing[item.id])
+            }
+            item("ad_${section.id}") {
+                AdSlot(AdPlacement.STORE, Modifier.padding(horizontal = 20.dp).padding(top = 16.dp))
+            }
+        }
+
+        UiShelfLayout.CAROUSEL -> item(section.id) {
+            val state = rememberLazyListState()
+            LazyRow(
+                state = state,
+                flingBehavior = rememberSnapFlingBehavior(state),
+                contentPadding = PaddingValues(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                itemsIndexed(section.items, key = { _, it -> it.id }) { i, item ->
+                    PosterCard(item = item, index = i, onOpen = { onOpenItem(item) })
+                }
+            }
+        }
+
+        UiShelfLayout.POSTER -> item(section.id) {
+            val state = rememberLazyListState()
+            LazyRow(
+                state = state,
+                flingBehavior = rememberSnapFlingBehavior(state),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                itemsIndexed(section.items, key = { _, it -> it.id }) { i, item ->
+                    FeaturedHeroCard(
+                        title = item.title,
+                        badge = item.kind.name,
+                        subtitle = listOfNotNull(item.author, item.language)
+                            .joinToString(" · ").ifBlank { item.category },
+                        pair = tonalPair(i),
+                        motif = remember(item.id) { motifFor(item.id) },
+                        rating = item.rating,
+                        installs = item.installs,
+                        onClick = { onOpenItem(item) },
+                    )
+                }
+            }
+        }
+
+        UiShelfLayout.GRID -> {
+            val rows = section.items.chunked(2)
+            itemsIndexed(rows, key = { i, _ -> "grid_${section.id}_$i" }) { rowIndex, row ->
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    row.forEachIndexed { colIndex, item ->
+                        PosterCard(
+                            item = item,
+                            index = rowIndex * 2 + colIndex,
+                            onOpen = { onOpenItem(item) },
+                            modifier = Modifier.weight(1f),
+                            fillWidth = true,
+                        )
+                    }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+
+        // Numbered like a chart, but with no movement arrows: this shelf has no previous snapshot behind
+        // it, and drawing a flat arrow for every row would claim a history that does not exist.
+        UiShelfLayout.RANK -> item(section.id) {
+            Spacer(Modifier.height(4.dp))
+            ChartCard(
+                entries = section.items.mapIndexed { i, it ->
+                    UiChartEntry(rank = i + 1, previousRank = null, item = it)
+                },
+                metaFor = { chartMeta(it, "installs") },
+                actionFor = { installActionLabel(it.item, installing[it.item.id]) },
+                onOpen = { onOpenItem(it.item) },
+                onAction = { if (!installing[it.item.id].inFlight) onInstallItem(it.item) },
+                showMovement = false,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShelfHeader(section: UiFeedSection.Shelf) {
+    if (section.eyebrow != null) {
+        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 26.dp)) {
+            Eyebrow(section.eyebrow!!)
+        }
+        SectionHeaderTight(section.title.orEmpty(), section.subtitle)
+    } else {
+        SectionHeader(section.title.orEmpty(), subtitle = section.subtitle)
+    }
+}
+
+/** The same header with the top padding removed, for when an eyebrow already opened the block. */
+@Composable
+private fun SectionHeaderTight(title: String, subtitle: String?) {
+    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 8.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        if (subtitle != null) {
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    }
+}
+
 private fun LazyListScope.categoriesGrid(
     section: UiFeedSection.Categories,
     onOpenSearch: (String?) -> Unit,
@@ -474,13 +612,14 @@ private fun LazyListScope.categoriesGrid(
 
 /** Which glyph, note and slot proportions a ghost shelf uses. The note names the threshold, not a date. */
 private data class GhostSpec(
-    val title: String,
-    val note: String,
+    val title: String?,
+    val note: String?,
     val glyph: Char,
     val slotHeight: androidx.compose.ui.unit.Dp,
     val slotCount: Int,
 )
 
+/** Null members mean "this build has no copy for that shelf"; the server's own words are used instead. */
 private fun ghostSpec(key: String, need: Int): GhostSpec = when (key) {
     "charts" -> GhostSpec(
         title = "Top charts",
@@ -496,9 +635,17 @@ private fun ghostSpec(key: String, need: Int): GhostSpec = when (key) {
         slotHeight = 72.dp,
         slotCount = 2,
     )
-    else -> GhostSpec(
+    "recommendations" -> GhostSpec(
         title = "Because you installed…",
         note = "Recommendations need install history across several projects.",
+        glyph = CaSymbols.hub,
+        slotHeight = 60.dp,
+        slotCount = 3,
+    )
+    // A shelf the registry gained after this build shipped: same frame, the server's own copy.
+    else -> GhostSpec(
+        title = null,
+        note = null,
         glyph = CaSymbols.hub,
         slotHeight = 60.dp,
         slotCount = 3,
@@ -599,7 +746,8 @@ private fun ExploreEmpty(
                 val spec = ghostSpec(key, need = 0)
                 GhostShelfCard(
                     shelf = null,
-                    title = spec.title,
+                    // EMPTY_GHOSTS only names shelves this build has copy for, so the fallback is unused.
+                    title = spec.title ?: key,
                     note = emptyGhostNote(key),
                     glyph = spec.glyph,
                     slotHeight = spec.slotHeight,

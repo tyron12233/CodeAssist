@@ -7,6 +7,7 @@ import dev.ide.store.StoreQuery
 import dev.ide.store.StoreResult
 import dev.ide.store.impl.StoreFeedParser
 import dev.ide.ui.backend.UiFeedSection
+import dev.ide.ui.backend.UiShelfLayout
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreItemKind
 import dev.ide.ui.backend.UiStoreMode
@@ -75,6 +76,35 @@ class StoreFeedWiringTest {
         assertTrue("Collections" in kinds, kinds.toString())
         assertTrue("Personalized" in kinds, kinds.toString())
         assertTrue("Spotlight" in kinds, kinds.toString())
+        assertTrue("Shelf" in kinds, kinds.toString())
+    }
+
+    /**
+     * The layout survives the mapping.
+     *
+     * Everything else in this mapper is field-for-field; the layout is an enum crossing the module seam,
+     * and a mapping that collapsed it would leave every server-defined shelf drawn as a plain list while
+     * still passing every other assertion here.
+     */
+    @Test
+    fun shelfLayoutSurvivesTheMapping() {
+        val feed = assertNotNull(StoreFeedParser.parse(fixture("explore-populated.json")))
+        val ui = StoreFeedMapper.toUi(feed, emptyMap())
+        val shelves = ui.sections.filterIsInstance<UiFeedSection.Shelf>().associateBy { it.id }
+        assertEquals(UiShelfLayout.POSTER, shelves.getValue("editors-choice").layout)
+        assertEquals(UiShelfLayout.CAROUSEL, shelves.getValue("most-liked").layout)
+        assertEquals(UiShelfLayout.ROWS, shelves.getValue("new-updated").layout)
+        assertEquals("Editorial", shelves.getValue("editors-choice").eyebrow)
+        assertTrue(shelves.values.all { it.items.isNotEmpty() })
+    }
+
+    /** The chart's meta line reads off `metric`, so it has to reach the UI model. */
+    @Test
+    fun chartMetricReachesTheUiModel() {
+        val feed = assertNotNull(StoreFeedParser.parse(fixture("explore-populated.json")))
+        val ui = StoreFeedMapper.toUi(feed, emptyMap())
+        val charts = ui.sections.filterIsInstance<UiFeedSection.Charts>().single()
+        assertEquals(listOf("installs", "rating", "recency", "likes"), charts.tabs.map { it.metric })
     }
 
     @Test

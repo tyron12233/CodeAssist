@@ -32,15 +32,24 @@ import dev.ide.lang.synthetic.SyntheticModifier
  * preview's bridge maps back from at runtime.
  */
 class AndroidRClassProvider(
-    /** Supplies the module's merged [ResourceRepository] (or null). The IDE injects a cache-backed supplier so
-     *  the repository is parsed ONCE and shared across the R class, layout preview, and reference resolution -
-     *  parsing it per call (per completion/analysis pass) re-read every dependency `res/` file and OOM'd. */
+    /** Supplies the module's merged [ResourceRepository] (or null). The repository is parsed ONCE and shared
+     *  across the R class, layout preview, and reference resolution - parsing it per call (per completion/
+     *  analysis pass) re-read every dependency `res/` file and OOM'd. */
     private val repository: (Module, Workspace) -> ResourceRepository?,
 ) : SyntheticClassProvider {
 
-    /** Standalone/default: parse the module's resources directly through [model] (tests and hosts without a
-     *  shared cache). */
-    constructor(model: ResourceModel = ResourceModel.DEFAULT) : this({ m, w -> AndroidResources.repository(m, w, model) })
+    /**
+     * The default: prefer the shared cache the workspace being asked about publishes
+     * ([ANDROID_RESOURCE_REPOSITORY]), and parse directly through [model] when there is none, which is the
+     * case for a standalone host or a test with no engine behind it.
+     *
+     * The cache is resolved through the [Workspace] that arrives with each call rather than through any
+     * "currently open project" handle, so the answer always comes from the model the caller is working on.
+     */
+    constructor(model: ResourceModel = ResourceModel.DEFAULT) : this({ m, w ->
+        w.serviceOrNull(ANDROID_RESOURCE_REPOSITORY)?.repository(m, w)
+            ?: AndroidResources.repository(m, w, model)
+    })
 
     override fun classesFor(context: SyntheticClassContext): List<SyntheticClass> {
         val facet = context.module.facets.get(AndroidFacet.KEY) ?: return emptyList()

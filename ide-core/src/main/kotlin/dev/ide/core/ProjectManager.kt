@@ -138,6 +138,7 @@ class ProjectManager private constructor(
      */
     val env: ApplicationEnvironment = ApplicationEnvironment(
         disabledPluginIds = readDisabledPlugins(),
+        consentedPluginIds = consentedPlugins(),
         pluginSources = pluginSources,
         hostVersion = hostVersion,
     )
@@ -426,6 +427,20 @@ class ProjectManager private constructor(
         setPreference(DISABLED_PLUGINS_KEY, ids.sorted().joinToString(","))
     }
 
+    /**
+     * Installed plugins the user has accepted running inside the IDE. Stored as the accepted set rather than
+     * the refused one: a plugin absent here has not been refused, only not asked about yet, and an
+     * accept-by-default would load third-party code before any disclosure was shown.
+     */
+    fun consentedPlugins(): Set<String> =
+        preference(CONSENTED_PLUGINS_KEY)?.split(",")?.mapNotNull { it.trim().ifEmpty { null } }?.toSet()
+            ?: emptySet()
+
+    /** Persist [ids] as the accepted installed plugins; takes effect on the next launch. */
+    fun setConsentedPlugins(ids: Set<String>) {
+        setPreference(CONSENTED_PLUGINS_KEY, ids.sorted().joinToString(","))
+    }
+
     private fun loadPrefs(): Properties = Properties().apply {
         if (Files.exists(prefsFile)) Files.newInputStream(prefsFile).use { load(it) }
     }
@@ -705,6 +720,7 @@ class ProjectManager private constructor(
     companion object {
         private const val LEGACY_IMPORTED_PREF = "legacy.projects.imported"
         private const val DISABLED_PLUGINS_KEY = "plugins.disabled"
+        private const val CONSENTED_PLUGINS_KEY = "plugins.consented"
 
         /** Desktop host: an installed Android SDK if present (so `android.*` resolves), else a detected JDK; Java 17. */
         fun desktop(projectsRoot: Path, legacyDataDirs: List<Path> = emptyList()): ProjectManager =

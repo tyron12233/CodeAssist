@@ -27,6 +27,7 @@ internal class PluginRegistrationImpl(
     private val registry: ExtensionRegistry,
     private val teardown: CompositeDisposable,
     private val bus: MessageBus,
+    override val hostVersion: String? = null,
 ) : PluginRegistration {
 
     override val messageBus: MessageBus get() = bus

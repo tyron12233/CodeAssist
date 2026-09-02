@@ -12,6 +12,7 @@ import dev.ide.plugin.PluginRegistration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private val EP = ExtensionPoint<String>("test.ep")
@@ -170,5 +171,37 @@ private class HalfRegisteringPlugin(id: String) : Plugin {
     override fun register(reg: PluginRegistration) {
         reg.register(EP, "$manifest-partial")
         throw IllegalStateException("register failed")
+    }
+}
+
+
+/** Records what the registrar reported as the running IDE's version. */
+private class HostVersionPlugin(id: String = "hv") : Plugin {
+    override val manifest = PluginManifest(id = id, name = id)
+    var seen: String? = null
+    var registered = false
+
+    override fun register(reg: PluginRegistration) {
+        seen = reg.hostVersion
+        registered = true
+    }
+}
+
+class PluginRegistrationHostVersionTest {
+
+    @Test
+    fun `a plugin sees the host version the manager was built with`() {
+        val plugin = HostVersionPlugin()
+        PluginManager(ExtensionRegistryImpl(), hostVersion = "3.12.0").loadAll(listOf(plugin))
+        assertTrue(plugin.registered, "the plugin must have been registered")
+        assertEquals("3.12.0", plugin.seen)
+    }
+
+    @Test
+    fun `the host version is null when the host supplied none`() {
+        val plugin = HostVersionPlugin()
+        PluginManager(ExtensionRegistryImpl()).loadAll(listOf(plugin))
+        assertTrue(plugin.registered, "the plugin must have been registered")
+        assertNull(plugin.seen, "a host with no version to report must not invent one")
     }
 }
