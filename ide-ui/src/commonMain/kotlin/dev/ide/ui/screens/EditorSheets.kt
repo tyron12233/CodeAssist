@@ -151,7 +151,7 @@ internal fun MoreSheetContent(
         Text(stringResource(Res.string.more), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 6.dp, top = 4.dp, bottom = 10.dp))
         actions.forEach { a ->
-            MoreRow(actionIcon(a.iconId), a.text, a.description ?: "") { a.perform(host) }
+            MoreRow(actionIcon(a.iconId), localizedUiActionText(a), localizedUiActionDescription(a) ?: "") { a.perform(host) }
         }
 
         // Performance-analytics opt-in lives here (a settings surface) rather than on the home screen, so it's

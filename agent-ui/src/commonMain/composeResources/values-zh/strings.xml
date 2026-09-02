@@ -37,4 +37,8 @@
     <string name="chat_antigravity_signin">使用 Google 登录</string>
     <string name="chat_antigravity_waiting">正在等待浏览器 — 授权后请返回 CodeAssist</string>
     <string name="chat_cancel">取消</string>
+
+        <string name="chat_ca_cert">CA 证书（可选）</string>
+
+        <string name="chat_ca_cert_hint">仅当端点使用系统不信任的私有或区域性 CA 时（如 GigaChat）才粘贴 CA 证书（PEM）。它会在系统 CA 之外额外受信任；证书链仍会校验。</string>
 </resources>
