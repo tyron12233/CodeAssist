@@ -9,17 +9,21 @@ import dev.ide.platform.settings.SettingsScope
 import dev.ide.plugin.Plugin
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.PluginRegistration
+import dev.ide.plugin.action.ActionContext
+import dev.ide.plugin.action.ActionEffect
 import dev.ide.plugin.action.ActionPlaces
 import dev.ide.plugin.action.ActionResult
 import dev.ide.plugin.action.SimpleAction
+import dev.ide.plugin.action.TextEdit
 import dev.ide.plugin.action.UI_ACTION_EP
 
 /**
  * The entry point named by `res/raw/codeassist_plugin.toml`. The IDE instantiates this class off the
  * installed APK with its own classloader as the parent, so the SPI types below bind to the IDE's copies.
  *
- * It contributes to three surfaces, each a plain extension-point registration:
+ * It contributes to four surfaces, each a plain extension-point registration:
  *  - a command in the command palette and the More menu ([UI_ACTION_EP]);
+ *  - an editor action at the caret, on the same extension point but the [ActionPlaces.EDITOR] place;
  *  - a category in Settings ([SETTINGS_PAGE_EP]);
  *  - a log line attributed to this plugin, which the Logs screen can filter by.
  */
@@ -32,7 +36,7 @@ class HelloPlugin : Plugin {
         version = "1.0.0",
         description = "Sample plugin shipped as its own app.",
         entryPoints = listOf("com.example.hello.HelloPlugin"),
-        capabilities = listOf("ui.settingsPage", "ui.action"),
+        capabilities = listOf("ui.settingsPage", "ui.action", "ui.editorAction"),
         minHostVersion = "3.12.0",
     )
 
@@ -53,9 +57,62 @@ class HelloPlugin : Plugin {
             },
         )
 
+        // An editor action: same extension point, but placed at the caret. It is listed in the Alt-Enter
+        // popup, the editor's overflow menu, and the palette while an editor is focused.
+        reg.register(
+            UI_ACTION_EP,
+            SimpleAction(
+                id = "com.example.hello.wrapInRunCatching",
+                text = "Hello: wrap call in runCatching { }",
+                places = setOf(ActionPlaces.EDITOR),
+                iconId = "sparkle",
+                order = 100,
+                // Listing runs on caret moves, so the predicate reads the flat snapshot and nothing else.
+                // Without it the action would offer itself on every caret position in every file.
+                visible = { ctx ->
+                    val caret = ctx.caret
+                    caret != null && caret.languageId == "kotlin" && caret.nodeKind == "method_call"
+                },
+            ) { ctx -> wrapInRunCatching(ctx, log) },
+        )
+
         reg.register(SETTINGS_PAGE_EP, HelloSettingsPage(log))
-        log.info("registered 1 action and 1 settings page")
+        log.info("registered 2 actions and 1 settings page")
     }
+}
+
+/**
+ * Replace the call at the caret with `runCatching { <call> }` and leave the result selected.
+ *
+ * The shape every editor action follows: read the caret snapshot and the buffer off the context, compute
+ * the replacement, and return it as effects. The action never touches a file or the editor itself, which is
+ * what lets the host apply the edit through its normal text path, in one undo step.
+ */
+private fun wrapInRunCatching(ctx: ActionContext, log: Logger): ActionResult {
+    val caret = ctx.caret ?: return ActionResult.NONE
+    val text = ctx.documentText ?: return ActionResult.NONE
+
+    // Read the call from the buffer rather than from CaretContext.nodeText: that field is capped, so a long
+    // node arrives truncated. The span is exact either way.
+    val start = caret.nodeStart.coerceIn(0, text.length)
+    val end = caret.nodeEnd.coerceIn(start, text.length)
+    if (end == start) return ActionResult.NONE
+    val call = text.substring(start, end)
+    if (call.startsWith("runCatching")) return ActionResult.message("Already wrapped")
+
+    // Ancestors carry their spans, so an action can report or act on what encloses the caret.
+    val enclosing = caret.enclosing("method_decl")
+    log.info("wrapping `$call` at $start..$end, inside a function: ${enclosing != null}")
+
+    val replacement = "runCatching { $call }"
+    return ActionResult(
+        message = "Wrapped the call in runCatching",
+        effects = listOf(
+            ActionEffect.ApplyEdits(listOf(TextEdit.replace(start, end, replacement))),
+            // Pairing an edit with a selection is how a generated result is left ready to type over.
+            ActionEffect.Select(start, start + replacement.length),
+        ),
+    )
 }
 
 /** A Settings category the IDE renders generically from these control declarations. */

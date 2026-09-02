@@ -870,12 +870,20 @@ ancestor chain, the resolver, and the index, and returns `QuickFix`es producing 
 tiers are listed in the same popup and menu, so the choice is about what the action needs, not where it
 appears.
 
+`analysis-api` is published alongside `plugin-api`, so an installed plugin can use either tier. The
+difference is what each one costs and reaches, not who is allowed to use it:
+
 | | `IdeAction` on `EDITOR` | `ActionProvider` |
 | --- | --- | --- |
+| Module | `plugin-api` (needs only `platform-core`) | `analysis-api` (pulls in `language-api` and `index-api`) |
 | Context | Flat `CaretContext` plus the buffer | Live DOM, resolver, index, module |
 | Scope | Any language, or gated on `caret.languageId` | Declared `languages` set |
 | Produces | `ActionEffect`s, including file and caret effects | `WorkspaceEdit` (text edits only) |
 | Good for | Line and text rewrites, sending code elsewhere, file moves | Type-aware refactors, generated members, import fixes |
+
+One consequence of that last row: only the portable tier can place the caret or a selection, since a
+`WorkspaceEdit` carries edits and nothing else. An analysis-tier refactor that generates a name cannot
+leave it selected for the user to type over.
 
 ### 9.4 How it reaches the UI
 
@@ -1575,13 +1583,13 @@ which doubles as your app's own screen:
 The engine SPI is published, so the extension points in these modules are available to a plugin app:
 
 ```kotlin
-compileOnly("io.github.tyron12233:plugin-api:1.0.0")        // actions, menus, palette commands
-compileOnly("io.github.tyron12233:platform-core:1.0.0")     // scoped services, settings pages, logging
-compileOnly("io.github.tyron12233:project-model-api:1.0.0") // module types, templates, facets + codecs, file icons
-compileOnly("io.github.tyron12233:language-api:1.0.0")      // file types, completion, postfix, synthetic classes
-compileOnly("io.github.tyron12233:analysis-api:1.0.0")      // analyzers, diagnostics, quick fixes, intentions
-compileOnly("io.github.tyron12233:index-api:1.0.0")         // persisted indexes
-compileOnly("io.github.tyron12233:build-api:1.0.0")         // build systems, build plugins, source generators
+compileOnly("io.github.tyron12233:plugin-api:1.1.0")        // actions, menus, palette commands
+compileOnly("io.github.tyron12233:platform-core:1.1.0")     // scoped services, settings pages, logging
+compileOnly("io.github.tyron12233:project-model-api:1.1.0") // module types, templates, facets + codecs, file icons
+compileOnly("io.github.tyron12233:language-api:1.1.0")      // file types, completion, postfix, synthetic classes
+compileOnly("io.github.tyron12233:analysis-api:1.1.0")      // analyzers, diagnostics, quick fixes, intentions
+compileOnly("io.github.tyron12233:index-api:1.1.0")         // persisted indexes
+compileOnly("io.github.tyron12233:build-api:1.1.0")         // build systems, build plugins, source generators
 ```
 
 Take only the ones you use; each brings the ones below it transitively.
@@ -1600,8 +1608,8 @@ The SPI is published, so it is an ordinary dependency:
 
 ```kotlin
 dependencies {
-    compileOnly("io.github.tyron12233:plugin-api:1.0.0")
-    compileOnly("io.github.tyron12233:platform-core:1.0.0")
+    compileOnly("io.github.tyron12233:plugin-api:1.1.0")
+    compileOnly("io.github.tyron12233:platform-core:1.1.0")
 }
 ```
 

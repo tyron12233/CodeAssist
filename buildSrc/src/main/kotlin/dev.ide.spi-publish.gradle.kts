@@ -1,14 +1,17 @@
-// Publishing for the two modules a plugin author compiles against: the plugin SPI (:plugin-api) and the
-// substrate it exposes through that SPI (:platform-core). Nothing else in this build is published.
+// Publishing for the modules a plugin author compiles against: the plugin SPI (:plugin-api), the substrate
+// it exposes (:platform-core), and the feature SPIs a plugin extends (:project-model-api, :language-api,
+// :analysis-api, :index-api, :build-api, and :vfs-api, which the others expose transitively). Nothing else
+// in this build is published.
 //
 // These carry their own version rather than the app's. The SPI changes far less often than the IDE ships,
 // and whether a plugin is compatible is decided by PLUGIN_API_VERSION plus the manifest's minHostVersion,
-// so republishing two unchanged artifacts on every release would buy nothing. The version is read out of
+// so republishing unchanged artifacts on every release would buy nothing. The version is read out of
 // plugin-api's own PLUGIN_SPI_VERSION, which is also what the Create-Project template writes into a
 // scaffolded plugin's build file, so the coordinate asked for and the coordinate published cannot drift.
 //
-// Both modules are GPL-3.0-or-later WITH Classpath-exception-2.0 (see LICENSE-EXCEPTION), which is what lets
-// a plugin linking against them choose its own license. The rest of CodeAssist stays plain GPL-3.0-or-later.
+// Every published module is GPL-3.0-or-later WITH Classpath-exception-2.0 (see LICENSE-EXCEPTION), which is
+// what lets a plugin linking against them choose its own license. The rest of CodeAssist stays plain
+// GPL-3.0-or-later, so applying this plugin to a module is also the decision to license it that way.
 
 plugins {
     `java-library`
@@ -58,6 +61,22 @@ publishing {
                         "platform-core" ->
                             "The CodeAssist platform substrate the plugin SPI exposes: extension points, " +
                                 "scoped services, the message bus, logging, and the settings model."
+                        "project-model-api" ->
+                            "The CodeAssist project model: module types, project templates, facets and " +
+                                "their codecs, and file icons."
+                        "language-api" ->
+                            "The CodeAssist language SPI: the neutral syntax tree, resolution, file types, " +
+                                "completion, formatting, and folding."
+                        "analysis-api" ->
+                            "The CodeAssist analysis SPI: analyzers, the diagnostic model, quick fixes, and " +
+                                "editor action providers."
+                        "index-api" ->
+                            "The CodeAssist index SPI: persisted, incrementally maintained project indexes."
+                        "build-api" ->
+                            "The CodeAssist build SPI: build systems, build plugins, source generators, and " +
+                                "run tasks."
+                        "vfs-api" ->
+                            "The CodeAssist virtual file system, which the other SPI artifacts expose."
                         else -> "A CodeAssist plugin SPI artifact."
                     }
                 )

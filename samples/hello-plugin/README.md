@@ -4,10 +4,13 @@ A CodeAssist plugin shipped as its own Android app. The IDE finds it through the
 packaged manifest, and loads its classes off the installed APK. The full explanation of the model is in
 [docs/writing-plugins.md](../../docs/writing-plugins.md); this is the smallest complete example of it.
 
-It contributes to three surfaces, each a plain extension-point registration in
+It contributes to four surfaces, each a plain extension-point registration in
 [`HelloPlugin.kt`](src/main/kotlin/com/example/hello/HelloPlugin.kt):
 
 - a **command** in the command palette and the More menu (`UI_ACTION_EP`);
+- an **editor action** at the caret (the same extension point, placed on `ActionPlaces.EDITOR`): it wraps
+  the Kotlin call under the cursor in `runCatching { }` and leaves the result selected, and is listed in the
+  Alt-Enter popup, the editor's overflow menu, and the palette while an editor is focused;
 - a **category** in Settings (`SETTINGS_PAGE_EP`);
 - **log lines** attributed to `com.example.hello`, which the Logs screen can filter by.
 
@@ -46,8 +49,8 @@ published coordinates:
 
 ```kotlin
 dependencies {
-    compileOnly("io.github.tyron12233:plugin-api:1.0.0")
-    compileOnly("io.github.tyron12233:platform-core:1.0.0")
+    compileOnly("io.github.tyron12233:plugin-api:1.1.0")
+    compileOnly("io.github.tyron12233:platform-core:1.1.0")
 }
 ```
 
@@ -93,7 +96,7 @@ with `kotlin.compiler.runViaBuildToolsApi=true` in `gradle.properties`. Without 
 - `essential` and `trusted` are ignored whatever the file says: those are the IDE's to decide.
 - The plugin runs in the IDE's process, under its UID and its granted permissions. Class loading isolates
   versions, not privileges.
-- Your plugin's own license is yours to choose. The two SPI modules are GPL-3.0-or-later **with** the
+- Your plugin's own license is yours to choose. The published SPI modules are GPL-3.0-or-later **with** the
   Classpath exception (see [LICENSE-EXCEPTION](../../LICENSE-EXCEPTION)), so linking against them does not
   make your plugin a derivative work of CodeAssist.
 - Enabling or disabling a plugin takes effect on the IDE's next launch. The manager loads once at startup and
@@ -101,3 +104,9 @@ with `kotlin.compiler.runViaBuildToolsApi=true` in `gradle.properties`. Without 
 - A plugin that contributes only a settings page has no visible surface until a project is open, because
   plugin settings pages come from the project's engine. Add a palette command if you want something visible
   straight away.
+- An editor action's `visible` predicate runs on caret moves, for every registered action. Keep it to the
+  flat `caret` snapshot, and do the real work in `perform`, which runs only for the action the user picked.
+- `CaretContext.nodeText` is capped, so a long node arrives truncated. Read the exact source out of
+  `documentText` using `nodeStart`/`nodeEnd`, as the editor action here does.
+- An action that has to walk the syntax tree or resolve a symbol wants the analysis tier instead
+  (`ActionProvider` in `analysis-api`), which is published too. Both tiers appear in the same popup.

@@ -17,16 +17,21 @@ const val PLUGIN_API_VERSION: Int = 1
  * scaffolded with a coordinate that resolves:
  *
  * ```
- * compileOnly("io.github.tyron12233:plugin-api:1.0.0")
- * compileOnly("io.github.tyron12233:platform-core:1.0.0")
+ * compileOnly("io.github.tyron12233:plugin-api:1.1.0")
+ * compileOnly("io.github.tyron12233:platform-core:1.1.0")
  * ```
  *
  * Independent of the IDE's own version, because the SPI changes far less often than the app ships.
  * Whether a plugin is *compatible* is decided by [PLUGIN_API_VERSION] and the manifest's
  * [PluginManifest.minHostVersion], never by this coordinate. The publishing configuration reads this
  * constant, so what a scaffolded project asks for and what is actually published cannot drift.
+ *
+ * Semver over the SPI surface: a minor bump adds to it and leaves every existing plugin compiling, a
+ * major bump does not. `1.1.0` added the editor action tier (the `EDITOR` place, [action.CaretContext] on
+ * [action.ActionContext], and the editing, caret and file [action.ActionEffect]s), all of it defaulted, so
+ * a plugin built against `1.0.0` needs no change and [PLUGIN_API_VERSION] stays where it is.
  */
-const val PLUGIN_SPI_VERSION: String = "1.0.0"
+const val PLUGIN_SPI_VERSION: String = "1.1.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry
