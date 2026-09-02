@@ -125,11 +125,28 @@ dependencies {
 // the IntellijCoroutines -> IntelliJCoroutinesFacade remap; META-INF/services files are concatenated; jar
 // signature files and per-jar manifests are dropped (a fresh Multi-Release manifest is written so the
 // platform jars' META-INF/versions/* variants stay honored on the desktop JVM).
+// Cacheable: `clean` deletes the 65 MB output and re-merging it measured ~12s on every clean build, for a
+// pure function of four pinned jar sets. NAME_ONLY path sensitivity is what the merge itself uses (it sorts
+// each group by file name and is otherwise position-independent), so a jar's location in the Gradle cache
+// never enters the key while its content always does.
+@org.gradle.api.tasks.CacheableTask
 abstract class MergeUnshadedCompiler : DefaultTask() {
-    @get:org.gradle.api.tasks.InputFiles abstract val platformJars: ConfigurableFileCollection
-    @get:org.gradle.api.tasks.InputFiles abstract val compilerJars: ConfigurableFileCollection
-    @get:org.gradle.api.tasks.InputFiles abstract val analysisApiJars: ConfigurableFileCollection
-    @get:org.gradle.api.tasks.InputFiles abstract val extraJars: ConfigurableFileCollection
+    @get:org.gradle.api.tasks.InputFiles
+    @get:org.gradle.api.tasks.PathSensitive(org.gradle.api.tasks.PathSensitivity.NAME_ONLY)
+    abstract val platformJars: ConfigurableFileCollection
+
+    @get:org.gradle.api.tasks.InputFiles
+    @get:org.gradle.api.tasks.PathSensitive(org.gradle.api.tasks.PathSensitivity.NAME_ONLY)
+    abstract val compilerJars: ConfigurableFileCollection
+
+    @get:org.gradle.api.tasks.InputFiles
+    @get:org.gradle.api.tasks.PathSensitive(org.gradle.api.tasks.PathSensitivity.NAME_ONLY)
+    abstract val analysisApiJars: ConfigurableFileCollection
+
+    @get:org.gradle.api.tasks.InputFiles
+    @get:org.gradle.api.tasks.PathSensitive(org.gradle.api.tasks.PathSensitivity.NAME_ONLY)
+    abstract val extraJars: ConfigurableFileCollection
+
     @get:org.gradle.api.tasks.OutputFile abstract val outputJar: RegularFileProperty
 
     @TaskAction
@@ -199,9 +216,32 @@ val mergeUnshadedCompiler = tasks.register<MergeUnshadedCompiler>("mergeUnshaded
     outputJar.set(layout.buildDirectory.file("unshaded-compiler/kotlin-compiler-unshaded-$kotlinForIde.jar"))
 }
 
+// The merged compiler+platform jar IS this module's API, published as the project's OWN jar artifact rather
+// than declared as an `api(files(...))` file dependency.
+//
+// Why it matters for build speed: a `files(...)` entry reaches an Android consumer in AGP's
+// `ArtifactScope.FILE` bucket, which routes it to `desugar<Variant>FileDependencies`
+// (`DexFileDependenciesTask`). That task is non-incremental by design (AGP carries a `TODO: make
+// incremental`), gives each file dependency ONE worker (so this jar is D8-ed whole and single-threaded),
+// desugars it against the ENTIRE runtime classpath, and folds that whole classpath's ABI into its
+// up-to-date key. For a 65 MB / ~30k-class jar that is minutes of dexing on any build whose classpath ABI
+// moved. As the project's own artifact it is an ordinary sub-project jar instead, so it goes through AGP's
+// per-artifact `DexingNoClasspathTransform`: content-keyed, cached under ~/.gradle/caches/*/transforms, and
+// therefore dexed once and then reused across builds, cleans and branches.
+//
+// This module has no sources, so the java-library plugin's default `jar` artifact and its `classes` /
+// `resources` secondary variants are all views onto empty output directories. They are replaced wholesale:
+// the secondary variants have to go, or a consumer's compile classpath (which asks for
+// LibraryElements=classes) would resolve to an empty directory instead of the merged jar.
+listOf("apiElements", "runtimeElements").forEach { elements ->
+    configurations.named(elements) {
+        outgoing.artifacts.clear()
+        outgoing.artifact(mergeUnshadedCompiler.flatMap { it.outputJar })
+        outgoing.variants.removeIf { it.name == "classes" || it.name == "resources" }
+    }
+}
+
 dependencies {
-    // The merged compiler+platform jar IS this module's API.
-    api(files(mergeUnshadedCompiler.flatMap { it.outputJar }))
 
     // --- Support libs the platform/compiler need at runtime ------------------------------------------
     api("org.jetbrains.kotlinx:kotlinx-collections-immutable-jvm:0.3.4")
