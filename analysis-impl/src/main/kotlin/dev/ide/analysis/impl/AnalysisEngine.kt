@@ -6,12 +6,14 @@ import dev.ide.analysis.AnalysisListener
 import dev.ide.analysis.AnalysisProfile
 import dev.ide.analysis.AnalysisService
 import dev.ide.analysis.AnalysisTarget
+import dev.ide.analysis.CaretSnapshot
 import dev.ide.analysis.AnalyzerTier
 import dev.ide.analysis.Diagnostic
 import dev.ide.analysis.DiagnosticProvider
 import dev.ide.analysis.DiagnosticSink
 import dev.ide.analysis.DiagnosticSource
 import dev.ide.analysis.DiagnosticTag
+import dev.ide.analysis.EditorActionContext
 import dev.ide.analysis.FileAnalyzer
 import dev.ide.analysis.FileDiagnostics
 import dev.ide.analysis.FixContext
@@ -24,6 +26,7 @@ import dev.ide.analysis.QuickFixProvider
 import dev.ide.analysis.RelatedRange
 import dev.ide.analysis.WorkspaceEdit
 import dev.ide.lang.LanguageId
+import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 import dev.ide.platform.Disposable
@@ -141,10 +144,44 @@ class AnalysisEngine(
         val fixes = diagnostics(target.file)
             .filter { overlaps(it.range, range) }
             .flatMap { fixesFor(it, target) }
-        val intentions = actionProviders
-            .filter { lang == null || lang in it.languages }
-            .flatMap { runCatching { it.actions(target, range) }.getOrDefault(emptyList()) }
+        val applicable = actionProviders.filter { lang == null || lang in it.languages }
+        if (applicable.isEmpty()) return fixes
+        // Resolve the caret's place in the tree ONCE and share it: every provider's first move is to find
+        // the node at the caret and walk up from it, and that walk is identical for all of them.
+        val ctx = editorActionContext(target, range, lang)
+        val intentions = applicable
+            .flatMap { runCatching { it.actions(ctx) }.getOrDefault(emptyList()) }
         return fixes + intentions
+    }
+
+    /** The shared [EditorActionContext] for one listing pass: node at the caret + its ancestor chain. */
+    private fun editorActionContext(
+        target: AnalysisTarget,
+        range: TextRange,
+        lang: LanguageId?,
+    ): EditorActionContext {
+        val parsed = target.parsed
+        val at = parsed.nodeAt(range.start.coerceIn(0, parsed.range.end))
+        val chain = ArrayList<DomNode>()
+        var p = at.parent
+        while (p != null) {
+            chain.add(p)
+            p = p.parent
+        }
+        val snapshot = CaretSnapshot.of(parsed, range.start, lang)
+        return object : EditorActionContext {
+            override val target = target
+            override val range = range
+            override val node = at
+            override val ancestors: List<DomNode> = chain
+            override val caret = snapshot
+            override fun checkCanceled() = target.checkCanceled()
+        }
+    }
+
+    override suspend fun caretSnapshotAt(file: VirtualFile, offset: Int): CaretSnapshot? {
+        val target = environment.targetFor(file, needsBindings = false) ?: return null
+        return runCatching { CaretSnapshot.of(target.parsed, offset, environment.languageOf(file)) }.getOrNull()
     }
 
     /** Point-inclusive overlap (treats a caret — an empty range — as touching a diagnostic it sits on). */

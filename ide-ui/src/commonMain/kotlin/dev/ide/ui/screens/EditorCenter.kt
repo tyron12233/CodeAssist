@@ -283,6 +283,27 @@ internal fun EditorCenter(
                             active.previewTarget = fn
                             active.viewMode = EditorViewMode.Preview
                         },
+                        // A plugin editor action goes through the same dispatcher as the toolbar's, so its
+                        // effects (edit, move the caret, open a file, navigate) behave identically. The caret
+                        // snapshot is fetched at invoke time rather than kept on hand: it is only needed when
+                        // an action actually runs, and refetching it guarantees it matches this buffer.
+                        onEditorAction = { actionId, selStart, selEnd ->
+                            state.dispatchAction(
+                                actionId,
+                                UiActionContext(
+                                    place = UiActionPlaces.EDITOR,
+                                    activeFilePath = active.path,
+                                    selectionStart = selStart,
+                                    selectionEnd = selEnd,
+                                    caret = runCatching {
+                                        state.backend.editor.caretContext(
+                                            active.path, active.session.doc.text, selStart,
+                                        )
+                                    }.getOrNull(),
+                                ),
+                                navigate = pluginNavigator,
+                            )
+                        },
                     )
                 }
                 // `split` is true only in the Split view (editor + preview together): the Compose preview then

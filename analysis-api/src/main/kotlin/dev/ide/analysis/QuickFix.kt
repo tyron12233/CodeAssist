@@ -1,6 +1,9 @@
 package dev.ide.analysis
 
 import dev.ide.lang.LanguageId
+import dev.ide.lang.dom.DomNode
+import dev.ide.lang.dom.NodeKind
+import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.vfs.VirtualFile
@@ -87,6 +90,110 @@ interface ActionProvider {
      * Actions offered at [range] in [target] — an empty range is the bare caret, a non-empty one a
      * selection. Return empty when nothing applies (the common case for most positions). Must be pure /
      * side-effect-free: it may be called both to *list* actions and again to *compute* the chosen one.
+     *
+     * Prefer overriding [actions] with an [EditorActionContext] instead: it hands over the caret node and
+     * its ancestor chain already walked, which is what most providers do first anyway. This overload stays
+     * for providers that only need the range, and is what the context overload delegates to by default.
      */
-    fun actions(target: AnalysisTarget, range: TextRange): List<QuickFix>
+    fun actions(target: AnalysisTarget, range: TextRange): List<QuickFix> = emptyList()
+
+    /**
+     * Actions offered for [ctx]: the same contract as the two-argument [actions], plus the resolved caret
+     * position (the innermost node, its ancestors, and a flat snapshot). Defaults to the two-argument form,
+     * so a provider written before this existed is unaffected.
+     *
+     * Override exactly one of the two. Both default to nothing, so a provider that overrides neither
+     * contributes nothing rather than failing to compile.
+     */
+    fun actions(ctx: EditorActionContext): List<QuickFix> = actions(ctx.target, ctx.range)
+}
+
+/**
+ * The position an [ActionProvider] is being asked about: the live [target] and [range] as before, plus the
+ * caret's place in the tree, resolved once by the engine instead of by every provider.
+ *
+ * This is the rich half of the two-tier editor-action model. Everything here is live ([node] holds parent
+ * and child pointers, [AnalysisTarget.resolver] resolves symbols and types, [AnalysisTarget.index] answers
+ * project-wide questions), so a provider can walk and query freely. It cannot cross a process or DTO
+ * boundary: the flat, portable half is [CaretSnapshot], and an action that needs only that belongs on the
+ * plugin-api `EDITOR` place instead.
+ *
+ * Being handed to `actions()`, this is on the listing path, which runs on caret moves. Keep the work here
+ * structural (kinds, ranges, ancestors) and leave resolution to the chosen fix's `computeEdits`: the
+ * engine builds [target] without bindings for listing, so a resolver call here pays a re-parse.
+ */
+interface EditorActionContext {
+    /** The file's live analysis target: DOM, resolver, index, module. */
+    val target: AnalysisTarget
+
+    /** The editor selection. `start == end` is a bare caret. */
+    val range: TextRange
+
+    /** The innermost node containing [TextRange.start] of [range], as returned by [ParsedFile.nodeAt]. */
+    val node: DomNode
+
+    /** [node]'s ancestors, innermost first, ending at the [ParsedFile] root. Excludes [node] itself. */
+    val ancestors: List<DomNode>
+
+    /** The flat, portable view of the same position, as handed to the plugin-api tier. */
+    val caret: CaretSnapshot
+
+    fun checkCanceled()
+
+    /** The nearest ancestor (or [node] itself) of kind [kind], or null. */
+    fun nearest(kind: NodeKind): DomNode? =
+        if (node.kind == kind) node else ancestors.firstOrNull { it.kind == kind }
+
+    /** The nearest enclosing statement: the ancestor that is a direct child of a [NodeKind.BLOCK]. */
+    fun enclosingStatement(): DomNode? {
+        if (node.parent?.kind == NodeKind.BLOCK) return node
+        return ancestors.firstOrNull { it.parent?.kind == NodeKind.BLOCK }
+    }
+}
+
+/**
+ * A flat, serializable snapshot of what the caret is on, built once per listing pass from the syntax-only
+ * tree. The portable currency shared by both editor-action tiers: the engine hands it to plugin-api's
+ * `CaretContext` across the `IdeBackend` port, and to [EditorActionContext.caret] beside the live tree.
+ *
+ * [nodeText] is capped at [MAX_NODE_TEXT]; a caret inside a large declaration would otherwise copy the
+ * whole thing on every caret move. [nodeTextTruncated] records when that happened, so an action needing
+ * exact text reads it off [AnalysisTarget.parsed] rather than trusting a prefix.
+ */
+data class CaretSnapshot(
+    val offset: Int,
+    val languageId: LanguageId? = null,
+    val nodeKind: String = "",
+    val nodeRange: TextRange = TextRange(offset, offset),
+    val nodeText: String = "",
+    val nodeTextTruncated: Boolean = false,
+    val ancestors: List<String> = emptyList(),
+) {
+    companion object {
+        /** The cap on [nodeText]. Matches plugin-api's `CaretContext.MAX_NODE_TEXT`. */
+        const val MAX_NODE_TEXT = 4096
+
+        /** Build a snapshot for [offset] in [parsed]. The one place either tier's caret view is derived. */
+        fun of(parsed: ParsedFile, offset: Int, language: LanguageId? = null): CaretSnapshot {
+            val clamped = offset.coerceIn(0, parsed.range.end)
+            val node = parsed.nodeAt(clamped)
+            val text = node.text()
+            val truncated = text.length > MAX_NODE_TEXT
+            val ancestors = ArrayList<String>()
+            var p = node.parent
+            while (p != null) {
+                ancestors.add(p.kind.id)
+                p = p.parent
+            }
+            return CaretSnapshot(
+                offset = clamped,
+                languageId = language,
+                nodeKind = node.kind.id,
+                nodeRange = node.range,
+                nodeText = if (truncated) text.subSequence(0, MAX_NODE_TEXT).toString() else text.toString(),
+                nodeTextTruncated = truncated,
+                ancestors = ancestors,
+            )
+        }
+    }
 }

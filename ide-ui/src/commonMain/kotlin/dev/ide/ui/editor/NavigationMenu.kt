@@ -10,6 +10,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -26,6 +27,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import dev.ide.ui.icons.actionIcon
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,12 +40,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiAction
+import dev.ide.ui.backend.UiMenuNode
+import dev.ide.ui.backend.UiMenuGroup
+import dev.ide.ui.backend.UiActionItem
 import dev.ide.ui.backend.UiActionKind
 import dev.ide.ui.backend.UiNavKind
 import dev.ide.ui.backend.UiNavOption
 import dev.ide.ui.backend.UiNavTarget
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.codeaction_quick_fixes
+import dev.ide.ui.generated.resources.ctxmenu_actions
 import dev.ide.ui.generated.resources.ctxmenu_intentions
 import dev.ide.ui.generated.resources.nav_declaration
 import dev.ide.ui.generated.resources.nav_go_to
@@ -78,6 +87,9 @@ fun NavMenu(
     onOption: (UiNavOption) -> Unit,
     onAction: (UiAction) -> Unit,
     onPick: (UiNavTarget) -> Unit,
+    /** The plugin action tree for this caret (groups render as expandable submenus). */
+    menu: UiMenuGroup = UiMenuGroup(),
+    onMenuAction: (UiActionItem) -> Unit = {},
 ) {
     Column(
         Modifier.width(width)
@@ -87,8 +99,10 @@ fun NavMenu(
         when (state) {
             is NavMenuState.Menu -> {
                 val quickFixes = actions.filter { it.kind == UiActionKind.QUICK_FIX }
-                val intentions = actions.filter { it.kind != UiActionKind.QUICK_FIX }
-                if (state.options.isEmpty() && actions.isEmpty()) {
+                // Plugin-tier entries (those carrying an actionId) are rendered from [menu] instead, where
+                // their groups survive as submenus. Listing them here too would double every one of them.
+                val intentions = actions.filter { it.kind != UiActionKind.QUICK_FIX && it.actionId == null }
+                if (state.options.isEmpty() && quickFixes.isEmpty() && intentions.isEmpty() && menu.items.isEmpty()) {
                     NothingFound()
                 } else {
                     Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
@@ -103,6 +117,10 @@ fun NavMenu(
                         if (intentions.isNotEmpty()) {
                             SectionHeader(stringResource(Res.string.ctxmenu_intentions))
                             intentions.forEach { a -> MenuRow(CaIcons.lightbulb, a.title) { onAction(a) } }
+                        }
+                        if (menu.items.isNotEmpty()) {
+                            SectionHeader(stringResource(Res.string.ctxmenu_actions))
+                            MenuNodes(menu.items, depth = 0, onMenuAction = onMenuAction)
                         }
                     }
                 }
@@ -134,21 +152,41 @@ private fun NothingFound() {
 }
 
 @Composable
-private fun MenuRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+private fun MenuRow(
+    icon: ImageVector,
+    label: String,
+    indent: Int = 0,
+    enabled: Boolean = true,
+    trailing: ImageVector? = null,
+    onClick: () -> Unit,
+) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    val fg = when {
+        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        pressed -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Row(
         Modifier.fillMaxWidth().height(40.dp)
-            .background(if (pressed) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-            .clickable(interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 12.dp),
+            .background(if (pressed && enabled) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+            .clickable(interaction, indication = null, enabled = enabled, onClick = onClick)
+            .padding(start = 12.dp + (indent * 16).dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(icon, null, Modifier.size(16.dp), tint = if (pressed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(icon, null, Modifier.size(16.dp), tint = fg)
         Text(
-            label, color = MaterialTheme.colorScheme.onSurface, style = Ide.type.code,
+            label,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+            style = Ide.type.code,
             maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
         )
+        if (trailing != null) {
+            Spacer(Modifier.weight(1f))
+            Icon(trailing, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
+        }
     }
 }
 
@@ -175,4 +213,45 @@ private fun iconForKind(kind: String): ImageVector = when (kind) {
     "resource" -> CaIcons.resources
     "library" -> CaIcons.box // a compiled library class (opens read-only: decompiled / attached source)
     else -> CaIcons.dot
+}
+
+/**
+ * Render a resolved action tree. A submenu expands in place rather than opening a nested popup: this menu
+ * is reachable by touch (the selection toolbar's overflow), where a fly-out submenu is hard to hit, and
+ * inline expansion keeps every row a full-width tap target.
+ */
+@Composable
+private fun MenuNodes(items: List<UiMenuNode>, depth: Int, onMenuAction: (UiActionItem) -> Unit) {
+    for ((index, node) in items.withIndex()) {
+        when (node) {
+            is UiMenuNode.Item -> MenuRow(
+                icon = actionIcon(node.action.iconId),
+                label = node.action.text,
+                indent = depth,
+                enabled = node.action.enabled,
+            ) { if (node.action.enabled) onMenuAction(node.action) }
+
+            is UiMenuNode.Submenu -> {
+                // Keyed on the label AND position so two same-named submenus keep separate open state.
+                var expanded by remember(depth, index, node.text) { mutableStateOf(false) }
+                MenuRow(
+                    icon = actionIcon(node.iconId),
+                    label = node.text,
+                    indent = depth,
+                    trailing = if (expanded) CaIcons.chevronDown else CaIcons.chevronRight,
+                ) { expanded = !expanded }
+                if (expanded) MenuNodes(node.items, depth + 1, onMenuAction)
+            }
+
+            UiMenuNode.Separator -> MenuDivider()
+        }
+    }
+}
+
+@Composable
+private fun MenuDivider() {
+    Box(
+        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)
+            .height(1.dp).background(MaterialTheme.colorScheme.outlineVariant),
+    )
 }

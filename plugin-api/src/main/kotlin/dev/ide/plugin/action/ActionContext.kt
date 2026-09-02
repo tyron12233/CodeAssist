@@ -28,4 +28,14 @@ interface ActionContext {
      * for [ActionPlaces.FILE_CONTEXT]). Null for global places like the toolbar or palette.
      */
     val contextPath: String?
+
+    /**
+     * What the caret is on, for the places that resolve against editor content ([ActionPlaces.EDITOR], and
+     * the command palette when an editor is focused). Null when there is no editor, when the file has not
+     * been parsed yet, or for a place that carries no caret (the file tree).
+     *
+     * Defaulted so an action written before editor places existed still compiles, and so a host that has no
+     * editor concept can implement [ActionContext] without one.
+     */
+    val caret: CaretContext? get() = null
 }

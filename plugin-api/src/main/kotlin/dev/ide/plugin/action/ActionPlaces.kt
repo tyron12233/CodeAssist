@@ -19,4 +19,16 @@ object ActionPlaces {
 
     /** The command palette. Actions placed here are searchable commands. */
     val COMMAND_PALETTE = ActionPlace("commandPalette")
+
+    /**
+     * The editor content at the caret. One place, three surfaces: an action placed here is listed in the
+     * Alt-Enter / lightbulb popup alongside the analysis quick-fixes and intentions, in the editor's
+     * overflow context menu (where [ActionGroup]s nest it into submenus), and in the command palette while
+     * an editor is focused.
+     *
+     * [ActionContext.caret] carries what the caret is on, so [IdeAction.isVisible] can keep the action out
+     * of the list where it does not apply. An action that offers itself everywhere adds noise to a popup
+     * the user opened to fix one specific thing.
+     */
+    val EDITOR = ActionPlace("editor")
 }

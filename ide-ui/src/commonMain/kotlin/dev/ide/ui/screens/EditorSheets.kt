@@ -32,7 +32,10 @@ import dev.ide.ui.components.AnalyticsToggleRow
 import dev.ide.ui.components.BottomSheet
 import dev.ide.ui.components.FtpServerToggleRow
 import dev.ide.ui.components.CommandPalette
+import dev.ide.ui.actions.applyActionEffects
+import dev.ide.ui.components.PaletteEditorTarget
 import dev.ide.ui.components.DropdownOverlay
+import dev.ide.ui.LocalPluginNavigator
 import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.ext.UiActionHost
 import dev.ide.ui.ext.UiActionRegistry
@@ -52,6 +55,7 @@ internal fun PaletteOverlay(
     onOpenIconManager: () -> Unit,
     onOpenDependencies: (String?) -> Unit,
 ) {
+    val pluginNavigator = LocalPluginNavigator.current
     // The palette's UI-navigation commands come from UiActionRegistry; this host bridges them to the app's
     // navigation callbacks (the same pattern as the More menu). Global settings + SDK/keystore managers all
     // live behind the Settings & Tools hub now, so they route through one HUB destination.
@@ -80,6 +84,15 @@ internal fun PaletteOverlay(
             onOpenFile = { node -> node.filePath?.let { state.open(it, node.name); state.paletteOpen = false } },
             onOpenAt = { path, offset -> state.openAt(path, offset); state.paletteOpen = false },
             onClose = { state.paletteOpen = false },
+            // The focused editor, so a caret-aware command can list, enable, and act on the real code.
+            // Read-only tabs are excluded: an action that edits has nothing to edit there.
+            editorTarget = state.active?.takeIf { !it.readOnly }?.let {
+                PaletteEditorTarget(it.path, it.session.doc.text, it.session.selection.min, it.session.selection.max)
+            },
+            onEffects = { effects ->
+                state.paletteOpen = false
+                state.applyActionEffects(effects, navigate = pluginNavigator)
+            },
         )
     }
 }
