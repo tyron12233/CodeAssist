@@ -1512,6 +1512,8 @@ data class UiActionContext(
     val selectionEnd: Int? = null,
     val contextPath: String? = null,
     val caret: UiCaretContext? = null,
+    /** The focused editor's live text, for an action that rewrites it. Null off the editor places. */
+    val documentText: String? = null,
 )
 
 /**

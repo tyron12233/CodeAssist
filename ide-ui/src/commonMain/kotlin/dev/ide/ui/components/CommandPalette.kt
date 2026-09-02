@@ -143,6 +143,7 @@ fun CommandPalette(
         selectionStart = editorTarget?.selectionStart,
         selectionEnd = editorTarget?.selectionEnd,
         caret = caret,
+        documentText = editorTarget?.text,
     )
 
     // Engine commands: those placed in the palette, plus the editor actions when an editor is focused,

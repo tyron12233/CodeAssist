@@ -26,7 +26,6 @@ import dev.ide.analysis.QuickFixProvider
 import dev.ide.analysis.RelatedRange
 import dev.ide.analysis.WorkspaceEdit
 import dev.ide.lang.LanguageId
-import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 import dev.ide.platform.Disposable
@@ -148,35 +147,10 @@ class AnalysisEngine(
         if (applicable.isEmpty()) return fixes
         // Resolve the caret's place in the tree ONCE and share it: every provider's first move is to find
         // the node at the caret and walk up from it, and that walk is identical for all of them.
-        val ctx = editorActionContext(target, range, lang)
+        val ctx = EditorActionContext.of(target, range, lang)
         val intentions = applicable
             .flatMap { runCatching { it.actions(ctx) }.getOrDefault(emptyList()) }
         return fixes + intentions
-    }
-
-    /** The shared [EditorActionContext] for one listing pass: node at the caret + its ancestor chain. */
-    private fun editorActionContext(
-        target: AnalysisTarget,
-        range: TextRange,
-        lang: LanguageId?,
-    ): EditorActionContext {
-        val parsed = target.parsed
-        val at = parsed.nodeAt(range.start.coerceIn(0, parsed.range.end))
-        val chain = ArrayList<DomNode>()
-        var p = at.parent
-        while (p != null) {
-            chain.add(p)
-            p = p.parent
-        }
-        val snapshot = CaretSnapshot.of(parsed, range.start, lang)
-        return object : EditorActionContext {
-            override val target = target
-            override val range = range
-            override val node = at
-            override val ancestors: List<DomNode> = chain
-            override val caret = snapshot
-            override fun checkCanceled() = target.checkCanceled()
-        }
     }
 
     override suspend fun caretSnapshotAt(file: VirtualFile, offset: Int): CaretSnapshot? {

@@ -395,6 +395,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
                     selectionStart = selStart,
                     selectionEnd = selEnd,
                     caret = caret?.toUiCaretContext(),
+                    documentText = text,
                 ),
                 ctx.services.workspaceRoot.toString(),
             )

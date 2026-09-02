@@ -91,5 +91,6 @@ internal fun toPluginActionContext(snapshot: UiActionContext, projectRoot: Strin
         override val selectionEnd = snapshot.selectionEnd
         override val contextPath = snapshot.contextPath
         override val caret = caretCtx
+        override val documentText = snapshot.documentText
     }
 }

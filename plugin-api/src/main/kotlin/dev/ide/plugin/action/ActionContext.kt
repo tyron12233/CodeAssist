@@ -38,4 +38,14 @@ interface ActionContext {
      * editor concept can implement [ActionContext] without one.
      */
     val caret: CaretContext? get() = null
+
+    /**
+     * The live text of [activeFilePath], for an action that rewrites it. Null when there is no editor, or
+     * for a place that acts on something other than editor content.
+     *
+     * An action computes its [ActionEffect.TextEdit]s against exactly this string, and the host applies them
+     * to the same buffer, so offsets cannot drift between deciding and applying. Read it rather than the
+     * file on disk: the buffer may hold unsaved changes.
+     */
+    val documentText: String? get() = null
 }

@@ -1,0 +1,309 @@
+package dev.ide.lang.kotlin
+
+import dev.ide.analysis.ActionProvider
+import dev.ide.analysis.AnalysisTarget
+import dev.ide.analysis.EditorActionContext
+import dev.ide.analysis.FixContext
+import dev.ide.analysis.QuickFix
+import dev.ide.index.IndexService
+import dev.ide.lang.SourceAnalyzer
+import dev.ide.lang.dom.ParsedFile
+import dev.ide.lang.dom.TextRange
+import dev.ide.lang.kotlin.analysis.KotlinBracesActionProvider
+import dev.ide.lang.kotlin.analysis.KotlinExplicitTypeActionProvider
+import dev.ide.lang.kotlin.analysis.KotlinFunctionBodyActionProvider
+import dev.ide.lang.kotlin.analysis.KotlinIntroduceVariableActionProvider
+import dev.ide.lang.kotlin.analysis.KotlinSurroundActionProvider
+import dev.ide.model.Module
+import dev.ide.vfs.VirtualFile
+import kotlinx.coroutines.runBlocking
+import java.nio.file.Path
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+/**
+ * The Kotlin caret intentions, each driven the way the engine drives it: build the shared
+ * [EditorActionContext] for a caret, ask one provider what it offers, then apply the chosen fix's edits.
+ *
+ * The caret is written as `|` in the fixture and stripped before parsing.
+ */
+class KotlinEditorActionsTest {
+
+    // ---- surround with ----------------------------------------------------------------------------
+
+    @Test
+    fun surroundWrapsTheStatementAtTheCaret() {
+        val result = apply(
+            "package demo\nfun f() {\n    println(\"hi\")|\n}\n",
+            KotlinSurroundActionProvider(),
+            "Surround with 'if'",
+        )
+        assertEquals(
+            "package demo\nfun f() {\n    if (true) {\n        println(\"hi\")\n    }\n}\n",
+            result,
+        )
+    }
+
+    @Test
+    fun surroundOffersEachWrapper() {
+        val titles = titles("package demo\nfun f() {\n    println(\"hi\")|\n}\n", KotlinSurroundActionProvider())
+        assertEquals(
+            listOf("Surround with 'if'", "Surround with 'try/catch'", "Surround with 'run'"),
+            titles,
+        )
+    }
+
+    @Test
+    fun surroundWithTryCatchKeepsTheStatementIndent() {
+        val result = apply(
+            "package demo\nfun f() {\n    println(\"hi\")|\n}\n",
+            KotlinSurroundActionProvider(),
+            "Surround with 'try/catch'",
+        )
+        assertEquals(
+            "package demo\nfun f() {\n    try {\n        println(\"hi\")\n    } catch (e: Exception) {\n" +
+                "        throw e\n    }\n}\n",
+            result,
+        )
+    }
+
+    @Test
+    fun surroundIsNotOfferedOutsideAFunctionBody() {
+        assertTrue(titles("package demo\n|\nfun f() {}\n", KotlinSurroundActionProvider()).isEmpty())
+    }
+
+    // ---- introduce variable -----------------------------------------------------------------------
+
+    @Test
+    fun introduceVariableNamesTheValueAfterTheCall() {
+        val result = apply(
+            "package demo\nfun g() = 1\nfun f() {\n    println(g|())\n}\n",
+            KotlinIntroduceVariableActionProvider(),
+            "Introduce local variable 'g1'",
+        )
+        assertEquals(
+            "package demo\nfun g() = 1\nfun f() {\n    val g1 = g()\n    println(g1)\n}\n",
+            result,
+        )
+    }
+
+    @Test
+    fun introduceVariableIsNotOfferedOnABareName() {
+        val titles = titles(
+            "package demo\nfun f() {\n    val a = 1\n    println(a|)\n}\n",
+            KotlinIntroduceVariableActionProvider(),
+        )
+        assertTrue(titles.isEmpty(), "a bare name reference is not worth extracting, got $titles")
+    }
+
+    @Test
+    fun introduceVariableTakesTheWholeQualifiedCallNotItsReceiver() {
+        val result = apply(
+            "package demo\nfun f() {\n    println(\"a\".trim|())\n}\n",
+            KotlinIntroduceVariableActionProvider(),
+            null,
+        )
+        // The generated name is deduplicated against the buffer, and `trim` occurs in the expression
+        // being replaced, so the fresh name is `trim1`.
+        assertEquals(
+            "package demo\nfun f() {\n    val trim1 = \"a\".trim()\n    println(trim1)\n}\n",
+            result,
+        )
+    }
+
+    // ---- function body form -----------------------------------------------------------------------
+
+    @Test
+    fun convertsASingleReturnBlockToAnExpressionBody() {
+        val result = apply(
+            "package demo\nfun |f(): Int {\n    return 1 + 2\n}\n",
+            KotlinFunctionBodyActionProvider(),
+            "Convert to expression body",
+        )
+        assertEquals("package demo\nfun f(): Int = 1 + 2\n", result)
+    }
+
+    @Test
+    fun convertsAnExpressionBodyToABlock() {
+        val result = apply(
+            "package demo\nfun |f(): Int = 1 + 2\n",
+            KotlinFunctionBodyActionProvider(),
+            "Convert to block body",
+        )
+        assertEquals("package demo\nfun f(): Int {\n    return 1 + 2\n}\n", result)
+    }
+
+    @Test
+    fun aMultiStatementBlockHasNoExpressionForm() {
+        val titles = titles(
+            "package demo\nfun |f(): Int {\n    println(\"x\")\n    return 1\n}\n",
+            KotlinFunctionBodyActionProvider(),
+        )
+        assertTrue(titles.isEmpty(), "expected no conversion for a multi-statement body, got $titles")
+    }
+
+    @Test
+    fun theConversionIsOfferedOnTheSignatureNotDeepInTheBody() {
+        val titles = titles(
+            "package demo\nfun f(): Int {\n    return 1 |+ 2\n}\n",
+            KotlinFunctionBodyActionProvider(),
+        )
+        assertTrue(titles.isEmpty(), "expected nothing from inside the body, got $titles")
+    }
+
+    // ---- braces -----------------------------------------------------------------------------------
+
+    @Test
+    fun addsBracesToASingleStatementIfBranch() {
+        val result = apply(
+            "package demo\nfun f(b: Boolean) {\n    if (b) println|(\"y\")\n}\n",
+            KotlinBracesActionProvider(),
+            "Add braces to 'if'",
+        )
+        assertEquals(
+            "package demo\nfun f(b: Boolean) {\n    if (b) {\n        println(\"y\")\n    }\n}\n",
+            result,
+        )
+    }
+
+    @Test
+    fun removesBracesFromASingleStatementBlock() {
+        val result = apply(
+            "package demo\nfun f(b: Boolean) {\n    if (b) {\n        println|(\"y\")\n    }\n}\n",
+            KotlinBracesActionProvider(),
+            "Remove braces from 'if'",
+        )
+        assertEquals("package demo\nfun f(b: Boolean) {\n    if (b) println(\"y\")\n}\n", result)
+    }
+
+    @Test
+    fun theElseBranchIsNamedAsElse() {
+        val titles = titles(
+            "package demo\nfun f(b: Boolean) {\n    if (b) println(\"y\") else println|(\"n\")\n}\n",
+            KotlinBracesActionProvider(),
+        )
+        assertEquals(listOf("Add braces to 'else'"), titles)
+    }
+
+    @Test
+    fun aLoopBodyIsNamedAfterItsLoop() {
+        val titles = titles(
+            "package demo\nfun f() {\n    for (i in 1..2) println|(i)\n}\n",
+            KotlinBracesActionProvider(),
+        )
+        assertEquals(listOf("Add braces to 'for'"), titles)
+    }
+
+    @Test
+    fun bracesAreNotRemovedAroundAMultiLineStatement() {
+        val titles = titles(
+            "package demo\nfun f(b: Boolean) {\n    if (b) {\n        println|(\n            \"y\",\n        )\n    }\n}\n",
+            KotlinBracesActionProvider(),
+        )
+        assertTrue(titles.isEmpty(), "a multi-line statement should keep its braces, got $titles")
+    }
+
+    // ---- explicit type ----------------------------------------------------------------------------
+
+    @Test
+    fun specifiesTheInferredTypeOnADeclaration() {
+        val result = apply(
+            "package demo\nfun f() {\n    val a| = 1\n}\n",
+            KotlinExplicitTypeActionProvider(),
+            "Specify explicit type",
+        )
+        assertEquals("package demo\nfun f() {\n    val a: Int = 1\n}\n", result)
+    }
+
+    @Test
+    fun removesAnExplicitType() {
+        val result = apply(
+            "package demo\nfun f() {\n    val a|: Int = 1\n}\n",
+            KotlinExplicitTypeActionProvider(),
+            "Remove explicit type",
+        )
+        assertEquals("package demo\nfun f() {\n    val a = 1\n}\n", result)
+    }
+
+    @Test
+    fun theTypeIntentionIsOfferedOnlyOnTheName() {
+        val titles = titles("package demo\nfun f() {\n    val a = |1\n}\n", KotlinExplicitTypeActionProvider())
+        assertTrue(titles.isEmpty(), "expected nothing with the caret on the initializer, got $titles")
+    }
+
+    @Test
+    fun aDeclarationWithNoInitializerCannotGainAType() {
+        val titles = titles(
+            "package demo\nclass C {\n    lateinit var a|\n}\n",
+            KotlinExplicitTypeActionProvider(),
+        )
+        assertTrue(titles.isEmpty(), "nothing to infer from, got $titles")
+    }
+
+    // ---- harness ----------------------------------------------------------------------------------
+
+    /** The intention titles [provider] offers at the `|` caret in [code]. */
+    private fun titles(code: String, provider: ActionProvider): List<String> = runBlocking {
+        val (clean, offset) = split(code)
+        provider.actions(contextFor(clean, offset)).map { it.title }
+    }
+
+    /**
+     * Apply the intention named [title] (or the only one, when null) at the `|` caret and return the
+     * resulting text. Edits land descending by offset, which is the host's contract.
+     */
+    private fun apply(code: String, provider: ActionProvider, title: String?): String = runBlocking {
+        val (clean, offset) = split(code)
+        val ctx = contextFor(clean, offset)
+        val fixes = provider.actions(ctx)
+        val fix: QuickFix = when {
+            title != null -> fixes.firstOrNull { it.title == title }
+                ?: error("no intention titled \"$title\"; offered ${fixes.map { f -> f.title }}")
+            else -> fixes.singleOrNull() ?: error("expected one intention, got ${fixes.map { f -> f.title }}")
+        }
+        val edits = fix.computeEdits(Ctx(ctx.target)).edits.values.flatten()
+        val sb = StringBuilder(clean)
+        for (e in edits.sortedByDescending { it.offset }) {
+            sb.replace(e.offset, e.offset + e.oldLength, e.newText.toString())
+        }
+        sb.toString()
+    }
+
+    private fun split(code: String): Pair<String, Int> {
+        val at = code.indexOf('|')
+        require(at >= 0) { "the fixture must mark the caret with |" }
+        return code.removeRange(at, at + 1) to at
+    }
+
+    private suspend fun contextFor(code: String, offset: Int): EditorActionContext {
+        val doc = SnippetDoc(code, DiskFile(srcDir.resolve("Use.kt")))
+        val parsed = analyzer.incrementalParser.parseFull(doc)
+        analyzer.analyze(doc.file)
+        return EditorActionContext.of(
+            Target(parsed, doc.file, analyzer),
+            TextRange(offset, offset),
+            KotlinLanguageBackend.LANGUAGE_ID,
+        )
+    }
+
+    private class Target(
+        override val parsed: ParsedFile,
+        override val file: VirtualFile,
+        override val resolver: SourceAnalyzer,
+    ) : AnalysisTarget {
+        override val documentVersion = 1L
+        override val index: IndexService get() = error("the intentions under test do not query the index")
+        override val module: Module get() = error("the intentions under test do not read the module")
+        override fun checkCanceled() {}
+    }
+
+    private class Ctx(override val target: AnalysisTarget) : FixContext {
+        override fun checkCanceled() {}
+    }
+
+    companion object {
+        val srcDir: Path = tempProject(mapOf("Local.kt" to "package demo\n"))
+        val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))
+    }
+}

@@ -161,6 +161,7 @@ internal class EditorActionsController(
                     selectionStart = availStart,
                     selectionEnd = availEnd,
                     caret = caret,
+                    documentText = text,
                 ),
             )
         }.getOrNull() ?: UiMenuGroup()

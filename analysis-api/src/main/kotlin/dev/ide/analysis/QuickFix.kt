@@ -144,10 +144,45 @@ interface EditorActionContext {
     fun nearest(kind: NodeKind): DomNode? =
         if (node.kind == kind) node else ancestors.firstOrNull { it.kind == kind }
 
-    /** The nearest enclosing statement: the ancestor that is a direct child of a [NodeKind.BLOCK]. */
+    /**
+     * The nearest enclosing statement: the node that is a direct child of a [NodeKind.BLOCK].
+     *
+     * A caret at the end of a line sits *after* the last token of the statement, where the innermost node
+     * is the enclosing block rather than the statement. That is the most common place to invoke a
+     * statement intention from, so a caret resolving to a block is attributed to the statement it touches.
+     */
     fun enclosingStatement(): DomNode? {
         if (node.parent?.kind == NodeKind.BLOCK) return node
-        return ancestors.firstOrNull { it.parent?.kind == NodeKind.BLOCK }
+        ancestors.firstOrNull { it.parent?.kind == NodeKind.BLOCK }?.let { return it }
+        val block = if (node.kind == NodeKind.BLOCK) node else ancestors.firstOrNull { it.kind == NodeKind.BLOCK }
+        return block?.children?.lastOrNull { range.start >= it.range.start && range.start <= it.range.end }
+    }
+
+    companion object {
+        /**
+         * Resolve [range]'s position in [target] once: the innermost node, its ancestor chain, and the flat
+         * snapshot. The single construction site, used by the engine per listing pass and by tests, so a
+         * provider is never handed a context assembled two different ways.
+         */
+        fun of(target: AnalysisTarget, range: TextRange, language: LanguageId? = null): EditorActionContext {
+            val parsed = target.parsed
+            val at = parsed.nodeAt(range.start.coerceIn(0, parsed.range.end))
+            val chain = ArrayList<DomNode>()
+            var p = at.parent
+            while (p != null) {
+                chain.add(p)
+                p = p.parent
+            }
+            val snapshot = CaretSnapshot.of(parsed, range.start, language)
+            return object : EditorActionContext {
+                override val target = target
+                override val range = range
+                override val node = at
+                override val ancestors: List<DomNode> = chain
+                override val caret = snapshot
+                override fun checkCanceled() = target.checkCanceled()
+            }
+        }
     }
 }
 

@@ -300,6 +300,7 @@ internal fun EditorCenter(
                                             active.path, active.session.doc.text, selStart,
                                         )
                                     }.getOrNull(),
+                                    documentText = active.session.doc.text,
                                 ),
                                 navigate = pluginNavigator,
                             )

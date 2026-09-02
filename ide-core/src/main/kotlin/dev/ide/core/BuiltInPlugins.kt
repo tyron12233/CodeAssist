@@ -12,6 +12,7 @@ import dev.ide.android.support.metadata.AndroidSdkMetadata
 import dev.ide.block.BLOCK_MAPPING_EP
 import dev.ide.block.impl.JavaBlockMapping
 import dev.ide.core.actions.BuiltInActions
+import dev.ide.core.actions.EditorTextActions
 import dev.ide.core.analysis.AidlAnalyzer
 import dev.ide.core.analysis.PackageMismatchAnalyzer
 import dev.ide.core.completion.BufferWordsContributor
@@ -167,6 +168,7 @@ object BuiltInPlugins {
         BuiltInPlugin(AndroidXmlPlugin(env)),
         BuiltInPlugin(IdeCoreServicesPlugin()),
         BuiltInPlugin(IdeCoreActionsPlugin(env)),
+        BuiltInPlugin(EditorTextActionsPlugin()),
         // The AI agent: engine facet (settings page + AgentBackend wiring) + its Compose chat UI, one entry.
         BuiltInPlugin(AgentPlugin(), ui = AgentUiPlugin),
         // Version control: engine facet (settings page + VcsBackend wiring) + its Compose Git UI.
@@ -766,5 +768,16 @@ private class IdeCoreActionsPlugin(private val env: ApplicationEnvironment) : Pl
     )
     override fun register(reg: PluginRegistration) {
         reg.contributeVia { ext, _ -> BuiltInActions.register(ext, env) }
+    }
+}
+
+/** The line-level editor actions (comment toggling, moving and sorting lines). */
+private class EditorTextActionsPlugin : Plugin {
+    override val manifest = PluginManifest(
+        id = "editor-text-actions", name = "Editor Line Actions",
+        description = "Editor actions that work on lines: comment or uncomment, move, and sort.",
+    )
+    override fun register(reg: PluginRegistration) {
+        reg.contributeVia { ext, _ -> EditorTextActions.register(ext) }
     }
 }
