@@ -16,9 +16,10 @@ import dev.ide.plugin.PLUGIN_API_VERSION
  *
  * Everything offered here is read from something real rather than from a hardcoded list of guesses: the keys
  * are the ones [dev.ide.core.plugins.PluginManifestToml] actually reads, `dependsOn` completes the plugin ids
- * the running IDE has loaded, and `entryPoints` completes classes in the project that implement `Plugin`,
- * taken from the subtype index. A manifest is short, hand-written, and only validated on someone else's
- * device, so knowing the accepted spelling while typing is most of the value.
+ * the running IDE has loaded, and `entryPoints` / `uiEntryPoints` complete classes in the project that
+ * implement the engine and UI facet interfaces, taken from the subtype index. A manifest is short,
+ * hand-written, and only validated on someone else's device, so knowing the accepted spelling while typing is
+ * most of the value.
  *
  * The file is plain text as far as the editor is concerned, so the context is read from the line at the caret
  * rather than from a DOM.
@@ -48,8 +49,11 @@ class PluginManifestCompletion(
             "capabilities" -> CAPABILITIES.forEach { (value, detail) ->
                 add(params, result, value, CompletionItemKind.VARIABLE, detail)
             }
-            "entryPoints" -> pluginClasses().forEach { fqcn ->
-                add(params, result, fqcn, CompletionItemKind.CLASS, "implements dev.ide.plugin.Plugin")
+            "entryPoints" -> implementationsOf(PLUGIN_INTERFACE).forEach { fqcn ->
+                add(params, result, fqcn, CompletionItemKind.CLASS, "implements $PLUGIN_INTERFACE")
+            }
+            "uiEntryPoints" -> implementationsOf(UI_PLUGIN_INTERFACE).forEach { fqcn ->
+                add(params, result, fqcn, CompletionItemKind.CLASS, "implements $UI_PLUGIN_INTERFACE")
             }
             "apiVersion" -> add(
                 params, result, PLUGIN_API_VERSION.toString(), CompletionItemKind.KEYWORD,
@@ -75,11 +79,11 @@ class PluginManifestCompletion(
         }
     }
 
-    /** Classes in the open project that implement `Plugin`, so an entry point can be picked rather than typed. */
-    private fun pluginClasses(): List<String> {
+    /** Classes in the open project implementing [supertype], so an entry point can be picked rather than typed. */
+    private fun implementationsOf(supertype: String): List<String> {
         val index = index()?.takeIf { it.status.ready } ?: return emptyList()
         return SubtypeIndex.ALL
-            .flatMap { index.exact<SubtypeValue>(it, SubtypeIndex.key(PLUGIN_INTERFACE)).toList() }
+            .flatMap { index.exact<SubtypeValue>(it, SubtypeIndex.key(supertype)).toList() }
             .map { it.fqn }
             .distinct()
             .sorted()
@@ -111,6 +115,7 @@ class PluginManifestCompletion(
 
     private companion object {
         const val PLUGIN_INTERFACE = "dev.ide.plugin.Plugin"
+        const val UI_PLUGIN_INTERFACE = "dev.ide.plugin.ui.UiPlugin"
 
         /** Exactly the keys the manifest parser reads. `essential` and `trusted` are left out on purpose:
          *  the parser ignores them whatever the file says, so offering them would invite a wasted edit. */
@@ -121,6 +126,7 @@ class PluginManifestCompletion(
             "apiVersion" to "must equal the IDE's plugin API version",
             "description" to "one line, shown under the name",
             "entryPoints" to "fully-qualified classes implementing Plugin",
+            "uiEntryPoints" to "fully-qualified classes implementing UiPlugin (Compose UI)",
             "dependsOn" to "plugin ids that must load first",
             "capabilities" to "what the plugin declares it does",
             "minHostVersion" to "oldest CodeAssist this plugin runs on",
@@ -134,7 +140,10 @@ class PluginManifestCompletion(
         val CAPABILITIES = linkedMapOf(
             "ui.action" to "contributes a command to the palette or menus",
             "ui.settingsPage" to "contributes a Settings category",
+            "ui.editorAction" to "contributes an action at the caret",
             "ui.toolWindow" to "contributes a tool window",
+            "ui.screen" to "contributes a full screen",
+            "ui.overlay" to "contributes an app-wide overlay",
             "fs.read" to "reads project files",
         )
     }

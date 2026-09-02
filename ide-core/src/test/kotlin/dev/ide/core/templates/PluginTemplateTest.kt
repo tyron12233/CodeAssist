@@ -102,6 +102,60 @@ class PluginTemplateTest {
     }
 
     @Test
+    fun `a panel plugin declares a UI facet and no engine entry point`() {
+        withTempDir("plugin-template-panel") { dir ->
+            IdeServices.createProjectAt(
+                dir, TEMPLATE, args("contributes" to "panel"),
+                IdeServices.defaultDesktopSdk(), LanguageLevel.JAVA_17,
+            ).use {
+                val manifest = PluginManifestToml.parse(dir.resolve(TOML).readText())
+                // The two entry-point lists are independent: a plugin contributing only UI declares only the
+                // UI one, and the parser must accept that as a complete manifest.
+                assertEquals(emptyList(), manifest.entryPoints)
+                assertEquals(listOf("$PKG.MyToolUiPlugin"), manifest.uiEntryPoints)
+                assertEquals(listOf("ui.toolWindow"), manifest.capabilities)
+
+                val source = dir.resolve("plugin/src/main/kotlin/com/example/mytool/MyToolUiPlugin.kt").readText()
+                assertTrue(Files.exists(dir.resolve("plugin/src/main/kotlin/com/example/mytool/MyToolUiPlugin.kt")))
+                assertTrue("class MyToolUiPlugin : UiPlugin" in source, "the UI facet class was not generated")
+                assertTrue("ui.toolWindow(" in source, "the panel is not registered")
+                assertTrue("@Composable" in source, "the panel has no composable body")
+                // Generated code is interpolated, and an escaped `$` that leaked would be a compile error on
+                // the user's device rather than here.
+                assertTrue("\${'$'}{d}" !in source, "an unexpanded interpolation escaped into the output")
+                assertTrue("id = \"$PKG\"" in source, "the facet's id must match the manifest's")
+
+                // A UI-only plugin has no engine class, so nothing should reference one.
+                assertTrue(
+                    !Files.exists(dir.resolve("plugin/src/main/kotlin/com/example/mytool/MyToolPlugin.kt")),
+                    "a panel-only plugin should not generate an engine entry point",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `a panel plugin compiles against the UI SPI and the IDE's own Compose`() {
+        val deps = CodeAssistPluginTemplate.dependencies(TemplateArgs(args("contributes" to "panel")))
+        val coordinates = deps.map { it.coordinate }
+        assertTrue(
+            "io.github.tyron12233:plugin-ui-api:$PLUGIN_SPI_VERSION" in coordinates,
+            "the UI SPI is missing: $coordinates",
+        )
+        // Compose has to be declared explicitly and pinned: it is not in the published POM (that would put a
+        // desktop artifact in an Android plugin's graph), and the plugin binds to the IDE's copy at runtime.
+        for (group in listOf(
+            "androidx.compose.runtime:runtime",
+            "androidx.compose.foundation:foundation",
+            "androidx.compose.ui:ui",
+            "androidx.compose.material3:material3",
+        )) {
+            assertTrue(coordinates.any { it.startsWith("$group:") }, "$group is missing: $coordinates")
+        }
+        assertTrue(deps.all { it.scope == "compileOnly" }, "nothing a UI plugin compiles against may be bundled")
+    }
+
+    @Test
     fun `the SPI is declared compileOnly at the published coordinates`() {
         val deps = CodeAssistPluginTemplate.dependencies(TemplateArgs(args()))
         assertEquals(

@@ -87,26 +87,30 @@ class PluginManifestAnalyzer(
             )
         }
 
-        checkEntryPoints(manifest.entryPoints, target, ranges, sink)
+        checkEntryPoints(manifest.entryPoints, PLUGIN_INTERFACE, "entryPoints", target, ranges, sink)
+        checkEntryPoints(manifest.uiEntryPoints, UI_PLUGIN_INTERFACE, "uiEntryPoints", target, ranges, sink)
         checkMarkerActivity(target.module, path, ranges, sink)
     }
 
     /**
-     * Every declared entry point has to name a class in the project that implements `Plugin`, since the
-     * loader instantiates it by exactly that name and casts it. Both halves need the index, so nothing is
-     * reported until it holds queryable data.
+     * Every declared entry point has to name a class in the project that implements [supertype] (`Plugin`
+     * for `entryPoints`, `UiPlugin` for `uiEntryPoints`), since the loader instantiates it by exactly that
+     * name and casts it. Both halves need the index, so nothing is reported until it holds queryable data.
      */
     private fun checkEntryPoints(
         entryPoints: List<String>,
+        supertype: String,
+        key: String,
         target: AnalysisTarget,
         ranges: KeyRanges,
         sink: DiagnosticSink,
     ) {
+        if (entryPoints.isEmpty()) return
         if (!target.index.status.ready) return
-        val range = ranges.value("entryPoints")
+        val range = ranges.value(key)
 
         val pluginSubtypes = SubtypeIndex.ALL
-            .flatMap { target.index.exact<SubtypeValue>(it, SubtypeIndex.key(PLUGIN_INTERFACE)).toList() }
+            .flatMap { target.index.exact<SubtypeValue>(it, SubtypeIndex.key(supertype)).toList() }
             .mapTo(HashSet()) { it.fqn }
 
         for (fqcn in entryPoints) {
@@ -130,7 +134,7 @@ class PluginManifestAnalyzer(
                 sink.report(
                     range,
                     Severity.ERROR,
-                    "'$fqcn' does not implement $PLUGIN_INTERFACE, so the IDE cannot use it as an entry point.",
+                    "'$fqcn' does not implement $supertype, so the IDE cannot use it as an entry point.",
                     CODE,
                 )
             }
@@ -191,6 +195,9 @@ class PluginManifestAnalyzer(
         /** The key a parser message names, so a malformed value is underlined rather than the header. */
         fun forMessage(message: String): TextRange = when {
             "'id'" in message || "plugin id" in message -> value("id")
+            // "declares no 'entryPoints' or 'uiEntryPoints'" names both and has neither to underline, so it
+            // falls through to the header; a message about one existing key still points at that key.
+            "'uiEntryPoints'" in message && "'entryPoints'" !in message -> value("uiEntryPoints")
             "entryPoints" in message -> value("entryPoints")
             else -> header()
         }
@@ -198,6 +205,7 @@ class PluginManifestAnalyzer(
 
     private companion object {
         const val PLUGIN_INTERFACE = "dev.ide.plugin.Plugin"
+        const val UI_PLUGIN_INTERFACE = "dev.ide.plugin.ui.UiPlugin"
         const val CODE = "codeassistPlugin"
     }
 }
