@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.ide.plugin.ui.ToolWindow
 import dev.ide.plugin.ui.ToolWindowAnchor
@@ -73,4 +74,20 @@ private fun HelloPanel(ctx: UiContext) {
 
         Button(onClick = { HelloState.greeted("the panel") }) { Text("Say hello") }
     }
+}
+
+/**
+ * The panel in the editor's preview pane, with no IDE running and nothing installed. `UiContext.preview()`
+ * stands in for the host, so the two states worth looking at are two previews rather than two installs.
+ */
+@Preview
+@Composable
+private fun HelloPanelPreview() {
+    HelloPanel(UiContext.preview(activeFilePath = "MainActivity.kt"))
+}
+
+@Preview
+@Composable
+private fun HelloPanelNoFilePreview() {
+    HelloPanel(UiContext.preview())
 }

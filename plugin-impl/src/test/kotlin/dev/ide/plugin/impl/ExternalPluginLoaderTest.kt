@@ -3,6 +3,8 @@ package dev.ide.plugin.impl
 import dev.ide.platform.ExtensionPoint
 import dev.ide.platform.impl.ExtensionRegistryImpl
 import dev.ide.plugin.Plugin
+import dev.ide.plugin.PLUGIN_API_VERSION
+import dev.ide.plugin.PLUGIN_SPI_VERSION
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.PluginRegistration
 import dev.ide.plugin.external.DiscoveredPlugin
@@ -37,6 +39,45 @@ class ThrowingEntryPoint : Plugin {
 /** An entry point named in a manifest that does not implement the SPI. */
 class NotAPlugin
 
+/**
+ * An entry point built against an older SPI: it satisfies `apiVersion` and then fails to link, exactly as a
+ * plugin compiled before a field was added to [PluginManifest] does when it constructs one.
+ */
+class StaleSpiEntryPoint : Plugin {
+    init {
+        throw NoSuchMethodError(
+            "No direct method <init>(Ljava/lang/String;Ljava/lang/String;)V in class " +
+                "Ldev/ide/plugin/PluginManifest; or its super classes",
+        )
+    }
+
+    override val manifest = PluginManifest(id = "stale", name = "Stale")
+    override fun register(reg: PluginRegistration) = Unit
+}
+
+/** The shape an author reaches for when the entry point holds no state of its own. */
+object ObjectEntryPoint : Plugin {
+    override val manifest = PluginManifest(id = "object", name = "Object")
+
+    override fun register(reg: PluginRegistration) {
+        reg.register(EXT_EP, "object-impl")
+    }
+}
+
+/** Counts its own construction, so a test can see how many objects a manifest's lists produced. */
+class CountingEntryPoint : Plugin {
+    init {
+        constructed++
+    }
+
+    override val manifest = PluginManifest(id = "counting", name = "Counting")
+    override fun register(reg: PluginRegistration) = Unit
+
+    companion object {
+        var constructed = 0
+    }
+}
+
 private class FakeDiscovered(
     override val manifest: PluginManifest,
     private val loader: ClassLoader? = FakeDiscovered::class.java.classLoader,
@@ -47,7 +88,7 @@ private class FakeDiscovered(
 
 private fun manifest(
     id: String = "com.example.plugin",
-    apiVersion: Int = 1,
+    apiVersion: Int = PLUGIN_API_VERSION,
     entryPoints: List<String> = listOf(ExternalEntryPoint::class.java.name),
     uiEntryPoints: List<String> = emptyList(),
     minHostVersion: String? = null,
@@ -79,7 +120,7 @@ class ExternalPluginLoaderTest {
 
     @Test
     fun `rejects a plugin built against a different plugin API`() {
-        val result = ExternalPluginLoader(hostApiVersion = 2).load(FakeDiscovered(manifest(apiVersion = 1)))
+        val result = ExternalPluginLoader(hostApiVersion = 9).load(FakeDiscovered(manifest(apiVersion = 1)))
         assertTrue(result is ExternalPluginLoader.Result.Failed)
         assertTrue("API" in result.reason, result.reason)
     }
@@ -159,6 +200,53 @@ class ExternalPluginLoaderTest {
         val result = ExternalPluginLoader().load(FakeDiscovered(manifest(), loader = null))
         assertTrue(result is ExternalPluginLoader.Result.Failed)
         assertTrue("no classloader" in result.reason, result.reason)
+    }
+
+    @Test
+    fun `an object entry point is taken from its INSTANCE, not constructed`() {
+        // A Kotlin `object` has a private constructor, so reflection cannot call it. Registering means the
+        // loader found the singleton instead of failing the plugin over the shape of its entry point.
+        val result = ExternalPluginLoader()
+            .load(FakeDiscovered(manifest(entryPoints = listOf(ObjectEntryPoint::class.java.name))))
+        assertTrue(result is ExternalPluginLoader.Result.Loaded, "expected a load, got $result")
+
+        val registry = ExtensionRegistryImpl()
+        PluginManager(registry).load(result.plugin)
+        assertEquals(listOf("object-impl"), registry.extensions(EXT_EP))
+    }
+
+    @Test
+    fun `a class the manifest names more than once is instantiated once`() {
+        CountingEntryPoint.constructed = 0
+        val name = CountingEntryPoint::class.java.name
+        val result = ExternalPluginLoader().load(FakeDiscovered(manifest(entryPoints = listOf(name, name))))
+        assertTrue(result is ExternalPluginLoader.Result.Loaded, "expected a load, got $result")
+
+        // Two names, one object: the facet a plugin declares twice must not get two copies of its state.
+        assertEquals(1, CountingEntryPoint.constructed)
+        assertTrue(result.instances.of(name) === result.instances.of(name))
+    }
+
+    @Test
+    fun `a plugin built against an older SPI is told to rebuild, not shown a descriptor`() {
+        val result = ExternalPluginLoader()
+            .load(FakeDiscovered(manifest(entryPoints = listOf(StaleSpiEntryPoint::class.java.name))))
+        assertTrue(result is ExternalPluginLoader.Result.Failed, "expected a failure, got $result")
+
+        // The row has to say what to do about it. The JVM's descriptor is kept, but after the instruction.
+        assertTrue("plugin SPI" in result.reason, result.reason)
+        assertTrue(PLUGIN_SPI_VERSION in result.reason, result.reason)
+        assertTrue("rebuild" in result.reason, result.reason)
+    }
+
+    @Test
+    fun `a link failure on a class that is not ours is reported as it is`() {
+        // Not an SPI mismatch: a plugin that forgot to package a library of its own. Rewriting that into
+        // "rebuild against the SPI" would send the author looking in the wrong place.
+        val loader = ExternalPluginLoader()
+        val result = loader.load(FakeDiscovered(manifest(entryPoints = listOf("com.example.NotThere"))))
+        assertTrue(result is ExternalPluginLoader.Result.Failed)
+        assertTrue("plugin SPI" !in result.reason, result.reason)
     }
 
     @Test

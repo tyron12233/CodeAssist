@@ -1,5 +1,6 @@
 package dev.ide.plugin.impl
 
+import dev.ide.plugin.PLUGIN_API_VERSION
 import dev.ide.plugin.Plugin
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.PluginRegistration
@@ -21,7 +22,7 @@ import dev.ide.plugin.external.DiscoveredPlugin
  */
 class ExternalPluginLoader(
     /** The host's plugin-SPI version. A plugin declaring a different [PluginManifest.apiVersion] is rejected. */
-    private val hostApiVersion: Int = 1,
+    private val hostApiVersion: Int = PLUGIN_API_VERSION,
     /** The host's own version, compared against [PluginManifest.minHostVersion]. Null skips that check. */
     private val hostVersion: String? = null,
 ) {
@@ -33,16 +34,20 @@ class ExternalPluginLoader(
         /**
          * The plugin instantiated cleanly and is ready for [PluginManager.load].
          *
-         * [classLoader] is the loader its classes came off, carried out so the host can instantiate the
-         * plugin's other facets from it. The UI facet (`dev.ide.plugin.ui.UiPlugin`) is loaded that way: its
-         * type lives in a Compose module this one cannot see, so the host does the instantiating, but it must
-         * happen on THIS loader: that is what lets a plugin's two facets share statics and call each other.
+         * [instances] holds the entry points this load created, carried out so the host can take the plugin's
+         * other facets from it. The UI facet (`dev.ide.plugin.ui.UiPlugin`) is loaded that way: its type lives
+         * in a Compose module this one cannot see, so the host does the instantiating, through this object
+         * rather than off the raw loader. That is what lets a class named in both of the manifest's lists be
+         * one object, and what keeps every facet on the loader that lets them share statics.
          */
         data class Loaded(
             override val manifest: PluginManifest,
             val plugin: Plugin,
-            val classLoader: ClassLoader,
-        ) : Result
+            val instances: EntryPointInstances,
+        ) : Result {
+            /** The loader the plugin's classes came off. */
+            val classLoader: ClassLoader get() = instances.classLoader
+        }
 
         /** The plugin was rejected or threw while being instantiated. [reason] is user-facing. */
         data class Failed(override val manifest: PluginManifest, val reason: String) : Result
@@ -65,8 +70,11 @@ class ExternalPluginLoader(
         }
 
         return try {
-            val loader = discovered.classLoader()
-            val entries = manifest.entryPoints.map { instantiate(loader, it) }
+            val instances = EntryPointInstances(discovered.classLoader())
+            // Distinct, because one class is one entry point: a manifest naming it twice used to register it
+            // twice, and now that both names resolve to one object that would be the same object registering
+            // twice, which is worse.
+            val entries = manifest.entryPoints.distinct().map { asPlugin(it, instances) }
             // A UI-only plugin has no engine facet to run. It still loads, so that it holds a place in the
             // load order (another plugin may depend on it), is attributed and listed like any other, and has
             // a classloader the host can take its UI facet off; register() then has nothing to do.
@@ -75,26 +83,19 @@ class ExternalPluginLoader(
                 1 -> entries[0]
                 else -> CompositePlugin(entries)
             }
-            Result.Loaded(manifest, ExternalPlugin(manifest, plugin, loader), loader)
+            Result.Loaded(manifest, ExternalPlugin(manifest, plugin, instances.classLoader), instances)
         } catch (t: Throwable) {
             Result.Failed(manifest, describe(t))
         }
     }
 
-    private fun instantiate(loader: ClassLoader, fqcn: String): Plugin {
-        val cls = loader.loadClass(fqcn)
-        val instance = cls.getDeclaredConstructor().newInstance()
-        return instance as? Plugin
+    private fun asPlugin(fqcn: String, instances: EntryPointInstances): Plugin =
+        instances.of(fqcn) as? Plugin
             ?: throw IllegalStateException("$fqcn does not implement ${Plugin::class.java.name}")
-    }
 
-    private fun describe(t: Throwable): String {
-        // An entry point that fails to link reports the missing type, which is the actionable part: it means
-        // the plugin was built against a host API that is not on this classloader's parent.
-        val cause = generateSequence(t) { it.cause }.last()
-        val message = cause.message?.takeIf { it.isNotBlank() }
-        return if (message != null) "${cause::class.java.simpleName}: $message" else cause::class.java.name
-    }
+    // An entry point that fails to link is a plugin built against an SPI this host does not have; see
+    // PluginLoadFailure for why that reads as a raw JVM descriptor unless it is spelled out.
+    private fun describe(t: Throwable): String = PluginLoadFailure.describe(t)
 
     /**
      * The loaded plugin as the manager sees it: the host's manifest over the instantiated delegate, with the

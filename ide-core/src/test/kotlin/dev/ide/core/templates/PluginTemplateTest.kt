@@ -130,6 +130,15 @@ class PluginTemplateTest {
                     !Files.exists(dir.resolve("plugin/src/main/kotlin/com/example/mytool/MyToolPlugin.kt")),
                     "a panel-only plugin should not generate an engine entry point",
                 )
+
+                // The panel is previewable out of the box: without this an author's first sight of their own
+                // UI is an APK install and a restart.
+                assertTrue("@Preview" in source, "the panel has no preview")
+                assertTrue("UiContext.preview(" in source, "the preview does not use the published stub")
+                assertTrue(
+                    "import androidx.compose.ui.tooling.preview.Preview" in source,
+                    "the preview annotation is not imported",
+                )
             }
         }
     }
@@ -149,6 +158,8 @@ class PluginTemplateTest {
             "androidx.compose.foundation:foundation",
             "androidx.compose.ui:ui",
             "androidx.compose.material3:material3",
+            // The generated preview's annotation. Without it the scaffold does not compile.
+            "androidx.compose.ui:ui-tooling-preview",
         )) {
             assertTrue(coordinates.any { it.startsWith("$group:") }, "$group is missing: $coordinates")
         }

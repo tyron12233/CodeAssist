@@ -139,11 +139,16 @@ internal fun DestinationSheets(
         )
     }
     // The Logs viewer — opened from the More menu; a tall sheet so a stack trace has room.
-    BottomSheet(visible = state.logsOpen, onDismiss = { state.logsOpen = false }, heightFraction = 0.9f) {
+    BottomSheet(
+        visible = state.logsOpen,
+        onDismiss = { state.logsOpen = false; state.logsSource = null },
+        heightFraction = 0.9f,
+    ) {
         LogsScreen(
             backend = state.backend,
             fileActions = fileActions,
             modifier = Modifier.fillMaxWidth().weight(1f),
+            initialSource = state.logsSource,
         )
     }
 }

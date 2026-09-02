@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.plugin.PLUGIN_API_VERSION
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
@@ -92,11 +93,44 @@ class PluginManifestInspectionTest {
         assertEquals(emptyList(), runBlocking { s.analyzeDiagnostics(file, text) }.map { it.message })
     }
 
+    @Test
+    fun `flags a misspelled capability, which the consent screen would show as written`() {
+        val s = boot(markerActivity = true)
+        val text = manifest(capabilities = listOf("ui.toolwindow"))
+        val file = write(s, text)
+
+        val problem = runBlocking { s.analyzeDiagnostics(file, text) }.single()
+        assertTrue("Unknown capability 'ui.toolwindow'" in problem.message, problem.message)
+        // The known set is in the message, since the fix is almost always one character away from it.
+        assertTrue("ui.toolWindow" in problem.message, problem.message)
+    }
+
+    @Test
+    fun `flags a capability the plugin has no facet to deliver`() {
+        val s = boot(markerActivity = true)
+        // An engine-only manifest claiming a panel: nothing in it can contribute one.
+        val text = manifest(capabilities = listOf("ui.toolWindow"))
+        val file = write(s, text)
+
+        val problem = runBlocking { s.analyzeDiagnostics(file, text) }.single()
+        assertTrue("needs a UI facet" in problem.message, problem.message)
+    }
+
+    @Test
+    fun `a capability its facet can deliver is not flagged`() {
+        val s = boot(markerActivity = true)
+        val text = manifest(capabilities = listOf("ui.action", "fs.read"))
+        val file = write(s, text)
+
+        assertEquals(emptyList(), runBlocking { s.analyzeDiagnostics(file, text) }.map { it.message })
+    }
+
     // ---- helpers ----------------------------------------------------------------------------------
 
     private fun manifest(
         id: String = "com.example.app.plugin",
-        apiVersion: Int = 1,
+        apiVersion: Int = PLUGIN_API_VERSION,
+        capabilities: List<String> = emptyList(),
     ): String = """
         [plugin]
         id = "$id"
@@ -104,7 +138,8 @@ class PluginManifestInspectionTest {
         version = "1.0.0"
         apiVersion = $apiVersion
         entryPoints = ["com.example.app.DemoPlugin"]
-    """.trimIndent() + "\n"
+    """.trimIndent() + "\n" +
+        if (capabilities.isEmpty()) "" else "capabilities = [${capabilities.joinToString(", ") { "\"$it\"" }}]\n"
 
     private fun boot(markerActivity: Boolean): IdeServices {
         val s = IdeServices.bootstrapDemo(root).also { services = it }

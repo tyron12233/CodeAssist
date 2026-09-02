@@ -1,6 +1,7 @@
 package dev.ide.core.plugins
 
 import dev.ide.model.impl.format.Toml
+import dev.ide.plugin.PLUGIN_API_VERSION
 import dev.ide.plugin.PluginManifest
 
 /**
@@ -13,7 +14,7 @@ import dev.ide.plugin.PluginManifest
  * id = "com.example.hello"
  * name = "Hello"
  * version = "1.0.0"
- * apiVersion = 1
+ * apiVersion = 2
  * description = "Adds a Hello tool window."
  * entryPoints = ["com.example.hello.HelloPlugin"]
  * uiEntryPoints = ["com.example.hello.HelloUiPlugin"]
@@ -51,7 +52,7 @@ object PluginManifestToml {
             id = id,
             name = string(table, "name") ?: id,
             version = string(table, "version") ?: "1.0.0",
-            apiVersion = (table["apiVersion"] as? Long)?.toInt() ?: 1,
+            apiVersion = (table["apiVersion"] as? Long)?.toInt() ?: PLUGIN_API_VERSION,
             dependsOn = strings(table, "dependsOn"),
             description = string(table, "description") ?: "",
             essential = false,

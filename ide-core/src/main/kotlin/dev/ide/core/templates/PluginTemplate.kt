@@ -86,6 +86,15 @@ object CodeAssistPluginTemplate : ProjectTemplate {
             add(TemplateDependency(MODULE, "androidx.compose.foundation:foundation:$COMPOSE", scope = "compileOnly"))
             add(TemplateDependency(MODULE, "androidx.compose.ui:ui:$COMPOSE", scope = "compileOnly"))
             add(TemplateDependency(MODULE, "androidx.compose.material3:material3:$MATERIAL3", scope = "compileOnly"))
+            // For the generated `@Preview`. compileOnly like the rest: the annotation is not needed at
+            // runtime, and the IDE detects a preview by the annotation's simple name either way.
+            add(
+                TemplateDependency(
+                    MODULE,
+                    "androidx.compose.ui:ui-tooling-preview:$COMPOSE",
+                    scope = "compileOnly",
+                ),
+            )
         }
     }
 
@@ -249,7 +258,6 @@ object CodeAssistPluginTemplate : ProjectTemplate {
                 add("import dev.ide.platform.settings.SettingsPage")
             }
             add("import dev.ide.plugin.Plugin")
-            add("import dev.ide.plugin.PluginManifest")
             add("import dev.ide.plugin.PluginRegistration")
             if (command) {
                 add("import dev.ide.plugin.action.ActionPlaces")
@@ -314,17 +322,13 @@ $imports
  * The entry point named by `res/raw/codeassist_plugin.toml`. The IDE instantiates it off the installed APK
  * with its own classloader as the parent, so every SPI type below binds to the IDE's copy.
  *
+ * There is no manifest to declare here: that TOML is this plugin's identity, and the IDE reads it before any
+ * of this code runs.
+ *
  * [register] runs once, at IDE startup, after every plugin this one lists in `dependsOn`. Everything it
  * contributes is tracked and removed automatically if the plugin is unloaded.
  */
 class $entryClass : Plugin {
-
-    // The IDE trusts the packaged TOML manifest, not this one; keep them in agreement.
-    override val manifest = PluginManifest(
-        id = "$pluginId",
-        name = "$displayName",
-        version = "1.0.0",
-    )
 
     override fun register(reg: PluginRegistration) {
         val log = reg.logger("$entryClass")
@@ -357,6 +361,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.ide.plugin.ui.ToolWindow
 import dev.ide.plugin.ui.ToolWindowAnchor
@@ -412,6 +417,17 @@ private fun Panel(ctx: UiContext) {
             Text(if (taps == 0) "Tap me" else "Tapped ${d}taps times")
         }
     }
+}
+
+/**
+ * Renders [Panel] in the editor's preview pane, so the panel can be worked on without building, installing
+ * and restarting. `UiContext.preview()` stands in for the IDE: pass it the state you want to look at, and
+ * add another preview for the states that are easy to get wrong (here, no file open).
+ */
+@Preview
+@Composable
+private fun PanelPreview() {
+    Panel(UiContext.preview(activeFilePath = "App.kt"))
 }
 """
     }

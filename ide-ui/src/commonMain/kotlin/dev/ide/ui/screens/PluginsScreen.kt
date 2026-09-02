@@ -2,6 +2,9 @@ package dev.ide.ui.screens
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,6 +41,7 @@ import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.plugins_failed
 import dev.ide.ui.generated.resources.plugins_installed_empty
+import dev.ide.ui.generated.resources.plugins_logs
 import dev.ide.ui.generated.resources.plugins_required
 import dev.ide.ui.generated.resources.plugins_review
 import dev.ide.ui.generated.resources.plugins_requires
@@ -66,7 +70,12 @@ private enum class PluginTab(val label: StringResource) {
  * (app-global) but applied on the next launch, so a restart hint appears once anything is toggled.
  */
 @Composable
-fun PluginsScreen(backend: IdeBackend, onBack: () -> Unit) {
+fun PluginsScreen(
+    backend: IdeBackend,
+    onBack: () -> Unit,
+    /** Show this plugin's own log records. Null when there is no editor to show the Logs viewer over. */
+    onOpenLogs: ((pluginId: String) -> Unit)? = null,
+) {
     var plugins by remember { mutableStateOf(backend.settings.pluginCatalog()) }
     var changed by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PluginTab.BuiltIn) }
@@ -100,6 +109,11 @@ fun PluginsScreen(backend: IdeBackend, onBack: () -> Unit) {
                                 plugins = backend.settings.pluginCatalog()
                                 changed = true
                             },
+                            // Built-ins log under their own ids too, but their logs are the IDE's; this is
+                            // for the author of an installed plugin watching their own code run.
+                            onOpenLogs = onOpenLogs
+                                ?.takeIf { !p.builtIn && p.togglable }
+                                ?.let { open -> { open(p.id) } },
                         )
                     }
                 }
@@ -186,7 +200,12 @@ private fun RestartHint() {
 }
 
 @Composable
-private fun PluginRow(p: UiPluginInfo, onReview: () -> Unit, onToggle: (Boolean) -> Unit) {
+private fun PluginRow(
+    p: UiPluginInfo,
+    onReview: () -> Unit,
+    onToggle: (Boolean) -> Unit,
+    onOpenLogs: (() -> Unit)? = null,
+) {
     Row(
         Modifier.fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
@@ -219,6 +238,17 @@ private fun PluginRow(p: UiPluginInfo, onReview: () -> Unit, onToggle: (Boolean)
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                 )
+            }
+            // An installed plugin's own records, which the Logs viewer already attributes by plugin id. Its
+            // author's alternative is reading the whole IDE's log and picking their lines out of it.
+            if (onOpenLogs != null) {
+                TextButton(
+                    onClick = onOpenLogs,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                    modifier = Modifier.offset(x = (-6).dp).heightIn(min = 28.dp),
+                ) {
+                    Text(stringResource(Res.string.plugins_logs), style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
         // A plugin the IDE could not read has no id to toggle, so its row carries only its reason. One

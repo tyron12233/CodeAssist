@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -80,8 +81,14 @@ fun LogsScreen(
     backend: IdeBackend,
     fileActions: FileActions,
     modifier: Modifier = Modifier,
+    /** Open filtered to this source (a plugin id), as the Plugins screen does. Null shows everything. */
+    initialSource: String? = null,
 ) {
     val state = rememberLogsScreenState(backend)
+    // Selected rather than filtered-on-open: until that plugin has actually logged something its id is not
+    // among `sources`, and `activeSource` ignores a selection that matches nothing, so the view shows
+    // everything and narrows by itself once the first record arrives.
+    LaunchedEffect(initialSource) { if (initialSource != null) state.selectSource(initialSource) }
     val clipboard = LocalClipboardManager.current
     val shown = state.shown
 

@@ -36,6 +36,7 @@ ide-android (Android launcher) → ide-core
 | `block-api` | `dev.ide.block` | Projectional (block) editor SPI: block tree, block mappings, block edits, the projection service. |
 | `plugin-api` | `dev.ide.plugin`, `.action`, `.external` | The plugin SPI (`Plugin`/`PluginManifest`/`PluginRegistration`), the lean action model (`IdeAction`/`ActionGroup` + named places), and the discovery SPI for plugins the user installed separately (`PluginSource`/`DiscoveredPlugin`/`PluginOrigin`). |
 | `plugin-ui-api` | `dev.ide.plugin.ui` | The UI half of the plugin SPI, for a plugin shipped as its own app: the `UiPlugin` facet named by the manifest's `uiEntryPoints`, its tool window / screen / overlay contributions, and the narrow `UiContext` their `@Composable` bodies render against. Compose is `compileOnly` (the host provides it) and it depends on no other CodeAssist module, so publishing it commits to a surface `IdeBackend` changes cannot break. |
+| `plugin-bom` | (no code) | The versions a plugin compiles against as one coordinate: the nine published SPI artifacts and the Compose the IDE provides at runtime. Its Compose pins are read out of `PluginTemplate.kt`, so a plugin built with Gradle outside the IDE and one scaffolded inside it cannot end up on different Compose. |
 
 ## Implementation modules
 

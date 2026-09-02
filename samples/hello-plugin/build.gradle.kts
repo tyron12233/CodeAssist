@@ -56,4 +56,7 @@ dependencies {
     compileOnly(libs.androidx.compose.foundation)
     compileOnly(libs.androidx.compose.ui)
     compileOnly(libs.androidx.compose.material3)
+    // The @Preview below the panel, so the sample shows a plugin author how to see their UI without
+    // installing anything.
+    compileOnly(libs.androidx.compose.ui.tooling.preview)
 }

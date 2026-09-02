@@ -75,6 +75,12 @@ class PluginManager(
      */
     fun load(plugin: Plugin) {
         val id = plugin.manifest.pluginId
+        // A built-in that forgot to override `manifest` would otherwise register everything it contributes
+        // under the empty id, which unload cannot find again and the Plugins screen cannot show. An
+        // installed plugin never reaches this: the loader has already put the packaged manifest over it.
+        require(id.value.isNotBlank()) {
+            "plugin ${plugin.javaClass.name} declares no manifest id; a built-in must override Plugin.manifest"
+        }
         require(id !in loaded) { "plugin '${id.value}' already loaded" }
         val teardown = CompositeDisposable()
         // Recorded before register(), not after: a throw part-way through leaves contributions on the

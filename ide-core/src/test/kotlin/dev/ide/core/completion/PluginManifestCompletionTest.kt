@@ -1,5 +1,6 @@
 package dev.ide.core.completion
 
+import dev.ide.plugin.PLUGIN_API_VERSION
 import dev.ide.index.ClassNameValue
 import dev.ide.index.IndexId
 import dev.ide.index.IndexScope
@@ -79,7 +80,7 @@ class PluginManifestCompletionTest {
     @Test
     fun `apiVersion offers the version this IDE loads`() {
         val labels = complete("[plugin]\napiVersion = ", caretAfter = "apiVersion = ")
-        assertEquals(listOf("1"), labels)
+        assertEquals(listOf(PLUGIN_API_VERSION.toString()), labels)
     }
 
     @Test

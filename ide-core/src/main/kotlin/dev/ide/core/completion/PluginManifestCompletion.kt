@@ -1,5 +1,6 @@
 package dev.ide.core.completion
 
+import dev.ide.plugin.PluginCapabilities
 import dev.ide.core.plugins.PluginProject
 import dev.ide.index.IndexService
 import dev.ide.index.SubtypeIndex
@@ -133,18 +134,23 @@ class PluginManifestCompletion(
         )
 
         /**
-         * The capability strings this project already publishes, in the plugin guide and in the plugin
-         * template. Nothing reads `capabilities` yet, so this is a spelling aid for the values already in
-         * use rather than a permission vocabulary; enforcement, when it exists, decides the real set.
+         * What each capability in [PluginCapabilities.KNOWN] means, for the completion detail line. The set
+         * itself lives in the SPI, so this offers exactly what the manifest checks accept; a capability added
+         * there without a line here is offered with no detail rather than not offered (see the test).
          */
-        val CAPABILITIES = linkedMapOf(
-            "ui.action" to "contributes a command to the palette or menus",
-            "ui.settingsPage" to "contributes a Settings category",
-            "ui.editorAction" to "contributes an action at the caret",
-            "ui.toolWindow" to "contributes a tool window",
-            "ui.screen" to "contributes a full screen",
-            "ui.overlay" to "contributes an app-wide overlay",
-            "fs.read" to "reads project files",
-        )
+        val CAPABILITIES: Map<String, String> = PluginCapabilities.KNOWN.associateWith { capability ->
+            when (capability) {
+                PluginCapabilities.UI_ACTION -> "contributes a command to the palette or menus"
+                PluginCapabilities.UI_SETTINGS_PAGE -> "contributes a Settings category"
+                PluginCapabilities.UI_EDITOR_ACTION -> "contributes an action at the caret"
+                PluginCapabilities.UI_TOOL_WINDOW -> "contributes a tool window"
+                PluginCapabilities.UI_SCREEN -> "contributes a full screen"
+                PluginCapabilities.UI_OVERLAY -> "contributes an app-wide overlay"
+                PluginCapabilities.FS_READ -> "reads project files"
+                PluginCapabilities.FS_WRITE -> "changes project files"
+                PluginCapabilities.NET -> "makes network requests"
+                else -> ""
+            }
+        }
     }
 }

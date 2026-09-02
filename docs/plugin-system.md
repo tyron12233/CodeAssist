@@ -42,7 +42,7 @@ interface Plugin {
 
 data class PluginManifest(
     val id: String, val name: String, val version: String = "1.0.0",
-    val apiVersion: Int = 1,
+    val apiVersion: Int = PLUGIN_API_VERSION,
     val dependsOn: List<String> = emptyList(),   // plugin ids; drives topological load order
     // Installed plugins only: entryPoints (the FQCNs the loader instantiates) and minHostVersion are
     // enforced at load; capabilities and trusted are parsed and carried, but nothing reads them yet.
@@ -256,7 +256,7 @@ itself undisablable) and `trusted` (which follows from the origin's signature).
 id = "com.example.hello"
 name = "Hello"
 version = "1.0.0"
-apiVersion = 1
+apiVersion = 2
 description = "Adds a Hello tool window."
 entryPoints = ["com.example.hello.HelloPlugin"]
 uiEntryPoints = ["com.example.hello.HelloUiPlugin"]

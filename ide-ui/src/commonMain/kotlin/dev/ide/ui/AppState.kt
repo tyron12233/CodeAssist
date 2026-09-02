@@ -563,6 +563,10 @@ class IdeUiState(
     /** Whether the Logs viewer sheet (editor & analysis logs, opened from the More menu) is showing. */
     var logsOpen by mutableStateOf(false)
 
+    /** The plugin id the Logs viewer should open filtered to, set when it is opened from a plugin's row.
+     *  Cleared when the sheet closes, so opening Logs from the More menu shows everything again. */
+    var logsSource: String? by mutableStateOf(null)
+
     /** Whether the indexing-status detail dialog (opened by tapping the top-bar index chip) is showing. */
     var indexDetailOpen by mutableStateOf(false)
 

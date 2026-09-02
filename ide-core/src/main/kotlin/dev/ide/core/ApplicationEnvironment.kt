@@ -116,7 +116,8 @@ class ApplicationEnvironment(
 
     /**
      * The Compose UI facets ([dev.ide.ui.ext.UiPlugin]) of the ENABLED plugins, in load order: the built-ins
-     * first, then the installed plugins' `uiEntryPoints`. The Compose shell reads these (through
+     * first, then the installed plugins' `uiEntryPoints`, one entry per plugin however many classes it names.
+     * The Compose shell reads these (through
      * `IdeBackend.uiPlugins`) and registers them into `UiPluginHost`, so a plugin's tool windows / actions /
      * screens are governed by the SAME enable/disable decision as its engine facet, so a disabled plugin
      * contributes no UI at all.
@@ -153,9 +154,9 @@ class ApplicationEnvironment(
         val builtInLoadIds = enabledBuiltIns.mapTo(HashSet()) { it.engine.manifest.id }
         val loader = ExternalPluginLoader(hostApiVersion = PLUGIN_API_VERSION, hostVersion = hostVersion)
         val external = LinkedHashMap<String, Plugin>()
-        // Each load's result, kept for its classloader: a plugin's UI facets must be instantiated off the
-        // SAME loader its engine facet came from, which is what makes the two halves one program (see
-        // ExternalUiFacets).
+        // Each load's result, kept for its entry-point instances: a plugin's UI facets come off the SAME
+        // loader its engine facet came from, and a class named in both of the manifest's lists is the SAME
+        // object, which is what makes the two halves one program (see ExternalUiFacets).
         val loaded = LinkedHashMap<String, ExternalPluginLoader.Result.Loaded>()
         for (d in discovered.filter { pluginCatalog.isEnabled(it.manifest.id) }) {
             when (val r = loader.load(d)) {
@@ -194,9 +195,9 @@ class ApplicationEnvironment(
 
         // UI facets come after the ordered engine load, so a plugin whose engine facet was pruned or threw
         // contributes no UI: its panels would be reading services that never registered.
-        val externalUi = external.keys.filter { it !in failures }.flatMap { id ->
+        val externalUi = external.keys.filter { it !in failures }.mapNotNull { id ->
             val plugin = loaded.getValue(id)
-            ExternalUiFacets.load(plugin.manifest, plugin.classLoader) { reason ->
+            ExternalUiFacets.load(plugin.manifest, plugin.instances) { reason ->
                 // A UI facet that failed is reported without failing the plugin: its engine facet is loaded
                 // and working, so the row should say what is missing rather than claim nothing loaded.
                 failures.merge(id, reason) { existing, new -> "$existing; $new" }

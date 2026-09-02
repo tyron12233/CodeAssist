@@ -7,7 +7,6 @@ import dev.ide.platform.settings.SettingControl
 import dev.ide.platform.settings.SettingsPage
 import dev.ide.platform.settings.SettingsScope
 import dev.ide.plugin.Plugin
-import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.PluginRegistration
 import dev.ide.plugin.action.ActionContext
 import dev.ide.plugin.action.ActionEffect
@@ -33,21 +32,12 @@ import dev.ide.plugin.action.UI_ACTION_EP
  */
 class HelloPlugin : Plugin {
 
-    // The host's discovered manifest is authoritative; this one is what a built-in would declare inline.
-    override val manifest = PluginManifest(
-        id = "com.example.hello",
-        name = "Hello Plugin",
-        version = "1.0.0",
-        description = "Sample plugin shipped as its own app.",
-        entryPoints = listOf("com.example.hello.HelloPlugin"),
-        uiEntryPoints = listOf("com.example.hello.HelloUiPlugin"),
-        capabilities = listOf("ui.settingsPage", "ui.action", "ui.editorAction", "ui.toolWindow"),
-        minHostVersion = "3.12.0",
-    )
+    // No manifest is declared here: res/raw/codeassist_plugin.toml is this plugin's identity, and the IDE
+    // has read it before this class is instantiated.
 
     override fun register(reg: PluginRegistration) {
         val log = reg.logger("HelloPlugin")
-        log.info("loaded from a separate APK, api=${manifest.apiVersion}, version=${manifest.version}")
+        log.info("loaded from a separate APK")
 
         reg.register(
             UI_ACTION_EP,

@@ -115,9 +115,10 @@ and only enabled plugins' UI facets are handed to the shell.
 A plugin may have only an engine facet (most do), or an engine facet plus a UI facet (Git, the AI agent). For
 a **built-in**, a UI-only plugin is not a thing: the manifest, and therefore the identity, lives on the engine
 facet. An **installed** plugin carries its manifest in its APK instead, so it may declare either facet or
-both (see [section 15](#15-ship-your-plugin-as-its-own-app)). Its UI facet implements a different, narrower
-interface (`dev.ide.plugin.ui.UiPlugin`), for the reason given in
-[section 10.11](#1011-an-installed-plugins-ui-facet).
+both (see [section 15](#15-ship-your-plugin-as-its-own-app)) and, since both halves come off one APK, may
+implement both with a **single class**: name it in `entryPoints` and in `uiEntryPoints` and the IDE
+instantiates it once. Its UI facet implements a different, narrower interface (`dev.ide.plugin.ui.UiPlugin`),
+for the reason given in [section 10.11](#1011-an-installed-plugins-ui-facet).
 
 ### 2.3 Lifetimes
 
@@ -189,6 +190,14 @@ interface Plugin {
 | `register(reg)` | The single contribution hook. Runs exactly once, after every plugin in `dependsOn`. Everything the plugin adds goes through `reg` so it can be attributed and tracked |
 | `dispose()` | Optional. Only for resources the plugin owns beyond its registry contributions, such as a background scope or a file watcher. Registry contributions are torn down automatically, so most plugins never override this |
 
+One thing the interface does **not** ask of a plugin shipped as its own app: a `manifest`. That property is
+defaulted, because such a plugin's identity is its packaged `codeassist_plugin.toml`, which the IDE reads
+before any of the plugin's code runs and uses in preference to whatever an entry point returns. Declaring one
+anyway used to be the single line that broke an already-compiled plugin whenever `PluginManifest` grew a
+field, since Kotlin compiles a call relying on default arguments into a synthetic constructor whose descriptor
+names every parameter. A **built-in** still overrides it: it has no packaged manifest, and the loader refuses
+a plugin whose id is blank.
+
 ### 3.2 `PluginManifest`
 
 [`dev.ide.plugin.PluginManifest`](../plugin-api/src/main/kotlin/dev/ide/plugin/PluginManifest.kt)
@@ -198,12 +207,13 @@ data class PluginManifest(
     val id: String,
     val name: String,
     val version: String = "1.0.0",
-    val apiVersion: Int = 1,
+    val apiVersion: Int = PLUGIN_API_VERSION,
     val dependsOn: List<String> = emptyList(),
     val description: String = "",
     val essential: Boolean = false,
     // installed plugins only (unused for built-ins, where the class is the entry point):
     val entryPoints: List<String> = emptyList(),
+    val uiEntryPoints: List<String> = emptyList(),
     val capabilities: List<String> = emptyList(),
     val minHostVersion: String? = null,
     val trusted: Boolean = true,
@@ -215,7 +225,7 @@ data class PluginManifest(
 | `id` | Attribution key, `dependsOn` node id, persisted in the user's disabled set | Lowercase, hyphenated, stable forever, because renaming it silently re-enables a plugin the user disabled |
 | `name` | Shown in **Settings → Plugins** | Human title case, e.g. `Version Control` |
 | `version` | Displayed on the plugin's row | Semantic version |
-| `apiVersion` | Host SPI/ABI compatibility floor, bumped when this SPI changes incompatibly | Leave at the default; an installed plugin declaring another value is rejected at load |
+| `apiVersion` | Host SPI/ABI compatibility floor, bumped when this SPI changes incompatibly, **including when a field is added to this class** (Kotlin's synthetic default-argument constructor names every parameter, so an older plugin calls a method that no longer exists) | Leave at the default; an installed plugin declaring another value is rejected at load, which is the readable version of the linkage error it would otherwise hit |
 | `dependsOn` | Drives the **topological load order**, and drops dependents when a dependency is disabled | Declare an edge whenever your contribution must land after another's |
 | `description` | One line under the name in **Settings → Plugins** | Say what the user gets, not how it is implemented |
 | `essential` | The plugin cannot be disabled; it and everything it transitively depends on stay loaded | Only for things the IDE genuinely cannot run without; ignored for an installed plugin |
@@ -1197,9 +1207,11 @@ are not namespaced on the way through, which is what lets an engine-side action 
 `ActionEffect.Navigate("com.example.screen")` and open the UI facet's own screen.
 
 Loading and gating: the facets are instantiated off the classloader the engine facet was loaded from, only
-for a plugin that is enabled, consented to, and whose engine facet loaded cleanly. A UI facet that is
-missing, is not a `UiPlugin`, or throws in its constructor is reported on that plugin's row in the Plugins
-screen; its engine facet keeps running. Packaging, the Compose pins and the two-facet pairing are in
+for a plugin that is enabled, consented to, and whose engine facet loaded cleanly. Each class the manifest
+names is instantiated once, so naming one class in both lists gives you one object rather than two halves
+with separate copies of every field. A UI facet that is missing, is not a `UiPlugin`, or throws while being
+created is reported on that plugin's row in the Plugins screen; its engine facet keeps running, which is the
+reason to keep them two classes when they really are separate. Packaging, the Compose pins and the two-facet pairing are in
 [section 15](#15-ship-your-plugin-as-its-own-app).
 
 ---
@@ -1624,6 +1636,15 @@ names no class or a class that does not implement `Plugin` / `UiPlugin`, a missi
 completes the manifest's keys, the plugin ids available to `dependsOn`, and the `Plugin` and `UiPlugin`
 implementations in the project.
 
+It also checks `capabilities`, which is the list the user reads at the consent gate when deciding whether to
+let the plugin run at all: a value the IDE does not recognise is flagged, because it is shown to that user
+exactly as written, and so is one whose facet the plugin does not declare (`ui.toolWindow` with no
+`uiEntryPoints` cannot be delivered). The vocabulary is `PluginCapabilities` in the SPI.
+
+**Watching your plugin run.** Anything your plugin logs through `reg.logger(...)` is attributed to its plugin
+id, and **Settings > Plugins** offers **Logs** on an installed plugin's row, which opens the Logs viewer
+filtered to that plugin. That is the difference between reading your own output and reading the whole IDE's.
+
 Three things go into the plugin app, and a fourth if it has UI.
 
 **1. The plugin manifest**, as `res/raw/codeassist_plugin.toml`. This is `PluginManifest` in TOML, and it is
@@ -1634,7 +1655,7 @@ what the IDE reads to build its catalogue, so it must agree with what your entry
 id = "com.example.hello"
 name = "Hello"
 version = "1.0.0"
-apiVersion = 1
+apiVersion = 2
 description = "Adds a Hello command and a settings page."
 entryPoints = ["com.example.hello.HelloPlugin"]
 uiEntryPoints = ["com.example.hello.HelloUiPlugin"]   # optional; the Compose UI facet
@@ -1696,24 +1717,38 @@ private fun HelloPanel(ctx: UiContext) {
 }
 ```
 
-Both facets are instantiated off the same APK on the **same classloader**, so they are ordinary Kotlin to each
-other: a shared `object` is the whole channel between them, with nothing to serialise and no extension point
-in the middle. (Two *different* plugins cannot do this, since each gets its own classloader, and the message
-bus is the channel there.) `samples/hello-plugin` shows the pairing: the palette command writes to a
-`HelloState` object and the panel reads it.
+The two facets need not be two classes. One class may implement both and be named in `entryPoints` and in
+`uiEntryPoints`; the IDE instantiates it once, so the halves share ordinary fields and the panel reads
+whatever `register` set up. Keep them apart when they really are apart: two classes fail independently, so a
+UI facet that throws is reported against your plugin while its engine half goes on working, where one class
+means one failure takes both.
+
+Either way both are instantiated off the same APK on the **same classloader**, so they are ordinary Kotlin to
+each other: with two classes a shared `object` is the whole channel between them, with nothing to serialise
+and no extension point in the middle. (Two *different* plugins cannot do this, since each gets its own
+classloader, and the message bus is the channel there.) `samples/hello-plugin` shows the pairing: the palette
+command writes to a `HelloState` object and the panel reads it.
 
 Compose has to be declared, and pinned to what the IDE bundles, because your `@Composable` code composes into
 the IDE's own runtime:
 
 ```kotlin
 dependencies {
-    compileOnly("io.github.tyron12233:plugin-ui-api:1.2.0")
-    compileOnly("androidx.compose.runtime:runtime:1.11.2")
-    compileOnly("androidx.compose.foundation:foundation:1.11.2")
-    compileOnly("androidx.compose.ui:ui:1.11.2")
-    compileOnly("androidx.compose.material3:material3:1.4.0")
+    // The BOM carries the versions, including the Compose the IDE provides.
+    compileOnly(platform("io.github.tyron12233:plugin-bom:1.3.0"))
+
+    compileOnly("io.github.tyron12233:plugin-ui-api")
+    compileOnly("androidx.compose.runtime:runtime")
+    compileOnly("androidx.compose.foundation:foundation")
+    compileOnly("androidx.compose.ui:ui")
+    compileOnly("androidx.compose.material3:material3")
+    compileOnly("androidx.compose.ui:ui-tooling-preview")   // for @Preview; see below
 }
 ```
+
+Writing the versions out (`androidx.compose.runtime:runtime:1.11.2`, and so on) works too, and is what a
+project scaffolded inside the IDE does, since it builds on-device. The BOM is there so that a plugin built
+with Gradle outside the IDE has one number to get right instead of thirteen.
 
 Two consequences worth knowing before you build one:
 
@@ -1724,19 +1759,50 @@ Two consequences worth knowing before you build one:
 - **A plugin has no `Context` for its own package.** No drawables, no `stringResource`: icons are ids in the
   IDE's registry and text is Kotlin string literals.
 
+#### Previewing a panel
+
+A panel body takes a `UiContext`, so previewing one means having a context outside the IDE. `UiContext`
+provides it, and the rest is an ordinary `@Preview` rendered by the editor's preview pane:
+
+```kotlin
+@Preview
+@Composable
+private fun HelloPanelPreview() {
+    HelloPanel(UiContext.preview(activeFilePath = "MainActivity.kt"))
+}
+
+@Preview
+@Composable
+private fun HelloPanelNoFilePreview() {
+    HelloPanel(UiContext.preview())
+}
+```
+
+`preview()` answers the `projectPath` and `activeFilePath` you give it, and its `openFile`, `openScreen` and
+`back` do nothing, because a preview has no editor to open a file in. `ScreenUiContext.preview()` is the same
+thing for a contributed screen. The two states above are the ones worth having as separate previews: a panel
+that reads the active file is usually written against the case where there is one, and looks wrong in the
+case where there is not.
+
+The scaffolded panel comes with a preview already, and `samples/hello-plugin` has two. This is the whole of
+what previewing gives you: the body, composed. The rail, the panel frame and the plugin's registration are
+not part of it, so an id or an anchor that is wrong still shows up only once the plugin is installed.
+
 ### What a separately-packaged plugin can reach
 
 The engine SPI is published, so the extension points in these modules are available to a plugin app:
 
 ```kotlin
-compileOnly("io.github.tyron12233:plugin-api:1.2.0")        // actions, menus, palette commands
-compileOnly("io.github.tyron12233:platform-core:1.2.0")     // scoped services, settings pages, logging
-compileOnly("io.github.tyron12233:project-model-api:1.2.0") // module types, templates, facets + codecs, file icons
-compileOnly("io.github.tyron12233:language-api:1.2.0")      // file types, completion, postfix, synthetic classes
-compileOnly("io.github.tyron12233:analysis-api:1.2.0")      // analyzers, diagnostics, quick fixes, intentions
-compileOnly("io.github.tyron12233:index-api:1.2.0")         // persisted indexes
-compileOnly("io.github.tyron12233:build-api:1.2.0")         // build systems, build plugins, source generators
-compileOnly("io.github.tyron12233:plugin-ui-api:1.2.0")     // tool windows, screens, overlays (see part 4)
+compileOnly(platform("io.github.tyron12233:plugin-bom:1.3.0")) // one version for everything below
+
+compileOnly("io.github.tyron12233:plugin-api")        // actions, menus, palette commands
+compileOnly("io.github.tyron12233:platform-core")     // scoped services, settings pages, logging
+compileOnly("io.github.tyron12233:project-model-api") // module types, templates, facets + codecs, file icons
+compileOnly("io.github.tyron12233:language-api")      // file types, completion, postfix, synthetic classes
+compileOnly("io.github.tyron12233:analysis-api")      // analyzers, diagnostics, quick fixes, intentions
+compileOnly("io.github.tyron12233:index-api")         // persisted indexes
+compileOnly("io.github.tyron12233:build-api")         // build systems, build plugins, source generators
+compileOnly("io.github.tyron12233:plugin-ui-api")     // tool windows, screens, overlays (see part 4)
 ```
 
 Take only the ones you use; each brings the ones below it transitively (`plugin-ui-api` brings nothing: it
@@ -1747,7 +1813,9 @@ The Compose UI surfaces are reachable, but through a **different, narrower model
 What is not reachable from an installed plugin is the internal `ide-ui-api` model itself: editor view modes,
 UI host actions and tab decorations, which are built-in-only because they hand a body the whole `IdeBackend`.
 
-**3. Your plugin classes**, compiled against the plugin SPI as `compileOnly`. The IDE's classloader is the
+**3. Your plugin classes**, compiled against the plugin SPI as `compileOnly`. They implement `Plugin`,
+`dev.ide.plugin.ui.UiPlugin`, or both, and they do **not** declare a `PluginManifest`: the TOML above is this
+plugin's identity, and the IDE has read it before your class is instantiated. The IDE's classloader is the
 parent of your plugin's, so the SPI, the Kotlin stdlib, and the Compose runtime resolve to the IDE's copies.
 Bundling your own copy of any of them does nothing: the parent wins, and shipping a mismatched version is how
 you get a linkage error reported against your plugin.
@@ -1756,8 +1824,9 @@ The SPI is published, so it is an ordinary dependency:
 
 ```kotlin
 dependencies {
-    compileOnly("io.github.tyron12233:plugin-api:1.2.0")
-    compileOnly("io.github.tyron12233:platform-core:1.2.0")
+    compileOnly(platform("io.github.tyron12233:plugin-bom:1.3.0"))
+    compileOnly("io.github.tyron12233:plugin-api")
+    compileOnly("io.github.tyron12233:platform-core")
 }
 ```
 

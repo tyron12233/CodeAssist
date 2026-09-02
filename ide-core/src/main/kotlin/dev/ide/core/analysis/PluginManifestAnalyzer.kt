@@ -17,6 +17,7 @@ import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 import dev.ide.model.Module
 import dev.ide.plugin.PLUGIN_API_VERSION
+import dev.ide.plugin.PluginCapabilities
 import dev.ide.plugin.PluginVersions
 import java.nio.file.Files
 import java.nio.file.Path
@@ -89,7 +90,70 @@ class PluginManifestAnalyzer(
 
         checkEntryPoints(manifest.entryPoints, PLUGIN_INTERFACE, "entryPoints", target, ranges, sink)
         checkEntryPoints(manifest.uiEntryPoints, UI_PLUGIN_INTERFACE, "uiEntryPoints", target, ranges, sink)
+        checkCapabilities(manifest, ranges, sink)
         checkMarkerActivity(target.module, path, ranges, sink)
+    }
+
+    /**
+     * What the manifest claims has to be something the plugin can actually do, because this list is what the
+     * user is shown when they decide whether to allow the plugin at all.
+     *
+     * All of it is decidable from the manifest itself, so nothing here waits on the index. A capability the
+     * IDE does not recognise is shown to that user verbatim, and one whose facet the plugin does not declare
+     * is shown for something the plugin has no way to deliver. Both are warnings rather than errors: the
+     * plugin still loads, and the cost is a consent screen that misdescribes it.
+     */
+    private fun checkCapabilities(
+        manifest: dev.ide.plugin.PluginManifest,
+        ranges: KeyRanges,
+        sink: DiagnosticSink,
+    ) {
+        if (manifest.capabilities.isEmpty()) {
+            // The converse: a plugin that contributes UI and says nothing about it. The consent gate then
+            // describes a plugin with panels as doing nothing in particular.
+            if (manifest.uiEntryPoints.isNotEmpty()) {
+                sink.report(
+                    ranges.value("uiEntryPoints"),
+                    Severity.WARNING,
+                    "This plugin contributes UI but declares no capabilities, so the consent screen will " +
+                        "not say so. Add what it contributes, e.g. '${PluginCapabilities.UI_TOOL_WINDOW}'.",
+                    CODE,
+                )
+            }
+            return
+        }
+
+        val range = ranges.value("capabilities")
+        for (capability in manifest.capabilities) {
+            if (capability !in PluginCapabilities.KNOWN) {
+                sink.report(
+                    range,
+                    Severity.WARNING,
+                    "Unknown capability '$capability'; it is shown to the user exactly as written. " +
+                        "Known: ${PluginCapabilities.KNOWN.joinToString(", ")}.",
+                    CODE,
+                )
+                continue
+            }
+            if (capability in PluginCapabilities.NEEDS_UI_FACET && manifest.uiEntryPoints.isEmpty()) {
+                sink.report(
+                    range,
+                    Severity.WARNING,
+                    "'$capability' needs a UI facet, and 'uiEntryPoints' is empty, so the plugin cannot " +
+                        "contribute one.",
+                    CODE,
+                )
+            }
+            if (capability in PluginCapabilities.NEEDS_ENGINE_FACET && manifest.entryPoints.isEmpty()) {
+                sink.report(
+                    range,
+                    Severity.WARNING,
+                    "'$capability' needs an engine facet, and 'entryPoints' is empty, so the plugin cannot " +
+                        "contribute one.",
+                    CODE,
+                )
+            }
+        }
     }
 
     /**

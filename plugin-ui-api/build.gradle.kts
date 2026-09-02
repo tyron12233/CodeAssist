@@ -24,4 +24,9 @@ plugins {
 // against itself (the template does this), and the host provides it at runtime.
 dependencies {
     compileOnly(libs.compose.runtime.desktop)
+
+    // The Compose compiler plugin is applied to this module, and it refuses to run without the runtime on
+    // the class path. `compileOnly` does not reach the test compilation, so the tests need their own copy.
+    // Test-scoped, so it stays out of the published POM the way the main one does.
+    testImplementation(libs.compose.runtime.desktop)
 }

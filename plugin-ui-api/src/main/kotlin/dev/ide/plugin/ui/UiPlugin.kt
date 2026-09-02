@@ -6,20 +6,28 @@ package dev.ide.plugin.ui
 /**
  * The UI facet of a plugin: what it implements to contribute Compose-bearing UI.
  *
- * A plugin has up to two facets, and they are separate objects only because a `@Composable` body cannot live
+ * A plugin has up to two facets, and they are separate *types* only because a `@Composable` body cannot live
  * in the engine module. The **engine facet** (`dev.ide.plugin.Plugin`) contributes data: services, analyzers,
  * actions, settings pages. This one contributes UI that renders itself: a tool window, a screen, an overlay.
- *
- * Both are named by the same packaged manifest and loaded off the same APK, so **they share a classloader**:
- * the two facets of one plugin can hold a common `object`, read each other's state and call each other
- * directly, with no bridge and nothing crossing a boundary as data. (Two *different* plugins cannot: each
- * gets its own classloader over its own APK.)
  *
  * ```toml
  * # res/raw/codeassist_plugin.toml
  * entryPoints = ["com.example.hello.HelloPlugin"]      # the engine facet
  * uiEntryPoints = ["com.example.hello.HelloUiPlugin"]  # this one
  * ```
+ *
+ * Nothing says they have to be two classes. One class may implement both and be named in both lists, and the
+ * IDE instantiates it once: the halves then share ordinary fields, and a panel reads what `register` set up
+ * with no ceremony at all. Two classes are worth keeping when the halves are genuinely separate, since they
+ * then fail independently: a UI facet that throws is reported against the plugin while its engine facet
+ * loads, where one class means one failure takes both.
+ *
+ * Either way both are loaded off the same APK, so **they share a classloader**: two classes can hold a common
+ * `object`, read each other's state and call each other directly, with no bridge and nothing crossing a
+ * boundary as data. (Two *different* plugins cannot: each gets its own classloader over its own APK.)
+ *
+ * A facet with no state of its own can be written as an `object`; the IDE takes the singleton rather than
+ * constructing a second one.
  *
  * Either list may be empty, so a plugin can be engine-only, UI-only, or both. The engine facet's
  * enable/disable and consent decision gates both: a plugin the user has not allowed contributes no UI, and a

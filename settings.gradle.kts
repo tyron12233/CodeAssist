@@ -100,6 +100,7 @@ include(
     ":block-impl",
     ":plugin-api",  // UI extensibility SPI: the lean action model (IdeAction/ActionGroup + places) + EPs
     ":plugin-ui-api", // the UI half of the plugin SPI: what an installed plugin implements to contribute Compose UI
+    ":plugin-bom", // the versions a plugin compiles against (SPI + the Compose the IDE provides), as one coordinate
     ":plugin-impl", // ActionManager: resolves UI_ACTION_EP/ACTION_GROUP_EP into places/menus, dispatches
     ":agent-api",   // agentic-coding SPI: provider-neutral LLM client + AgentTool + AgentWorkspace engine port
     ":agent-impl",  // the agent engine: OkHttp/SSE transport, Anthropic/OpenAI/Gemini providers, loop, built-in tools
@@ -125,6 +126,13 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":vcs-ui", // the version-control Compose UI as a self-contained plugin module (Git panel, branches, history, sign-in, clone)
         ":ide-core",
         ":ide-desktop",
+        // JDK/ART compatibility jars the APK dexes but nothing compiles against (relocated ecj + Eclipse
+        // runtime, javax.xml.stream / javax.swing / javax.management / javax.lang.model surface, jdk.jfr
+        // shims). Consumed only by :ide-android, and it needs the Android SDK to compile the shims against
+        // android.jar, so it belongs to the shells rather than the framework. It exists as a module so those
+        // jars arrive as ordinary dexable artifacts instead of `files(...)` dependencies — see its build
+        // script for why that is worth a module.
+        ":art-compat",
         ":ide-android",
         // A plugin packaged as its own app, built here so it cannot drift from the SPI it compiles against.
         ":samples:hello-plugin",

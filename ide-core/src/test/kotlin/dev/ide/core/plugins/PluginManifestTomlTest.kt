@@ -1,5 +1,6 @@
 package dev.ide.core.plugins
 
+import dev.ide.plugin.PLUGIN_API_VERSION
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -75,7 +76,9 @@ class PluginManifestTomlTest {
         // Name falls back to the id, and the remaining fields to their defaults.
         assertEquals("com.example.flat", m.name)
         assertEquals("1.0.0", m.version)
-        assertEquals(1, m.apiVersion)
+        // A manifest that names no apiVersion is read as the one this IDE loads, so a hand-written manifest
+        // is current by omission rather than pinned to whatever the field defaulted to when it was written.
+        assertEquals(PLUGIN_API_VERSION, m.apiVersion)
         assertTrue(m.dependsOn.isEmpty())
         assertNull(m.minHostVersion)
     }

@@ -1,6 +1,7 @@
 package dev.ide.core
 
 import dev.ide.platform.ExtensionPoint
+import dev.ide.plugin.PLUGIN_API_VERSION
 import dev.ide.plugin.Plugin
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.PluginRegistration
@@ -66,11 +67,65 @@ class ThrowingUiFacet : dev.ide.plugin.ui.UiPlugin {
 /** Not a UI facet at all, for a manifest naming the wrong class. */
 class NotAUiFacet
 
+/**
+ * An entry point that declares no manifest, which is what a plugin shipped as its own app should look like:
+ * its identity is the packaged TOML, and not naming [PluginManifest] is what keeps it loading when that
+ * class grows a field.
+ */
+class ManifestlessEntryPoint : Plugin {
+    override fun register(reg: PluginRegistration) {
+        reg.register(INSTALLED_EP, "manifestless-impl")
+    }
+}
+
+/**
+ * One class that is both facets, which the manifest's two lists let a plugin declare by naming it in each.
+ * The engine half writes a field the UI half reads back, so a test can tell whether they are one object.
+ */
+class BothFacets : Plugin, dev.ide.plugin.ui.UiPlugin {
+    init {
+        constructed++
+    }
+
+    override val manifest = PluginManifest(id = "ignored", name = "Ignored")
+    override val id = "ignored"
+
+    private var registeredAs: String? = null
+
+    override fun register(reg: PluginRegistration) {
+        registeredAs = "engine ran"
+        reg.register(INSTALLED_EP, "both-impl")
+    }
+
+    override fun contribute(ui: dev.ide.plugin.ui.UiRegistration) {
+        sawFromEngineHalf = registeredAs
+    }
+
+    companion object {
+        var constructed = 0
+        var sawFromEngineHalf: String? = null
+    }
+}
+
+/** A UI facet with no state of its own, written as an `object`: the shape a stateless registrar takes. */
+object ObjectUiFacet : dev.ide.plugin.ui.UiPlugin {
+    override val id = "com.example.objectui"
+    override fun contribute(ui: dev.ide.plugin.ui.UiRegistration) = Unit
+}
+
+/** A second UI facet, for a manifest that names two: both have to contribute. */
+class OtherUiFacet : dev.ide.plugin.ui.UiPlugin {
+    override val id = "com.example.two"
+    override fun contribute(ui: dev.ide.plugin.ui.UiRegistration) {
+        InstalledUiFacet.contributedFor += "other"
+    }
+}
+
 private class FakePlugin(
     id: String,
     entryPoint: String = InstalledEntryPoint::class.java.name,
     dependsOn: List<String> = emptyList(),
-    apiVersion: Int = 1,
+    apiVersion: Int = PLUGIN_API_VERSION,
     entryPoints: List<String> = listOf(entryPoint),
     uiEntryPoints: List<String> = emptyList(),
 ) : DiscoveredPlugin {
@@ -289,6 +344,95 @@ class InstalledPluginsTest {
             }
             // The engine facets are unaffected: three plugins registered, one extension each.
             assertEquals(3, env.platform.extensions.extensions(INSTALLED_EP).size)
+        }
+    }
+
+    @Test
+    fun `one class can be both facets, and is instantiated once`() {
+        BothFacets.constructed = 0
+        BothFacets.sawFromEngineHalf = null
+        val name = BothFacets::class.java.name
+        val source = FakeSource(
+            listOf(FakePlugin("com.example.both", entryPoints = listOf(name), uiEntryPoints = listOf(name)))
+        )
+        ApplicationEnvironment(
+            pluginSources = listOf(source),
+            consentedPluginIds = setOf("com.example.both"),
+        ).use { env ->
+            assertNull(env.installedPlugins.single().error)
+            assertEquals(listOf("both-impl"), env.platform.extensions.extensions(INSTALLED_EP))
+            assertEquals(1, BothFacets.constructed, "naming one class in both lists must not make two objects")
+
+            val ui = env.enabledUiPlugins.single { it.id == "com.example.both" }
+            ui.contributeUi(RecordingScope(ui.id))
+            // The UI half reads what the engine half wrote, which holds only if they share their fields.
+            assertEquals("engine ran", BothFacets.sawFromEngineHalf)
+        }
+    }
+
+    @Test
+    fun `a UI facet written as an object loads`() {
+        val source = FakeSource(
+            listOf(
+                FakePlugin(
+                    "com.example.objectui",
+                    entryPoints = emptyList(),
+                    uiEntryPoints = listOf(ObjectUiFacet::class.java.name),
+                ),
+            )
+        )
+        ApplicationEnvironment(
+            pluginSources = listOf(source),
+            consentedPluginIds = setOf("com.example.objectui"),
+        ).use { env ->
+            // An `object` has a private constructor: taking its INSTANCE is what keeps this from failing the
+            // plugin over the shape of its facet.
+            assertNull(env.installedPlugins.single().error)
+            assertEquals(1, env.enabledUiPlugins.count { it.id == "com.example.objectui" })
+        }
+    }
+
+    @Test
+    fun `a plugin naming two UI facets contributes both`() {
+        InstalledUiFacet.contributedFor.clear()
+        val source = FakeSource(
+            listOf(
+                FakePlugin(
+                    "com.example.two",
+                    uiEntryPoints = listOf(
+                        InstalledUiFacet::class.java.name,
+                        OtherUiFacet::class.java.name,
+                    ),
+                ),
+            )
+        )
+        ApplicationEnvironment(
+            pluginSources = listOf(source),
+            consentedPluginIds = setOf("com.example.two"),
+        ).use { env ->
+            // One registration, because the host keeps one per plugin id: two would drop the second in
+            // silence, and the plugin would come up with half its UI.
+            val ui = env.enabledUiPlugins.single { it.id == "com.example.two" }
+            ui.contributeUi(RecordingScope(ui.id))
+            assertEquals(listOf("com.example.two", "other"), InstalledUiFacet.contributedFor)
+        }
+    }
+
+    @Test
+    fun `a plugin that declares no manifest loads under its packaged one`() {
+        val source = FakeSource(
+            listOf(
+                FakePlugin("com.example.nomanifest", entryPoint = ManifestlessEntryPoint::class.java.name),
+            )
+        )
+        ApplicationEnvironment(
+            pluginSources = listOf(source),
+            consentedPluginIds = setOf("com.example.nomanifest"),
+        ).use { env ->
+            assertNull(env.installedPlugins.single().error)
+            assertEquals(listOf("manifestless-impl"), env.platform.extensions.extensions(INSTALLED_EP))
+            // Attributed to the packaged manifest's id, not to the empty one the default answers with.
+            assertTrue(env.pluginCatalog.isEnabled("com.example.nomanifest"))
         }
     }
 

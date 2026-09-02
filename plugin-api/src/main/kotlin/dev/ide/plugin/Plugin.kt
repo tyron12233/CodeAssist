@@ -19,8 +19,22 @@ package dev.ide.plugin
  * its own (a background scope, a file watcher) beyond its registry contributions.
  */
 interface Plugin {
-    /** Identity + load-order metadata. `manifest.id` is the attribution key and the `dependsOn` node id. */
-    val manifest: PluginManifest
+    /**
+     * Identity + load-order metadata. `manifest.id` is the attribution key and the `dependsOn` node id.
+     *
+     * A plugin **shipped as its own app leaves this alone**. Its identity is the packaged
+     * `res/raw/codeassist_plugin.toml`, which the host reads before any of the plugin's code runs and uses in
+     * preference to whatever an entry point returns, so a manifest declared here was only ever read by the
+     * plugin itself. It was also the one line that broke an already-compiled plugin whenever [PluginManifest]
+     * grew a field: Kotlin compiles a call relying on default arguments into a synthetic constructor whose
+     * descriptor names every parameter. Defaulting it here moves that call into the artifact the host ships,
+     * where it is always in step.
+     *
+     * A **built-in** has no packaged manifest, so it must override this. [dev.ide.plugin.PluginRegistration]
+     * attributes contributions by id, and the loader refuses a plugin whose id is blank rather than let one
+     * register unattributed.
+     */
+    val manifest: PluginManifest get() = PACKAGED
 
     /** Contribute extension points, extensions, and services. Runs once, after every plugin in `dependsOn`. */
     fun register(reg: PluginRegistration)
@@ -28,3 +42,9 @@ interface Plugin {
     /** Release resources this plugin owns beyond its registry contributions. Optional; most plugins need none. */
     fun dispose() {}
 }
+
+/**
+ * What [Plugin.manifest] answers for a plugin that does not declare one. Nothing reads it: an installed
+ * plugin's identity is its packaged manifest, and the loader replaces this before the plugin is registered.
+ */
+private val PACKAGED = PluginManifest(id = "", name = "")
