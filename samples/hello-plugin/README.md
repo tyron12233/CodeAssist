@@ -4,8 +4,9 @@ A CodeAssist plugin shipped as its own Android app. The IDE finds it through the
 packaged manifest, and loads its classes off the installed APK. The full explanation of the model is in
 [docs/writing-plugins.md](../../docs/writing-plugins.md); this is the smallest complete example of it.
 
-It contributes to four surfaces, each a plain extension-point registration in
-[`HelloPlugin.kt`](src/main/kotlin/com/example/hello/HelloPlugin.kt):
+It has both facets a plugin can have. The **engine facet**,
+[`HelloPlugin.kt`](src/main/kotlin/com/example/hello/HelloPlugin.kt), contributes four surfaces, each a plain
+extension-point registration:
 
 - a **command** in the command palette and the More menu (`UI_ACTION_EP`);
 - an **editor action** at the caret (the same extension point, placed on `ActionPlaces.EDITOR`): it wraps
@@ -13,6 +14,14 @@ It contributes to four surfaces, each a plain extension-point registration in
   Alt-Enter popup, the editor's overflow menu, and the palette while an editor is focused;
 - a **category** in Settings (`SETTINGS_PAGE_EP`);
 - **log lines** attributed to `com.example.hello`, which the Logs screen can filter by.
+
+The **UI facet**, [`HelloUiPlugin.kt`](src/main/kotlin/com/example/hello/HelloUiPlugin.kt), adds a **tool
+window** on the editor's left rail with a real Compose body.
+
+The two are separate classes because a `@Composable` body cannot live in the engine module, not because they
+are separate programs. They are named by the same manifest and loaded off this one APK on the same
+classloader, so [`HelloState`](src/main/kotlin/com/example/hello/HelloState.kt) is one object to both: the
+palette command writes to it, the panel reads it, and nothing is serialised or routed in between.
 
 ## What makes it a plugin
 
@@ -22,7 +31,8 @@ Three things, and nothing else:
 | --- | --- |
 | The packaged manifest, as TOML | [`res/raw/codeassist_plugin.toml`](src/main/res/raw/codeassist_plugin.toml) |
 | A marker activity carrying `dev.ide.codeassist.action.PLUGIN` and pointing `meta-data` at that resource | [`AndroidManifest.xml`](src/main/AndroidManifest.xml) |
-| The entry-point class the manifest names | [`HelloPlugin.kt`](src/main/kotlin/com/example/hello/HelloPlugin.kt) |
+| The entry-point class `entryPoints` names | [`HelloPlugin.kt`](src/main/kotlin/com/example/hello/HelloPlugin.kt) |
+| The UI class `uiEntryPoints` names, if the plugin has UI | [`HelloUiPlugin.kt`](src/main/kotlin/com/example/hello/HelloUiPlugin.kt) |
 
 The activity is both the discovery marker and the app's own screen, so the plugin is a real app rather than a
 bare code container.
@@ -35,7 +45,8 @@ bare code container.
 
 Then restart CodeAssist and open **Settings > Plugins > Installed**. The plugin loads at startup, so a
 freshly installed or newly enabled plugin appears after the next launch. Its palette command is under
-**Hello: say hello**, and its settings category appears once a project is open.
+**Hello: say hello**, its settings category appears once a project is open, and its tool window is on the
+editor's left rail once one is.
 
 If it does not appear, the reason is on its row in that same screen. A row with a reason and no switch is a
 plugin the IDE found but could not read.
@@ -49,17 +60,29 @@ published coordinates:
 
 ```kotlin
 dependencies {
-    compileOnly("io.github.tyron12233:plugin-api:1.1.0")
-    compileOnly("io.github.tyron12233:platform-core:1.1.0")
+    compileOnly("io.github.tyron12233:plugin-api:1.2.0")
+    compileOnly("io.github.tyron12233:platform-core:1.2.0")
+
+    // The UI facet, plus the Compose the IDE bundles. Pinned: your @Composable code composes into the
+    // IDE's own Compose runtime, so a newer version here fails at first composition, not at build time.
+    compileOnly("io.github.tyron12233:plugin-ui-api:1.2.0")
+    compileOnly("androidx.compose.runtime:runtime:1.11.2")
+    compileOnly("androidx.compose.foundation:foundation:1.11.2")
+    compileOnly("androidx.compose.ui:ui:1.11.2")
+    compileOnly("androidx.compose.material3:material3:1.4.0")
 }
 ```
+
+The Compose *compiler* needs no declaration when the project is built by CodeAssist: it applies the plugin to
+any module whose classpath carries the Compose runtime. Building with Gradle, apply
+`org.jetbrains.kotlin.plugin.compose` (this module does).
 
 The SPI carries its own version, independent of the IDE's: it changes far less often than the app ships, and
 compatibility is decided by `apiVersion` and `minHostVersion` rather than by this coordinate. Before the
 first Central release, publish them locally and add `mavenLocal()` to your repositories:
 
 ```
-./gradlew :plugin-api:publishToMavenLocal :platform-core:publishToMavenLocal
+./gradlew :plugin-api:publishToMavenLocal :platform-core:publishToMavenLocal :plugin-ui-api:publishToMavenLocal
 ```
 
 `compileOnly` is the important part either way. The IDE's classloader is the parent of the plugin's, so the
@@ -110,3 +133,8 @@ with `kotlin.compiler.runViaBuildToolsApi=true` in `gradle.properties`. Without 
   `documentText` using `nodeStart`/`nodeEnd`, as the editor action here does.
 - An action that has to walk the syntax tree or resolve a symbol wants the analysis tier instead
   (`ActionProvider` in `analysis-api`), which is published too. Both tiers appear in the same popup.
+- A UI facet gets a deliberately narrow `UiContext` (the active file, the project root, `openFile`,
+  `openScreen`). Anything more belongs in the engine facet, which has the whole engine SPI and is a plain
+  function call away. The IDE's internal UI model, with its `IdeBackend` handle, is not published.
+- A plugin has no `Context` for its own package: no drawables, no `stringResource`. Icons are ids in the
+  IDE's registry (`iconId = "sparkle"`) and text is Kotlin string literals.

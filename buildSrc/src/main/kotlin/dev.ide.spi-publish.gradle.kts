@@ -1,7 +1,7 @@
-// Publishing for the modules a plugin author compiles against: the plugin SPI (:plugin-api), the substrate
-// it exposes (:platform-core), and the feature SPIs a plugin extends (:project-model-api, :language-api,
-// :analysis-api, :index-api, :build-api, and :vfs-api, which the others expose transitively). Nothing else
-// in this build is published.
+// Publishing for the modules a plugin author compiles against: the plugin SPI (:plugin-api and, for a
+// plugin contributing Compose UI, :plugin-ui-api), the substrate it exposes (:platform-core), and the
+// feature SPIs a plugin extends (:project-model-api, :language-api, :analysis-api, :index-api, :build-api,
+// and :vfs-api, which the others expose transitively). Nothing else in this build is published.
 //
 // These carry their own version rather than the app's. The SPI changes far less often than the IDE ships,
 // and whether a plugin is compatible is decided by PLUGIN_API_VERSION plus the manifest's minHostVersion,
@@ -58,6 +58,9 @@ publishing {
                         "plugin-api" ->
                             "The CodeAssist plugin SPI: the Plugin entry point, its manifest, the " +
                                 "registration API, and the action model."
+                        "plugin-ui-api" ->
+                            "The CodeAssist plugin UI SPI: what a plugin implements to contribute a tool " +
+                                "window, a screen, or an overlay, and the context those bodies render against."
                         "platform-core" ->
                             "The CodeAssist platform substrate the plugin SPI exposes: extension points, " +
                                 "scoped services, the message bus, logging, and the settings model."

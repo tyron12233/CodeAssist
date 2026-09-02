@@ -30,8 +30,19 @@ class ExternalPluginLoader(
     sealed interface Result {
         val manifest: PluginManifest
 
-        /** The plugin instantiated cleanly and is ready for [PluginManager.load]. */
-        data class Loaded(override val manifest: PluginManifest, val plugin: Plugin) : Result
+        /**
+         * The plugin instantiated cleanly and is ready for [PluginManager.load].
+         *
+         * [classLoader] is the loader its classes came off, carried out so the host can instantiate the
+         * plugin's other facets from it. The UI facet (`dev.ide.plugin.ui.UiPlugin`) is loaded that way: its
+         * type lives in a Compose module this one cannot see, so the host does the instantiating, but it must
+         * happen on THIS loader: that is what lets a plugin's two facets share statics and call each other.
+         */
+        data class Loaded(
+            override val manifest: PluginManifest,
+            val plugin: Plugin,
+            val classLoader: ClassLoader,
+        ) : Result
 
         /** The plugin was rejected or threw while being instantiated. [reason] is user-facing. */
         data class Failed(override val manifest: PluginManifest, val reason: String) : Result
@@ -49,15 +60,22 @@ class ExternalPluginLoader(
         if (!PluginVersions.satisfies(hostVersion, min)) {
             return Result.Failed(manifest, "requires CodeAssist $min or newer")
         }
-        if (manifest.entryPoints.isEmpty()) {
+        if (manifest.entryPoints.isEmpty() && manifest.uiEntryPoints.isEmpty()) {
             return Result.Failed(manifest, "declares no entry point")
         }
 
         return try {
             val loader = discovered.classLoader()
             val entries = manifest.entryPoints.map { instantiate(loader, it) }
-            val plugin = if (entries.size == 1) entries[0] else CompositePlugin(entries)
-            Result.Loaded(manifest, ExternalPlugin(manifest, plugin, loader))
+            // A UI-only plugin has no engine facet to run. It still loads, so that it holds a place in the
+            // load order (another plugin may depend on it), is attributed and listed like any other, and has
+            // a classloader the host can take its UI facet off; register() then has nothing to do.
+            val plugin = when (entries.size) {
+                0 -> UiOnlyPlugin(manifest)
+                1 -> entries[0]
+                else -> CompositePlugin(entries)
+            }
+            Result.Loaded(manifest, ExternalPlugin(manifest, plugin, loader), loader)
         } catch (t: Throwable) {
             Result.Failed(manifest, describe(t))
         }
@@ -103,6 +121,11 @@ class ExternalPluginLoader(
                 thread.contextClassLoader = previous
             }
         }
+    }
+
+    /** The engine facet of a plugin that declares only `uiEntryPoints`: present, ordered, and inert. */
+    private class UiOnlyPlugin(override val manifest: PluginManifest) : Plugin {
+        override fun register(reg: PluginRegistration) = Unit
     }
 
     /** A manifest that names several entry points loads them all under its single id. */

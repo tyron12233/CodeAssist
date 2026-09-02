@@ -3,13 +3,16 @@
 > **Status — the unified internal plugin system is delivered.** The IDE now has one plugin system: a `Plugin`
 > SPI + `PluginManager`, with the built-ins as its first consumers. See [`plugin-system.md`](plugin-system.md)
 > for what ships. The UI-extensibility model this document specifies is delivered as `UiPlugin` /
-> `UiContributionScope` in `:ide-ui-api` (tool windows, screens, view modes, tree icons, and data-driven
-> actions all plug in through the one model). The *external tier* this document also designs now loads too: on
+> `UiContributionScope` in `:ide-ui-api` (tool windows, screens, view modes, overlays, editor-tab decorations,
+> tree icons, and data-driven actions all plug in through the one model). The *external tier* this document also designs now loads too: on
 > Android a plugin is a separate app the user installs, discovered through `PluginSource` and loaded off the
 > installed APK with a `PathClassLoader`. See the "Installed plugins" section of
-> [`plugin-system.md`](plugin-system.md) for what ships. What remains **future** from the design below is the
-> trust half: capabilities are parsed and carried but nothing reads them, and there is no install-time consent
-> or permission broker yet.
+> [`plugin-system.md`](plugin-system.md) for what ships. An installed plugin can contribute **Compose UI**
+> too, through a second, narrower published SPI (`dev.ide.plugin.ui.UiPlugin` in `:plugin-ui-api`, named by
+> the manifest's `uiEntryPoints`) that the host adapts onto the model above. The internal model itself stays
+> unpublished, because it hands a body the whole `IdeBackend`. What remains **future** from the design below
+> is capability *enforcement*: capabilities are declared and shown at the consent gate, but nothing checks
+> that a plugin stays inside them, and there is no permission broker yet.
 
 This document specifies how the IDE's **UI** becomes extensible the same way its **engine** already is: through
 the IntelliJ-style extension-point registry in `platform-core`. Today the engine is a plugin platform (language
@@ -214,9 +217,11 @@ object ViewModeRegistry {
 ```
 
 `*Context` objects hand the body what it needs (the `IdeBackend` handle, the active file, the selection) without
-the body reaching into app internals. A plugin that ships Compose content compiles against `ide-ui-api` plus a
-**pinned Compose runtime**; at load its classes resolve Compose and `ide-ui-api` through the app classloader
-parent (the same mechanism the on-device custom-view Compose bridge already uses).
+the body reaching into app internals. *As built, this applies to built-ins only:* an installed plugin compiles
+against `:plugin-ui-api` and gets the narrow `UiContext` instead, since publishing these contexts would publish
+`IdeBackend` with them. Either way a plugin ships a **pinned Compose runtime** as `compileOnly` and its classes
+resolve Compose through the app classloader parent (the same mechanism the on-device custom-view Compose bridge
+already uses).
 
 ## Plugins: descriptor, packaging, loading
 
@@ -366,10 +371,12 @@ core-editor change best done as its own visually-verified pass.
 
 **Phase C: the plugin unit.** *Mostly delivered.* The descriptor + `Plugin` SPI, the discovery SPI
 (`PluginSource`/`DiscoveredPlugin`), `ExternalPluginLoader`, the Android source (`ApkPluginSource`: a plugin is
-a separate installed app, loaded off its APK with a `PathClassLoader`), load/enable/disable, and the Plugins
-settings page with its Built-in and Installed tabs. *Remaining:* the `PluginPermissionBroker` + install
-consent, uninstall, a desktop plugins-directory source, UI facets (`UiPlugin`) from an installed plugin, and a
-sample plugin app contributing a toolbar action (Tier 1) and a Logcat tool window (Tier 2).
+a separate installed app, loaded off its APK with a `PathClassLoader`), load/enable/disable, the Plugins
+settings page with its Built-in and Installed tabs, the install consent gate, and **UI facets from an
+installed plugin** (`uiEntryPoints` → `dev.ide.plugin.ui.UiPlugin` from the published `:plugin-ui-api`,
+instantiated off the plugin's own classloader and bridged onto the registries; `samples/hello-plugin`
+contributes a tool window this way). *Remaining:* the `PluginPermissionBroker` and capability enforcement,
+uninstall, and a desktop plugins-directory source.
 
 **Phase D (later, behind these contracts):** keymap + user-rebindable shortcuts on actions; palette categories;
 a plugin marketplace/install-from-URL flow.
@@ -415,7 +422,11 @@ after the shared-state fields.)
 
 - Whether `PluginContext` (the narrowed Tier-1 facade) is a hand-curated subset of `IdeBackend`/`IdeServices`
   or a generated narrowing; start hand-curated.
-- ABI/versioning policy for `ide-ui-api` (Compose-bearing plugins are the strictest consumers); start with a
-  single integer `apiVersion` floor and a compatibility check at load.
+- ~~ABI/versioning policy for `ide-ui-api` (Compose-bearing plugins are the strictest consumers)~~:
+  **settled by not publishing it.** A plugin's UI compiles against `:plugin-ui-api` instead: no `IdeBackend`,
+  no DTOs, three contribution types, and the Compose runtime as a `compileOnly` pin the host provides. The
+  `apiVersion` floor still gates loading, but the Compose ABI is not something it can check: a plugin built
+  against a newer Compose than the host bundles fails at first composition, so the versions are pinned by the
+  template and stated in the guide.
 - Whether action `perform` ever needs to run UI-thread work; the lean model keeps `perform` engine-side and
   routes any UI effect back through `IdeBackend` state, which avoids the question for now.

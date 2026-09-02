@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.LocalHostFileActions
+import dev.ide.ui.LocalPluginFileOpener
 import dev.ide.ui.LocalPluginNavigator
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.ext.ToolWindowAnchor
@@ -99,12 +100,14 @@ fun pluginPanels(anchor: ToolWindowAnchor, backend: IdeBackend, activeFilePath: 
     val tools = ToolWindowRegistry.forAnchor(anchor)
     val hostFileActions = LocalHostFileActions.current
     val navigate = LocalPluginNavigator.current
-    val ctx = remember(backend, activeFilePath, hostFileActions, navigate) {
+    val openInEditor = LocalPluginFileOpener.current
+    val ctx = remember(backend, activeFilePath, hostFileActions, navigate, openInEditor) {
         object : ToolWindowContext {
             override val backend = backend
             override val activeFilePath = activeFilePath
             override val fileActions = hostFileActions
             override fun openScreen(id: String) = navigate(id)
+            override fun openFile(path: String, offset: Int) = openInEditor(path, offset)
         }
     }
     return tools.map { tw -> SidebarPanel(tw.id, tw.title, actionIcon(tw.iconId), tw.order) { tw.content(ctx) } }

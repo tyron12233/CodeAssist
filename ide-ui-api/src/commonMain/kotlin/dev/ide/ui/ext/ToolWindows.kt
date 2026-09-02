@@ -32,6 +32,10 @@ interface ToolWindowContext {
 
     /** Navigate to a contributed [ScreenContribution] by id, for a panel whose detail view is a full screen. */
     fun openScreen(id: String) {}
+
+    /** Open [path] in the editor with the caret at [offset], for a panel that lists code the user can jump
+     *  to. Defaulted to a no-op so a host that has no editor to open into (a preview, a test) needs nothing. */
+    fun openFile(path: String, offset: Int = 0) {}
 }
 
 /**
@@ -66,6 +70,12 @@ object ToolWindowRegistry {
 /** What an overlay body is handed: the backend it observes (e.g. a plugin's permission-request flow). */
 interface OverlayContext {
     val backend: IdeBackend
+
+    /** Navigate to a contributed [ScreenContribution] by id, for an overlay whose answer is a whole screen. */
+    fun openScreen(id: String) {}
+
+    /** Open [path] in the editor with the caret at [offset]. See [ToolWindowContext.openFile]. */
+    fun openFile(path: String, offset: Int = 0) {}
 }
 
 /**
@@ -105,6 +115,9 @@ interface ScreenContext {
 
     /** Navigate to another contributed screen, replacing this one. */
     fun openScreen(id: String) {}
+
+    /** Open [path] in the editor with the caret at [offset]. See [ToolWindowContext.openFile]. */
+    fun openFile(path: String, offset: Int = 0) {}
 }
 
 /** A top-level screen reachable by [id] (e.g. from an action's `Navigate(id)` effect / `UiActionHost`). */

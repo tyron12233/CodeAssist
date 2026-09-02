@@ -184,10 +184,11 @@ via the `regressionTest` tasks against committed JSON baselines.
 CodeAssist is free software licensed under the **GNU General Public License v3.0 or later**
 (`GPL-3.0-or-later`). See [LICENSE](LICENSE).
 
-The plugin SPI is the one exception. `plugin-api` and `platform-core`, published as
-`io.github.tyron12233:plugin-api` and `io.github.tyron12233:platform-core`, add the Classpath exception
-(`GPL-3.0-or-later WITH Classpath-exception-2.0`, see [LICENSE-EXCEPTION](LICENSE-EXCEPTION)) so that a
-plugin compiled against them may be released under any license, proprietary included.
+The plugin SPI is the one exception. The modules a plugin author compiles against (`plugin-api`,
+`plugin-ui-api`, `platform-core`, and the feature SPIs `vfs-api`, `project-model-api`, `language-api`,
+`index-api`, `analysis-api`, `build-api`), published under `io.github.tyron12233`, add the Classpath
+exception (`GPL-3.0-or-later WITH Classpath-exception-2.0`, see [LICENSE-EXCEPTION](LICENSE-EXCEPTION)) so
+that a plugin compiled against them may be released under any license, proprietary included.
 
 ## Install
 

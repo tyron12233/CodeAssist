@@ -259,6 +259,7 @@ version = "1.0.0"
 apiVersion = 1
 description = "Adds a Hello tool window."
 entryPoints = ["com.example.hello.HelloPlugin"]
+uiEntryPoints = ["com.example.hello.HelloUiPlugin"]
 dependsOn = ["kotlin-language"]
 capabilities = ["ui.toolWindow"]
 minHostVersion = "3.11.0"
@@ -268,9 +269,29 @@ minHostVersion = "3.11.0"
 compared exactly wherever it is used, `dependsOn` included; only the clash check is case-insensitive, so two
 plugins cannot be distinguished by capitalisation alone.
 
+**Two entry-point lists, one classloader.** `entryPoints` names the engine facets and `uiEntryPoints` the
+Compose UI facets (`dev.ide.plugin.ui.UiPlugin`, from the published `plugin-ui-api`). Either list alone is a
+complete plugin; neither is a rejection. Both are instantiated off the *same* `PathClassLoader`, which is what
+makes a plugin's two facets one program: they can share an `object` and call each other directly, where two
+different plugins cannot see each other at all. The loader carries that classloader out on `Result.Loaded`
+and `ExternalUiFacets` (`ide-core`) does the UI half, because `UiPlugin` is a Compose-bearing type the engine
+tier cannot see; `ExternalUiPlugin.kt` (`ide-ui-api`, `jvmShared`) then adapts each contribution onto the
+internal `UiPlugin`/`UiContributionScope` model, so a contributed panel lands in the registries the shell
+already renders. A UI facet is instantiated only for a plugin that is enabled, consented to, and whose engine
+facet loaded cleanly; one that is missing, is not a `UiPlugin`, or throws in its constructor is reported on
+that plugin's row while its engine facet keeps running.
+
+The published UI SPI is deliberately not `ide-ui-api`: the internal contribution model hands a body the whole
+`IdeBackend` port, and publishing it would freeze every concern service and DTO in it as plugin API. A
+plugin's UI gets `UiContext` (active file, project root, `openFile`, `openScreen`) and reaches everything else
+through its own engine facet, which already has the full engine SPI. `samples/hello-plugin` ships both facets
+and shares state between them.
+
 **Loading is failure-tolerant end to end.** `ExternalPluginLoader` (`plugin-impl`) checks `apiVersion` against
 `PLUGIN_API_VERSION` and `minHostVersion` against the running IDE, builds the classloader, and instantiates
-each entry point, returning `Result.Failed` with a user-facing reason rather than throwing. The discovered
+each entry point, returning `Result.Failed` with a user-facing reason rather than throwing. A plugin declaring
+only `uiEntryPoints` loads with an inert engine facet, so it keeps its place in the load order and its
+identity. The discovered
 manifest stays authoritative: the instantiated class's own `manifest` is ignored, so a plugin cannot claim an
 id or a dependency edge other than the one the catalogue already used to ask the user. `PluginManager` gained
 a `loadAll(plugins, onError)` that rolls back a plugin whose `register` throws, skips its dependents, and
@@ -327,7 +348,7 @@ the `minHostVersion` comparison, so the editor's verdict and the loader's cannot
 
 **Isolation.** An installed plugin runs in the IDE's process, under its UID and its granted permissions.
 Classloader separation is a versioning boundary, not a security one. The capability field in the manifest is
-parsed and carried, but nothing reads it yet.
+declared and shown at the consent gate, but nothing enforces it yet.
 
 ## Future work
 
@@ -335,8 +356,9 @@ parsed and carried, but nothing reads it yet.
   runtime permission broker modelled on the run sandbox's. See `docs/ui-extensibility-and-plugin-api.md`.
 - **A desktop plugin source:** the same SPI over a plugins directory (`URLClassLoader`, parent = app
   classloader), plus install and uninstall for both hosts.
-- **UI contributions from an installed plugin:** `UiPlugin` is discovered per built-in today; the external
-  tier loads engine facets only.
+- **The rest of the UI surface for installed plugins:** editor view modes, UI host actions and tab decorations
+  are built-in-only, because their contexts carry `IdeBackend`. Tool windows, screens and overlays are
+  reachable (see [Installed plugins](#installed-plugins)).
 - **UI contribution unification:** an `ide-ui-api` module homing the Compose-bearing registries (tool windows,
   screens, editor view modes, UI actions, tree icons) so UI contributions flow through the same plugin model.
 - **Remaining host capabilities:** the `IdeServicesBackend`-layer ports (analytics, the build-runner factory,

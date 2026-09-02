@@ -70,7 +70,15 @@ internal fun AppOverlays(
     // Plugin-contributed app-wide overlays (e.g. the AI agent's write-permission prompt). Each decides its own
     // visibility (typically observing a backend flow). Registered via UiPlugin's `overlay { }` and populated
     // once UiPluginHost has loaded — a disabled plugin contributes none.
-    val overlayCtx = remember(backend) { object : OverlayContext { override val backend = backend } }
+    val navigate = LocalPluginNavigator.current
+    val openInEditor = LocalPluginFileOpener.current
+    val overlayCtx = remember(backend, navigate, openInEditor) {
+        object : OverlayContext {
+            override val backend = backend
+            override fun openScreen(id: String) = navigate(id)
+            override fun openFile(path: String, offset: Int) = openInEditor(path, offset)
+        }
+    }
     OverlayRegistry.all().forEach { it.content(overlayCtx) }
     // First-build notification-permission gate — asks for the permission the isolated build process needs, and
     // falls back to in-process builds (with an explanation) if declined. No-op after the one-time prompt.

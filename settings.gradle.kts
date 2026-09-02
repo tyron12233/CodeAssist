@@ -99,6 +99,7 @@ include(
     ":block-api",
     ":block-impl",
     ":plugin-api",  // UI extensibility SPI: the lean action model (IdeAction/ActionGroup + places) + EPs
+    ":plugin-ui-api", // the UI half of the plugin SPI: what an installed plugin implements to contribute Compose UI
     ":plugin-impl", // ActionManager: resolves UI_ACTION_EP/ACTION_GROUP_EP into places/menus, dispatches
     ":agent-api",   // agentic-coding SPI: provider-neutral LLM client + AgentTool + AgentWorkspace engine port
     ":agent-impl",  // the agent engine: OkHttp/SSE transport, Anthropic/OpenAI/Gemini providers, loop, built-in tools

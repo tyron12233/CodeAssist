@@ -255,12 +255,14 @@ internal fun AppNavGraph(
                 }
                 val contribution = shown?.let { ScreenRegistry.find(it) }
                 if (contribution != null) {
-                    val screenCtx = remember(backend, fileActions, app) {
+                    val openInEditor = LocalPluginFileOpener.current
+                    val screenCtx = remember(backend, fileActions, app, openInEditor) {
                         object : ScreenContext {
                             override val backend = backend
                             override val fileActions = fileActions
                             override fun back() = app.navigateBack()
                             override fun openScreen(id: String) = app.openPluginScreen(id)
+                            override fun openFile(path: String, offset: Int) = openInEditor(path, offset)
                         }
                     }
                     contribution.content(screenCtx)

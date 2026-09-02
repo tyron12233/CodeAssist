@@ -126,6 +126,15 @@ fun CodeAssistApp(
             LocalAds provides app.adController,
             LocalHostFileActions provides fileActions,
             LocalPluginNavigator provides app::openPluginScreen,
+            // A contributed panel can open a file the same way an action's OpenFile effect does, and lands the
+            // user on the editor to see it. Guarded on a project being open (`epoch > 0`), since a tab over
+            // nothing is not a state the shell has.
+            LocalPluginFileOpener provides { path, offset ->
+                if (app.epoch > 0) {
+                    state.openAt(path, offset)
+                    app.navigateTo(Screen.Editor)
+                }
+            },
         ) {
             // Occasional full-screen ad over a LONG build (Android only; inert on desktop / when ads are off).
             // Renders nothing — it just observes the build state and asks the host to present an interstitial.

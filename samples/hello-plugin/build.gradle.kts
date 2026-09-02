@@ -7,6 +7,10 @@
 // Kotlin version has to be pinned by hand.
 plugins {
     alias(libs.plugins.android.application)
+    // The Compose compiler plugin, for the UI facet's @Composable panel. Under AGP 9 Kotlin is built into
+    // `com.android.application`, so this is the only Compose-related plugin a plugin app needs: the Compose
+    // runtime itself comes off the IDE at load time.
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -42,4 +46,14 @@ dependencies {
     // the SPI, the Kotlin stdlib and the Compose runtime all resolve to the IDE's copies; a second copy in
     // the plugin APK is dead weight at best and a linkage error at worst.
     compileOnly(project(":plugin-api"))
+    // The UI facet's SPI (HelloUiPlugin): tool windows, screens, overlays.
+    compileOnly(project(":plugin-ui-api"))
+
+    // Compose, at the versions the IDE bundles and in the coordinates an out-of-tree plugin would use, so
+    // this sample also checks that those pins are the right ones. compileOnly for the same reason as the
+    // SPI: the plugin's @Composable code composes into the IDE's own Compose runtime.
+    compileOnly(libs.androidx.compose.runtime)
+    compileOnly(libs.androidx.compose.foundation)
+    compileOnly(libs.androidx.compose.ui)
+    compileOnly(libs.androidx.compose.material3)
 }

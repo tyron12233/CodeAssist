@@ -16,6 +16,7 @@ import dev.ide.plugin.PluginManifest
  * apiVersion = 1
  * description = "Adds a Hello tool window."
  * entryPoints = ["com.example.hello.HelloPlugin"]
+ * uiEntryPoints = ["com.example.hello.HelloUiPlugin"]
  * dependsOn = ["kotlin-language"]
  * capabilities = ["ui.toolWindow"]
  * minHostVersion = "3.11.0"
@@ -40,7 +41,11 @@ object PluginManifestToml {
         val id = string(table, "id") ?: throw IllegalArgumentException("manifest has no 'id'")
         require(ID.matches(id)) { "plugin id '$id' must be letters, digits, '.', '-' or '_'" }
         val entryPoints = strings(table, "entryPoints")
-        require(entryPoints.isNotEmpty()) { "plugin '$id' declares no 'entryPoints'" }
+        val uiEntryPoints = strings(table, "uiEntryPoints")
+        // Either list alone is a complete plugin: engine-only, UI-only, or both. Neither is nothing.
+        require(entryPoints.isNotEmpty() || uiEntryPoints.isNotEmpty()) {
+            "plugin '$id' declares no 'entryPoints' or 'uiEntryPoints'"
+        }
 
         return PluginManifest(
             id = id,
@@ -51,6 +56,7 @@ object PluginManifestToml {
             description = string(table, "description") ?: "",
             essential = false,
             entryPoints = entryPoints,
+            uiEntryPoints = uiEntryPoints,
             capabilities = strings(table, "capabilities"),
             minHostVersion = string(table, "minHostVersion"),
             trusted = false,

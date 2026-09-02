@@ -1,5 +1,6 @@
 package dev.ide.core.plugins
 
+import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -19,6 +20,7 @@ class PluginManifestTomlTest {
             apiVersion = 1
             description = "Adds a Hello tool window."
             entryPoints = ["com.example.hello.HelloPlugin"]
+            uiEntryPoints = ["com.example.hello.HelloUiPlugin"]
             dependsOn = ["kotlin-language"]
             capabilities = ["ui.toolWindow", "fs.read"]
             minHostVersion = "3.11.0"
@@ -30,9 +32,35 @@ class PluginManifestTomlTest {
         assertEquals(1, m.apiVersion)
         assertEquals("Adds a Hello tool window.", m.description)
         assertEquals(listOf("com.example.hello.HelloPlugin"), m.entryPoints)
+        assertEquals(listOf("com.example.hello.HelloUiPlugin"), m.uiEntryPoints)
         assertEquals(listOf("kotlin-language"), m.dependsOn)
         assertEquals(listOf("ui.toolWindow", "fs.read"), m.capabilities)
         assertEquals("3.11.0", m.minHostVersion)
+    }
+
+    /**
+     * The sample plugin's real manifest, read from the tree. The sample is a module of this build so it cannot
+     * drift from an SPI change, but a compile cannot check the manifest: the entry-point names in it are
+     * strings, and a typo there is a plugin that installs and does nothing. This is the check the loader makes,
+     * run against the file that ships.
+     */
+    @Test
+    fun `the sample plugin's manifest names classes the sample actually has`() {
+        val sample = java.nio.file.Paths.get("../samples/hello-plugin/src/main")
+        if (!java.nio.file.Files.isDirectory(sample)) return // not this checkout's problem
+        val m = PluginManifestToml.parse(sample.resolve("res/raw/codeassist_plugin.toml").readText())
+
+        assertEquals("com.example.hello", m.id)
+        for (fqcn in m.entryPoints + m.uiEntryPoints) {
+            val source = sample.resolve("kotlin/${fqcn.replace('.', '/')}.kt")
+            assertTrue(java.nio.file.Files.isRegularFile(source), "$fqcn is named by the manifest but has no source")
+            val simpleName = fqcn.substringAfterLast('.')
+            val supertype = if (fqcn in m.uiEntryPoints) "UiPlugin" else "Plugin"
+            assertTrue(
+                "class $simpleName : $supertype" in source.readText(),
+                "$fqcn must implement $supertype for the loader to cast it",
+            )
+        }
     }
 
     @Test
@@ -79,7 +107,22 @@ class PluginManifestTomlTest {
         val e = assertFailsWith<IllegalArgumentException> {
             PluginManifestToml.parse("""id = "com.example.p"""")
         }
+        // The message has to name both lists, since either one alone would have been enough.
         assertTrue("entryPoints" in (e.message ?: ""), e.message ?: "")
+        assertTrue("uiEntryPoints" in (e.message ?: ""), e.message ?: "")
+    }
+
+    @Test
+    fun `a UI facet alone is a complete manifest`() {
+        // A plugin contributing only Compose UI has no engine entry point, and that is not a mistake.
+        val m = PluginManifestToml.parse(
+            """
+            id = "com.example.panel"
+            uiEntryPoints = ["com.example.panel.PanelUiPlugin"]
+            """.trimIndent()
+        )
+        assertEquals(emptyList(), m.entryPoints)
+        assertEquals(listOf("com.example.panel.PanelUiPlugin"), m.uiEntryPoints)
     }
 
     @Test

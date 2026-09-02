@@ -26,6 +26,10 @@ import dev.ide.plugin.action.UI_ACTION_EP
  *  - an editor action at the caret, on the same extension point but the [ActionPlaces.EDITOR] place;
  *  - a category in Settings ([SETTINGS_PAGE_EP]);
  *  - a log line attributed to this plugin, which the Logs screen can filter by.
+ *
+ * This is the plugin's **engine facet**. Its Compose UI is a second class, [HelloUiPlugin], named by
+ * `uiEntryPoints` in the same manifest and loaded off this same APK on the same classloader, which is why
+ * the two share [HelloState] as an ordinary object.
  */
 class HelloPlugin : Plugin {
 
@@ -36,7 +40,8 @@ class HelloPlugin : Plugin {
         version = "1.0.0",
         description = "Sample plugin shipped as its own app.",
         entryPoints = listOf("com.example.hello.HelloPlugin"),
-        capabilities = listOf("ui.settingsPage", "ui.action", "ui.editorAction"),
+        uiEntryPoints = listOf("com.example.hello.HelloUiPlugin"),
+        capabilities = listOf("ui.settingsPage", "ui.action", "ui.editorAction", "ui.toolWindow"),
         minHostVersion = "3.12.0",
     )
 
@@ -53,6 +58,8 @@ class HelloPlugin : Plugin {
                 iconId = "sparkle",
             ) { ctx ->
                 log.info("greet invoked from '${ctx.place.id}', project=${ctx.projectRoot ?: "none"}")
+                // Written straight into the object the UI facet reads: the panel updates with no bridge.
+                HelloState.greeted("the palette")
                 ActionResult.message("Hello from a plugin installed as its own app.")
             },
         )
@@ -77,7 +84,7 @@ class HelloPlugin : Plugin {
         )
 
         reg.register(SETTINGS_PAGE_EP, HelloSettingsPage(log))
-        log.info("registered 2 actions and 1 settings page")
+        log.info("registered 2 actions and 1 settings page; the UI facet adds a tool window")
     }
 }
 
@@ -152,6 +159,7 @@ private class HelloSettingsPage(private val log: Logger) : SettingsPage {
 
     override fun onAction(key: String, values: PreferenceReader): String? {
         if (key != "greet") return null
+        HelloState.greeted("Settings")
         val greeting = "Hello, ${values.string("name", "world")}!"
         return if (values.bool("loud", false)) greeting.uppercase() else greeting
     }

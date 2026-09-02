@@ -3,7 +3,9 @@ id = "com.example.hello"
 name = "Hello Plugin"
 version = "1.0.0"
 apiVersion = 1
-description = "Sample plugin shipped as its own app: a settings page, a palette command, and an editor action."
+description = "Sample plugin shipped as its own app: a settings page, a palette command, an editor action, and a tool window."
 entryPoints = ["com.example.hello.HelloPlugin"]
-capabilities = ["ui.settingsPage", "ui.action", "ui.editorAction"]
+# The Compose UI facet, instantiated off the same APK and the same classloader as the entry point above.
+uiEntryPoints = ["com.example.hello.HelloUiPlugin"]
+capabilities = ["ui.settingsPage", "ui.action", "ui.editorAction", "ui.toolWindow"]
 minHostVersion = "3.12.0"

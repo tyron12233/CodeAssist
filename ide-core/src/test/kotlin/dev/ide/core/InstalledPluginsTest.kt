@@ -35,15 +35,48 @@ private class ThrowingSource : PluginSource {
     override fun discover(): List<PluginCandidate> = error("the package manager is unavailable")
 }
 
+/**
+ * Stands in for an installed plugin's UI facet. It registers nothing: what the environment is responsible for
+ * is instantiating it off the plugin's own classloader and handing it to the shell, and the mapping from a
+ * contribution to the host's registries is the bridge's job (covered in :ide-ui, where the Compose compiler
+ * is available to build a real body).
+ */
+class InstalledUiFacet : dev.ide.plugin.ui.UiPlugin {
+    override val id = "com.example.ui"
+    override fun contribute(ui: dev.ide.plugin.ui.UiRegistration) {
+        contributedFor += ui.pluginId
+    }
+
+    companion object {
+        /** The plugin ids this facet was contributed under, so a test can see that it actually ran. */
+        val contributedFor = mutableListOf<String>()
+    }
+}
+
+/** A UI facet whose constructor fails, standing in for one that is broken on the user's device. */
+class ThrowingUiFacet : dev.ide.plugin.ui.UiPlugin {
+    init {
+        error("this facet cannot be constructed")
+    }
+
+    override val id = "com.example.throwing"
+    override fun contribute(ui: dev.ide.plugin.ui.UiRegistration) = Unit
+}
+
+/** Not a UI facet at all, for a manifest naming the wrong class. */
+class NotAUiFacet
+
 private class FakePlugin(
     id: String,
     entryPoint: String = InstalledEntryPoint::class.java.name,
     dependsOn: List<String> = emptyList(),
     apiVersion: Int = 1,
+    entryPoints: List<String> = listOf(entryPoint),
+    uiEntryPoints: List<String> = emptyList(),
 ) : DiscoveredPlugin {
     override val manifest = PluginManifest(
         id = id, name = id, apiVersion = apiVersion,
-        dependsOn = dependsOn, entryPoints = listOf(entryPoint), trusted = false,
+        dependsOn = dependsOn, entryPoints = entryPoints, uiEntryPoints = uiEntryPoints, trusted = false,
     )
     override val origin = PluginOrigin("fake", id, signature = "cafe")
     override fun classLoader(): ClassLoader = javaClass.classLoader
@@ -185,6 +218,104 @@ class InstalledPluginsTest {
             assertEquals("com.example.dup", rejected.origin.label)
             assertTrue(rejected.reason.contains("already in use"), rejected.reason)
         }
+    }
+
+    @Test
+    fun `an installed plugin's UI facet loads off the same classloader as its engine facet`() {
+        InstalledUiFacet.contributedFor.clear()
+        val source = FakeSource(
+            listOf(
+                FakePlugin("com.example.withui", uiEntryPoints = listOf(InstalledUiFacet::class.java.name)),
+            )
+        )
+        ApplicationEnvironment(
+            pluginSources = listOf(source),
+            consentedPluginIds = setOf("com.example.withui"),
+        ).use { env ->
+            // Both facets ran: the engine one contributed to its EP, the UI one is handed to the shell.
+            assertEquals(listOf("installed-impl"), env.platform.extensions.extensions(INSTALLED_EP))
+            val ui = env.enabledUiPlugins.single { it.id == "com.example.withui" }
+            // The packaged manifest's id wins over the one the facet declares for itself.
+            assertEquals("com.example.withui", ui.id)
+            assertNull(env.installedPlugins.single().error)
+
+            // Nothing has contributed yet: the shell drives that, once, when it composes.
+            assertTrue(InstalledUiFacet.contributedFor.isEmpty())
+            ui.contributeUi(RecordingScope(ui.id))
+            assertEquals(listOf("com.example.withui"), InstalledUiFacet.contributedFor)
+        }
+    }
+
+    @Test
+    fun `a plugin may declare only a UI facet`() {
+        val source = FakeSource(
+            listOf(
+                FakePlugin(
+                    "com.example.uionly",
+                    entryPoints = emptyList(),
+                    uiEntryPoints = listOf(InstalledUiFacet::class.java.name),
+                ),
+            )
+        )
+        ApplicationEnvironment(
+            pluginSources = listOf(source),
+            consentedPluginIds = setOf("com.example.uionly"),
+        ).use { env ->
+            // No engine entry point is not an error: the plugin loads, holds its place in the order, and
+            // contributes its UI.
+            assertNull(env.installedPlugins.single().error)
+            assertEquals(1, env.enabledUiPlugins.count { it.id == "com.example.uionly" })
+        }
+    }
+
+    @Test
+    fun `a broken UI facet is reported against the plugin, and its engine facet still loads`() {
+        val source = FakeSource(
+            listOf(
+                FakePlugin("com.example.badui", uiEntryPoints = listOf(ThrowingUiFacet::class.java.name)),
+                FakePlugin("com.example.wrongui", uiEntryPoints = listOf(NotAUiFacet::class.java.name)),
+                FakePlugin("com.example.missingui", uiEntryPoints = listOf("com.example.NotThere")),
+            )
+        )
+        ApplicationEnvironment(
+            pluginSources = listOf(source),
+            consentedPluginIds = setOf("com.example.badui", "com.example.wrongui", "com.example.missingui"),
+        ).use { env ->
+            assertTrue(env.enabledUiPlugins.none { it.id.startsWith("com.example.") }, "no UI should have loaded")
+            val errors = env.installedPlugins.associate { it.manifest.id to it.error }
+            for (id in listOf("com.example.badui", "com.example.wrongui", "com.example.missingui")) {
+                val error = errors.getValue(id)
+                assertTrue(error != null && "UI facet" in error, "expected a UI-facet reason for $id, got $error")
+            }
+            // The engine facets are unaffected: three plugins registered, one extension each.
+            assertEquals(3, env.platform.extensions.extensions(INSTALLED_EP).size)
+        }
+    }
+
+    @Test
+    fun `an unconsented plugin contributes no UI either`() {
+        val source = FakeSource(
+            listOf(FakePlugin("com.example.quiet", uiEntryPoints = listOf(InstalledUiFacet::class.java.name)))
+        )
+        ApplicationEnvironment(pluginSources = listOf(source)).use { env ->
+            assertTrue(
+                env.enabledUiPlugins.none { it.id == "com.example.quiet" },
+                "a plugin the user has not allowed must not reach the UI registries",
+            )
+        }
+    }
+
+    /** A [dev.ide.ui.ext.UiContributionScope] that only records, for driving a bridged facet in a test. */
+    private class RecordingScope(override val pluginId: String) : dev.ide.ui.ext.UiContributionScope {
+        override fun action(action: dev.ide.ui.ext.UiHostAction) = dev.ide.ui.ext.Registration {}
+        override fun toolWindow(toolWindow: dev.ide.ui.ext.ToolWindowContribution) = dev.ide.ui.ext.Registration {}
+        override fun screen(screen: dev.ide.ui.ext.ScreenContribution) = dev.ide.ui.ext.Registration {}
+        override fun viewMode(mode: dev.ide.ui.ext.EditorViewModeContribution) = dev.ide.ui.ext.Registration {}
+        override fun overlay(overlay: dev.ide.ui.ext.OverlayContribution) = dev.ide.ui.ext.Registration {}
+        override fun tabDecoration(decoration: dev.ide.ui.ext.TabDecorationContribution) =
+            dev.ide.ui.ext.Registration {}
+        override fun treeIcon(iconId: String, icon: dev.ide.ui.icons.TreeIcon) = dev.ide.ui.ext.Registration {}
+        override fun editorLanguage(profile: dev.ide.ui.ext.EditorLanguageProfile) = dev.ide.ui.ext.Registration {}
     }
 
     @Test

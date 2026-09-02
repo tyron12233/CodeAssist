@@ -5,6 +5,7 @@ import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.impl.ApplicationContainer
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.core.plugins.ExternalUiFacets
 import dev.ide.core.plugins.PluginManifestToml
 import dev.ide.platform.log.Log
 import dev.ide.plugin.Plugin
@@ -114,10 +115,14 @@ class ApplicationEnvironment(
     val rejectedPlugins: List<RejectedPlugin>
 
     /**
-     * The Compose UI facets ([dev.ide.ui.ext.UiPlugin]) of the ENABLED built-in plugins, in load order. The
-     * Compose shell reads these (through `IdeBackend.uiPlugins`) and registers them into `UiPluginHost`, so a
-     * plugin's tool windows / actions / screens are governed by the SAME enable/disable decision as its engine
-     * facet — a disabled plugin contributes no UI at all.
+     * The Compose UI facets ([dev.ide.ui.ext.UiPlugin]) of the ENABLED plugins, in load order: the built-ins
+     * first, then the installed plugins' `uiEntryPoints`. The Compose shell reads these (through
+     * `IdeBackend.uiPlugins`) and registers them into `UiPluginHost`, so a plugin's tool windows / actions /
+     * screens are governed by the SAME enable/disable decision as its engine facet, so a disabled plugin
+     * contributes no UI at all.
+     *
+     * Installed plugins come last so one can override a built-in registration that is last-writer-wins (a
+     * file-tree icon), rather than being overridden by it.
      */
     val enabledUiPlugins: List<UiPlugin>
 
@@ -148,9 +153,16 @@ class ApplicationEnvironment(
         val builtInLoadIds = enabledBuiltIns.mapTo(HashSet()) { it.engine.manifest.id }
         val loader = ExternalPluginLoader(hostApiVersion = PLUGIN_API_VERSION, hostVersion = hostVersion)
         val external = LinkedHashMap<String, Plugin>()
+        // Each load's result, kept for its classloader: a plugin's UI facets must be instantiated off the
+        // SAME loader its engine facet came from, which is what makes the two halves one program (see
+        // ExternalUiFacets).
+        val loaded = LinkedHashMap<String, ExternalPluginLoader.Result.Loaded>()
         for (d in discovered.filter { pluginCatalog.isEnabled(it.manifest.id) }) {
             when (val r = loader.load(d)) {
-                is ExternalPluginLoader.Result.Loaded -> external[r.manifest.id] = r.plugin
+                is ExternalPluginLoader.Result.Loaded -> {
+                    external[r.manifest.id] = r.plugin
+                    loaded[r.manifest.id] = r
+                }
                 is ExternalPluginLoader.Result.Failed -> failures[r.manifest.id] = r.reason
             }
         }
@@ -180,10 +192,21 @@ class ApplicationEnvironment(
             log.warn("installed plugin '$id' failed to load", error)
         }
 
+        // UI facets come after the ordered engine load, so a plugin whose engine facet was pruned or threw
+        // contributes no UI: its panels would be reading services that never registered.
+        val externalUi = external.keys.filter { it !in failures }.flatMap { id ->
+            val plugin = loaded.getValue(id)
+            ExternalUiFacets.load(plugin.manifest, plugin.classLoader) { reason ->
+                // A UI facet that failed is reported without failing the plugin: its engine facet is loaded
+                // and working, so the row should say what is missing rather than claim nothing loaded.
+                failures.merge(id, reason) { existing, new -> "$existing; $new" }
+            }
+        }
+
         installedPlugins = discovered.map {
             InstalledPlugin(it.manifest, it.origin, error = failures[it.manifest.id])
         }
-        enabledUiPlugins = enabledBuiltIns.mapNotNull { it.ui }
+        enabledUiPlugins = enabledBuiltIns.mapNotNull { it.ui } + externalUi
         container.registerServiceIfAbsent(PROJECT_TEMPLATES) { ProjectTemplateRegistry(platform.extensions) }
     }
 

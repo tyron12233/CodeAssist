@@ -17,8 +17,8 @@ const val PLUGIN_API_VERSION: Int = 1
  * scaffolded with a coordinate that resolves:
  *
  * ```
- * compileOnly("io.github.tyron12233:plugin-api:1.1.0")
- * compileOnly("io.github.tyron12233:platform-core:1.1.0")
+ * compileOnly("io.github.tyron12233:plugin-api:1.2.0")
+ * compileOnly("io.github.tyron12233:platform-core:1.2.0")
  * ```
  *
  * Independent of the IDE's own version, because the SPI changes far less often than the app ships.
@@ -28,10 +28,12 @@ const val PLUGIN_API_VERSION: Int = 1
  *
  * Semver over the SPI surface: a minor bump adds to it and leaves every existing plugin compiling, a
  * major bump does not. `1.1.0` added the editor action tier (the `EDITOR` place, [action.CaretContext] on
- * [action.ActionContext], and the editing, caret and file [action.ActionEffect]s), all of it defaulted, so
- * a plugin built against `1.0.0` needs no change and [PLUGIN_API_VERSION] stays where it is.
+ * [action.ActionContext], and the editing, caret and file [action.ActionEffect]s). `1.2.0` added the UI
+ * facet: a new artifact, `plugin-ui-api`, and [PluginManifest.uiEntryPoints] to name the classes in it. All
+ * of it is additive and defaulted, so a plugin built against `1.0.0` needs no change and
+ * [PLUGIN_API_VERSION] stays where it is.
  */
-const val PLUGIN_SPI_VERSION: String = "1.1.0"
+const val PLUGIN_SPI_VERSION: String = "1.2.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry
@@ -39,10 +41,10 @@ const val PLUGIN_SPI_VERSION: String = "1.1.0"
  * that tier parses into this exact type without an SPI change.
  *
  * The internal (one-classpath) tier uses [id]/[name]/[version]/[apiVersion]/[dependsOn]. The remaining fields
- * are carried but inert until the external/dex tier enforces them: [entryPoints] (the class FQCNs a loader
- * instantiates — unused for built-ins, where the class *is* the entry point), [capabilities] (declared,
- * prompted, and enforced only for untrusted code), [minHostVersion], and [trusted] (built-ins are trusted;
- * an external plugin defaults untrusted).
+ * are carried but inert until the external/dex tier enforces them: [entryPoints] and [uiEntryPoints] (the
+ * class FQCNs a loader instantiates, unused for built-ins, where the class *is* the entry point),
+ * [capabilities] (declared, prompted, and enforced only for untrusted code), [minHostVersion], and [trusted]
+ * (built-ins are trusted; an external plugin defaults untrusted).
  */
 data class PluginManifest(
     val id: String,
@@ -61,6 +63,16 @@ data class PluginManifest(
 
     // Inert until the external/dex tier (parsed + carried now, enforced by that tier's loader):
     val entryPoints: List<String> = emptyList(),
+    /**
+     * The class FQCNs implementing the UI facet (`dev.ide.plugin.ui.UiPlugin`, from the `plugin-ui-api`
+     * artifact), instantiated off the same classloader as [entryPoints], so a plugin's two facets can call
+     * each other directly.
+     *
+     * Independent of [entryPoints]: a plugin may declare either list, or both. A UI facet is instantiated
+     * only for a plugin that is enabled, consented to, and whose engine facet loaded, so the UI is governed
+     * by exactly the decision the engine facet is.
+     */
+    val uiEntryPoints: List<String> = emptyList(),
     val capabilities: List<String> = emptyList(),
     val minHostVersion: String? = null,
     val trusted: Boolean = true,

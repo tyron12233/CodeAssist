@@ -80,6 +80,7 @@ import dev.ide.ui.backend.UiLogLevel
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.LocalHostFileActions
+import dev.ide.ui.LocalPluginFileOpener
 import dev.ide.ui.LocalPluginNavigator
 import dev.ide.ui.ext.ToolWindowContext
 import dev.ide.ui.ext.ToolWindowContribution
@@ -196,12 +197,14 @@ fun BuildConsole(
                 val ctxBackend: IdeBackend = backend
                 val hostFileActions = LocalHostFileActions.current
                 val navigate = LocalPluginNavigator.current
-                val ctx = remember(ctxBackend, activeFilePath, hostFileActions, navigate) {
+                val openInEditor = LocalPluginFileOpener.current
+                val ctx = remember(ctxBackend, activeFilePath, hostFileActions, navigate, openInEditor) {
                     object : ToolWindowContext {
                         override val backend = ctxBackend
                         override val activeFilePath = activeFilePath
                         override val fileActions = hostFileActions
                         override fun openScreen(id: String) = navigate(id)
+                        override fun openFile(path: String, offset: Int) = openInEditor(path, offset)
                     }
                 }
                 plugin.content(ctx)

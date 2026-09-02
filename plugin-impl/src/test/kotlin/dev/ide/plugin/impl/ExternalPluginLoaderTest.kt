@@ -49,10 +49,11 @@ private fun manifest(
     id: String = "com.example.plugin",
     apiVersion: Int = 1,
     entryPoints: List<String> = listOf(ExternalEntryPoint::class.java.name),
+    uiEntryPoints: List<String> = emptyList(),
     minHostVersion: String? = null,
 ) = PluginManifest(
     id = id, name = "Example", version = "1.0.0", apiVersion = apiVersion,
-    entryPoints = entryPoints, minHostVersion = minHostVersion, trusted = false,
+    entryPoints = entryPoints, uiEntryPoints = uiEntryPoints, minHostVersion = minHostVersion, trusted = false,
 )
 
 class ExternalPluginLoaderTest {
@@ -126,6 +127,31 @@ class ExternalPluginLoaderTest {
         val result = ExternalPluginLoader().load(FakeDiscovered(manifest(entryPoints = emptyList())))
         assertTrue(result is ExternalPluginLoader.Result.Failed)
         assertEquals("declares no entry point", result.reason)
+    }
+
+    @Test
+    fun `carries the classloader out, for the host to load the plugin's other facets from`() {
+        val result = ExternalPluginLoader().load(FakeDiscovered(manifest()))
+        assertTrue(result is ExternalPluginLoader.Result.Loaded)
+        // Must be the loader the engine facet came off: loading the UI facet from anywhere else would put a
+        // plugin's two halves in different classloaders, where they cannot see each other.
+        assertEquals(FakeDiscovered::class.java.classLoader, result.classLoader)
+    }
+
+    @Test
+    fun `a plugin declaring only a UI facet loads with an inert engine facet`() {
+        val result = ExternalPluginLoader().load(
+            FakeDiscovered(
+                manifest(entryPoints = emptyList(), uiEntryPoints = listOf("com.example.SomeUiPlugin")),
+            )
+        )
+        assertTrue(result is ExternalPluginLoader.Result.Loaded, "expected a load, got $result")
+        // It keeps its place in the load order and its identity; register() simply has nothing to do. The UI
+        // facet itself is instantiated by the host, which is where the Compose-side types are visible.
+        assertEquals("com.example.plugin", result.plugin.manifest.id)
+        val registry = ExtensionRegistryImpl()
+        PluginManager(registry).load(result.plugin)
+        assertTrue(registry.extensions(EXT_EP).isEmpty())
     }
 
     @Test

@@ -35,6 +35,7 @@ ide-android (Android launcher) → ide-core
 | `analysis-api` | `dev.ide.analysis` | Diagnostics/analyzer/quick-fix SPI: one diagnostic model and one pipeline; compiler errors and analyzer findings merge into the same stream. |
 | `block-api` | `dev.ide.block` | Projectional (block) editor SPI: block tree, block mappings, block edits, the projection service. |
 | `plugin-api` | `dev.ide.plugin`, `.action`, `.external` | The plugin SPI (`Plugin`/`PluginManifest`/`PluginRegistration`), the lean action model (`IdeAction`/`ActionGroup` + named places), and the discovery SPI for plugins the user installed separately (`PluginSource`/`DiscoveredPlugin`/`PluginOrigin`). |
+| `plugin-ui-api` | `dev.ide.plugin.ui` | The UI half of the plugin SPI, for a plugin shipped as its own app: the `UiPlugin` facet named by the manifest's `uiEntryPoints`, its tool window / screen / overlay contributions, and the narrow `UiContext` their `@Composable` bodies render against. Compose is `compileOnly` (the host provides it) and it depends on no other CodeAssist module, so publishing it commits to a surface `IdeBackend` changes cannot break. |
 
 ## Implementation modules
 
