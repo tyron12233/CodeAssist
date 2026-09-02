@@ -1522,8 +1522,8 @@ data class UiActionContext(
  *
  * The UI does not build this itself (it has no parse tree); it asks the backend for one via
  * [EditorService.caretContext] and passes it straight back when resolving or invoking an editor action.
- * [nodeKind] and [ancestors] are open string ids from the engine's DOM (`"method_call"`, `"class_decl"`,
- * …); [ancestors] runs innermost-first to the file root.
+ * [nodeKind] is an open string id from the engine's DOM (`"method_call"`, `"class_decl"`, …);
+ * [ancestors] runs innermost-first to the file root, each with its own kind and span.
  */
 data class UiCaretContext(
     val offset: Int,
@@ -1533,8 +1533,11 @@ data class UiCaretContext(
     val nodeEnd: Int = offset,
     val nodeText: String = "",
     val nodeTextTruncated: Boolean = false,
-    val ancestors: List<String> = emptyList(),
+    val ancestors: List<UiCaretAncestor> = emptyList(),
 )
+
+/** One ancestor of the caret's node: its kind id and its span `[start, end)`. */
+data class UiCaretAncestor(val kind: String, val start: Int, val end: Int)
 
 /** A resolved action ready to render. [id] round-trips through [IdeBackend.invokeAction]; [iconId] resolves
  *  via the UI icon registry; [enabled] is pre-evaluated for the context it was resolved in. */

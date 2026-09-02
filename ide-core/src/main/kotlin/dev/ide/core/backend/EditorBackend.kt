@@ -21,6 +21,7 @@ import dev.ide.ui.backend.EditorService
 import dev.ide.ui.backend.UiAction
 import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionPlaces
+import dev.ide.ui.backend.UiCaretAncestor
 import dev.ide.ui.backend.UiCaretContext
 import dev.ide.ui.backend.UiActionKind
 import dev.ide.ui.backend.UiCaret
@@ -547,5 +548,5 @@ internal fun CaretSnapshot.toUiCaretContext(): UiCaretContext = UiCaretContext(
     nodeEnd = nodeRange.end,
     nodeText = nodeText,
     nodeTextTruncated = nodeTextTruncated,
-    ancestors = ancestors,
+    ancestors = ancestors.map { UiCaretAncestor(it.kind, it.start, it.end) },
 )

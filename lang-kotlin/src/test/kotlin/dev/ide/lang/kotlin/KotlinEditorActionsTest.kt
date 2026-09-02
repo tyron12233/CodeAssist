@@ -11,6 +11,7 @@ import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.kotlin.analysis.KotlinBracesActionProvider
 import dev.ide.lang.kotlin.analysis.KotlinExplicitTypeActionProvider
+import dev.ide.lang.kotlin.analysis.KotlinExtractFunctionActionProvider
 import dev.ide.lang.kotlin.analysis.KotlinFunctionBodyActionProvider
 import dev.ide.lang.kotlin.analysis.KotlinIntroduceVariableActionProvider
 import dev.ide.lang.kotlin.analysis.KotlinSurroundActionProvider
@@ -241,6 +242,83 @@ class KotlinEditorActionsTest {
         assertTrue(titles.isEmpty(), "nothing to infer from, got $titles")
     }
 
+    // ---- extract function -------------------------------------------------------------------------
+
+    @Test
+    fun extractsSelectedStatementsIntoAPrivateFunction() {
+        val result = applyRange(
+            "package demo\nfun f() {\n[    println(\"a\")\n    println(\"b\")]\n}\n",
+            KotlinExtractFunctionActionProvider(),
+            "Extract function 'extracted'",
+        )
+        assertEquals(
+            "package demo\nfun f() {\n    extracted()\n}\n\nprivate fun extracted() {\n" +
+                "    println(\"a\")\n    println(\"b\")\n}\n",
+            result,
+        )
+    }
+
+    @Test
+    fun aLocalTheSelectionReadsBecomesAParameter() {
+        val result = applyRange(
+            "package demo\nfun f() {\n    val n: Int = 1\n[    println(n)]\n}\n",
+            KotlinExtractFunctionActionProvider(),
+            "Extract function 'extracted'",
+        )
+        assertTrue("extracted(n)" in result, "expected the local passed as an argument:\n$result")
+        assertTrue("private fun extracted(n: Int) {" in result, "expected a typed parameter:\n$result")
+    }
+
+    @Test
+    fun aLocalDeclaredInsideAndUsedAfterIsNotExtractable() {
+        // Handing the value back needs a return plus a declaration at the call site, so this is not offered.
+        val titles = titlesRange(
+            "package demo\nfun f() {\n[    val n = 1]\n    println(n)\n}\n",
+            KotlinExtractFunctionActionProvider(),
+        )
+        assertTrue(titles.isEmpty(), "expected no extraction, got $titles")
+    }
+
+    @Test
+    fun aLocalDeclaredAndUsedOnlyInsideNeedsNoParameter() {
+        val result = applyRange(
+            "package demo\nfun f() {\n[    val n = 1\n    println(n)]\n}\n",
+            KotlinExtractFunctionActionProvider(),
+            "Extract function 'extracted'",
+        )
+        assertTrue("private fun extracted() {" in result, "expected no parameters:\n$result")
+        assertTrue("val n = 1" in result, result)
+    }
+
+    @Test
+    fun aPartialSelectionWidensToWholeStatements() {
+        val result = applyRange(
+            "package demo\nfun f() {\n    prin[tln(\"a\")\n    printl]n(\"b\")\n}\n",
+            KotlinExtractFunctionActionProvider(),
+            "Extract function 'extracted'",
+        )
+        assertTrue("println(\"a\")\n    println(\"b\")" in result, "both statements expected:\n$result")
+        assertTrue("    extracted()\n}" in result, "one call replaces both:\n$result")
+    }
+
+    @Test
+    fun theNameIsDeduplicatedAgainstTheFile() {
+        val result = applyRange(
+            "package demo\nfun extracted() {}\nfun f() {\n[    println(\"a\")]\n}\n",
+            KotlinExtractFunctionActionProvider(),
+            "Extract function 'extracted1'",
+        )
+        assertTrue("private fun extracted1()" in result, result)
+    }
+
+    @Test
+    fun extractIsNotOfferedWithoutASelection() {
+        assertTrue(
+            titles("package demo\nfun f() {\n    println|(\"a\")\n}\n", KotlinExtractFunctionActionProvider())
+                .isEmpty(),
+        )
+    }
+
     // ---- harness ----------------------------------------------------------------------------------
 
     /** The intention titles [provider] offers at the `|` caret in [code]. */
@@ -270,19 +348,49 @@ class KotlinEditorActionsTest {
         sb.toString()
     }
 
+    /** The titles [provider] offers for the `[`..`]` selection in [code]. */
+    private fun titlesRange(code: String, provider: ActionProvider): List<String> = runBlocking {
+        val (clean, range) = splitRange(code)
+        provider.actions(contextFor(clean, range.start, range.end)).map { it.title }
+    }
+
+    /** Apply the intention named [title] for the `[`..`]` selection and return the resulting text. */
+    private fun applyRange(code: String, provider: ActionProvider, title: String): String = runBlocking {
+        val (clean, range) = splitRange(code)
+        val ctx = contextFor(clean, range.start, range.end)
+        val fixes = provider.actions(ctx)
+        val fix = fixes.firstOrNull { it.title == title }
+            ?: error("no intention titled \"$title\"; offered ${fixes.map { f -> f.title }}")
+        val edits = fix.computeEdits(Ctx(ctx.target)).edits.values.flatten()
+        val sb = StringBuilder(clean)
+        for (e in edits.sortedByDescending { it.offset }) {
+            sb.replace(e.offset, e.offset + e.oldLength, e.newText.toString())
+        }
+        sb.toString()
+    }
+
+    private fun splitRange(code: String): Pair<String, TextRange> {
+        val open = code.indexOf('[')
+        require(open >= 0) { "the fixture must mark the selection with [ and ]" }
+        val withoutOpen = code.removeRange(open, open + 1)
+        val close = withoutOpen.indexOf(']')
+        require(close >= 0) { "the fixture must close the selection with ]" }
+        return withoutOpen.removeRange(close, close + 1) to TextRange(open, close)
+    }
+
     private fun split(code: String): Pair<String, Int> {
         val at = code.indexOf('|')
         require(at >= 0) { "the fixture must mark the caret with |" }
         return code.removeRange(at, at + 1) to at
     }
 
-    private suspend fun contextFor(code: String, offset: Int): EditorActionContext {
+    private suspend fun contextFor(code: String, offset: Int, end: Int = offset): EditorActionContext {
         val doc = SnippetDoc(code, DiskFile(srcDir.resolve("Use.kt")))
         val parsed = analyzer.incrementalParser.parseFull(doc)
         analyzer.analyze(doc.file)
         return EditorActionContext.of(
             Target(parsed, doc.file, analyzer),
-            TextRange(offset, offset),
+            TextRange(offset, end),
             KotlinLanguageBackend.LANGUAGE_ID,
         )
     }

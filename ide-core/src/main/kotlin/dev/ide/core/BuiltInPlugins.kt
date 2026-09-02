@@ -13,6 +13,7 @@ import dev.ide.block.BLOCK_MAPPING_EP
 import dev.ide.block.impl.JavaBlockMapping
 import dev.ide.core.actions.BuiltInActions
 import dev.ide.core.actions.EditorTextActions
+import dev.ide.core.actions.ExtractFileAction
 import dev.ide.core.analysis.AidlAnalyzer
 import dev.ide.core.analysis.PackageMismatchAnalyzer
 import dev.ide.core.completion.BufferWordsContributor
@@ -771,13 +772,14 @@ private class IdeCoreActionsPlugin(private val env: ApplicationEnvironment) : Pl
     }
 }
 
-/** The line-level editor actions (comment toggling, moving and sorting lines). */
+/** The line-level editor actions (comment toggling, moving and sorting lines) plus move-to-a-new-file. */
 private class EditorTextActionsPlugin : Plugin {
     override val manifest = PluginManifest(
         id = "editor-text-actions", name = "Editor Line Actions",
-        description = "Editor actions that work on lines: comment or uncomment, move, and sort.",
+        description = "Editor actions on lines (comment, move, sort) and moving a declaration to its own file.",
     )
     override fun register(reg: PluginRegistration) {
         reg.contributeVia { ext, _ -> EditorTextActions.register(ext) }
+        reg.contributeVia { ext, _ -> ExtractFileAction.register(ext) }
     }
 }

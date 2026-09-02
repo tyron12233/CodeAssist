@@ -28,9 +28,9 @@ package dev.ide.plugin.action
  * @property nodeText the source text the innermost node covers. Capped at [MAX_NODE_TEXT] characters so a
  *   caret inside a large declaration cannot make listing expensive; [nodeTextTruncated] records when it was.
  * @property nodeTextTruncated true when [nodeText] was cut to [MAX_NODE_TEXT] characters.
- * @property ancestors the kind ids of the innermost node's ancestors, innermost first, ending at the file
- *   root, e.g. `["block", "method_decl", "class_decl", "compilation_unit"]`. Lets an action test whether
- *   it sits inside a class body without walking a tree it cannot see.
+ * @property ancestors the innermost node's ancestors, innermost first, ending at the file root. Each
+ *   carries its kind and its span, so an action can both test where it sits and act on what encloses it
+ *   (moving the enclosing declaration, wrapping the enclosing block) without a tree it cannot see.
  */
 data class CaretContext(
     val offset: Int,
@@ -40,13 +40,22 @@ data class CaretContext(
     val nodeEnd: Int = offset,
     val nodeText: String = "",
     val nodeTextTruncated: Boolean = false,
-    val ancestors: List<String> = emptyList(),
+    val ancestors: List<CaretAncestor> = emptyList(),
 ) {
     /** True when [kind] is the innermost node's kind or any ancestor's: is the caret anywhere inside one. */
-    fun isInside(kind: String): Boolean = nodeKind == kind || kind in ancestors
+    fun isInside(kind: String): Boolean = nodeKind == kind || ancestors.any { it.kind == kind }
+
+    /** The innermost ancestor of kind [kind], or null. Use it to act on what encloses the caret. */
+    fun enclosing(kind: String): CaretAncestor? = ancestors.firstOrNull { it.kind == kind }
+
+    /** [nodeKind] and [ancestors]' kinds, innermost first: the caret's position as a path of kinds. */
+    val kindPath: List<String> get() = listOf(nodeKind) + ancestors.map { it.kind }
 
     companion object {
         /** The cap on [nodeText]. A node longer than this is truncated rather than copied whole. */
         const val MAX_NODE_TEXT = 4096
     }
 }
+
+/** One ancestor of the caret's node: its kind id and its span `[start, end)`. */
+data class CaretAncestor(val kind: String, val start: Int, val end: Int)

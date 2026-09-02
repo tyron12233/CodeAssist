@@ -94,5 +94,6 @@ object KotlinAnalysisSupport {
         extensions.register(ACTION_PROVIDER_EP, KotlinFunctionBodyActionProvider(), plugin)
         extensions.register(ACTION_PROVIDER_EP, KotlinBracesActionProvider(), plugin)
         extensions.register(ACTION_PROVIDER_EP, KotlinExplicitTypeActionProvider(), plugin)
+        extensions.register(ACTION_PROVIDER_EP, KotlinExtractFunctionActionProvider(), plugin)
     }
 }

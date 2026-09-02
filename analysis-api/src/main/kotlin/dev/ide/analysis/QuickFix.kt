@@ -202,7 +202,7 @@ data class CaretSnapshot(
     val nodeRange: TextRange = TextRange(offset, offset),
     val nodeText: String = "",
     val nodeTextTruncated: Boolean = false,
-    val ancestors: List<String> = emptyList(),
+    val ancestors: List<AncestorSpan> = emptyList(),
 ) {
     companion object {
         /** The cap on [nodeText]. Matches plugin-api's `CaretContext.MAX_NODE_TEXT`. */
@@ -214,10 +214,10 @@ data class CaretSnapshot(
             val node = parsed.nodeAt(clamped)
             val text = node.text()
             val truncated = text.length > MAX_NODE_TEXT
-            val ancestors = ArrayList<String>()
+            val ancestors = ArrayList<AncestorSpan>()
             var p = node.parent
             while (p != null) {
-                ancestors.add(p.kind.id)
+                ancestors.add(AncestorSpan(p.kind.id, p.range.start, p.range.end))
                 p = p.parent
             }
             return CaretSnapshot(
@@ -232,3 +232,6 @@ data class CaretSnapshot(
         }
     }
 }
+
+/** One ancestor of the caret's node in a [CaretSnapshot]: its kind id and its span `[start, end)`. */
+data class AncestorSpan(val kind: String, val start: Int, val end: Int)

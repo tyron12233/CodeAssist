@@ -4,6 +4,7 @@ import dev.ide.core.BackendContext
 import dev.ide.plugin.action.ActionContext
 import dev.ide.plugin.action.ActionEffect
 import dev.ide.plugin.action.ActionPlace
+import dev.ide.plugin.action.CaretAncestor
 import dev.ide.plugin.action.CaretContext
 import dev.ide.plugin.action.TextEdit
 import dev.ide.plugin.impl.ResolvedMenuItem
@@ -80,7 +81,7 @@ internal fun toPluginActionContext(snapshot: UiActionContext, projectRoot: Strin
             nodeEnd = it.nodeEnd,
             nodeText = it.nodeText,
             nodeTextTruncated = it.nodeTextTruncated,
-            ancestors = it.ancestors,
+            ancestors = it.ancestors.map { a -> CaretAncestor(a.kind, a.start, a.end) },
         )
     }
     return object : ActionContext {

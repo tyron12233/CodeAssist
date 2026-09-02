@@ -171,3 +171,129 @@ class EditorTextActionsTest {
         assertTrue(manager.actionsFor(ctx).isEmpty())
     }
 }
+
+/**
+ * Moving a top-level declaration into its own file: the plugin-tier action that spans files, so it is
+ * where the create-plus-edit effect pair is exercised.
+ */
+class ExtractFileActionTest {
+
+    private val manager = ActionManager(
+        dev.ide.platform.impl.ExtensionRegistryImpl().also { dev.ide.core.actions.ExtractFileAction.register(it) },
+    )
+
+    private fun context(
+        text: String,
+        caret: CaretContext,
+        path: String = "/p/app/src/main/kotlin/com/example/Main.kt",
+    ) = object : ActionContext {
+        override val place = ActionPlaces.EDITOR
+        override val projectRoot: String? = "/p"
+        override val activeFilePath = path
+        override val selectionStart = caret.offset
+        override val selectionEnd = caret.offset
+        override val contextPath: String? = null
+        override val caret = caret
+        override val documentText = text
+    }
+
+    /** The caret sitting ON a top-level declaration spanning `[start, end)`. */
+    private fun onDeclaration(offset: Int, start: Int, end: Int, kind: String = "class_decl") = CaretContext(
+        offset = offset,
+        languageId = "kotlin",
+        nodeKind = kind,
+        nodeStart = start,
+        nodeEnd = end,
+        ancestors = listOf(dev.ide.plugin.action.CaretAncestor("compilation_unit", 0, end)),
+    )
+
+    private fun effects(ctx: ActionContext) = runBlocking {
+        manager.invoke("editor.moveToNewFile", ctx).effects
+    }
+
+    @Test
+    fun writesTheDeclarationToItsOwnFileUnderTheSamePackage() {
+        val text = "package com.example\n\nimport kotlin.math.PI\n\nclass Main\n\nclass Helper {\n    val x = PI\n}\n"
+        val start = text.indexOf("class Helper")
+        val ctx = context(text, onDeclaration(start + 6, start, text.indexOf("\n}\n") + 2))
+        val created = effects(ctx).filterIsInstance<ActionEffect.CreateFile>().single()
+        assertEquals("/p/app/src/main/kotlin/com/example/Helper.kt", created.path)
+        assertEquals(
+            "package com.example\nimport kotlin.math.PI\n\nclass Helper {\n    val x = PI\n}\n",
+            created.text,
+        )
+    }
+
+    @Test
+    fun cutsTheDeclarationOutOfTheSourceFile() {
+        val text = "package com.example\n\nclass Main\n\nclass Helper\n"
+        val start = text.indexOf("class Helper")
+        val ctx = context(text, onDeclaration(start + 6, start, start + "class Helper".length))
+        val edit = effects(ctx).filterIsInstance<ActionEffect.ApplyEdits>().single().edits.single()
+        val remaining = StringBuilder(text).replace(edit.offset, edit.offset + edit.length, edit.newText).toString()
+        assertEquals("package com.example\n\nclass Main\n", remaining)
+    }
+
+    @Test
+    fun opensTheNewFileAfterWritingIt() {
+        val text = "package com.example\n\nclass Main\n\nclass Helper\n"
+        val start = text.indexOf("class Helper")
+        val ctx = context(text, onDeclaration(start + 6, start, start + "class Helper".length))
+        val order = effects(ctx).map { it::class.simpleName }
+        // Create before cut: a failed create must not leave the declaration deleted from both files.
+        assertEquals(listOf("CreateFile", "ApplyEdits", "OpenFile"), order)
+    }
+
+    @Test
+    fun theDeclarationTheFileIsNamedAfterIsNotOffered() {
+        val text = "package com.example\n\nclass Main\n"
+        val start = text.indexOf("class Main")
+        val ctx = context(text, onDeclaration(start + 6, start, text.length - 1))
+        assertTrue(manager.actionsFor(ctx).isEmpty(), "moving Main out of Main.kt would orphan the file")
+    }
+
+    @Test
+    fun aMemberIsNotOfferedAsItsOwnFile() {
+        val text = "package com.example\n\nclass Helper {\n    fun m() {}\n}\n"
+        val fnStart = text.indexOf("fun m")
+        val caret = CaretContext(
+            offset = fnStart + 2,
+            languageId = "kotlin",
+            nodeKind = "method_decl",
+            nodeStart = fnStart,
+            nodeEnd = fnStart + "fun m() {}".length,
+            ancestors = listOf(
+                dev.ide.plugin.action.CaretAncestor("class_decl", text.indexOf("class Helper"), text.length - 1),
+                dev.ide.plugin.action.CaretAncestor("compilation_unit", 0, text.length),
+            ),
+        )
+        // The enclosing top-level class is what moves, not the method.
+        val created = effects(context(text, caret)).filterIsInstance<ActionEffect.CreateFile>().single()
+        assertEquals("/p/app/src/main/kotlin/com/example/Helper.kt", created.path)
+        assertTrue("class Helper {" in created.text, created.text)
+    }
+
+    @Test
+    fun onlyKotlinAndJavaFilesAreOffered() {
+        val text = "<resources>\n    <string name=\"a\">b</string>\n</resources>\n"
+        val ctx = context(text, onDeclaration(2, 0, text.length), path = "/p/app/src/main/res/values/strings.xml")
+        assertTrue(manager.actionsFor(ctx).isEmpty())
+    }
+
+    @Test
+    fun aJavaDeclarationKeepsSemicolonsOnItsHeader() {
+        val text = "package com.example;\n\nimport java.util.List;\n\nclass Main {}\n\nclass Helper {}\n"
+        val start = text.indexOf("class Helper")
+        val ctx = context(
+            text,
+            onDeclaration(start + 6, start, start + "class Helper {}".length),
+            path = "/p/app/src/main/java/com/example/Main.java",
+        )
+        val created = effects(ctx).filterIsInstance<ActionEffect.CreateFile>().single()
+        assertEquals("/p/app/src/main/java/com/example/Helper.java", created.path)
+        assertEquals(
+            "package com.example;\nimport java.util.List;\n\nclass Helper {}\n",
+            created.text,
+        )
+    }
+}
