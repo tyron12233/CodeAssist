@@ -1,6 +1,7 @@
 package dev.ide.core
 
 import dev.ide.analysis.ACTION_PROVIDER_EP
+import dev.ide.analysis.CaretSnapshot
 import dev.ide.analysis.ANALYZER_EP
 import dev.ide.analysis.AnalysisProfile
 import dev.ide.analysis.AnalysisTarget
@@ -2570,6 +2571,23 @@ class IdeServices private constructor(
         } catch (e: LinkageError) {
             analysisUnavailable.add(languageFor(file))
             emptyList()
+        }
+    }
+
+    /**
+     * What the caret is on at [offset] in [file]'s live buffer [text]: the flat snapshot both editor-action
+     * tiers resolve against. Null when the file has no analysis backend or could not be parsed.
+     *
+     * Syntax-only (no binding analysis), so this is cheap enough to call when an action surface opens.
+     */
+    fun caretSnapshot(file: Path, text: String, offset: Int): CaretSnapshot? {
+        if (analysisDisabled(file) || moduleForEditableFile(file) == null) return null
+        updateDocument(file, text)
+        return try {
+            runSync { analysisEngine.caretSnapshotAt(store.vfs.fileFor(file), offset) }
+        } catch (e: LinkageError) {
+            analysisUnavailable.add(languageFor(file))
+            null
         }
     }
 

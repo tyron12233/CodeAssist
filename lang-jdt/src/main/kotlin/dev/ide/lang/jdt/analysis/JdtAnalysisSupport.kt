@@ -31,5 +31,10 @@ object JdtAnalysisSupport {
         extensions.register(QUICK_FIX_PROVIDER_EP, CreateMethodFromUsageQuickFixProvider(), plugin)
         extensions.register(ACTION_PROVIDER_EP, IntroduceVariableActionProvider(), plugin)
         extensions.register(ACTION_PROVIDER_EP, SurroundWithTryCatchActionProvider(), plugin)
+        // Member generation (see JavaGenerateActions).
+        extensions.register(ACTION_PROVIDER_EP, GenerateConstructorActionProvider(), plugin)
+        extensions.register(ACTION_PROVIDER_EP, GenerateEqualsHashCodeActionProvider(), plugin)
+        extensions.register(ACTION_PROVIDER_EP, GenerateToStringActionProvider(), plugin)
+        extensions.register(ACTION_PROVIDER_EP, GenerateAccessorsActionProvider(), plugin)
     }
 }

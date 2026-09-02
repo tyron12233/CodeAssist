@@ -87,5 +87,15 @@ object KotlinAnalysisSupport {
         extensions.register(DIAGNOSTIC_PROVIDER_EP, KotlinDiagnosticProvider(), plugin)
         extensions.register(ACTION_PROVIDER_EP, KotlinImportActionProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, KotlinImplementMembersFixProvider(), plugin)
+        // Caret intentions (see KotlinEditorActions).
+        extensions.register(ACTION_PROVIDER_EP, KotlinSurroundActionProvider(), plugin)
+        extensions.register(ACTION_PROVIDER_EP, KotlinIntroduceVariableActionProvider(), plugin)
+        extensions.register(ACTION_PROVIDER_EP, KotlinImplementMembersActionProvider(), plugin)
+        extensions.register(ACTION_PROVIDER_EP, KotlinFunctionBodyActionProvider(), plugin)
+        extensions.register(ACTION_PROVIDER_EP, KotlinBracesActionProvider(), plugin)
+        extensions.register(ACTION_PROVIDER_EP, KotlinExplicitTypeActionProvider(), plugin)
+        extensions.register(ACTION_PROVIDER_EP, KotlinExtractFunctionActionProvider(), plugin)
+        extensions.register(ACTION_PROVIDER_EP, KotlinGenerateEqualsActionProvider(), plugin)
+        extensions.register(ACTION_PROVIDER_EP, KotlinGenerateToStringActionProvider(), plugin)
     }
 }

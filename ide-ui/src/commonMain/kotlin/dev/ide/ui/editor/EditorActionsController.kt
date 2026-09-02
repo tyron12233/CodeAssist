@@ -6,11 +6,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAction
+import dev.ide.ui.backend.UiMenuGroup
+import dev.ide.ui.backend.UiActionPlaces
+import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.RangeEdit
@@ -35,6 +39,9 @@ internal class EditorActionsController(
     private val path: String,
     private val scope: CoroutineScope,
     private val dismissCompletion: () -> Unit,
+    /** Runs a plugin-tier editor action (see [UiAction.actionId]) through the host's action dispatcher. */
+    private val onPluginAction: suspend (actionId: String, selStart: Int, selEnd: Int) -> Unit =
+        { _, _, _ -> },
 ) {
     var available by mutableStateOf<List<UiAction>>(emptyList())
         private set
@@ -53,6 +60,10 @@ internal class EditorActionsController(
     var sheet by mutableStateOf<UiDiagnostic?>(null)
         private set
     var sheetActions by mutableStateOf<List<UiAction>>(emptyList())
+        private set
+
+    /** The plugin action tree for the editor context menu (groups become submenus). Empty until resolved. */
+    var editorMenu by mutableStateOf(UiMenuGroup())
         private set
 
     /** The most recent selection-expand request, for the editor to animate the growing highlight. The logical
@@ -125,6 +136,42 @@ internal class EditorActionsController(
 
     fun closeMenu() { menuOpen = false }
 
+    /**
+     * Resolve everything the editor context menu lists: the analysis quick-fixes and intentions at the
+     * current selection, plus the plugin action tree for the `EDITOR` place.
+     *
+     * The context menu is opened deliberately, so unlike the proactive lightbulb it can afford to resolve
+     * on demand. That is also the only way its fix and intention sections are populated off a diagnostic
+     * line (see [refreshAvailability] for why nothing is resolved proactively there).
+     */
+    suspend fun resolveContextMenu() {
+        val sel = session.selection
+        val len = session.doc.length
+        availStart = sel.min.coerceIn(0, len)
+        availEnd = sel.max.coerceIn(availStart, len)
+        val text = session.doc.text
+        available = runCatching { backend.editor.actionsAt(path, text, availStart, availEnd) }
+            .getOrNull().orEmpty()
+        val caret = runCatching { backend.editor.caretContext(path, text, availStart) }.getOrNull()
+        editorMenu = runCatching {
+            backend.actions.menuFor(
+                UiActionContext(
+                    place = UiActionPlaces.EDITOR,
+                    activeFilePath = path,
+                    selectionStart = availStart,
+                    selectionEnd = availEnd,
+                    caret = caret,
+                    documentText = text,
+                ),
+            )
+        }.getOrNull() ?: UiMenuGroup()
+    }
+
+    /** Invoke a plugin action picked from the context menu, at the range the menu was resolved for. */
+    fun invokeMenuAction(id: String) {
+        scope.launch { runCatching { onPluginAction(id, availStart, availEnd) } }
+    }
+
     fun moveSelection(delta: Int) {
         menuSelected = (menuSelected + delta).coerceIn(0, (available.size - 1).coerceAtLeast(0))
     }
@@ -155,7 +202,11 @@ internal class EditorActionsController(
         sheetActions = emptyList()
         val text = session.doc.text
         scope.launch {
-            sheetActions = runCatching { backend.editor.actionsAt(path, text, d.startOffset, d.endOffset) }.getOrNull().orEmpty()
+            // Analysis-tier entries only. The sheet answers "what fixes this problem?", so the plugin
+            // actions that apply anywhere the caret is (they carry an `actionId`) are excluded; they stay
+            // reachable from the Alt-Enter popup and the editor overflow menu.
+            sheetActions = runCatching { backend.editor.actionsAt(path, text, d.startOffset, d.endOffset) }
+                .getOrNull().orEmpty().filter { it.actionId == null }
         }
     }
 
@@ -201,6 +252,13 @@ internal class EditorActionsController(
     // splice them in (the editor round-trip — reparse + re-analyze follow the normal text path). The caret is
     // kept on its logical spot by shifting it by the net delta of edits that land at/before it.
     private fun runAction(act: UiAction, ctxStart: Int, ctxEnd: Int) {
+        // A plugin-tier action is invoked by registry id, not by list index, and returns the full effect set
+        // (edits, caret, files, navigation) rather than only edits, so it goes to the host dispatcher, the
+        // same path the toolbar and palette use. Effects that edit land on this very session.
+        act.actionId?.let { id ->
+            scope.launch { runCatching { onPluginAction(id, ctxStart, ctxEnd) } }
+            return
+        }
         val text = session.doc.text
         scope.launch {
             val raw = runCatching { backend.editor.applyAction(path, text, ctxStart, ctxEnd, act.id) }.getOrNull().orEmpty()
@@ -232,8 +290,16 @@ internal fun rememberEditorActionsController(
     path: String,
     session: EditorSession,
     backend: IdeBackend,
+    onPluginAction: suspend (actionId: String, selStart: Int, selEnd: Int) -> Unit = { _, _, _ -> },
     dismissCompletion: () -> Unit,
 ): EditorActionsController {
     val scope = rememberCoroutineScope()
-    return remember(path) { EditorActionsController(session, backend, path, scope, dismissCompletion) }
+    // The callback is re-read through a ref so a recomposition with a new lambda does not rebuild the
+    // controller (which would drop the open menu and the resolved action list).
+    val cb = rememberUpdatedState(onPluginAction)
+    return remember(path) {
+        EditorActionsController(session, backend, path, scope, dismissCompletion) { id, s, e ->
+            cb.value(id, s, e)
+        }
+    }
 }

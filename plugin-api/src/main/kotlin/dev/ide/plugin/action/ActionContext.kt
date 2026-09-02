@@ -31,4 +31,24 @@ interface ActionContext {
      * for [ActionPlaces.FILE_CONTEXT]). Null for global places like the toolbar or palette.
      */
     val contextPath: String?
+
+    /**
+     * What the caret is on, for the places that resolve against editor content ([ActionPlaces.EDITOR], and
+     * the command palette when an editor is focused). Null when there is no editor, when the file has not
+     * been parsed yet, or for a place that carries no caret (the file tree).
+     *
+     * Defaulted so an action written before editor places existed still compiles, and so a host that has no
+     * editor concept can implement [ActionContext] without one.
+     */
+    val caret: CaretContext? get() = null
+
+    /**
+     * The live text of [activeFilePath], for an action that rewrites it. Null when there is no editor, or
+     * for a place that acts on something other than editor content.
+     *
+     * An action computes its [ActionEffect.TextEdit]s against exactly this string, and the host applies them
+     * to the same buffer, so offsets cannot drift between deciding and applying. Read it rather than the
+     * file on disk: the buffer may hold unsaved changes.
+     */
+    val documentText: String? get() = null
 }

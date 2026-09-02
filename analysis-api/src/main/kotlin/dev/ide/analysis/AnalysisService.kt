@@ -97,6 +97,16 @@ interface AnalysisService {
     suspend fun editorActionsAt(file: VirtualFile, range: TextRange): List<QuickFix>
 
     /**
+     * What the caret is on at [offset] in [file], as flat data: the portable half of the editor-action
+     * context. Built from the syntax-only tree, so it costs a parse at most and never a binding analysis.
+     * Null when [file] has no language backend or could not be parsed.
+     *
+     * The host uses this to hand a caret position to actions that live outside the analysis layer (the
+     * plugin-api `EDITOR` place, whose actions cross a DTO boundary and cannot hold a tree node).
+     */
+    suspend fun caretSnapshotAt(file: VirtualFile, offset: Int): CaretSnapshot?
+
+    /**
      * Compute (but do NOT apply) the edits of the action at [index] in [editorActionsAt]'s list for
      * (`file`, `range`). The host applies the returned edits to its live buffer (the editor round-trip,
      * like a block edit) so undo/redo and re-analysis follow the normal text path. Returns

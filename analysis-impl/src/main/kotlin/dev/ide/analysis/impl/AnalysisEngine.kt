@@ -6,12 +6,14 @@ import dev.ide.analysis.AnalysisListener
 import dev.ide.analysis.AnalysisProfile
 import dev.ide.analysis.AnalysisService
 import dev.ide.analysis.AnalysisTarget
+import dev.ide.analysis.CaretSnapshot
 import dev.ide.analysis.AnalyzerTier
 import dev.ide.analysis.Diagnostic
 import dev.ide.analysis.DiagnosticProvider
 import dev.ide.analysis.DiagnosticSink
 import dev.ide.analysis.DiagnosticSource
 import dev.ide.analysis.DiagnosticTag
+import dev.ide.analysis.EditorActionContext
 import dev.ide.analysis.FileAnalyzer
 import dev.ide.analysis.FileDiagnostics
 import dev.ide.analysis.FixContext
@@ -141,10 +143,19 @@ class AnalysisEngine(
         val fixes = diagnostics(target.file)
             .filter { overlaps(it.range, range) }
             .flatMap { fixesFor(it, target) }
-        val intentions = actionProviders
-            .filter { lang == null || lang in it.languages }
-            .flatMap { runCatching { it.actions(target, range) }.getOrDefault(emptyList()) }
+        val applicable = actionProviders.filter { lang == null || lang in it.languages }
+        if (applicable.isEmpty()) return fixes
+        // Resolve the caret's place in the tree ONCE and share it: every provider's first move is to find
+        // the node at the caret and walk up from it, and that walk is identical for all of them.
+        val ctx = EditorActionContext.of(target, range, lang)
+        val intentions = applicable
+            .flatMap { runCatching { it.actions(ctx) }.getOrDefault(emptyList()) }
         return fixes + intentions
+    }
+
+    override suspend fun caretSnapshotAt(file: VirtualFile, offset: Int): CaretSnapshot? {
+        val target = environment.targetFor(file, needsBindings = false) ?: return null
+        return runCatching { CaretSnapshot.of(target.parsed, offset, environment.languageOf(file)) }.getOrNull()
     }
 
     /** Point-inclusive overlap (treats a caret — an empty range — as touching a diagnostic it sits on). */

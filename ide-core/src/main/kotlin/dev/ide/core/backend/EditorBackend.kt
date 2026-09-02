@@ -1,5 +1,6 @@
 package dev.ide.core.backend
 
+import dev.ide.analysis.CaretSnapshot
 import dev.ide.analysis.CodeActionKind
 import dev.ide.analysis.DiagnosticTag
 import dev.ide.analytics.Events
@@ -18,6 +19,10 @@ import dev.ide.platform.EngineCanceledException
 import dev.ide.ui.backend.AnalysisPreempted
 import dev.ide.ui.backend.EditorService
 import dev.ide.ui.backend.UiAction
+import dev.ide.ui.backend.UiActionContext
+import dev.ide.ui.backend.UiActionPlaces
+import dev.ide.ui.backend.UiCaretAncestor
+import dev.ide.ui.backend.UiCaretContext
 import dev.ide.ui.backend.UiActionKind
 import dev.ide.ui.backend.UiCaret
 import dev.ide.ui.backend.UiCompletionItem
@@ -370,13 +375,49 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     override suspend fun actionsAt(
         path: String, text: String, selStart: Int, selEnd: Int
-    ): List<UiAction> = timedPass("actions", path, { it.size }) {
-        // Timed like a daemon pass because a CPU trace showed THIS (lightbulb / import quick-fixes → full
-        // diagnostics → deep inference) as a heavy entry point, yet it was invisible in the perf timeline.
-        withContext(ctx.engineDispatcher) {
-            ctx.services.editorActions(Paths.get(path), text, selStart, selEnd)
+    ): List<UiAction> {
+        val fixes = timedPass("actions", path, { it.size }) {
+            // Timed like a daemon pass because a CPU trace showed THIS (lightbulb / import quick-fixes → full
+            // diagnostics → deep inference) as a heavy entry point, yet it was invisible in the perf timeline.
+            withContext(ctx.engineDispatcher) {
+                ctx.services.editorActions(Paths.get(path), text, selStart, selEnd)
+            }
+        }.mapIndexed { i, fix -> UiAction(i, fix.title, mapActionKind(fix.kind)) }
+
+        // The plugin tier: actions placed on EDITOR, resolved against the same caret. Listed after the
+        // analysis fixes and intentions, so a popup opened on a squiggle leads with the fix for it.
+        // Their ids continue the same index space so a UI can key a row on `id` regardless of tier.
+        val plugin = withContext(ctx.engineDispatcher) {
+            val caret = ctx.services.caretSnapshot(Paths.get(path), text, selStart)
+            val actionCtx = toPluginActionContext(
+                UiActionContext(
+                    place = UiActionPlaces.EDITOR,
+                    activeFilePath = path,
+                    selectionStart = selStart,
+                    selectionEnd = selEnd,
+                    caret = caret?.toUiCaretContext(),
+                    documentText = text,
+                ),
+                ctx.services.workspaceRoot.toString(),
+            )
+            runCatching { ctx.services.actions.actionsFor(actionCtx) }.getOrDefault(emptyList())
+                .mapIndexed { i, action ->
+                    UiAction(
+                        id = fixes.size + i,
+                        title = action.text,
+                        kind = UiActionKind.INTENTION,
+                        actionId = action.id,
+                        iconId = action.iconId,
+                    )
+                }
         }
-    }.mapIndexed { i, fix -> UiAction(i, fix.title, mapActionKind(fix.kind)) }
+        return fixes + plugin
+    }
+
+    override suspend fun caretContext(path: String, text: String, offset: Int): UiCaretContext? =
+        withContext(ctx.engineDispatcher) {
+            ctx.services.caretSnapshot(Paths.get(path), text, offset)?.toUiCaretContext()
+        }
 
     override suspend fun applyAction(
         path: String, text: String, selStart: Int, selEnd: Int, actionId: Int
@@ -497,3 +538,15 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         CompletionItemKind.WORD -> UiCompletionKind.Word
     }
 }
+
+/** The engine's caret snapshot as the UI DTO. One mapping, used by both `actionsAt` and `caretContext`. */
+internal fun CaretSnapshot.toUiCaretContext(): UiCaretContext = UiCaretContext(
+    offset = offset,
+    languageId = languageId?.id,
+    nodeKind = nodeKind,
+    nodeStart = nodeRange.start,
+    nodeEnd = nodeRange.end,
+    nodeText = nodeText,
+    nodeTextTruncated = nodeTextTruncated,
+    ancestors = ancestors.map { UiCaretAncestor(it.kind, it.start, it.end) },
+)

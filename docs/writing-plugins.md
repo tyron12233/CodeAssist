@@ -783,9 +783,9 @@ reg.register(
 | [`IdeAction`](../plugin-api/src/main/kotlin/dev/ide/plugin/action/IdeAction.kt) | One invocable command: `id`, `text`, `iconId`, `places`, `order`, `isVisible`, `isEnabled`, `suspend perform` |
 | [`SimpleAction`](../plugin-api/src/main/kotlin/dev/ide/plugin/action/Builders.kt) | Lambda-backed `IdeAction`, when a dedicated class is overkill |
 | [`ActionGroup`](../plugin-api/src/main/kotlin/dev/ide/plugin/action/ActionGroup.kt) / `SimpleGroup` | Menu nesting; `children(ctx)` returns action and group ids, and the literal `"---"` inserts a divider |
-| [`ActionContext`](../plugin-api/src/main/kotlin/dev/ide/plugin/action/ActionContext.kt) | Read-only snapshot: `place`, `projectRoot`, `activeFilePath`, `selectionStart/End`, `contextPath` |
+| [`ActionContext`](../plugin-api/src/main/kotlin/dev/ide/plugin/action/ActionContext.kt) | Read-only snapshot: `place`, `projectRoot`, `activeFilePath`, `selectionStart/End`, `contextPath`, plus `caret` and `documentText` for the editor places |
 | [`ActionResult`](../plugin-api/src/main/kotlin/dev/ide/plugin/action/ActionResult.kt) | A status `message` plus declarative `effects` |
-| [`ActionEffect`](../plugin-api/src/main/kotlin/dev/ide/plugin/action/ActionEffect.kt) | `OpenFile`, `Navigate`, `RefreshTree`, `ReloadFile` |
+| [`ActionEffect`](../plugin-api/src/main/kotlin/dev/ide/plugin/action/ActionEffect.kt) | `OpenFile`, `Navigate`, `RefreshTree`, `ReloadFile`, `ApplyEdits`, `ApplyWorkspaceEdit`, `MoveCaret`, `Select`, `CreateFile`, `RenameFile`, `DeleteFile` |
 
 `ActionEffect` is why an engine action can ask the UI to navigate without depending on the UI: the action
 returns an instruction, and the UI applies the ones it can honour and ignores the rest.
@@ -805,12 +805,79 @@ mirror is `dev.ide.ui.backend.UiActionPlaces`.
 | `MORE_MENU` (`moreMenu`) | The editor "More" sheet | Same |
 | `FILE_CONTEXT` (`fileContext`) | File-tree row long-press / right-click | `contextPath` = the node |
 | `EDITOR_TAB` (`editorTab`) | An open tab's context menu | `activeFilePath` = the tab's file |
-| `COMMAND_PALETTE` (`commandPalette`) | The searchable palette | Global |
+| `COMMAND_PALETTE` (`commandPalette`) | The searchable palette | Global, plus the caret when an editor is focused |
+| `EDITOR` (`editor`) | The Alt-Enter popup, the editor overflow menu, and the palette | `caret`, `documentText`, selection |
 
 `ActionPlace` is a `@JvmInline value class` over a string, and an open set: a plugin can invent
 its own place for its own surface without changing the platform.
 
-### 9.3 How it reaches the UI
+### 9.3 Editor actions
+
+An action placed on `ActionPlaces.EDITOR` acts on code. It is listed in the Alt-Enter popup beside the
+analysis quick-fixes and intentions, in the editor's overflow menu (where an `ActionGroup` becomes a
+submenu), and in the command palette while an editor is focused.
+
+Two extra pieces of context arrive for these places:
+
+- [`CaretContext`](../plugin-api/src/main/kotlin/dev/ide/plugin/action/CaretContext.kt) on
+  `ActionContext.caret`: the caret `offset`, the file's `languageId`, and the innermost tree node's
+  `nodeKind` / `nodeStart` / `nodeEnd` / `nodeText`, plus `ancestors` (innermost first to the file root,
+  each a `CaretAncestor` carrying its own kind and span). `isInside(kind)` tests where the caret sits and
+  `enclosing(kind)` returns what to act on.
+- `ActionContext.documentText`: the live buffer, including unsaved changes. Compute edits against exactly
+  this string; the host applies them to the same buffer, so offsets cannot drift.
+
+Node kinds are the open string set the engine's DOM uses (`class_decl`, `method_decl`, `block`,
+`method_call`, `literal`, and language-specific ids such as Kotlin's `kt.lambda`). Gate an action with
+`isVisible` so it is listed only where it applies: a popup the user opened to fix one thing should not
+fill up with actions that do not.
+
+```kotlin
+reg.register(
+    UI_ACTION_EP,
+    SimpleAction(
+        id = "hello.wrapInRun",
+        text = "Wrap Call in run { }",
+        places = setOf(ActionPlaces.EDITOR),
+        visible = { it.caret?.nodeKind == "method_call" },
+    ) { ctx ->
+        val caret = ctx.caret ?: return@SimpleAction ActionResult.NONE
+        val call = ctx.documentText?.substring(caret.nodeStart, caret.nodeEnd)
+            ?: return@SimpleAction ActionResult.NONE
+        ActionResult.effect(
+            ActionEffect.ApplyEdits(
+                TextEdit.replace(caret.nodeStart, caret.nodeEnd, "run { $call }"),
+            ),
+        )
+    },
+)
+```
+
+Edits go through the editor's own text path, so a plugin's rewrite lands in the same undo step as typing
+and re-triggers analysis normally. `ApplyWorkspaceEdit` spans files (open buffers are edited in place,
+closed files are written through), and `CreateFile` never overwrites an existing file. Pair an edit with
+`Select` to leave a generated name ready to type over, which is how a refactor asks for a name without a
+dialog.
+
+#### When to use the analysis tier instead
+
+`CaretContext` is flat on purpose: listing runs on caret moves, and the snapshot has to cross the
+`IdeBackend` port. An action that needs to walk the syntax tree, resolve a symbol, or query the project
+index belongs on the analysis extension point instead:
+[`ActionProvider`](../analysis-api/src/main/kotlin/dev/ide/analysis/QuickFix.kt) on
+`platform.actionProvider`, whose `actions(ctx: EditorActionContext)` receives the live `DomNode`, its
+ancestor chain, the resolver, and the index, and returns `QuickFix`es producing a `WorkspaceEdit`. Both
+tiers are listed in the same popup and menu, so the choice is about what the action needs, not where it
+appears.
+
+| | `IdeAction` on `EDITOR` | `ActionProvider` |
+| --- | --- | --- |
+| Context | Flat `CaretContext` plus the buffer | Live DOM, resolver, index, module |
+| Scope | Any language, or gated on `caret.languageId` | Declared `languages` set |
+| Produces | `ActionEffect`s, including file and caret effects | `WorkspaceEdit` (text edits only) |
+| Good for | Line and text rewrites, sending code elsewhere, file moves | Type-aware refactors, generated members, import fixes |
+
+### 9.4 How it reaches the UI
 
 [`ActionManager`](../plugin-impl/src/main/kotlin/dev/ide/plugin/impl/ActionManager.kt) is the single consumer
 of `UI_ACTION_EP` / `ACTION_GROUP_EP`. It resolves a place into an ordered, visibility-filtered list

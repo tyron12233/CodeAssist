@@ -51,6 +51,8 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.SymbolHit
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.UiActionContext
+import dev.ide.ui.backend.UiCaretContext
+import dev.ide.ui.backend.UiActionItem
 import dev.ide.ui.backend.UiActionEffect
 import dev.ide.ui.backend.UiActionPlaces
 import dev.ide.ui.ext.UiPluginHost
@@ -106,6 +108,12 @@ fun CommandPalette(
     onOpenFile: (TreeNode) -> Unit,
     onOpenAt: (String, Int) -> Unit,
     onClose: () -> Unit,
+    /** The focused editor, when there is one: what an editor-aware command resolves against. Null leaves
+     *  the palette to the file-independent commands. */
+    editorTarget: PaletteEditorTarget? = null,
+    /** Applies a command's effects. Supplied by the host, which owns the editor and navigation; without it
+     *  the palette can only honor "open this file". */
+    onEffects: suspend (List<UiActionEffect>) -> Unit = { },
 ) {
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(PaletteFilter.All) }
@@ -119,16 +127,51 @@ fun CommandPalette(
     //  - engine commands (Run/Stop/Re-index + any dex plugin) via IdeBackend.actionsFor (data-driven), and
     //  - UI-navigation commands (Settings/Dependencies/SDK/Toggle theme + in-UI plugins) via UiActionRegistry.
     UiPluginHost.ensureLoaded()
-    val pluginCommands = remember { backend.actions.actionsFor(UiActionContext(place = UiActionPlaces.COMMAND_PALETTE)) }
+
+    // The caret snapshot for the focused editor, fetched once when the palette opens. Commands read it off
+    // the context to decide whether they apply (and what to act on), so an editor-aware command is listed
+    // only where it makes sense, and is never re-resolved as the user types a query.
+    var caret by remember(editorTarget?.path) { mutableStateOf<UiCaretContext?>(null) }
+    LaunchedEffect(editorTarget?.path, editorTarget?.selectionStart) {
+        val t = editorTarget ?: return@LaunchedEffect
+        caret = runCatching { backend.editor.caretContext(t.path, t.text, t.selectionStart) }.getOrNull()
+    }
+
+    fun contextFor(place: String) = UiActionContext(
+        place = place,
+        activeFilePath = editorTarget?.path,
+        selectionStart = editorTarget?.selectionStart,
+        selectionEnd = editorTarget?.selectionEnd,
+        caret = caret,
+        documentText = editorTarget?.text,
+    )
+
+    // Engine commands: those placed in the palette, plus the editor actions when an editor is focused,
+    // which makes them searchable by name instead of reachable only through the caret popup.
+    var pluginCommands by remember { mutableStateOf<List<UiActionItem>>(emptyList()) }
+    LaunchedEffect(editorTarget?.path, caret) {
+        val palette = runCatching { backend.actions.actionsFor(contextFor(UiActionPlaces.COMMAND_PALETTE)) }
+            .getOrDefault(emptyList())
+        val editor = if (editorTarget == null) emptyList() else
+            runCatching { backend.actions.actionsFor(contextFor(UiActionPlaces.EDITOR)) }
+                .getOrDefault(emptyList())
+        // A command placed in BOTH places must be listed once.
+        pluginCommands = (palette + editor).distinctBy { it.id }
+    }
     val uiCommands = UiActionRegistry.forPlace(UiActionPlaces.COMMAND_PALETTE, uiHost)
     fun runCommand(id: String) {
         scope.launch {
+            // An editor-placed command is invoked in its own place so it sees the caret it was listed for.
+            val place =
+                if (editorTarget != null && pluginCommands.any { it.id == id }) UiActionPlaces.EDITOR
+                else UiActionPlaces.COMMAND_PALETTE
             val result = runCatching {
-                backend.actions.invokeAction(id, UiActionContext(place = UiActionPlaces.COMMAND_PALETTE))
+                backend.actions.invokeAction(id, contextFor(place))
             }.getOrNull() ?: return@launch
+            onEffects(result.effects)
             for (effect in result.effects) when (effect) {
                 is UiActionEffect.OpenFile -> onOpenAt(effect.path, effect.offset ?: 0)
-                else -> {} // Navigate/RefreshTree/ReloadFile need a richer host; the palette ignores them.
+                else -> {} // everything else is the host's job, via onEffects.
             }
         }
     }
@@ -294,3 +337,15 @@ private fun PaletteRow(entry: PaletteEntry, onClose: () -> Unit) {
         }
     }
 }
+
+/**
+ * The editor the palette should resolve editor-aware commands against: the focused tab's path, its live
+ * text, and the selection. A snapshot taken when the palette opens; the palette is modal, so the buffer
+ * cannot move underneath it.
+ */
+class PaletteEditorTarget(
+    val path: String,
+    val text: String,
+    val selectionStart: Int,
+    val selectionEnd: Int,
+)

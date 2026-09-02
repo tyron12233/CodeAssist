@@ -128,8 +128,19 @@ interface EditorService {
     /** Foldable regions for the live buffer. May throw [AnalysisPreempted]. */
     suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> = emptyList()
 
-    /** Code actions (quick-fixes + intentions) at the selection `[selStart, selEnd)`. */
+    /** Code actions at the selection `[selStart, selEnd)`: analysis quick-fixes and intentions merged with
+     *  the plugin actions placed on [UiActionPlaces.EDITOR] (those carry a [UiAction.actionId]). */
     suspend fun actionsAt(path: String, text: String, selStart: Int, selEnd: Int): List<UiAction> = emptyList()
+
+    /**
+     * What the caret is on at [offset] in [path]'s live buffer: the flat snapshot an editor action is
+     * resolved against. Null when the file has no language backend or is not parseable.
+     *
+     * The UI needs this to build a [UiActionContext] for the editor places, since it has no parse tree of
+     * its own. Cheap (syntax-only), but it is a backend round-trip, so fetch it when a surface that needs
+     * it opens rather than on every caret move.
+     */
+    suspend fun caretContext(path: String, text: String, offset: Int): UiCaretContext? = null
 
     /** Compute the edits for the code action [actionId] from [actionsAt] over the same buffer + selection. */
     suspend fun applyAction(path: String, text: String, selStart: Int, selEnd: Int, actionId: Int): List<UiTextEdit> = emptyList()

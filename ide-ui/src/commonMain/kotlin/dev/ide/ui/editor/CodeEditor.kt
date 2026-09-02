@@ -48,6 +48,8 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.components.clipForClipboard
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiAction
+import dev.ide.ui.backend.UiMenuGroup
+import dev.ide.ui.backend.UiActionItem
 import dev.ide.ui.backend.UiNavKind
 import dev.ide.ui.backend.UiNavOption
 import dev.ide.ui.backend.UiNavTarget
@@ -109,6 +111,13 @@ fun CodeEditor(
     onFontScaleChange: (Float) -> Unit = {},
     /** Tapped a `@Preview` gutter icon — the host switches to the Preview surface rendering this variant. */
     onPreview: (variantId: String) -> Unit = {},
+    /**
+     * Invoke a plugin editor action (one contributed to the `EDITOR` place) by its registry id, for the
+     * selection it was listed at. The host routes it through the shared action dispatcher so its effects
+     * apply exactly as they would from the toolbar or palette. Left at the default no-op, plugin editor
+     * actions still list but do nothing, so the host must wire this for them to work.
+     */
+    onEditorAction: suspend (actionId: String, selStart: Int, selEnd: Int) -> Unit = { _, _, _ -> },
     /** Whether typing auto-opens the completion popup (Settings → Completion); Ctrl-Space always works. */
     completionAutoPopup: Boolean = true,
     /** Debounce (ms) before an auto-popup completion request (Settings → Completion → Advanced). */
@@ -170,6 +179,7 @@ fun CodeEditor(
             horizontalScrollbar,
             fontLigatures,
             obscured,
+            onEditorAction,
         )
     }
 }
@@ -199,6 +209,7 @@ private fun CodeEditorContent(
     horizontalScrollbar: Boolean = true,
     fontLigatures: Boolean = true,
     obscured: Boolean = false,
+    onEditorAction: suspend (actionId: String, selStart: Int, selEnd: Int) -> Unit = { _, _, _ -> },
 ) {
     val colors = Ca.colors
     val scope = rememberCoroutineScope()
@@ -255,7 +266,7 @@ private fun CodeEditorContent(
     // Active snippet/template expansion (tab-stop stepping), or null. Reset when the file changes.
     var snippet by remember(path) { mutableStateOf<SnippetSession?>(null) }
     val sig = rememberSignatureHelpController(path, backend)
-    val acts = rememberEditorActionsController(path, editorSession, backend) { completion.dismiss() }
+    val acts = rememberEditorActionsController(path, editorSession, backend, onEditorAction) { completion.dismiss() }
     // Animate the "expand selection" gesture: the logical selection snaps to the enclosing node immediately,
     // while the DRAWN highlight grows from the previous range to it over a short tween (1f = settled). Keyed on
     // the request token so each expansion (and each step of a chain) restarts the growth from the new base.
@@ -300,6 +311,10 @@ private fun CodeEditorContent(
         scope.launch {
             val options = runCatching { backend.editor.navigationOptions(path, text, caret) }.getOrDefault(emptyList())
             navMenu = NavMenuState.Menu(options)
+            // Resolve the code actions too. Nothing is resolved proactively off a diagnostic line, so
+            // without this the menu's Quick fixes / Intentions / Actions sections would be empty exactly
+            // where the user opened it to find them.
+            acts.resolveContextMenu()
         }
     }
 
@@ -1165,6 +1180,8 @@ private fun CodeEditorContent(
         NavMenuLayer(
             state = navMenu,
             actions = acts.available,
+            menu = acts.editorMenu,
+            onMenuAction = { item -> navMenu = null; acts.invokeMenuAction(item.id) },
             engaged = engaged,
             caretOffset = caretOffset,
             caretGeometry = { geometry.caretGeometry(it) },
@@ -1395,6 +1412,8 @@ private fun CodeActionsMenuLayer(
 private fun NavMenuLayer(
     state: NavMenuState?,
     actions: List<UiAction>,
+    menu: UiMenuGroup,
+    onMenuAction: (UiActionItem) -> Unit,
     engaged: Boolean,
     caretOffset: Int,
     caretGeometry: (Int) -> Triple<Int, Float, Float>,
@@ -1422,7 +1441,7 @@ private fun NavMenuLayer(
     Popup(popupPositionProvider = positionProvider, onDismissRequest = onDismiss) {
         BoxWithConstraints {
             val width = if (maxWidth < 600.dp) (maxWidth * 0.9f).coerceIn(240.dp, 360.dp) else 360.dp
-            NavMenu(state, actions, width, onOption, onAction, onPick)
+            NavMenu(state, actions, width, onOption, onAction, onPick, menu, onMenuAction)
         }
     }
 }

@@ -1468,8 +1468,22 @@ data class UiRenameResult(
 /** Whether an action fixes a problem ([QUICK_FIX]), is a context action with no diagnostic ([INTENTION]), or refactors ([REFACTOR]). Drives the menu icon. */
 enum class UiActionKind { QUICK_FIX, INTENTION, REFACTOR }
 
-/** One entry in the editor's code-action menu. [id] is the stable index used to round-trip via [IdeBackend.applyAction]. */
-data class UiAction(val id: Int, val title: String, val kind: UiActionKind)
+/**
+ * One entry in the editor's code-action menu, from either editor-action tier.
+ *
+ * An analysis-side fix or intention has [actionId] null and round-trips by its [id] index through
+ * [IdeBackend.applyAction]. A plugin-side action (one placed on [UiActionPlaces.EDITOR]) carries its
+ * registry id in [actionId] and is invoked through [IdeBackend.invokeAction] instead, which is what lets it
+ * return the full effect set rather than only text edits. [id] stays unique across both so a UI can key a
+ * list row on it either way.
+ */
+data class UiAction(
+    val id: Int,
+    val title: String,
+    val kind: UiActionKind,
+    val actionId: String? = null,
+    val iconId: String? = null,
+)
 
 // ---- UI action DTOs (toolbar / menu / palette; distinct from the editor's code-action [UiAction]) ----
 
@@ -1481,6 +1495,10 @@ object UiActionPlaces {
     const val FILE_CONTEXT = "fileContext"
     const val EDITOR_TAB = "editorTab"
     const val COMMAND_PALETTE = "commandPalette"
+
+    /** The editor content at the caret: the Alt-Enter popup, the editor overflow menu, and the palette
+     *  while an editor is focused. [UiActionContext.caret] carries what the caret is on. */
+    const val EDITOR = "editor"
 }
 
 /**
@@ -1493,7 +1511,33 @@ data class UiActionContext(
     val selectionStart: Int? = null,
     val selectionEnd: Int? = null,
     val contextPath: String? = null,
+    val caret: UiCaretContext? = null,
+    /** The focused editor's live text, for an action that rewrites it. Null off the editor places. */
+    val documentText: String? = null,
 )
+
+/**
+ * What the caret is sitting on, as flat data: the DTO form of the engine's caret snapshot, carried on
+ * [UiActionContext] for the editor places.
+ *
+ * The UI does not build this itself (it has no parse tree); it asks the backend for one via
+ * [EditorService.caretContext] and passes it straight back when resolving or invoking an editor action.
+ * [nodeKind] is an open string id from the engine's DOM (`"method_call"`, `"class_decl"`, …);
+ * [ancestors] runs innermost-first to the file root, each with its own kind and span.
+ */
+data class UiCaretContext(
+    val offset: Int,
+    val languageId: String? = null,
+    val nodeKind: String = "",
+    val nodeStart: Int = offset,
+    val nodeEnd: Int = offset,
+    val nodeText: String = "",
+    val nodeTextTruncated: Boolean = false,
+    val ancestors: List<UiCaretAncestor> = emptyList(),
+)
+
+/** One ancestor of the caret's node: its kind id and its span `[start, end)`. */
+data class UiCaretAncestor(val kind: String, val start: Int, val end: Int)
 
 /** A resolved action ready to render. [id] round-trips through [IdeBackend.invokeAction]; [iconId] resolves
  *  via the UI icon registry; [enabled] is pre-evaluated for the context it was resolved in. */
@@ -1533,6 +1577,21 @@ sealed interface UiActionEffect {
     data object RefreshTree : UiActionEffect
     /** Re-read [path] from disk into any open editor showing it. */
     data class ReloadFile(val path: String) : UiActionEffect
+
+    /** Apply [edits] to the active editor's buffer, through the normal text path (so: one undo step). */
+    data class ApplyEdits(val edits: List<UiTextEdit>) : UiActionEffect
+    /** Apply edits across several files, keyed by absolute path. Open buffers are edited in place. */
+    data class ApplyWorkspaceEdit(val edits: Map<String, List<UiTextEdit>>) : UiActionEffect
+    /** Put the caret at [offset] in the active editor. */
+    data class MoveCaret(val offset: Int) : UiActionEffect
+    /** Select `[start, end)` in the active editor, e.g. to leave a generated name ready to type over. */
+    data class Select(val start: Int, val end: Int) : UiActionEffect
+    /** Create [path] with [text]; [open] opens it afterwards. Never overwrites an existing file. */
+    data class CreateFile(val path: String, val text: String = "", val open: Boolean = false) : UiActionEffect
+    /** Move/rename [from] to [to], following it in any tab that has it open. */
+    data class RenameFile(val from: String, val to: String) : UiActionEffect
+    /** Delete [path], closing any tab showing it. */
+    data class DeleteFile(val path: String) : UiActionEffect
 }
 
 /**

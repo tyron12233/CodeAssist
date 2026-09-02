@@ -114,7 +114,8 @@ cost the user that plugin and not the launch.
 `ide-core/BuiltInPlugins.kt` holds the IDE's own built-ins as a set of `Plugin`s (`platform`, `jdt-language`,
 `java-psi-language`, `kotlin-language`, `xml-language`, `java-support`, `kotlin-support`, `blocks`,
 `android-support`, `samples`, `completion-builtins`, `indexing`, `jdt-analysis`, `kotlin-analysis`,
-`xml-analysis`, `android-xml`, `ide-core-services`, `ide-core-actions`, …), each mapping to the `PluginId` it
+`xml-analysis`, `android-xml`, `ide-core-services`, `ide-core-actions`, `editor-text-actions`, …), each
+mapping to the `PluginId` it
 contributed under before. Most are non-essential and can be disabled; the essentials (`platform`,
 `jdt-language`, `java-psi-language`, `ide-core-services`) cannot. For example `blocks` contributes the Java
 block decomposition on the `blockMapping` EP — disabling it drops the only mapping, so the engine's
@@ -134,6 +135,38 @@ The extension points the built-ins contribute to (all `platform.*`) include: lan
 Kotlin compiler plugins (`kotlinCompilerPlugin`), build systems (`buildSystem`), run-task providers
 (`runTaskProvider`), settings pages (`settingsPage`), UI actions (`uiAction` / `actionGroup`), and scoped
 services (`service`).
+
+### Editor actions
+
+Editor actions come from two extension points that resolve into one list, because the two halves need
+different things and only one of them can cross the `IdeBackend` port.
+
+`platform.uiAction` carries the portable half. An `IdeAction` placed on `ActionPlaces.EDITOR` receives a
+flat `CaretContext` on `ActionContext.caret` (the caret offset, the file's language, the innermost node's
+kind and span and text, and the ancestor chain with each ancestor's kind and span) plus the live buffer as
+`ActionContext.documentText`. It returns `ActionEffect`s, which now include `ApplyEdits`,
+`ApplyWorkspaceEdit`, `MoveCaret`, `Select`, `CreateFile`, `RenameFile` and `DeleteFile`, so a portable
+action can rewrite code, place the caret, and move a declaration into a new file. Edits are applied through
+the editor's text path, joining the same undo step as typing.
+
+`platform.actionProvider` carries the type-aware half. `ActionProvider.actions(ctx: EditorActionContext)`
+receives the live `DomNode` at the caret, its ancestor chain, and the `AnalysisTarget`'s resolver, index and
+module, and returns `QuickFix`es producing a `WorkspaceEdit`. The engine resolves the caret's position once
+per listing pass (`EditorActionContext.of`) and shares it across every provider, rather than each one
+repeating the same walk. `CaretSnapshot` is the single place either tier's caret view is derived from, and
+`AnalysisService.caretSnapshotAt` is how the portable tier obtains one.
+
+`AnalysisService.editorActionsAt` merges the diagnostic quick-fixes with the provider intentions;
+`EditorBackend.actionsAt` then appends the `EDITOR`-placed plugin actions, which carry a `UiAction.actionId`
+and so round-trip through `invokeAction` (getting the full effect set) rather than by list index. Three
+surfaces render the merged result: the Alt-Enter popup, the editor's overflow context menu (where
+`ActionGroup`s become inline-expanding submenus), and the command palette when an editor is focused.
+
+The built-ins split along the same line. `editor-text-actions` contributes the language-neutral line
+actions (comment and uncomment, move a line, sort a selection) and move-to-a-new-file on the portable tier;
+`jdt-analysis` contributes the Java member generators (constructor, `equals`/`hashCode`, `toString`,
+accessors) and `kotlin-analysis` the Kotlin intentions (surround with, introduce variable, implement
+members, expression or block body, braces, explicit type, extract function) on the analysis tier.
 
 ### File-to-language routing
 
