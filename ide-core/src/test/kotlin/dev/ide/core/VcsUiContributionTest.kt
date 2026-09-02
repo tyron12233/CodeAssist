@@ -6,6 +6,7 @@ import dev.ide.ui.ext.EditorViewModeContribution
 import dev.ide.ui.ext.OverlayContribution
 import dev.ide.ui.ext.Registration
 import dev.ide.ui.ext.ScreenContribution
+import dev.ide.ui.ext.TabDecorationContribution
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.ext.ToolWindowContribution
 import dev.ide.ui.ext.UiContributionScope
@@ -49,6 +50,19 @@ class VcsUiContributionTest {
             VcsService.SCREEN_GITHUB,
         )
         assertEquals(expected, registered)
+    }
+
+    /** The tab dots version control claims: a conflict above the built-in error dot (which a conflicted
+     *  file's marker lines would otherwise win), and the working-copy state below all of them. */
+    @Test
+    fun `the tab strip's version-control dots are ordered around the built-in ones`() {
+        val scope = RecordingScope()
+        VcsUiPlugin.contributeUi(scope)
+
+        val byId = scope.tabDecorations.associateBy { it.id }
+        assertEquals(setOf("vcs.tab.conflict", "vcs.tab.changed"), byId.keys)
+        assertTrue(byId.getValue("vcs.tab.conflict").order < 100, "a conflict outranks the built-in error dot")
+        assertTrue(byId.getValue("vcs.tab.changed").order > 120, "differing from HEAD ranks below every built-in")
     }
 
     @Test
@@ -95,6 +109,13 @@ class VcsUiContributionTest {
 
         override fun overlay(overlay: OverlayContribution): Registration {
             overlays += overlay
+            return Registration {}
+        }
+
+        val tabDecorations = mutableListOf<TabDecorationContribution>()
+
+        override fun tabDecoration(decoration: TabDecorationContribution): Registration {
+            tabDecorations += decoration
             return Registration {}
         }
 

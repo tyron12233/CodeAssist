@@ -125,6 +125,16 @@ class OpenFile(
     val session = EditorSession(initial, languageFor(name), editable = !readOnly)
     var modified by mutableStateOf(false)
         private set
+
+    /**
+     * The backing file changed on disk while this tab held unsaved edits, so
+     * [IdeUiState.syncOpenTabsFromDisk] left the buffer alone rather than clobber them: the tab and the file
+     * have diverged. Set by that sync (the only writer) and cleared by a save, which resolves the divergence
+     * by overwriting the file.
+     */
+    var staleOnDisk by mutableStateOf(false)
+        internal set
+
     /** Which surface this tab shows — text, blocks, or resource preview (text/blocks edit the one [session]).
      *  Image resources open straight into Preview (their bytes aren't editable text). */
     var viewMode by mutableStateOf(
@@ -156,8 +166,9 @@ class OpenFile(
         modified = session.doc.length != savedText.length || text != savedText
     }
 
-    /** Rebase the saved baseline after a successful save. */
-    fun onSaved(text: String) { savedText = text; modified = false }
+    /** Rebase the saved baseline after a successful save. The save just wrote this buffer over whatever was
+     *  on disk, so any divergence from it is resolved. */
+    fun onSaved(text: String) { savedText = text; modified = false; staleOnDisk = false }
 
     companion object {
         // Monotonic tab-id source. Bumped only from OpenFile construction, which always happens on the UI
@@ -879,6 +890,10 @@ class IdeUiState(
      * Re-read any clean open tab whose backing file changed on disk since it was loaded (e.g. the agent, or
      * any external tool, wrote it). Runs on every file-system-epoch bump. Modified tabs are left untouched so
      * an external write never clobbers in-progress user edits; unchanged tabs keep their session/undo/caret.
+     *
+     * A modified tab whose file changed anyway is marked [OpenFile.staleOnDisk] instead, which is what the
+     * tab strip's "changed on disk" dot reports: the tab cannot be reloaded without losing the user's edits,
+     * so the divergence is theirs to resolve (save over it, or close the tab and reopen the file).
      */
     fun syncOpenTabsFromDisk() {
         scope.launch {
@@ -887,7 +902,14 @@ class IdeUiState(
             // write each result back at that exact tab's CURRENT index, skipping it if the tab is gone or has
             // since been edited (so an external write never clobbers in-progress user edits).
             for (f in openFiles.toList()) {
-                if (f.readOnly || f.modified) continue
+                if (f.readOnly) continue
+                if (f.modified) {
+                    // Reading it costs one file read per edited tab per epoch bump, which buys the only
+                    // signal the user has that their buffer and the file underneath it have parted ways.
+                    val disk = readTabText(f.path)
+                    f.staleOnDisk = disk != null && disk != f.savedText
+                    continue
+                }
                 val text = readTabText(f.path) ?: continue
                 if (text == f.savedText) continue // untouched → preserve session/undo/caret
                 val i = openFiles.indexOf(f)

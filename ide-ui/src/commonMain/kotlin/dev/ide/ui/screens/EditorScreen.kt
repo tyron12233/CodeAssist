@@ -36,6 +36,7 @@ import dev.ide.ui.components.NewSourceRequest
 import dev.ide.ui.components.NewXmlFileDialog
 import dev.ide.ui.components.NewXmlTarget
 import dev.ide.ui.components.xmlTargetOf
+import dev.ide.ui.editor.engine.OpenTabDiagnosticsEffect
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.edscreen_project_root
 import dev.ide.ui.platform.PlatformBackHandler
@@ -81,6 +82,9 @@ fun EditorScreen(
     LaunchedEffect(buildState.status) {
         if (buildState.status == RunStatus.Succeeded || buildState.status == RunStatus.Failed) state.refreshTree()
     }
+    // Diagnostics for the tabs that are open but not focused (the daemon in EditorCenter covers the focused
+    // one), so every tab's status dot reports its own file rather than only the file on screen.
+    OpenTabDiagnosticsEffect(state, indexStatus.building, buildState.status)
     var newEntry by remember { mutableStateOf<NewEntryRequest?>(null) }
     var newXmlTarget by remember { mutableStateOf<NewXmlTarget?>(null) }
     var newSource by remember { mutableStateOf<NewSourceRequest?>(null) }

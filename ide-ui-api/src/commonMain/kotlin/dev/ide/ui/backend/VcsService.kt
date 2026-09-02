@@ -237,6 +237,10 @@ data class UiVcsChange(
 data class UiVcsStatus(
     /** False when the open project is not inside a working copy (the panel then offers to create one). */
     val present: Boolean = false,
+    /** Absolute path of the working-copy root. Every [UiVcsChange.path] is relative to it, and the root can
+     *  sit above the project root (a project checked out inside a larger repository), so a UI that has to
+     *  map a change onto a file path needs this rather than the project's own root. */
+    val root: String = "",
     val branch: String = "",
     val detached: Boolean = false,
     /** True for a repository with no commits yet. */

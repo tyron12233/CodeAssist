@@ -137,7 +137,7 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
         _status.value = withContext(Dispatchers.IO) {
             lock.withLock {
                 val repo = repositoryOrNull() ?: return@withLock UiVcsStatus(present = false)
-                runCatching { repo.status().toUi() }.getOrElse { e ->
+                runCatching { repo.status().toUi(repo.root.toString()) }.getOrElse { e ->
                     log.warn("Could not read the repository status", e)
                     UiVcsStatus(present = true, error = e.userMessage())
                 }
@@ -636,8 +636,9 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
 
     // ---- mapping -------------------------------------------------------------------------------
 
-    private fun VcsStatus.toUi(): UiVcsStatus = UiVcsStatus(
+    private fun VcsStatus.toUi(root: String): UiVcsStatus = UiVcsStatus(
         present = true,
+        root = root,
         branch = branch.orEmpty(),
         detached = detached,
         unborn = unborn,

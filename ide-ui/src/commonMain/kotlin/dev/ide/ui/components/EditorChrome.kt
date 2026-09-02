@@ -81,9 +81,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.OpenFile
 import dev.ide.ui.backend.DepsResolveState
+import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.UiActionItem
+import dev.ide.ui.backend.UiSeverity
+import dev.ide.ui.ext.TabDecoration
+import dev.ide.ui.ext.TabDecorationContext
+import dev.ide.ui.ext.TabDecorationRegistry
+import dev.ide.ui.ext.TabDotStyle
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.close
 import dev.ide.ui.generated.resources.edchrome_build_console
@@ -982,7 +988,8 @@ fun IndexStatusChip(
 }
 
 /**
- * Tabs strip (solid editor-bg): active tab gets an accent tint + border, a modified dot, a close icon. Each
+ * Tabs strip (solid editor-bg): active tab gets an accent tint + border, a status dot (unsaved changes, or
+ * whatever a [TabDecorationRegistry] contribution reports, such as the built-in error dot), a close icon. Each
  * tab opens a close-operations context menu on right-click (desktop) / long-press (touch). Rendered in a
  * [LazyRow] so a session with many open files only composes the tabs that are actually on screen.
  *
@@ -1000,6 +1007,9 @@ fun TabsStrip(
     onCloseToRight: (OpenFile) -> Unit = {},
     onCloseToLeft: (OpenFile) -> Unit = {},
     onCloseAll: () -> Unit = {},
+    /** Handed to the tab-decoration producers, which read their state through it. Null draws the tabs with
+     *  no decorations (the `@Preview` below, which has no engine to hand them). */
+    backend: IdeBackend? = null,
 ) {
     if (openFiles.isEmpty()) return
 
@@ -1032,6 +1042,7 @@ fun TabsStrip(
                     modifier = Modifier.animateItem(),
                     file = file,
                     active = index == activeIndex,
+                    backend = backend,
                     canCloseOthers = openFiles.size > 1,
                     canCloseRight = index < openFiles.lastIndex,
                     canCloseLeft = index > 0,
@@ -1047,7 +1058,7 @@ fun TabsStrip(
         if (overflowing) {
             // A hairline separates the pinned chevron from the scrolling tabs.
             Box(Modifier.fillMaxHeight(0.55f).width(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-            TabsOverflowMenu(openFiles, activeIndex) { index ->
+            TabsOverflowMenu(openFiles, activeIndex, backend) { index ->
                 onSelect(index)
                 scope.launch { runCatching { listState.animateScrollToItem(index) } }
             }
@@ -1059,10 +1070,15 @@ fun TabsStrip(
 
 /**
  * The trailing overflow affordance: a down-chevron that drops a menu of every open file (file-type icon +
- * name, the active one accented, a dot for unsaved changes). [onSelect] jumps to the picked file by index.
+ * name, the active one accented, its status dot). [onSelect] jumps to the picked file by index.
  */
 @Composable
-private fun TabsOverflowMenu(openFiles: List<OpenFile>, activeIndex: Int, onSelect: (Int) -> Unit) {
+private fun TabsOverflowMenu(
+    openFiles: List<OpenFile>,
+    activeIndex: Int,
+    backend: IdeBackend?,
+    onSelect: (Int) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
     Box(Modifier.padding(horizontal = 4.dp)) {
         IconButtonCa(
@@ -1075,7 +1091,7 @@ private fun TabsOverflowMenu(openFiles: List<OpenFile>, activeIndex: Int, onSele
         )
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             openFiles.forEachIndexed { index, file ->
-                OpenFileMenuItem(file, active = index == activeIndex) {
+                OpenFileMenuItem(file, active = index == activeIndex, backend = backend) {
                     open = false
                     onSelect(index)
                 }
@@ -1085,9 +1101,10 @@ private fun TabsOverflowMenu(openFiles: List<OpenFile>, activeIndex: Int, onSele
 }
 
 /** One row of the open-files overflow menu: leading file-type glyph, name (accented + bold when active), and
- *  a trailing unsaved-changes dot — mirroring how the tab itself reads. */
+ *  a trailing status dot, mirroring how the tab itself reads. */
 @Composable
-private fun OpenFileMenuItem(file: OpenFile, active: Boolean, onClick: () -> Unit) {
+private fun OpenFileMenuItem(file: OpenFile, active: Boolean, backend: IdeBackend?, onClick: () -> Unit) {
+    val decoration = tabDecoration(file, active, backend)
     DropdownMenuItem(
         text = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1099,9 +1116,13 @@ private fun OpenFileMenuItem(file: OpenFile, active: Boolean, onClick: () -> Uni
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (file.modified) {
+                if (file.modified || decoration != null) {
                     Spacer(Modifier.width(10.dp))
-                    Box(Modifier.size(7.dp).background(Ide.colors.gitModified, RoundedCornerShape(Ca.radius.pill)))
+                    StatusDot(
+                        dotColor(decoration),
+                        decoration?.style ?: TabDotStyle.Filled,
+                        decoration?.description,
+                    )
                 }
             }
         },
@@ -1116,6 +1137,7 @@ private fun OpenFileMenuItem(file: OpenFile, active: Boolean, onClick: () -> Uni
 private fun EditorTab(
     file: OpenFile,
     active: Boolean,
+    backend: IdeBackend?,
     canCloseOthers: Boolean,
     canCloseRight: Boolean,
     canCloseLeft: Boolean,
@@ -1151,18 +1173,7 @@ private fun EditorTab(
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
             )
-            // The unsaved-changes dot fades + scales while its slot (the dot *and* its leading gap, so the
-            // tab smoothly grows/shrinks) expands/collapses — instead of the tab jumping to a new width.
-            AnimatedVisibility(
-                visible = file.modified,
-                enter = fadeIn() + expandHorizontally() + scaleIn(initialScale = 0.4f),
-                exit = fadeOut() + shrinkHorizontally() + scaleOut(targetScale = 0.4f),
-            ) {
-                Box(
-                    Modifier.padding(start = 8.dp).size(7.dp)
-                        .background(Ide.colors.gitModified, RoundedCornerShape(Ca.radius.pill))
-                )
-            }
+            TabStatusDot(file, active, backend)
             Box(
                 Modifier.padding(start = 8.dp).size(16.dp).clickable { onClose() },
                 contentAlignment = Alignment.Center,
@@ -1200,6 +1211,89 @@ private fun TabFileIcon(name: String) {
         is TreeIcon.Folder -> Icon(ic.closed, null, Modifier.size(15.dp), tint = resolveTint(ic.tint))
         is TreeIcon.Badge -> LetterBadge(ic.text, ic.color, 15)
     }
+}
+
+/**
+ * A tab's status dot: the color and shape a contributed [TabDecoration] asks for (the built-in ones turn it
+ * red while analysis left errors behind, cyan while the file changed on disk), amber while the file has
+ * unsaved edits, absent otherwise.
+ *
+ * One dot covers every state rather than one dot each: a second colored dot in a 40dp tab reads as noise, so
+ * a decoration takes the slot while it applies. The dot fades + scales while its slot (the dot *and* its
+ * leading gap, so the tab smoothly grows/shrinks) expands/collapses, instead of the tab jumping to a new
+ * width.
+ */
+@Composable
+private fun TabStatusDot(file: OpenFile, active: Boolean, backend: IdeBackend?) {
+    val decoration = tabDecoration(file, active, backend)
+    val visible = file.modified || decoration != null
+    val target = dotColor(decoration)
+    val style = decoration?.style ?: TabDotStyle.Filled
+    // Latched rather than read straight through: by the time the dot animates out its decoration is already
+    // gone, and a red dot must not flick to the unsaved amber on its way off the tab.
+    var drawn by remember { mutableStateOf(target to style) }
+    LaunchedEffect(target, style, visible) { if (visible) drawn = target to style }
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn() + expandHorizontally() + scaleIn(initialScale = 0.4f),
+        exit = fadeOut() + shrinkHorizontally() + scaleOut(targetScale = 0.4f),
+    ) {
+        StatusDot(drawn.first, drawn.second, decoration?.description, Modifier.padding(start = 8.dp))
+    }
+}
+
+/** The dot itself, filled for a state to act on and a ring for a standing one ([TabDotStyle]). [description]
+ *  labels it for accessibility (a decoration supplies one; the unsaved dot is already conveyed by the save
+ *  affordance in the top bar). */
+@Composable
+private fun StatusDot(
+    color: Color,
+    style: TabDotStyle,
+    description: String?,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(Ca.radius.pill)
+    Box(
+        modifier
+            .size(7.dp)
+            .then(
+                if (style == TabDotStyle.Outlined) Modifier.border(1.5.dp, color, shape)
+                else Modifier.background(color, shape)
+            )
+            .then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier)
+    )
+}
+
+/** A decoration's themed tint, or the unsaved-changes amber when no decoration applies. */
+@Composable
+private fun dotColor(decoration: TabDecoration?): Color =
+    if (decoration != null) resolveTint(decoration.tint) else Ide.colors.gitModified
+
+/** The decoration for one tab, or null when the strip was given no backend to hand the producers. */
+@Composable
+private fun tabDecoration(file: OpenFile, active: Boolean, backend: IdeBackend?): TabDecoration? {
+    if (backend == null) return null
+    val ctx = remember(file, active, backend) { OpenTabDecorationContext(file, active, backend) }
+    return TabDecorationRegistry.decorationFor(ctx)
+}
+
+/**
+ * One open tab as its decoration producers see it. Every member reads through to the live [OpenFile], so the
+ * counts follow the tab's session as analysis refreshes it (and shifts it in place between passes): the strip
+ * re-decorates as diagnostics land, without observing the analysis daemon itself.
+ */
+internal class OpenTabDecorationContext(
+    private val file: OpenFile,
+    override val active: Boolean,
+    override val backend: IdeBackend,
+) : TabDecorationContext {
+    override val path get() = file.path
+    override val name get() = file.name
+    override val modified get() = file.modified
+    override val staleOnDisk get() = file.staleOnDisk
+    override val diagnostics get() = file.session.diagnostics
+    override val errorCount get() = diagnostics.count { it.severity == UiSeverity.Error }
+    override val warningCount get() = diagnostics.count { it.severity == UiSeverity.Warning }
 }
 
 /** The editor's empty state — shown in place of the code canvas when no tab is open: a muted glyph, a short

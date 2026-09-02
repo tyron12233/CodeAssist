@@ -922,6 +922,7 @@ interface UiContributionScope {
     fun screen(screen: ScreenContribution): Registration
     fun viewMode(mode: EditorViewModeContribution): Registration
     fun overlay(overlay: OverlayContribution): Registration
+    fun tabDecoration(decoration: TabDecorationContribution): Registration
     fun treeIcon(iconId: String, icon: TreeIcon): Registration
     fun editorLanguage(profile: EditorLanguageProfile): Registration
 }
@@ -1074,7 +1075,55 @@ Available today, grouped: `run`/`play`, `stop`, `refresh`/`reindex`, `build`/`ha
 File-tree icons are separate: `scope.treeIcon(iconId, icon)` registers into `TreeIcons`. Note that tree icons
 are a persistent lookup, so the returned `Registration` is a no-op: nothing unregisters an icon.
 
-### 10.9 Setting up a UI module
+### 10.9 Tab decorations
+
+[`TabDecorations.kt`](../ide-ui-api/src/commonMain/kotlin/dev/ide/ui/ext/TabDecorations.kt)
+
+An open editor tab carries one status dot: amber while the file has unsaved edits, and otherwise whatever a
+decoration reports. A decoration answers "does this tab need attention" without the user opening it.
+
+```kotlin
+scope.tabDecoration(
+    TabDecorationContribution("hello.tab.todos", order = 200) { tab ->
+        if (tab.path in TodoStore.flagged) TabDecoration(IconTint.Warning, "has TODOs") else null
+    },
+)
+```
+
+The dot is host-drawn, so a decoration is data rather than a `@Composable` body: a themed `IconTint` (use
+`IconTint.Fixed(color)` only when the color itself carries meaning), a `TabDotStyle`, and a label for
+accessibility. The producer, though, *is* composable, so it reads state and the strip re-decorates when those
+reads change:
+
+| Member | Purpose |
+| --- | --- |
+| `path`, `name` | The tab's workspace path (`library://…` for a library tab) and displayed name |
+| `active`, `modified` | Whether the tab is focused, and whether it has unsaved edits |
+| `staleOnDisk` | The file changed on disk while the tab held unsaved edits, so the host did not reload it |
+| `diagnostics`, `errorCount`, `warningCount` | The diagnostics anchored to the tab's buffer |
+| `backend` | The engine, for a producer whose state lives behind it (a build, version control, your own service) |
+
+Three constraints come with the slot:
+
+- **One tab, one dot.** Producers are asked in `order`, low first, and the first non-null claims the tab.
+  The built-ins occupy 50 (changed on disk), 100 (analysis errors and warnings) and 120 (build errors), so a
+  lower order outranks them and a higher one fills in where they decline. The Git plugin's conflict dot goes
+  above all of them at 40; its working-copy dot below at 200.
+- **Two shapes, so the colors go further.** `TabDotStyle.Filled` is something to act on now (errors, a file
+  that changed underneath you); `Outlined` is a standing property of the file (warnings, differing from
+  HEAD). A filled amber dot already means unsaved edits, so do not spend it on anything else.
+- **Decide, do not work.** `decorate` runs once per open tab on every recomposition of the strip. Subscribe
+  where the state is produced (`IdeEventTopics.ANALYSIS` carries a file's merged diagnostics to the engine
+  facet), keep the answer in an observable store, and read that store here.
+
+`diagnostics` is the tab's last analysis result. Every open tab is analyzed, not just the focused one
+([`OpenTabDiagnostics.kt`](../ide-ui/src/commonMain/kotlin/dev/ide/ui/editor/engine/OpenTabDiagnostics.kt)
+sweeps the rest when a tab opens and again whenever indexing or a build settles), but a background tab is not
+re-analyzed while it sits there, so its diagnostics are as old as the last of those events. A decoration that
+needs more than that reads a source with it, the way the built-in build dot reads
+`backend.build.buildState`.
+
+### 10.10 Setting up a UI module
 
 A UI plugin module is Compose Multiplatform with a desktop (JVM) and an Android target. Depend on `:ide-ui`,
 which re-exposes `:ide-ui-api` via `api`, so the `UiPlugin` SPI and the shell's design system both come

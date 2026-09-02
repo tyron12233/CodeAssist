@@ -236,6 +236,7 @@ internal fun EditorCenter(
                 onCloseToRight = { state.closeToRight(it) },
                 onCloseToLeft = { state.closeToLeft(it) },
                 onCloseAll = { state.closeAll() },
+                backend = state.backend,
             )
             if (active != null) {
                 EditorDaemonEffect(state, active, indexStatus) { hasPreview = it }

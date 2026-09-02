@@ -23,6 +23,10 @@ interface UiContributionScope {
     fun viewMode(mode: EditorViewModeContribution): Registration
     fun overlay(overlay: OverlayContribution): Registration
 
+    /** Claim an open editor tab's status dot for a state of this plugin's own ([TabDecorationContribution]).
+     *  The dot is host-drawn, so this contribution supplies data, not a `@Composable` body. */
+    fun tabDecoration(decoration: TabDecorationContribution): Registration
+
     /** Register (or override) the file-tree icon for [iconId]. Tree icons are a persistent lookup, so the
      *  returned handle is a no-op today (nothing unregisters an icon). */
     fun treeIcon(iconId: String, icon: TreeIcon): Registration
@@ -80,6 +84,8 @@ object UiPluginHost {
         override fun screen(screen: ScreenContribution): Registration = ScreenRegistry.register(screen)
         override fun viewMode(mode: EditorViewModeContribution): Registration = ViewModeRegistry.register(mode)
         override fun overlay(overlay: OverlayContribution): Registration = OverlayRegistry.register(overlay)
+        override fun tabDecoration(decoration: TabDecorationContribution): Registration =
+            TabDecorationRegistry.register(decoration)
         override fun treeIcon(iconId: String, icon: TreeIcon): Registration {
             TreeIcons.register(iconId, icon)
             return Registration {}
