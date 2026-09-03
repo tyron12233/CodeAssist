@@ -1,7 +1,7 @@
 package dev.ide.core
 
 import dev.ide.testkit.withTempDir
-import dev.ide.core.services.RunCapture
+import dev.ide.build.RunCapture
 import dev.ide.model.LanguageLevel
 import dev.ide.model.template.TemplateArgs
 import kotlinx.coroutines.runBlocking

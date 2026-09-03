@@ -3,6 +3,7 @@ package dev.ide.plugin.impl
 import dev.ide.platform.ExtensionRegistry
 import dev.ide.platform.MessageBus
 import dev.ide.platform.PluginId
+import dev.ide.platform.ServiceLookup
 import dev.ide.platform.impl.CompositeDisposable
 import dev.ide.platform.impl.MessageBusImpl
 import dev.ide.plugin.Plugin
@@ -26,6 +27,11 @@ class PluginManager(
     /** The running IDE's version, exposed to each plugin as [PluginRegistration.hostVersion]. Null in a
      *  standalone test and on a host that has no version to report. */
     private val hostVersion: String? = null,
+    /** The APPLICATION-scoped service container, handed to each plugin as
+     *  [PluginRegistration.appServices] so it can resolve what the host and the plugins ahead of it in load
+     *  order registered. Defaults to nothing registered (a standalone test); the host passes its
+     *  `ApplicationContainer`. */
+    private val appServices: ServiceLookup = ServiceLookup.Empty,
 ) {
 
     private class Loaded(val plugin: Plugin, val teardown: CompositeDisposable)
@@ -87,7 +93,7 @@ class PluginManager(
         // registry that only unload() can sweep, and unload() needs the entry to find them.
         loaded[id] = Loaded(plugin, teardown)
         try {
-            plugin.register(PluginRegistrationImpl(id, registry, teardown, bus, hostVersion))
+            plugin.register(PluginRegistrationImpl(id, registry, teardown, bus, hostVersion, appServices))
         } catch (t: Throwable) {
             unload(id)
             throw t

@@ -13,6 +13,7 @@ import dev.ide.platform.ServiceFactory
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.ServiceScope
 import dev.ide.platform.ServiceScopeLevel
+import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -37,6 +38,9 @@ class ServiceContainerImpl(
     private val entries = ConcurrentHashMap<String, Holder>()
     private val programmatic = ConcurrentHashMap<String, ServiceFactory<*>>()
     private val disposer = CompositeDisposable()
+
+    /** Instances already handed to [disposer], by identity. See [own]. */
+    private val owned = IdentityHashMap<Disposable, Boolean>()
 
     private val scope = object : ServiceScope {
         override val level get() = this@ServiceContainerImpl.level
@@ -80,6 +84,7 @@ class ServiceContainerImpl(
         val holder = entries.remove(key.id) ?: return
         (holder.instance as? Disposable)?.let { inst ->
             disposer.remove(inst)
+            synchronized(owned) { owned.remove(inst) }
             runCatching { inst.dispose() }
         }
     }
@@ -90,6 +95,7 @@ class ServiceContainerImpl(
         } finally {
             entries.clear()
             programmatic.clear()
+            synchronized(owned) { owned.clear() }
         }
     }
 
@@ -108,6 +114,22 @@ class ServiceContainerImpl(
         }
     }
 
+    /**
+     * Register [instance] for disposal with this container, at most once per instance.
+     *
+     * One instance can be reachable under more than one key: an SPI alias registers a narrowed key against
+     * the service the engine's own key resolves (see `IdeCoreServicesPlugin`), so both holders end up
+     * pointing at one object. The container owns it once, so it disposes it once. Otherwise correctness
+     * would rest on every aliased service's `dispose()` happening to be idempotent.
+     *
+     * Identity, not equality: a service is not obliged to leave `equals` alone.
+     */
+    private fun own(instance: Any) {
+        val disposable = instance as? Disposable ?: return
+        val isNew = synchronized(owned) { owned.put(disposable, true) == null }
+        if (isNew) disposer.add(disposable)
+    }
+
     private fun build(id: String, holder: Holder): Any {
         holder.instance?.let { return it }
         synchronized(holder) {
@@ -120,7 +142,7 @@ class ServiceContainerImpl(
                 val factory = holder.factory as ServiceFactory<Any>
                 val instance = with(factory) { scope.create() }
                 holder.instance = instance
-                (instance as? Disposable)?.let { disposer.add(it) }
+                own(instance)
                 return instance
             } finally {
                 stack.removeLast()

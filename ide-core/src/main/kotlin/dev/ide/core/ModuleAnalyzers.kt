@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.analysis.ModuleAnalysis
 import dev.ide.lang.CacheInvalidation
 import dev.ide.lang.LanguageId
 import dev.ide.lang.SourceAnalyzer
@@ -26,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap
  * construct a compiler environment), so it deliberately runs outside a global lock: two threads racing on
  * *different* languages proceed in parallel.
  */
-internal class ModuleAnalyzers(private val build: (LanguageId) -> SourceAnalyzer) : Disposable {
+internal class ModuleAnalyzers(private val build: (LanguageId) -> SourceAnalyzer) : Disposable, ModuleAnalysis {
 
     private val byLanguage = ConcurrentHashMap<String, SourceAnalyzer>()
 
@@ -38,7 +39,7 @@ internal class ModuleAnalyzers(private val build: (LanguageId) -> SourceAnalyzer
     private var disposed = false
 
     /** The analyzer for [language], building it on first use. */
-    fun analyzer(language: LanguageId): SourceAnalyzer {
+    override fun analyzer(language: LanguageId): SourceAnalyzer {
         byLanguage[language.id]?.let { return it }
         // computeIfAbsent would hold the bin lock across `build`, which resolves other services and can
         // re-enter this map for another language. Build outside, then publish, discarding a loser's instance.
@@ -58,7 +59,7 @@ internal class ModuleAnalyzers(private val build: (LanguageId) -> SourceAnalyzer
     }
 
     /** The analyzer already built for [language], or null. Never constructs one. */
-    fun peek(language: LanguageId): SourceAnalyzer? = byLanguage[language.id]
+    override fun peek(language: LanguageId): SourceAnalyzer? = byLanguage[language.id]
 
     /** Every analyzer built so far. Never constructs one. */
     fun live(): Collection<SourceAnalyzer> = byLanguage.values.toList()

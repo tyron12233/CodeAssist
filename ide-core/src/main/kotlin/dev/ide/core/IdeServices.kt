@@ -70,7 +70,7 @@ import dev.ide.core.services.KotlinEditorService
 import dev.ide.core.services.LanguageFeatureService
 import dev.ide.core.services.ModuleService
 import dev.ide.core.services.RefactorService
-import dev.ide.core.services.RunCapture
+import dev.ide.build.RunCapture
 import dev.ide.core.services.SearchService
 import dev.ide.core.services.SigningService
 import dev.ide.core.settings.BuiltInSettingsPages

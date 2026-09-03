@@ -141,6 +141,27 @@ class ServiceContainerTest {
     }
 
     @Test
+    fun anInstanceReachableUnderTwoKeysIsDisposedOnce() {
+        val disposed = AtomicInteger(0)
+        class S : Disposable {
+            override fun dispose() {
+                disposed.incrementAndGet()
+            }
+        }
+        // What an SPI alias looks like to the container: a second, narrower key whose factory resolves the
+        // first key rather than building anything, so both holders end up on one instance.
+        val real = ServiceKey<S>("test.aliased")
+        val alias = ServiceKey<S>("test.alias")
+        val c = ServiceContainerImpl(WORKSPACE, null, null)
+        c.registerService(real) { S() }
+        c.registerService(alias) { getService(real) }
+
+        assertSame(c.getService(real), c.getService(alias), "the alias must not build a second instance")
+        c.dispose()
+        assertEquals(1, disposed.get(), "the container owns the instance once, so it disposes it once")
+    }
+
+    @Test
     fun concurrentDistinctKeysAllResolveExactlyOnce() {
         val n = 200
         val keys = (0 until n).map { ServiceKey<Counter>("test.k$it") }

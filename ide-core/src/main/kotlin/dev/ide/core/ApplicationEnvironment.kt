@@ -1,20 +1,20 @@
 package dev.ide.core
 
+import dev.ide.core.plugins.ExternalUiFacets
+import dev.ide.core.plugins.PluginManifestToml
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.impl.ApplicationContainer
 import dev.ide.platform.impl.PlatformCore
-import dev.ide.core.plugins.ExternalUiFacets
-import dev.ide.core.plugins.PluginManifestToml
 import dev.ide.platform.log.Log
+import dev.ide.plugin.PLUGIN_API_VERSION
 import dev.ide.plugin.Plugin
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.external.DiscoveredPlugin
 import dev.ide.plugin.external.PluginOrigin
 import dev.ide.plugin.external.PluginSource
 import dev.ide.plugin.external.RejectedPlugin
-import dev.ide.plugin.PLUGIN_API_VERSION
 import dev.ide.plugin.impl.ExternalPluginLoader
 import dev.ide.plugin.impl.PluginCatalog
 import dev.ide.plugin.impl.PluginManager
@@ -88,7 +88,8 @@ class ApplicationEnvironment(
 
     /** Drives the IDE's built-in plugins onto [platform]'s app-global registry. The app-wide message bus is
      *  passed so a plugin's registrar can publish/subscribe on the same bus the engine's events flow through. */
-    private val pluginManager = PluginManager(platform.extensions, platform.messageBus, hostVersion)
+    private val pluginManager =
+        PluginManager(platform.extensions, platform.messageBus, hostVersion, container)
 
     /**
      * The built-in plugin catalog: every built-in plus which are active, given the host's persisted disabled

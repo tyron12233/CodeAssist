@@ -11,6 +11,7 @@ import dev.ide.platform.MessageBusConnection
 import dev.ide.platform.PluginId
 import dev.ide.platform.ServiceFactory
 import dev.ide.platform.ServiceKey
+import dev.ide.platform.ServiceLookup
 import dev.ide.platform.ServiceScopeLevel
 import dev.ide.platform.log.Logger
 
@@ -30,6 +31,30 @@ interface PluginRegistration {
     /** Contribute a scoped service: a [dev.ide.platform.ServiceDescriptor] on `SERVICE_EP` at [level], built
      *  by [factory]. Collapses the double-passing of the id the raw `register(SERVICE_EP, ...)` requires. */
     fun <T : Any> service(key: ServiceKey<T>, level: ServiceScopeLevel, factory: ServiceFactory<T>): Disposable
+
+    /**
+     * Resolution, the counterpart of [service] registration: the APPLICATION-scoped container, read-only. A
+     * plugin registers a service to publish a capability, and resolves one to consume a capability the host
+     * or another plugin published.
+     *
+     * Prefer [ServiceLookup.getServiceOrNull]. A key with no service behind it is the normal case, not an
+     * error: a host may not supply the capability at all (it is absent on desktop and in tests for most of
+     * the host's own ports), and a plugin the user disabled registered nothing. Fall back rather than fail.
+     *
+     * Two rules follow from [Plugin.register] running once, at startup, before any project is open.
+     *
+     *  - **Resolve lazily.** Hold this and call it from a callback, not from `register`. Resolving during
+     *    load forces the service to be built then, and a WORKSPACE- or MODULE-scoped one cannot be built at
+     *    all, because there is no open project to scope it to. Those two scopes are reached from the
+     *    `Workspace` or `Module` an extension-point callback is already handed, through its own `service`.
+     *  - **Declare the edge.** Resolving what another plugin registers works only once that plugin has run,
+     *    so name it in `manifest.dependsOn`. That also makes the user disabling it disable this plugin,
+     *    which is what depending on it means.
+     *
+     * Defaults to [ServiceLookup.Empty], so a host that wires no container answers "nothing registered"
+     * instead of failing.
+     */
+    val appServices: ServiceLookup get() = ServiceLookup.Empty
 
     /** Escape hatch for the existing `(ExtensionRegistry, PluginId) -> Unit` facades (e.g. `AndroidSupport
      *  .register`, `JdtAnalysisSupport.register`, the EP-backed wrapper registries). They discard their

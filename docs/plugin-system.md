@@ -363,10 +363,18 @@ declared and shown at the consent gate, but nothing enforces it yet.
   screens, editor view modes, UI actions, tree icons) so UI contributions flow through the same plugin model.
 - **Remaining host capabilities:** the `IdeServicesBackend`-layer ports (analytics, the build-runner factory,
   the notifications gate) and the build-system / run-task selectors are not yet EP- or service-modelled.
-- **Engine services for the external tier:** an installed plugin can register a service but cannot resolve one
-  of the IDE's. Every engine key is `internal` to `ide-core`, and even the public ones (`ANALYTICS_SERVICE`,
-  `NOTIFICATION_PRESENTER`, the Store ports) sit in an unpublished module, so `WORKSPACE_SERVICE` is the only
-  service key the published SPI carries. Closing this means either promoting a narrowed interface plus its key
-  into an `*-api` module, or growing the host facade that `PluginRegistration.hostVersion` starts, which is
-  also where `capabilities` enforcement would land. The full inventory, and what each tier can name, is in
+- **More engine services for the external tier.** Both halves of the original gap are closed for a first
+  set. `PluginRegistration.appServices` is a read-only `ServiceLookup` over the application container, so
+  any plugin can resolve an APPLICATION-scoped service (`Module.service` / `Workspace.service` already
+  covered the other two scopes from an extension-point callback), and four engine services are now nameable
+  from the published SPI: `BUILD_CONTROL` (`build-api`), `SYMBOL_SEARCH` (`index-api`), `MODULE_SOURCES`
+  (`project-model-api`) and `MODULE_ANALYSIS` (`analysis-api`). Each is a **narrowed** interface over the
+  engine class, registered as an alias against the same instance the internal key resolves, so only the
+  promoted members are frozen as plugin API while the rest of each service stays `internal`. What is left is
+  case-by-case: the remaining keys in Appendix C are still built-in-only, the public platform ports
+  (`ANALYTICS_SERVICE`, `NOTIFICATION_PRESENTER`, the Store ports) still sit in an unpublished module, and
+  there is still no pull-style read of a plugin's own settings (a `SettingsPage` only receives its values
+  in `onChanged` / `onAction`). Promote each the same way, or grow the host facade that
+  `PluginRegistration.hostVersion` starts, which is also where `capabilities` enforcement would land. The
+  full inventory, and what each tier can name, is in
   [writing-plugins.md, Appendix C](writing-plugins.md#appendix-c-service-index).

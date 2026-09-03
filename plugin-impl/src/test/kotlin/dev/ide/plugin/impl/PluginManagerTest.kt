@@ -4,7 +4,9 @@ import dev.ide.platform.ExtensionPoint
 import dev.ide.platform.PluginId
 import dev.ide.platform.SERVICE_EP
 import dev.ide.platform.ServiceKey
+import dev.ide.platform.ServiceLookup
 import dev.ide.platform.ServiceScopeLevel
+import dev.ide.platform.impl.ApplicationContainer
 import dev.ide.platform.impl.ExtensionRegistryImpl
 import dev.ide.plugin.Plugin
 import dev.ide.plugin.PluginManifest
@@ -96,6 +98,53 @@ class PluginManagerTest {
 
         mgr.unload(PluginId("svc"))
         assertTrue(reg.extensions(SERVICE_EP).isEmpty())
+    }
+
+    @Test
+    fun `appServices resolves a service another plugin registered`() {
+        val reg = ExtensionRegistryImpl()
+        val key = ServiceKey<String>("test.shared")
+        val publisher = object : Plugin {
+            override val manifest = PluginManifest(id = "publisher", name = "publisher")
+            override fun register(reg: PluginRegistration) {
+                reg.service(key, ServiceScopeLevel.APPLICATION) { "shared-instance" }
+            }
+        }
+        // The documented pattern: keep the lookup, resolve at callback time rather than during load.
+        val consumer = object : Plugin {
+            lateinit var services: ServiceLookup
+            override val manifest =
+                PluginManifest(id = "consumer", name = "consumer", dependsOn = listOf("publisher"))
+
+            override fun register(reg: PluginRegistration) {
+                services = reg.appServices
+            }
+        }
+        PluginManager(reg, appServices = ApplicationContainer(reg))
+            .loadAll(listOf(consumer, publisher))
+
+        assertEquals("shared-instance", consumer.services.getService(key))
+        // A key nothing registered is an answer, not a failure: the consumer falls back.
+        assertNull(consumer.services.getServiceOrNull(ServiceKey<String>("test.absent")))
+    }
+
+    @Test
+    fun `appServices is empty when the host wired no container`() {
+        val reg = ExtensionRegistryImpl()
+        val key = ServiceKey<String>("test.shared")
+        val plugin = object : Plugin {
+            lateinit var services: ServiceLookup
+            override val manifest = PluginManifest(id = "solo", name = "solo")
+            override fun register(reg: PluginRegistration) {
+                reg.service(key, ServiceScopeLevel.APPLICATION) { "unreachable" }
+                services = reg.appServices
+            }
+        }
+        PluginManager(reg).loadAll(listOf(plugin))
+
+        // The descriptor is registered, but with no container there is nothing to resolve it against.
+        assertNull(plugin.services.getServiceOrNull(key))
+        assertFailsWith<IllegalStateException> { plugin.services.getService(key) }
     }
 
     @Test

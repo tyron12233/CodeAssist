@@ -5,6 +5,7 @@ import dev.ide.index.MemberValue
 import dev.ide.index.MembersIndex
 import dev.ide.index.SourceSymbolIndex
 import dev.ide.index.SymbolValue
+import dev.ide.index.SymbolSearch
 import dev.ide.index.fuzzyAll
 import dev.ide.ui.backend.UiSearchOptions
 import dev.ide.ui.backend.UiTextMatch
@@ -22,18 +23,18 @@ import kotlin.io.path.readText
  * editor overlay. Index *lifecycle* (the `reindex()` control + the `indexStatus` flow) stays on the engine
  * — it backs more than search — so this service holds only the read-side queries.
  */
-internal class SearchService(private val ctx: EngineContext) {
+internal class SearchService(private val ctx: EngineContext) : SymbolSearch {
 
     /** Go-to-symbol over project declarations (navigable). */
-    fun searchSymbols(query: String, limit: Int = 50): List<SymbolValue> =
+    override fun searchSymbols(query: String, limit: Int): List<SymbolValue> =
         ctx.indexService.fuzzyAll<SymbolValue>(SourceSymbolIndex.ALL, query, limit)
             .map { it.value }
 
     /** Resolve a [SymbolValue.fileId] (interned, path stored once) back to its file path for navigation. */
-    fun symbolFilePath(fileId: Int): String? = ctx.indexService.filePath(fileId)
+    override fun symbolFilePath(fileId: Int): String? = ctx.indexService.filePath(fileId)
 
     /** Member search across the classpath (informational). */
-    fun searchMembers(query: String, limit: Int = 50): List<MemberValue> =
+    override fun searchMembers(query: String, limit: Int): List<MemberValue> =
         ctx.indexService.fuzzyAll<MemberValue>(MembersIndex.ALL, query, limit).map { it.value }
 
     /**

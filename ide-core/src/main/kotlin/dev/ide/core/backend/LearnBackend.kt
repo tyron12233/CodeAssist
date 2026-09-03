@@ -3,7 +3,7 @@ package dev.ide.core.backend
 import dev.ide.core.BackendContext
 import dev.ide.core.IdeServices
 import dev.ide.core.LoweredComposePreview
-import dev.ide.core.services.RunCapture
+import dev.ide.build.RunCapture
 import dev.ide.lang.hints.InlayHintKind
 import dev.ide.ui.backend.LearnService
 import dev.ide.ui.backend.UiCompletionResult

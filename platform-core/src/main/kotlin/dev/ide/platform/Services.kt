@@ -43,19 +43,43 @@ fun interface ServiceFactory<T : Any> {
 }
 
 /**
- * A scoped locator. Lookups are lazy and cached; an unresolved key falls back to [parent] and throws
- * only when no scope up the chain defines it. A constructed service that is [Disposable] is torn down
- * with the container (LIFO).
+ * Read-only service resolution: the half of a [ServiceContainer] a *consumer* needs. It resolves keys and
+ * does nothing else, so handing one out grants no power to define a service, evict an instance somebody
+ * else built, or tear a scope down.
+ *
+ * That distinction is the reason this is a type of its own rather than a container reference passed around:
+ * the plugin registrar hands each plugin one of these (`PluginRegistration.appServices`), and a plugin
+ * consuming a capability has no business redefining it.
  */
-interface ServiceContainer : Disposable {
-    val level: ServiceScopeLevel
-    val parent: ServiceContainer?
+interface ServiceLookup {
 
     /** The service for [key], instantiating it on first use. Throws if no scope defines it. */
     fun <T : Any> getService(key: ServiceKey<T>): T
 
     /** Like [getService] but returns null instead of throwing when no scope defines [key]. */
     fun <T : Any> getServiceOrNull(key: ServiceKey<T>): T?
+
+    companion object {
+
+        /** A lookup that defines nothing: [getServiceOrNull] answers null and [getService] throws. What a
+         *  host that wired no container offers (a standalone test). */
+        val Empty: ServiceLookup = object : ServiceLookup {
+            override fun <T : Any> getService(key: ServiceKey<T>): T =
+                error("no service is registered for '${key.id}'")
+
+            override fun <T : Any> getServiceOrNull(key: ServiceKey<T>): T? = null
+        }
+    }
+}
+
+/**
+ * A scoped locator. Lookups are lazy and cached; an unresolved key falls back to [parent] and throws
+ * only when no scope up the chain defines it. A constructed service that is [Disposable] is torn down
+ * with the container (LIFO).
+ */
+interface ServiceContainer : Disposable, ServiceLookup {
+    val level: ServiceScopeLevel
+    val parent: ServiceContainer?
 
     /** Register [factory] for [key] at this level programmatically. Overrides an EP descriptor for the
      *  same key+level. Must be called before the service is first resolved. */

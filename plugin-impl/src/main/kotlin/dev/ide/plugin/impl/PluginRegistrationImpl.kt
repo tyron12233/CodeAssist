@@ -10,6 +10,7 @@ import dev.ide.platform.SERVICE_EP
 import dev.ide.platform.ServiceDescriptor
 import dev.ide.platform.ServiceFactory
 import dev.ide.platform.ServiceKey
+import dev.ide.platform.ServiceLookup
 import dev.ide.platform.ServiceScopeLevel
 import dev.ide.platform.impl.CompositeDisposable
 import dev.ide.platform.log.Log
@@ -28,6 +29,7 @@ internal class PluginRegistrationImpl(
     private val teardown: CompositeDisposable,
     private val bus: MessageBus,
     override val hostVersion: String? = null,
+    override val appServices: ServiceLookup = ServiceLookup.Empty,
 ) : PluginRegistration {
 
     override val messageBus: MessageBus get() = bus
