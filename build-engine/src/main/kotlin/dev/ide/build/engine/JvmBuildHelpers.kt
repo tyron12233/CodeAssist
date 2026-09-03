@@ -51,7 +51,7 @@ fun sourceRootDirs(module: Module): List<Path> {
         .flatMap { it.contentRoots }
         .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
         .map { Paths.get(it.dir.path) }
-    return collapseNestedRoots(declared + generatedRoot(module)).filter { Files.isDirectory(it) }
+    return collapseNestedRoots(declared.plusElement(generatedRoot(module))).filter { Files.isDirectory(it) }
 }
 
 fun sourceFiles(module: Module): List<Path> = sourceRootDirs(module)

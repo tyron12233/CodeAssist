@@ -83,6 +83,62 @@ class SourceGenerationTest {
         return store.workspace.projects.single()
     }
 
+    /** The same project, declaring only its hand-written root: no `ContentRole.GENERATED` anywhere. */
+    private fun workspaceWithoutAGeneratedRoot(dir: Path, platform: PlatformCore): Project {
+        ModuleTypeRegistry(platform.extensions).register(JavaLib(), PluginId("java-support"))
+        val store: ProjectModelStore = ProjectModel.open(dir, platform, FacetCodecRegistry())
+        val javaLib = ModuleTypeRegistry(platform.extensions).resolve("java-lib")
+        store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+        store.workspace.projects.single().beginModification().apply {
+            addModule("app", javaLib).addSourceSet(
+                SourceSetTemplate(
+                    "main", DependencyScope.IMPLEMENTATION,
+                    mapOf("src/main/java" to setOf(ContentRole.SOURCE)),
+                )
+            )
+            commit()
+        }
+        dir.writeSource("app/src/main/java/com/example/app/Main.java", MAIN)
+        return store.workspace.projects.single()
+    }
+
+    /**
+     * A module that declares no generated root still gets its generated sources compiled: `build/generated` is
+     * a source root by convention, which is what makes a contributed generator work on any module rather than
+     * only on one whose model happens to declare a root for output the build itself produces.
+     */
+    @Test
+    fun generatedSourceIsCompiledWithNoDeclaredGeneratedRoot() {
+        testEnv("srcgen-convention") { env ->
+            val dir = env.dir
+            val runs = AtomicInteger(0)
+            val project = workspaceWithoutAGeneratedRoot(dir, env.platform)
+            assertTrue(
+                project.modules.single().sourceSets.flatMap { it.contentRoots }
+                    .none { ContentRole.GENERATED in it.roles },
+                "this case is only meaningful while the module declares no generated root",
+            )
+            val build = JavaBuildSystem(generators = listOf(StubGenerator(runs)))
+            val graph = build.createBuildGraph(
+                project, BuildRequest(listOf(ModuleId("app")), VariantSelector("main"), BuildGoal.PACKAGE),
+            )
+            assertTrue(
+                graph.tasks.any { it.name.value == ":app:generateSources" },
+                "generateSources must be registered even with no declared generated root",
+            )
+
+            val log = StringBuilder()
+            val outcome = runBlocking {
+                TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
+                    .execute(graph, SimpleTaskContext(log = { log.appendLine(it) }), 2)
+            }
+            assertTrue(outcome.succeeded, "build failed:\n$log")
+            assertEquals(1, runs.get(), "the generator must have run once")
+            val jar = jarPath(project.modules.single())
+            assertEquals("GENERATED-HI", runJava(listOf(jar), "com.example.app.Main"), "the generated code must run")
+        }
+    }
+
     @Test
     fun generatedSourceIsCompiledAndUsableByHandWrittenCode() {
         testEnv("srcgen") { env ->
