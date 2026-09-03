@@ -37,7 +37,10 @@ data class GmmVariant(
 )
 
 /** A variant dependency. The artifact name is the GMM `module` field. [version] is the resolvable version
- *  (`requires`, else `strictly`/`prefers`); [strictly] is set when a `strictly` pin is present (must not be bumped). */
+ *  (`requires`, else `strictly`/`prefers`); [strictly] is set when a `strictly` pin is present (must not be bumped).
+ *  [prefers] is kept separately because `requires` is frequently a RANGE (`[1.0.0, 1.3.99]`) whose companion
+ *  `prefers` names the version the publisher actually expects: the fallback when the range can't be resolved
+ *  against the repository's version index. */
 data class GmmDependency(
     val group: String,
     val name: String,
@@ -45,10 +48,13 @@ data class GmmDependency(
     val strictly: String?,
     val attributes: Map<String, String>,
     val excludes: Set<GA>,
+    val prefers: String? = null,
 )
 
 /** A `dependencyConstraints` entry: a version (and optional strict pin) for a GA, applied only if present. */
-data class GmmConstraint(val group: String, val name: String, val version: String?, val strictly: String?)
+data class GmmConstraint(
+    val group: String, val name: String, val version: String?, val strictly: String?, val prefers: String? = null,
+)
 
 /** A published file of a variant (`name` is the artifact filename, e.g. `lib-android-1.0.aar`). */
 data class GmmFile(val name: String, val url: String)
@@ -104,7 +110,8 @@ object GradleModuleParser {
             val e = ex as? Map<*, *> ?: return@mapNotNull null
             GA((e["group"] as? String) ?: "*", (e["module"] as? String) ?: "*")
         }.toSet()
-        return GmmDependency(group, name, version, strictly, stringAttributes(d["attributes"]), excludes)
+        val prefers = (ver?.get("prefers"))?.toString()
+        return GmmDependency(group, name, version, strictly, stringAttributes(d["attributes"]), excludes, prefers)
     }
 
     private fun parseConstraint(any: Any?): GmmConstraint? {
@@ -114,7 +121,7 @@ object GradleModuleParser {
         val ver = c["version"] as? Map<*, *>
         val strictly = (ver?.get("strictly"))?.toString()
         val version = ((ver?.let { it["requires"] ?: it["strictly"] ?: it["prefers"] }))?.toString()
-        return GmmConstraint(group, name, version, strictly)
+        return GmmConstraint(group, name, version, strictly, (ver?.get("prefers"))?.toString())
     }
 
     private fun parseFile(any: Any?): GmmFile? {

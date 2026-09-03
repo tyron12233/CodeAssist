@@ -11,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -506,6 +507,87 @@ class MavenDependencyResolverTest {
         "org.gradle.category" to "library", "org.gradle.usage" to "java-api",
         "org.jetbrains.kotlin.platform.type" to "jvm", "org.gradle.jvm.environment" to "standard-jvm",
     )
+
+    @Test
+    fun gmmVersionRangeResolvesToTheNewestPublishedVersionInRange() {
+        // The OneSignal bug. `com.onesignal:*` declares every external dependency as a Gradle-metadata RANGE
+        // (`androidx.appcompat:appcompat` → `{"requires":"[1.0.0, 1.3.99]","prefers":"1.3.1"}`). The GMM path
+        // passed `requires` through RAW (only the POM path normalized versions), so the resolver fetched
+        // `.../appcompat/[1.0.0, 1.3.99]/appcompat-[1.0.0, 1.3.99].pom`, got a 404, and dropped the edge with
+        // its whole subtree. AppCompat, firebase-messaging, work-runtime and browser all vanished from the
+        // classpath of any project that added the SDK.
+        //
+        // A range must resolve the way Maven and Gradle resolve it: the NEWEST published version inside it.
+        val files = FakeRepo()
+        files.putMetadata("lib", listOf("1.0.0", "1.2.0", "1.3.1", "1.4.0", "2.0.0"))
+        files.put("lib", "1.3.1")
+        files.putModule("sdk", "5.0", variants = listOf(
+            GmmVar("androidApiElements", androidApi, files = listOf("sdk-5.0.jar"),
+                rangeDeps = listOf(RangeDep("g", "lib", "[1.0.0, 1.3.99]"))),
+        ))
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("sdk", "5.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+
+        val lib = result.resolved.singleOrNull { it.coordinate.name == "lib" }
+        assertNotNull(lib, "the ranged edge must not be dropped; got ${result.resolved.map { it.coordinate }}")
+        // Not 1.0.0 (the lower bound the old normalizer would have taken) and not 1.4.0/2.0.0 (out of range).
+        assertEquals("1.3.1", lib.coordinate.version)
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+    }
+
+    @Test
+    fun versionRangeFallsBackToGmmPrefersWhenTheVersionIndexIsUnreachable() {
+        // No `maven-metadata.xml` published (offline, or a repo that serves no version index): the range can't
+        // be matched against real versions, so the publisher's own `prefers` is the next best answer, far
+        // better than the range's lower bound, which for OneSignal's AppCompat range means 1.0.0.
+        val files = FakeRepo()
+        files.put("lib", "1.3.1")
+        files.putModule("sdk", "5.0", variants = listOf(
+            GmmVar("androidApiElements", androidApi, files = listOf("sdk-5.0.jar"),
+                rangeDeps = listOf(RangeDep("g", "lib", "[1.0.0, 1.3.99]", prefers = "1.3.1"))),
+        ))
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("sdk", "5.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+
+        assertEquals("1.3.1", result.resolved.single { it.coordinate.name == "lib" }.coordinate.version)
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+    }
+
+    @Test
+    fun pomVersionRangeAlsoResolvesToTheNewestPublishedVersionInRange() {
+        // The POM path already collapsed a range so the URL was fetchable, but it took the LOWER bound,
+        // silently downgrading the edge to the oldest version the publisher ever allowed.
+        val files = FakeRepo()
+        files.putMetadata("lib", listOf("1.0.0", "1.3.1", "2.0.0"))
+        files.put("lib", "1.3.1")
+        files.put("app", "1.0", deps = listOf(Dep("g", "lib", "[1.0.0, 1.3.99]")))
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("app", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+
+        assertEquals("1.3.1", result.resolved.single { it.coordinate.name == "lib" }.coordinate.version)
+    }
+
+    @Test
+    fun anAarShippingAZeroEntryClassesJarIsExplodedToAUsableJar() {
+        // `com.onesignal:OneSignal` is a dependency-only umbrella module: its AAR carries a `classes.jar`
+        // entry that is itself the canonical 22-byte EMPTY zip. The explosion copied that entry verbatim
+        // (a `classes.jar` was "found", so the class-free fallback never ran), putting a zero-entry archive
+        // on the classpath, which ART's ZipFile rejects outright ("No entries"), the poison documented for
+        // resource-only AARs. Validate what was COPIED, not merely that an entry existed.
+        val files = FakeRepo()
+        files.put("umbrella", "1.0", packaging = "aar", jarBytes = aarWithRes())   // its classes.jar is entry-less
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("umbrella", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+
+        val classes = Path.of(result.resolved.single { it.coordinate.name == "umbrella" }.classesRoot.path)
+        val entries = ZipFile(classes.toFile()).use { zf -> zf.entries().toList().map { it.name } }
+        assertTrue(entries.isNotEmpty(), "an exploded classes.jar must never be zero-entry: ART cannot open it")
+        assertTrue(entries.none { it.endsWith(".class") }, "the umbrella module carries no code: $entries")
+    }
 
     @Test
     fun selectsAndroidVariantOverJvmFromGmm() {
@@ -1120,7 +1202,12 @@ class MavenDependencyResolverTest {
         val strictDeps: List<Dep> = emptyList(),       // deps published with version.strictly
         val constraints: List<Dep> = emptyList(),      // dependencyConstraints (g:a:v)
         val capabilities: List<Dep> = emptyList(),     // declared capabilities (g:a:v); empty = implicit only
+        val rangeDeps: List<RangeDep> = emptyList(),   // deps whose version.requires is a RANGE (+ optional prefers)
     )
+
+    /** A GMM dependency published as a version RANGE, `{"requires":"[1.0.0, 1.3.99]","prefers":"1.3.1"}`,
+     *  the shape every `com.onesignal:*` module uses for its external dependencies. */
+    private data class RangeDep(val g: String, val a: String, val requires: String, val prefers: String? = null)
 
     /** An in-memory Maven repo keyed by request URL; missing entries return null (404). */
     private inner class FakeRepo : ArtifactFetcher {
@@ -1207,9 +1294,15 @@ class MavenDependencyResolverTest {
             append("}")
             v.availableAt?.let { append(""","available-at":{"group":"${it.first}","module":"${it.second}","version":"${it.third}"}""") }
             val allDeps = v.deps.map { it to "requires" } + v.strictDeps.map { it to "strictly" }
-            if (allDeps.isNotEmpty()) {
+            if (allDeps.isNotEmpty() || v.rangeDeps.isNotEmpty()) {
                 append(""","dependencies":[""")
                 allDeps.forEachIndexed { j, (d, key) -> if (j > 0) append(","); append("""{"group":"${d.g}","module":"${d.a}","version":{"$key":"${d.v}"}}""") }
+                v.rangeDeps.forEachIndexed { j, d ->
+                    if (j > 0 || allDeps.isNotEmpty()) append(",")
+                    append("""{"group":"${d.g}","module":"${d.a}","version":{"requires":"${d.requires}"""")
+                    d.prefers?.let { append(""","prefers":"$it"""") }
+                    append("}}")
+                }
                 append("]")
             }
             if (v.constraints.isNotEmpty()) {

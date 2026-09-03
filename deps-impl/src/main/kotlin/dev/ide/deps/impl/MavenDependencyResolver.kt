@@ -79,6 +79,13 @@ class MavenDependencyResolver(
      */
     private val effCache = ConcurrentHashMap<Coordinate, Optional<EffPom>>()
 
+    /** Resolved version RANGES, keyed `group:name:<spec>` ([selectVersion]). A range costs a `maven-metadata.xml`
+     *  read, and one range edge (e.g. OneSignal's AppCompat) is re-seen at every node that declares it. */
+    private val rangeCache = ConcurrentHashMap<String, Optional<String>>()
+
+    /** Published-version index per artifact, backing [publishedVersions]. */
+    private val versionIndex = ConcurrentHashMap<GA, List<String>>()
+
     /** Gradle Module Metadata (`*.module`) cache, sibling to [effCache] — also immutable once released.
      *  `Optional.empty()` records a coordinate with no `.module` so we don't re-probe (it took the POM path). */
     private val moduleCache = ConcurrentHashMap<Coordinate, Optional<GradleModule>>()
@@ -636,7 +643,11 @@ class MavenDependencyResolver(
      * it), so a cached copy would hide newer versions. Versions are merged across repos and ordered by
      * [MavenVersion]. Empty when no repo carries the artifact or the network is unreachable.
      */
-    suspend fun availableVersions(group: String, name: String, repos: List<Repository>): List<String> {
+    suspend fun availableVersions(group: String, name: String, repos: List<Repository>): List<String> =
+        fetchVersionIndex(group, name, repos).sortedWith(MavenVersion.reversed())
+
+    /** Every version `group:name` publishes, merged across [repos] in repo order. Uncached: see the callers. */
+    private fun fetchVersionIndex(group: String, name: String, repos: List<Repository>): List<String> {
         if (group.isBlank() || name.isBlank()) return emptyList()
         val rel = "${group.replace('.', '/')}/$name/maven-metadata.xml"
         val merged = LinkedHashSet<String>()
@@ -645,7 +656,7 @@ class MavenDependencyResolver(
             val bytes = runCatching { fetcher.fetch(url) }.getOrNull() ?: continue
             merged += parseMetadataVersions(bytes)
         }
-        return merged.sortedWith(MavenVersion.reversed())
+        return merged.toList()
     }
 
     /** Extract the `<version>`s inside `maven-metadata.xml`'s `<versions>` block (falling back to the whole
@@ -689,7 +700,7 @@ class MavenDependencyResolver(
             for (m in raw.managed) {
                 val g = resolveProperties(m.ga.group, props, coord) ?: continue
                 val a = resolveProperties(m.ga.name, props, coord) ?: continue
-                val v = normalizeVersion(resolveProperties(m.version, props, coord))
+                val v = selectVersion(g, a, resolveProperties(m.version, props, coord), repos)
                 if (m.scope.equals("import", ignoreCase = true) && v != null) {
                     loadEffective(Coordinate(g, a, v), repos, visiting)?.managed?.forEach { (ga, ver) -> managed.putIfAbsent(ga, ver) }
                 } else if (v != null) {
@@ -700,7 +711,7 @@ class MavenDependencyResolver(
             val deps = raw.dependencies.mapNotNull { d ->
                 val g = resolveProperties(d.groupId, props, coord) ?: return@mapNotNull null
                 val a = resolveProperties(d.artifactId, props, coord) ?: return@mapNotNull null
-                val v = normalizeVersion(resolveProperties(d.version, props, coord)) ?: managed[GA(g, a)]
+                val v = selectVersion(g, a, resolveProperties(d.version, props, coord), repos) ?: managed[GA(g, a)]
                 d.copy(
                     groupId = g,
                     artifactId = a,
@@ -714,7 +725,7 @@ class MavenDependencyResolver(
             val relocation = raw.relocation?.let { r ->
                 val g = resolveProperties(r.groupId, props, coord) ?: coord.group
                 val a = resolveProperties(r.artifactId, props, coord) ?: coord.name
-                val v = normalizeVersion(resolveProperties(r.version, props, coord)) ?: coord.version
+                val v = selectVersion(g, a, resolveProperties(r.version, props, coord), repos) ?: coord.version
                 Coordinate(g, a, v).takeIf { it != coord }
             }
             val eff = EffPom(coord, raw.packaging, props, managed, deps, relocation)
@@ -806,8 +817,15 @@ class MavenDependencyResolver(
             ?.dependencies
             ?.filter { rd -> apiDeps.none { it.group == rd.group && it.name == rd.name } }
             ?: emptyList()
+        // A GMM `requires` is just as often a RANGE as a POM `<version>` is (OneSignal declares AppCompat as
+        // `[1.0.0, 1.3.99]`), so it needs the same range resolution the POM path gets. Without it the raw
+        // range string is used as a literal version, its POM 404s, and the edge is silently dropped.
         val transitives = (apiDeps + runtimeOnly).map {
-            ChildDep(it.group, it.name, it.version?.ifBlank { null }, it.strictly?.ifBlank { null }, it.excludes, "jar")
+            ChildDep(
+                it.group, it.name,
+                selectVersion(it.group, it.name, it.version, repos, it.prefers),
+                selectVersion(it.group, it.name, it.strictly, repos), it.excludes, "jar",
+            )
         }
         // Constraints from BOTH the api and runtime variants (deduped by GA). AGP publishes the group-alignment
         // block on every variant, but a runtime-only edge's aligning version can live on the runtime variant —
@@ -815,7 +833,13 @@ class MavenDependencyResolver(
         // reading only the api variant's constraints would drop such an edge (the savedstate-compose case).
         val constraints = (variant.dependencyConstraints + runtimeVar?.dependencyConstraints.orEmpty())
             .distinctBy { GA(it.group, it.name) }
-            .map { ChildDep(it.group, it.name, it.version?.ifBlank { null }, it.strictly?.ifBlank { null }, emptySet(), "jar") }
+            .map {
+                ChildDep(
+                    it.group, it.name,
+                    selectVersion(it.group, it.name, it.version, repos, it.prefers),
+                    selectVersion(it.group, it.name, it.strictly, repos), emptySet(), "jar",
+                )
+            }
         // The artifact's real path is the file's `url` (relative to the module dir), NOT its `name`: AGP
         // publishes an AAR with a logical name like `datastore-preferences-release.aar` but a url of
         // `datastore-preferences-android-1.1.1.aar`. All primary files are kept (a variant rarely ships more
@@ -871,12 +895,12 @@ class MavenDependencyResolver(
         "${coord.group.replace('.', '/')}/${coord.name}/${coord.version}/$fileName"
 
     /**
-     * Reduce a Maven version *specification* to a single concrete version this resolver can fetch. A plain
-     * version (`1.9.3`) passes through. A range or hard-pin — AndroidX pins every same-group dependency as
-     * `[1.9.3]`, and others use `[a,b)` etc. — is collapsed: a single value (`[V]`) becomes `V`; a comma
-     * range yields its lower bound (else upper), a real version that conflict resolution can still bump.
-     * Without this, `[1.9.3]` is treated as a literal version, its POM URL 404s, and the whole subtree
-     * (e.g. `androidx.activity:activity`, which carries `ComponentActivity`) is silently dropped.
+     * Reduce a Maven version *specification* to a single concrete version this resolver can fetch, WITHOUT
+     * consulting the network. A plain version (`1.9.3`) passes through. A hard-pin (`[1.9.3]`, how AndroidX
+     * pins every same-group dependency) becomes `1.9.3`; a genuine range collapses to its lower bound (else
+     * upper). This is the offline fallback for [selectVersion], which prefers the newest *published* version
+     * inside the range. Without either, `[1.9.3]` is treated as a literal version, its POM URL 404s, and the
+     * whole subtree (e.g. `androidx.activity:activity`, which carries `ComponentActivity`) is silently dropped.
      */
     private fun normalizeVersion(raw: String?): String? {
         val v = raw?.trim()?.ifBlank { null } ?: return null
@@ -886,6 +910,84 @@ class MavenDependencyResolver(
         if (!inner.contains(',')) return inner          // hard pin: [V]
         val (lower, upper) = inner.split(',', limit = 2).let { it[0].trim() to it.getOrElse(1) { "" }.trim() }
         return lower.ifBlank { upper.ifBlank { null } }
+    }
+
+    /**
+     * Pick the concrete version to resolve for a `group:name` edge whose declared version may be a RANGE.
+     *
+     * Maven and Gradle both resolve a range to the NEWEST published version inside it; taking the lower bound
+     * (what [normalizeVersion] alone does) silently downgrades the edge to the oldest version the publisher
+     * ever allowed. OneSignal declares every external dependency this way (`androidx.appcompat:appcompat`
+     * as `[1.0.0, 1.3.99]`, `com.google.firebase:firebase-messaging` as `[21.0.0, 23.4.99]`), so the lower
+     * bound would pull an eight-year-old AppCompat into a modern app.
+     *
+     * So: a range is matched against the artifact's published versions ([publishedVersions], read from each
+     * repo's `maven-metadata.xml`) and the newest STABLE version inside it wins (a prerelease only if the
+     * range admits nothing else). When the index is unreachable (offline) or lists nothing in range, fall
+     * back to Gradle Module Metadata's companion [prefers], the version the publisher actually expects,
+     * and finally to [normalizeVersion]'s bound, so resolution degrades instead of dropping the edge.
+     */
+    private fun selectVersion(
+        group: String, name: String, raw: String?, repos: List<Repository>, prefers: String? = null,
+    ): String? {
+        val spec = raw?.trim()?.ifBlank { null }
+            ?: return prefers?.trim()?.ifBlank { null }?.let { normalizeVersion(it) }
+        if (spec.first() != '[' && spec.first() != '(') return spec        // already concrete
+        // A hard pin (`[V]`) is already an exact answer and outranks any `prefers`; only a genuine range
+        // needs resolving, and only IT may fall back to what the publisher prefers.
+        val range = VersionRange.parse(spec) ?: return normalizeVersion(spec)
+        val fallback = normalizeVersion(prefers) ?: normalizeVersion(spec)
+        val key = "$group:$name:$spec"
+        rangeCache[key]?.let { return it.orElse(null) }
+        val inRange = publishedVersions(group, name, repos).filter { range.contains(it) }
+        val picked = MavenVersion.newest(inRange.filter { '-' !in it }.ifEmpty { inRange }) ?: fallback
+        if (picked != null) log.info("range $group:$name $spec -> $picked")
+        rangeCache[key] = Optional.ofNullable(picked)
+        return picked
+    }
+
+    /**
+     * The versions `group:name` publishes, merged across [repos] (unordered). Session-cached per artifact;
+     * an empty result is NOT cached, so a transient network failure doesn't pin every range in the graph to
+     * its lower bound for the rest of the session. Unlike [availableVersions] (the UI version picker) this
+     * is a plain blocking read: the resolver's graph walk is already off the main thread.
+     */
+    private fun publishedVersions(group: String, name: String, repos: List<Repository>): List<String> {
+        val ga = GA(group, name)
+        versionIndex[ga]?.let { return it }
+        return fetchVersionIndex(group, name, repos).also { if (it.isNotEmpty()) versionIndex[ga] = it }
+    }
+
+    /** A parsed Maven version range: `[1.0,2.0)`, `[1.0,)`, `(,2.0]`. A `[V]` hard pin is NOT a range. */
+    private data class VersionRange(
+        val lower: String?, val lowerInclusive: Boolean,
+        val upper: String?, val upperInclusive: Boolean,
+    ) {
+        fun contains(v: String): Boolean {
+            lower?.let {
+                val c = MavenVersion.compare(v, it)
+                if (c < 0 || (c == 0 && !lowerInclusive)) return false
+            }
+            upper?.let {
+                val c = MavenVersion.compare(v, it)
+                if (c > 0 || (c == 0 && !upperInclusive)) return false
+            }
+            return true
+        }
+
+        companion object {
+            fun parse(spec: String): VersionRange? {
+                val s = spec.trim()
+                if (s.length < 3) return null
+                val lowerInclusive = when (s.first()) { '[' -> true; '(' -> false; else -> return null }
+                val upperInclusive = when (s.last()) { ']' -> true; ')' -> false; else -> return null }
+                val inner = s.substring(1, s.length - 1)
+                if (',' !in inner) return null      // `[V]` hard pin: a single version, not a range
+                val (lo, hi) = inner.split(',', limit = 2).let { it[0].trim() to it[1].trim() }
+                if (lo.isBlank() && hi.isBlank()) return null
+                return VersionRange(lo.ifBlank { null }, lowerInclusive, hi.ifBlank { null }, upperInclusive)
+            }
+        }
     }
 
     private fun parseRawPom(coord: Coordinate, repos: List<Repository>): RawPom? {
@@ -1037,8 +1139,12 @@ class MavenDependencyResolver(
                 }
             }
         }
-        // resource-only AAR (no code) → a classes.jar with a single manifest entry (see [writeManifestOnlyJar]).
-        if (!foundClasses) writeManifestOnlyJar(classesJar)
+        // Code-free AAR → a classes.jar with a single manifest entry (see [writeManifestOnlyJar]). Two shapes
+        // land here: no `classes.jar` entry at all (a resource-only AAR), and the one that used to slip
+        // through, an AAR that SHIPS a zero-entry `classes.jar`, as `com.onesignal:OneSignal` does for its
+        // dependency-only umbrella module. Copying that verbatim puts a 22-byte empty archive on the classpath,
+        // which ART's ZipFile rejects outright ("No entries"), so validate what was copied, not just that it existed.
+        if (!foundClasses || !isUsableJar(classesJar)) writeManifestOnlyJar(classesJar)
         marker.writeText(AAR_EXPLODE_VERSION)
         return classesJar
     }
@@ -1120,7 +1226,7 @@ private fun GA.excludedBy(exclusions: Set<GA>): Boolean = exclusions.any {
  *  added after the initial classes.jar-only explosion), so a dir left by an older build is treated as stale
  *  and re-extracted instead of reused missing its `res/`. Folded into the dependency-reconcile fingerprint so
  *  a bump forces a one-time re-resolve that heals existing caches on the next open. */
-const val AAR_EXPLODE_VERSION = "3"
+const val AAR_EXPLODE_VERSION = "4"
 
 const val MAVEN_CENTRAL_SEARCH = "https://search.maven.org/solrsearch/select"
 
