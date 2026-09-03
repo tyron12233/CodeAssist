@@ -18,6 +18,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
@@ -243,6 +244,44 @@ class SegmentTest {
                 assertTrue(exact(s, "Bar").isEmpty())             // an all-bad term degrades to empty, no crash
                 assertEquals(listOf("Baz.good"), exact(s, "Baz")) // a later term is unaffected (cursor stayed aligned)
                 assertEquals(setOf("Baz.good"), prefix(s, "Ba").map { it.value as String }.toSet())
+            } finally { s.close() }
+        }
+    }
+
+    /**
+     * A [StackOverflowError] out of the externalizer is NOT a corrupt payload: it means the CALLER ran out of
+     * stack, so it must propagate instead of being swallowed as corruption. Swallowing it also LOGGED, and the
+     * log's native `println` needs stack of its own, so an overflow in the Kotlin resolver (a self-referential
+     * generic bound) reached a segment read and died as a SIGSEGV in liblog rather than as a catchable error.
+     * The segment is also not marked corrupt, so later reads still work.
+     */
+    @Test
+    fun callerStackOverflowPropagatesInsteadOfReadingAsCorruption() {
+        withTempDir("seg") { dir ->
+            var explode = true
+            val ext = object : IndexExtension<String, String> {
+                override val id = IndexId("test.overflow")
+                override val version = 1
+                override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
+                override val valueExternalizer = object : Externalizer<String> {
+                    override fun write(out: java.io.DataOutput, value: String) = out.writeUTF(value)
+                    override fun read(inp: java.io.DataInput): String {
+                        val v = inp.readUTF()
+                        if (explode) throw StackOverflowError()
+                        return v
+                    }
+                }
+                override val matching = MatchingMode.PREFIX_AND_FUZZY
+                override val inputFilter = InputFilter { true }
+                override fun index(input: IndexInput): Map<String, Collection<String>> = emptyMap()
+            }
+            val file = dir.resolve("overflow.seg")
+            Segment.write(file, ext, listOf(entry("Foo", "Foo.value")))
+            val s = Segment.open(file, ext, BlockCache(8L * 1024 * 1024), 0)
+            try {
+                assertFailsWith<StackOverflowError> { exact(s, "Foo") }
+                explode = false
+                assertEquals(listOf("Foo.value"), exact(s, "Foo")) // not written off as a corrupt segment
             } finally { s.close() }
         }
     }

@@ -257,6 +257,13 @@ internal class Segment private constructor(
                 DataInputStream(ByteArrayInputStream(payload)).use { dis ->
                     externalizer.read(PoolingDataInput(dis) { id -> poolString(id) })
                 }
+            } catch (e: VirtualMachineError) {
+                // A StackOverflowError (or OOM) raised because the CALLER is already out of stack/heap says
+                // nothing about this segment, and mistaking it for a corrupt payload is what turned an
+                // overflow in the Kotlin resolver into a hard SIGSEGV: [warnCorruptOnce] logs, and the log's
+                // native `println` needs stack of its own, which a thread on its last frames doesn't have.
+                // Propagate to the caller's own guard instead of swallowing it and logging.
+                throw e
             } catch (t: Throwable) {
                 warnCorruptOnce(t)
                 return@repeat
