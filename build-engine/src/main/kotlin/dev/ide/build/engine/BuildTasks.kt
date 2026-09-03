@@ -8,8 +8,10 @@ import dev.ide.build.Task
 import dev.ide.build.TaskContainer
 import dev.ide.build.TaskContext
 import dev.ide.build.TaskInputs
+import dev.ide.build.TaskInputsImpl
 import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
+import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
@@ -17,10 +19,11 @@ import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
 import dev.ide.model.Project
+import dev.ide.platform.log.Log
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
 import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
 
 /** A plain [BuildConfiguration] for a plugin to contribute tasks to (the host realizes [tasks] afterwards). */
 class SimpleBuildConfiguration(
@@ -43,22 +46,32 @@ class DefaultBuildEnv(
     override fun bootClasspath(module: Module): List<Path> = bootClasspathFor(module)
 }
 
+private val log = Log.logger("build.plugins")
+
 /**
  * Apply the contributed [BuildPlugin]s that claim [config] to it, in registration order. A plugin that
- * throws is skipped with a build-log warning rather than failing the graph: one bad extension must not make
- * a project unbuildable. Called by each build system after its own plugins, before realizing the container.
+ * throws is skipped rather than failing the graph: one bad extension must not make a project unbuildable.
+ * Called by each build system after its own plugins, before realizing the container.
+ *
+ * The reason is always logged (a silently skipped extension is indistinguishable from one that ran and did
+ * nothing, which is the hardest kind of plugin bug to find) and also handed to [onError], which build systems
+ * wire to [dev.ide.build.BuildContext.onExtensionError] so it reaches the build console as well.
  */
 fun applyBuildPlugins(
     config: BuildConfiguration,
     plugins: List<BuildPlugin>,
     onError: (String) -> Unit = {},
 ) {
+    fun skipped(plugin: BuildPlugin, stage: String, t: Throwable) {
+        val message = "build plugin '${plugin.id}' failed in $stage, skipped: ${t.message ?: t.toString()}"
+        log.warn(message, t)
+        runCatching { onError(message) }
+    }
     for (plugin in plugins) {
         val claims = runCatching { plugin.appliesTo(config) }
-            .getOrElse { onError("build plugin '${plugin.id}' failed in appliesTo: ${it.message}"); false }
+            .getOrElse { skipped(plugin, "appliesTo", it); false }
         if (!claims) continue
-        runCatching { plugin.apply(config) }
-            .onFailure { onError("build plugin '${plugin.id}' failed to apply: ${it.message}") }
+        runCatching { plugin.apply(config) }.onFailure { skipped(plugin, "apply", it) }
     }
 }
 

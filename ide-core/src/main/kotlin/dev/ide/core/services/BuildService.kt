@@ -1,15 +1,5 @@
 package dev.ide.core.services
 
-import dev.ide.core.MEM_HEARTBEAT_EVERY_SAMPLES
-import dev.ide.core.MEM_SAMPLE_INTERVAL_MS
-import dev.ide.core.PeakHeap
-import dev.ide.platform.log.Log
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.launch
 import dev.ide.android.support.AndroidBuildSystem
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidVariants
@@ -20,6 +10,7 @@ import dev.ide.android.support.tools.SigningConfig
 import dev.ide.build.BUILD_PLUGIN_EP
 import dev.ide.build.BUILD_SYSTEM_EP
 import dev.ide.build.BuildContext
+import dev.ide.build.BuildControl
 import dev.ide.build.BuildDiagnostic
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildLogEntry
@@ -27,9 +18,11 @@ import dev.ide.build.BuildLogLevel
 import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSeverity
 import dev.ide.build.CyclicTaskDependencyException
+import dev.ide.build.KOTLIN_COMPILER_PLUGIN_EP
+import dev.ide.build.KotlinCompilerPlugin
 import dev.ide.build.RUN_TASK_PROVIDER_EP
-import dev.ide.core.plugins.PluginProject
 import dev.ide.build.RunAction
+import dev.ide.build.RunCapture
 import dev.ide.build.SOURCE_GENERATOR_EP
 import dev.ide.build.SourceGenerator
 import dev.ide.build.TaskGraph
@@ -46,17 +39,22 @@ import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.TaskStatus
 import dev.ide.build.engine.jarPath
 import dev.ide.build.jvm.JavaBuildSystem
+import dev.ide.core.AppLogEntry
+import dev.ide.core.AppLogLevel
+import dev.ide.core.AppLogSnapshot
 import dev.ide.core.BuildFailureKind
 import dev.ide.core.EngineContext
+import dev.ide.core.MEM_HEARTBEAT_EVERY_SAMPLES
+import dev.ide.core.MEM_SAMPLE_INTERVAL_MS
 import dev.ide.core.MemSample
+import dev.ide.core.PeakHeap
 import dev.ide.core.PermissionPolicy
 import dev.ide.core.event.BuildEvent
 import dev.ide.core.event.IdeEventTopics
 import dev.ide.core.event.RunEvent
+import dev.ide.core.plugins.PluginProject
 import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
-import dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP
-import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -69,6 +67,9 @@ import dev.ide.model.event.ProjectModelTopics
 import dev.ide.model.module
 import dev.ide.platform.Disposable
 import dev.ide.platform.MessageBusConnection
+import dev.ide.platform.log.Log
+import dev.ide.ui.backend.AppLogLineUi
+import dev.ide.ui.backend.AppLogUi
 import dev.ide.ui.backend.BuildDiagnosticUi
 import dev.ide.ui.backend.BuildLogLine
 import dev.ide.ui.backend.BuildState
@@ -89,7 +90,12 @@ import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -97,12 +103,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import dev.ide.core.AppLogEntry
-import dev.ide.core.AppLogLevel
-import dev.ide.core.AppLogSnapshot
-import dev.ide.ui.backend.AppLogLineUi
-import dev.ide.ui.backend.AppLogUi
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -115,7 +117,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * flow, which the editor reads, so the rest of the engine stays decoupled. Reaches shared infrastructure
  * (model, compilers, classpath, ports) through [EngineContext].
  */
-internal class BuildService(private val ctx: EngineContext) : Disposable {
+internal class BuildService(private val ctx: EngineContext) : Disposable, BuildControl {
 
     /** Phase-0 build heap-peak instrumentation; read by the analytics bridge to attach to build_result. */
     @Volatile
@@ -596,7 +598,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         plugins = ctx.platform.extensions.extensions(BUILD_PLUGIN_EP),
         env = DefaultBuildEnv(ctx.workspaceRoot, ctx.sharedCachesRoot) { ctx.bootClasspathFor(it) },
         extensions = ctx.platform.extensions,
+        // A graph is assembled before the run it belongs to starts, so there is no console to write to yet.
+        // Held here and drained by [launch] into that run's log and Problems list, so a contributed plugin the
+        // build system had to skip is visible where the user is already looking.
+        onExtensionError = { extensionWarnings.add(it) },
     )
+
+    /** Messages from [buildContext]'s error channel, awaiting the next [launch]. */
+    private val extensionWarnings = java.util.Collections.synchronizedList(ArrayList<String>())
 
     /**
      * The executable form of a Run row the host itself doesn't own: one contributed by the project's bound
@@ -957,7 +966,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     }
 
     /** Run the default task (first of [runTasks]) — the plain Run button + existing callers. */
-    fun runBuild() {
+    override fun runBuild() {
         val first =
             runTasks().firstOrNull() ?: return fail("Nothing to run or assemble in this project.")
         runTask(first.id)
@@ -1077,6 +1086,23 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     /** Stream [graph] execution into [buildState] (shared by run + assemble). [onSuccess] (e.g. install +
      *  launch an APK) runs after a successful build, receiving the console log appender. [onComplete] runs
      *  when the build finishes normally (success or failure, not cancellation), with the outcome. */
+    /**
+     * Report the build plugins skipped while assembling this graph, as WARNING diagnostics and log lines on
+     * the run that is starting. Drained, so a message is reported once and does not follow later builds.
+     */
+    private fun drainExtensionWarnings(taskCtx: SimpleTaskContext) {
+        val pending = synchronized(extensionWarnings) {
+            if (extensionWarnings.isEmpty()) return
+            extensionWarnings.toList().also { extensionWarnings.clear() }
+        }
+        for (message in pending) {
+            taskCtx.buildLog.log(BuildLogEntry(message, BuildLogLevel.WARN))
+            taskCtx.diagnostics.report(
+                BuildDiagnostic(severity = BuildSeverity.WARNING, message = message, source = "build")
+            )
+        }
+    }
+
     private fun launch(
         moduleName: String,
         graph: TaskGraph,
@@ -1111,6 +1137,8 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             onDiagnostic = { d -> _buildState.update { it.copy(diagnostics = it.diagnostics + d.toUi()) } },
         )
         buildCtx = ctx
+        // Anything a build plugin did wrong while this graph was being assembled, now that there is a console.
+        drainExtensionWarnings(ctx)
         // Arm the run-time guard for this run: fresh per-run decisions + this engine's broker. Only the
         // interpreter run consults it (its bridge mediates sensitive calls); other graphs never touch it.
         permissionPolicy.resetRun(); _permissionRequest.value = null
@@ -1224,7 +1252,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     }
 
     /** Cancel an in-progress build/run. */
-    fun stopBuild() {
+    override fun stopBuild() {
         buildCtx?.canceled = true
         currentRunIo?.input?.close() // EOF a program blocked reading stdin, before we interrupt its thread
         buildJob?.cancel()
@@ -1379,8 +1407,8 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
      * bounded by [timeoutMs]. The run sandbox is auto-allowed for the duration so a lesson snippet never
      * blocks on a permission prompt.
      */
-    suspend fun runAndCapture(
-        moduleName: String, stdin: String = "", timeoutMs: Long = 60_000
+    override suspend fun runAndCapture(
+        moduleName: String, stdin: String, timeoutMs: Long
     ): RunCapture {
         ctx.flushOpenDocuments()
         runCatching { ctx.ensureKotlinStdlib() }
@@ -1531,15 +1559,3 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     }
 }
 
-/**
- * Outcome of [BuildService.runAndCapture]: whether the program [compiled] (its `main` started), [ran] to
- * completion, its captured [stdout], its [exitCode] (null if it never finished / timed out), and any
- * compile-error [diagnostics].
- */
-data class RunCapture(
-    val compiled: Boolean,
-    val ran: Boolean,
-    val stdout: String,
-    val exitCode: Int?,
-    val diagnostics: List<String>,
-)

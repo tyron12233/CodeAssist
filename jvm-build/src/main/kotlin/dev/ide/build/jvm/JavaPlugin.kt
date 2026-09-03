@@ -2,6 +2,7 @@ package dev.ide.build.jvm
 
 import dev.ide.build.BuildConfiguration
 import dev.ide.build.BuildGoal
+import dev.ide.build.KotlinCompilerPlugin
 import dev.ide.build.Lifecycle
 import dev.ide.build.Plugin
 import dev.ide.build.SourceGenerator
@@ -13,6 +14,7 @@ import dev.ide.build.engine.LifecycleTask
 import dev.ide.build.engine.ProcessResourcesTask
 import dev.ide.build.engine.classOutputs
 import dev.ide.build.engine.depOutputDirs
+import dev.ide.build.engine.generatedRoot
 import dev.ide.build.engine.directModuleDeps
 import dev.ide.build.engine.hasKotlinSources
 import dev.ide.build.engine.jarPath
@@ -25,7 +27,6 @@ import dev.ide.lang.jdt.build.JdtCompileTask
 import dev.ide.lang.kotlin.build.KotlinCompileTask
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
-import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
 import dev.ide.model.ContentRole
 import dev.ide.model.Module
 import dev.ide.model.ModuleId
@@ -58,11 +59,17 @@ class JavaPlugin(
     private val mainClassFor: (Module) -> String? = { null },
 ) : Plugin {
 
-    /** The module's `ContentRole.GENERATED` source roots (where a [GenerateSourcesTask] emits). */
-    private fun generatedRoots(module: Module): List<Path> = module.sourceSets
+    /**
+     * Where a [GenerateSourcesTask] emits for [module]: its first declared `ContentRole.GENERATED` root, or
+     * the conventional `build/generated` when it declares none. The compile tasks read both as source (see
+     * `sourceRootDirs`), so a generator contributed for a module that never declared a generated root still
+     * has its output compiled.
+     */
+    private fun generatedOutputRoot(module: Module): Path = module.sourceSets
         .flatMap { it.contentRoots }
         .filter { ContentRole.GENERATED in it.roles }
         .map { Paths.get(it.dir.path) }
+        .firstOrNull() ?: generatedRoot(module)
 
     override fun apply(config: BuildConfiguration) {
         val byId = config.project.modules.associateBy { it.id }
@@ -79,14 +86,14 @@ class JavaPlugin(
     fun registerModule(tasks: TaskContainer, module: Module, byId: Map<ModuleId, Module>, withJar: Boolean) {
         val hasKt = kotlin != null && hasKotlinSources(module)
         // generateSources: run the source generators into the module's generated root ahead of compilation.
-        // The compile tasks read that root as source (it's ContentRole.GENERATED), so they need only an
-        // explicit edge to it — the generated dir is empty at graph-build time, so output/input inference alone
-        // wouldn't catch it (the same reason Android wires aapt2Link -> compileJava explicitly).
-        val generatedRoots = generatedRoots(module)
-        val generateSources: TaskName? = if (generators.isNotEmpty() && generatedRoots.isNotEmpty()) {
+        // The compile tasks read that root as source, so they need only an explicit edge to it: the generated
+        // dir is empty at graph-build time, so output/input inference alone wouldn't catch it (the same reason
+        // Android wires aapt2Link -> compileJava explicitly).
+        val generateSources: TaskName? = if (generators.isNotEmpty()) {
             val gen = TaskName(":${module.name}:generateSources")
+            val out = generatedOutputRoot(module)
             val cp = { depOutputDirs(module) + kotlinSiblings(depOutputDirs(module)) + libJars(module) }
-            tasks.register(gen) { GenerateSourcesTask(module, gen, generators, generatedRoots.first(), cp) }
+            tasks.register(gen) { GenerateSourcesTask(module, gen, generators, out, cp) }
             gen
         } else null
 

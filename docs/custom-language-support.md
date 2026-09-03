@@ -1083,7 +1083,9 @@ of the work:
 | To emit Kotlin or Java source before compilation | [`SourceGenerator`](../build-api/src/main/kotlin/dev/ide/build/SourceGenerator.kt) on `SOURCE_GENERATOR_EP` | The build wires the output as a `GENERATED` source root, so it is compiled and indexed like hand-written code |
 | To own a project's builds entirely | [`BuildSystem`](../build-api/src/main/kotlin/dev/ide/build/Build.kt) on `BUILD_SYSTEM_EP` | A genuinely different pipeline or a foreign build system |
 
-Most languages want `BuildPlugin`. Reach for `BuildSystem` only when the whole graph is different.
+Most languages want `BuildPlugin`. Reach for `BuildSystem` only when the whole graph is different. This
+section covers what a language author needs; [custom-build-plugins.md](custom-build-plugins.md) is the full
+guide to the build extension surface.
 
 ### 12.1 Tasks
 

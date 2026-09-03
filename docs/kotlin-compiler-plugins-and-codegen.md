@@ -269,7 +269,8 @@ shared by both plugins and processors.
 
 ## Roadmap
 
-1. **Generalize the seam.** [DONE] `KOTLIN_COMPILER_PLUGIN_EP` + `KotlinCompilerPlugin` in lang-kotlin;
+1. **Generalize the seam.** [DONE] `KOTLIN_COMPILER_PLUGIN_EP` + `KotlinCompilerPlugin` in build-api
+   (the built-in implementations stay in lang-kotlin);
    Compose is the reference impl; `pluginOptions` wired end to end; the plugin list is threaded
    `IdeServices` -> build systems -> compile tasks. Compose behaves exactly as before.
 2. **Runtime-dex plugin loading.** Engine [DONE], device wiring staged.

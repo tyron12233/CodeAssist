@@ -1,10 +1,8 @@
 package dev.ide.build.engine
 
-import dev.ide.model.ContentRole
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
 import java.util.stream.Collectors
 
 /**
@@ -15,19 +13,13 @@ import java.util.stream.Collectors
  * same-module Java types), while the Java compiler sees the Kotlin output via the `kotlin-classes` dir.
  */
 
-/** The `.kt` files in a module's SOURCE/GENERATED roots — kotlinc's program inputs. */
+/** The `.kt` files in a module's source roots (see `sourceRootDirs`) — kotlinc's program inputs. */
 fun kotlinSourceFiles(module: Module): List<Path> = sourceRootDirs(module)
     .flatMap { root -> Files.walk(root).use { s -> s.filter { it.toString().endsWith(".kt") }.collect(Collectors.toList()) } }
 
 /** True when a module carries any Kotlin source (so it needs a `compileKotlin` step). */
 fun hasKotlinSources(module: Module): Boolean = sourceRootDirs(module)
     .any { root -> Files.walk(root).use { s -> s.anyMatch { it.toString().endsWith(".kt") } } }
-
-private fun sourceRootDirs(module: Module): List<Path> = module.sourceSets
-    .flatMap { it.contentRoots }
-    .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
-    .map { Paths.get(it.dir.path) }
-    .filter { Files.isDirectory(it) }
 
 /** Where a module's Kotlin `.class` output lands — a sibling of the Java [outputDir] so the two compilers
  *  never share a directory (which would make each see the other's classes as "changed" output every run). */

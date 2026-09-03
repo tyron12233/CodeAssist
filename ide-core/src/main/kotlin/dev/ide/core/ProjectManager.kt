@@ -21,14 +21,20 @@ import dev.ide.platform.ServiceContainer
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.impl.ApplicationContainer
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.platform.settings.PreferenceReader
+import dev.ide.platform.settings.SETTINGS_ACCESS
+import dev.ide.platform.settings.SettingsAccess
+import dev.ide.platform.settings.SettingsPage
+import dev.ide.platform.settings.SettingsScope
+import dev.ide.platform.settings.settingsKey
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.util.Properties
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import java.nio.file.Paths
 
 
 /** Cap on screenshots embedded in an exported package, and on the size of each one. */
@@ -155,6 +161,20 @@ class ProjectManager private constructor(
         kotlinPluginLoader?.let { l -> env.container.registerServiceIfAbsent(KOTLIN_PLUGIN_LOADER) { l } }
         kotlinCompiler?.let { c -> env.container.registerServiceIfAbsent(KOTLIN_COMPILER_BACKEND) { c } }
         realViewRuntime?.let { rv -> env.container.registerServiceIfAbsent(REAL_VIEW_RUNTIME) { rv } }
+        // Lets a contribution read its own settings page outside the page's callbacks (a build task
+        // consulting a toggle). Registered here because this is where both stores are reachable: app
+        // preferences below, and the open project's settings through the active engine.
+        env.container.registerServiceIfAbsent(SETTINGS_ACCESS) {
+            object : SettingsAccess {
+                override fun reader(page: SettingsPage): PreferenceReader = object : PreferenceReader {
+                    override fun raw(key: String): String? {
+                        val full = settingsKey(page.id, key)
+                        return if (page.scope == SettingsScope.PROJECT) env.activeEngine?.projectPref(full)
+                        else preference(full)
+                    }
+                }
+            }
+        }
     }
 
     /** The process-global application service container (see [env]); parents every project container. */

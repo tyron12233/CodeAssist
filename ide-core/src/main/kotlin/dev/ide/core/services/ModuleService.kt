@@ -2,15 +2,15 @@ package dev.ide.core.services
 
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidFeatureDependencies
-import dev.ide.ksp.KspProcessorCatalog
 import dev.ide.android.support.AndroidPackaging
 import dev.ide.android.support.BuildFeatures
 import dev.ide.android.support.JniLibsPackaging
 import dev.ide.android.support.ResourcePackaging
+import dev.ide.build.KOTLIN_COMPILER_PLUGIN_EP
 import dev.ide.core.EngineContext
+import dev.ide.ksp.KspProcessorCatalog
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
-import dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP
 import dev.ide.lang.kotlin.compile.ParcelizeCompilerPlugin
 import dev.ide.lang.kotlin.compile.SerializationCompilerPlugin
 import dev.ide.model.ClasspathEntryKind
@@ -20,6 +20,7 @@ import dev.ide.model.LanguageLevel
 import dev.ide.model.LibraryDependency
 import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
+import dev.ide.model.ModuleSources
 import dev.ide.model.PlatformKind
 import dev.ide.model.SdkRef
 import dev.ide.model.SdkResolution
@@ -54,7 +55,7 @@ import java.nio.file.Paths
  * [dev.ide.core.IdeServices]. Reaches shared infrastructure (model, prefs) through [EngineContext]; enabling
  * an Android build feature pulls its runtime dependency through [EngineContext.dependencies], mirroring AGP.
  */
-internal class ModuleService(private val ctx: EngineContext) {
+internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
 
     /** Starter body for a created `proguard-rules.pro` — comments only (the bundled defaults carry the
      *  framework keep rules); applied on top of them when the build type has `minifyEnabled = true`. */
@@ -191,7 +192,7 @@ internal class ModuleService(private val ctx: EngineContext) {
      * A bundled Kotlin compiler plugin the user can toggle per module. Its enable-state is stored in the
      * [BuildFeatures] flag ([get]/[set]) — reusing the persistence AGP's `buildFeatures` already drives — and
      * enabling it adds [coords] (the runtime whose presence auto-applies the plugin). [pluginId] matches the
-     * corresponding [dev.ide.lang.kotlin.compile.KotlinCompilerPlugin.pluginId]. Adding a new toggleable plugin
+     * corresponding [dev.ide.build.KotlinCompilerPlugin.pluginId]. Adding a new toggleable plugin
      * = register it on the EP + add a [BuildFeatures] field + a dep coordinate list + one row here.
      */
     private class ToggleablePlugin(
@@ -214,7 +215,7 @@ internal class ModuleService(private val ctx: EngineContext) {
     private val kspProcessors: List<dev.ide.ksp.KspProcessor> = KspProcessorCatalog.blessed().processors
 
     /** The registered compiler plugins (EP contributions, or the built-ins for direct/test wiring), by id. */
-    private fun registeredPlugins(): Map<String, dev.ide.lang.kotlin.compile.KotlinCompilerPlugin> =
+    private fun registeredPlugins(): Map<String, dev.ide.build.KotlinCompilerPlugin> =
         ctx.platform.extensions.extensions(KOTLIN_COMPILER_PLUGIN_EP)
             .ifEmpty { BUILTIN_KOTLIN_COMPILER_PLUGINS }
             .associateBy { it.pluginId }
@@ -815,13 +816,13 @@ internal class ModuleService(private val ctx: EngineContext) {
     )
 
     /** The source-set names declared on [module], in declaration order. */
-    fun sourceSetNamesOf(module: Module): List<String> = module.sourceSets.map { it.name }
+    override fun sourceSetNamesOf(module: Module): List<String> = module.sourceSets.map { it.name }
 
     /**
      * The base directory a [sourceSetName]'s roots live under (e.g. `src/main`): the parent of its first
      * content root, or `<moduleRoot>/src/<name>` when the set is empty or absent. New roots go here.
      */
-    fun sourceSetBaseFor(module: Module, sourceSetName: String): Path? {
+    override fun sourceSetBaseFor(module: Module, sourceSetName: String): Path? {
         val moduleDir = ctx.moduleRoot(module) ?: return null
         val fallback = moduleDir.resolve("src").resolve(sourceSetName)
         val firstRoot =
@@ -834,7 +835,7 @@ internal class ModuleService(private val ctx: EngineContext) {
      * Register a typed content root at `<set-base>/[dirName]` under [sourceSetName] of [moduleName]. See
      * [addSourceRootAt]. Returns the created directory, or null if the module/project can't be resolved.
      */
-    fun addSourceRoot(
+    override fun addSourceRoot(
         moduleName: String, sourceSetName: String, dirName: String, roles: Set<ContentRole>
     ): Path? {
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return null
@@ -876,7 +877,7 @@ internal class ModuleService(private val ctx: EngineContext) {
 
     /** Remove the content root at [dirRelPath] (relative to the module dir) from [sourceSetName] of
      *  [moduleName]. Model-only — the directory on disk is left untouched. Returns true on a model change. */
-    fun removeSourceRoot(moduleName: String, sourceSetName: String, dirRelPath: String): Boolean {
+    override fun removeSourceRoot(moduleName: String, sourceSetName: String, dirRelPath: String): Boolean {
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return false
         val project = ctx.projectOf(module) ?: return false
         try {
@@ -894,7 +895,7 @@ internal class ModuleService(private val ctx: EngineContext) {
     }
 
     /** Create an empty source set [name] on [moduleName] (returns false if it already exists). */
-    fun addSourceSet(moduleName: String, name: String): Boolean {
+    override fun addSourceSet(moduleName: String, name: String): Boolean {
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return false
         if (module.sourceSets.any { it.name == name }) return false
         val project = ctx.projectOf(module) ?: return false

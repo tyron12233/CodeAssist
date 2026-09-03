@@ -36,6 +36,15 @@ object PluginCapabilities {
     /** Contributes a layer drawn over every screen. UI facet. */
     const val UI_OVERLAY = "ui.overlay"
 
+    /** Adds steps to the user's builds (a build plugin, or a build system of its own). Engine facet. */
+    const val BUILD_TASK = "build.task"
+
+    /** Generates source code into the user's modules at build time. Engine facet. */
+    const val BUILD_SOURCE_GENERATOR = "build.sourceGenerator"
+
+    /** Adds a row to the Run picker, and runs it. Engine facet. */
+    const val BUILD_RUN_TASK = "build.runTask"
+
     /** Reads the files in the user's projects. */
     const val FS_READ = "fs.read"
 
@@ -49,6 +58,7 @@ object PluginCapabilities {
     val KNOWN: Set<String> = linkedSetOf(
         UI_ACTION, UI_SETTINGS_PAGE, UI_EDITOR_ACTION,
         UI_TOOL_WINDOW, UI_SCREEN, UI_OVERLAY,
+        BUILD_TASK, BUILD_SOURCE_GENERATOR, BUILD_RUN_TASK,
         FS_READ, FS_WRITE, NET,
     )
 
@@ -62,5 +72,8 @@ object PluginCapabilities {
      * The file and network ones are in neither set on purpose. Either facet can read a file or open a socket,
      * so there is nothing about the manifest that makes declaring one inconsistent.
      */
-    val NEEDS_ENGINE_FACET: Set<String> = linkedSetOf(UI_ACTION, UI_SETTINGS_PAGE, UI_EDITOR_ACTION)
+    val NEEDS_ENGINE_FACET: Set<String> = linkedSetOf(
+        UI_ACTION, UI_SETTINGS_PAGE, UI_EDITOR_ACTION,
+        BUILD_TASK, BUILD_SOURCE_GENERATOR, BUILD_RUN_TASK,
+    )
 }

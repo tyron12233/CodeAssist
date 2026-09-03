@@ -15,22 +15,32 @@ import dev.ide.android.support.tools.Shrinker
 import dev.ide.android.support.tools.SigningConfig
 import dev.ide.android.support.viewbinding.LayoutBindingModel
 import dev.ide.android.support.viewbinding.ViewBindingJavaSource
+import dev.ide.build.DiagnosticKind
+import dev.ide.build.KotlinCompilerPlugin
 import dev.ide.build.Task
 import dev.ide.build.TaskContext
 import dev.ide.build.TaskInputs
+import dev.ide.build.TaskInputsImpl
 import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
-import dev.ide.build.DiagnosticKind
+import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import dev.ide.build.engine.reportToolDiagnostics
-import dev.ide.build.engine.TaskInputsImpl
-import dev.ide.build.engine.TaskOutputsImpl
+import dev.ide.build.resolveFor
 import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
-import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
-import dev.ide.lang.kotlin.compile.resolveFor
 import dev.ide.model.Module
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.jar.JarEntry
+import java.util.jar.JarOutputStream
+import java.util.stream.Collectors
+import java.util.zip.ZipFile
+import kotlin.io.path.writeText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -43,16 +53,6 @@ import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.StandardCopyOption
-import java.security.MessageDigest
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.jar.JarEntry
-import java.util.jar.JarOutputStream
-import java.util.stream.Collectors
-import java.util.zip.ZipFile
-import kotlin.io.path.writeText
 
 /**
  * The native Android pipeline as discrete, independently-incremental [Task]s. Each

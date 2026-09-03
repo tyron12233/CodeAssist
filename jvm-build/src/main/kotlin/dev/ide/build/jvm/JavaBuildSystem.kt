@@ -4,23 +4,23 @@ import dev.ide.build.BuildContext
 import dev.ide.build.BuildEnv
 import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSystem
+import dev.ide.build.KotlinCompilerPlugin
+import dev.ide.build.SourceGenerator
 import dev.ide.build.TaskDescriptor
 import dev.ide.build.TaskGraph
 import dev.ide.build.TaskName
 import dev.ide.build.engine.DefaultBuildEnv
 import dev.ide.build.engine.DefaultTaskContainer
-import dev.ide.build.engine.applyBuildPlugins
 import dev.ide.build.engine.InterpretExecTask
 import dev.ide.build.engine.ProgramInterpreter
 import dev.ide.build.engine.ProgramIo
-import dev.ide.build.SourceGenerator
 import dev.ide.build.engine.SimpleBuildConfiguration
+import dev.ide.build.engine.applyBuildPlugins
 import dev.ide.build.engine.classOutputs
 import dev.ide.build.engine.kotlinSiblings
 import dev.ide.build.engine.moduleClosure
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
-import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
 import dev.ide.model.BuildSystemId
 import dev.ide.model.DependencyScope
 import dev.ide.model.Module
@@ -74,7 +74,7 @@ class JavaBuildSystem(
         JavaPlugin(bootClasspathFor, kotlin, plugins, generators, mainClassFor).apply(config)
         // Contributed build logic (BUILD_PLUGIN_EP) lands after the Java plugin, so it can wire by name to
         // the tasks just registered; the container is realized only once every plugin has had its turn.
-        applyBuildPlugins(config, ctx.plugins)
+        applyBuildPlugins(config, ctx.plugins, ctx.onExtensionError)
         return tasks.build()
     }
 

@@ -101,7 +101,9 @@ produced them (collapsible), colors them by level, and offers a level filter + t
 ## Extending the build
 
 Build logic is contributed, not hard-coded: the built-in Java and Android pipelines are `Plugin`s over the
-task container, and a plugin adds its own the same way through `platform.buildPlugin`.
+task container, and a plugin adds its own the same way through `platform.buildPlugin`. This section is the
+summary; [custom-build-plugins.md](custom-build-plugins.md) is the step-by-step guide to the whole extension
+surface, with a runnable example in [`samples/hello-plugin`](../samples/hello-plugin).
 
 ```kotlin
 class BuildInfoPlugin : BuildPlugin {
@@ -124,12 +126,18 @@ The host reads the extension point per build and hands the plugins to the build 
 one is applied after the build system's own plugins and before the container is realized. That ordering is what
 lets a contributed task wire by name to tasks it does not own, in both directions. Configuring a task that no
 build system registered is ignored, so one plugin can target several pipelines without probing which is
-running, and a plugin that throws is skipped with a logged warning rather than making the project unbuildable.
+running, and a plugin that throws is skipped rather than making the project unbuildable: the reason is logged
+and reported on the build console (`BuildContext.onExtensionError`), so a skipped extension is never silent.
 
-A task is the same `Task` the built-ins implement: declare typed inputs and outputs (build-engine's
+A task is the same `Task` the built-ins implement: declare typed inputs and outputs (build-api's
 `TaskInputsImpl`/`TaskOutputsImpl` cover files, dirs, properties, and classpath hashes) and the engine gives it
 up-to-date checking, caching, parallelism, cancellation, and console/diagnostic streaming for free. Declaring no
 inputs marks the task NO-SOURCE and skips it.
+
+Both pipelines treat a module's `build/generated` directory as a source root whether or not the module declares
+one (`BuildEnv.generatedDir(module, id)` writes inside it), so generated code is compiled without the project
+having to declare a root for output the build itself produced. Nested roots are collapsed, so a module that
+does declare one is unaffected.
 
 ### Lifecycle task names
 

@@ -4,7 +4,9 @@ import dev.ide.build.CyclicTaskDependencyException
 import dev.ide.build.Task
 import dev.ide.build.TaskContext
 import dev.ide.build.TaskGraph
+import dev.ide.build.TaskInputsImpl
 import dev.ide.build.TaskName
+import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import kotlin.test.Test
 import kotlin.test.assertEquals

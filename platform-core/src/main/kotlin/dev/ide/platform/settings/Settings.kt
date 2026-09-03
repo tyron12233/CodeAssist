@@ -4,6 +4,7 @@
 package dev.ide.platform.settings
 
 import dev.ide.platform.ExtensionPoint
+import dev.ide.platform.ServiceKey
 
 /**
  * The extensible settings/preferences framework. A **page** is one entry in the Settings screen's category
@@ -146,3 +147,42 @@ interface PreferenceReader {
 interface PreferenceStore : PreferenceReader {
     fun set(key: String, value: String?)
 }
+
+/**
+ * The key a control's value is stored under: the page id namespaces it, which is what keeps control keys
+ * page-local and safe from colliding across plugins.
+ */
+fun settingsKey(pageId: String, key: String): String = "settings.$pageId.$key"
+
+/**
+ * Reads a [SettingsPage]'s stored values outside the page's own callbacks.
+ *
+ * [SettingsPage.onChanged] and [SettingsPage.onAction] are handed a reader because they run in response to
+ * the user, but a contribution that needs a setting at some other time (a build task consulting a toggle, a
+ * generator deciding whether to run) has no callback to read it in, and caching the last `onChanged` value
+ * does not survive a restart. Resolve this service and read the page whenever the value is needed:
+ *
+ * ```
+ * private val page = MySettingsPage()
+ * private lateinit var services: ServiceLookup
+ *
+ * override fun register(reg: PluginRegistration) {
+ *     services = reg.appServices
+ *     reg.register(SETTINGS_PAGE_EP, page)
+ * }
+ *
+ * private fun stampEnabled(): Boolean =
+ *     services.getServiceOrNull(SETTINGS_ACCESS)?.reader(page)?.bool("stamp", false) ?: false
+ * ```
+ *
+ * The page is passed rather than its id because the page carries the [SettingsPage.scope] that decides which
+ * store the values live in. A `PROJECT`-scoped page reads the open project's settings, so its values are only
+ * available while a project is open.
+ */
+interface SettingsAccess {
+    /** A live view of [page]'s stored values; each read goes to the store, so a later change is seen. */
+    fun reader(page: SettingsPage): PreferenceReader
+}
+
+/** The host's [SettingsAccess], registered at application scope. */
+val SETTINGS_ACCESS = ServiceKey<SettingsAccess>("platform.settingsAccess")

@@ -28,5 +28,8 @@ and follow the links into each subsystem.
   round-trips block edits back to byte-for-byte source.
 - [build-system.md](build-system.md) — the `BuildSystem` SPI, the incremental task engine, the native
   Java and Android pipelines, and the Gradle compatibility layer.
+- [custom-build-plugins.md](custom-build-plugins.md): the step-by-step guide to extending the build.
+  Writing a task, contributing it to an existing pipeline, generating source, Kotlin compiler plugins,
+  Run-picker rows, and bringing your own build system and project model.
 - [version-control.md](version-control.md) — Git on device: the provider-neutral model, what it takes to
   run JGit on ART, GitHub sign-in and the account store, and the UI surfaces.

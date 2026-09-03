@@ -1,11 +1,14 @@
 package dev.ide.android.support
 
+import dev.ide.android.support.aidl.AidlCompiler
+import dev.ide.android.support.crashlytics.Crashlytics
+import dev.ide.android.support.gms.GoogleServices
 import dev.ide.android.support.tasks.Aapt2CompileTask
 import dev.ide.android.support.tasks.Aapt2LinkTask
 import dev.ide.android.support.tasks.AndroidCompileTask
 import dev.ide.android.support.tasks.AndroidKotlinCompileTask
+import dev.ide.android.support.tasks.BundleTask
 import dev.ide.android.support.tasks.CheckAarMetadataTask
-import dev.ide.android.support.aidl.AidlCompiler
 import dev.ide.android.support.tasks.CompileAidlTask
 import dev.ide.android.support.tasks.ConvertResourcesTask
 import dev.ide.android.support.tasks.DexArchiveBuilderTask
@@ -14,20 +17,17 @@ import dev.ide.android.support.tasks.DexMergeTask
 import dev.ide.android.support.tasks.GenerateAarRJarTask
 import dev.ide.android.support.tasks.GenerateLibraryRTask
 import dev.ide.android.support.tasks.GenerateRJarTask
-import dev.ide.android.support.tasks.PackageAarTask
 import dev.ide.android.support.tasks.GenerateViewBindingTask
 import dev.ide.android.support.tasks.InjectAppLogProviderTask
-import dev.ide.android.support.crashlytics.Crashlytics
-import dev.ide.android.support.gms.GoogleServices
-import dev.ide.android.support.tasks.BundleTask
+import dev.ide.android.support.tasks.InjectCrashlyticsMappingFileIdTask
 import dev.ide.android.support.tasks.L8DexTask
 import dev.ide.android.support.tasks.ManifestMergeTask
 import dev.ide.android.support.tasks.MergeJavaResourcesTask
 import dev.ide.android.support.tasks.MergeNativeLibsTask
 import dev.ide.android.support.tasks.MergeResourcesTask
+import dev.ide.android.support.tasks.PackageAarTask
 import dev.ide.android.support.tasks.PackageApkTask
 import dev.ide.android.support.tasks.PackagingRules
-import dev.ide.android.support.tasks.InjectCrashlyticsMappingFileIdTask
 import dev.ide.android.support.tasks.ProcessGoogleServicesTask
 import dev.ide.android.support.tasks.R8MinifyTask
 import dev.ide.android.support.tasks.SharedLibraryDexer
@@ -46,15 +46,15 @@ import dev.ide.android.support.tools.BundleSigner
 import dev.ide.android.support.tools.Bundler
 import dev.ide.android.support.tools.BundletoolInProcess
 import dev.ide.android.support.tools.D8Dexer
-import dev.ide.android.support.tools.JarsignerBundleSigner
 import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.android.support.tools.DesugarLib
 import dev.ide.android.support.tools.DesugaredLibrary
 import dev.ide.android.support.tools.Dexer
+import dev.ide.android.support.tools.JarsignerBundleSigner
 import dev.ide.android.support.tools.R8InProcessShrinker
-import dev.ide.android.support.tools.ResourceShrink
 import dev.ide.android.support.tools.R8Subprocess
+import dev.ide.android.support.tools.ResourceShrink
 import dev.ide.android.support.tools.Shrinker
 import dev.ide.android.support.tools.SigningConfig
 import dev.ide.build.BuildContext
@@ -62,25 +62,26 @@ import dev.ide.build.BuildEnv
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSystem
+import dev.ide.build.KotlinCompilerPlugin
 import dev.ide.build.SourceGenerator
 import dev.ide.build.Task
+import dev.ide.build.TaskContainer
 import dev.ide.build.TaskDescriptor
 import dev.ide.build.TaskGraph
 import dev.ide.build.TaskName
-import dev.ide.build.TaskContainer
 import dev.ide.build.engine.DefaultBuildEnv
 import dev.ide.build.engine.DefaultTaskContainer
-import dev.ide.build.engine.SimpleBuildConfiguration
-import dev.ide.build.engine.applyBuildPlugins
 import dev.ide.build.engine.GenerateSourcesTask
 import dev.ide.build.engine.JarTask
 import dev.ide.build.engine.LifecycleTask
 import dev.ide.build.engine.ProcessResourcesTask
+import dev.ide.build.engine.SimpleBuildConfiguration
+import dev.ide.build.engine.applyBuildPlugins
+import dev.ide.build.engine.collapseNestedRoots
 import dev.ide.build.engine.jarPath
 import dev.ide.build.jvm.JavaPlugin
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
-import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ContentRole
@@ -232,7 +233,7 @@ class AndroidBuildSystem(
         }
         // Contributed build logic (BUILD_PLUGIN_EP) lands after every android/java task is registered, so it
         // can wire by name to them (`:app:assembleDebug`, `:app:compileJava`); realize once afterwards.
-        applyBuildPlugins(SimpleBuildConfiguration(project, request, tasks, id, ctx.env), ctx.plugins)
+        applyBuildPlugins(SimpleBuildConfiguration(project, request, tasks, id, ctx.env), ctx.plugins, ctx.onExtensionError)
         return tasks.build()
     }
 
@@ -280,7 +281,10 @@ class AndroidBuildSystem(
             AndroidVariants.matchLibraryVariant(dep, variant, facet)?.let { roots(it, role) } ?: moduleRoots(dep, role)
         val mergeResInputs = depAndroidLibs.flatMap { depRoots(it, ContentRole.ANDROID_RES) } +
             libs.resDirs + gmsRes + crashlyticsRes + roots(variant, ContentRole.ANDROID_RES)
-        val sourceRoots = roots(variant, ContentRole.SOURCE)
+        // SOURCE plus the module's declared GENERATED roots, so a generated root is compiled here exactly as
+        // it is on the Java pipeline. Nested roots are collapsed: a project that declares `build/generated`
+        // would otherwise present the pipeline's own generated directories twice.
+        val sourceRoots = collapseNestedRoots(roots(variant, ContentRole.SOURCE) + roots(variant, ContentRole.GENERATED))
         val assetsDirs = depAndroidLibs.flatMap { depRoots(it, ContentRole.ASSETS) } +
             libs.assetsDirs + roots(variant, ContentRole.ASSETS)
         val level = levelOf(app.languageLevel)
@@ -353,7 +357,7 @@ class AndroidBuildSystem(
             }
             gs
         } else null
-        val genSourceRoots = sourceRoots + listOfNotNull(generateSources?.let { layout.kspGen })
+        val genSourceRoots = collapseNestedRoots(sourceRoots + listOfNotNull(generateSources?.let { layout.kspGen }))
 
         val mergeRes = step("mergeResources")
         val processManifest = step("processManifest")
@@ -798,7 +802,7 @@ class AndroidBuildSystem(
         val depRTasks = depAndroidLibs.map { TaskName(":${it.name}:compileR") }
         val classpath = ArrayList(compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin + depRJars)
         val compileDeps = (directModuleDeps(m, byId).map { TaskName(":${it.name}:compileJava") } + depRTasks).toMutableList()
-        val sourceRoots = srcRoots(ContentRole.SOURCE)
+        val sourceRoots = collapseNestedRoots(srcRoots(ContentRole.SOURCE) + srcRoots(ContentRole.GENERATED))
 
         val rRoot = buildDir.resolve("intermediates").resolve("r")
         val generateR = TaskName(":${m.name}:generateR")
@@ -880,7 +884,7 @@ class AndroidBuildSystem(
             compileDeps.add(gs)
             gs
         } else null
-        val libGenSourceRoots = sourceRoots + listOfNotNull(libGenerateSources?.let { kspGen })
+        val libGenSourceRoots = collapseNestedRoots(sourceRoots + listOfNotNull(libGenerateSources?.let { kspGen }))
 
         // compileKotlin (when the lib has `.kt`): runs against android.jar + the lib's own non-final R, ahead
         // of compileJava, which then sees its output. The Kotlin output IS dexed (it's the lib's code) — only

@@ -80,6 +80,13 @@ class BuildContext(
     val env: BuildEnv,
     /** The registry the graph was realized against, for a plugin that needs to read another extension point. */
     val extensions: ExtensionRegistry? = null,
+    /**
+     * Where a build system reports a contributed [BuildPlugin] it had to skip: one whose [BuildPlugin.apply]
+     * or [BuildPlugin.appliesTo] threw. Such a plugin is skipped rather than allowed to make the project
+     * unbuildable, so this is the only trace of it; the host routes it to the build console. A build system
+     * that assembles a graph must pass it to `applyBuildPlugins`.
+     */
+    val onExtensionError: (String) -> Unit = {},
 )
 
 data class BuildRequest(
@@ -259,9 +266,13 @@ interface TaskGraph {
 class CyclicTaskDependencyException(val cycle: List<TaskName>) :
     RuntimeException("cyclic task dependency: ${cycle.joinToString(" -> ") { it.value }}")
 
+/** Marker for tasks that must run every time (never up-to-date), like Gradle's `JavaExec`/`run`. */
+interface AlwaysRun
+
 /**
  * Runs a [TaskGraph]: up-to-date checks via input/output [ContentHash] fingerprints persisted in
  * the build cache, bounded-parallel execution per level, cooperative cancellation, progress streaming.
+ * A task marked [AlwaysRun] bypasses the up-to-date check.
  */
 interface TaskExecutor {
     suspend fun execute(graph: TaskGraph, ctx: TaskContext, maxParallel: Int = 2): BuildOutcome

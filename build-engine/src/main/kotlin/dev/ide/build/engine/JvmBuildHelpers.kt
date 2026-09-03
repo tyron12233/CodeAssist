@@ -23,11 +23,38 @@ import java.util.stream.Collectors
  * no compiler.
  */
 
-fun sourceFiles(module: Module): List<Path> = module.sourceSets
-    .flatMap { it.contentRoots }
-    .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
-    .map { Paths.get(it.dir.path) }
-    .filter { Files.isDirectory(it) }
+/**
+ * The conventional generated-source root of a module: `<module>/build/generated`, which is where
+ * [dev.ide.build.BuildEnv.generatedDir] writes. It counts as a source root whether or not the module
+ * declares one, so a contributed build plugin or source generator that emits there is compiled without the
+ * project having to declare a root for output the build itself produced.
+ */
+fun generatedRoot(module: Module): Path =
+    (outputDir(module).parent ?: outputDir(module)).resolve("generated")
+
+/**
+ * De-duplicate [roots] and drop any that sits inside another, keeping the outermost. A source-root list
+ * assembled from several places (a module's declared roots, a pipeline's generated directory, the
+ * conventional generated root) can otherwise present the same file twice, which a compiler rejects.
+ */
+fun collapseNestedRoots(roots: List<Path>): List<Path> {
+    val all = roots.map { it.toAbsolutePath().normalize() }.distinct()
+    return all.filterNot { root -> all.any { it != root && root.startsWith(it) } }
+}
+
+/**
+ * A module's source root directories: its declared `SOURCE` and `GENERATED` roots plus [generatedRoot],
+ * keeping only those that exist on disk.
+ */
+fun sourceRootDirs(module: Module): List<Path> {
+    val declared = module.sourceSets
+        .flatMap { it.contentRoots }
+        .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
+        .map { Paths.get(it.dir.path) }
+    return collapseNestedRoots(declared + generatedRoot(module)).filter { Files.isDirectory(it) }
+}
+
+fun sourceFiles(module: Module): List<Path> = sourceRootDirs(module)
     .flatMap { root -> Files.walk(root).use { s -> s.filter { it.toString().endsWith(".java") }.collect(Collectors.toList()) } }
 
 fun depOutputDirs(module: Module): List<Path> =

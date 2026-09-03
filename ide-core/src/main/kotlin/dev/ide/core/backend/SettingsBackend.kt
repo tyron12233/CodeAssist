@@ -13,15 +13,16 @@ import dev.ide.platform.settings.PreferenceReader
 import dev.ide.platform.settings.SettingControl
 import dev.ide.platform.settings.SettingsPage
 import dev.ide.platform.settings.SettingsScope
+import dev.ide.platform.settings.settingsKey
 import dev.ide.ui.backend.SettingsService
 import dev.ide.ui.backend.UiAccent
 import dev.ide.ui.backend.UiCodeStyle
 import dev.ide.ui.backend.UiInspection
 import dev.ide.ui.backend.UiPluginInfo
-import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.backend.UiSettingControl
 import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.backend.UiSettingsPage
+import dev.ide.ui.backend.UiSeverity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -220,7 +221,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
 
     // --- settings helpers ---
 
-    private fun settingKey(pageId: String, key: String) = "settings.$pageId.$key"
+    private fun settingKey(pageId: String, key: String) = settingsKey(pageId, key)
 
     private fun findPage(pageId: String): SettingsPage? =
         BuiltInSettingsPages.all(ctx.analyticsAvailable()).firstOrNull { it.id == pageId }

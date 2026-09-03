@@ -1,5 +1,6 @@
 package dev.ide.build.engine
 
+import dev.ide.build.AlwaysRun
 import dev.ide.build.BuildDiagnostic
 import dev.ide.build.BuildLogEntry
 import dev.ide.build.BuildLogLevel
@@ -17,15 +18,15 @@ import dev.ide.build.TaskProvider
 import dev.ide.build.TaskResult
 import dev.ide.build.TaskSpec
 import dev.ide.platform.ProgressReporter
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.util.Collections
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import java.nio.file.Files
-import java.nio.file.Path
-import java.util.Collections
-import java.nio.file.Paths
 
 /**
  * A task DAG with batched [topologicalLevels] (Kahn's algorithm); tasks in a level are independent.

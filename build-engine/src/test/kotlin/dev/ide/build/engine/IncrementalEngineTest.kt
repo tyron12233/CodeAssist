@@ -3,16 +3,18 @@ package dev.ide.build.engine
 import dev.ide.build.Task
 import dev.ide.build.TaskContext
 import dev.ide.build.TaskInputs
+import dev.ide.build.TaskInputsImpl
 import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
+import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import dev.ide.testkit.withTempDir
-import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 
 /**
  * Incremental execution: re-running an unchanged graph does zero work, and changing one

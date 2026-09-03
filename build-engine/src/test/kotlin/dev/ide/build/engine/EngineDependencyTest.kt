@@ -5,11 +5,12 @@ import dev.ide.build.Task
 import dev.ide.build.TaskContext
 import dev.ide.build.TaskGraph
 import dev.ide.build.TaskInputs
+import dev.ide.build.TaskInputsImpl
 import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
+import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import dev.ide.testkit.withTempDir
-import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -17,6 +18,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 
 /** The richer task-relationship API: inferred output→input deps, declared dependsOn, mustRunAfter/Before
  *  ordering, cycle detection, and NO-SOURCE skipping. */

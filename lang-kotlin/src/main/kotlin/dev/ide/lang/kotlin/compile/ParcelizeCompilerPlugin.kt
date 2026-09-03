@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin.compile
 
+import dev.ide.build.KotlinCompilerPlugin
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path

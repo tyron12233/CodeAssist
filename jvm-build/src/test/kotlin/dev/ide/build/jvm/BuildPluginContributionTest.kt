@@ -10,15 +10,15 @@ import dev.ide.build.Lifecycle
 import dev.ide.build.Task
 import dev.ide.build.TaskContext
 import dev.ide.build.TaskInputs
+import dev.ide.build.TaskInputsImpl
 import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
+import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
-import dev.ide.build.engine.TaskInputsImpl
-import dev.ide.build.engine.TaskOutputsImpl
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -34,13 +34,13 @@ import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
 import dev.ide.testkit.testEnv
 import dev.ide.testkit.writeSource
-import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 
 /**
  * A plugin contributes build logic to the native Java graph through [BuildContext.plugins]: its task is

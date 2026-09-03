@@ -1,15 +1,19 @@
-package dev.ide.build.engine
+package dev.ide.build
 
-import dev.ide.build.TaskInputs
-import dev.ide.build.TaskOutputs
 import dev.ide.model.ClasspathSnapshot
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
 import java.nio.file.Files
 import java.nio.file.Path
-import java.security.MessageDigest
 import java.nio.file.Paths
+import java.security.MessageDigest
 import java.util.stream.Collectors
+
+/*
+ * The implementations of [TaskInputs] and [TaskOutputs] every task uses. They live here, beside the
+ * interfaces, rather than in the engine: declaring inputs and outputs is the one thing a task cannot skip,
+ * and build-api is the module a contributed build plugin compiles against.
+ */
 
 internal fun sha256(): MessageDigest = MessageDigest.getInstance("SHA-256")
 internal fun MessageDigest.hex(): String = digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }

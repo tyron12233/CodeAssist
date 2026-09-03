@@ -3,15 +3,15 @@ package dev.ide.android.support.tasks
 import dev.ide.build.Task
 import dev.ide.build.TaskContext
 import dev.ide.build.TaskInputs
+import dev.ide.build.TaskInputsImpl
 import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
+import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
-import dev.ide.build.engine.TaskInputsImpl
-import dev.ide.build.engine.TaskOutputsImpl
-import org.w3c.dom.Element
 import java.nio.file.Files
 import java.nio.file.Path
 import javax.xml.parsers.DocumentBuilderFactory
+import org.w3c.dom.Element
 
 /**
  * `injectAppLogProvider`: on a DEBUG build, weave a `<provider>` for the IDE's log bridge

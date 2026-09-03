@@ -555,11 +555,11 @@ hosts provide. The keys are declared in
 
 ### Getting an instance of a service
 
-`register()` cannot resolve one, and that is structural rather than a missing API. It runs inside
-[`ApplicationEnvironment`](../ide-core/src/main/kotlin/dev/ide/core/ApplicationEnvironment.kt)'s constructor,
-once at startup, before any project is open, so no workspace container exists yet and there is nothing to
-resolve. No built-in resolves a service there either. Register something that is handed a scope later, and
-resolve at that point. Three shapes cover it.
+`register()` runs inside [`ApplicationEnvironment`](../ide-core/src/main/kotlin/dev/ide/core/ApplicationEnvironment.kt)'s
+constructor, once at startup, before any project is open. The application container exists by then, so an
+APPLICATION-scoped service is resolvable there; a WORKSPACE- or MODULE-scoped one is not, because there is no
+open project to scope it to. Prefer registering something that is handed a scope later and resolving at that
+point. Four shapes cover it.
 
 **From your own service factory.** The factory is lazy: it runs on first resolution, when the scope it is
 registered at exists. This is where a service's own dependencies belong.
@@ -597,6 +597,26 @@ What the callbacks hand you to resolve through:
 selection as plain strings and offsets, with no model object, so it can resolve nothing. An action that needs
 services fits better on `ACTION_PROVIDER_EP`, which is given an `AnalysisTarget`.
 
+**From the registrar**, for an APPLICATION-scoped service with no scope object in sight.
+`reg.appServices` is a read-only
+[`ServiceLookup`](../platform-core/src/main/kotlin/dev/ide/platform/Services.kt) over the application
+container: it resolves keys, and cannot define a service, evict an instance, or dispose a scope.
+
+```kotlin
+private lateinit var services: ServiceLookup
+
+override fun register(reg: PluginRegistration) {
+    services = reg.appServices          // keep the lookup; resolve at callback time
+}
+
+private fun sdk() = services.getServiceOrNull(APP_SDK_MANAGER)
+```
+
+Hold it rather than resolving in `register`: resolving during load forces the service to be built then, and
+a service another plugin registers is only there once that plugin has run, so name that plugin in
+`manifest.dependsOn`. The edge also means the user disabling it disables yours, since the catalog drops a
+disabled plugin's dependents.
+
 **From the message bus**, when what you need is the transition rather than the object:
 `reg.busConnection().subscribe(topic, listener)`, auto-unsubscribed on unload. See
 [section 7](#7-listen-to-ide-events-and-log).
@@ -610,13 +630,25 @@ A key is usable only if you can name its type, and that differs by tier:
 | Built-in (a module in this build) | Every key in [Appendix C](#appendix-c-service-index), `internal` ones included |
 | Installed (its own APK) | Keys from the published SPI artifacts, plus keys it or another plugin declares |
 
-The published SPI declares exactly one service key, `WORKSPACE_SERVICE`. Every engine service lives in
-`:ide-core`, which is not published, so an installed plugin cannot name one today even where the key itself
-is public. Its route to the engine is extension points and the contexts they pass, not service resolution.
+Resolution itself is available to both tiers: `reg.appServices` for APPLICATION scope, and
+`Module.service` / `Workspace.service` from the callbacks above. What differs is what you can *name*.
 
-Plugin-to-plugin sharing does work in both tiers: declare a `ServiceKey` in an artifact both sides compile
+Five engine capabilities are nameable from the published SPI. `WORKSPACE_SERVICE` is the bound `Workspace`.
+The other four are the promoted services (`BUILD_CONTROL`, `SYMBOL_SEARCH`, `MODULE_SOURCES`,
+`MODULE_ANALYSIS`), each declared in the api module whose types it already speaks, and each typed to a
+*narrowed* interface rather than to the engine class behind it. `:ide-core` registers the narrow key
+alongside its own and resolves both to one instance, so a plugin and the IDE act on the same build, the same
+index, and the same module model.
+
+The narrowing is the point. The engine's build service is a 1500-line class whose width is phrased in the
+console, run-picker and permission types the IDE's UI port owns; `BuildControl` is three members. What is
+promoted is frozen as plugin API, and what is not stays `internal` and free to change. Everything else in
+Appendix C is built-in-only, and a plugin's route to it is extension points and the contexts they pass.
+
+Plugin-to-plugin sharing works fully in both tiers: declare a `ServiceKey` in an artifact both sides compile
 against, register the service, and have the consumer list you in `dependsOn` so your `register()` runs
-first.
+first. That is the case `appServices` closes for the installed tier, which had no way to resolve an
+APPLICATION-scoped service at all.
 
 Container lookup is by the key's string id, so a forged `ServiceKey<Any>("ide.service.build")` does return
 the real instance. Do not do this. The type is `internal`, so what you get back is `Any` plus reflection
@@ -1801,7 +1833,7 @@ compileOnly("io.github.tyron12233:project-model-api") // module types, templates
 compileOnly("io.github.tyron12233:language-api")      // file types, completion, postfix, synthetic classes
 compileOnly("io.github.tyron12233:analysis-api")      // analyzers, diagnostics, quick fixes, intentions
 compileOnly("io.github.tyron12233:index-api")         // persisted indexes
-compileOnly("io.github.tyron12233:build-api")         // build systems, build plugins, source generators
+compileOnly("io.github.tyron12233:build-api")         // build systems, build plugins, tasks, source generators
 compileOnly("io.github.tyron12233:plugin-ui-api")     // tool windows, screens, overlays (see part 4)
 ```
 
@@ -1919,6 +1951,8 @@ Every published extension point, its id, the type it carries, and what contribut
 
 ### Build
 
+Step-by-step guide: [custom-build-plugins.md](custom-build-plugins.md).
+
 | FQN | Id | Type | Contribute to add |
 | --- | --- | --- | --- |
 | `dev.ide.build.BUILD_SYSTEM_EP` | `platform.buildSystem` | `BuildSystem` | A build system |
@@ -2030,32 +2064,42 @@ Published, and the only UI surface an installed plugin compiles against. See
 ## Appendix C: service index
 
 Every service key the IDE registers, what it is for, and who can name it. Resolve one with `getService` /
-`getServiceOrNull` from a service factory, or with `Module.service(key)` / `Workspace.service(key)` from an
-extension point callback. See [Getting an instance of a service](#getting-an-instance-of-a-service).
+`getServiceOrNull` from a service factory or from `PluginRegistration.appServices` (APPLICATION scope), or
+with `Module.service(key)` / `Workspace.service(key)` from an extension point callback. See
+[Getting an instance of a service](#getting-an-instance-of-a-service).
 
 ### Published SPI
 
-| Key | Scope | For |
-| --- | --- | --- |
-| `dev.ide.model.WORKSPACE_SERVICE` | WORKSPACE | The bound `Workspace`. The `ServiceScope.workspace()` helper is this lookup |
+| Key | Scope | Interface | For |
+| --- | --- | --- | --- |
+| `dev.ide.model.WORKSPACE_SERVICE` | WORKSPACE | `Workspace` | The bound workspace. The `ServiceScope.workspace()` helper is this lookup |
+| `dev.ide.build.BUILD_CONTROL` | WORKSPACE | `BuildControl` | Start or stop the build; compile and run a module's `main` and capture its output |
+| `dev.ide.index.SYMBOL_SEARCH` | WORKSPACE | `SymbolSearch` | Symbol and member lookup over the workspace indexes |
+| `dev.ide.model.MODULE_SOURCES` | WORKSPACE | `ModuleSources` | A module's source sets and source roots, including adding one |
+| `dev.ide.analysis.MODULE_ANALYSIS` | MODULE | `ModuleAnalysis` | The module's `SourceAnalyzer` per language: resolution and diagnostics for code the plugin did not parse |
 
-The only service key in the published SPI, so it is the only one an installed plugin can name.
+The keys an installed plugin can name. The four below `WORKSPACE_SERVICE` are **narrowed aliases** of engine
+services listed further down: the interface is the promoted slice, declared in the api module whose types it
+already speaks, and `IdeCoreServicesPlugin` registers it against the same instance the internal key
+resolves. So a plugin gets the live service, and the members it can reach are the ones the IDE committed to.
 
 ### Engine services: [`IdeServices.kt`](../ide-core/src/main/kotlin/dev/ide/core/IdeServices.kt)
 
 The open project's decomposed concerns, registered by `IdeCoreServicesPlugin` in
 [`BuiltInPlugins.kt`](../ide-core/src/main/kotlin/dev/ide/core/BuiltInPlugins.kt) and resolved from the
-workspace container. All are `internal` to `:ide-core`: built-in plugins only.
+workspace container. All are `internal` to `:ide-core`, so naming one directly is built-in-only; the four
+marked **SPI** are additionally reachable from the published SPI through the narrowed alias in the table
+above.
 
 | Key | Scope | For |
 | --- | --- | --- |
 | `ENGINE_CONTEXT` | WORKSPACE | The engine's shared-infrastructure surface. What every service below is built from |
-| `MODULE_ANALYZERS` | MODULE | This module's source analyzers, one per language, built on first use |
-| `BUILD_SERVICE` | WORKSPACE | Build and run orchestration, for the native Java/Kotlin and the Android builds |
-| `MODULE_SERVICE` | WORKSPACE | Module configuration and management, behind the Module Settings editor |
+| `MODULE_ANALYZERS` | MODULE | This module's source analyzers, one per language, built on first use. **SPI**: `MODULE_ANALYSIS` |
+| `BUILD_SERVICE` | WORKSPACE | Build and run orchestration, for the native Java/Kotlin and the Android builds. **SPI**: `BUILD_CONTROL` |
+| `MODULE_SERVICE` | WORKSPACE | Module configuration and management, behind the Module Settings editor. **SPI**: `MODULE_SOURCES` |
 | `DEPENDENCY_SERVICE` | WORKSPACE | Maven dependencies: add, resolve, conflicts, BOM platforms |
 | `PROJECT_SYNC_SERVICE` | WORKSPACE | Re-importing a project whose model comes from a foreign build system |
-| `SEARCH_SERVICE` | WORKSPACE | Go-to-symbol and member search over the index, plus find-in-files |
+| `SEARCH_SERVICE` | WORKSPACE | Go-to-symbol and member search over the index, plus find-in-files. **SPI**: `SYMBOL_SEARCH` |
 | `REFACTOR_SERVICE` | WORKSPACE | The Java rename refactoring |
 | `LANGUAGE_FEATURE_SERVICE` | WORKSPACE | On-demand editor features that delegate to a language backend |
 | `KOTLIN_EDITOR_SERVICE` | WORKSPACE | Kotlin-analyzer-backed editor queries |

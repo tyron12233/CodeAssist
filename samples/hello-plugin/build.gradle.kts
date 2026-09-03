@@ -48,6 +48,9 @@ dependencies {
     compileOnly(project(":plugin-api"))
     // The UI facet's SPI (HelloUiPlugin): tool windows, screens, overlays.
     compileOnly(project(":plugin-ui-api"))
+    // The build SPI (HelloBuildPlugin): build plugins, tasks, source generators, Run-picker rows. It brings
+    // project-model-api, vfs-api and platform-core with it.
+    compileOnly(project(":build-api"))
 
     // Compose, at the versions the IDE bundles and in the coordinates an out-of-tree plugin would use, so
     // this sample also checks that those pins are the right ones. compileOnly for the same reason as the

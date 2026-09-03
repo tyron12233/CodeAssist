@@ -1,17 +1,17 @@
 package dev.ide.build.engine
 
+import dev.ide.build.AlwaysRun
 import dev.ide.build.Task
 import dev.ide.build.TaskContext
 import dev.ide.build.TaskInputs
+import dev.ide.build.TaskInputsImpl
 import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
+import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
-
-/** Marker for tasks that must run every time (never up-to-date) — like Gradle's `JavaExec`/`run`. */
-interface AlwaysRun
 
 /**
  * The running program's standard I/O for an interactive console run, supplied by the host. [stdout] receives

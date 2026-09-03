@@ -1,12 +1,12 @@
 package dev.ide.core
 
+import dev.ide.build.KOTLIN_COMPILER_PLUGIN_EP
 import dev.ide.index.INDEX_EP
 import dev.ide.lang.FILE_TYPE_EP
 import dev.ide.lang.LANGUAGE_BACKEND_EP
 import dev.ide.lang.LanguageId
 import dev.ide.lang.java.JavaLanguageBackend
 import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
-import dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP
 import dev.ide.lang.synthetic.SYNTHETIC_CLASS_EP
 import dev.ide.platform.SERVICE_EP
 import dev.ide.platform.ServiceScopeLevel
@@ -74,9 +74,23 @@ class BuiltInParityTest {
             // the workspace it is handed rather than through the open project.
             "android.resourceRepository",
         )
-        assertEquals(moduleAnalyzers + workspaceServices, byId.keys, "exactly the 16 engine services")
-        moduleAnalyzers.forEach { assertEquals(ServiceScopeLevel.MODULE, byId.getValue(it).level, it) }
-        workspaceServices.forEach { assertEquals(ServiceScopeLevel.WORKSPACE, byId.getValue(it).level, it) }
+        // The published-SPI aliases: the same instances again under the keys the api modules declare, so an
+        // installed plugin can name them (docs/writing-plugins.md, Appendix C). Each sits at the scope of the
+        // service it aliases, since it resolves that service's key.
+        val spiModuleAliases = setOf("platform.moduleAnalysis")
+        val spiWorkspaceAliases =
+            setOf("platform.buildControl", "platform.symbolSearch", "platform.moduleSources")
+        assertEquals(
+            moduleAnalyzers + workspaceServices + spiModuleAliases + spiWorkspaceAliases,
+            byId.keys,
+            "exactly the 16 engine services plus the 4 published-SPI aliases",
+        )
+        (moduleAnalyzers + spiModuleAliases).forEach {
+            assertEquals(ServiceScopeLevel.MODULE, byId.getValue(it).level, it)
+        }
+        (workspaceServices + spiWorkspaceAliases).forEach {
+            assertEquals(ServiceScopeLevel.WORKSPACE, byId.getValue(it).level, it)
+        }
     }
 
     @Test

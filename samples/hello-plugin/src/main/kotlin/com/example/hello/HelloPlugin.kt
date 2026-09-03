@@ -1,5 +1,8 @@
 package com.example.hello
 
+import dev.ide.build.BUILD_PLUGIN_EP
+import dev.ide.build.RUN_TASK_PROVIDER_EP
+import dev.ide.build.SOURCE_GENERATOR_EP
 import dev.ide.platform.log.Logger
 import dev.ide.platform.settings.PreferenceReader
 import dev.ide.platform.settings.SETTINGS_PAGE_EP
@@ -20,10 +23,12 @@ import dev.ide.plugin.action.UI_ACTION_EP
  * The entry point named by `res/raw/codeassist_plugin.toml`. The IDE instantiates this class off the
  * installed APK with its own classloader as the parent, so the SPI types below bind to the IDE's copies.
  *
- * It contributes to four surfaces, each a plain extension-point registration:
+ * It contributes to several surfaces, each a plain extension-point registration:
  *  - a command in the command palette and the More menu ([UI_ACTION_EP]);
  *  - an editor action at the caret, on the same extension point but the [ActionPlaces.EDITOR] place;
  *  - a category in Settings ([SETTINGS_PAGE_EP]);
+ *  - build logic: a task on every build graph, a source generator, and a Run-picker row (see
+ *    [HelloBuildReportPlugin], [HelloBuildInfoGenerator] and [HelloRunTaskProvider] in HelloBuildPlugin.kt);
  *  - a log line attributed to this plugin, which the Logs screen can filter by.
  *
  * This is the plugin's **engine facet**. Its Compose UI is a second class, [HelloUiPlugin], named by
@@ -73,8 +78,20 @@ class HelloPlugin : Plugin {
             ) { ctx -> wrapInRunCatching(ctx, log) },
         )
 
-        reg.register(SETTINGS_PAGE_EP, HelloSettingsPage(log))
-        log.info("registered 2 actions and 1 settings page; the UI facet adds a tool window")
+        val settings = HelloSettingsPage(log)
+        reg.register(SETTINGS_PAGE_EP, settings)
+
+        // The build facet. Contributing build logic is an extension-point registration like any other, so it
+        // belongs in the engine facet next to the actions above rather than in a plugin of its own.
+        //
+        // The registrar's `appServices` lookup is held, not resolved here: the build plugin reads the toggle
+        // on the settings page above every time a build graph is assembled, so the value is the current one.
+        val services = reg.appServices
+        reg.register(BUILD_PLUGIN_EP, HelloBuildReportPlugin { helloBuildReportEnabled(services, settings) })
+        reg.register(SOURCE_GENERATOR_EP, HelloBuildInfoGenerator())
+        reg.register(RUN_TASK_PROVIDER_EP, HelloRunTaskProvider())
+
+        log.info("registered 2 actions, 1 settings page and 3 build contributions; the UI facet adds a tool window")
     }
 }
 
@@ -113,7 +130,7 @@ private fun wrapInRunCatching(ctx: ActionContext, log: Logger): ActionResult {
 }
 
 /** A Settings category the IDE renders generically from these control declarations. */
-private class HelloSettingsPage(private val log: Logger) : SettingsPage {
+internal class HelloSettingsPage(private val log: Logger) : SettingsPage {
 
     override val id = "com.example.hello"
     override val title = "Hello Plugin"
@@ -134,6 +151,12 @@ private class HelloSettingsPage(private val log: Logger) : SettingsPage {
             title = "Shout the greeting",
             description = "Uppercase the greeting.",
             default = false,
+        ),
+        SettingControl.Toggle(
+            key = HelloSettings.BUILD_REPORT,
+            title = "Write a build report",
+            description = "Adds a step to every build that writes build/reports/hello-build-report/.",
+            default = true,
         ),
         SettingControl.Action(
             key = "greet",

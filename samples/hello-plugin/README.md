@@ -5,7 +5,7 @@ packaged manifest, and loads its classes off the installed APK. The full explana
 [docs/writing-plugins.md](../../docs/writing-plugins.md); this is the smallest complete example of it.
 
 It has both facets a plugin can have. The **engine facet**,
-[`HelloPlugin.kt`](src/main/kotlin/com/example/hello/HelloPlugin.kt), contributes four surfaces, each a plain
+[`HelloPlugin.kt`](src/main/kotlin/com/example/hello/HelloPlugin.kt), contributes these surfaces, each a plain
 extension-point registration:
 
 - a **command** in the command palette and the More menu (`UI_ACTION_EP`);
@@ -14,6 +14,24 @@ extension-point registration:
   Alt-Enter popup, the editor's overflow menu, and the palette while an editor is focused;
 - a **category** in Settings (`SETTINGS_PAGE_EP`);
 - **log lines** attributed to `com.example.hello`, which the Logs screen can filter by.
+
+It also contributes **build logic**, in
+[`HelloBuildPlugin.kt`](src/main/kotlin/com/example/hello/HelloBuildPlugin.kt). Three more registrations from
+the same engine facet, since build contributions are extension points like any other:
+
+- a **`BuildPlugin`** (`BUILD_PLUGIN_EP`) that registers `:<module>:helloBuildReport` on every build graph and
+  hangs it off the module's `assemble` aggregate by name;
+- a **`SourceGenerator`** (`SOURCE_GENERATOR_EP`) that emits `hello.buildinfo.HelloBuildInfo` ahead of
+  compilation, for a module whose own sources reference it (an Android module, or a plain JVM module that
+  declares a generated source root: the native pipeline registers no `generateSources` task without one);
+- a **`RunTaskProvider`** (`RUN_TASK_PROVIDER_EP`) that puts "Hello: write build report" in the Run picker and
+  executes it.
+
+It also shows two things worth copying: the build plugin reads its own settings page through
+`SETTINGS_ACCESS`, which is how a contribution consults a setting outside the page's own callbacks, and the
+Run row builds a one-task `TaskGraph` by hand, which is less code than the engine's real graph for something
+with no dependencies. [docs/custom-build-plugins.md](../../docs/custom-build-plugins.md) walks through all of
+it.
 
 The **UI facet**, [`HelloUiPlugin.kt`](src/main/kotlin/com/example/hello/HelloUiPlugin.kt), adds a **tool
 window** on the editor's left rail with a real Compose body.
@@ -46,7 +64,8 @@ bare code container.
 Then restart CodeAssist and open **Settings > Plugins > Installed**. The plugin loads at startup, so a
 freshly installed or newly enabled plugin appears after the next launch. Its palette command is under
 **Hello: say hello**, its settings category appears once a project is open, and its tool window is on the
-editor's left rail once one is.
+editor's left rail once one is. Build any project and the console's **Steps** tab lists
+`:<module>:helloBuildReport`; the Run picker carries the row that writes the same report on its own.
 
 If it does not appear, the reason is on its row in that same screen. A row with a reason and no switch is a
 plugin the IDE found but could not read.
@@ -62,6 +81,9 @@ published coordinates:
 dependencies {
     compileOnly("io.github.tyron12233:plugin-api:1.2.0")
     compileOnly("io.github.tyron12233:platform-core:1.2.0")
+
+    // The build facet. It brings project-model-api, vfs-api and platform-core with it.
+    compileOnly("io.github.tyron12233:build-api:1.2.0")
 
     // The UI facet, plus the Compose the IDE bundles. Pinned: your @Composable code composes into the
     // IDE's own Compose runtime, so a newer version here fails at first composition, not at build time.
@@ -82,7 +104,8 @@ compatibility is decided by `apiVersion` and `minHostVersion` rather than by thi
 first Central release, publish them locally and add `mavenLocal()` to your repositories:
 
 ```
-./gradlew :plugin-api:publishToMavenLocal :platform-core:publishToMavenLocal :plugin-ui-api:publishToMavenLocal
+./gradlew :plugin-api:publishToMavenLocal :platform-core:publishToMavenLocal \
+    :plugin-ui-api:publishToMavenLocal :build-api:publishToMavenLocal
 ```
 
 `compileOnly` is the important part either way. The IDE's classloader is the parent of the plugin's, so the
@@ -138,3 +161,10 @@ with `kotlin.compiler.runViaBuildToolsApi=true` in `gradle.properties`. Without 
   function call away. The IDE's internal UI model, with its `IdeBackend` handle, is not published.
 - A plugin has no `Context` for its own package: no drawables, no `stringResource`. Icons are ids in the
   IDE's registry (`iconId = "sparkle"`) and text is Kotlin string literals.
+- Your plugin's code runs in the IDE's process, which is **minSdk 26**, so the JDK method floor applies to it
+  too. `Path.of`, `Files.readString`, `Files.writeString` and `Stream.toList()` do not exist on the older
+  devices the IDE supports; use `Paths.get`, `Files.readAllBytes`, `Files.write` and `Collectors.toList()`.
+  The call dexes cleanly either way and throws only when the line is reached.
+- Build contributions have their own capabilities (`build.task`, `build.sourceGenerator`,
+  `build.runTask`), so the consent gate names them like any other. Declare the ones you actually register:
+  the editor flags a capability no facet can deliver, and an unknown one as a typo.

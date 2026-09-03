@@ -99,7 +99,9 @@ source-set kinds a distinct look with no UI dependency.
 ## Kotlin compiler plugins
 
 Kotlin compiler plugins (Compose, kotlinx-serialization, Parcelize, all-open/no-arg) plug in through
-`platform.kotlinCompilerPlugin`. A `KotlinCompilerPlugin` decides whether it `appliesTo` a module (Compose
+`platform.kotlinCompilerPlugin`. The SPI lives in `build-api` with the rest of the build contracts (it is
+plain paths and strings, so contributing one needs neither the Kotlin language module nor the compiler); the
+built-in implementations live in `lang-kotlin`. A `KotlinCompilerPlugin` decides whether it `appliesTo` a module (Compose
 probes the classpath for `androidx.compose.runtime.Composable`) and supplies its `-Xplugin` `classpath` plus
 `-P` `options`; the build's `compileKotlin` tasks feed the union of the applicable plugins to kotlinc's
 generic `compilerPlugins`/`pluginOptions` seam. Compose is the built-in contributor. Adding another plugin
@@ -119,7 +121,8 @@ file-write helper, with the host injecting the SDK and language level).
 
 Four points cover the two things a build extension does: add work to a build, and bring in a project model
 from a build system the IDE doesn't own. See `docs/build-system.md` for the task-authoring contract and the
-lifecycle task names a contributed task anchors to.
+lifecycle task names a contributed task anchors to, and `docs/custom-build-plugins.md` for the step-by-step
+guide.
 
 - **`platform.buildPlugin`** contributes tasks to whatever graph is being assembled. A `BuildPlugin` is the
   same `Plugin` interface the built-in Java and Android pipelines are written against, so a plugin registers

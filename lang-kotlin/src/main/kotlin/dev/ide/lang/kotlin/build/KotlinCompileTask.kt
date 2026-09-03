@@ -1,13 +1,14 @@
 package dev.ide.lang.kotlin.build
 
+import dev.ide.build.KotlinCompilerPlugin
 import dev.ide.build.Task
 import dev.ide.build.TaskContext
 import dev.ide.build.TaskInputs
+import dev.ide.build.TaskInputsImpl
 import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
+import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
-import dev.ide.build.engine.TaskInputsImpl
-import dev.ide.build.engine.TaskOutputsImpl
 import dev.ide.build.engine.depOutputDirs
 import dev.ide.build.engine.kotlinOutputDir
 import dev.ide.build.engine.kotlinSiblings
@@ -16,10 +17,9 @@ import dev.ide.build.engine.levelOf
 import dev.ide.build.engine.libJars
 import dev.ide.build.engine.reportToolDiagnostics
 import dev.ide.build.engine.sourceFiles
+import dev.ide.build.resolveFor
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
-import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
-import dev.ide.lang.kotlin.compile.resolveFor
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path

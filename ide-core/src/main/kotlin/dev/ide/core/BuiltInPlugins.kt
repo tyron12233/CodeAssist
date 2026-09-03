@@ -1,7 +1,9 @@
 package dev.ide.core
 
+import dev.ide.agent.ui.AgentUiPlugin
 import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ANALYZER_EP
+import dev.ide.analysis.MODULE_ANALYSIS
 import dev.ide.android.support.ANDROID_RESOURCE_REPOSITORY
 import dev.ide.android.support.AndroidAidlProvider
 import dev.ide.android.support.AndroidBuildConfigProvider
@@ -13,13 +15,18 @@ import dev.ide.android.support.index.AndroidResourceIndex
 import dev.ide.android.support.metadata.AndroidSdkMetadata
 import dev.ide.block.BLOCK_MAPPING_EP
 import dev.ide.block.impl.JavaBlockMapping
+import dev.ide.build.BUILD_CONTROL
+import dev.ide.build.KOTLIN_COMPILER_PLUGIN_EP
+import dev.ide.build.SOURCE_GENERATOR_EP
 import dev.ide.core.actions.BuiltInActions
 import dev.ide.core.actions.EditorTextActions
 import dev.ide.core.actions.ExtractFileAction
 import dev.ide.core.analysis.AidlAnalyzer
 import dev.ide.core.analysis.PackageMismatchAnalyzer
+import dev.ide.core.analysis.PluginManifestAnalyzer
 import dev.ide.core.completion.BufferWordsContributor
 import dev.ide.core.completion.CompletionStats
+import dev.ide.core.completion.PluginManifestCompletion
 import dev.ide.core.completion.PostfixContributor
 import dev.ide.core.completion.UserLiveTemplateContributor
 import dev.ide.core.gradle.GradleBuildFileWriter
@@ -38,15 +45,21 @@ import dev.ide.core.services.SearchService
 import dev.ide.core.services.SigningService
 import dev.ide.core.sync.ProjectSyncService
 import dev.ide.core.templates.CalculatorSampleTemplate
+import dev.ide.core.templates.CodeAssistPluginTemplate
 import dev.ide.core.templates.JavaConsoleAppTemplate
 import dev.ide.core.templates.JavaLibraryTemplate
-import dev.ide.core.templates.SwingAppTemplate
-import dev.ide.core.templates.SwingCanvasTemplate
 import dev.ide.core.templates.KotlinConsoleAppTemplate
 import dev.ide.core.templates.KotlinLibraryTemplate
 import dev.ide.core.templates.NotesSampleTemplate
+import dev.ide.core.templates.SwingAppTemplate
+import dev.ide.core.templates.SwingCanvasTemplate
 import dev.ide.core.templates.WeatherSampleTemplate
 import dev.ide.index.INDEX_EP
+import dev.ide.index.SYMBOL_SEARCH
+import dev.ide.ksp.DefaultKspProcessorLoader
+import dev.ide.ksp.KspProcessorCatalog
+import dev.ide.ksp.KspProcessorLoader
+import dev.ide.ksp.KspSourceGenerator
 import dev.ide.lang.FILE_TYPE_EP
 import dev.ide.lang.FileTypeMapping
 import dev.ide.lang.LANGUAGE_BACKEND_EP
@@ -56,7 +69,6 @@ import dev.ide.lang.completion.COMPLETION_WEIGHER_EP
 import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.completion.StatsWeigher
 import dev.ide.lang.java.JavaLanguageBackend
-import dev.ide.lang.jdt.analysis.JdtAnalysisSupport
 import dev.ide.lang.java.index.JavaClassLocatorIndex
 import dev.ide.lang.java.index.JavaClassNamesIndex
 import dev.ide.lang.java.index.JavaMainIndex
@@ -68,10 +80,10 @@ import dev.ide.lang.java.index.JavaSourceAnnotationIndex
 import dev.ide.lang.java.index.JavaSourceDocIndex
 import dev.ide.lang.java.index.JavaSourceSubtypeIndex
 import dev.ide.lang.java.index.JavaSourceSymbolsIndex
+import dev.ide.lang.jdt.analysis.JdtAnalysisSupport
 import dev.ide.lang.kotlin.KotlinLanguageBackend
 import dev.ide.lang.kotlin.analysis.KotlinAnalysisSupport
 import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
-import dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP
 import dev.ide.lang.kotlin.compile.ParcelizeCompilerPlugin
 import dev.ide.lang.kotlin.compile.SerializationCompilerPlugin
 import dev.ide.lang.kotlin.completion.KotlinPostfixTemplates
@@ -97,32 +109,24 @@ import dev.ide.lang.postfix.POSTFIX_TEMPLATE_EP
 import dev.ide.lang.synthetic.SYNTHETIC_CLASS_EP
 import dev.ide.lang.xml.XmlLanguageBackend
 import dev.ide.lang.xml.lint.XmlAnalysisSupport
+import dev.ide.model.MODULE_SOURCES
 import dev.ide.model.impl.DefaultFileIconProvider
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.FileIconRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
-import dev.ide.core.analysis.PluginManifestAnalyzer
-import dev.ide.core.completion.PluginManifestCompletion
-import dev.ide.core.templates.CodeAssistPluginTemplate
 import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.model.module
 import dev.ide.model.sync.BUILD_FILE_WRITER_EP
 import dev.ide.model.sync.PROJECT_IMPORTER_EP
 import dev.ide.platform.ServiceScopeLevel
 import dev.ide.plugin.Plugin
-import dev.ide.build.SOURCE_GENERATOR_EP
-import dev.ide.ksp.DefaultKspProcessorLoader
-import dev.ide.ksp.KspProcessorCatalog
-import dev.ide.ksp.KspProcessorLoader
-import dev.ide.ksp.KspSourceGenerator
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.PluginRegistration
+import dev.ide.plugin.impl.ActionManager
+import dev.ide.ui.ext.UiPlugin
+import dev.ide.vcs.ui.VcsUiPlugin
 import java.nio.file.Files
 import java.nio.file.Paths
-import dev.ide.plugin.impl.ActionManager
-import dev.ide.agent.ui.AgentUiPlugin
-import dev.ide.vcs.ui.VcsUiPlugin
-import dev.ide.ui.ext.UiPlugin
 
 /**
  * The IDE's own built-in plugins and the ordered set the [ApplicationEnvironment] loads.
@@ -786,6 +790,16 @@ private class IdeCoreServicesPlugin : Plugin {
                 )
             )
         }
+        // The same instances again, under the keys the PUBLISHED api modules declare, so an installed
+        // plugin can NAME them: it compiles against build-api / index-api / project-model-api /
+        // analysis-api, never against `:ide-core`. The published keys are typed to narrowed interfaces
+        // (BuildControl, SymbolSearch, ModuleSources, ModuleAnalysis), so only the promoted members are
+        // frozen as plugin API and the rest of each service stays internal and free to change. Each alias
+        // resolves the internal key, so a scope holds ONE instance however it is asked for.
+        reg.service(BUILD_CONTROL, ServiceScopeLevel.WORKSPACE) { getService(BUILD_SERVICE) }
+        reg.service(SYMBOL_SEARCH, ServiceScopeLevel.WORKSPACE) { getService(SEARCH_SERVICE) }
+        reg.service(MODULE_SOURCES, ServiceScopeLevel.WORKSPACE) { getService(MODULE_SERVICE) }
+        reg.service(MODULE_ANALYSIS, ServiceScopeLevel.MODULE) { getService(MODULE_ANALYZERS) }
         reg.service(PROJECT_SYNC_SERVICE, ServiceScopeLevel.WORKSPACE) {
             ProjectSyncService(getService(ENGINE_CONTEXT))
         }

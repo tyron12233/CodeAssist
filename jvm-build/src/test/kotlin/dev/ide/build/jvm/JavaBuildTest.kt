@@ -1,5 +1,6 @@
 package dev.ide.build.jvm
 
+import dev.ide.build.AlwaysRun
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
@@ -26,17 +27,17 @@ import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
 import dev.ide.testkit.testEnv
 import dev.ide.testkit.writeSource
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 
 /**
  * Native build + the console-app run task: builds `app → util → core` (api-exported) via the native
