@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Panel chrome -->
+    <string name="vcs_title">Git</string>
+    <string name="vcs_refresh">刷新</string>
+    <string name="vcs_cancel">取消</string>
+    <string name="vcs_copy">复制</string>
+    <string name="vcs_copied">已复制</string>
+    <string name="vcs_open_in_browser">在浏览器中打开</string>
+
+    <!-- Empty and error states -->
+    <string name="vcs_not_a_repo_title">未纳入版本控制</string>
+    <string name="vcs_not_a_repo_body">使用 Git 跟踪此项目，即可保留更改历史、在分支上工作并推送到 GitHub。</string>
+    <string name="vcs_init">创建仓库</string>
+    <string name="vcs_clone">克隆仓库</string>
+    <string name="vcs_no_project">打开一个项目即可使用版本控制。</string>
+    <string name="vcs_clean_title">没有可提交的内容</string>
+    <string name="vcs_clean_body">你的工作区与最近一次提交一致。</string>
+
+    <!-- Branch header -->
+    <string name="vcs_branch">分支</string>
+    <string name="vcs_detached">游离 HEAD</string>
+    <string name="vcs_no_commits">尚无提交</string>
+    <string name="vcs_up_to_date">已是最新</string>
+    <string name="vcs_fetch">抓取</string>
+    <string name="vcs_pull">拉取</string>
+    <string name="vcs_push">推送</string>
+    <string name="vcs_history">历史</string>
+    <string name="vcs_file_history">此文件的历史</string>
+
+    <!-- Change sections -->
+    <string name="vcs_section_conflicts">冲突</string>
+    <string name="vcs_section_staged">已暂存</string>
+    <string name="vcs_section_changes">更改</string>
+    <string name="vcs_stage">暂存</string>
+    <string name="vcs_unstage">取消暂存</string>
+    <string name="vcs_stage_all">全部暂存</string>
+    <string name="vcs_unstage_all">全部取消暂存</string>
+    <string name="vcs_discard">丢弃</string>
+    <string name="vcs_discard_title">丢弃更改？</string>
+    <string name="vcs_discard_body">对 %1$s 的修改将被丢弃。此操作无法撤销。</string>
+    <string name="vcs_mark_resolved">标记为已解决</string>
+    <string name="vcs_abort_merge">中止合并</string>
+    <string name="vcs_merge_in_progress">合并进行中</string>
+    <string name="vcs_rebase_in_progress">变基进行中</string>
+    <string name="vcs_cherry_pick_in_progress">Cherry-pick 进行中</string>
+    <string name="vcs_revert_in_progress">回退进行中</string>
+    <string name="vcs_bisect_in_progress">二分查找进行中</string>
+
+    <!-- File status labels -->
+    <string name="vcs_status_added">已添加</string>
+    <string name="vcs_status_modified">已修改</string>
+    <string name="vcs_status_deleted">已删除</string>
+    <string name="vcs_status_renamed">已重命名</string>
+    <string name="vcs_status_copied">已复制</string>
+    <string name="vcs_status_untracked">新增</string>
+    <string name="vcs_status_conflicted">冲突</string>
+
+    <!-- Commit -->
+    <string name="vcs_commit_hint">提交信息</string>
+    <string name="vcs_commit">提交</string>
+    <string name="vcs_commit_and_push">提交并推送</string>
+    <string name="vcs_amend">修正上次提交</string>
+    <string name="vcs_nothing_staged">先暂存文件才能提交。</string>
+    <string name="vcs_identity_missing">提交前请先设置姓名和邮箱。</string>
+    <string name="vcs_set_identity">设置身份信息</string>
+    <string name="vcs_name">姓名</string>
+    <string name="vcs_email">邮箱</string>
+    <string name="vcs_save">保存</string>
+
+    <!-- Branches screen -->
+    <string name="vcs_branches">分支</string>
+    <string name="vcs_branches_search">搜索分支</string>
+    <string name="vcs_branches_local">本地</string>
+    <string name="vcs_branches_remote">远程</string>
+    <string name="vcs_branches_none">没有匹配的分支。</string>
+    <string name="vcs_new_branch">新建分支</string>
+    <string name="vcs_new_branch_hint">分支名称</string>
+    <string name="vcs_create">创建</string>
+    <string name="vcs_current_branch">当前</string>
+    <string name="vcs_merge_into">合并到 %1$s</string>
+    <string name="vcs_delete">删除</string>
+    <string name="vcs_delete_branch_title">删除 %1$s？</string>
+    <string name="vcs_delete_branch_body">该分支将从本地移除。仅存在于该分支上的提交可能会丢失。</string>
+    <string name="vcs_force_delete">仍要删除</string>
+
+    <!-- History screen -->
+    <string name="vcs_history_empty">尚无提交。</string>
+    <string name="vcs_load_more">加载更多</string>
+    <string name="vcs_commit_files">%1$d 个文件更改</string>
+    <string name="vcs_insertions">+%1$d</string>
+    <string name="vcs_deletions">-%1$d</string>
+    <string name="vcs_merge_commit">合并</string>
+
+    <!-- Diff -->
+    <string name="vcs_diff">差异</string>
+    <string name="vcs_diff_empty">没有文本差异。</string>
+    <string name="vcs_diff_binary">二进制文件，没有可显示的文本差异。</string>
+
+    <!-- Stash -->
+    <string name="vcs_stash">贮藏</string>
+    <string name="vcs_stashes">贮藏列表</string>
+    <string name="vcs_stash_changes">贮藏更改</string>
+    <string name="vcs_stash_hint">描述（可选）</string>
+    <string name="vcs_stash_untracked">包含未跟踪的文件</string>
+    <string name="vcs_stash_apply">应用</string>
+    <string name="vcs_stash_drop">丢弃</string>
+    <string name="vcs_stash_empty">没有贮藏的内容。</string>
+
+    <!-- Ignore -->
+    <string name="vcs_add_ignores">添加默认 .gitignore 条目</string>
+
+    <!-- Accounts -->
+    <string name="vcs_accounts">账号</string>
+    <string name="vcs_sign_in_github">使用 GitHub 登录</string>
+    <string name="vcs_sign_in_intro">登录后可克隆你的私有仓库、通过 HTTPS 免密码推送，以及创建拉取请求。</string>
+    <string name="vcs_sign_out">退出登录</string>
+    <string name="vcs_active_account">用于 Git 操作</string>
+    <string name="vcs_use_account">使用此账号</string>
+    <string name="vcs_device_code_title">在 GitHub 上输入此代码</string>
+    <string name="vcs_device_code_body">打开 %1$s 并输入代码。你批准后此页面会立即更新。</string>
+    <string name="vcs_signing_in">等待批准…</string>
+    <string name="vcs_sign_in_token">使用访问令牌</string>
+    <string name="vcs_token_hint">个人访问令牌</string>
+    <string name="vcs_token_help">在 GitHub 的 Settings、Developer settings、Personal access tokens 中创建一个带有 "repo" 权限范围的令牌。</string>
+    <string name="vcs_sign_in">登录</string>
+    <string name="vcs_other_servers">其他 Git 服务器</string>
+    <string name="vcs_other_servers_body">为不支持账号登录的服务器保存用户名和密码，例如自托管的 GitLab 或 Gitea。</string>
+    <string name="vcs_host">主机</string>
+    <string name="vcs_host_hint">git.example.com</string>
+    <string name="vcs_username">用户名</string>
+    <string name="vcs_password">密码或令牌</string>
+    <string name="vcs_saved_hosts">已保存的服务器</string>
+    <string name="vcs_remove">移除</string>
+
+    <!-- Clone -->
+    <string name="vcs_clone_title">克隆仓库</string>
+    <string name="vcs_clone_url">仓库 URL</string>
+    <string name="vcs_clone_folder">文件夹名称</string>
+    <string name="vcs_clone_action">克隆</string>
+    <string name="vcs_clone_yours">你的仓库</string>
+    <string name="vcs_clone_search">搜索仓库</string>
+    <string name="vcs_clone_sign_in">登录后即可浏览你的仓库。</string>
+    <string name="vcs_clone_none">未找到仓库。</string>
+    <string name="vcs_clone_unrecognized_title">无法识别的项目</string>
+    <string name="vcs_clone_unrecognized_body">%1$s 已克隆并添加到你的项目中，但没有构建系统能识别它。你可以浏览和编辑其文件；构建和运行需要先设置好模块。</string>
+    <string name="vcs_clone_unrecognized_open">以编辑方式打开</string>
+    <string name="vcs_private">私有</string>
+    <string name="vcs_fork">Fork</string>
+
+    <!-- GitHub screen -->
+    <string name="vcs_github">GitHub</string>
+    <string name="vcs_publish_title">发布到 GitHub</string>
+    <string name="vcs_publish_body">为此项目创建一个仓库，并将当前分支推送到该仓库。</string>
+    <string name="vcs_publish_name">仓库名称</string>
+    <string name="vcs_publish_description">描述（可选）</string>
+    <string name="vcs_publish_private">私有仓库</string>
+    <string name="vcs_publish">发布</string>
+    <string name="vcs_publish_needs_commit">发布前请先进行一次提交。</string>
+    <string name="vcs_pull_requests">拉取请求</string>
+    <string name="vcs_pull_requests_empty">没有开启中的拉取请求。</string>
+    <string name="vcs_new_pull_request">新建拉取请求</string>
+    <string name="vcs_pr_title">标题</string>
+    <string name="vcs_pr_body">描述</string>
+    <string name="vcs_pr_base">合并到</string>
+    <string name="vcs_pr_create">创建拉取请求</string>
+    <string name="vcs_pr_from">来自 %1$s</string>
+    <string name="vcs_draft">草稿</string>
+
+    <!-- Remotes -->
+    <string name="vcs_remotes">远程仓库</string>
+    <string name="vcs_add_remote">添加远程仓库</string>
+    <string name="vcs_remote_name">远程仓库名称</string>
+    <string name="vcs_remote_url">远程仓库 URL</string>
+    <string name="vcs_no_remote">此项目还没有远程仓库。</string>
+
+    <!-- Plain-language hints and menu wording. Git's own vocabulary is the main thing newcomers trip on, so
+         each group of files says what it is and every occasional action is a worded menu row. -->
+    <string name="vcs_hint_conflicts">双方都修改了这些文件。逐个修复后，再将其标记为已解决。</string>
+    <string name="vcs_hint_staged">已就绪待提交。这些文件会进入你的下一次提交。</string>
+    <string name="vcs_hint_changes">已修改但尚未纳入。暂存文件即可将其加入下一次提交。</string>
+    <string name="vcs_hint_commit">提交会将已暂存的文件保存为快照，仅保存在本设备上。</string>
+    <string name="vcs_hint_push">推送会将你的提交发送到远程仓库，让其他人可以看到。</string>
+
+    <string name="vcs_menu_more">更多操作</string>
+    <string name="vcs_menu_repository">仓库</string>
+    <string name="vcs_menu_file">此文件</string>
+    <string name="vcs_menu_view_changes">查看更改</string>
+    <string name="vcs_menu_file_history">文件历史</string>
+    <string name="vcs_menu_sync">同步</string>
+    <string name="vcs_tooltip_refresh">重新读取文件状态</string>
+    <string name="vcs_tooltip_history">浏览历史提交</string>
+    <string name="vcs_tooltip_fetch">检查远程是否有新提交，不改动你的文件</string>
+    <string name="vcs_tooltip_pull">将远程的提交拉入你的分支</string>
+    <string name="vcs_tooltip_push">将你的提交发送到远程仓库</string>
+    <string name="vcs_tooltip_github">你的 GitHub 账号、发布和拉取请求</string>
+    <string name="vcs_tooltip_stage">将此文件加入下一次提交</string>
+    <string name="vcs_tooltip_unstage">将此文件移出下一次提交</string>
+    <string name="vcs_tooltip_stage_all">将所有已更改的文件加入下一次提交</string>
+    <string name="vcs_tooltip_unstage_all">将所有文件移出下一次提交</string>
+    <string name="vcs_tooltip_discard">丢弃你对这个文件的修改</string>
+    <string name="vcs_tooltip_resolved">按当前内容接受此文件</string>
+    <string name="vcs_tooltip_branch">%1$s。点按可切换或新建分支。</string>
+    <string name="vcs_push_after_commit">提交后推送</string>
+    <string name="vcs_no_remote_short">未设置远程仓库</string>
+    <string name="vcs_set_up_remote">连接到 GitHub</string>
+    <string name="vcs_sign_out_of">退出 %1$s</string>
+    <string name="vcs_checkout_branch">切换到此分支</string>
+    <string name="vcs_delete_branch">删除分支</string>
+    <string name="vcs_merge_into_current">合并到当前分支</string>
+</resources>

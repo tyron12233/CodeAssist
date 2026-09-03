@@ -36,6 +36,30 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.UiGhostShelf
 import dev.ide.ui.backend.UiStoreItem
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.store_action_use
+import dev.ide.ui.generated.resources.store_badge_cd
+import dev.ide.ui.generated.resources.store_badge_first
+import dev.ide.ui.generated.resources.store_badge_new
+import dev.ide.ui.generated.resources.store_ghost_count_cd
+import dev.ide.ui.generated.resources.store_how_it_works
+import dev.ide.ui.generated.resources.store_not_rated
+import dev.ide.ui.generated.resources.store_ordinal_fifth
+import dev.ide.ui.generated.resources.store_ordinal_fourth
+import dev.ide.ui.generated.resources.store_ordinal_second
+import dev.ide.ui.generated.resources.store_ordinal_third
+import dev.ide.ui.generated.resources.store_perk_direct_line
+import dev.ide.ui.generated.resources.store_perk_front_page
+import dev.ide.ui.generated.resources.store_pitch_body
+import dev.ide.ui.generated.resources.store_pitch_eyebrow
+import dev.ide.ui.generated.resources.store_pitch_next
+import dev.ide.ui.generated.resources.store_pitch_ordinal_full
+import dev.ide.ui.generated.resources.store_pitch_subject
+import dev.ide.ui.generated.resources.store_pitch_subject_one
+import dev.ide.ui.generated.resources.store_project_count
+import dev.ide.ui.generated.resources.store_publish_cta
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.cardShape
@@ -59,18 +83,18 @@ import dev.ide.ui.theme.tonalPair
 @Composable
 fun StoreCountBadge(count: Int, modifier: Modifier = Modifier) {
     val c = MaterialTheme.colorScheme
+    // Resolved outside the semantics block: stringResource is composable-only.
+    val cd = stringResource(Res.string.store_badge_cd, count)
+    val label = pluralStringResource(Res.plurals.store_project_count, count, count)
     Surface(
         shape = RoundedCornerShape(9.dp),
         color = c.surfaceContainerHigh,
         contentColor = c.onSurfaceVariant,
         modifier = modifier.height(28.dp)
-            .semantics { contentDescription = "$count projects published" },
+            .semantics { contentDescription = cd },
     ) {
         Box(Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-            Text(
-                if (count == 1) "1 PROJECT" else "$count PROJECTS",
-                style = MaterialTheme.typography.labelSmall,
-            )
+            Text(label, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -232,7 +256,7 @@ private fun RatingLine(item: UiStoreItem, onContainer: Color) {
             )
         } else {
             Text(
-                "Not rated yet",
+                stringResource(Res.string.store_not_rated),
                 style = MaterialTheme.typography.labelLarge,
                 color = onContainer.copy(alpha = 0.75f),
             )
@@ -248,9 +272,10 @@ private fun RatingLine(item: UiStoreItem, onContainer: Color) {
  *
  * Index 0 is the shelf's first project; index 1 gets "NEW" only when it is genuinely recent.
  */
+@Composable
 private fun sparseBadge(index: Int, isRecent: Boolean): String? = when {
-    index == 0 -> "FIRST ON THE SHELF"
-    index == 1 && isRecent -> "NEW"
+    index == 0 -> stringResource(Res.string.store_badge_first)
+    index == 1 && isRecent -> stringResource(Res.string.store_badge_new)
     else -> null
 }
 
@@ -284,7 +309,7 @@ fun PublishPitchBand(
                 modifier = Modifier.align(Alignment.BottomEnd).offset(x = 20.dp, y = 26.dp),
             )
             Column(Modifier.padding(20.dp)) {
-                Eyebrow("Shelves are still short", color = c.onPrimaryContainer.copy(alpha = 0.75f))
+                Eyebrow(stringResource(Res.string.store_pitch_eyebrow), color = c.onPrimaryContainer.copy(alpha = 0.75f))
                 Text(
                     pitchHeadline(projectCount),
                     style = MaterialTheme.typography.headlineSmall.copy(
@@ -295,8 +320,7 @@ fun PublishPitchBand(
                     modifier = Modifier.padding(top = 8.dp),
                 )
                 Text(
-                    "Everything published right now sits on this page — no ranking to climb, no back " +
-                        "pages to fall into. That stops being true later.",
+                    stringResource(Res.string.store_pitch_body),
                     style = MaterialTheme.typography.bodyMedium,
                     color = c.onPrimaryContainer.copy(alpha = 0.82f),
                     modifier = Modifier.padding(top = 8.dp),
@@ -319,7 +343,7 @@ fun PublishPitchBand(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Symbol(CaSymbols.upload, contentDescription = null, size = 19.dp)
-                            Text("Publish a project", style = MaterialTheme.typography.labelLarge)
+                            Text(stringResource(Res.string.store_publish_cta), style = MaterialTheme.typography.labelLarge)
                         }
                     }
                     Surface(
@@ -331,7 +355,7 @@ fun PublishPitchBand(
                         modifier = Modifier.height(44.dp),
                     ) {
                         Box(Modifier.padding(horizontal = 18.dp), contentAlignment = Alignment.Center) {
-                            Text("How it works", style = MaterialTheme.typography.labelLarge)
+                            Text(stringResource(Res.string.store_how_it_works), style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
@@ -341,8 +365,8 @@ fun PublishPitchBand(
                     Modifier.fillMaxWidth().padding(top = 18.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    PerkTile(CaSymbols.visibility, "Front page from day one", Modifier.weight(1f))
-                    PerkTile(CaSymbols.forum, "Direct line to the review team", Modifier.weight(1f))
+                    PerkTile(CaSymbols.visibility, stringResource(Res.string.store_perk_front_page), Modifier.weight(1f))
+                    PerkTile(CaSymbols.forum, stringResource(Res.string.store_perk_direct_line), Modifier.weight(1f))
                 }
             }
         }
@@ -373,16 +397,19 @@ private fun PerkTile(glyph: Char, label: String, modifier: Modifier = Modifier) 
  * Above five the ordinal starts sounding like a small club rather than an opportunity, so it switches to
  * "Yours would be next" — the handoff's own note on the copy.
  */
+@Composable
 internal fun pitchHeadline(count: Int): String {
-    val subject = if (count == 1) "One project in." else "$count projects in."
+    val subject = if (count == 1) stringResource(Res.string.store_pitch_subject_one)
+        else stringResource(Res.string.store_pitch_subject, count)
     val ordinal = when (count) {
-        1 -> "second"
-        2 -> "third"
-        3 -> "fourth"
-        4 -> "fifth"
+        1 -> stringResource(Res.string.store_ordinal_second)
+        2 -> stringResource(Res.string.store_ordinal_third)
+        3 -> stringResource(Res.string.store_ordinal_fourth)
+        4 -> stringResource(Res.string.store_ordinal_fifth)
         else -> null
     }
-    return if (ordinal != null) "$subject Yours would be the $ordinal." else "$subject Yours would be next."
+    return if (ordinal != null) stringResource(Res.string.store_pitch_ordinal_full, subject, ordinal)
+        else stringResource(Res.string.store_pitch_next, subject)
 }
 
 /**
@@ -423,12 +450,14 @@ fun GhostShelfCard(
                 modifier = Modifier.weight(1f),
             )
             if (shelf != null) {
+                // Resolved outside the semantics block: stringResource is composable-only.
+                val shelfCountCd = stringResource(Res.string.store_ghost_count_cd, shelf.have, shelf.need)
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = c.surfaceContainer,
                     contentColor = c.onSurfaceVariant,
                     modifier = Modifier.height(24.dp).semantics {
-                        contentDescription = "${shelf.have} of ${shelf.need} projects needed"
+                        contentDescription = shelfCountCd
                     },
                 ) {
                     Box(Modifier.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
@@ -497,7 +526,7 @@ fun BundledTemplateRow(
             }
             Surface(shape = CircleShape, color = c.primaryContainer, contentColor = c.onPrimaryContainer) {
                 Box(Modifier.height(34.dp).padding(horizontal = 15.dp), contentAlignment = Alignment.Center) {
-                    Text("Use", style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(Res.string.store_action_use), style = MaterialTheme.typography.labelMedium)
                 }
             }
         }

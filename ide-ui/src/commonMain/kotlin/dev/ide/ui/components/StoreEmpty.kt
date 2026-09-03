@@ -39,6 +39,37 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.UiStoreSubmission
 import dev.ide.ui.backend.UiSubmissionStatus
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.store_empty_hero_body
+import dev.ide.ui.generated.resources.store_empty_hero_title
+import dev.ide.ui.generated.resources.store_ghost_charts_note
+import dev.ide.ui.generated.resources.store_ghost_collections_note
+import dev.ide.ui.generated.resources.store_ghost_recommend_note
+import dev.ide.ui.generated.resources.store_hero_eyebrow_open
+import dev.ide.ui.generated.resources.store_notify_state_off
+import dev.ide.ui.generated.resources.store_notify_state_on
+import dev.ide.ui.generated.resources.store_notify_subtitle
+import dev.ide.ui.generated.resources.store_notify_title
+import dev.ide.ui.generated.resources.store_publish_another
+import dev.ide.ui.generated.resources.store_publish_cta
+import dev.ide.ui.generated.resources.store_publishing_guide
+import dev.ide.ui.generated.resources.store_action_read_why
+import dev.ide.ui.generated.resources.store_action_view_listing
+import dev.ide.ui.generated.resources.store_action_view_notes
+import dev.ide.ui.generated.resources.store_action_withdraw
+import dev.ide.ui.generated.resources.store_status_building
+import dev.ide.ui.generated.resources.store_status_changes
+import dev.ide.ui.generated.resources.store_status_published
+import dev.ide.ui.generated.resources.store_status_rejected
+import dev.ide.ui.generated.resources.store_status_rejected_note
+import dev.ide.ui.generated.resources.store_status_submitted
+import dev.ide.ui.generated.resources.store_step_listing_body
+import dev.ide.ui.generated.resources.store_step_listing_title
+import dev.ide.ui.generated.resources.store_step_pick_body
+import dev.ide.ui.generated.resources.store_step_pick_title
+import dev.ide.ui.generated.resources.store_step_submit_body
+import dev.ide.ui.generated.resources.store_step_submit_title
+import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.tileShape
@@ -85,9 +116,9 @@ fun EmptyStoreHero(
                 modifier = Modifier.align(Alignment.BottomEnd).offset(x = 24.dp, y = 34.dp),
             )
             Column(Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) {
-                Eyebrow("The store is open", color = c.onPrimaryContainer.copy(alpha = 0.75f))
+                Eyebrow(stringResource(Res.string.store_hero_eyebrow_open), color = c.onPrimaryContainer.copy(alpha = 0.75f))
                 Text(
-                    "No one has published a project yet",
+                    stringResource(Res.string.store_empty_hero_title),
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontWeight = FontWeight.Medium, fontSize = 26.sp, lineHeight = 32.sp,
                         letterSpacing = (-0.7).sp,
@@ -96,8 +127,7 @@ fun EmptyStoreHero(
                     modifier = Modifier.padding(top = 8.dp),
                 )
                 Text(
-                    "Templates, sample apps and plugins show up here the moment they pass review. " +
-                        "Yours can be the first one.",
+                    stringResource(Res.string.store_empty_hero_body),
                     style = MaterialTheme.typography.bodyMedium,
                     color = c.onPrimaryContainer.copy(alpha = 0.82f),
                     modifier = Modifier.padding(top = 10.dp),
@@ -121,7 +151,11 @@ fun EmptyStoreHero(
                         ) {
                             Symbol(CaSymbols.upload, contentDescription = null, size = 20.dp)
                             Text(
-                                if (hasSubmission) "Publish another" else "Publish a project",
+                                if (hasSubmission) {
+                                    stringResource(Res.string.store_publish_another)
+                                } else {
+                                    stringResource(Res.string.store_publish_cta)
+                                },
                                 style = MaterialTheme.typography.labelLarge,
                             )
                         }
@@ -135,7 +169,7 @@ fun EmptyStoreHero(
                         modifier = Modifier.height(46.dp),
                     ) {
                         Box(Modifier.padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
-                            Text("Publishing guide", style = MaterialTheme.typography.labelLarge)
+                            Text(stringResource(Res.string.store_publishing_guide), style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
@@ -189,19 +223,19 @@ fun PublishingSteps(steps: List<PublishStep>, modifier: Modifier = Modifier) {
 }
 
 /** The default copy for [PublishingSteps]. Kept beside the component so the two cannot drift apart. */
-val defaultPublishSteps: List<PublishStep> = listOf(
+@Composable
+fun defaultPublishSteps(): List<PublishStep> = listOf(
     PublishStep(
-        "Pick a project from Home",
-        "Choose any local project. CodeAssist reads its name, language, JDK and Gradle setup for you — " +
-            "nothing to write by hand.",
+        stringResource(Res.string.store_step_pick_title),
+        stringResource(Res.string.store_step_pick_body),
     ),
     PublishStep(
-        "Fill in the listing",
-        "Title, a short description, category and screenshots — captured from your editor inside the app.",
+        stringResource(Res.string.store_step_listing_title),
+        stringResource(Res.string.store_step_listing_body),
     ),
     PublishStep(
-        "Submit for review",
-        "We build it on a clean machine and a human checks licensing and the README. Usually two business days.",
+        stringResource(Res.string.store_step_submit_title),
+        stringResource(Res.string.store_step_submit_body),
     ),
 )
 
@@ -225,6 +259,9 @@ fun NotifySwitchRow(
     message: String? = null,
 ) {
     val c = MaterialTheme.colorScheme
+    // Resolved outside the semantics block: stringResource is composable-only.
+    val stateOn = stringResource(Res.string.store_notify_state_on)
+    val stateOff = stringResource(Res.string.store_notify_state_off)
     Surface(
         shape = RoundedCornerShape(26.dp),
         color = c.surfaceContainerLow,
@@ -238,12 +275,12 @@ fun NotifySwitchRow(
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    "Tell me when projects arrive",
+                    stringResource(Res.string.store_notify_title),
                     style = MaterialTheme.typography.titleSmall,
                     color = c.onSurface,
                 )
                 Text(
-                    message ?: "One notification, only for the first batch.",
+                    message ?: stringResource(Res.string.store_notify_subtitle),
                     style = MaterialTheme.typography.bodySmall,
                     // The failure takes over the supporting line rather than adding a row: it replaces the
                     // promise it just failed to keep.
@@ -257,7 +294,7 @@ fun NotifySwitchRow(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
                 modifier = Modifier.semantics {
-                    stateDescription = if (checked) "Notifications on" else "Notifications off"
+                    stateDescription = if (checked) stateOn else stateOff
                 },
             )
         }
@@ -282,19 +319,36 @@ fun SubmissionStatusCard(
     val c = MaterialTheme.colorScheme
     val (line, actionLabel, action) = when (submission.status) {
         UiSubmissionStatus.SUBMITTED ->
-            Triple("In review · usually 2 business days", "Withdraw", onWithdraw)
+            Triple(
+                stringResource(Res.string.store_status_submitted),
+                stringResource(Res.string.store_action_withdraw),
+                onWithdraw,
+            )
         UiSubmissionStatus.BUILDING ->
-            Triple("Building on a clean machine", "Withdraw", onWithdraw)
+            Triple(
+                stringResource(Res.string.store_status_building),
+                stringResource(Res.string.store_action_withdraw),
+                onWithdraw,
+            )
         UiSubmissionStatus.CHANGES_REQUESTED ->
-            Triple("Changes requested — read the notes", "View notes", onViewNotes)
+            Triple(
+                stringResource(Res.string.store_status_changes),
+                stringResource(Res.string.store_action_view_notes),
+                onViewNotes,
+            )
         UiSubmissionStatus.REJECTED ->
             Triple(
-                submission.note?.let { "Not accepted · $it" } ?: "Not accepted",
-                "Read why",
+                submission.note?.let { stringResource(Res.string.store_status_rejected_note, it) }
+                    ?: stringResource(Res.string.store_status_rejected),
+                stringResource(Res.string.store_action_read_why),
                 onViewNotes,
             )
         UiSubmissionStatus.PUBLISHED ->
-            Triple("Live in the store", "View listing", onViewListing)
+            Triple(
+                stringResource(Res.string.store_status_published),
+                stringResource(Res.string.store_action_view_listing),
+                onViewListing,
+            )
     }
     // Only the in-flight states spin; a finished one holding an animation would read as still working.
     val spinning = submission.status == UiSubmissionStatus.SUBMITTED ||
@@ -376,8 +430,9 @@ private fun SpinningGlyph(glyph: Char, spinning: Boolean, tint: Color) {
  * Different from the sparse state's on purpose: with nothing published, the honest thing to state is the
  * **condition** that fills the shelf, not a threshold the reader is nowhere near.
  */
+@Composable
 fun emptyGhostNote(key: String): String = when (key) {
-    "charts" -> "Ranks appear once projects have a week of install history."
-    "collections" -> "Curated shelves are assembled by the team from published projects."
-    else -> "Recommendations need your install history — install something first."
+    "charts" -> stringResource(Res.string.store_ghost_charts_note)
+    "collections" -> stringResource(Res.string.store_ghost_collections_note)
+    else -> stringResource(Res.string.store_ghost_recommend_note)
 }

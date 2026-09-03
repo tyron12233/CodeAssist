@@ -17,6 +17,8 @@
     <string name="chat_add_key">添加 API 密钥</string>
     <string name="chat_show">显示</string>
     <string name="chat_hide">隐藏</string>
+    <string name="chat_ca_cert">CA 证书（可选）</string>
+    <string name="chat_ca_cert_hint">仅当端点使用系统不信任的私有或区域性 CA 时（如 GigaChat）才粘贴 CA 证书（PEM）。它会在系统 CA 之外额外受信任；证书链仍会校验。</string>
     <string name="chat_gateway_hint">兼容 OpenAI：OpenRouter、LiteLLM 或自托管端点。</string>
     <string name="chat_done">完成</string>
     <string name="chat_placeholder">询问代码问题，或描述需要的修改</string>
