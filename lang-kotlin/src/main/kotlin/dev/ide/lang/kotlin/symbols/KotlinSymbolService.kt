@@ -40,6 +40,7 @@ import dev.ide.lang.synthetic.SyntheticField
 import dev.ide.lang.synthetic.SyntheticMethod
 import dev.ide.lang.synthetic.SyntheticModifier
 import dev.ide.lang.synthetic.SyntheticTypeKind
+import dev.ide.platform.EngineCanceledException
 import dev.ide.vfs.VirtualFile
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtExpression
@@ -3329,6 +3330,17 @@ class KotlinSymbolService(
                 inferred,
                 decl
             ) else inferred
+        } catch (e: VirtualMachineError) {
+            // Out of stack or heap says nothing about this body, and the memo write below would cache the
+            // resulting null for the rest of the session: one transient overflow (a deep chain of
+            // expression-body declarations resolved on a shallow stack) would leave every declaration it
+            // unwound through permanently untyped, so a member chain off them stays unresolved until the
+            // source model is rebuilt. Propagate instead, leaving the memo untouched.
+            throw e
+        } catch (e: EngineCanceledException) {
+            throw e // preemption is control flow, not a body that failed to type
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (t: Throwable) {
             null
         } finally {
