@@ -17,6 +17,7 @@ import dev.ide.android.support.tasks.GenerateRJarTask
 import dev.ide.android.support.tasks.PackageAarTask
 import dev.ide.android.support.tasks.GenerateViewBindingTask
 import dev.ide.android.support.tasks.InjectAppLogProviderTask
+import dev.ide.android.support.crashlytics.Crashlytics
 import dev.ide.android.support.gms.GoogleServices
 import dev.ide.android.support.tasks.BundleTask
 import dev.ide.android.support.tasks.L8DexTask
@@ -26,6 +27,7 @@ import dev.ide.android.support.tasks.MergeNativeLibsTask
 import dev.ide.android.support.tasks.MergeResourcesTask
 import dev.ide.android.support.tasks.PackageApkTask
 import dev.ide.android.support.tasks.PackagingRules
+import dev.ide.android.support.tasks.InjectCrashlyticsMappingFileIdTask
 import dev.ide.android.support.tasks.ProcessGoogleServicesTask
 import dev.ide.android.support.tasks.R8MinifyTask
 import dev.ide.android.support.tasks.SharedLibraryDexer
@@ -261,12 +263,23 @@ class AndroidBuildSystem(
         val gmsJson = GoogleServices.findJson(layout.moduleDir, variant)
         val gmsRes = if (gmsJson != null) listOf(layout.generatedGmsRes) else emptyList()
 
+        // Crashlytics: its runtime demands a build-id string resource that only its Gradle plugin writes, and
+        // it initializes itself from the <provider> its own AAR merges into the manifest, so an app that just
+        // HAS the library on the classpath crashes on startup until we supply that resource ourselves.
+        // The RUNTIME closure, not the compile classpath: what matters is whether Crashlytics is PACKAGED
+        // (it self-initializes from the manifest), and a library module's non-exported `implementation` dep
+        // reaches the APK without ever appearing on the app's compile classpath.
+        val usesCrashlytics = Crashlytics.onClasspath(
+            app.classpath(DependencyScope.RUNTIME_ONLY, variant = variant.configurations).entries.map { Paths.get(it.root.path) },
+        )
+        val crashlyticsRes = if (usesCrashlytics) listOf(layout.generatedCrashlyticsRes) else emptyList()
+
         // A dependency lib contributes the resources/assets of ITS matching variant (build-type-first), not
         // all its source sets, so a debug-only or flavor-only resource doesn't leak into the wrong variant.
         fun depRoots(dep: Module, role: ContentRole): List<Path> =
             AndroidVariants.matchLibraryVariant(dep, variant, facet)?.let { roots(it, role) } ?: moduleRoots(dep, role)
         val mergeResInputs = depAndroidLibs.flatMap { depRoots(it, ContentRole.ANDROID_RES) } +
-            libs.resDirs + gmsRes + roots(variant, ContentRole.ANDROID_RES)
+            libs.resDirs + gmsRes + crashlyticsRes + roots(variant, ContentRole.ANDROID_RES)
         val sourceRoots = roots(variant, ContentRole.SOURCE)
         val assetsDirs = depAndroidLibs.flatMap { depRoots(it, ContentRole.ASSETS) } +
             libs.assetsDirs + roots(variant, ContentRole.ASSETS)
@@ -382,13 +395,22 @@ class AndroidBuildSystem(
         val aidlDep = listOfNotNull(compileAidl)
 
         // google-services.json (when present) generates res that the merge consumes, so it runs first.
-        val mergeResDeps = if (gmsJson != null) {
-            val processGms = step("processGoogleServices")
-            tasks.task(processGms) {
-                ProcessGoogleServicesTask(processGms, gmsJson, applicationId, facet.namespace, layout.generatedGmsRes)
+        val mergeResDeps = buildList {
+            if (gmsJson != null) {
+                val processGms = step("processGoogleServices")
+                tasks.task(processGms) {
+                    ProcessGoogleServicesTask(processGms, gmsJson, applicationId, facet.namespace, layout.generatedGmsRes)
+                }
+                add(processGms)
             }
-            listOf(processGms)
-        } else emptyList()
+            if (usesCrashlytics) {
+                val injectCrashlytics = step("injectCrashlyticsMappingFileId")
+                tasks.task(injectCrashlytics) {
+                    InjectCrashlyticsMappingFileIdTask(injectCrashlytics, layout.generatedCrashlyticsRes)
+                }
+                add(injectCrashlytics)
+            }
+        }
         tasks.task(mergeRes, mergeResDeps) { MergeResourcesTask(mergeRes, mergeResInputs, layout.mergedRes) }
         // Fail early (before compilation) if a dependency AAR requires a higher compileSdk than the app has
         // (AGP's checkAarMetadata). Gates processManifest so a violation stops the build with a clear message.
@@ -1111,6 +1133,8 @@ class AndroidBuildSystem(
         // The merged manifest + the debug-only log-bridge <provider> — what aapt2 links on an instrumented build.
         val instrumentedManifest: Path = inter.resolve("instrumented-manifest").resolve("AndroidManifest.xml")
         val generatedGmsRes: Path = buildDir.resolve("generated").resolve("res").resolve("google-services").resolve(variantName)
+        // The Crashlytics build-id resource (AGP: build/generated/res/crashlytics/<variant>).
+        val generatedCrashlyticsRes: Path = buildDir.resolve("generated").resolve("res").resolve("crashlytics").resolve(variantName)
         val genJava: Path = inter.resolve("gen")
         // AGP's compile_and_runtime_not_namespaced_r_class_jar: the R classes as bytecode, not compiled R.java.
         val rJar: Path = inter.resolve("compile_and_runtime_not_namespaced_r_class_jar").resolve("R.jar")

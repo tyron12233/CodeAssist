@@ -198,6 +198,25 @@ Two shapes fall out of this, both reusable by the next library that needs them:
   only when the generated base is present in the output, so a build where the processor did not run is left
   alone rather than pointed at a type that doesn't exist.
 
+**A plugin half is not always about codegen.** Some plugins only need to *generate a resource*, and the
+runtime hard-fails without it. Two live cases, both wired as a task that writes into a generated `res/`
+dir feeding `mergeResources`:
+
+- `com.google.gms.google-services` → `processGoogleServices` reads `google-services.json` into the
+  `google_app_id`/`project_id`/… string resources FirebaseApp needs, gated on that file being present.
+- `com.google.firebase.crashlytics` → `injectCrashlyticsMappingFileId` writes the build-id string resource
+  `com.google.firebase.crashlytics.mapping_file_id`. Without it every app that merely *has* the library
+  dies before any user code runs: Crashlytics self-initializes from the `<provider>` merged out of the
+  Firebase AARs, and `CrashlyticsCore.onPreExecute` throws *"The Crashlytics build ID is missing. This
+  occurs when the Crashlytics Gradle plugin is missing from your app's build configuration."*
+
+The gating rule differs from Hilt's on purpose. Hilt is gated on the module **declaring** the runtime,
+because declaring it is what makes the processor run and generate the bases to rewrite. Crashlytics is
+gated on its presence anywhere in the **runtime closure**, because it self-initializes from a merged
+manifest: reaching it transitively, or through a library module's non-exported `implementation`, crashes
+the app just the same. The value written is the constant the real plugin uses when mapping-file upload is
+off: a per-build UUID would buy nothing here and would dirty the resource merge on every build.
+
 ### Incrementality
 
 Lean on KSP's own incremental model (`Dependencies`, aggregating/isolating outputs) rather than teaching
