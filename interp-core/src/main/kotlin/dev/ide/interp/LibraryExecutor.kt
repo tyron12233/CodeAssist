@@ -13,6 +13,12 @@ class LibraryValue(val value: Any?)
  * named-argument call omitting a defaulted parameter — the executor routes through the Kotlin `$default`
  * synthetic) and [InterpretedLambda] (the executor proxies it into the functional interface the target
  * parameter expects). Method names are Kotlin names; the executor resolves JVM name mangling.
+ *
+ * `declaredArgCount` is how many arguments the RESOLVED overload would take at this seam (receivers already in
+ * `args` included), or -1 when unknown. A call that omits TRAILING defaulted parameters supplies fewer than
+ * that and leaves no [OmittedArg] hole, so its argument list is indistinguishable from a call to a SHORTER
+ * same-named overload (`Modifier.padding(start = 16.dp)` vs `Modifier.padding(16.dp)`); the count lets the
+ * executor keep the overload the resolver actually chose.
  */
 interface LibraryExecutor {
     /** Whether [fqn] (a binary class name) is executable here. */
@@ -28,7 +34,8 @@ interface LibraryExecutor {
         ownerFqn: String,
         name: String,
         args: List<Any?>,
-        leadingReceivers: Int = 0
+        leadingReceivers: Int = 0,
+        declaredArgCount: Int = -1,
     ): Any?
 
     /** Invoke instance method [name] on [receiver] (an instance this executor owns). [leadingReceivers] counts
@@ -37,7 +44,8 @@ interface LibraryExecutor {
         receiver: Any,
         name: String,
         args: List<Any?>,
-        leadingReceivers: Int = 0
+        leadingReceivers: Int = 0,
+        declaredArgCount: Int = -1,
     ): Any?
 
     /** Construct an [ownerFqn] instance. */

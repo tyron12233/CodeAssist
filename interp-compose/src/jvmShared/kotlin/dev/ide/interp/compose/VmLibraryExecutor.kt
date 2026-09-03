@@ -169,12 +169,12 @@ class VmLibraryExecutor(
         jarFiles.forEach { runCatching { it.close() } }
     }
 
-    override fun invokeStatic(ownerFqn: String, name: String, args: List<Any?>, leadingReceivers: Int): Any? =
-        call(vm.interpretedMethods(ownerFqn), name, wantStatic = true, receiver = null, args, leadingReceivers)?.value
+    override fun invokeStatic(ownerFqn: String, name: String, args: List<Any?>, leadingReceivers: Int, declaredArgCount: Int): Any? =
+        call(vm.interpretedMethods(ownerFqn), name, wantStatic = true, receiver = null, args, leadingReceivers, declaredArgCount)?.value
             ?: throw InterpreterException("no static `$name`(${args.size}) on interpreted `$ownerFqn`")
 
-    override fun invokeInstance(receiver: Any, name: String, args: List<Any?>, leadingReceivers: Int): Any? {
-        call(vm.interpretedMethodsOf(receiver), name, wantStatic = false, receiver, args, leadingReceivers)
+    override fun invokeInstance(receiver: Any, name: String, args: List<Any?>, leadingReceivers: Int, declaredArgCount: Int): Any? {
+        call(vm.interpretedMethodsOf(receiver), name, wantStatic = false, receiver, args, leadingReceivers, declaredArgCount)
             ?.let { return it.value }
         // A nested `object` reached through member syntax (`Icons.AutoMirrored`): the class
         // `<Receiver>$<name>` with its own singleton, not a method on the receiver.
@@ -383,22 +383,38 @@ class VmLibraryExecutor(
         receiver: Any?,
         args: List<Any?>,
         leadingReceivers: Int,
+        declaredArgCount: Int = -1,
     ): Res? {
         val named = methods.filter { it.isStatic == wantStatic && !it.isAbstract && kotlinNames.matches(it, kotlinName) }
-        if (args.none { it === OmittedArg }) {
+        // A call that omits TRAILING defaulted parameters supplies fewer args than the resolved overload declares
+        // and leaves no [OmittedArg] hole, so an exact-arity match here is a DIFFERENT, shorter overload of the
+        // same name (`Modifier.padding(start = 16.dp)` would bind `padding(all)` and pad every direction). Go to
+        // the `$default` synthetic first in that case, keeping the exact-arity match as the fallback for a
+        // version-skewed jar whose function really does take only the supplied arguments.
+        val omitsTrailingDefaults = declaredArgCount >= 0 && args.none { it === OmittedArg } && declaredArgCount > args.size
+        fun exactArity(): Res? {
+            if (args.any { it === OmittedArg }) return null
             named.firstOrNull { it.paramDescriptors.size == args.size && fitsAll(it.paramDescriptors, args) }
                 ?.let { return Res(it.invoke(receiver, bindArgs(it.paramDescriptors, args))) }
             named.firstOrNull { varargFits(it, args) }
                 ?.let { return Res(it.invoke(receiver, bindVarargs(it, args))) }
+            return null
         }
+        if (!omitsTrailingDefaults) exactArity()?.let { return it }
         // `name$default` is STATIC even for an instance method, with the receiver as its first real parameter
         // (not numbered in the mask).
         val defaults = methods.filter { it.isStatic && kotlinNames.isDefaultSynthetic(it, kotlinName) }
         if (defaults.isNotEmpty()) {
             val realArgs = if (wantStatic) args else listOf(receiver!!) + args
             val maskShift = leadingReceivers + if (wantStatic) 0 else 1
-            for (d in defaults) invokeDefault(d, realArgs, maskShift)?.let { return it }
+            // The synthetic's real params are `paramDescriptors.size - 2` (mask + marker) and include the
+            // receiver the instance form prepends — so try the one matching the RESOLVED overload first.
+            val declaredReal = if (declaredArgCount < 0) -1 else declaredArgCount + if (wantStatic) 0 else 1
+            val ordered = if (declaredReal < 0) defaults
+            else defaults.sortedByDescending { it.paramDescriptors.size - 2 == declaredReal }
+            for (d in ordered) invokeDefault(d, realArgs, maskShift)?.let { return it }
         }
+        if (omitsTrailingDefaults) exactArity()?.let { return it }
         if (args.none { it === OmittedArg }) {
             named.firstOrNull { it.paramDescriptors.size == args.size }
                 ?.let { return Res(it.invoke(receiver, bindArgs(it.paramDescriptors, args))) }

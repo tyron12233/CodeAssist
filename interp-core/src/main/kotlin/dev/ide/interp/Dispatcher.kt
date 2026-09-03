@@ -435,6 +435,17 @@ class ReflectiveDispatcher(
             callee,
             if (callee is ResolvedCallable.Library) reorderNamedArgs(callee.paramNames, call.args, args) else args,
         )
+        // The resolved overload's declared VALUE-parameter count, or -1 when it isn't known (a source callee, a
+        // `vararg`/`suspend` shape whose supplied-arg count legitimately differs from the declared one). Named-arg
+        // reordering TRIMS trailing omitted slots, so the argument list alone can't tell `padding(start = 16.dp)`
+        // (the four-way overload with three defaults omitted) from `padding(16.dp)` (the one-param `all`
+        // overload) — both arrive as a single `Dp`, and the exact-arity reflective lookup then picks the WRONG
+        // same-named overload (every direction padded instead of just `start`). Carrying the count preserves the
+        // overload `chooseCallee` already resolved, exactly as the constructor and `@Composable` paths do.
+        val declaredParams = (callee as? ResolvedCallable.Library)
+            ?.takeIf { it.varargParamIndex < 0 && !it.isSuspend }
+            ?.let { maxOf(it.paramNames.size, it.paramTypes.size) }
+            ?: -1
         return when (call.dispatch) {
             // SUPER is resolved by the interpreter (source super → the supertype body; binary super → no-op), so
             // it normally never reaches here; if it does, the only sound thing is a plain instance invocation.
@@ -457,27 +468,27 @@ class ReflectiveDispatcher(
                 if (call.dispatch == DispatchKind.MEMBER) {
                     unboxedValueClassOwner(target, callee)?.let { ownerJvm ->
                         val all = listOf(target) + args
-                        return invokeStatic(ownerJvm, callee.displayName, all, composableParamFlags(callee, all, leadingReceiver = true), receiverCount = 1)
+                        return invokeStatic(ownerJvm, callee.displayName, all, composableParamFlags(callee, all, leadingReceiver = true), receiverCount = 1, declaredParams = declaredParams)
                     }
                 }
-                invokeInstance(target, callee.displayName, args, composableParamFlags(callee, args))
+                invokeInstance(target, callee.displayName, args, composableParamFlags(callee, args), declaredParams)
             }
             // A member extension (`RowScope.weight`): `receiver` is the scope instance, the extension receiver is
             // the head of `args`. It's an instance method on the scope whose first param is the extension receiver
             // — and BOTH precede its value params, which matters for the defaulted-arg synthetic.
             DispatchKind.MEMBER_EXTENSION -> {
                 val target = receiver ?: throw InterpreterException("member extension `${callee.displayName}` has no scope receiver")
-                invokeMemberExtension(target, callee.displayName, args, composableParamFlags(callee, args))
+                invokeMemberExtension(target, callee.displayName, args, composableParamFlags(callee, args), declaredParams)
             }
             DispatchKind.EXTENSION -> {
                 val owner = libraryOwner(callee) ?: throw InterpreterException("extension `${callee.displayName}` has no owner")
                 // Extensions compile to static facade methods with the receiver as the first parameter.
                 val all = listOfNotNull(receiver) + args
-                invokeStatic(owner, callee.displayName, all, composableParamFlags(callee, all, leadingReceiver = receiver != null), receiverCount = if (receiver != null) 1 else 0)
+                invokeStatic(owner, callee.displayName, all, composableParamFlags(callee, all, leadingReceiver = receiver != null), receiverCount = if (receiver != null) 1 else 0, declaredParams = declaredParams)
             }
             DispatchKind.TOP_LEVEL -> {
                 val owner = libraryOwner(callee) ?: throw InterpreterException("top-level `${callee.displayName}` has no owner")
-                invokeStatic(owner, callee.displayName, args, composableParamFlags(callee, args), receiverCount = 0)
+                invokeStatic(owner, callee.displayName, args, composableParamFlags(callee, args), receiverCount = 0, declaredParams = declaredParams)
             }
             DispatchKind.CONSTRUCTOR -> {
                 val owner = libraryOwner(callee) ?: throw InterpreterException("constructor `${callee.displayName}` has no type")
@@ -521,24 +532,32 @@ class ReflectiveDispatcher(
         }
     }
 
-    private fun invokeInstance(target: Any, name: String, args: List<Any?>, composable: List<Boolean>): Any? {
+    private fun invokeInstance(target: Any, name: String, args: List<Any?>, composable: List<Boolean>, declaredParams: Int = -1): Any? {
         // An instance the library executor produced (an interpreted-library object): its methods exist only in
         // the executor's world, not on the peer class reflection sees.
-        if (libraryFallback?.ownsInstance(target) == true) return libraryFallback.invokeInstance(target, name, args)
-        // An omitted (defaulted) parameter has no exact-arity match — go straight to the `$default` synthetic.
-        if (args.none { it === OmittedArg }) {
+        if (libraryFallback?.ownsInstance(target) == true) return libraryFallback.invokeInstance(target, name, args, declaredArgCount = declaredParams)
+        val omitsTrailingDefaults = omitsTrailingDefaults(declaredParams, args, receiverCount = 0)
+        fun exactArity(): Invoked? {
+            // An omitted (defaulted) parameter has no exact-arity match — the `$default` synthetic owns the call.
+            if (args.any { it === OmittedArg }) return null
             findMethod(target.javaClass, name, args, static = false)?.let { m ->
                 runCatching { m.isAccessible = true }
-                return m.invoke(target, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes))
+                return Invoked(m.invoke(target, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes)))
             }
             // No exact-arity match: a vararg method (`fun f(vararg x)`) packs the trailing args into an array.
-            findVarargMethod(target.javaClass, name, args, static = false)?.let { return invokeVararg(it, target, args, composable) }
+            findVarargMethod(target.javaClass, name, args, static = false)?.let { return Invoked(invokeVararg(it, target, args, composable)) }
+            return null
         }
+        if (!omitsTrailingDefaults) exactArity()?.let { return it.value }
         // A call that omits defaulted params has no exact-arity match — Kotlin emits a STATIC `name$default`
         // synthetic that takes the receiver as its first real parameter, so prepend the target (and that
         // receiver is not numbered in the `$default` mask → receiverCount = 1).
-        invokeViaDefaultSynthetic(target.javaClass, name, listOf(target) + args, listOf(false) + composable, receiverCount = 1)
+        invokeViaDefaultSynthetic(target.javaClass, name, listOf(target) + args, listOf(false) + composable, receiverCount = 1, declaredRealParams = declaredRealParams(declaredParams, 1))
             ?.let { return it.value }
+        // The resolved overload declares more parameters than the call supplied, but no `$default` synthetic fits
+        // — a version-skewed runtime whose method really does take only the supplied arguments. Take the
+        // exact-arity match after all rather than failing the call (see [omitsTrailingDefaults]).
+        if (omitsTrailingDefaults) exactArity()?.let { return it.value }
         // Last resort (see [invokeStatic]): a same-arity method coerceArg can satisfy (value-class (un)boxing),
         // AFTER the $default synthetic so a defaulted overload wins over a non-coercible same-arity sibling.
         if (args.none { it === OmittedArg }) {
@@ -578,36 +597,50 @@ class ReflectiveDispatcher(
      *  synthetic is needed — and it has TWO non-value leading params (the scope `$this` AND the extension
      *  receiver), so `receiverCount = 2`; the synthetic may live on the scope's interface (see
      *  [invokeViaDefaultSynthetic]'s interface search), not the runtime impl class. */
-    private fun invokeMemberExtension(scope: Any, name: String, args: List<Any?>, composable: List<Boolean>): Any? {
-        if (libraryFallback?.ownsInstance(scope) == true) return libraryFallback.invokeInstance(scope, name, args, leadingReceivers = 1)
-        if (args.none { it === OmittedArg }) {
+    private fun invokeMemberExtension(scope: Any, name: String, args: List<Any?>, composable: List<Boolean>, declaredParams: Int = -1): Any? {
+        if (libraryFallback?.ownsInstance(scope) == true) return libraryFallback.invokeInstance(scope, name, args, leadingReceivers = 1, declaredArgCount = declaredRealParams(declaredParams, 1))
+        // [args] already leads with the EXTENSION receiver; the scope is the dispatch receiver alongside it.
+        val omitsTrailingDefaults = omitsTrailingDefaults(declaredParams, args, receiverCount = 1)
+        fun exactArity(): Invoked? {
+            if (args.any { it === OmittedArg }) return null
             findMethod(scope.javaClass, name, args, static = false)?.let { m ->
                 runCatching { m.isAccessible = true }
-                return m.invoke(scope, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes))
+                return Invoked(m.invoke(scope, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes)))
             }
-            findVarargMethod(scope.javaClass, name, args, static = false)?.let { return invokeVararg(it, scope, args, composable) }
+            findVarargMethod(scope.javaClass, name, args, static = false)?.let { return Invoked(invokeVararg(it, scope, args, composable)) }
+            return null
         }
-        invokeViaDefaultSynthetic(scope.javaClass, name, listOf(scope) + args, listOf(false) + composable, receiverCount = 2)
+        if (!omitsTrailingDefaults) exactArity()?.let { return it.value }
+        invokeViaDefaultSynthetic(scope.javaClass, name, listOf(scope) + args, listOf(false) + composable, receiverCount = 2, declaredRealParams = declaredRealParams(declaredParams, 2))
             ?.let { return it.value }
+        if (omitsTrailingDefaults) exactArity()?.let { return it.value }
         throw InterpreterException("no member extension `$name`(${args.size}) on ${scope.javaClass.name}")
     }
 
-    private fun invokeStatic(ownerFqn: String, name: String, args: List<Any?>, composable: List<Boolean>, receiverCount: Int): Any? {
+    private fun invokeStatic(ownerFqn: String, name: String, args: List<Any?>, composable: List<Boolean>, receiverCount: Int, declaredParams: Int = -1): Any? {
         // A facade the library executor owns runs there: one the host can't load at all (a project-only jar),
         // OR one it prefers the project's version of over a version-skewed bundled build (Material3). Keying on
         // `hasClass` (not host-loadability) lets the latter win — the executor's own gate decides.
         if (libraryFallback != null && libraryFallback.hasClass(ownerFqn)) {
-            return libraryFallback.invokeStatic(ownerFqn, name, args, receiverCount)
+            return libraryFallback.invokeStatic(ownerFqn, name, args, receiverCount, declaredRealParams(declaredParams, receiverCount))
         }
         val cls = loadClass(ownerFqn)
-        if (args.none { it === OmittedArg }) {
+        val omitsTrailingDefaults = omitsTrailingDefaults(declaredParams, args, receiverCount)
+        fun exactArity(): Invoked? {
+            if (args.any { it === OmittedArg }) return null
             findMethod(cls, name, args, static = true)?.let { m ->
                 runCatching { m.isAccessible = true }
-                return m.invoke(null, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes))
+                return Invoked(m.invoke(null, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes)))
             }
-            findVarargMethod(cls, name, args, static = true)?.let { return invokeVararg(it, null, args, composable) }
+            findVarargMethod(cls, name, args, static = true)?.let { return Invoked(invokeVararg(it, null, args, composable)) }
+            return null
         }
-        invokeViaDefaultSynthetic(cls, name, args, composable, receiverCount)?.let { return it.value }
+        if (!omitsTrailingDefaults) exactArity()?.let { return it.value }
+        invokeViaDefaultSynthetic(cls, name, args, composable, receiverCount, declaredRealParams(declaredParams, receiverCount))?.let { return it.value }
+        // The resolved overload declares more parameters than the call supplied, but no `$default` synthetic fits
+        // — a version-skewed runtime whose function really does take only the supplied arguments. Take the
+        // exact-arity match after all rather than failing the call (see [omitsTrailingDefaults]).
+        if (omitsTrailingDefaults) exactArity()?.let { return it.value }
         // Last resort: a same-arity overload none ACCEPTS as-is but [bindArgs]/coerceArg can satisfy (value-class
         // (un)boxing). AFTER the $default synthetic so a defaulted overload wins over a non-coercible same-arity
         // sibling (`Color(Float,Float,Float)` -> the Float `Color$default`, not `Color(Int,Int,Int)`).
@@ -644,6 +677,29 @@ class ReflectiveDispatcher(
     private class Invoked(val value: Any?)
 
     /**
+     * Whether the call supplied FEWER arguments than the resolved overload declares — so it omitted trailing
+     * defaulted parameters that [reorderNamedArgs] left no [OmittedArg] hole for.
+     *
+     * That trim is what makes `Modifier.padding(start = 16.dp)` arrive as a single `Dp`, indistinguishable from
+     * `Modifier.padding(16.dp)`; the exact-arity reflective lookup then binds the ONE-param `padding(all)`
+     * overload and every direction gets padded. When this is true the exact-arity match is a DIFFERENT overload,
+     * so the `$default` synthetic — pinned to the resolved parameter count — is tried first, with the
+     * exact-arity match kept as the fallback for a version-skewed runtime whose method really is that short.
+     *
+     * [declaredParams] is the resolved overload's declared VALUE-parameter count (-1 when unknown, or when the
+     * callee is `vararg`/`suspend` and its supplied-arg count legitimately differs); [args] leads with
+     * [receiverCount] receivers, which are not among those value parameters.
+     */
+    private fun omitsTrailingDefaults(declaredParams: Int, args: List<Any?>, receiverCount: Int): Boolean =
+        declaredParams >= 0 && args.none { it === OmittedArg } && declaredParams + receiverCount > args.size
+
+    /** The resolved overload's real-parameter count as its `$default` synthetic declares it — the value
+     *  parameters plus the [receiverCount] receivers that precede them in the JVM signature. -1 (unknown) when
+     *  [declaredParams] is. */
+    private fun declaredRealParams(declaredParams: Int, receiverCount: Int): Int =
+        if (declaredParams < 0) -1 else declaredParams + receiverCount
+
+    /**
      * Invoke [name]'s Kotlin default-arguments synthetic — `<jvmName>$default(realParams…, int mask, Object
      * marker)`, always static — filling the omitted (defaulted) parameters. [realArgs] are the supplied
      * positional args INCLUDING any receiver (the synthetic takes the receiver as its first real param). A set
@@ -653,8 +709,8 @@ class ReflectiveDispatcher(
      * bit `i - receiverCount`. Returns null when no fitting synthetic exists (so the caller reports the
      * original "not found"). Assumes ≤32 value parameters (one mask int) — true of every real fn.
      */
-    private fun invokeViaDefaultSynthetic(cls: Class<*>, name: String, realArgs: List<Any?>, composable: List<Boolean>, receiverCount: Int): Invoked? {
-        val m = findDefaultSynthetic(cls, name, realArgs) ?: return null
+    private fun invokeViaDefaultSynthetic(cls: Class<*>, name: String, realArgs: List<Any?>, composable: List<Boolean>, receiverCount: Int, declaredRealParams: Int = -1): Invoked? {
+        val m = findDefaultSynthetic(cls, name, realArgs, declaredRealParams) ?: return null
         val params = m.parameterTypes
         // A SUSPEND function's `$default` synthetic inserts its `Continuation` BETWEEN the real value params and
         // the mask+marker: `realParams…, Continuation, int mask×k, Object marker` (the low-level gesture detectors
@@ -712,9 +768,9 @@ class ReflectiveDispatcher(
      *  static: for a class member it's on the class (in `cls.methods`); for an INTERFACE member (e.g.
      *  `RowScope.weight`) it's static on the interface (jvm-default=all) or its `…$DefaultImpls`
      *  (jvm-default=disable) — neither inherited into the impl's `getMethods()`, so the interfaces are searched. */
-    private fun findDefaultSynthetic(cls: Class<*>, name: String, realArgs: List<Any?>): Method? {
+    private fun findDefaultSynthetic(cls: Class<*>, name: String, realArgs: List<Any?>, declaredRealParams: Int = -1): Method? {
         val cache = cacheFor(cls)
-        val key = "d|$name|${argShape(realArgs)}"
+        val key = "d|$name|$declaredRealParams|${argShape(realArgs)}"
         cache[key]?.let { InterpProfile.count("cacheHit"); return it.method }
         InterpProfile.count("cacheMiss")
         // `cls.methods` is PUBLIC-only; also scan `cls.declaredMethods` (any visibility) so a synthetic that a
@@ -725,6 +781,15 @@ class ReflectiveDispatcher(
             .distinct()
             .filter { Modifier.isStatic(it.modifiers) && isDefaultSynthetic(cls, it.name, name) && fitsDefaultSynthetic(it, realArgs) }
             .toList()
+        // Prefer the synthetic of the overload static resolution actually picked. Trailing omitted arguments
+        // leave no hole, so a shorter same-named overload's synthetic fits the args just as well and would win
+        // the smallest-arity tie below: `Modifier.padding(start = 16.dp)` fits `padding(horizontal, vertical)`'s
+        // 3-real-param synthetic as readily as the four-way overload's 5-real-param one. Matching the resolved
+        // count settles it — the same pin [findDefaultConstructor] applies to constructors.
+        if (declaredRealParams >= 0) {
+            fitting.firstOrNull { syntheticRealParamCount(it) == declaredRealParams }
+                ?.let { cache[key] = MethodHolder(it); return it }
+        }
         val minArity = fitting.minOfOrNull { it.parameterCount }
         // Among the smallest-arity fitting synthetics, prefer the MOST SPECIFIC for the args — else two
         // overloads a collection arg fits ambiguously (`arrayOf(stop to color)`, a `List<Pair>`, fits both
@@ -735,6 +800,15 @@ class ReflectiveDispatcher(
         val m = fitting.filter { it.parameterCount == minArity }
             .maxByOrNull { defaultSyntheticSpecificity(it, realArgs) }
         return m.also { cache[key] = MethodHolder(it) }
+    }
+
+    /** A `$default` synthetic's REAL (pre-mask) parameter count — its receivers and value parameters. For a
+     *  suspend function that is the `Continuation`'s index (the masks follow it); otherwise the parameters
+     *  before the mask words and the trailing marker. */
+    private fun syntheticRealParamCount(m: Method): Int {
+        val params = m.parameterTypes
+        val contSlot = params.indexOfFirst { CONTINUATION_CLASS.isAssignableFrom(it) }
+        return if (contSlot >= 0) contSlot else defaultSyntheticRealParamCount(params.size)
     }
 
     /** Specificity score for a `$default` synthetic against [realArgs] (higher = more specific): +1 per arg
