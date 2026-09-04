@@ -526,6 +526,8 @@ object GradleImport {
             val group = p.getOrNull(0) ?: continue
             val artifact = p.getOrNull(1) ?: continue
             when {
+                // Room 3 is its own artifact group with its own annotations, so it maps to its own processor.
+                group == "androidx.room3" && artifact.startsWith("room3") -> ids.add("room3")
                 group == "androidx.room" && artifact.startsWith("room") -> ids.add("room")
                 group == "com.squareup.moshi" && artifact.startsWith("moshi") -> ids.add("moshi")
                 group == "com.google.dagger" && (artifact.startsWith("hilt") || artifact.startsWith("dagger")) -> ids.add("hilt")

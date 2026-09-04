@@ -56,6 +56,10 @@ ksp = "2.3.10"
 # with the KSP2 runner above; room-runtime/-common go on the compile classpath, room-compiler on the
 # processor classpath.
 room = "2.8.4"
+# Room 3 (`androidx.room3`) is a SEPARATE artifact group with its own annotations, not a version bump: a
+# project on it declares `androidx.room3:room3-runtime` and imports `androidx.room3.*`, which the Room 2
+# processor above neither probes for nor understands. Bundled alongside, as its own catalog entry.
+room3 = "3.0.2"
 # The other blessed bundled KSP processors. Each ships its processor's closure as /processors/<id>.zip and
 # activates on a classpath probe of its runtime (Compose-plugin style — add the runtime, the processor runs).
 moshi = "1.15.2"   # com.squareup.moshi — moshi-kotlin-codegen (KSP-native JSON adapters)
@@ -201,6 +205,8 @@ ksp-aa = { module = "com.google.devtools.ksp:symbol-processing-aa", version.ref 
 # against. Test-only in :lang-ksp (the Room desktop spike); self-gates when unresolvable.
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
+room3-compiler = { module = "androidx.room3:room3-compiler", version.ref = "room3" }
+room3-runtime = { module = "androidx.room3:room3-runtime", version.ref = "room3" }
 # The other blessed processors: `*-compiler`/`ksp` = the bundled KSP processor closure; the runtime module
 # (moshi/glide-annotations/hilt-core) carries the marker class the catalog probes to auto-activate it.
 moshi-kotlin-codegen = { module = "com.squareup.moshi:moshi-kotlin-codegen", version.ref = "moshi" }

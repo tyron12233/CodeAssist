@@ -9,6 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import org.junit.jupiter.api.Assumptions.assumeTrue
 
 /**
@@ -44,13 +45,51 @@ class KspProcessorCatalogTest {
     }
 
     /** A jar carrying only [entries] (zero-byte class entries) — enough to trip [classpathHasClass]. */
-    private fun jarWith(dir: Path, name: String, vararg entries: String): Path {
+    private fun jarWith(dir: Path, name: String, vararg entries: String): Path =
+        jarOf(dir, name, entries.associateWith { ByteArray(0) })
+
+    /** A jar whose entries carry real bytes — needed once a probe reads a class, not just its presence. */
+    private fun jarOf(dir: Path, name: String, entries: Map<String, ByteArray>): Path {
         val jar = dir.resolve(name)
         java.util.zip.ZipOutputStream(Files.newOutputStream(jar)).use { zos ->
-            entries.forEach { e -> zos.putNextEntry(java.util.zip.ZipEntry(e)); zos.closeEntry() }
+            entries.forEach { (path, bytes) ->
+                zos.putNextEntry(java.util.zip.ZipEntry(path))
+                zos.write(bytes)
+                zos.closeEntry()
+            }
         }
         return jar
     }
+
+    /**
+     * A compiled annotation type declaring [elements] as `String` elements — a stand-in for one revision of a
+     * runtime's annotation. Real bytes, because the member floor reads the class file itself.
+     */
+    private fun annotationClass(internalName: String, vararg elements: String): ByteArray {
+        val cw = org.objectweb.asm.ClassWriter(0)
+        cw.visit(
+            org.objectweb.asm.Opcodes.V1_8,
+            org.objectweb.asm.Opcodes.ACC_PUBLIC or org.objectweb.asm.Opcodes.ACC_INTERFACE or
+                org.objectweb.asm.Opcodes.ACC_ABSTRACT or org.objectweb.asm.Opcodes.ACC_ANNOTATION,
+            internalName,
+            null,
+            "java/lang/Object",
+            arrayOf("java/lang/annotation/Annotation"),
+        )
+        elements.forEach { e ->
+            cw.visitMethod(
+                org.objectweb.asm.Opcodes.ACC_PUBLIC or org.objectweb.asm.Opcodes.ACC_ABSTRACT,
+                e, "()Ljava/lang/String;", null, null,
+            ).visitEnd()
+        }
+        cw.visitEnd()
+        return cw.toByteArray()
+    }
+
+    /** `@AggregatedRoot` as Hilt declares it, at the revision named by [elements]. */
+    private fun aggregatedRoot(vararg elements: String): Map<String, ByteArray> = mapOf(
+        AGGREGATED_ROOT to annotationClass("dagger/hilt/internal/aggregatedroot/AggregatedRoot", *elements),
+    )
 
     /**
      * The AGP-faithful activation rule: a processor runs only when its runtime is a **directly-declared**
@@ -129,7 +168,13 @@ class KspProcessorCatalogTest {
             // A runtime that DOES carry the class is accepted: the check is a class probe, not a version compare,
             // so any runtime new enough to work passes regardless of its version string.
             val current = listOf(
-                jarWith(root, "dagger-current.jar", KspProcessorCatalog.HILT_MARKER, "dagger/internal/Provider.class")
+                jarOf(
+                    root, "dagger-current.jar",
+                    mapOf(
+                        KspProcessorCatalog.HILT_MARKER to ByteArray(0),
+                        "dagger/internal/Provider.class" to ByteArray(0),
+                    ) + aggregatedRoot(*AGGREGATED_ROOT_2_60),
+                )
             )
             assertTrue(
                 catalog.runtimeMismatches(current, declared).isEmpty(),
@@ -140,6 +185,64 @@ class KspProcessorCatalogTest {
             assertTrue(
                 catalog.runtimeMismatches(old, declaredDependencies = emptyList()).isEmpty(),
                 "an inapplicable processor must never report a mismatch",
+            )
+        }
+    }
+
+    /**
+     * The same skew one level down, where a class probe is blind: the runtime carries the annotation, just an
+     * older revision of it.
+     *
+     * Reported against Hilt 2.51.1 (a real project, 2026-09-04). Hilt 2.57 added `rootComponentPackage` and
+     * `rootComponentSimpleNames` to `@AggregatedRoot`; the bundled 2.60.1 processor writes them into
+     * `dagger.hilt.internal.aggregatedroot.codegen._<Root>` and READS THAT BACK in a later round, where
+     * XProcessing looks each written argument's name up among the annotation's declared methods. On a pre-2.57
+     * `AggregatedRoot` there is no such method, and the build died as
+     * `[Hilt] Collection contains no element matching the predicate.` — no library, no version, no annotation
+     * named. `dagger.internal.Provider` (the class floor) is present from 2.51 on, so it cannot catch this.
+     */
+    @Test
+    fun aRuntimeWhoseAnnotationLacksAnElementTheProcessorWritesIsReportedToo() {
+        val catalog = KspProcessorCatalog.blessed()
+        withTempDir("ksp-stale-member") { root ->
+            val declared = listOf("com.google.dagger:hilt-android:2.51.1")
+            val everythingButTheMember = mapOf(
+                KspProcessorCatalog.HILT_MARKER to ByteArray(0),
+                "dagger/internal/Provider.class" to ByteArray(0),
+            )
+
+            // Hilt 2.51.1: every required CLASS present, `AggregatedRoot` present — one revision too old.
+            val old = listOf(
+                jarOf(root, "hilt-2.51.1.jar", everythingButTheMember + aggregatedRoot(*AGGREGATED_ROOT_2_51))
+            )
+            val mismatch = assertNotNull(
+                catalog.runtimeMismatches(old, declared).singleOrNull(),
+                "a runtime whose AggregatedRoot predates 2.57 must be reported",
+            )
+            assertTrue(mismatch.missing.isEmpty(), "no CLASS is missing — this is a member-level skew")
+            assertEquals(listOf("rootComponentPackage"), mismatch.missingMembers.map { it.memberName })
+            val message = mismatch.message
+            assertTrue(
+                "AggregatedRoot.rootComponentPackage()" in message,
+                "the message names the annotation AND the element, which the raw failure never does: $message",
+            )
+            assertTrue("com.google.dagger:hilt-android to 2.60.1" in message, "names the fix: $message")
+
+            // 2.57+ declares it → nothing to report, whatever the version string says.
+            val current = listOf(
+                jarOf(root, "hilt-current.jar", everythingButTheMember + aggregatedRoot(*AGGREGATED_ROOT_2_60))
+            )
+            assertTrue(
+                catalog.runtimeMismatches(current, declared).isEmpty(),
+                "a runtime declaring the element must not be flagged",
+            )
+
+            // The annotation missing outright is a mismatch as well: the generated root won't compile either
+            // way, and the same instruction fixes it.
+            val without = listOf(jarOf(root, "hilt-no-annotation.jar", everythingButTheMember))
+            assertEquals(
+                listOf("rootComponentPackage"),
+                catalog.runtimeMismatches(without, declared).single().missingMembers.map { it.memberName },
             )
         }
     }
@@ -280,5 +383,19 @@ class KspProcessorCatalogTest {
                     emitted.joinToString("\n") { genRoot.relativize(it).toString() },
             )
         }
+    }
+
+    private companion object {
+        const val AGGREGATED_ROOT = "dagger/hilt/internal/aggregatedroot/AggregatedRoot.class"
+
+        /** `@AggregatedRoot`'s elements up to Hilt 2.56.x. */
+        val AGGREGATED_ROOT_2_51 = arrayOf(
+            "root", "rootPackage", "rootSimpleNames",
+            "originatingRoot", "originatingRootPackage", "originatingRootSimpleNames",
+            "rootAnnotation",
+        )
+
+        /** …and from 2.57 on, which is what the bundled 2.60.1 processor writes. */
+        val AGGREGATED_ROOT_2_60 = AGGREGATED_ROOT_2_51 + arrayOf("rootComponentPackage", "rootComponentSimpleNames")
     }
 }

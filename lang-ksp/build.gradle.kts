@@ -28,6 +28,10 @@ dependencies {
     implementation(libs.ksp.api)
     implementation(libs.ksp.common.deps)
 
+    // ClassReader — read the method names a runtime class declares (KspProcessorCatalog's member-level
+    // runtime floor) without loading it, the same way android-support/lang-java scan a classpath.
+    implementation(libs.ow2.asm)
+
     // Test-only: the de-risk spikes (KspEngineSpikeTest / RoomKspSpikeTest) reference KotlinSymbolProcessing
     // statically, so they need the runner on the test compile classpath. KspSourceGeneratorTest instead drives
     // the production reflective path. KSP's Analysis API frontend uses coroutines (the embeddable bundles a
@@ -70,6 +74,9 @@ val appProvidedJarPrefixes = listOf("kotlin-stdlib", "kotlinx-coroutines", "symb
 // verifier's static init then succeeds, its connection attempt throws a caught SQLException, and Room falls
 // into its own `CANNOT_CREATE_VERIFICATION_DATABASE` path — generating the `_Impl` code (identical either way)
 // without compile-time SQL verification. Also drops 12.8 MB from the APK.
+/** The processor ids whose closure carries Room's sqlite-jdbc-backed query verifier. */
+val sqliteVerifierProcessors = setOf("room", "room3")
+
 val sqliteStub by sourceSets.creating
 val sqliteStubJar by tasks.registering(Jar::class) {
     description = "Native-free org.sqlite stub that replaces sqlite-jdbc in the Room processor bundle (see src/sqliteStub)."
@@ -86,20 +93,22 @@ fun bundleProcessor(id: String, dep: Provider<*>) {
     // "Duplicate class ...Identifier" when dexing the bundle on device. Drop the stale com.intellij one; the
     // org.jetbrains:annotations already in the closure supplies the same classes.
     cfg.exclude(group = "com.intellij", module = "annotations")
-    // Room only: drop the native sqlite-jdbc and bundle the stub instead (see the note above).
-    if (id == "room") cfg.exclude(group = "org.xerial", module = "sqlite-jdbc")
+    // Room only (both generations — room3-compiler pulls the same sqlite-jdbc for the same verifier): drop
+    // the native sqlite-jdbc and bundle the stub instead (see the note above).
+    if (id in sqliteVerifierProcessors) cfg.exclude(group = "org.xerial", module = "sqlite-jdbc")
     val zip = tasks.register<Zip>("ksp${id.replaceFirstChar { it.uppercase() }}ProcessorZip") {
         description = "Packages the $id KSP processor closure as /processors/$id.zip (zip of jars; app-provided jars dropped)."
         archiveFileName.set("$id.zip")
         destinationDirectory.set(layout.buildDirectory.dir("generated/processors"))
         from(provider { cfg.filter { f -> f.name.endsWith(".jar") && appProvidedJarPrefixes.none { f.name.startsWith(it) } } })
-        if (id == "room") from(sqliteStubJar)
+        if (id in sqliteVerifierProcessors) from(sqliteStubJar)
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
     tasks.processResources { from(zip) { into("processors") } }
 }
 
 bundleProcessor("room", libs.room.compiler)
+bundleProcessor("room3", libs.room3.compiler)
 bundleProcessor("moshi", libs.moshi.kotlin.codegen)
 bundleProcessor("hilt", libs.hilt.compiler)
 bundleProcessor("glide", libs.glide.ksp)
@@ -110,6 +119,7 @@ bundleProcessor("glide", libs.glide.ksp)
 // handed to the test as system properties. Self-gates (assumeTrue) when unresolvable.
 val roomProcessor: Configuration by configurations.creating   // room-compiler + its processor closure
 val roomLibs: Configuration by configurations.creating        // room-runtime/-common annotations + RoomDatabase
+val room3Libs: Configuration by configurations.creating       // room3-runtime — the SEPARATE androidx.room3 group
 val moshiLibs: Configuration by configurations.creating       // moshi runtime (JsonClass marker + KSerializer machinery)
 val hiltLibs: Configuration by configurations.creating        // hilt-core (dagger.hilt.InstallIn marker) + the dagger runtime
 // The Dagger the APP carries: it dexes bundletool for in-process .aab building, whose closure drags in an
@@ -131,6 +141,7 @@ val kspThinRuntime: Configuration by configurations.creating
 dependencies {
     roomProcessor(libs.room.compiler)
     roomLibs(libs.room.runtime)
+    room3Libs(libs.room3.runtime)
     moshiLibs(libs.moshi.runtime)
     hiltLibs(libs.hilt.core)
     appProvidedDagger(libs.android.bundletool)
@@ -157,6 +168,7 @@ tasks.named<Test>("test") {
     doFirst {
         systemProperty("room.processor.classpath", roomProcessor.asPath)
         systemProperty("room.libs.classpath", roomLibs.asPath)
+        systemProperty("room3.libs.classpath", room3Libs.asPath)
         systemProperty("moshi.libs.classpath", moshiLibs.asPath)
         systemProperty("hilt.libs.classpath", hiltLibs.asPath)
         // Just the dagger runtime (+ the javax.inject it implements) out of bundletool's closure: what the

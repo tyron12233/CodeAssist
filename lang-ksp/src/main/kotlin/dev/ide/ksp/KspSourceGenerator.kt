@@ -148,6 +148,9 @@ class KspSourceGenerator(
                         val summary = "ksp: ${logger.errorCount} error(s) reported; failing source generation for ${request.moduleName}"
                         messages += summary
                         log(summary)
+                        // A processor that CATCHES the version-skew failure reports it as an error line rather
+                        // than crashing, so the hint has to be attached from the reported text too.
+                        staleRuntimeHint(messages.joinToString("\n"))?.let { messages += it; log(it) }
                     }
                     kspOutcome(ok, logger.errorCount, messages, request.moduleName)
                 },
@@ -172,11 +175,14 @@ class KspSourceGenerator(
                     // sqlite-jdbc) can't load it on ART — there's no `.so` for Android/aarch64 — so the run dies
                     // with an opaque "No native library found". Say so plainly: it's a device limitation, not a
                     // project error, and the (declared) processor's code generation isn't supported on-device yet.
-                    val hint = if (needsUnavailableNativeLibrary(root))
-                        "ksp: a bundled processor needs a native library not available on this device; its code generation isn't supported on-device yet"
-                    else null
-                    hint?.let(log)
-                    SourceGenResult(false, messages + m + chain.map { "ksp:   $it" } + listOfNotNull(hint))
+                    val hints = listOfNotNull(
+                        if (needsUnavailableNativeLibrary(root))
+                            "ksp: a bundled processor needs a native library not available on this device; its code generation isn't supported on-device yet"
+                        else null,
+                        staleRuntimeHint((listOf(detail) + chain).joinToString("\n")),
+                    )
+                    hints.forEach(log)
+                    SourceGenResult(false, messages + m + chain.map { "ksp:   $it" } + hints)
                 },
             )
     }
@@ -290,6 +296,28 @@ class KspSourceGenerator(
 internal fun kspOutcome(exitOk: Boolean, errorCount: Int, messages: List<String>, moduleName: String): SourceGenResult =
     if (exitOk && errorCount == 0) SourceGenResult(true, messages)
     else SourceGenResult(false, messages.ifEmpty { listOf("ksp: processing failed for $moduleName") })
+
+/**
+ * A plain-language hint for the one failure whose own text explains nothing: [reported] (a crash trace or the
+ * error lines a processor logged) shows the annotation-processing framework looking a written annotation
+ * argument up among the declared elements of that annotation and finding none.
+ *
+ * That is what a runtime OLDER than the bundled processor looks like from the inside. The processor writes an
+ * annotation with the elements its own generation defines, reads it back in a later round, and the copy of the
+ * annotation class on the module's classpath — the project's runtime — doesn't declare them. XProcessing
+ * reports it as a bare "Collection contains no element matching the predicate", which names neither the
+ * library, nor the version, nor the annotation.
+ *
+ * [KspProcessor.requiredRuntimeMembers] fails such a build up front for the skews we know about (Hilt's
+ * `AggregatedRoot`); this catches the ones we don't and points at the same cause. Null when [reported] isn't
+ * that failure.
+ */
+internal fun staleRuntimeHint(reported: String): String? =
+    if ("KspAnnotationValue" in reported && "no element matching the predicate" in reported)
+        "ksp: that failure is what a runtime older than the bundled processor looks like: a processor wrote " +
+            "an annotation element the copy of that annotation on this module's classpath does not declare. " +
+            "Update that library's runtime to the version the IDE bundles, then rebuild."
+    else null
 
 /**
  * Render [e] and its full cause chain to individual lines — a "Caused by" header per level, then each stack

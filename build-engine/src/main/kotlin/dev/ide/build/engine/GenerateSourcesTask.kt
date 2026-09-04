@@ -90,7 +90,17 @@ class GenerateSourcesTask(
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
-        Files.createDirectories(outputDir)
+        // Start from an empty output directory, so what it holds afterwards is exactly what THIS run
+        // generated. Generation is not incremental — every applicable generator rewrites its whole output
+        // each run — so nothing else prunes it, and a file generated for a source that has since been
+        // renamed, moved or deleted would otherwise stay forever and keep being COMPILED, because the
+        // generated root is a source root. (Real case: an app deleted a stray second `@HiltAndroidApp`
+        // class; its `Hilt_*` / `_MembersInjector` / aggregated-root siblings survived and failed the
+        // compile against a class that no longer existed.) Cleared even when no generator applies, which
+        // is how removing a processor's runtime takes its generated code with it. Safe because the task
+        // DECLARES this directory as its own output ([outputs]) — nothing else writes there, and the KSP
+        // caches deliberately live in a sibling, not inside it.
+        clearGeneratedOutput(outputDir)
         val req = request()
         val applicable = generators.filter { it.appliesTo(req) }
         if (applicable.isEmpty()) return TaskResult.Success
@@ -105,4 +115,24 @@ class GenerateSourcesTask(
         ctx.logger()(":${module.name}:generateSources OK (${applicable.joinToString(",") { it.id }})")
         return TaskResult.Success
     }
+}
+
+/**
+ * Empty [dir]'s contents, leaving [dir] itself in place (created when absent), so a source-generation run
+ * starts from nothing and its result is exactly what that run produced.
+ *
+ * Deletes depth-first and tolerates a file vanishing underneath it (a concurrent editor/indexer scan);
+ * what matters is that no file OUTSIDE [dir] is touched.
+ */
+internal fun clearGeneratedOutput(dir: Path) {
+    if (Files.isDirectory(dir)) {
+        Files.walk(dir).use { s ->
+            s.sorted(Comparator.reverseOrder())
+                .filter { it != dir }
+                .forEach { runCatching { Files.deleteIfExists(it) } }
+        }
+    } else {
+        Files.deleteIfExists(dir)
+    }
+    Files.createDirectories(dir)
 }

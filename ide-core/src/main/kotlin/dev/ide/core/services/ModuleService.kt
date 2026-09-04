@@ -416,8 +416,7 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
             // A runtime too OLD for the bundled processor's generated code: the row would otherwise read
             // "applied" while every build fails on symbols that runtime doesn't have. Same probe the build's
             // preflight uses (KspProcessorCatalog.runtimeMismatches).
-            val staleRuntime = applied &&
-                p.requiredRuntimeClasses.any { !KspProcessorCatalog.classpathHasClass(classpath, it) }
+            val staleRuntime = applied && KspProcessorCatalog.hasUnmetRuntimeRequirements(p, classpath)
             UiCompilerPlugin(
                 id = p.id,
                 title = p.displayName,

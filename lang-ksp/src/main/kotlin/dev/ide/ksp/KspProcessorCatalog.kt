@@ -42,6 +42,16 @@ class KspProcessor(
      */
     val requiredRuntimeClasses: List<String> = emptyList(),
     /**
+     * The same requirement at MEMBER granularity: types the runtime already carries, but whose newer
+     * revision gained an element the bundled processor's generated code names. A class probe cannot see
+     * this — the class is there, the member is not — and it is the worse failure of the two, because the
+     * processor reads such code back in a later round and dies inside the annotation-processing framework
+     * rather than at compile time (see the Hilt entry in [KspProcessorCatalog.blessed]).
+     *
+     * Empty ⇒ no member-level requirement.
+     */
+    val requiredRuntimeMembers: List<RuntimeMember> = emptyList(),
+    /**
      * Processor options (KSP's `-P ksp:apoption=…`) to pass whenever this processor runs: the ones a
      * processor's own **Gradle plugin** would contribute, which a project's build files never spell out and
      * this build system therefore has to supply itself. Merged across the applicable processors
@@ -51,6 +61,18 @@ class KspProcessor(
     /** The processor's classpath (bundled in-app). Empty ⇒ the processor isn't bundled in this build → skipped. */
     val jars: () -> List<Path>,
 )
+
+/**
+ * One member of a runtime type the bundled processor's generated code names: [memberName] declared by the
+ * class at [classEntry] (an annotation's element is a method, so this is always a method name).
+ */
+class RuntimeMember(val classEntry: String, val memberName: String) {
+    /** The declaring type's source-level name. */
+    val typeName: String get() = classEntry.removeSuffix(".class").replace('/', '.')
+
+    /** `dagger.hilt.internal.aggregatedroot.AggregatedRoot.rootComponentPackage()`, for a message. */
+    val displayName: String get() = "$typeName.$memberName()"
+}
 
 /**
  * Maps a module's compile classpath to the bundled KSP processors that apply. This is the **probe-based
@@ -102,16 +124,19 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
 
     /**
      * A RUN-eligible processor whose generated code the module's declared runtime is too OLD to compile:
-     * [missing] are the [KspProcessor.requiredRuntimeClasses] absent from the module's classpath, and
+     * [missing] are the [KspProcessor.requiredRuntimeClasses] absent from the module's classpath,
+     * [missingMembers] the [KspProcessor.requiredRuntimeMembers] its classes do not declare, and
      * [declared] the module's own coordinates for that runtime (as declared, version included when it has one).
      */
     class RuntimeMismatch(
         val processor: KspProcessor,
         val missing: List<String>,
+        val missingMembers: List<RuntimeMember> = emptyList(),
         val declared: List<String> = emptyList(),
     ) {
-        /** The missing classes as source-level names, for a human-readable message. */
-        val missingTypeNames: List<String> get() = missing.map { it.removeSuffix(".class").replace('/', '.') }
+        /** Everything the runtime is missing, as source-level names, for a human-readable message. */
+        val missingTypeNames: List<String>
+            get() = missing.map { it.removeSuffix(".class").replace('/', '.') } + missingMembers.map { it.displayName }
 
         /** The coordinates the runtime has to be set to: the versions the bundled processor was built against. */
         val requiredCoordinates: List<String> get() = processor.runtimeCoordinates
@@ -169,17 +194,31 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
      */
     fun runtimeMismatches(classpath: List<Path>, declaredDependencies: List<String>): List<RuntimeMismatch> =
         applicable(classpath, declaredDependencies).mapNotNull { p ->
-            p.requiredRuntimeClasses.filterNot { classpathHasClass(classpath, it) }
-                .takeIf { it.isNotEmpty() }
-                ?.let { missing ->
-                    val wanted = p.runtimeCoordinates.mapNotNull { groupName(it) }.toSet()
-                    RuntimeMismatch(p, missing, declaredDependencies.filter { groupName(it) in wanted })
-                }
+            val missingClasses = missingRuntimeClasses(p, classpath)
+            val missingMembers = missingRuntimeMembers(p, classpath)
+            if (missingClasses.isEmpty() && missingMembers.isEmpty()) return@mapNotNull null
+            val wanted = p.runtimeCoordinates.mapNotNull { groupName(it) }.toSet()
+            RuntimeMismatch(
+                processor = p,
+                missing = missingClasses,
+                missingMembers = missingMembers,
+                declared = declaredDependencies.filter { groupName(it) in wanted },
+            )
         }
 
     companion object {
         /** Marker class entries for the blessed catalog (the runtime each ships in). */
         const val ROOM_MARKER = "androidx/room/RoomDatabase.class"
+
+        /**
+         * Room 3 is a separate artifact GROUP (`androidx.room3`) with its own annotation package
+         * (`androidx.room3.*`), not a newer Room 2 — so it needs its own marker, its own runtime coordinate
+         * and its own bundled processor. A project on Room 3 trips neither [ROOM_MARKER] nor the
+         * `androidx.room:room-runtime` declared-dependency gate, so before this entry existed the Room
+         * processor simply never ran for it: no error, no generated `_Impl`, and the module failed later on
+         * a missing generated class.
+         */
+        const val ROOM3_MARKER = "androidx/room3/RoomDatabase.class"
         const val MOSHI_MARKER = "com/squareup/moshi/JsonClass.class"
         const val HILT_MARKER = "dagger/hilt/InstallIn.class"
         const val GLIDE_MARKER = "com/bumptech/glide/annotation/GlideModule.class"
@@ -218,6 +257,10 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
                         ROOM_MARKER, listOf("androidx.room:room-runtime:2.8.4"),
                     ) { bundledJars("room") },
                     KspProcessor(
+                        "room3", "Room 3", "Generate @Database/@Dao implementations for Room 3 (androidx.room3).",
+                        ROOM3_MARKER, listOf("androidx.room3:room3-runtime:3.0.2"),
+                    ) { bundledJars("room3") },
+                    KspProcessor(
                         "moshi", "Moshi", "Generate JSON adapters for @JsonClass(generateAdapter = true) classes.",
                         MOSHI_MARKER, listOf("com.squareup.moshi:moshi:1.15.2"),
                     ) { bundledJars("moshi") },
@@ -229,6 +272,20 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
                         // code used `javax.inject.Provider`). A project pinning an older Hilt otherwise builds
                         // to "The import dagger.internal.Provider cannot be resolved" in every generated file.
                         requiredRuntimeClasses = listOf("dagger/internal/Provider.class"),
+                        // Hilt 2.57 added `rootComponentPackage`/`rootComponentSimpleNames` to the
+                        // `@AggregatedRoot` annotation the root processor writes AND READS BACK in a later
+                        // round. Against a pre-2.57 runtime, whose `AggregatedRoot` declares neither element,
+                        // that read-back dies inside XProcessing (`KspAnnotationValue.findMethod` looks the
+                        // argument's name up among the annotation's declared methods) as
+                        // "[Hilt] Collection contains no element matching the predicate." — a message that
+                        // names neither Hilt's version nor the annotation. The class probe above cannot see
+                        // this: `AggregatedRoot` is present, just older.
+                        requiredRuntimeMembers = listOf(
+                            RuntimeMember(
+                                "dagger/hilt/internal/aggregatedroot/AggregatedRoot.class",
+                                "rootComponentPackage",
+                            ),
+                        ),
                         options = HILT_OPTIONS,
                     ) { bundledJars("hilt") },
                     KspProcessor(
@@ -256,5 +313,46 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
                 else -> false
             }
         }
+
+        /** [processor]'s [KspProcessor.requiredRuntimeClasses] that [classpath] does not carry. */
+        fun missingRuntimeClasses(processor: KspProcessor, classpath: List<Path>): List<String> =
+            processor.requiredRuntimeClasses.filterNot { classpathHasClass(classpath, it) }
+
+        /**
+         * [processor]'s [KspProcessor.requiredRuntimeMembers] that [classpath] does not declare — because the
+         * declaring class is absent, or (the case this exists for) present in a revision without that member.
+         */
+        fun missingRuntimeMembers(processor: KspProcessor, classpath: List<Path>): List<RuntimeMember> =
+            processor.requiredRuntimeMembers.filterNot { m ->
+                // The class isn't there at all → the requirement is unmet. Its bytes are there but
+                // unreadable → say nothing: this decides whether to fail a build, and a jar we can't parse
+                // is not evidence against the project.
+                val bytes = classFileOn(classpath, m.classEntry) ?: return@filterNot false
+                val declared = ClassFileMembers.methodNames(bytes) ?: return@filterNot true
+                m.memberName in declared
+            }
+
+        /** True when the module's runtime does not meet everything [processor]'s generated code needs. The
+         *  one predicate behind both the build preflight and the Module Config row, so they can't disagree. */
+        fun hasUnmetRuntimeRequirements(processor: KspProcessor, classpath: List<Path>): Boolean =
+            missingRuntimeClasses(processor, classpath).isNotEmpty() ||
+                missingRuntimeMembers(processor, classpath).isNotEmpty()
+
+        /** The bytes of [classEntry] from the first [classpath] entry carrying it, or null when absent. */
+        private fun classFileOn(classpath: List<Path>, classEntry: String): ByteArray? =
+            classpath.firstNotNullOfOrNull { entry ->
+                when {
+                    !Files.exists(entry) -> null
+                    Files.isDirectory(entry) -> entry.resolve(classEntry)
+                        .takeIf { Files.isRegularFile(it) }
+                        ?.let { runCatching { Files.readAllBytes(it) }.getOrNull() }
+                    entry.toString().endsWith(".jar") || entry.toString().endsWith(".zip") -> runCatching {
+                        ZipFile(entry.toFile()).use { zf ->
+                            zf.getEntry(classEntry)?.let { zf.getInputStream(it).use { s -> s.readBytes() } }
+                        }
+                    }.getOrNull()
+                    else -> null
+                }
+            }
     }
 }
