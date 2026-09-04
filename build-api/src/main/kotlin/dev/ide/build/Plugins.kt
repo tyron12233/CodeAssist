@@ -86,8 +86,7 @@ interface BuildEnv {
     fun bootClasspath(module: Module): List<Path> = emptyList()
 
     /** The module's build directory (`<moduleDir>/build`), where generated and intermediate output belongs. */
-    fun buildDir(module: Module): Path =
-        Paths.get(module.outputDir.path).parent ?: Paths.get(module.outputDir.path)
+    fun buildDir(module: Module): Path = Paths.get(module.dir.path).resolve("build")
 
     /** A private output directory for [id] under the module's build dir, e.g. `build/generated/<id>`. */
     fun generatedDir(module: Module, id: String): Path = buildDir(module).resolve("generated").resolve(id)

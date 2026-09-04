@@ -77,8 +77,11 @@ import dev.ide.build.engine.LifecycleTask
 import dev.ide.build.engine.ProcessResourcesTask
 import dev.ide.build.engine.SimpleBuildConfiguration
 import dev.ide.build.engine.applyBuildPlugins
+import dev.ide.build.engine.buildDir
 import dev.ide.build.engine.collapseNestedRoots
 import dev.ide.build.engine.jarPath
+import dev.ide.build.engine.moduleDir
+import dev.ide.build.engine.outputDir
 import dev.ide.build.jvm.JavaPlugin
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
@@ -329,7 +332,7 @@ class AndroidBuildSystem(
         // Library manifests to merge, in decreasing priority: local android-lib modules, then external AARs.
         val depLibManifests = depAndroidLibs.mapNotNull { lib ->
             val libFacet = lib.facets.get(AndroidFacet.KEY) ?: return@mapNotNull null
-            Paths.get(lib.outputDir.path).parent.parent.resolve(libFacet.manifest).takeIf { Files.exists(it) }
+            moduleDir(lib).resolve(libFacet.manifest).takeIf { Files.exists(it) }
         }
         val libraryManifests = depLibManifests + libs.aarManifests
 
@@ -598,7 +601,7 @@ class AndroidBuildSystem(
             // proguardFiles (bundled defaults + module files), then dependency-lib + AAR consumer rules.
             val appProguard = resolveProguardFiles(bt.proguardFiles, layout.moduleDir, layout.proguardDefaults)
             val depConsumer = depAndroidLibs.flatMap { lib ->
-                val libDir = Paths.get(lib.outputDir.path).parent.parent
+                val libDir = moduleDir(lib)
                 val libBt = lib.facets.get(AndroidFacet.KEY)?.buildType?.invoke(variant.buildTypeName)
                 resolveProguardFiles(libBt?.consumerProguardFiles ?: emptyList(), libDir, layout.proguardDefaults)
             }
@@ -778,7 +781,7 @@ class AndroidBuildSystem(
      * straight through [JavaPlugin.registerModule]; this is the android variant of that.
      */
     private fun registerAndroidLibrary(tasks: TaskContainer, m: Module, byId: Map<ModuleId, Module>, withJar: Boolean, consumerVariant: AndroidVariant, consumerFacet: AndroidFacet) {
-        val classesOut = Paths.get(m.outputDir.path)
+        val classesOut = outputDir(m)
         val buildDir = classesOut.parent
         // Build this dependency lib in the variant matching the app being assembled (build-type + dimension-aware
         // flavor match); its variant-scoped source sets, resources, R and library deps are used, not all sets.
@@ -942,7 +945,7 @@ class AndroidBuildSystem(
      * proguard rules into a `.aar` under `build/outputs/aar/`. AGP's `bundle<Variant>Aar` → `assemble<Variant>`.
      */
     private fun appendAar(tasks: TaskContainer, lib: Module, variant: AndroidVariant, facet: AndroidFacet) {
-        val classesOut = Paths.get(lib.outputDir.path)
+        val classesOut = outputDir(lib)
         val buildDir = classesOut.parent
         val moduleDir = buildDir.parent
         val libVariant = AndroidVariants.matchLibraryVariant(lib, variant, facet)
@@ -985,7 +988,7 @@ class AndroidBuildSystem(
 
     /** Where [registerAndroidLibrary] writes an android-lib's compile-only `R.jar` (see its `rRoot`). */
     private fun rJarOf(m: Module): Path =
-        Paths.get(m.outputDir.path).parent.resolve("intermediates").resolve("r").resolve("R.jar")
+        buildDir(m).resolve("intermediates").resolve("r").resolve("R.jar")
 
     /**
      * Source-generator warnings [m] has accepted, for [dev.ide.build.SourceGenRequest.acceptedWarnings]: the
@@ -1124,7 +1127,7 @@ class AndroidBuildSystem(
 
     /** Per-(module, variant) build paths under `<module>/build/`. */
     private inner class Layout(module: Module, variantName: String) {
-        private val classesOut: Path = Paths.get(module.outputDir.path)   // <module>/build/classes
+        private val classesOut: Path = outputDir(module)   // <module>/build/classes
         private val buildDir: Path = classesOut.parent                  // <module>/build
         private val moduleDirField: Path = buildDir.parent              // <module>
         private val inter: Path = buildDir.resolve("intermediates").resolve("android").resolve(variantName)
@@ -1201,25 +1204,25 @@ class AndroidBuildSystem(
         /** The signed-APK output path for [module] + [variantName] (matches [Layout.signedApk]) — so a host
          *  can locate the artifact to install after an `assemble`. */
         fun signedApkPath(module: Module, variantName: String): Path {
-            val buildDir = Paths.get(module.outputDir.path).parent
+            val buildDir = buildDir(module)
             return buildDir.resolve("outputs").resolve("apk").resolve(variantName).resolve("${module.name}-$variantName.apk")
         }
 
         /** The signed-AAB output path for [module] + [variantName] (matches [Layout.signedAab]). */
         fun signedAabPath(module: Module, variantName: String): Path {
-            val buildDir = Paths.get(module.outputDir.path).parent
+            val buildDir = buildDir(module)
             return buildDir.resolve("outputs").resolve("bundle").resolve(variantName).resolve("${module.name}-$variantName.aab")
         }
 
         /** The packaged `.aar` output path for an android-lib [module] + [variantName] (`assembleAar`).
          *  Mirrors AGP's `build/outputs/aar/<module>-<variant>.aar` so a host can locate the artifact. */
         fun aarPath(module: Module, variantName: String): Path {
-            val buildDir = Paths.get(module.outputDir.path).parent
+            val buildDir = buildDir(module)
             return buildDir.resolve("outputs").resolve("aar").resolve("${module.name}-$variantName.aar")
         }
 
         private fun interDir(module: Module, variantName: String): Path =
-            Paths.get(module.outputDir.path).parent.resolve("intermediates").resolve("android").resolve(variantName)
+            buildDir(module).resolve("intermediates").resolve("android").resolve(variantName)
 
         /** aapt2-linked resources (`resources.ap_`: binary manifest + `resources.arsc` + compiled res XML) for
          *  [module]+[variantName] (matches [Layout.resourcesAp]) — the real `Resources` input for the on-device

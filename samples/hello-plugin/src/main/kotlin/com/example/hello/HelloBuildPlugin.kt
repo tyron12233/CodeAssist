@@ -140,7 +140,7 @@ internal class HelloBuildReportTask(
                         severity = BuildSeverity.WARNING,
                         message = "module '${module.name}' declares no source roots that exist on disk",
                         source = "hello",
-                        location = DiagnosticLocation(module.outputDir.path),
+                        location = DiagnosticLocation(module.dir.path),
                     ),
                 )
             }

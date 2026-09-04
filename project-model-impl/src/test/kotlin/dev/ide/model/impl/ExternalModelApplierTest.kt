@@ -70,7 +70,7 @@ class ExternalModelApplierTest {
 
         val app = project.modules.single { it.name == "app" }
         // The module's directory comes from the snapshot, not from its name.
-        assertTrue(app.outputDir.path.replace('\\', '/').contains("apps/app/"), app.outputDir.path)
+        assertTrue(app.dir.path.replace('\\', '/').endsWith("apps/app"), app.dir.path)
         assertTrue(app.sourceSets.single { it.name == "main" }.contentRoots.any { ContentRole.SOURCE in it.roles })
         assertTrue(app.dependencies.any { it is LibraryDependency && it.library.name == "com.squareup.okhttp3:okhttp:4.12.0" })
         val moduleDep = app.dependencies.filterIsInstance<ModuleDependency>().single()

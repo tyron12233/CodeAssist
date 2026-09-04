@@ -11,4 +11,8 @@ dependencies {
     api(project(":project-model-api"))
     api(project(":vfs-api"))
     api(project(":platform-core"))
+
+    // ModuleCompilationContext binds analysis to the model, so its test needs a real workspace to bind to.
+    // Test-only, so the published module still depends on the api alone (test -> impl stays acyclic).
+    testImplementation(project(":project-model-impl"))
 }

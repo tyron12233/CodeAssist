@@ -1,12 +1,12 @@
 package dev.ide.core
 
 import dev.ide.analysis.ACTION_PROVIDER_EP
-import dev.ide.analysis.CaretSnapshot
 import dev.ide.analysis.ANALYZER_EP
 import dev.ide.analysis.AnalysisProfile
 import dev.ide.analysis.AnalysisTarget
 import dev.ide.analysis.Analyzer
 import dev.ide.analysis.AnalyzerId
+import dev.ide.analysis.CaretSnapshot
 import dev.ide.analysis.DIAGNOSTIC_PROVIDER_EP
 import dev.ide.analysis.ProjectAnalysisScope
 import dev.ide.analysis.QUICK_FIX_PROVIDER_EP
@@ -47,11 +47,13 @@ import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.KeystoreRegistry
 import dev.ide.block.BLOCK_MAPPING_EP
 import dev.ide.block.impl.JavaBlockMapping
+import dev.ide.build.RunCapture
 import dev.ide.build.engine.ProgramInterpreter
 import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.core.IdeServices.Companion.PARSER_WARMUP_MIN_FREE_BYTES
 import dev.ide.core.IdeServices.Companion.openStore
 import dev.ide.core.actions.BuiltInActions
+import dev.ide.core.analysis.CompilationContexts
 import dev.ide.core.completion.BufferWordsContributor
 import dev.ide.core.completion.CompletionEngine
 import dev.ide.core.completion.CompletionOptions
@@ -61,19 +63,25 @@ import dev.ide.core.event.AnalysisEvent
 import dev.ide.core.event.IdeEventTopics
 import dev.ide.core.event.IndexEvent
 import dev.ide.core.services.AndroidResourceService
-import dev.ide.core.services.IconManagerService
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
 import dev.ide.core.services.ComposePreviewService
 import dev.ide.core.services.DependencyService
+import dev.ide.core.services.IconManagerService
 import dev.ide.core.services.KotlinEditorService
 import dev.ide.core.services.LanguageFeatureService
 import dev.ide.core.services.ModuleService
 import dev.ide.core.services.RefactorService
-import dev.ide.build.RunCapture
 import dev.ide.core.services.SearchService
 import dev.ide.core.services.SigningService
 import dev.ide.core.settings.BuiltInSettingsPages
+import dev.ide.core.sync.ExternalProjectMarker
+import dev.ide.core.sync.ExternalRepositories
+import dev.ide.core.sync.NoSyncProgress
+import dev.ide.core.sync.ProjectSyncOutcome
+import dev.ide.core.sync.ProjectSyncService
+import dev.ide.core.sync.SyncStamp
+import dev.ide.core.sync.UnrecognizedProjectMarker
 import dev.ide.core.templates.CalculatorSampleTemplate
 import dev.ide.core.templates.JavaConsoleAppTemplate
 import dev.ide.core.templates.JavaLibraryTemplate
@@ -81,6 +89,8 @@ import dev.ide.core.templates.KotlinConsoleAppTemplate
 import dev.ide.core.templates.KotlinLibraryTemplate
 import dev.ide.core.templates.NotesSampleTemplate
 import dev.ide.core.templates.WeatherSampleTemplate
+import dev.ide.decompiler.Decompiler
+import dev.ide.decompiler.LibrarySources
 import dev.ide.deps.ConflictPolicy
 import dev.ide.index.ClassNameIndex
 import dev.ide.index.ClassNameValue
@@ -92,32 +102,29 @@ import dev.ide.index.MemberValue
 import dev.ide.index.exactAll
 import dev.ide.index.impl.IndexServiceImpl
 import dev.ide.lang.AnalysisResult
+import dev.ide.lang.COMPILATION_CONTEXT_PROVIDER_EP
 import dev.ide.lang.CacheInvalidation
+import dev.ide.lang.CompilationContext
 import dev.ide.lang.FILE_TYPE_EP
-import dev.ide.decompiler.Decompiler
-import dev.ide.decompiler.LibrarySources
 import dev.ide.lang.FileTypeMapping
-import dev.ide.lang.LANGUAGE_BACKEND_EP
 import dev.ide.lang.JvmIndexScopeProvider
+import dev.ide.lang.LANGUAGE_BACKEND_EP
 import dev.ide.lang.LanguageBackend
 import dev.ide.lang.LanguageId
+import dev.ide.lang.ModuleCompilationContext
 import dev.ide.lang.SourceAnalyzer
 import dev.ide.lang.completion.COMPLETION_CONTRIBUTOR_EP
 import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.completion.CompletionContributor
 import dev.ide.lang.completion.CompletionParams
 import dev.ide.lang.completion.CompletionResult
-import dev.ide.lang.completion.TextEdit
 import dev.ide.lang.completion.CompletionTrigger
+import dev.ide.lang.completion.TextEdit
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.lang.incremental.DocumentSnapshot
-import dev.ide.lang.jdt.JdtLanguageBackend
-import dev.ide.lang.jdt.JdtSourceAnalyzer
-import dev.ide.lang.jdt.compile.JdtBatchCompiler
-import dev.ide.lang.jdt.context.ModuleCompilationContext
 import dev.ide.lang.java.index.JavaClassLocatorIndex
 import dev.ide.lang.java.index.JavaClassNamesIndex
 import dev.ide.lang.java.index.JavaMainIndex
@@ -130,6 +137,9 @@ import dev.ide.lang.java.index.JavaSourceDocIndex
 import dev.ide.lang.java.index.JavaSourceIndexer
 import dev.ide.lang.java.index.JavaSourceSubtypeIndex
 import dev.ide.lang.java.index.JavaSourceSymbolsIndex
+import dev.ide.lang.jdt.JdtLanguageBackend
+import dev.ide.lang.jdt.JdtSourceAnalyzer
+import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.lang.jdt.rename.JdtRename
 import dev.ide.lang.jdt.synthetic.SyntheticJavaSource
 import dev.ide.lang.kotlin.KotlinLanguageBackend
@@ -173,8 +183,11 @@ import dev.ide.lang.xml.completion.XmlCompletion
 import dev.ide.lang.xml.completion.XmlContextScanner
 import dev.ide.lang.xml.edit.XmlAttributeInsert
 import dev.ide.lang.xml.hints.XmlResourceValueResolver
+import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
+import dev.ide.model.FacetCodecRegistry
+import dev.ide.model.FileIconRegistry
 import dev.ide.model.IconTarget
 import dev.ide.model.LanguageLevel
 import dev.ide.model.LibraryDependency
@@ -184,34 +197,24 @@ import dev.ide.model.MavenClasspath
 import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
+import dev.ide.model.ModuleTypeRegistry
+import dev.ide.model.PlatformKind
 import dev.ide.model.Project
-import dev.ide.core.sync.ExternalProjectMarker
-import dev.ide.core.sync.ExternalRepositories
-import dev.ide.core.sync.NoSyncProgress
-import dev.ide.core.sync.ProjectSyncOutcome
-import dev.ide.core.sync.ProjectSyncService
-import dev.ide.core.sync.SyncStamp
-import dev.ide.core.sync.UnrecognizedProjectMarker
-import dev.ide.model.BuildSystemId
+import dev.ide.model.ProjectTemplateRegistry
+import dev.ide.model.SdkResolution
 import dev.ide.model.impl.DefaultFileIconProvider
 import dev.ide.model.impl.ExternalModelApplier
+import dev.ide.model.impl.ModelPersistence
+import dev.ide.model.impl.ProjectModel
+import dev.ide.model.impl.ProjectModelStore
+import dev.ide.model.impl.SdkData
+import dev.ide.model.impl.jdk.CorePlatformProvider
+import dev.ide.model.impl.jdk.JdkSdkProvider
+import dev.ide.model.module
 import dev.ide.model.sync.ModelOwnership
 import dev.ide.model.sync.SyncReason
 import dev.ide.model.sync.SyncRequest
 import dev.ide.model.sync.SyncSeverity
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.FileIconRegistry
-import dev.ide.model.impl.ModelPersistence
-import dev.ide.model.impl.ModuleTypeRegistry
-import dev.ide.model.impl.ProjectModel
-import dev.ide.model.impl.ProjectModelStore
-import dev.ide.model.impl.ProjectTemplateRegistry
-import dev.ide.model.impl.SdkData
-import dev.ide.model.impl.jdk.CorePlatformProvider
-import dev.ide.model.impl.jdk.JdkSdkProvider
-import dev.ide.model.PlatformKind
-import dev.ide.model.SdkResolution
-import dev.ide.model.module
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateArgs
 import dev.ide.model.template.TemplateId
@@ -243,18 +246,6 @@ import dev.ide.ui.backend.IndexWorkState
 import dev.ide.ui.backend.IndexerUiStat
 import dev.ide.ui.backend.PreviewProgress
 import dev.ide.vfs.VirtualFile
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -268,6 +259,18 @@ import kotlin.coroutines.startCoroutine
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * The UI-agnostic façade that wires the whole framework together: platform-core (extension registry,
@@ -1811,15 +1814,15 @@ class IdeServices private constructor(
      */
     fun manifestPath(module: Module): Path? {
         val facet = module.facets.get(AndroidFacet.KEY) ?: return null
-        val moduleDir = Paths.get(module.outputDir.path).parent?.parent ?: return null
-        return moduleDir.resolve(facet.manifest)
+        return Paths.get(module.dir.path).resolve(facet.manifest)
     }
 
     /**
-     * The module's root directory on disk — where its `module.toml` lives — derived from the output-dir
-     * `<moduleRoot>/build/classes` convention (same basis as [manifestPath]). Null if it can't be resolved.
+     * The module's root directory on disk, where its `module.toml` lives. Nullable only for the callers that
+     * still treat it as fallible; the model answers it directly now, rather than deriving it from the
+     * `<moduleRoot>/build/classes` output convention.
      */
-    fun moduleRoot(module: Module): Path? = Paths.get(module.outputDir.path).parent?.parent
+    fun moduleRoot(module: Module): Path? = Paths.get(module.dir.path)
 
     /**
      * The dotted package a [dir] corresponds to — its path relative to the enclosing source root — or null
@@ -1883,14 +1886,37 @@ class IdeServices private constructor(
     ): SourceAnalyzer =
         if (hasLanguageBackend(language)) module.service(MODULE_ANALYZERS).analyzer(language) else PlainTextAnalyzer
 
+    private val contextLog by lazy { Log.logger("ide.compilationContext") }
+
+    /**
+     * The analysis inputs for [module] in [language]: a [dev.ide.lang.CompilationContextProvider] that claims
+     * the language if one answers, otherwise the model-derived JVM context.
+     *
+     * The provider seam exists because [ModuleCompilationContext] describes a module the only way the model
+     * can on its own: a classpath, a platform SDK boot classpath, a Java language level. A plugin for a
+     * language whose inputs are a virtualenv or an include path has to supply them itself, and a provider
+     * that returns null (or throws) leaves the host's context in place.
+     */
+    private fun compilationContext(module: Module, language: LanguageId): CompilationContext {
+        val variant = activeConfigs(module)
+        return CompilationContexts.resolve(
+            providers = platform.extensions.extensions(COMPILATION_CONTEXT_PROVIDER_EP),
+            workspace = store.workspace,
+            module = module,
+            language = language,
+            variant = variant,
+            onError = { provider, t ->
+                contextLog.warn(
+                    "${provider::class.simpleName} failed for ${language.id}; using the model-derived context", t,
+                )
+            },
+        ) { ModuleCompilationContext.create(store.workspace, module, variant) }
+    }
+
     /** Construct the analyzer for [module] in [language]. Invoked once by the module-scoped analyzer
      *  service factory; the module container caches and disposes the result. */
     private fun buildAnalyzer(module: Module, language: LanguageId): SourceAnalyzer =
-        backendFor(language).createAnalyzer(
-            ModuleCompilationContext.create(
-                store.workspace, module, activeConfigs(module)
-            )
-        ).also {
+        backendFor(language).createAnalyzer(compilationContext(module, language)).also {
             when (it) {
                 is dev.ide.lang.java.JavaSourceAnalyzer -> {
                     // The IntelliJ-PSI Java backend (when `.java` is routed to it): give it the workspace index
@@ -3407,7 +3433,7 @@ class IdeServices private constructor(
         // Relink the live buffer over the project's resources so the preview reflects the edited (or newly
         // added) layout. The linker self-builds its base from the live res tree, so a prior successful build
         // is NOT required and edits to other resources show; it falls back internally to the build's flats.
-        val moduleDir = Paths.get(module.outputDir.path).parent.parent
+        val moduleDir = Paths.get(module.dir.path)
         val manifestPath =
             AndroidBuildSystem.mergedManifestPath(module, variant)
                 .takeIf { Files.exists(it) } ?: moduleDir.resolve(facet.manifest)

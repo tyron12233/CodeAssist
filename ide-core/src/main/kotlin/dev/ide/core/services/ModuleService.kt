@@ -108,7 +108,7 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
             typeDisplay = module.type.displayName,
             languageLevel = module.languageLevel.name,
             languageLevels = LanguageLevel.values().map { it.name },
-            outputDir = module.outputDir.path,
+            outputDir = module.outputDir?.path.orEmpty(),
             sourceSets = module.sourceSets.map { ss ->
                 UiSourceSetInfo(ss.name, ss.scope.name, ss.contentRoots.map { it.dir.path })
             },
@@ -604,7 +604,7 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
 
     /** The directory `proguardFiles`/`consumerProguardFiles` entries resolve against (the module root,
      *  `<module>/build/classes` → `<module>`), or null when the layout is unexpected. */
-    private fun moduleDirOf(module: Module): Path? = Paths.get(module.outputDir.path).parent?.parent
+    private fun moduleDirOf(module: Module): Path? = Paths.get(module.dir.path)
 
     /**
      * The build types' keep-rule files that are module-relative and missing on disk — the ones R8 would

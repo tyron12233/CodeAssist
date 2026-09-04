@@ -1252,8 +1252,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
     /** True if the module already ships a `google-services.json` (any variant-specific dir or the module root). */
     private fun hasGoogleServicesJson(module: Module): Boolean {
         val variant = AndroidVariants.defaultVariant(module) ?: return false
-        val moduleDir =
-            java.nio.file.Paths.get(module.outputDir.path).parent?.parent ?: return false
+        val moduleDir = java.nio.file.Paths.get(module.dir.path)
         return GoogleServices.findJson(moduleDir, variant) != null
     }
 

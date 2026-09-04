@@ -89,7 +89,7 @@ object MavenClasspath {
         for (e in items) {
             val c = coordinateOf(e.root.path)
             if (c != null && winner[c.artifactKey] != c.version) continue   // a superseded version of this artifact — drop it
-            out.putIfAbsent("${e.kind.name}|${e.root.path}", e)
+            out.putIfAbsent("${e.kind.id}|${e.root.path}", e)
         }
         return out.values.toList()
     }

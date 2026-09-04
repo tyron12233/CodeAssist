@@ -39,10 +39,8 @@ import dev.ide.model.VariantId
 import dev.ide.model.Workspace
 import dev.ide.model.WorkspaceTransaction
 import dev.ide.model.event.LibrariesChanged
-import dev.ide.platform.ContentHash
 import dev.ide.platform.ServiceKey
 import dev.ide.vfs.VirtualFile
-import java.security.MessageDigest
 
 /**
  * The live read views over a [ProjectModelStore] snapshot. Each view captures the immutable
@@ -107,6 +105,7 @@ internal class ModuleImpl(
 
     private val moduleDir get() = store.resolveRel(store.projectRoot(projectData), data.dirRelPath)
 
+    override val dir: VirtualFile get() = store.vfs.fileFor(moduleDir)
     override val sourceSets: List<SourceSet> get() = data.sourceSets.map { SourceSetImpl(it, store, moduleDir) }
     override val outputDir: VirtualFile get() = store.vfs.fileFor(store.resolveRel(moduleDir, data.outputRelPath))
 
@@ -127,7 +126,7 @@ internal class ModuleImpl(
             if (directInPhase(scope, entry.scope) && includedInVariant(entry, variant))
                 addEntry(entry, scope, transitive, variant, items, visitedModules)
         }
-        return ClasspathSnapshotImpl(MavenClasspath.resolveVersionConflicts(items))
+        return ClasspathSnapshot.of(MavenClasspath.resolveVersionConflicts(items))
     }
 
     override fun <T : Any> service(key: ServiceKey<T>): T = store.moduleContainer(id).getService(key)
@@ -254,19 +253,6 @@ internal class FacetContainerImpl(
     }
 
     override val all: List<Facet> get() = facets.mapNotNull { codecs.decode(it) }
-}
-
-internal class ClasspathSnapshotImpl(override val entries: List<ClasspathEntry>) : ClasspathSnapshot {
-    override fun fingerprint(): ContentHash {
-        val md = MessageDigest.getInstance("SHA-256")
-        for (e in entries) {
-            md.update(e.kind.name.toByteArray(Charsets.UTF_8))
-            md.update(0)
-            md.update(e.root.path.toByteArray(Charsets.UTF_8))
-            md.update('\n'.code.toByte())
-        }
-        return ContentHash(md.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) })
-    }
 }
 
 // --- library & sdk tables ---

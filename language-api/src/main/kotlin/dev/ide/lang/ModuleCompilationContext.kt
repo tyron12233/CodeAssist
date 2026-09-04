@@ -1,25 +1,21 @@
-package dev.ide.lang.jdt.context
+package dev.ide.lang
 
-import dev.ide.lang.AnnotationProcessor
-import dev.ide.lang.CompilationContext
 import dev.ide.model.ClasspathEntry
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ClasspathSnapshot
-import dev.ide.model.MavenClasspath
 import dev.ide.model.ContentRole
 import dev.ide.model.Library
 import dev.ide.model.LibraryDependency
+import dev.ide.model.MavenClasspath
 import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
-import dev.ide.model.Sdk
 import dev.ide.model.PlatformDependency
+import dev.ide.model.Sdk
 import dev.ide.model.SdkDependency
 import dev.ide.model.SdkResolution
 import dev.ide.model.Workspace
-import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
-import java.security.MessageDigest
 
 /**
  * Binds analysis to the project model: builds a [CompilationContext] for a [Module] from the model
@@ -28,6 +24,11 @@ import java.security.MessageDigest
  * workspace-wide, so another project's module resolves too), library jars, and the boot classpath
  * from the workspace SDK table. Resolving against dependency *sources* is what makes cross-module and
  * cross-project completion work in the editor before anything is built.
+ *
+ * Language-neutral: it reads the project model and nothing else, which is why it lives here rather than in a
+ * language module. It is what every backend without a [CompilationContextProvider] of its own is handed, and
+ * it is published alongside [CompilationContext] so that a provider can start from the model's reading of a
+ * module and add to it instead of reassembling the dependency walk.
  */
 object ModuleCompilationContext {
 
@@ -49,7 +50,7 @@ object ModuleCompilationContext {
         // gets the core-Java SDK, an `android-*` module the Android SDK) — the same resolver the build uses,
         // so the editor never resolves `android.*` that the build would reject. See [SdkResolution].
         val sdk: Sdk? = SdkResolution.sdkFor(workspace, module)
-        val boot = ClasspathSnapshotView(
+        val boot = ClasspathSnapshot.of(
             (sdk?.bootClasspath ?: emptyList()).map { ClasspathEntry(it, ClasspathEntryKind.SDK_BOOTCLASSPATH) },
         )
 
@@ -59,7 +60,7 @@ object ModuleCompilationContext {
             // versions of one artifact (e.g. `androidx.collection` 1.1.0 + 1.4.0). Collapse to newest-wins —
             // the same dedup the build classpath uses — so the analyzer sees one version per artifact (no
             // duplicate classes), matching a whole-graph resolve.
-            classpath = ClasspathSnapshotView(MavenClasspath.resolveVersionConflicts(libraries.toList())),
+            classpath = ClasspathSnapshot.of(MavenClasspath.resolveVersionConflicts(libraries.toList())),
             bootClasspath = boot,
             languageLevel = module.languageLevel,
             outputDir = module.outputDir,
@@ -129,19 +130,8 @@ private class CompilationContextView(
     override val classpath: ClasspathSnapshot,
     override val bootClasspath: ClasspathSnapshot,
     override val languageLevel: dev.ide.model.LanguageLevel,
-    override val outputDir: VirtualFile,
+    override val outputDir: VirtualFile?,
     override val sourceAttachments: List<VirtualFile>,
 ) : CompilationContext {
     override val processors: List<AnnotationProcessor> = emptyList()
-}
-
-private class ClasspathSnapshotView(override val entries: List<ClasspathEntry>) : ClasspathSnapshot {
-    override fun fingerprint(): ContentHash {
-        val md = MessageDigest.getInstance("SHA-256")
-        for (e in entries) {
-            md.update(e.kind.name.toByteArray(Charsets.UTF_8)); md.update(0)
-            md.update(e.root.path.toByteArray(Charsets.UTF_8)); md.update('\n'.code.toByte())
-        }
-        return ContentHash(md.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) })
-    }
 }

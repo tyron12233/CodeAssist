@@ -18,7 +18,9 @@ import dev.ide.lang.resolve.StructureItem
 import dev.ide.lang.resolve.TypeRef
 import dev.ide.lang.signature.SignatureHelpService
 import dev.ide.model.ClasspathSnapshot
+import dev.ide.model.Module
 import dev.ide.model.LanguageLevel
+import dev.ide.model.Workspace
 import dev.ide.vfs.VirtualFile
 
 /**
@@ -79,11 +81,33 @@ enum class BackendCapability {
  */
 interface CompilationContext {
     val sourceRoots: List<VirtualFile>
-    val classpath: ClasspathSnapshot
-    val bootClasspath: ClasspathSnapshot
-    val languageLevel: LanguageLevel
-    val outputDir: VirtualFile
-    val processors: List<AnnotationProcessor>
+
+    /**
+     * The dependency path, JVM-shaped by default because that is what the host can derive from the model on
+     * its own. A language with no classpath leaves it [ClasspathSnapshot.EMPTY] and carries what its own
+     * toolchain needs as an [attribute], or as entries under a [dev.ide.model.ClasspathEntryKind] of its own.
+     */
+    val classpath: ClasspathSnapshot get() = ClasspathSnapshot.EMPTY
+
+    /** The platform SDK's path. [ClasspathSnapshot.EMPTY] for a language with no boot classpath. */
+    val bootClasspath: ClasspathSnapshot get() = ClasspathSnapshot.EMPTY
+
+    /** Defaults to [LanguageLevel.DEFAULT]; a language with its own versioning names its own level. */
+    val languageLevel: LanguageLevel get() = LanguageLevel.DEFAULT
+
+    /** Where compilation output lands, or null for a language that produces none. */
+    val outputDir: VirtualFile? get() = null
+
+    /** JVM annotation processors. Empty for everything that has no such notion. */
+    val processors: List<AnnotationProcessor> get() = emptyList()
+
+    /**
+     * A language-specific input the core has no name for: an interpreter path, a virtualenv, include
+     * directories, a sysroot. The provider that built this context is what puts one here, and the backend
+     * that reads it is the same plugin, so the two agree on the key without the core knowing it exists.
+     * Answers null for a key this context carries no value for, which is the normal case.
+     */
+    fun <T : Any> attribute(key: ContextKey<T>): T? = null
 
     /**
      * Source attachments for the classpath libraries (e.g. Maven `-sources.jar`s). NOT compiled — they exist
@@ -93,6 +117,47 @@ interface CompilationContext {
      */
     val sourceAttachments: List<VirtualFile> get() = emptyList()
 }
+
+/**
+ * Typed key for a [CompilationContext.attribute]. Like [dev.ide.model.FacetKey] it has **reference
+ * identity**, so the plugin that writes an attribute and the backend that reads it must name the same `val`;
+ * [id] exists for diagnostics, not for matching.
+ */
+class ContextKey<T : Any>(val id: String) {
+    override fun toString(): String = id
+}
+
+/**
+ * Builds the [CompilationContext] for a module whose analysis inputs the host cannot derive.
+ *
+ * Without one, every backend is handed the context the host assembles from the project model, which is the
+ * JVM reading of a module: a classpath walked with `api`/`implementation` export semantics, a platform SDK
+ * boot classpath, a Java language level. That is right for the languages the IDE ships and wrong for a
+ * language whose inputs are a virtualenv, an include path or a sysroot, which no amount of model-walking
+ * produces.
+ *
+ * The host asks each provider claiming the language, in registration order, and uses the first non-null
+ * answer; returning null means "not mine after all", and falls back to the model-derived context. A provider
+ * is free to start from that context and add to it, which is the usual case for a language that does have a
+ * classpath but needs something extra alongside it.
+ */
+interface CompilationContextProvider : LanguageScoped {
+    /**
+     * The context to analyze [module] in [language] with, or null to leave it to the host. [variant] is the
+     * active build-variant config-name set, as passed to [dev.ide.model.Module.classpath]. Must not mutate
+     * the model, and is called on the analysis dispatcher, so it should not block on the network.
+     */
+    fun contextFor(
+        workspace: Workspace,
+        module: Module,
+        language: LanguageId,
+        variant: Set<String>?,
+    ): CompilationContext?
+}
+
+/** Plugins contribute context providers here; the host consults them before its own model-derived context. */
+val COMPILATION_CONTEXT_PROVIDER_EP =
+    ExtensionPoint<CompilationContextProvider>("platform.compilationContext")
 
 interface AnnotationProcessor {
     val qualifiedName: String

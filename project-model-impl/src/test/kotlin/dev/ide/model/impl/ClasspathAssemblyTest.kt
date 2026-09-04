@@ -2,12 +2,14 @@ package dev.ide.model.impl
 
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ClasspathEntryKind
+import dev.ide.model.ClasspathSnapshot
 import dev.ide.model.DependencyScope
 import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
 import dev.ide.model.LibraryRef
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
+import dev.ide.model.ModuleTypeRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -49,6 +51,22 @@ class ClasspathAssemblyTest {
     }
 
     private fun ProjectModelStore.consumer() = workspace.projects.single().modules.first { it.name == "consumer" }
+
+    @Test
+    fun theEmptySnapshotFingerprintsLikeAnEmptyAssembledClasspath() = withWorkspace { platform, store ->
+        val javaLib = ModuleTypeRegistry(platform.extensions).resolve("java-lib")
+        store.workspace.beginModification().apply {
+            addProject("p", BuildSystemId.NATIVE, store.vfs.root()); commit()
+        }
+        store.workspace.projects.single().beginModification().apply { addModule("bare", javaLib); commit() }
+
+        val assembled = store.workspace.projects.single().modules.single().classpath(DependencyScope.IMPLEMENTATION)
+        assertTrue(assembled.entries.isEmpty(), "a module with no dependencies has no classpath entries")
+        // ClasspathSnapshot.EMPTY states this hash as a literal, so that a language with no classpath and a
+        // module with no dependencies are one cache key rather than two spellings of nothing.
+        assertEquals(assembled.fingerprint(), ClasspathSnapshot.EMPTY.fingerprint())
+        assertTrue(ClasspathSnapshot.EMPTY.entries.isEmpty())
+    }
 
     @Test
     fun apiDependencyOfADependencyIsOnCompileClasspathButImplementationIsNot() = withWorkspace { platform, store ->

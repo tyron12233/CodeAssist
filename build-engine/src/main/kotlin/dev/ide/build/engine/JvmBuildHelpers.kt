@@ -65,12 +65,24 @@ fun libJars(module: Module): List<Path> =
     module.classpath(DependencyScope.IMPLEMENTATION).entries
         .filter { it.kind == ClasspathEntryKind.LIBRARY }.map { Paths.get(it.root.path) }
 
-fun outputDir(module: Module): Path = Paths.get(module.outputDir.path)
+/** The module's own directory. */
+fun moduleDir(module: Module): Path = Paths.get(module.dir.path)
 
-/** Convention path of a module's `jar` artifact (`build/libs/<name>.jar`, Gradle-style) — shared so other
+/** The module's build directory (`<moduleDir>/build`): generated sources, intermediates, outputs. */
+fun buildDir(module: Module): Path = moduleDir(module).resolve("build")
+
+/**
+ * A module's compile output directory. Required rather than optional: these helpers exist for the JVM build,
+ * and a module that declares no compiled output is not one it can build.
+ */
+fun outputDir(module: Module): Path = Paths.get(
+    requireNotNull(module.outputDir) { "module '${module.name}' has no compiled output directory" }.path,
+)
+
+/** Convention path of a module's `jar` artifact (`build/libs/<name>.jar`, Gradle-style) - shared so other
  *  plugins (Android) can consume it by the same path. */
 fun jarPath(module: Module): Path =
-    Paths.get(module.outputDir.path).resolveSibling("libs").resolve("${module.name}.jar")
+    outputDir(module).resolveSibling("libs").resolve("${module.name}.jar")
 
 /** javac's `-source`/`-target` argument. A level that names no Java version compiles at the default. */
 fun levelOf(level: LanguageLevel): String = level.javaVersion.toString()

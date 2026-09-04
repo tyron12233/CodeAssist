@@ -115,7 +115,7 @@ class ProjectImporterExtensionTest {
                         "the snapshot's declarations reached the model",
                     )
                     // A nested module keeps the directory the snapshot gave it, not its name.
-                    assertTrue(app.outputDir.path.replace('\\', '/').contains("apps/app/"), app.outputDir.path)
+                    assertTrue(app.dir.path.replace('\\', '/').endsWith("apps/app"), app.dir.path)
 
                     // Editing a watched file makes the model stale; a sync re-derives it and clears that.
                     val root = it.workspaceRoot

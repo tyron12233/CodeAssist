@@ -169,10 +169,29 @@ interface Module {
      * never read the table directly — that helper applies this precedence uniformly for build and editor.
      */
     val sdk: SdkRef? get() = null
+
+    /**
+     * The module's own directory. Intrinsic to a module whatever its language, unlike [outputDir], and the
+     * thing to reach for when you want "where does this module live".
+     *
+     * It used to be recovered as `outputDir.parent.parent`, which happened to work only because the built-in
+     * output convention is two levels deep (`<module>/build/classes`); a module that set any other output
+     * path silently yielded the wrong directory.
+     */
+    val dir: VirtualFile
+
     val sourceSets: List<SourceSet>
     val dependencies: List<OrderEntry>      // ordered; order matters for classpath search
     val facets: FacetContainer
-    val outputDir: VirtualFile
+
+    /**
+     * Where this module's compiled output lands, or null for a module whose toolchain produces none.
+     *
+     * The compiled-language reading of a module, so it is not something every module has: a plugin's
+     * interpreted or header-only module answers null, and a build task that needs an output directory should
+     * say so rather than assume one. For "where does this module live", use [dir].
+     */
+    val outputDir: VirtualFile? get() = null
 
     /**
      * Assemble the classpath for a scope, enforcing api/implementation export rules (see ClasspathSnapshot).
@@ -180,10 +199,14 @@ interface Module {
      * `null` variant includes every entry (the build-variant-agnostic default), while a non-null set drops
      * any [OrderEntry] whose [OrderEntry.variant] qualifier isn't in it (a shared, unqualified entry always
      * stays). The same set filters the module-dependency closure.
+     *
+     * The classpath reading of [dependencies], which is the useful one for a JVM toolchain and empty for a
+     * language that has no such notion. A backend for one of those reads [dependencies] itself, or is handed
+     * what it needs by its own `CompilationContextProvider`; it does not have to answer this question.
      */
     fun classpath(
         scope: DependencyScope, transitive: Boolean = true, variant: Set<String>? = null
-    ): ClasspathSnapshot
+    ): ClasspathSnapshot = ClasspathSnapshot.EMPTY
 
     /** This module's MODULE-scoped service for [key], falling back to the workspace then application scope. */
     fun <T : Any> service(key: ServiceKey<T>): T
@@ -506,10 +529,69 @@ class DependencyScope(
 interface ClasspathSnapshot {
     val entries: List<ClasspathEntry>
     fun fingerprint(): ContentHash
+
+    companion object {
+        /**
+         * A snapshot over [entries], fingerprinted by digesting each entry's kind and path in order.
+         *
+         * The one implementation of the hash. Both things that assemble a classpath ([Module.classpath] and
+         * the analysis binding in `ModuleCompilationContext`) go through it, so a path the build sees and the
+         * same path the editor sees produce the same cache key rather than two hashes that merely happen to
+         * agree today.
+         */
+        fun of(entries: List<ClasspathEntry>): ClasspathSnapshot = Snapshot(entries.toList())
+
+        /**
+         * No entries. What a language with no classpath at all analyzes against, so that language's
+         * `CompilationContext` does not have to fabricate a snapshot. Equal in fingerprint to an assembled
+         * classpath that came out empty, since it is one.
+         */
+        val EMPTY: ClasspathSnapshot = of(emptyList())
+    }
+
+    private class Snapshot(override val entries: List<ClasspathEntry>) : ClasspathSnapshot {
+        override fun fingerprint(): ContentHash {
+            val md = java.security.MessageDigest.getInstance("SHA-256")
+            for (e in entries) {
+                md.update(e.kind.id.toByteArray(Charsets.UTF_8))
+                md.update(0)
+                md.update(e.root.path.toByteArray(Charsets.UTF_8))
+                md.update('\n'.code.toByte())
+            }
+            return ContentHash(md.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) })
+        }
+
+        override fun toString(): String =
+            if (entries.isEmpty()) "ClasspathSnapshot.EMPTY" else "ClasspathSnapshot(${entries.size} entries)"
+    }
 }
 
 data class ClasspathEntry(val root: VirtualFile, val kind: ClasspathEntryKind)
-enum class ClasspathEntryKind { MODULE_OUTPUT, LIBRARY, SDK_BOOTCLASSPATH }
+
+/**
+ * What a [ClasspathEntry] is, on the path a toolchain is handed. Open rather than an enum: the three
+ * built-ins are the JVM reading, and a plugin for another toolchain has kinds of its own that the core
+ * cannot enumerate (a C++ include directory or link library, a Python site-packages or stubs directory).
+ * A consumer that only understands the built-ins should ignore a kind it does not know rather than fail.
+ */
+@JvmInline
+value class ClasspathEntryKind(val id: String) {
+    override fun toString(): String = id
+
+    companion object {
+        val MODULE_OUTPUT = ClasspathEntryKind("MODULE_OUTPUT")
+        val LIBRARY = ClasspathEntryKind("LIBRARY")
+        val SDK_BOOTCLASSPATH = ClasspathEntryKind("SDK_BOOTCLASSPATH")
+
+        /** The kinds the IDE itself provides. A plugin's own kinds are not listed here. */
+        val entries: List<ClasspathEntryKind> = listOf(MODULE_OUTPUT, LIBRARY, SDK_BOOTCLASSPATH)
+
+        fun values(): List<ClasspathEntryKind> = entries
+
+        /** Total: an unrecognized [name] is a kind some plugin owns. [name] is the persisted spelling. */
+        fun valueOf(name: String): ClasspathEntryKind = ClasspathEntryKind(name)
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Library & SDK tables (interned, referenced by name)

@@ -54,7 +54,7 @@ class GradleBuildFileWriter : BuildFileWriter {
 
     /** The module's own build script (Kotlin DSL first, as a modern project uses it), or null. */
     private fun buildFileFor(module: Module): Path? {
-        val moduleDir = Paths.get(module.outputDir.path).parent?.parent ?: return null
+        val moduleDir = Paths.get(module.dir.path)
         return listOf("build.gradle.kts", "build.gradle")
             .map { moduleDir.resolve(it) }
             .firstOrNull { Files.isRegularFile(it) }

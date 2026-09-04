@@ -131,7 +131,7 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
      */
     private fun buildOutputsNode(module: Module): TreeNode? {
         // `<module>/build/classes`.parent == `<module>/build` (the same anchor AndroidBuildSystem uses).
-        val buildDir = runCatching { Paths.get(module.outputDir.path).parent }.getOrNull() ?: return null
+        val buildDir = runCatching { Paths.get(module.dir.path).resolve("build") }.getOrNull() ?: return null
         val children = listOf(buildDir.resolve("outputs"), buildDir.resolve("libs"))
             .filter { Files.isDirectory(it) }
             .flatMap { excludedChildren(it) }
