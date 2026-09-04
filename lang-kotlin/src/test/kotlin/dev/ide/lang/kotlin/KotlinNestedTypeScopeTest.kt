@@ -97,6 +97,42 @@ class KotlinNestedTypeScopeTest {
         assertTrue(mismatch(d).isNotEmpty(), "`String` must still be kotlin.String, so `s.length` is Int; got $d")
     }
 
+    // --- INHERITED nested types ------------------------------------------------------------------
+
+    /** A nested classifier is inherited into a subclass's scope, so `N` resolves inside `class Sub : Base()`
+     *  when `Base` declares `class N`. Resolving only the LEXICAL chain made every such reference a false
+     *  "Unresolved reference: N" on valid code. */
+    @Test
+    fun inheritedNestedTypeResolves() {
+        val cases = mapOf(
+            "direct supertype" to "open class Base {\n class N(val x: Int)\n}\nclass Sub : Base() {\n val n = N(1)\n}",
+            "two levels up" to "open class Top {\n class N(val x: Int)\n}\nopen class Mid : Top()\nclass Sub : Mid() {\n val n = N(1)\n}",
+            "interface" to "interface I {\n class N(val x: Int)\n}\nclass Sub : I {\n val n = N(1)\n}",
+        )
+        for ((label, src) in cases) {
+            val d = diagnose("package p\n$src")
+            assertTrue(unresolved(d).isEmpty(), "an inherited nested type must resolve ($label); got ${unresolved(d)}")
+        }
+    }
+
+    @Test
+    fun inheritedNestedTypeTypesInADeclaredPosition() {
+        val d = diagnose("package p\nopen class Base {\n class N(val x: Int)\n}\nclass Sub : Base() {\n fun f(a: N): Boolean = a.x\n}")
+        assertTrue(unresolved(d).isEmpty(), "`a: N` must resolve through the supertype; got ${unresolved(d)}")
+        assertTrue(mismatch(d).isNotEmpty(), "`a.x` is Int, so the Boolean return must mismatch; got $d")
+    }
+
+    /** Argument validation reaches an inherited nested class too — `sameFileClassNamed` follows each enclosing
+     *  class's supertype chain within this file, where the PSI gives exact arity. */
+    @Test
+    fun inheritedNestedConstructorArityIsFlagged() {
+        val d = diagnose("package p\nopen class Base {\n class N(val x: Int)\n}\nclass Sub : Base() {\n val n = N(1, 2)\n}")
+        assertTrue(
+            d.any { it.code == "kt.constructorArgs" && it.message.contains("expected 1") },
+            "`N(1, 2)` on the inherited 1-param constructor must be flagged; got $d",
+        )
+    }
+
     // --- every declared-type position -----------------------------------------------------------
 
     /** A nested type used where a type is WRITTEN. Each snippet reads an `Int` member into a `Boolean`, so a

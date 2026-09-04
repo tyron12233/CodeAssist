@@ -1873,18 +1873,50 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      * Only the first scope that claims the name is consulted; an inner scope's declaration shadows an outer
      * one, and reaching past it would judge the call against a class it doesn't mean.
      *
+     * A nested classifier is also INHERITED, so each enclosing class's own body is followed by its supertype
+     * chain (`N` inside `class Sub : Base()` where `Base` declares `class N`) — matching the order Kotlin
+     * resolves them in. Only supertypes declared in THIS file are followed, since exact arity needs the PSI;
+     * a supertype from elsewhere is a miss, never a wrong verdict.
+     *
      * Null when the claiming scope can't be judged: two same-named classes there, or a non-constructible
-     * `object` of that name (which shadows an outer class but is not what `Level(…)` calls). Supertypes are
-     * NOT walked — an inherited nested class is a miss, never a wrong verdict.
+     * `object` of that name (which shadows an outer class but is not what `Level(…)` calls).
      */
     private fun sameFileClassNamed(call: KtCallExpression, name: String): KtClass? {
+        val file = call.containingKtFile
+        // Every class/object in the file by SIMPLE name, for following a supertype reference to its PSI.
+        val byName = HashMap<String, KtClassOrObject>()
+        fun collect(decls: List<KtDeclaration>) {
+            for (d in decls) if (d is KtClassOrObject && d !is KtEnumEntry) {
+                d.name?.let { byName.putIfAbsent(it, d) }
+                collect(d.declarations)
+            }
+        }
+        collect(file.declarations)
+
+        // The scopes to consult, innermost-out: each enclosing class's own body, then its supertype chain's
+        // bodies, and the file's top level last.
         val scopes = ArrayList<List<KtDeclaration>>()
         var node: PsiElement? = call
         while (node != null) {
-            if (node is KtClassOrObject) scopes += node.declarations
+            if (node is KtClassOrObject) {
+                scopes += node.declarations
+                val seen = HashSet<KtClassOrObject>()
+                val queue = ArrayDeque<KtClassOrObject>().apply { add(node) }
+                while (queue.isNotEmpty()) {
+                    val cls = queue.removeFirst()
+                    if (!seen.add(cls)) continue // a cyclic supertype list in mid-edit code
+                    for (entry in cls.superTypeListEntries) {
+                        val ref = entry.typeReference?.text?.substringBefore('<')?.substringAfterLast('.')?.trim()
+                        val sup = ref?.let { byName[it] } ?: continue
+                        if (sup in seen) continue
+                        scopes += sup.declarations
+                        queue.add(sup)
+                    }
+                }
+            }
             node = node.parent
         }
-        scopes += call.containingKtFile.declarations
+        scopes += file.declarations
         for (decls in scopes) {
             val hits = decls.filterIsInstance<KtClass>().filter { it.name == name }
             if (hits.isNotEmpty()) return hits.singleOrNull()

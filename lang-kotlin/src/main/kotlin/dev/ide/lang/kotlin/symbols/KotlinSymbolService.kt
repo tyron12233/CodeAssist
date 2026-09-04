@@ -923,8 +923,14 @@ class KotlinSymbolService(
             val classes = model().classByFqn
             var owner: String? = enclosingClassFqn
             while (!owner.isNullOrEmpty()) {
-                val cand = "$owner.$simple"
-                if (cand in classes) return cand
+                "$owner.$simple".let { if (it in classes) return it }
+                // A nested classifier is INHERITED into the scope of a subclass, so `N` resolves inside
+                // `class Sub : Base()` when `Base` declares `class N`. The supertype chain is walked only for
+                // a name that is some class's nested type (the guard above), so the memoized walk stays off
+                // the common path.
+                for (sup in kotlinSupertypesMemo(owner)) {
+                    "$sup.$simple".let { if (it in classes) return it }
+                }
                 owner = owner.substringBeforeLast('.', "").ifEmpty { null }
             }
         }
