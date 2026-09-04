@@ -223,6 +223,15 @@ fun BuildConsole(
 
 private enum class BuildTab { Problems, Log, Steps, Logcat }
 
+/** The tab's display name, shared by its tab chip and its copy button's label/tooltip. */
+private val BuildTab.label: StringResource
+    get() = when (this) {
+        BuildTab.Problems -> Res.string.buildc_tab_problems
+        BuildTab.Log -> Res.string.buildc_tab_log
+        BuildTab.Steps -> Res.string.buildc_tab_steps
+        BuildTab.Logcat -> Res.string.buildc_tab_logcat
+    }
+
 /** True for a step that has settled (won't change again this build) — for the running-progress fraction. */
 private val StepStatus.isSettled: Boolean
     get() = this == StepStatus.Done || this == StepStatus.UpToDate ||
@@ -278,7 +287,7 @@ private fun Header(
         }
         StatusPill(state.status)
         val (copyTab, copyProvide) = copyForTab(state, tab, pluginActive)
-        if (copyProvide != null) CopyButton(copyTab, copyProvide)
+        if (copyProvide != null) CopyButton(stringResource(copyTab.label), copyProvide)
         if (running) IconButtonCa(
             CaIcons.stop,
             stringResource(Res.string.stop),
@@ -346,8 +355,8 @@ private fun copyForTab(
         BuildTab.Steps -> tab to (
             if (state.steps.isEmpty()) null
             else fun(): String = renderStepsForCopy(state.steps))
-        // The Logcat tab has its own live buffer (not in BuildState) and is selectable in place, so no
-        // header copy-all button — return no provider (which hides it).
+        // The Logcat tab's buffer isn't in BuildState, and its copy-all button lives in its own toolbar (so
+        // it's reachable full-screen too), so nothing to copy from the header — no provider hides it.
         BuildTab.Logcat -> tab to null
     }
 }
@@ -358,7 +367,7 @@ private fun copyForTab(
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun CopyButton(tab: BuildTab, provide: () -> String) {
+private fun CopyButton(label: String, provide: () -> String, boxSize: Int = 28) {
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var copied by remember { mutableStateOf(false) }
@@ -367,14 +376,6 @@ private fun CopyButton(tab: BuildTab, provide: () -> String) {
             delay(1500.milliseconds); copied = false
         }
     }
-    val label = stringResource(
-        when (tab) {
-            BuildTab.Problems -> Res.string.buildc_tab_problems
-            BuildTab.Log -> Res.string.buildc_tab_log
-            BuildTab.Steps -> Res.string.buildc_tab_steps
-            BuildTab.Logcat -> Res.string.buildc_tab_logcat
-        }
-    )
     IconButtonCa(
         if (copied) CaIcons.check else CaIcons.copy,
         if (copied) stringResource(Res.string.buildc_copied) else stringResource(Res.string.buildc_copy, label),
@@ -382,7 +383,7 @@ private fun CopyButton(tab: BuildTab, provide: () -> String) {
             scope.launch { clipboard.setText(AnnotatedString(clipForClipboard(provide()))) }
             copied = true
         },
-        boxSize = 28,
+        boxSize = boxSize,
         iconSize = 16,
         tint = if (copied) Ide.colors.run else MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -1078,6 +1079,16 @@ private fun LogcatBody(
         ) {
             LogcatStatus(appLog)
             SearchField(query, onQuery, Modifier.weight(1f))
+            // Copy-all: the WHOLE buffer, not the filtered view (same rule as the other tabs' copy — the
+            // point is capturing a run off a device with no `adb`). Hidden while there's nothing to copy.
+            if (appLog.lines.isNotEmpty()) {
+                val lines = appLog.lines
+                CopyButton(
+                    stringResource(BuildTab.Logcat.label),
+                    provide = { renderLogcatForCopy(lines) },
+                    boxSize = 30,
+                )
+            }
             IconButtonCa(
                 if (fullScreen) CaIcons.collapse else CaIcons.expand,
                 stringResource(if (fullScreen) Res.string.buildc_exit_fullscreen else Res.string.buildc_fullscreen),
@@ -1202,6 +1213,29 @@ private fun logLevelLetter(level: UiLogLevel): Char = when (level) {
     UiLogLevel.Info -> 'I'
     UiLogLevel.Warn -> 'W'
     UiLogLevel.Error -> 'E'
+}
+
+/**
+ * The whole Logcat buffer as pasteable text — one `time  PID-TID  L/tag: message` line per record, in the
+ * same shape as the on-screen row. Missing metadata is left out, and a multi-line message (a forwarded crash
+ * trace arrives as ONE record) keeps its own line breaks.
+ */
+internal fun renderLogcatForCopy(lines: List<AppLogLineUi>): String =
+    lines.joinToString("\n", transform = ::renderLogcatLineForCopy)
+
+private fun renderLogcatLineForCopy(line: AppLogLineUi): String = buildString {
+    if (line.timeLabel.isNotEmpty()) {
+        append(line.timeLabel); append("  ")
+    }
+    if (line.pid > 0) {
+        append(line.pid); append('-'); append(line.tid); append("  ")
+    }
+    append(logLevelLetter(line.level))
+    if (line.tag.isNotEmpty()) {
+        append('/'); append(line.tag)
+    }
+    append(": ")
+    append(line.message)
 }
 
 // ---------------------------------------------------------------------------
