@@ -485,15 +485,79 @@ change for free.
 [`CompilationContext`](../language-api/src/main/kotlin/dev/ide/lang/LanguageBackend.kt) is built from the
 project model and handed to `createAnalyzer`:
 
-| Member | Use |
-| --- | --- |
-| `sourceRoots` | The module's source roots |
-| `classpath` | Hashed `ClasspathSnapshot`; changing its fingerprint invalidates your caches |
-| `bootClasspath` | The platform SDK jars |
-| `languageLevel` | The target level |
-| `outputDir` | Where compiled output lands |
-| `processors` | Annotation processors on the classpath |
-| `sourceAttachments` | Library `-sources.jar`s, for parameter names and doc comments. Not compiled |
+| Member | Use | Default |
+| --- | --- | --- |
+| `sourceRoots` | The module's source roots | required |
+| `classpath` | Hashed `ClasspathSnapshot`; changing its fingerprint invalidates your caches | `ClasspathSnapshot.EMPTY` |
+| `bootClasspath` | The platform SDK jars | `ClasspathSnapshot.EMPTY` |
+| `languageLevel` | The target level | `LanguageLevel.DEFAULT` |
+| `outputDir` | Where compiled output lands, or null for a language that produces none | `null` |
+| `processors` | Annotation processors on the classpath | empty |
+| `sourceAttachments` | Library `-sources.jar`s, for parameter names and doc comments. Not compiled | empty |
+| `attribute(key)` | A language-specific input the core has no name for | `null` |
+
+Only `sourceRoots` is required. Everything else describes a module the way the *model* can on its own, which
+is the JVM reading of one, so a language that has no classpath simply leaves those alone.
+
+### 6.7.1 Supplying your own context
+
+The catch is that the host builds that context with
+[`ModuleCompilationContext`](../language-api/src/main/kotlin/dev/ide/lang/ModuleCompilationContext.kt), which
+walks the project model: dependencies with `api`/`implementation` export semantics, a platform SDK boot
+classpath, a Java language level. No amount of model-walking produces a virtualenv, an include path or a
+sysroot. Contribute a
+[`CompilationContextProvider`](../language-api/src/main/kotlin/dev/ide/lang/LanguageBackend.kt) and the host
+asks you first for the languages you claim:
+
+```kotlin
+val PY_INTERPRETER = ContextKey<String>("mylang.interpreter")
+
+object MyLangContexts : CompilationContextProvider {
+    override val languages = setOf(MyLangBackend.LANGUAGE_ID)
+
+    override fun contextFor(
+        workspace: Workspace, module: Module, language: LanguageId, variant: Set<String>?,
+    ): CompilationContext? {
+        val facet = module.facets.get(MYLANG_FACET) ?: return null   // not my module after all
+        return object : CompilationContext {
+            override val sourceRoots = module.sourceSets
+                .flatMap { it.contentRoots }
+                .filter { PACKAGE_ROOT in it.roles }
+                .map { it.dir }
+
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : Any> attribute(key: ContextKey<T>): T? =
+                if (key === PY_INTERPRETER) facet.interpreter as T else null
+        }
+    }
+}
+
+// in Plugin.register:
+reg.register(COMPILATION_CONTEXT_PROVIDER_EP, MyLangContexts)
+```
+
+The rules, which the host holds you to:
+
+- Only providers claiming the language are asked, in registration order, and the **first non-null answer
+  wins**. Returning null means "not mine after all" and falls back to the model-derived context, so a provider
+  can handle only the modules it recognizes.
+- A provider that **throws is logged and skipped**, never propagated: analysis of every other language in the
+  project does not stop because one plugin's provider is broken.
+- It runs on the analysis dispatcher, so it must not block on the network or mutate the model.
+
+`ContextKey` has **reference identity** like `FacetKey`: the provider that writes an attribute and the backend
+that reads it are the same plugin naming the same `val`, which is why the core never has to know the key
+exists.
+
+If your language does have a classpath but needs something extra alongside it, call
+`ModuleCompilationContext.create(workspace, module, variant)` and add to what it returns, rather than
+reassembling the dependency walk yourself. `ClasspathEntryKind` is open for the same reason the model's other
+vocabularies are, so an entry can be an include directory or a site-packages directory rather than a jar:
+
+```kotlin
+val INCLUDE_DIR = ClasspathEntryKind("INCLUDE_DIR")
+val SITE_PACKAGES = ClasspathEntryKind("SITE_PACKAGES")
+```
 
 ### 6.8 Register the backend
 
@@ -1226,7 +1290,10 @@ object MyLangModuleType : ModuleType {
     override val id = "mylang-lib"
     override val displayName = "MyLang Library"
     override fun defaultSourceSets() = listOf(
-        SourceSetTemplate("main", DependencyScope.COMPILE, mapOf("src/main/mylang" to setOf(ContentRole.SOURCE))),
+        SourceSetTemplate(
+            "main", DependencyScope.IMPLEMENTATION,
+            mapOf("src/main/mylang" to setOf(ContentRole.SOURCE)),
+        ),
     )
     override fun defaultFacets() = emptyList<FacetTemplate>()
     override fun supportedBuildSystems() = setOf(BuildSystemId.NATIVE)
@@ -1237,29 +1304,74 @@ object MyLangModuleType : ModuleType {
 stay stable. `platform` defaults to Android for an `android-*` id and JVM otherwise; override it if that
 inference is wrong for you.
 
-Register through the facade, which is the `contributeVia` case:
+Register it on the extension point:
 
 ```kotlin
-reg.contributeVia { ext, pid -> ModuleTypeRegistry(ext).register(MyLangModuleType, pid) }
+reg.register(ModuleTypeExtensionPoint, MyLangModuleType)
 ```
+
+`ModuleTypeRegistry(ext).register(...)` through `contributeVia` does the same thing and is what the built-ins
+use; the registry is the read side, for resolving a persisted type id back to a `ModuleType`.
+
+**If your language is not laid out like a JVM module**, say so rather than approximating. Five of the model's
+vocabularies are open value types, not enums, so a module type can name its own:
+
+```kotlin
+val PACKAGE_ROOT = ContentRole("mylang-package")   // instead of passing as ContentRole.SOURCE
+val HEADERS = ContentRole("mylang-headers")
+val MYLANG = PlatformKind("MYLANG")                // resolves an SDK of its own kind, never android.jar
+val BUNDLE = LibraryKind("BUNDLE")                 // instead of calling a package a jar
+val LEVEL = LanguageLevel("MYLANG_2")              // instead of claiming JAVA_17
+
+/** On the runtime path, never the compile one. */
+val LINK_ONLY = DependencyScope.register(
+    DependencyScope("LINK_ONLY", "linkOnly", onCompile = false, onRuntime = true, onTest = true),
+)
+```
+
+`ContentRole`, `PlatformKind`, `LibraryKind` and `LanguageLevel` round-trip through `module.toml` on their
+`id`/`name` alone. `DependencyScope` also carries classpath semantics a name cannot recover, so register it:
+otherwise a project that persisted it still loads, but the scope is re-derived permissively. The built-in
+values keep the spellings they have always been written under, so none of this is a format migration.
 
 ### 13.2 Facets
 
 A facet is domain-specific configuration attached to a module without the core knowing the domain
 (`AndroidFacet` is the built-in example). Define a `FacetKey<T>` and a `Facet`, then contribute a
-[`FacetCodec`](../project-model-impl/src/main/kotlin/dev/ide/model/impl/FacetCodec.kt) so it round-trips
-through `module.toml`:
+[`FacetCodec`](../project-model-api/src/main/kotlin/dev/ide/model/FacetCodec.kt) so it round-trips through
+`module.toml`:
 
 ```kotlin
-interface FacetCodec<T : Facet> {
-    val key: FacetKey<T>
-    val tomlTable: String
-    fun encode(facet: T): Map<String, Any?>
-    fun decode(values: Map<String, Any?>): T
+val MYLANG_FACET = FacetKey<MyLangFacet>("mylang")
+
+data class MyLangFacet(val dialect: String) : Facet {
+    override val key get() = MYLANG_FACET
 }
+
+object MyLangFacetCodec : FacetCodec<MyLangFacet> {
+    override val key = MYLANG_FACET
+    override val tomlTable = "mylang"          // the [mylang] table in module.toml
+    override fun encode(f: MyLangFacet) = mapOf("dialect" to f.dialect)
+    override fun decode(v: Map<String, Any?>) = MyLangFacet(v["dialect"] as? String ?: "strict")
+}
+
+// in Plugin.register:
+reg.register(FACET_CODEC_EP, MyLangFacetCodec)
 ```
 
-Registered on `FACET_CODEC_EP`. Without a codec the facet exists in memory and vanishes on reload.
+The codec is **required, not optional**: `ModifiableModule.putFacet` refuses a facet whose key has no
+registered codec, and `FacetContainer.get` answers null for one. The facet type and its codec are two halves
+of one contribution.
+
+Two matching rules to know:
+
+- `FacetKey` has **reference identity**. Declare it once as a `val` and have the facet and the codec name that
+  same instance; two keys sharing an id are two different keys.
+- The **`tomlTable` name is the on-disk identity**, in a namespace flat across every plugin. `decode` resolves
+  by table, so the last registration for a table wins.
+
+A table nobody claims is not lost: it is carried through a load and a save untouched, so a project edited with
+your plugin disabled keeps its configuration.
 
 ### 13.3 Project templates
 
@@ -1309,7 +1421,7 @@ Notes that save time:
 Register with:
 
 ```kotlin
-reg.contributeVia { ext, pid -> ProjectTemplateRegistry(ext).register(MyLangAppTemplate, pid) }
+reg.register(ProjectTemplateExtensionPoint, MyLangAppTemplate)
 ```
 
 ### 13.4 Importing and editing foreign build files
@@ -1470,6 +1582,7 @@ several SPI methods are `suspend`, so drive them with `runBlocking`.
 | --- | --- | --- | --- |
 | `dev.ide.lang.FILE_TYPE_EP` | `platform.fileType` | `FileTypeMapping` | Suffix to language routing |
 | `dev.ide.lang.LANGUAGE_BACKEND_EP` | `platform.languageBackend` | `LanguageBackend` | Parsing, resolution, editor services |
+| `dev.ide.lang.COMPILATION_CONTEXT_PROVIDER_EP` | `platform.compilationContext` | `CompilationContextProvider` | Your language's analysis inputs |
 | `dev.ide.lang.completion.COMPLETION_CONTRIBUTOR_EP` | `platform.completionContributor` | `CompletionContribution` | Completion items |
 | `dev.ide.lang.completion.COMPLETION_WEIGHER_EP` | `platform.completionWeigher` | `CompletionWeigher` | Completion ranking |
 | `dev.ide.lang.postfix.POSTFIX_TEMPLATE_EP` | `platform.postfixTemplate` | `PostfixTemplate` | Postfix templates |
@@ -1485,7 +1598,7 @@ several SPI methods are `suspend`, so drive them with `runBlocking`.
 | `dev.ide.build.RUN_TASK_PROVIDER_EP` | `platform.runTaskProvider` | `RunTaskProvider` | Run-picker rows |
 | `dev.ide.model.ModuleTypeExtensionPoint` | `platform.moduleType` | `ModuleType` | A module kind |
 | `dev.ide.model.template.ProjectTemplateExtensionPoint` | `platform.projectTemplate` | `ProjectTemplate` | A Create-Project entry |
-| `dev.ide.model.impl.FACET_CODEC_EP` | `platform.facetCodec` | `FacetCodec<*>` | Facet persistence |
+| `dev.ide.model.FACET_CODEC_EP` | `platform.facetCodec` | `FacetCodec<*>` | Facet persistence |
 | `dev.ide.model.sync.PROJECT_IMPORTER_EP` | `platform.projectImporter` | `ProjectImporter` | Reading a foreign project |
 | `dev.ide.model.sync.BUILD_FILE_WRITER_EP` | `platform.buildFileWriter` | `BuildFileWriter` | Writing build files |
 | `dev.ide.model.FileIconExtensionPoint` | `platform.fileIcon` | `FileIconProvider` | File-tree icons |
@@ -1497,7 +1610,8 @@ several SPI methods are `suspend`, so drive them with `runBlocking`.
 
 | FQN | File |
 | --- | --- |
-| `dev.ide.lang.LanguageBackend` / `SourceAnalyzer` / `CompilationContext` / `BackendCapability` / `LanguageId` / `CacheInvalidation` | [LanguageBackend.kt](../language-api/src/main/kotlin/dev/ide/lang/LanguageBackend.kt) |
+| `dev.ide.lang.LanguageBackend` / `SourceAnalyzer` / `CompilationContext` / `CompilationContextProvider` / `ContextKey` / `BackendCapability` / `LanguageId` / `CacheInvalidation` | [LanguageBackend.kt](../language-api/src/main/kotlin/dev/ide/lang/LanguageBackend.kt) |
+| `dev.ide.lang.ModuleCompilationContext` | [ModuleCompilationContext.kt](../language-api/src/main/kotlin/dev/ide/lang/ModuleCompilationContext.kt) |
 | `dev.ide.lang.LanguageScoped` / `LanguageExtensionIndex` / `appliesTo` | [LanguageExtension.kt](../language-api/src/main/kotlin/dev/ide/lang/LanguageExtension.kt) |
 | `dev.ide.lang.FileTypeMapping` | [FileType.kt](../language-api/src/main/kotlin/dev/ide/lang/FileType.kt) |
 | `dev.ide.lang.dom.DomNode` / `ParsedFile` / `NodeKind` / `TextRange` / `Diagnostic` / `Severity` | [Dom.kt](../language-api/src/main/kotlin/dev/ide/lang/dom/Dom.kt) |
@@ -1532,7 +1646,9 @@ several SPI methods are `suspend`, so drive them with `runBlocking`.
 | `dev.ide.model.ModuleType` / `Facet` / `FacetKey` | [ProjectModel.kt](../project-model-api/src/main/kotlin/dev/ide/model/ProjectModel.kt) |
 | `dev.ide.model.template.ProjectTemplate` / `TemplateParameter` / `ProjectScaffold` | [ProjectTemplate.kt](../project-model-api/src/main/kotlin/dev/ide/model/template/ProjectTemplate.kt) |
 | `dev.ide.model.sync.ProjectImporter` / `BuildFileWriter` | [ProjectSync.kt](../project-model-api/src/main/kotlin/dev/ide/model/sync/ProjectSync.kt) |
-| `dev.ide.model.impl.FacetCodec` | [FacetCodec.kt](../project-model-impl/src/main/kotlin/dev/ide/model/impl/FacetCodec.kt) |
+| `dev.ide.model.FacetCodec` / `FacetCodecRegistry` / `FacetData` | [FacetCodec.kt](../project-model-api/src/main/kotlin/dev/ide/model/FacetCodec.kt) |
+| `dev.ide.model.ModuleTypeRegistry` / `ProjectTemplateRegistry` / `FileIconRegistry` | [ModuleTypeRegistry.kt](../project-model-api/src/main/kotlin/dev/ide/model/ModuleTypeRegistry.kt) |
+| `dev.ide.model.ContentRole` / `PlatformKind` / `LibraryKind` / `LanguageLevel` / `DependencyScope` | [ProjectModel.kt](../project-model-api/src/main/kotlin/dev/ide/model/ProjectModel.kt) |
 
 ### Editor text layer
 

@@ -46,7 +46,7 @@ publishing {
                             "their codecs, and file icons."
                     "language-api" ->
                         "The CodeAssist language SPI: the neutral syntax tree, resolution, file types, " +
-                            "completion, formatting, and folding."
+                            "completion, formatting, folding, and a language's compilation context."
                     "analysis-api" ->
                         "The CodeAssist analysis SPI: analyzers, the diagnostic model, quick fixes, and " +
                             "editor action providers."

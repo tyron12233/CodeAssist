@@ -454,6 +454,7 @@ The full inventory is in [Appendix A](#appendix-a-extension-point-index). A repr
 | Extension point | Contribute to add |
 | --- | --- |
 | `dev.ide.lang.LANGUAGE_BACKEND_EP` | A new editor language (parse, complete, navigate) |
+| `dev.ide.lang.COMPILATION_CONTEXT_PROVIDER_EP` | `platform.compilationContext` | `CompilationContextProvider` | The analysis inputs for your language |
 | `dev.ide.lang.FILE_TYPE_EP` | A file suffix → language mapping |
 | `dev.ide.analysis.ANALYZER_EP` | An inspection producing diagnostics |
 | `dev.ide.analysis.QUICK_FIX_PROVIDER_EP` | A fix for a diagnostic |
@@ -498,6 +499,168 @@ Rules that matter:
 - **Namespace it.** Platform EPs use `platform.*`; use your plugin id as the prefix.
 - **Consume it defensively.** `extensions(EP).ifEmpty { builtinDefaults }` is the pattern used by the Kotlin
   compiler-plugin EP, so a standalone test with an empty registry still behaves.
+
+### Support a language the IDE has never heard of
+
+A plugin for Python, C++, Go or anything else laid out unlike a JVM module contributes on five extension
+points in `project-model-api`, all of them published. Nothing about this path is host-only: the built-in
+Android support registers exactly these.
+
+```kotlin
+class PythonPlugin : Plugin {
+    override val manifest = PluginManifest(
+        id = "python-support", name = "Python",
+        capabilities = listOf(
+            PluginCapabilities.MODEL_MODULE_TYPE,   // it contributes a kind of module
+            PluginCapabilities.MODEL_FACET,         // ... with configuration of its own
+            PluginCapabilities.LANG_BACKEND,        // ... and teaches the editor the language
+        ),
+    )
+
+    override fun register(reg: PluginRegistration) {
+        reg.register(ModuleTypeExtensionPoint, PythonModuleType)         // a kind of module
+        reg.register(FACET_CODEC_EP, PythonFacetCodec)                   // its module.toml table
+        reg.register(ProjectTemplateExtensionPoint, PythonAppTemplate)   // a Create-Project entry
+        reg.register(PROJECT_IMPORTER_EP, PyProjectImporter)             // adopt an existing pyproject.toml
+        reg.register(LANGUAGE_BACKEND_EP, PythonBackend)                 // parse / resolve / complete
+        reg.register(FILE_TYPE_EP, FileTypeMapping(listOf(".py"), LanguageId("python")))
+    }
+}
+```
+
+**A facet is a type plus its codec, always both.** The core cannot serialize a `Facet` generically, so
+`ModifiableModule.putFacet` refuses a facet whose key has no registered `FacetCodec` and `FacetContainer.get`
+answers null for one. Two rules follow from how they are matched:
+
+- `FacetKey` has **reference identity**. Declare it once as a `val` and have the facet and the codec name that
+  same instance; two keys sharing an id are two different keys.
+- The **TOML table name is the on-disk identity**, in a namespace flat across every plugin. `decode` is
+  resolved by table, so pick one that reads as your domain and expect the last registration to win.
+
+A table nobody claims is *not* lost: it is carried through a load and a save untouched, so a project edited
+with your plugin disabled keeps its configuration.
+
+```kotlin
+val PYTHON_FACET = FacetKey<PythonFacet>("python")
+
+data class PythonFacet(val interpreter: String, val venv: String?) : Facet {
+    override val key get() = PYTHON_FACET
+}
+
+object PythonFacetCodec : FacetCodec<PythonFacet> {
+    override val key = PYTHON_FACET
+    override val tomlTable = "python"          // the [python] table in module.toml
+    override fun encode(f: PythonFacet) = mapOf("interpreter" to f.interpreter, "venv" to f.venv)
+    override fun decode(v: Map<String, Any?>) =
+        PythonFacet(v["interpreter"] as? String ?: "python3", v["venv"] as? String)
+}
+```
+
+Codec values must be TOML-representable (`String`, `Long`, `Boolean`, and lists of those), so that an
+`encode` and a load-from-disk produce structurally equal values.
+
+**The model's vocabularies are open, so your layout does not have to lie.** `ContentRole`, `PlatformKind`,
+`LibraryKind`, `LanguageLevel` and `DependencyScope` were enums until SPI `2.0.0`. They are now value types
+whose built-in constants live on the companion, and a plugin declares its own:
+
+```kotlin
+object Py {
+    val PACKAGE_ROOT = ContentRole("python-package")   // not "a Java source root"
+    val STUBS = ContentRole("python-stubs")
+    val PLATFORM = PlatformKind("PYTHON")              // resolves a Python SDK, never android.jar
+    val WHEEL = LibraryKind("WHEEL")                   // not "a jar"
+    val LEVEL = LanguageLevel("PYTHON_3_12")           // not JAVA_17
+
+    /** On the runtime path, never the compile one. */
+    val RUNTIME_REQUIRES = DependencyScope.register(
+        DependencyScope("RUNTIME_REQUIRES", "runtimeRequires",
+            onCompile = false, onRuntime = true, onTest = true),
+    )
+}
+
+object PythonModuleType : ModuleType {
+    override val id = "python-app"
+    override val displayName = "Python Application"
+    override val platform get() = Py.PLATFORM
+    override fun defaultSourceSets() = listOf(
+        SourceSetTemplate("main", DependencyScope.IMPLEMENTATION,
+            mapOf("src" to setOf(Py.PACKAGE_ROOT), "stubs" to setOf(Py.STUBS))),
+    )
+    override fun defaultFacets() = emptyList<FacetTemplate>()
+    override fun supportedBuildSystems() = setOf(BuildSystemId.NATIVE)
+}
+```
+
+Three things to know about the open vocabularies:
+
+- **`DependencyScope` is the one that needs registering.** The others round-trip on their name alone, but a
+  scope also carries classpath semantics (`onCompile`/`onRuntime`/`onTest`) that a name cannot recover.
+  `DependencyScope.register(...)` from your `register` makes a project that persisted it load with the real
+  semantics; without it the scope still round-trips, but is re-derived permissively (on every classpath) and a
+  `[dependencies]` table keyed by its `id` is skipped.
+- **An exhaustive `when` over one of them now needs an `else`.** That is the one way this change can stop
+  existing plugin code from compiling, and why `PLUGIN_SPI_VERSION` went to `2.0.0`.
+- **The built-in on-disk spellings did not change.** `ContentRole.SOURCE` is still written as `java`,
+  a source set's scope still as `IMPLEMENTATION`, a level still as `JAVA_17`. Your own values persist under
+  their `id`/`name`, so pick ones unlikely to collide with those.
+
+**Adopting an existing project** is `PROJECT_IMPORTER_EP`: `detect(root)` claims a folder (highest
+`confidence` wins), `resolve` reads its build files into an `ExternalProjectModel`, and the host applies that
+snapshot in one transaction. The snapshot names your module type by id and your facets by table name, so an
+importer needs no reference to the classes that provide them. Pair it with `BUILD_FILE_WRITER_EP` if edits the
+user makes in the IDE should survive the next sync.
+
+`ModuleTypeRegistry`, `FacetCodecRegistry`, `ProjectTemplateRegistry` and `FileIconRegistry` (all in
+`dev.ide.model`) are the read side of these four EPs, if you need to resolve rather than contribute. They
+read through to the extension registry on every lookup, so a plugin that loads later is still seen.
+
+**Your language's analysis inputs are yours to supply.** The host builds a `CompilationContext` by walking the
+project model, which produces the JVM reading of a module: a classpath, a platform SDK boot classpath, a Java
+language level. A virtualenv, an include path or a sysroot is none of those, so contribute a
+`CompilationContextProvider` and the host asks you first for the languages you claim:
+
+```kotlin
+val PY_INTERPRETER = ContextKey<String>("python.interpreter")
+
+object PythonContexts : CompilationContextProvider {
+    override val languages = setOf(LanguageId("python"))
+
+    override fun contextFor(
+        workspace: Workspace, module: Module, language: LanguageId, variant: Set<String>?,
+    ): CompilationContext? {
+        val facet = module.facets.get(PYTHON_FACET) ?: return null   // not my module after all
+        return object : CompilationContext {
+            override val sourceRoots = module.sourceSets.flatMap { it.contentRoots }
+                .filter { Py.PACKAGE_ROOT in it.roles }.map { it.dir }
+
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : Any> attribute(key: ContextKey<T>): T? =
+                if (key === PY_INTERPRETER) facet.interpreter as T else null
+        }
+    }
+}
+
+reg.register(COMPILATION_CONTEXT_PROVIDER_EP, PythonContexts)
+```
+
+Only `sourceRoots` is required: `classpath` and `bootClasspath` default to `ClasspathSnapshot.EMPTY`,
+`languageLevel` to `LanguageLevel.DEFAULT`, `outputDir` to null, `processors` to empty. `ContextKey` has
+reference identity like `FacetKey`, so the provider that writes an attribute and the backend that reads it are
+the same plugin naming the same `val`, and the core never has to know the key exists. `ClasspathEntryKind` is
+open too, so a language that does have a dependency path can name entries the core has no word for
+(`ClasspathEntryKind("INCLUDE_DIR")`).
+
+The host asks providers claiming the language in registration order and takes the first non-null answer;
+returning null falls back to the model-derived context, and a provider that throws is logged and skipped so
+one broken plugin cannot stop analysis of everything else.
+
+If your language does have a classpath but needs something extra alongside it, start from
+`ModuleCompilationContext.create(workspace, module, variant)`, which is the model-derived context the host
+would otherwise hand you, and add to what it returns.
+
+What is still JVM-shaped underneath: `Module` carries `classpath()` and `outputDir` on the interface, which is
+why a non-JVM `Module` still answers a classpath question. It is not in your way once you supply your own
+context.
 
 ---
 
@@ -1767,7 +1930,7 @@ the IDE's own runtime:
 ```kotlin
 dependencies {
     // The BOM carries the versions, including the Compose the IDE provides.
-    compileOnly(platform("io.github.tyron12233:plugin-bom:1.3.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.0.0"))
 
     compileOnly("io.github.tyron12233:plugin-ui-api")
     compileOnly("androidx.compose.runtime:runtime")
@@ -1825,12 +1988,12 @@ not part of it, so an id or an anchor that is wrong still shows up only once the
 The engine SPI is published, so the extension points in these modules are available to a plugin app:
 
 ```kotlin
-compileOnly(platform("io.github.tyron12233:plugin-bom:1.3.0")) // one version for everything below
+compileOnly(platform("io.github.tyron12233:plugin-bom:2.0.0")) // one version for everything below
 
 compileOnly("io.github.tyron12233:plugin-api")        // actions, menus, palette commands
 compileOnly("io.github.tyron12233:platform-core")     // scoped services, settings pages, logging
 compileOnly("io.github.tyron12233:project-model-api") // module types, templates, facets + codecs, file icons
-compileOnly("io.github.tyron12233:language-api")      // file types, completion, postfix, synthetic classes
+compileOnly("io.github.tyron12233:language-api")      // file types, completion, postfix, compilation contexts
 compileOnly("io.github.tyron12233:analysis-api")      // analyzers, diagnostics, quick fixes, intentions
 compileOnly("io.github.tyron12233:index-api")         // persisted indexes
 compileOnly("io.github.tyron12233:build-api")         // build systems, build plugins, tasks, source generators
@@ -1856,11 +2019,15 @@ The SPI is published, so it is an ordinary dependency:
 
 ```kotlin
 dependencies {
-    compileOnly(platform("io.github.tyron12233:plugin-bom:1.3.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.0.0"))
     compileOnly("io.github.tyron12233:plugin-api")
     compileOnly("io.github.tyron12233:platform-core")
 }
 ```
+
+Upgrading a plugin written against `1.x`? See
+[Migrating a plugin to SPI 2.0.0](plugin-spi-2.0-migration.md): `PLUGIN_API_VERSION` moved to `3`, so an
+older plugin is refused at the gate, and recompiling is usually the whole migration.
 
 Those two modules are GPL-3.0-or-later **with** the Classpath exception, which is what lets your plugin carry
 whatever license you choose; the rest of CodeAssist is plain GPL-3.0-or-later. The SPI version is independent
@@ -1926,7 +2093,7 @@ Every published extension point, its id, the type it carries, and what contribut
 | `dev.ide.model.ModuleTypeExtensionPoint` | `platform.moduleType` | `ModuleType` | A module type |
 | `dev.ide.model.FileIconExtensionPoint` | `platform.fileIcon` | `FileIconProvider` | File-tree icon classification |
 | `dev.ide.model.template.ProjectTemplateExtensionPoint` | `platform.projectTemplate` | `ProjectTemplate` | A Create-Project template |
-| `dev.ide.model.impl.FACET_CODEC_EP` | `platform.facetCodec` | `FacetCodec<*>` | Persistence for a module facet |
+| `dev.ide.model.FACET_CODEC_EP` | `platform.facetCodec` | `FacetCodec<*>` | Persistence for a module facet |
 | `dev.ide.model.sync.PROJECT_IMPORTER_EP` | `platform.projectImporter` | `ProjectImporter` | Import of a foreign project layout |
 | `dev.ide.model.sync.BUILD_FILE_WRITER_EP` | `platform.buildFileWriter` | `BuildFileWriter` | Writing changes back to a build file |
 
@@ -2009,6 +2176,26 @@ See also [extension-points.md](extension-points.md) for how the built-ins are wi
 | `dev.ide.platform.ServiceKey` / `ServiceScope` / `ServiceContainer` / `ServiceScopeLevel` | [Services.kt](../platform-core/src/main/kotlin/dev/ide/platform/Services.kt) |
 | `dev.ide.platform.settings.SettingsPage` / `SettingControl` | [Settings.kt](../platform-core/src/main/kotlin/dev/ide/platform/settings/Settings.kt) |
 | `dev.ide.platform.log.Logger` / `Log` | [Log.kt](../platform-core/src/main/kotlin/dev/ide/platform/log/Log.kt) |
+
+### Project model: [`:project-model-api`](../project-model-api)
+
+| FQN | File |
+| --- | --- |
+| `dev.ide.model.ModuleType` / `SourceSetTemplate` / `FacetTemplate` / `ContentRole` | [ProjectModel.kt](../project-model-api/src/main/kotlin/dev/ide/model/ProjectModel.kt) |
+| `dev.ide.model.PlatformKind` / `LanguageLevel` / `LibraryKind` / `DependencyScope` | [ProjectModel.kt](../project-model-api/src/main/kotlin/dev/ide/model/ProjectModel.kt) |
+| `dev.ide.model.Facet` / `FacetKey` / `FacetContainer` | [ProjectModel.kt](../project-model-api/src/main/kotlin/dev/ide/model/ProjectModel.kt) |
+| `dev.ide.model.FacetCodec` / `FacetData` / `FacetCodecRegistry` | [FacetCodec.kt](../project-model-api/src/main/kotlin/dev/ide/model/FacetCodec.kt) |
+| `dev.ide.model.ModuleTypeRegistry` / `UnknownModuleType` | [ModuleTypeRegistry.kt](../project-model-api/src/main/kotlin/dev/ide/model/ModuleTypeRegistry.kt) |
+| `dev.ide.model.ProjectTemplateRegistry` | [ProjectTemplateRegistry.kt](../project-model-api/src/main/kotlin/dev/ide/model/ProjectTemplateRegistry.kt) |
+| `dev.ide.model.FileIconRegistry` / `FileIconProvider` / `IconTarget` | [FileIconRegistry.kt](../project-model-api/src/main/kotlin/dev/ide/model/FileIconRegistry.kt) |
+| `dev.ide.model.template.ProjectTemplate` / `ProjectScaffold` / `TemplateParameter` | [ProjectTemplate.kt](../project-model-api/src/main/kotlin/dev/ide/model/template/ProjectTemplate.kt) |
+| `dev.ide.model.sync.ProjectImporter` / `ExternalProjectModel` / `BuildFileWriter` | [ProjectSync.kt](../project-model-api/src/main/kotlin/dev/ide/model/sync/ProjectSync.kt) |
+| `dev.ide.model.ModuleSources` | [ModuleSources.kt](../project-model-api/src/main/kotlin/dev/ide/model/ModuleSources.kt) |
+
+The four registries are the read side of the model's extension points; they moved here from the unpublished
+`:project-model-impl` in SPI `2.0.0`, so a plugin resolves module types, facet codecs, templates and file
+icons through the same objects the host does. See
+[Support a language the IDE has never heard of](#support-a-language-the-ide-has-never-heard-of).
 
 ### Installed-plugin UI SPI: [`:plugin-ui-api`](../plugin-ui-api)
 

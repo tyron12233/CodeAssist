@@ -11,6 +11,9 @@ and follow the links into each subsystem.
   SPI, extension points, scoped services, events and logging, settings pages, actions, Compose UI
   contributions (tool windows, screens, overlays), shipping a plugin as its own installable app, and the
   Git and AI-agent plugins as worked examples.
+- [plugin-spi-2.0-migration.md](plugin-spi-2.0-migration.md) — the upgrade path for a plugin written
+  against SPI `1.x`: what the opened project-model vocabularies break (an exhaustive `when`), where the
+  model registries moved, and what `Module.dir` replaces.
 - [plugin-system.md](plugin-system.md) — the delivered plugin model itself: the substrate, the manifest +
   entry-point contract, the loader, how the IDE's own built-ins run through it, and how a plugin the user
   installs as a separate app is discovered and loaded.

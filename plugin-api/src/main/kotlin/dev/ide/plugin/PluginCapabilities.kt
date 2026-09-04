@@ -45,6 +45,25 @@ object PluginCapabilities {
     /** Adds a row to the Run picker, and runs it. Engine facet. */
     const val BUILD_RUN_TASK = "build.runTask"
 
+    /**
+     * Teaches the editor a language: a `LanguageBackend` (parse, resolve, complete, diagnose) and the file
+     * extensions that route to it. Engine facet.
+     */
+    const val LANG_BACKEND = "lang.backend"
+
+    /**
+     * Contributes a kind of module: a `ModuleType`, its default source-set layout, and the project templates
+     * that scaffold one. This is what a plugin for a language whose projects are not laid out like a JVM
+     * module declares. Engine facet.
+     */
+    const val MODEL_MODULE_TYPE = "model.moduleType"
+
+    /**
+     * Attaches its own configuration to the user's modules: a `Facet` plus the `FacetCodec` that persists it
+     * as a `module.toml` table. Engine facet.
+     */
+    const val MODEL_FACET = "model.facet"
+
     /** Reads the files in the user's projects. */
     const val FS_READ = "fs.read"
 
@@ -59,6 +78,7 @@ object PluginCapabilities {
         UI_ACTION, UI_SETTINGS_PAGE, UI_EDITOR_ACTION,
         UI_TOOL_WINDOW, UI_SCREEN, UI_OVERLAY,
         BUILD_TASK, BUILD_SOURCE_GENERATOR, BUILD_RUN_TASK,
+        LANG_BACKEND, MODEL_MODULE_TYPE, MODEL_FACET,
         FS_READ, FS_WRITE, NET,
     )
 
@@ -75,5 +95,6 @@ object PluginCapabilities {
     val NEEDS_ENGINE_FACET: Set<String> = linkedSetOf(
         UI_ACTION, UI_SETTINGS_PAGE, UI_EDITOR_ACTION,
         BUILD_TASK, BUILD_SOURCE_GENERATOR, BUILD_RUN_TASK,
+        LANG_BACKEND, MODEL_MODULE_TYPE, MODEL_FACET,
     )
 }

@@ -17,15 +17,22 @@ import dev.ide.platform.PluginId
  * the older artifact is loaded. `2` is where this moved when `1.2.0` added [PluginManifest.uiEntryPoints]:
  * every plugin built against `1.1.0` or earlier fails, and it is better that they are told so at the gate
  * than that they throw a `NoSuchMethodError` out of a constructor.
+ *
+ * `3` is where `2.0.0` moved it, for the same reason at a larger scale: the project model's closed
+ * vocabularies ([dev.ide.model.ContentRole], [dev.ide.model.PlatformKind], [dev.ide.model.LibraryKind],
+ * [dev.ide.model.LanguageLevel], [dev.ide.model.DependencyScope] and [dev.ide.model.ClasspathEntryKind])
+ * stopped being enums so that a plugin can name a value of its own. A plugin compiled against the enums
+ * references `Enum` members and `values()`/`valueOf` descriptors that no longer exist, which is a linkage
+ * error at first touch rather than at load.
  */
-const val PLUGIN_API_VERSION: Int = 2
+const val PLUGIN_API_VERSION: Int = 3
 
 /**
  * The version the SPI artifacts are published under, so a project that compiles against them can be
  * scaffolded with a coordinate that resolves:
  *
  * ```
- * compileOnly(platform("io.github.tyron12233:plugin-bom:1.3.0"))
+ * compileOnly(platform("io.github.tyron12233:plugin-bom:2.0.0"))
  * compileOnly("io.github.tyron12233:plugin-api")
  * compileOnly("io.github.tyron12233:platform-core")
  * ```
@@ -42,8 +49,25 @@ const val PLUGIN_API_VERSION: Int = 2
  * `plugin-ui-api`, and [PluginManifest.uiEntryPoints] to name the classes in it, which moved
  * [PLUGIN_API_VERSION] to `2`. `1.3.0` stopped requiring a plugin to declare a [PluginManifest] at all (see
  * [Plugin.manifest]), which is what keeps the next field from costing a version again.
+ *
+ * `2.0.0` is a major bump because it is the first change that can stop an existing plugin from *compiling*.
+ * It opened the project model's closed vocabularies (see [PLUGIN_API_VERSION]) so that a plugin for a
+ * language laid out unlike a JVM module can name its own content roles, platform, packaging, language level,
+ * dependency scopes and classpath-entry kinds; the constants and `values()`/`valueOf` survive, but an
+ * exhaustive `when` over one of them now needs an `else`. It also:
+ *
+ *  - promoted the model registries a plugin needs to reach ([dev.ide.model.FacetCodecRegistry],
+ *    [dev.ide.model.ModuleTypeRegistry], [dev.ide.model.ProjectTemplateRegistry],
+ *    [dev.ide.model.FileIconRegistry]) out of the unpublished `project-model-impl` into `project-model-api`;
+ *  - added `dev.ide.lang.CompilationContextProvider`, so a plugin supplies the analysis inputs for its own
+ *    language rather than receiving the model's JVM reading of a module, and gave
+ *    `dev.ide.lang.CompilationContext` defaults for every member a non-JVM language has no answer for
+ *    (`outputDir` became nullable, which narrows an existing override rather than breaking it);
+ *  - added the `lang.backend`, `model.moduleType` and `model.facet` capabilities such a plugin declares.
+ *
+ * `docs/plugin-spi-2.0-migration.md` is the upgrade path for a plugin written against `1.x`.
  */
-const val PLUGIN_SPI_VERSION: String = "1.3.0"
+const val PLUGIN_SPI_VERSION: String = "2.0.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry

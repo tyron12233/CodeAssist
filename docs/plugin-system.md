@@ -256,7 +256,7 @@ itself undisablable) and `trusted` (which follows from the origin's signature).
 id = "com.example.hello"
 name = "Hello"
 version = "1.0.0"
-apiVersion = 2
+apiVersion = 3
 description = "Adds a Hello tool window."
 entryPoints = ["com.example.hello.HelloPlugin"]
 uiEntryPoints = ["com.example.hello.HelloUiPlugin"]
