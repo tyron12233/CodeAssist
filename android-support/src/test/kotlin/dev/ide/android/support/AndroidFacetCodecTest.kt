@@ -1,8 +1,8 @@
 package dev.ide.android.support
 
 import dev.ide.model.BuildSystemId
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.ModuleTypeRegistry
+import dev.ide.model.FacetCodecRegistry
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.platform.impl.PlatformCore
 import dev.ide.testkit.testEnv

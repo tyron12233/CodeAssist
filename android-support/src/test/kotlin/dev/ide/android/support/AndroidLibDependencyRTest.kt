@@ -12,8 +12,8 @@ import dev.ide.model.DependencyScope
 import dev.ide.model.LanguageLevel
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.ModuleTypeRegistry
+import dev.ide.model.FacetCodecRegistry
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
 import dev.ide.model.LibraryRef

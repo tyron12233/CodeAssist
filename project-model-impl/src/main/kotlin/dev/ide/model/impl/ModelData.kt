@@ -2,6 +2,7 @@ package dev.ide.model.impl
 
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
+import dev.ide.model.FacetData
 import dev.ide.model.LanguageLevel
 import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
@@ -68,12 +69,6 @@ data class SourceSetData(
 data class ContentRootData(
     val dirRelPath: String,    // relative to the module dir
     val roles: Set<ContentRole>,
-)
-
-/** A facet persisted as the name of its `module.toml` table plus its declarative values. */
-data class FacetData(
-    val tomlTable: String,
-    val values: Map<String, Any?>,
 )
 
 data class LibraryData(

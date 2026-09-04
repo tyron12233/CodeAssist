@@ -9,10 +9,10 @@ import dev.ide.android.support.templates.MemoryMatchSampleTemplate
 import dev.ide.android.support.templates.SnakeSampleTemplate
 import dev.ide.android.support.templates.TicTacToeSampleTemplate
 import dev.ide.android.support.tools.SharedDexClasspath
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.FileIconRegistry
-import dev.ide.model.impl.ModuleTypeRegistry
-import dev.ide.model.impl.ProjectTemplateRegistry
+import dev.ide.model.FacetCodecRegistry
+import dev.ide.model.FileIconRegistry
+import dev.ide.model.ModuleTypeRegistry
+import dev.ide.model.ProjectTemplateRegistry
 import dev.ide.platform.PluginId
 
 /**

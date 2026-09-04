@@ -1,8 +1,10 @@
 package dev.ide.model.impl
 
-import dev.ide.model.FacetCodec
 import dev.ide.model.Facet
+import dev.ide.model.FacetCodec
+import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.FacetKey
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
 

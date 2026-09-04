@@ -1,7 +1,9 @@
 package dev.ide.model.impl
 
+import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.Module
 import dev.ide.model.ModuleId
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.WORKSPACE_SERVICE
 import dev.ide.model.Workspace
 import dev.ide.model.event.ModuleRemoved
@@ -22,8 +24,8 @@ import dev.ide.vfs.VirtualFile
 import dev.ide.vfs.local.LocalFileSystem
 import java.io.File
 import java.nio.file.Path
-import java.util.concurrent.ConcurrentHashMap
 import java.nio.file.Paths
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Holds the current immutable [WorkspaceData] snapshot and brokers atomic mutation. A commit installs

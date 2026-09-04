@@ -11,9 +11,9 @@ import dev.ide.core.sync.UnrecognizedProjectMarker
 import dev.ide.model.LanguageLevel
 import dev.ide.model.ModuleDependency
 import dev.ide.model.PlatformKind
+import dev.ide.model.ProjectTemplateRegistry
 import dev.ide.model.impl.ModelPersistence
 import dev.ide.model.impl.ProjectData
-import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.model.impl.SdkData
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateArgs

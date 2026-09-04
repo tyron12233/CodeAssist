@@ -18,7 +18,7 @@ import dev.ide.model.BuildSystemId
 import dev.ide.model.Module
 import dev.ide.model.ModuleType
 import dev.ide.model.Project
-import dev.ide.model.impl.UnknownModuleType
+import dev.ide.model.UnknownModuleType
 import dev.ide.platform.PluginId
 import dev.ide.ui.backend.RunStatus
 import kotlinx.coroutines.flow.first

@@ -3,9 +3,11 @@ package dev.ide.model.impl
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
+import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryRef
 import dev.ide.model.ModuleId
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.PlatformDependency
 import dev.ide.model.SourceSetTemplate
 import dev.ide.model.sanitizeCoordinate

@@ -1,7 +1,9 @@
 package dev.ide.model.impl
 
 import dev.ide.model.BuildSystemId
+import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.Module
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.PlatformKind
 import dev.ide.model.SdkDependency
 import dev.ide.model.SdkRef

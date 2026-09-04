@@ -5,10 +5,10 @@ import dev.ide.lang.synthetic.SyntheticClassContext
 import dev.ide.lang.synthetic.SyntheticModifier
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
+import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.Module
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.Workspace
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.testkit.testEnv
 import java.nio.file.Files

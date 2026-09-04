@@ -18,8 +18,8 @@ import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.model.BuildSystemId
 import dev.ide.model.LanguageLevel
 import dev.ide.model.ModuleId
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.ModuleTypeRegistry
+import dev.ide.model.FacetCodecRegistry
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
 import dev.ide.platform.impl.PlatformCore

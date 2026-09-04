@@ -5,6 +5,7 @@ import dev.ide.model.DependencyScope
 import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryRef
 import dev.ide.model.ModuleId
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.ProjectId
 import dev.ide.model.event.DependenciesChanged
 import dev.ide.model.event.ModuleAdded

@@ -22,13 +22,13 @@ import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
+import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.FacetTemplate
 import dev.ide.model.ModuleId
 import dev.ide.model.ModuleType
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.Project
 import dev.ide.model.SourceSetTemplate
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore

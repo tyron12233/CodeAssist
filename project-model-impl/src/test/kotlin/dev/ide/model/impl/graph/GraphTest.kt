@@ -4,8 +4,8 @@ import dev.ide.model.BuildSystemId
 import dev.ide.model.DependencyScope
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.ProjectId
-import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.withWorkspace
 import kotlin.test.Test
 import kotlin.test.assertEquals

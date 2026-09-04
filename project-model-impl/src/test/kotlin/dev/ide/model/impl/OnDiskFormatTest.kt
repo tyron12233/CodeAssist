@@ -1,17 +1,19 @@
 package dev.ide.model.impl
 
-import dev.ide.testkit.withTempDir
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
+import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryRef
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.SdkDependency
 import dev.ide.model.SdkRef
 import dev.ide.model.SourceSetTemplate
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertContains

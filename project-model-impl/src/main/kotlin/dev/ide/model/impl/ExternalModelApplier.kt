@@ -1,6 +1,7 @@
 package dev.ide.model.impl
 
 import dev.ide.model.DependencyScope
+import dev.ide.model.FacetData
 import dev.ide.model.LanguageLevel
 import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryRef

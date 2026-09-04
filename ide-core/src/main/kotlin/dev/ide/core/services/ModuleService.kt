@@ -16,16 +16,17 @@ import dev.ide.lang.kotlin.compile.SerializationCompilerPlugin
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
+import dev.ide.model.FacetData
 import dev.ide.model.LanguageLevel
 import dev.ide.model.LibraryDependency
 import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleSources
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.PlatformKind
 import dev.ide.model.SdkRef
 import dev.ide.model.SdkResolution
 import dev.ide.model.SourceSetTemplate
-import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.module
 import dev.ide.ui.backend.UiBuildFeature
 import dev.ide.ui.backend.UiBuildFeatures
@@ -141,7 +142,7 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
                 ctx.store.facetCodecs.encode(f)?.takeIf { it.tomlTable == table }?.values
             } ?: emptyMap()
             val merged = existing + values
-            val facet = ctx.store.facetCodecs.decode(dev.ide.model.impl.FacetData(table, merged))
+            val facet = ctx.store.facetCodecs.decode(FacetData(table, merged))
                 ?: return UiConfigResult(false, "No codec registered for facet '$table'.")
             facets += facet
         }
@@ -716,7 +717,7 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
         )
         val facets = ArrayList<dev.ide.model.Facet>()
         for ((table, values) in facetValues) {
-            val facet = ctx.store.facetCodecs.decode(dev.ide.model.impl.FacetData(table, values))
+            val facet = ctx.store.facetCodecs.decode(FacetData(table, values))
                 ?: return UiConfigResult(false, "No codec registered for facet '$table'.")
             facets += facet
         }

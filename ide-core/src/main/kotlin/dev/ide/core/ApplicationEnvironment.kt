@@ -2,8 +2,8 @@ package dev.ide.core
 
 import dev.ide.core.plugins.ExternalUiFacets
 import dev.ide.core.plugins.PluginManifestToml
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.ProjectTemplateRegistry
+import dev.ide.model.FacetCodecRegistry
+import dev.ide.model.ProjectTemplateRegistry
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.impl.ApplicationContainer
 import dev.ide.platform.impl.PlatformCore

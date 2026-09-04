@@ -36,13 +36,13 @@ import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.model.BuildSystemId
 import dev.ide.model.Coordinate
 import dev.ide.model.DependencyScope
+import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.LanguageLevel
 import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
 import dev.ide.model.LibraryRef
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.impl.ExternalModelApplier
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.model.sync.SyncReason
 import dev.ide.model.sync.SyncRequest

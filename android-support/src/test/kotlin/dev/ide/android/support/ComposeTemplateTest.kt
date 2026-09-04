@@ -1,11 +1,11 @@
 package dev.ide.android.support
 
 import dev.ide.android.support.templates.JetpackComposeAppTemplate
+import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.LanguageLevel
 import dev.ide.model.ModuleType
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.Workspace
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
 import dev.ide.model.template.ProjectScaffold

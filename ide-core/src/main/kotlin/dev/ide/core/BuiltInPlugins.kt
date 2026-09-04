@@ -109,12 +109,12 @@ import dev.ide.lang.postfix.POSTFIX_TEMPLATE_EP
 import dev.ide.lang.synthetic.SYNTHETIC_CLASS_EP
 import dev.ide.lang.xml.XmlLanguageBackend
 import dev.ide.lang.xml.lint.XmlAnalysisSupport
+import dev.ide.model.FacetCodecRegistry
+import dev.ide.model.FileIconRegistry
 import dev.ide.model.MODULE_SOURCES
+import dev.ide.model.ModuleTypeRegistry
+import dev.ide.model.ProjectTemplateRegistry
 import dev.ide.model.impl.DefaultFileIconProvider
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.FileIconRegistry
-import dev.ide.model.impl.ModuleTypeRegistry
-import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.model.module
 import dev.ide.model.sync.BUILD_FILE_WRITER_EP
 import dev.ide.model.sync.PROJECT_IMPORTER_EP

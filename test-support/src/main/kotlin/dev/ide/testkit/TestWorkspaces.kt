@@ -1,11 +1,11 @@
 package dev.ide.testkit
 
 import dev.ide.model.BuildSystemId
+import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.FacetTemplate
 import dev.ide.model.ModuleType
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.SourceSetTemplate
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
 import dev.ide.platform.PluginId

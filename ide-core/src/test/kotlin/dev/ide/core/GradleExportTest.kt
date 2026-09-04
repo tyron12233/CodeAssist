@@ -20,8 +20,8 @@ import dev.ide.model.ModuleType
 import dev.ide.model.PlatformDependency
 import dev.ide.model.Coordinate
 import dev.ide.model.SourceSetTemplate
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.ModuleTypeRegistry
+import dev.ide.model.FacetCodecRegistry
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore

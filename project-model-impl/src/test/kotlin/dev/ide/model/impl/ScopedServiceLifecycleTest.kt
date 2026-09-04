@@ -1,7 +1,9 @@
 package dev.ide.model.impl
 
 import dev.ide.model.BuildSystemId
+import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.ModuleId
+import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.WORKSPACE_SERVICE
 import dev.ide.model.module
 import dev.ide.model.workspace
