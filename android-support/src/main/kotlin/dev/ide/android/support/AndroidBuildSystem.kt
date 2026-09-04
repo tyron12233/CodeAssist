@@ -1274,12 +1274,8 @@ class AndroidBuildSystem(
          */
         private fun extMergeThreshold(minSdk: Int): Int = if (minSdk < 23) 50 else 500
 
-        private fun levelOf(level: LanguageLevel): String = when (level) {
-            LanguageLevel.JAVA_8 -> "8"
-            LanguageLevel.JAVA_11 -> "11"
-            LanguageLevel.JAVA_17 -> "17"
-            LanguageLevel.JAVA_21 -> "21"
-        }
+        /** javac's `-source`/`-target`. A level that names no Java version builds at the default. */
+        private fun levelOf(level: LanguageLevel): String = level.javaVersion.toString()
 
         /**
          * Desktop wiring: every tool is a subprocess over an installed SDK (`java -cp d8.jar …`,

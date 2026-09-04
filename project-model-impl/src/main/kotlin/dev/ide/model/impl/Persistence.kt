@@ -142,7 +142,7 @@ object ModelPersistence {
                 table["scope"] = ss.scope.name
                 val byKey = LinkedHashMap<String, MutableList<String>>()
                 for (cr in ss.contentRoots) {
-                    for (role in cr.roles.sortedBy { it.ordinal }) {
+                    for (role in cr.roles.sortedWith(ROLE_ORDER)) {
                         byKey.getOrPut(roleKey(role)) { ArrayList() }.add(cr.dirRelPath)
                     }
                 }
@@ -351,11 +351,13 @@ object ModelPersistence {
             val ssTable = ssTableAny.asObject()
             val scope = DependencyScope.valueOf(ssTable["scope"] as String)
             val byDir = LinkedHashMap<String, MutableSet<ContentRole>>()
-            for ((k, v) in ssTable) {
-                val key = k
+            for ((key, value) in ssTable) {
                 if (key == "scope") continue
-                val role = roleForKey(key) ?: continue
-                for (dirAny in (v as List<*>)) {
+                // Any other key is a role, built-in or a plugin's own, and its value is the list of dirs
+                // holding it. A key carrying anything else is a hand-edit, skipped rather than thrown on.
+                val dirs = value as? List<*> ?: continue
+                val role = roleForKey(key)
+                for (dirAny in dirs) {
                     byDir.getOrPut(dirAny as String) { linkedSetOf() }.add(role)
                 }
             }
@@ -414,45 +416,50 @@ object ModelPersistence {
     private fun resolveRel(base: Path, rel: String): Path =
         if (rel.isEmpty() || rel == ".") base else base.resolve(rel).normalize()
 
-    private fun roleKey(role: ContentRole): String = when (role) {
-        ContentRole.SOURCE -> "java"
-        ContentRole.RESOURCE -> "resources"
-        ContentRole.ANDROID_RES -> "res"
-        ContentRole.AIDL -> "aidl"
-        ContentRole.ASSETS -> "assets"
-        ContentRole.JNI_LIBS -> "jniLibs"
-        ContentRole.GENERATED -> "generated"
-        ContentRole.EXCLUDED -> "excluded"
-    }
+    /**
+     * The built-in roles keep the Gradle source-directory spellings they have always been written under, so
+     * an existing `module.toml` is unaffected by [ContentRole] becoming open. A role the core does not own is
+     * written under its own [ContentRole.id], which is what lets a plugin's source layout persist at all.
+     */
+    private val BUILT_IN_ROLE_KEYS: Map<ContentRole, String> = linkedMapOf(
+        ContentRole.SOURCE to "java",
+        ContentRole.RESOURCE to "resources",
+        ContentRole.ANDROID_RES to "res",
+        ContentRole.AIDL to "aidl",
+        ContentRole.ASSETS to "assets",
+        ContentRole.JNI_LIBS to "jniLibs",
+        ContentRole.GENERATED to "generated",
+        ContentRole.EXCLUDED to "excluded",
+    )
 
-    private fun roleForKey(key: String): ContentRole? = when (key) {
-        "java" -> ContentRole.SOURCE
-        "resources" -> ContentRole.RESOURCE
-        "res" -> ContentRole.ANDROID_RES
-        "aidl" -> ContentRole.AIDL
-        "assets" -> ContentRole.ASSETS
-        "jniLibs" -> ContentRole.JNI_LIBS
-        "generated" -> ContentRole.GENERATED
-        "excluded" -> ContentRole.EXCLUDED
-        else -> null
-    }
+    private val ROLES_BY_KEY: Map<String, ContentRole> =
+        BUILT_IN_ROLE_KEYS.entries.associate { (role, key) -> key to role }
 
-    private fun scopeKey(scope: DependencyScope): String = when (scope) {
-        DependencyScope.API -> "api"
-        DependencyScope.IMPLEMENTATION -> "implementation"
-        DependencyScope.COMPILE_ONLY -> "compileOnly"
-        DependencyScope.RUNTIME_ONLY -> "runtimeOnly"
-        DependencyScope.TEST_IMPLEMENTATION -> "testImplementation"
-    }
+    /** Built-in roles first, in declaration order, then a plugin's own by id: the on-disk order is canonical. */
+    private val ROLE_ORDER: Comparator<ContentRole> = compareBy(
+        { ContentRole.entries.indexOf(it).takeIf { i -> i >= 0 } ?: ContentRole.entries.size },
+        { it.id },
+    )
 
-    private fun scopeForKey(key: String): DependencyScope? = when (key) {
-        "api" -> DependencyScope.API
-        "implementation" -> DependencyScope.IMPLEMENTATION
-        "compileOnly" -> DependencyScope.COMPILE_ONLY
-        "runtimeOnly" -> DependencyScope.RUNTIME_ONLY
-        "testImplementation" -> DependencyScope.TEST_IMPLEMENTATION
-        else -> null
-    }
+    private fun roleKey(role: ContentRole): String = BUILT_IN_ROLE_KEYS[role] ?: role.id
+
+    /**
+     * Total, unlike the closed version it replaces: a key that is not one of the built-in spellings is a
+     * plugin's role, not a stray. The caller filters `scope` out first, and the writer emits nothing else
+     * into a source-set table, so every remaining key is a role.
+     */
+    private fun roleForKey(key: String): ContentRole = ROLES_BY_KEY[key] ?: ContentRole(key)
+
+    private fun scopeKey(scope: DependencyScope): String = scope.id
+
+    /**
+     * Stays PARTIAL on purpose, even though [DependencyScope] is now open. A `[dependencies]` table mixes
+     * scope-keyed lists with per-variant sub-tables (`[dependencies.debug]`), and the loader tells them apart
+     * by whether the key names a scope. A total lookup would read `debug` as a scope and then fail casting
+     * its sub-table to a list, so an unregistered scope id is skipped rather than guessed at, which is what
+     * [DependencyScope.register] exists to prevent.
+     */
+    private fun scopeForKey(key: String): DependencyScope? = DependencyScope.byId(key)
 
     @Suppress("UNCHECKED_CAST")
     private fun Any?.asObject(): Map<String, Any?> = this as Map<String, Any?>

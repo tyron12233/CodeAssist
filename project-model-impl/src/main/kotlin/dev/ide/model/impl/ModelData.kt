@@ -87,13 +87,9 @@ data class SdkData(
 
 // --- canonicalization ---
 
-private fun scopeOrder(scope: DependencyScope): Int = when (scope) {
-    DependencyScope.API -> 0
-    DependencyScope.IMPLEMENTATION -> 1
-    DependencyScope.COMPILE_ONLY -> 2
-    DependencyScope.RUNTIME_ONLY -> 3
-    DependencyScope.TEST_IMPLEMENTATION -> 4
-}
+/** Built-in scopes sort in declaration order; a plugin's own scope sorts after them, then by name. */
+private fun scopeOrder(scope: DependencyScope): Int =
+    DependencyScope.entries.indexOf(scope).takeIf { it >= 0 } ?: DependencyScope.entries.size
 
 /** `exported` follows `api` semantics: true iff the scope is API. */
 private fun OrderEntry.normalizedExported(): OrderEntry {
@@ -126,6 +122,6 @@ private fun normalizeModule(m: ModuleData): ModuleData = m.copy(
     // declaration order *within* a (variant, scope) group (which is what classpath search order depends on).
     // For a shared-only module every variant is null, so this reduces to the prior scope-only sort.
     dependencies = m.dependencies.map { it.normalizedExported() }
-        .sortedWith(compareBy({ it.variant ?: "" }, { scopeOrder(it.scope) })),
+        .sortedWith(compareBy({ it.variant ?: "" }, { scopeOrder(it.scope) }, { it.scope.name })),
     facets = m.facets.sortedBy { it.tomlTable },
 )

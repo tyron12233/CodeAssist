@@ -78,7 +78,47 @@ fun sanitizeLibraryName(name: String): String =
 private fun Char.isInvisibleInCoordinate(): Boolean =
     isWhitespace() || category == CharCategory.FORMAT || category == CharCategory.CONTROL
 
-enum class LanguageLevel { JAVA_8, JAVA_11, JAVA_17, JAVA_21 }
+/**
+ * The source/target level a module compiles and is analyzed at.
+ *
+ * Open rather than an enum so a plugin for a language with its own versioning (a Python interpreter level, a
+ * C++ standard) can name one: every [Module] carries a level, and a closed Java-only set forced such a module
+ * to claim a Java version it has nothing to do with. [name] is the persisted spelling, so the built-ins keep
+ * the `JAVA_17` form already in `module.toml`.
+ *
+ * [values] lists the built-ins (what the module-settings picker offers); [valueOf] is total, so a level a
+ * plugin defined round-trips through persistence even when that plugin is not loaded.
+ */
+@JvmInline
+value class LanguageLevel(val name: String) {
+    override fun toString(): String = name
+
+    /**
+     * The Java version this level denotes (`JAVA_17` -> `17`). A level the JVM toolchain does not own (a
+     * plugin's own language versioning) has no Java version of its own and reads as [DEFAULT]'s, so a build
+     * or analysis path that must produce a `-source`/`-target` argument gets one javac accepts rather than a
+     * string it rejects.
+     */
+    val javaVersion: Int get() = name.removePrefix("JAVA_").toIntOrNull() ?: 17
+
+    companion object {
+        val JAVA_8 = LanguageLevel("JAVA_8")
+        val JAVA_11 = LanguageLevel("JAVA_11")
+        val JAVA_17 = LanguageLevel("JAVA_17")
+        val JAVA_21 = LanguageLevel("JAVA_21")
+
+        /** The Java levels the IDE itself provides, in ascending order. */
+        val entries: List<LanguageLevel> = listOf(JAVA_8, JAVA_11, JAVA_17, JAVA_21)
+
+        /** Assumed when a module records no level, and the JVM reading of a level that names no Java version. */
+        val DEFAULT: LanguageLevel = JAVA_17
+
+        fun values(): List<LanguageLevel> = entries
+
+        /** Total: an unrecognized [name] is a level some plugin owns, not a failure. */
+        fun valueOf(name: String): LanguageLevel = LanguageLevel(name)
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Containment hierarchy: Workspace > Project > Module > SourceSet > ContentRoot
@@ -170,14 +210,40 @@ interface ContentRoot {
     val roles: Set<ContentRole>
 }
 
-enum class ContentRole {
-    SOURCE,
+/**
+ * What a [ContentRoot] holds. Open rather than an enum: the built-in set is the JVM/Android one, and a plugin
+ * for another language needs roles the core has never heard of (C++ headers, a Python typeshed) to model a
+ * module's layout at all.
+ *
+ * [id] is the identity: two roles with the same id are the same role, and it is what a plugin should keep
+ * stable. It is not necessarily the `module.toml` spelling: the built-ins persist under the Gradle
+ * source-directory names (`SOURCE` is written as `java`) for compatibility, while a plugin role persists
+ * under its [id]. Pick an id unlikely to collide with those names, since the on-disk key is a flat namespace.
+ */
+@JvmInline
+value class ContentRole(val id: String) {
+    override fun toString(): String = id
 
-    /** Java/JVM resources (`src/<set>/resources`) — non-code files packaged into the jar/APK root. */
-    RESOURCE, ANDROID_RES, AIDL, ASSETS,
+    companion object {
+        val SOURCE = ContentRole("source")
 
-    /** Prebuilt native libraries (`src/<set>/jniLibs`), laid out `<abi>/lib*.so`, packaged under `lib/`. */
-    JNI_LIBS, GENERATED, EXCLUDED,
+        /** Java/JVM resources (`src/<set>/resources`): non-code files packaged into the jar/APK root. */
+        val RESOURCE = ContentRole("resource")
+        val ANDROID_RES = ContentRole("android-res")
+        val AIDL = ContentRole("aidl")
+        val ASSETS = ContentRole("assets")
+
+        /** Prebuilt native libraries (`src/<set>/jniLibs`), laid out `<abi>/lib*.so`, packaged under `lib/`. */
+        val JNI_LIBS = ContentRole("jni-libs")
+        val GENERATED = ContentRole("generated")
+        val EXCLUDED = ContentRole("excluded")
+
+        /** The roles the IDE itself provides. A plugin's own roles are not listed here. */
+        val entries: List<ContentRole> =
+            listOf(SOURCE, RESOURCE, ANDROID_RES, AIDL, ASSETS, JNI_LIBS, GENERATED, EXCLUDED)
+
+        fun values(): List<ContentRole> = entries
+    }
 }
 
 interface ProjectSettings {
@@ -195,7 +261,23 @@ interface ProjectSettings {
  * matching [Sdk.kind]; the two are kept apart so a plain Java/Kotlin module never sees `android.*` and an
  * Android module never sees a raw JDK. Gradle makes the same split by which plugin is applied.
  */
-enum class PlatformKind { JVM, ANDROID }
+@JvmInline
+value class PlatformKind(val name: String) {
+    override fun toString(): String = name
+
+    companion object {
+        val JVM = PlatformKind("JVM")
+        val ANDROID = PlatformKind("ANDROID")
+
+        /** The platforms the IDE itself provides. A plugin's own platform is not listed here. */
+        val entries: List<PlatformKind> = listOf(JVM, ANDROID)
+
+        fun values(): List<PlatformKind> = entries
+
+        /** Total: an unrecognized [name] is a platform some plugin owns. [name] is the persisted spelling. */
+        fun valueOf(name: String): PlatformKind = PlatformKind(name)
+    }
+}
 
 /** Extensible, not an enum: android-support contributes android-app/android-lib, java-support java-lib/java-cli. */
 interface ModuleType {
@@ -326,19 +408,90 @@ data class PlatformDependency(
     override val variant: String? = null,
 ) : OrderEntry
 
-enum class DependencyScope(val onCompile: Boolean, val onRuntime: Boolean, val onTest: Boolean) {
-    API(true, true, true),
+/**
+ * Which classpaths an [OrderEntry] lands on. Open rather than an enum so a plugin can declare a scope its own
+ * toolchain needs (a C++ `linkOnly`, a Python `buildRequires`) instead of forcing every dependency through the
+ * five Gradle-shaped ones.
+ *
+ * Identity is [name] alone, so two scopes agreeing on the name are equal whichever instance is in hand. It
+ * carries **two** on-disk spellings, both of which the model already had:
+ *  - [name] (`IMPLEMENTATION`) is a source set's persisted `scope = ` value.
+ *  - [id] (`implementation`) is the key a `[dependencies]` table groups declarations under, which is also
+ *    what the declaration reads as in a Gradle build file.
+ *
+ * A plugin that defines a scope should [register] it, so that loading a project which uses it resolves the
+ * real scope with its real classpath semantics. Without that, an unregistered scope still round-trips by
+ * name, but [valueOf] can only re-derive it permissively (on every classpath), and a `[dependencies]` table
+ * keyed by its [id] is skipped rather than guessed at.
+ */
+class DependencyScope(
+    val name: String,
+    val id: String,
+    val onCompile: Boolean,
+    val onRuntime: Boolean,
+    val onTest: Boolean,
+) {
+    override fun equals(other: Any?): Boolean = this === other || (other is DependencyScope && other.name == name)
+    override fun hashCode(): Int = name.hashCode()
+    override fun toString(): String = name
 
-    IMPLEMENTATION(true, true, true),
+    companion object {
+        val API = DependencyScope("API", "api", onCompile = true, onRuntime = true, onTest = true)
 
-    COMPILE_ONLY(
-        true,
-        false,
-        true
-    ),
-    RUNTIME_ONLY(false, true, true),
+        val IMPLEMENTATION =
+            DependencyScope("IMPLEMENTATION", "implementation", onCompile = true, onRuntime = true, onTest = true)
 
-    TEST_IMPLEMENTATION(false, false, true),
+        val COMPILE_ONLY =
+            DependencyScope("COMPILE_ONLY", "compileOnly", onCompile = true, onRuntime = false, onTest = true)
+
+        val RUNTIME_ONLY =
+            DependencyScope("RUNTIME_ONLY", "runtimeOnly", onCompile = false, onRuntime = true, onTest = true)
+
+        val TEST_IMPLEMENTATION =
+            DependencyScope(
+                "TEST_IMPLEMENTATION", "testImplementation",
+                onCompile = false, onRuntime = false, onTest = true,
+            )
+
+        /** The scopes the IDE itself provides, in classpath-declaration order. */
+        val entries: List<DependencyScope> =
+            listOf(API, IMPLEMENTATION, COMPILE_ONLY, RUNTIME_ONLY, TEST_IMPLEMENTATION)
+
+        fun values(): List<DependencyScope> = entries
+
+        /**
+         * Every scope resolvable by [name] or [id]: the built-ins plus whatever plugins have registered.
+         * Guarded because plugins register on the load thread while a project may be opening on another.
+         */
+        private val known = LinkedHashMap<String, DependencyScope>().also { m ->
+            for (scope in entries) m[scope.name] = scope
+        }
+
+        /**
+         * Make [scope] resolvable when a project that persisted it is loaded. Idempotent, and safe to call
+         * from a plugin's `register`. Returns [scope] so it can wrap a declaration:
+         * `val LINK_ONLY = DependencyScope.register(DependencyScope("LINK_ONLY", "linkOnly", ...))`.
+         */
+        fun register(scope: DependencyScope): DependencyScope {
+            synchronized(known) { known[scope.name] = scope }
+            return scope
+        }
+
+        /** Every registered scope: the built-ins first, then plugin-defined ones in registration order. */
+        fun registered(): List<DependencyScope> = synchronized(known) { known.values.toList() }
+
+        /**
+         * Total, so a project whose source set names a scope from a plugin that is not loaded still opens.
+         * An unknown name is re-derived permissively (on every classpath), which keeps a dependency visible
+         * rather than silently dropping it from the compile classpath.
+         */
+        fun valueOf(name: String): DependencyScope =
+            synchronized(known) { known[name] }
+                ?: DependencyScope(name, name, onCompile = true, onRuntime = true, onTest = true)
+
+        /** The scope whose [id] is [id] (the `[dependencies]` table key), or null if nothing registered it. */
+        fun byId(id: String): DependencyScope? = synchronized(known) { known.values.firstOrNull { it.id == id } }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -381,7 +534,27 @@ interface Library {
     val sourcesRoots: List<VirtualFile>
 }
 
-enum class LibraryKind { JAR, AAR }
+/**
+ * What a [Library]'s classes roots are packaged as. Open so a plugin can name a package format of its own
+ * (a Python wheel, a prebuilt native archive) instead of mislabelling it a jar. [name] is persisted.
+ */
+@JvmInline
+value class LibraryKind(val name: String) {
+    override fun toString(): String = name
+
+    companion object {
+        val JAR = LibraryKind("JAR")
+        val AAR = LibraryKind("AAR")
+
+        /** The packaging kinds the IDE itself provides. */
+        val entries: List<LibraryKind> = listOf(JAR, AAR)
+
+        fun values(): List<LibraryKind> = entries
+
+        /** Total: an unrecognized [name] is a kind some plugin owns. */
+        fun valueOf(name: String): LibraryKind = LibraryKind(name)
+    }
+}
 
 interface ModifiableLibrary {
     var kind: LibraryKind

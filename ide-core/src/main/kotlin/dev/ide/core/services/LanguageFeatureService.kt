@@ -83,12 +83,9 @@ internal class LanguageFeatureService(private val ctx: EngineContext) {
         return null
     }
 
-    private fun jdtComplianceOf(level: LanguageLevel): String = when (level) {
-        LanguageLevel.JAVA_8 -> "1.8"
-        LanguageLevel.JAVA_11 -> "11"
-        LanguageLevel.JAVA_17 -> "17"
-        LanguageLevel.JAVA_21 -> "21"
-    }
+    /** JDT spells 8 as `1.8` and every later version bare; a non-Java level formats at LanguageLevel.DEFAULT. */
+    private fun jdtComplianceOf(level: LanguageLevel): String =
+        if (level == LanguageLevel.JAVA_8) "1.8" else level.javaVersion.toString()
 
     /** Format the built-in code sample for [languageId] with [style] and return the result — for the Code
      *  Style screen's live preview. Module-independent: it builds a standalone formatter, so it works with no

@@ -885,19 +885,13 @@ object GradleProjectExport {
     // Small helpers
     // ---------------------------------------------------------------------------------------------
 
-    private fun javaVersion(level: LanguageLevel): String = when (level) {
-        LanguageLevel.JAVA_8 -> "JavaVersion.VERSION_1_8"
-        LanguageLevel.JAVA_11 -> "JavaVersion.VERSION_11"
-        LanguageLevel.JAVA_17 -> "JavaVersion.VERSION_17"
-        LanguageLevel.JAVA_21 -> "JavaVersion.VERSION_21"
-    }
+    // Gradle spells 8 as `1_8` and every later version bare. A level that names no Java version exports at
+    // LanguageLevel.DEFAULT, which is what the exported project can actually be built with.
+    private fun javaVersion(level: LanguageLevel): String =
+        if (level == LanguageLevel.JAVA_8) "JavaVersion.VERSION_1_8" else "JavaVersion.VERSION_${level.javaVersion}"
 
-    private fun jvmTarget(level: LanguageLevel): String = when (level) {
-        LanguageLevel.JAVA_8 -> "JVM_1_8"
-        LanguageLevel.JAVA_11 -> "JVM_11"
-        LanguageLevel.JAVA_17 -> "JVM_17"
-        LanguageLevel.JAVA_21 -> "JVM_21"
-    }
+    private fun jvmTarget(level: LanguageLevel): String =
+        if (level == LanguageLevel.JAVA_8) "JVM_1_8" else "JVM_${level.javaVersion}"
 
     /** Kotlin-DSL string escaping: a build file is Kotlin source, so a quote or backslash has to survive. */
     private fun escape(text: String): String =
@@ -961,11 +955,6 @@ object GradleProjectExport {
     }
 }
 
-/** The Gradle configuration name a model dependency scope declares into. */
-internal fun gradleConfiguration(scope: DependencyScope): String = when (scope) {
-    DependencyScope.API -> "api"
-    DependencyScope.IMPLEMENTATION -> "implementation"
-    DependencyScope.COMPILE_ONLY -> "compileOnly"
-    DependencyScope.RUNTIME_ONLY -> "runtimeOnly"
-    DependencyScope.TEST_IMPLEMENTATION -> "testImplementation"
-}
+/** The Gradle configuration name a model dependency scope declares into, which is what [DependencyScope.id]
+ *  is: the built-ins were named after these configurations, and a plugin's own scope names its own. */
+internal fun gradleConfiguration(scope: DependencyScope): String = scope.id

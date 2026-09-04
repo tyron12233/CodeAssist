@@ -755,13 +755,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
     private fun findLibrary(name: String) = ctx.store.workspace.libraryTable.byName(name)
         ?: ctx.store.workspace.projects.firstNotNullOfOrNull { it.libraryTable.byName(name) }
 
-    private fun scopeLabel(scope: DependencyScope): String = when (scope) {
-        DependencyScope.API -> "api"
-        DependencyScope.IMPLEMENTATION -> "implementation"
-        DependencyScope.COMPILE_ONLY -> "compileOnly"
-        DependencyScope.RUNTIME_ONLY -> "runtimeOnly"
-        DependencyScope.TEST_IMPLEMENTATION -> "testImplementation"
-    }
+    private fun scopeLabel(scope: DependencyScope): String = scope.id
 
     private fun parseScope(label: String): DependencyScope =
         when (label.lowercase().replace("_", "").replace("-", "")) {

@@ -72,12 +72,8 @@ fun outputDir(module: Module): Path = Paths.get(module.outputDir.path)
 fun jarPath(module: Module): Path =
     Paths.get(module.outputDir.path).resolveSibling("libs").resolve("${module.name}.jar")
 
-fun levelOf(level: LanguageLevel): String = when (level) {
-    LanguageLevel.JAVA_8 -> "8"
-    LanguageLevel.JAVA_11 -> "11"
-    LanguageLevel.JAVA_17 -> "17"
-    LanguageLevel.JAVA_21 -> "21"
-}
+/** javac's `-source`/`-target` argument. A level that names no Java version compiles at the default. */
+fun levelOf(level: LanguageLevel): String = level.javaVersion.toString()
 
 /** Jar [classesDir], optionally rewriting each entry's bytes via [transform] (entryName, bytes) — used by
  *  the `jar` lifecycle task. The default identity transform is plain jarring. [mainClass], when set, becomes

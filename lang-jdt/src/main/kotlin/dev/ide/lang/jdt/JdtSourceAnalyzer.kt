@@ -233,6 +233,9 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable, J
         LanguageLevel.JAVA_11 -> ClassFileConstants.JDK11
         LanguageLevel.JAVA_17 -> ClassFileConstants.JDK17
         LanguageLevel.JAVA_21 -> ClassFileConstants.JDK21
+        // A level the JVM toolchain does not own (a plugin's own language versioning). Java analysis of such
+        // a module is not meaningful anyway, so it runs at LanguageLevel.DEFAULT rather than refusing.
+        else -> ClassFileConstants.JDK17
     }
 
     /**
@@ -603,6 +606,7 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable, J
         LanguageLevel.JAVA_11 -> JavaCore.VERSION_11
         LanguageLevel.JAVA_17 -> JavaCore.VERSION_17
         LanguageLevel.JAVA_21 -> JavaCore.VERSION_21
+        else -> JavaCore.VERSION_17 // see complianceLevelOf: LanguageLevel.DEFAULT for a non-Java level
     }
 }
 
