@@ -11,6 +11,7 @@ import dev.ide.analytics.Events
 import dev.ide.android.fork.ForkedKotlinCompiler
 import dev.ide.android.fork.ProcessIdentity
 import dev.ide.android.plugins.ApkPluginSource
+import dev.ide.android.plugins.PluginPackageWatcher
 import dev.ide.android.preview.SwingAwareProgramInterpreter
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.build.jvm.run.VmProgramInterpreter
@@ -18,6 +19,7 @@ import dev.ide.analytics.impl.AnalyticsLogSink
 import dev.ide.analytics.impl.DefaultAnalyticsService
 import dev.ide.analytics.impl.SupabaseSink
 import dev.ide.core.ANALYTICS_SERVICE
+import dev.ide.core.APP_RESTARTER
 import dev.ide.core.NOTIFICATION_PRESENTER
 import dev.ide.core.STORE_ACCOUNT_SERVICE
 import dev.ide.core.STORE_CATALOG_SOURCE
@@ -133,6 +135,12 @@ object AndroidIde {
         // Process-wide uncaught-exception handler: report app_crash + surface the non-fatal dialog + keep the
         // app alive (the MainActivity main-thread guard handles the UI looper). See IdeServicesBackend.
         backend.installCrashReporting()
+        // Plugins load once per process, so applying an installed plugin's change means starting again. Both
+        // halves of that are wired here, and only in the UI process: the restart itself, and the watch that
+        // notices a plugin app being installed, updated or uninstalled while the IDE is running (the `:build`
+        // and `:preview` processes stand up their own managers and have no screen to report it on).
+        manager.applicationContainer.registerServiceIfAbsent(APP_RESTARTER) { AppRestart(appContext) }
+        PluginPackageWatcher(appContext, ApkPluginSource(appContext), manager.pluginChanges).register()
         // Notifications that arrived by push while no engine existed (see CodeAssistMessagingService).
         runCatching { backend.adoptHostNotifications(PendingPushes.drain(appContext)) }
         // Register this device for push. Off the main thread and best-effort: a launch that cannot reach

@@ -280,6 +280,14 @@ internal fun AppNavGraph(
                         app.navigateTo(Screen.Editor)
                     }
                 } else null,
+                // A restart takes the whole app down, so every modified buffer is written first. Offered only
+                // where the host can restart itself; the screen states the restart either way.
+                onRestart = if (state.backend.settings.canRestartApplication()) {
+                    {
+                        state.saveAllNow()
+                        state.backend.settings.restartApplication()
+                    }
+                } else null,
             )
 
             Screen.Storage -> StorageScreen(

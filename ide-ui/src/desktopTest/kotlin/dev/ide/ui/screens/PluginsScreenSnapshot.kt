@@ -12,6 +12,8 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.unit.Density
 import dev.ide.ui.StubBackend
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.backend.UiPluginChange
+import dev.ide.ui.backend.UiPluginChangeKind
 import dev.ide.ui.backend.UiPluginInfo
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
@@ -24,7 +26,8 @@ import kotlin.test.Test
  * load failure, and a plugin whose manifest could not be read at all, which gets a reason and no switch) can
  * be eyeballed without launching the app; also guards that it renders without a runtime
  * layout error. The Installed tab is reached by a real click on the tab, so the switch is exercised the way a
- * user reaches it rather than by poking state.
+ * user reaches it rather than by poking state. A separate case renders the restart hint: the plugin changes
+ * waiting to be applied, named, with the Restart button a host that can restart itself provides.
  */
 class PluginsScreenSnapshot {
 
@@ -61,6 +64,20 @@ class PluginsScreenSnapshot {
         )
     }
 
+    /** A plugin app updated on the device and a plugin turned off, both waiting for a restart. */
+    private class WaitingBackend : StubBackend() {
+        private val delegate = FakeBackend()
+
+        override fun pluginCatalog(): List<UiPluginInfo> = delegate.pluginCatalog()
+
+        override fun pendingPluginChanges(): List<UiPluginChange> = listOf(
+            UiPluginChange("Hello", UiPluginChangeKind.UPDATED),
+            UiPluginChange("Sample Projects", UiPluginChangeKind.DISABLED),
+        )
+
+        override fun canRestartApplication(): Boolean = true
+    }
+
     /** With nothing installed, the Installed tab still exists and shows its empty state. */
     private class NoInstalledBackend : StubBackend() {
         override fun pluginCatalog(): List<UiPluginInfo> = listOf(
@@ -84,11 +101,23 @@ class PluginsScreenSnapshot {
         snapshot("plugins-installed-empty.png", NoInstalledBackend(), clickInstalledTab = true)
     }
 
+    @Test
+    fun renderWaitingChangesWithRestart() {
+        snapshot("plugins-restart-pending.png", WaitingBackend(), onRestart = {})
+    }
+
     @OptIn(ExperimentalComposeUiApi::class)
-    private fun snapshot(name: String, backend: IdeBackend, clickInstalledTab: Boolean = false) {
+    private fun snapshot(
+        name: String,
+        backend: IdeBackend,
+        clickInstalledTab: Boolean = false,
+        onRestart: (() -> Unit)? = null,
+    ) {
         val scene = ImageComposeScene(width = WIDTH, height = HEIGHT, density = Density(2f)) {
             CodeAssistTheme(dark = true) {
-                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) { PluginsScreen(backend, onBack = {}) }
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    PluginsScreen(backend, onBack = {}, onRestart = onRestart)
+                }
             }
         }
         try {

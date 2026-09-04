@@ -1035,6 +1035,14 @@
     <string name="storage_cat_other_title">其他</string>
     <string name="storage_cat_other_desc">密钥库、备份和应用数据</string>
     <string name="plugins_restart_hint">重启后将应用插件更改。</string>
+    <string name="plugins_restart_now">立即重启</string>
+    <string name="plugins_restarting">正在重启…</string>
+    <string name="plugins_change_installed">已安装</string>
+    <string name="plugins_change_updated">已更新</string>
+    <string name="plugins_change_uninstalled">已卸载</string>
+    <string name="plugins_change_enabled">已开启</string>
+    <string name="plugins_change_disabled">已关闭</string>
+    <string name="plugins_changes_more">还有 %1$d 项</string>
     <string name="plugins_required">必需</string>
     <string name="plugins_requires">需要 %1$s</string>
     <string name="plugins_tab_builtin">内置</string>

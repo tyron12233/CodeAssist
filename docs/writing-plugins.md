@@ -136,7 +136,9 @@ Two rules follow from that table:
    time**. Every capturing built-in does exactly this. See `CompletionBuiltinsPlugin`, `AndroidXmlPlugin`,
    and `IdeCoreActionsPlugin` in `BuiltInPlugins.kt`.
 2. **Enable/disable is applied on restart.** The manager loads once and does not hot-swap. The catalog
-   reflects persisted intent, not a live toggle.
+   reflects persisted intent, not a live toggle. The same holds for the plugin apps on the device: the IDE
+   records what changed about them while it was running (installed, updated, uninstalled) and the Plugins
+   screen applies the lot with one restart. See §13.1.
 
 ### 2.4 The substrate (`platform-core`)
 
@@ -1664,8 +1666,17 @@ drawer rendering nothing at all, because the host has no chat-specific chrome to
 **Built-in** plugins ship inside the IDE; **Installed** plugins came from a separate app the user installed,
 and each of those rows also carries the package it came from and, if it did not load this launch, why. Each
 tab label carries its count, so an installed plugin is visible without switching tabs.
-Essential plugins show a locked "Required" pill, which never applies to an installed plugin. Changing a toggle
-shows a restart hint, because enable/disable is applied on the next launch.
+Essential plugins show a locked "Required" pill, which never applies to an installed plugin.
+
+Nothing on this screen is live, because plugins are loaded once per process. So the screen carries a hint
+naming everything a restart would apply, and a **Restart now** button that applies it. What lands in that
+list is both the answers given here and what has happened to the plugin apps on the device since launch:
+`PluginPackageWatcher` (in `:ide-android`) watches the package manager and records an install, an install over
+an existing plugin, or an uninstall on
+[`PluginChanges`](../ide-core/src/main/kotlin/dev/ide/core/plugins/PluginChanges.kt). A change is listed only
+when a restart would load something different, so toggling a plugin off and back on leaves nothing waiting.
+The restart takes every process of the app down, including the `:build` daemon and `:preview`, since each one
+loaded the installed plugins for itself; modified editor buffers are written to disk first.
 
 The state flows: `PluginsScreen` → `SettingsService.setPluginEnabled(id, enabled)` →
 [`SettingsBackend`](../ide-core/src/main/kotlin/dev/ide/core/backend/SettingsBackend.kt) →
@@ -2061,6 +2072,11 @@ What to expect at runtime:
   `capabilities` accurately: it is what the user reads before deciding.
 - Changing your plugin's enabled state takes effect on the IDE's next launch; the manager loads once at
   startup and does not hot-swap.
+- Installing a new build of your plugin over the old one does not change the running IDE either, and it is
+  the case with no other symptom: the classloader it already has reads the install path from before the
+  update, so your plugin goes on behaving exactly as it did. The IDE reports the update on its row in
+  **Settings > Plugins** and applies it with the **Restart now** button there. Installing from the IDE's own
+  Run row says the same thing in the build console.
 - If your entry point throws, your plugin is rolled back and skipped with the reason shown on its row. The
   IDE still starts, and so does every other plugin that does not depend on yours.
 

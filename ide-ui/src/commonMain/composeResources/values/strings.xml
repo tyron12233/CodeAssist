@@ -1039,6 +1039,14 @@ We never collect your code, file or project names, which features you use, or an
     <string name="storage_cat_other_title">Other</string>
     <string name="storage_cat_other_desc">Keystores, backups, and app data</string>
     <string name="plugins_restart_hint">Restart to apply your plugin changes.</string>
+    <string name="plugins_restart_now">Restart now</string>
+    <string name="plugins_restarting">Restarting…</string>
+    <string name="plugins_change_installed">installed</string>
+    <string name="plugins_change_updated">updated</string>
+    <string name="plugins_change_uninstalled">uninstalled</string>
+    <string name="plugins_change_enabled">turned on</string>
+    <string name="plugins_change_disabled">turned off</string>
+    <string name="plugins_changes_more">and %1$d more</string>
     <string name="plugins_required">Required</string>
     <string name="plugins_review">Review</string>
     <string name="plugins_logs">Logs</string>

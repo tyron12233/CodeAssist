@@ -5,6 +5,8 @@ import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.android.support.tools.KeystoreRegistry
 import dev.ide.build.engine.ProgramInterpreter
 import dev.ide.core.gradle.GradleProjectExport
+import dev.ide.core.plugins.KnownPlugin
+import dev.ide.core.plugins.PluginChanges
 import dev.ide.core.sync.ExternalProjectMarker
 import dev.ide.core.sync.ProjectSyncService
 import dev.ide.core.sync.UnrecognizedProjectMarker
@@ -147,6 +149,24 @@ class ProjectManager private constructor(
         consentedPluginIds = consentedPlugins(),
         pluginSources = pluginSources,
         hostVersion = hostVersion,
+    )
+
+    /**
+     * What has changed about the plugins since [env] loaded them: a plugin app installed, updated or
+     * uninstalled on the device (reported by the host, which is the only side that watches the package
+     * manager), and the enable/consent decisions made through this manager. Read by the Plugins screen,
+     * which offers the restart that applies them. See [dev.ide.core.plugins.PluginChanges].
+     */
+    val pluginChanges: PluginChanges = PluginChanges(
+        installedAtStart = env.installedPlugins.map {
+            KnownPlugin(packageName = it.origin.label, id = it.manifest.id, name = it.manifest.name)
+        } + env.rejectedPlugins.map {
+            // No id: its manifest is what could not be read. It still needs a name, so an uninstall of it
+            // reads as the plugin the user saw rather than as a bare package name.
+            KnownPlugin(packageName = it.origin.label, id = "", name = it.name)
+        },
+        disabledAtStart = readDisabledPlugins(),
+        consentedAtStart = consentedPlugins(),
     )
 
     init {
@@ -445,6 +465,7 @@ class ProjectManager private constructor(
     /** Persist [ids] as the disabled built-in plugins; takes effect on the next launch. */
     fun setDisabledPlugins(ids: Set<String>) {
         setPreference(DISABLED_PLUGINS_KEY, ids.sorted().joinToString(","))
+        pluginChanges.choicesChanged(ids, consentedPlugins())
     }
 
     /**
@@ -459,7 +480,11 @@ class ProjectManager private constructor(
     /** Persist [ids] as the accepted installed plugins; takes effect on the next launch. */
     fun setConsentedPlugins(ids: Set<String>) {
         setPreference(CONSENTED_PLUGINS_KEY, ids.sorted().joinToString(","))
+        pluginChanges.choicesChanged(disabledPlugins(), ids)
     }
+
+    /** The host's restarter, or null on a host that cannot restart itself (desktop, tests). */
+    fun appRestarter(): AppRestarter? = env.container.getServiceOrNull(APP_RESTARTER)
 
     private fun loadPrefs(): Properties = Properties().apply {
         if (Files.exists(prefsFile)) Files.newInputStream(prefsFile).use { load(it) }

@@ -70,3 +70,20 @@ val NOTIFICATION_PRESENTER = ServiceKey<NotificationPresenter>("platform.notific
 interface NotificationPresenter {
     fun present(notification: dev.ide.ui.backend.UiNotification)
 }
+
+/**
+ * A host that can restart the whole application.
+ *
+ * Plugins are loaded once per process, so a plugin the user installs, updates, uninstalls or toggles takes
+ * effect by starting again (see [dev.ide.core.plugins.PluginChanges]). Optional: where no launcher registered
+ * one (desktop, tests) the Plugins screen states the restart as something for the user to do, rather than
+ * offering a button that cannot work.
+ */
+val APP_RESTARTER = ServiceKey<AppRestarter>("platform.appRestarter")
+
+/** Implemented by the launcher; see [APP_RESTARTER]. */
+interface AppRestarter {
+    /** Take the app down, every process of it, and bring its UI back up. Does not return on a host that
+     *  really restarts, so the caller must have finished whatever has to survive (saving open files). */
+    fun restart()
+}

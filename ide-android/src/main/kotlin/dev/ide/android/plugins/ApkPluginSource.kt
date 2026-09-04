@@ -74,6 +74,24 @@ class ApkPluginSource(
     }
 
     /**
+     * The single plugin app [packageName] holds, read the same way [discover] reads it, or null when that
+     * package is not a plugin app (or is not installed). Lets the host ask about one package it has been told
+     * changed, rather than re-reading every plugin app on the device.
+     */
+    fun candidate(packageName: String): PluginCandidate? {
+        val matches = try {
+            packages.queryIntentActivities(
+                Intent(PLUGIN_ACTION).setPackage(packageName),
+                PackageManager.GET_META_DATA,
+            )
+        } catch (t: Throwable) {
+            log.warn("could not read the plugin app $packageName", t)
+            return null
+        }
+        return matches.firstNotNullOfOrNull { read(it) }
+    }
+
+    /**
      * Parse one match into a [DiscoveredPlugin], or into a [RejectedPlugin] carrying why it cannot be used.
      * Null only for a match that is not a third-party plugin app at all.
      */

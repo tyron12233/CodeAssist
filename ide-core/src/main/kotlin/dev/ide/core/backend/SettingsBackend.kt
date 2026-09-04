@@ -3,6 +3,7 @@ package dev.ide.core.backend
 import dev.ide.analysis.AnalyzerId
 import dev.ide.core.BackendContext
 import dev.ide.core.completion.CompletionOptions
+import dev.ide.core.plugins.PluginChangeKind
 import dev.ide.core.settings.BuiltInSettingsPages
 import dev.ide.core.settings.CodeStyleSettings
 import dev.ide.core.settings.IdeSettings
@@ -18,6 +19,8 @@ import dev.ide.ui.backend.SettingsService
 import dev.ide.ui.backend.UiAccent
 import dev.ide.ui.backend.UiCodeStyle
 import dev.ide.ui.backend.UiInspection
+import dev.ide.ui.backend.UiPluginChange
+import dev.ide.ui.backend.UiPluginChangeKind
 import dev.ide.ui.backend.UiPluginInfo
 import dev.ide.ui.backend.UiSettingControl
 import dev.ide.ui.backend.UiSettings
@@ -104,6 +107,28 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         val disabled = manager.disabledPlugins().toMutableSet()
         if (enabled) disabled.remove(id) else disabled.add(id)
         manager.setDisabledPlugins(disabled)
+    }
+
+    override fun pendingPluginChanges(): List<UiPluginChange> {
+        val manager = ctx.manager ?: return emptyList()
+        // The catalog holds the display names; the tracker keeps only the installed plugin apps' own, so
+        // that a plugin uninstalled mid-session can still be named.
+        val names = manager.env.pluginCatalog.all.associate { it.id to it.name }
+        return manager.pluginChanges.pending { names[it] }.map { UiPluginChange(it.name, it.kind.toUi()) }
+    }
+
+    override fun canRestartApplication(): Boolean = ctx.manager?.appRestarter() != null
+
+    override fun restartApplication() {
+        ctx.manager?.appRestarter()?.restart()
+    }
+
+    private fun PluginChangeKind.toUi(): UiPluginChangeKind = when (this) {
+        PluginChangeKind.INSTALLED -> UiPluginChangeKind.INSTALLED
+        PluginChangeKind.UPDATED -> UiPluginChangeKind.UPDATED
+        PluginChangeKind.UNINSTALLED -> UiPluginChangeKind.UNINSTALLED
+        PluginChangeKind.ENABLED -> UiPluginChangeKind.ENABLED
+        PluginChangeKind.DISABLED -> UiPluginChangeKind.DISABLED
     }
 
     private val settingsStore = SettingsStore(

@@ -61,8 +61,9 @@ bare code container.
 ./gradlew :samples:hello-plugin:installDebug
 ```
 
-Then restart CodeAssist and open **Settings > Plugins > Installed**. The plugin loads at startup, so a
-freshly installed or newly enabled plugin appears after the next launch. Its palette command is under
+Then open **Settings > Plugins** in CodeAssist. Plugins load at startup, so a freshly installed plugin (or a
+new build installed over an old one) is not live yet: the screen lists it as waiting and its **Restart now**
+button applies it. After the restart the plugin is under the **Installed** tab. Its palette command is under
 **Hello: say hello**, its settings category appears once a project is open, and its tool window is on the
 editor's left rail once one is. Build any project and the console's **Steps** tab lists
 `:<module>:helloBuildReport`; the Run picker carries the row that writes the same report on its own.

@@ -937,9 +937,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         installer.installAndLaunch(apk, launchPkg, log)
                         if (isPlugin) {
                             log("")
-                            log("Installed as a plugin. Plugins load at startup, so restart CodeAssist to")
-                            log("pick this one up; it then appears under Settings > Plugins > Installed,")
-                            log("with the reason on its row if it could not be loaded.")
+                            log("Installed as a plugin. Plugins load at startup, so this build is not live")
+                            log("yet: Settings > Plugins lists it as waiting, with a Restart button that")
+                            log("applies it, and the reason on its row if it could not be loaded.")
                         }
                     }
                 }

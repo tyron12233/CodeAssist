@@ -239,6 +239,15 @@ data class RejectedPlugin(                     // found, and not loadable
 with the built-ins into the one `PluginCatalog`, applies the user's disabled set, and only then asks a
 surviving plugin for a classloader. A plugin the user turned off never gets one, let alone a `register` call.
 
+**Discovery happens once, so a change to the plugin apps is a restart.** The set is read while the process
+starts, and an installed plugin's code comes off the APK as the system had it then. `PluginPackageWatcher`
+(`:ide-android`) therefore watches the package manager and records an install, an install over an existing
+plugin, or an uninstall on `PluginChanges` (`ide-core`), together with the enable and consent answers given
+in the Plugins screen. The screen names what is waiting and restarts the app to apply it, through the
+`APP_RESTARTER` platform port. An update in place is the reason this exists: the loaded classloader keeps
+reading the install path from before the update, so without a report the plugin looks unchanged for no
+visible reason.
+
 **A plugin that cannot be read is reported, not dropped.** A missing or malformed packaged manifest, and an id
 a built-in or an earlier plugin already holds, produce a `RejectedPlugin` rather than a silent skip. Such a
 plugin has no usable manifest, so no id to attribute contributions to and no enable/disable choice to persist:

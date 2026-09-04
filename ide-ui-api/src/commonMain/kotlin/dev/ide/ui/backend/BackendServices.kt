@@ -1238,6 +1238,18 @@ data class UiPluginInfo(
     val signature: String? = null,
 )
 
+/** What happened to a plugin that the IDE running now has not taken up. */
+enum class UiPluginChangeKind { INSTALLED, UPDATED, UNINSTALLED, ENABLED, DISABLED }
+
+/**
+ * A change to this device's plugins that the running IDE has not applied.
+ *
+ * Plugins are loaded once, when the app starts, so installing, updating or uninstalling a plugin app (or
+ * turning one on or off here) leaves the IDE running what it loaded. The Plugins screen lists these and
+ * offers the restart that applies them.
+ */
+data class UiPluginChange(val name: String, val kind: UiPluginChangeKind)
+
 /** IDE settings, the extensible settings pages, the inspection catalogue, and app preferences. */
 interface SettingsService {
     /** App-global settings the editor applies live (theme, accent, font, inlay). */
@@ -1285,6 +1297,20 @@ interface SettingsService {
      * disables it, which is also what stops the question being asked again.
      */
     fun setPluginConsent(id: String, granted: Boolean) {}
+
+    /**
+     * Plugin changes made since the app started that are not in effect yet: a plugin app installed, updated
+     * or uninstalled on the device, and the enable/consent answers given here. Empty means the IDE is running
+     * exactly the plugins the device has, so nothing needs a restart.
+     */
+    fun pendingPluginChanges(): List<UiPluginChange> = emptyList()
+
+    /** True when this host can restart itself, so the Plugins screen can offer it as a button. */
+    fun canRestartApplication(): Boolean = false
+
+    /** Restart the app to apply [pendingPluginChanges]. The caller saves anything unsaved first: on a host
+     *  that really restarts, this does not return. */
+    fun restartApplication() {}
 }
 
 // ---------------------------------------------------------------------------

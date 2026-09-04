@@ -33,19 +33,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.backend.UiPluginChange
+import dev.ide.ui.backend.UiPluginChangeKind
 import dev.ide.ui.backend.UiPluginInfo
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.CaSwitch
 import dev.ide.ui.components.PluginConsent
 import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.plugins_change_disabled
+import dev.ide.ui.generated.resources.plugins_change_enabled
+import dev.ide.ui.generated.resources.plugins_change_installed
+import dev.ide.ui.generated.resources.plugins_change_uninstalled
+import dev.ide.ui.generated.resources.plugins_change_updated
+import dev.ide.ui.generated.resources.plugins_changes_more
 import dev.ide.ui.generated.resources.plugins_failed
 import dev.ide.ui.generated.resources.plugins_installed_empty
 import dev.ide.ui.generated.resources.plugins_logs
 import dev.ide.ui.generated.resources.plugins_required
-import dev.ide.ui.generated.resources.plugins_review
 import dev.ide.ui.generated.resources.plugins_requires
 import dev.ide.ui.generated.resources.plugins_restart_hint
+import dev.ide.ui.generated.resources.plugins_restart_now
+import dev.ide.ui.generated.resources.plugins_restarting
+import dev.ide.ui.generated.resources.plugins_review
 import dev.ide.ui.generated.resources.plugins_tab_builtin
 import dev.ide.ui.generated.resources.plugins_tab_installed
 import dev.ide.ui.generated.resources.settings_plugins
@@ -66,8 +76,12 @@ private enum class PluginTab(val label: StringResource) {
  * carry the package they came from, plus the reason any of them failed to load. A plugin app whose manifest
  * the IDE could not read is listed there too, with its reason and no switch. Each tab's count is on its
  * label, so an installed plugin is visible without switching. Essential plugins are shown locked (a "Required"
- * pill instead of a switch), which never applies to an installed plugin. A change is persisted immediately
- * (app-global) but applied on the next launch, so a restart hint appears once anything is toggled.
+ * pill instead of a switch), which never applies to an installed plugin.
+ *
+ * Nothing here is live: plugins are loaded once, when the app starts. A change is persisted immediately
+ * (app-global) and applied by restarting, so the screen names everything that is waiting, both the answers
+ * given here and what has happened to the plugin apps on the device since launch (installed, updated,
+ * uninstalled), and offers the restart itself on a host that can restart.
  */
 @Composable
 fun PluginsScreen(
@@ -75,9 +89,15 @@ fun PluginsScreen(
     onBack: () -> Unit,
     /** Show this plugin's own log records. Null when there is no editor to show the Logs viewer over. */
     onOpenLogs: ((pluginId: String) -> Unit)? = null,
+    /** Save open work and restart the app, applying the waiting changes. Null where the host cannot restart
+     *  itself (desktop), which leaves the hint stating the restart without offering to do it. */
+    onRestart: (() -> Unit)? = null,
 ) {
     var plugins by remember { mutableStateOf(backend.settings.pluginCatalog()) }
-    var changed by remember { mutableStateOf(false) }
+    // Read from the backend rather than tracked as "the user touched something here": it also covers a
+    // plugin app installed or updated on the device since launch, and it goes away by itself when a change
+    // is answered back to what is already loaded.
+    var pending by remember { mutableStateOf(backend.settings.pendingPluginChanges()) }
     var tab by remember { mutableStateOf(PluginTab.BuiltIn) }
     // The plugin whose consent sheet is open. Nothing loads while this is unanswered, so the sheet is a
     // gate rather than a notification.
@@ -89,7 +109,7 @@ fun PluginsScreen(
     ExpressiveScaffold(title = stringResource(Res.string.settings_plugins), onBack = onBack) { innerPadding ->
         Column(Modifier.widthIn(max = 640.dp).fillMaxSize().padding(innerPadding)) {
             // Above the tabs: a toggle on either tab needs the same restart, so the hint is not per-tab.
-            if (changed) RestartHint()
+            if (pending.isNotEmpty()) RestartHint(pending, onRestart)
             PluginTabs(tab, builtIn.size, installed.size) { tab = it }
             Column(
                 Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
@@ -107,7 +127,7 @@ fun PluginsScreen(
                             onToggle = { enabled ->
                                 backend.settings.setPluginEnabled(p.id, enabled)
                                 plugins = backend.settings.pluginCatalog()
-                                changed = true
+                                pending = backend.settings.pendingPluginChanges()
                             },
                             // Built-ins log under their own ids too, but their logs are the IDE's; this is
                             // for the author of an installed plugin watching their own code run.
@@ -128,7 +148,7 @@ fun PluginsScreen(
             onAnswer = { granted ->
                 backend.settings.setPluginConsent(plugin.id, granted)
                 plugins = backend.settings.pluginCatalog()
-                changed = true
+                pending = backend.settings.pendingPluginChanges()
                 asking = null
             },
         )
@@ -185,19 +205,79 @@ private fun EmptyInstalled() {
     )
 }
 
+/** How many waiting changes are named before the rest are counted. */
+private const val MAX_LISTED_CHANGES = 4
+
+/**
+ * What a restart would apply, and the restart itself where the host can do it. Each change is named rather
+ * than counted, so an installed plugin app's update is visible as something the IDE has seen.
+ */
 @Composable
-private fun RestartHint() {
-    Row(
+private fun RestartHint(changes: List<UiPluginChange>, onRestart: (() -> Unit)?) {
+    Column(
         Modifier.fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.md))
             .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Icon(CaIcons.info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-        Text(stringResource(Res.string.plugins_restart_hint), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(CaIcons.info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(
+                stringResource(Res.string.plugins_restart_hint),
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        for (c in changes.take(MAX_LISTED_CHANGES)) {
+            Text(
+                "${c.name}  ·  ${changeLabel(c.kind)}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (changes.size > MAX_LISTED_CHANGES) {
+            Text(
+                stringResource(Res.string.plugins_changes_more, changes.size - MAX_LISTED_CHANGES),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (onRestart != null) {
+            // Taking the app down takes a moment (the process that does it has to start first), and the
+            // screen stays up meanwhile, so the button reports that it was pressed and refuses a second
+            // press rather than starting the restart twice.
+            var restarting by remember { mutableStateOf(false) }
+            TextButton(
+                onClick = { restarting = true; onRestart() },
+                enabled = !restarting,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.align(Alignment.End).heightIn(min = 32.dp),
+            ) {
+                Text(
+                    stringResource(
+                        if (restarting) Res.string.plugins_restarting else Res.string.plugins_restart_now,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
     }
 }
+
+@Composable
+private fun changeLabel(kind: UiPluginChangeKind): String = stringResource(
+    when (kind) {
+        UiPluginChangeKind.INSTALLED -> Res.string.plugins_change_installed
+        UiPluginChangeKind.UPDATED -> Res.string.plugins_change_updated
+        UiPluginChangeKind.UNINSTALLED -> Res.string.plugins_change_uninstalled
+        UiPluginChangeKind.ENABLED -> Res.string.plugins_change_enabled
+        UiPluginChangeKind.DISABLED -> Res.string.plugins_change_disabled
+    }
+)
 
 @Composable
 private fun PluginRow(

@@ -769,6 +769,15 @@ class IdeUiState(
     fun saveActive() { active?.let(::save) }
 
     /**
+     * Write every modified buffer to disk before the app goes down (the Plugins screen's restart).
+     *
+     * Deliberately not [save]: with "Reformat on save" on, that path formats through a suspending backend
+     * call and writes from a coroutine, which the process death would cut off. Here the write has to have
+     * happened by the time this returns, so the reformat is skipped rather than the save.
+     */
+    fun saveAllNow() { openFiles.toList().forEach(::writeToDisk) }
+
+    /**
      * Reopen the tabs persisted from a previous session with this project (in tab order + the active tab),
      * each restored to where the user left it: its view mode, caret, and scroll position. Files that no longer
      * exist on disk are skipped. Returns true when the previous session was HANDLED — either tabs were
