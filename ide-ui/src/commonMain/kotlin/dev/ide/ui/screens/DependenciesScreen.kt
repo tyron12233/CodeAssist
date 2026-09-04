@@ -808,7 +808,7 @@ internal fun AddDependencyContent(
             } else if (state.query.isBlank()) {
                 AddEmptyState(state, backend, moduleName, listModifier)
             } else {
-                val typed = state.query.trim()
+                val typed = sanitizeCoordinateInput(state.query)
                 LazyColumn(listModifier) {
                     // Direct add of a typed coordinate — the only way to add a versionless `group:name`
                     // (resolved against the module's imported platforms) or a coordinate not in the index.

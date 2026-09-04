@@ -15,6 +15,8 @@ import dev.ide.model.OrderEntry
 import dev.ide.model.PlatformDependency
 import dev.ide.model.SdkDependency
 import dev.ide.model.SdkRef
+import dev.ide.model.sanitizeCoordinate
+import dev.ide.model.sanitizeLibraryName
 import dev.ide.model.impl.format.Json
 import dev.ide.model.impl.format.Toml
 import dev.ide.platform.log.Log
@@ -384,10 +386,10 @@ object ModelPersistence {
     private fun tomlToOrderEntry(item: Any?, scope: DependencyScope, variant: String?): OrderEntry {
         val exported = scope == DependencyScope.API
         return when (item) {
-            is String -> LibraryDependency(LibraryRef(item), scope, exported, variant = variant)
+            is String -> LibraryDependency(LibraryRef(sanitizeLibraryName(item)), scope, exported, variant = variant)
             is Map<*, *> -> when {
                 item.containsKey("library") -> LibraryDependency(
-                    LibraryRef(item["library"] as String), scope, exported,
+                    LibraryRef(sanitizeLibraryName(item["library"] as String)), scope, exported,
                     exclusions = (item["exclude"] as? List<*>).orEmpty().mapNotNull { Exclusion.parse(it as String) },
                     variant = variant,
                 )
@@ -404,7 +406,7 @@ object ModelPersistence {
 
     /** Parse a persisted `group:name:version` BOM coordinate (a missing version tolerated as blank). */
     private fun parseCoordinate(s: String): Coordinate {
-        val parts = s.split(":")
+        val parts = sanitizeCoordinate(s).split(":")
         return Coordinate(parts.getOrElse(0) { "" }, parts.getOrElse(1) { "" }, parts.getOrElse(2) { "" })
     }
 

@@ -41,6 +41,43 @@ data class Coordinate(val group: String, val name: String, val version: String) 
     override fun toString() = "$group:$name:$version"
 }
 
+/**
+ * Strip the characters a `group:name:version` can never legally contain: whitespace (ordinary or
+ * non-breaking) and every zero-width, bidi-mark, soft-hyphen [CharCategory.FORMAT] or control character.
+ *
+ * These arrive by paste. Documentation sites put `U+200B ZERO WIDTH SPACE` into their code blocks as
+ * line-break hints, so copying a coordinate off a web page can yield
+ * `"\u200Bandroidx.lifecycle:lifecycle-process:2.11.0"`, indistinguishable on screen from the real thing.
+ * `String.trim()` does not touch it, since U+200B is not whitespace. Left in, the invisible character
+ * reaches the artifact URL, the repository answers 404, and the dependency is reported unresolved
+ * against a coordinate that looks perfectly correct. The same corruption inside the VERSION can be worse
+ * than a clean failure: on emulated external storage a path lookup ignores zero-width characters, so the
+ * cache probe hits an already-downloaded clean artifact and the coordinate resolves to something nothing
+ * declared.
+ *
+ * Normalizing both on the way in (a new declaration) and on the way out of `module.toml` (load) also
+ * heals a project that already persisted one.
+ */
+fun sanitizeCoordinate(raw: String): String = raw.filterNot { it.isInvisibleInCoordinate() }
+
+/** [sanitizeCoordinate] over an already-split coordinate. */
+fun sanitizeCoordinate(raw: Coordinate): Coordinate = Coordinate(
+    sanitizeCoordinate(raw.group),
+    sanitizeCoordinate(raw.name),
+    sanitizeCoordinate(raw.version),
+)
+
+/**
+ * [sanitizeCoordinate] for a [LibraryRef.name], which is a coordinate only when it carries a `:`. The other
+ * two forms are left exactly as they are: the bundled-library alias (`kotlin-stdlib`) and a local jar/aar's
+ * file name, which is allowed to contain spaces.
+ */
+fun sanitizeLibraryName(name: String): String =
+    if (':' in name) sanitizeCoordinate(name) else name
+
+private fun Char.isInvisibleInCoordinate(): Boolean =
+    isWhitespace() || category == CharCategory.FORMAT || category == CharCategory.CONTROL
+
 enum class LanguageLevel { JAVA_8, JAVA_11, JAVA_17, JAVA_21 }
 
 // ---------------------------------------------------------------------------

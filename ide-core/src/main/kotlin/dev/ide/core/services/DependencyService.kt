@@ -33,6 +33,7 @@ import dev.ide.model.PlatformDependency
 import dev.ide.model.Project
 import dev.ide.model.SdkDependency
 import dev.ide.model.module
+import dev.ide.model.sanitizeCoordinate
 import dev.ide.model.sync.BUILD_FILE_WRITER_EP
 import dev.ide.model.sync.BuildFileWriter
 import dev.ide.model.sync.WriteOutcome
@@ -713,7 +714,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         "Android archives (.aar) need an Android module; '${module.name}' is a ${module.type.displayName.lowercase()}"
 
     private fun parseCoordinate(name: String): Coordinate? =
-        name.split(":").takeIf { it.size >= 3 }?.let { Coordinate(it[0], it[1], it[2]) }
+        sanitizeCoordinate(name).split(":").takeIf { it.size >= 3 }?.let { Coordinate(it[0], it[1], it[2]) }
 
     /**
      * Parse a user-entered dependency coordinate. Accepts:
@@ -724,7 +725,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
      *    with the group omitted; the blank group is inferred from a repository search at resolve time.
      */
     private fun parseInputCoordinate(name: String): Coordinate? =
-        name.split(":").map { it.trim() }.let {
+        sanitizeCoordinate(name).split(":").let {
             when {
                 it.size == 2 && looksLikeVersion(it[1]) -> Coordinate("", it[0], it[1])
                 it.size == 2 -> Coordinate(it[0], it[1], "")
@@ -999,11 +1000,14 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
      */
     suspend fun addDependency(
         moduleName: String,
-        coordinate: String,
+        rawCoordinate: String,
         scope: String,
         exclusions: List<String> = emptyList(),
         variant: String? = null,
     ): UiAddResult {
+        // A pasted coordinate can carry invisible characters that no repository path can contain; drop them
+        // before the string becomes the declared library name. See [sanitizeCoordinate].
+        val coordinate = sanitizeCoordinate(rawCoordinate)
         // The standalone "add" (Dependencies screen): owns the resolve-state flag; the resolution core is
         // shared with the deferred template-dependency loop ([startPendingDependencyResolution]).
         _depsState.value = DepsResolveState(
@@ -1136,7 +1140,8 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
      * `platform(...)` semantics. It contributes no artifact; it supplies versions to versionless
      * dependencies added afterwards. Verified resolvable before it's persisted.
      */
-    suspend fun addPlatform(moduleName: String, coordinate: String, variant: String? = null): UiAddResult {
+    suspend fun addPlatform(moduleName: String, rawCoordinate: String, variant: String? = null): UiAddResult {
+        val coordinate = sanitizeCoordinate(rawCoordinate)
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(
             false, "No module '$moduleName'."
         )
@@ -1458,7 +1463,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         val declared = parseCoordinate(entry.library.name)
             ?: return UiAddResult(false, "$coordinate is not a versioned Maven coordinate.")
 
-        val newVersion = version.trim().ifBlank { declared.version }
+        val newVersion = sanitizeCoordinate(version).ifBlank { declared.version }
         val newCoord = Coordinate(declared.group, declared.name, newVersion)
         val newLibraryName = newCoord.toString()
         val parsedExclusions = exclusions.mapNotNull(Exclusion::parse)

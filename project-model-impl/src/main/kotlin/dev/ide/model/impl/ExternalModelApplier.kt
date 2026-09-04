@@ -10,6 +10,8 @@ import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
 import dev.ide.model.PlatformDependency
 import dev.ide.model.SourceSetTemplate
+import dev.ide.model.sanitizeCoordinate
+import dev.ide.model.sanitizeLibraryName
 import dev.ide.model.sync.ExternalDependency
 import dev.ide.model.sync.ExternalLibrary
 import dev.ide.model.sync.ExternalModule
@@ -154,7 +156,7 @@ class ExternalModelApplier(private val store: ProjectModelStore) {
 
     private fun orderEntry(dependency: ExternalDependency) = when (dependency) {
         is ExternalLibrary -> LibraryDependency(
-            LibraryRef(dependency.coordinate),
+            LibraryRef(sanitizeLibraryName(dependency.coordinate)),
             dependency.scope,
             exported = dependency.scope == DependencyScope.API,
             exclusions = dependency.exclusions,
@@ -168,6 +170,6 @@ class ExternalModelApplier(private val store: ProjectModelStore) {
             variant = dependency.variant,
         )
 
-        is ExternalPlatform -> PlatformDependency(dependency.bom, dependency.scope, variant = dependency.variant)
+        is ExternalPlatform -> PlatformDependency(sanitizeCoordinate(dependency.bom), dependency.scope, variant = dependency.variant)
     }
 }

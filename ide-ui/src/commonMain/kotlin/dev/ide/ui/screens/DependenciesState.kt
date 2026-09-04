@@ -51,6 +51,16 @@ internal val DEP_CONFIGURATIONS = listOf("implementation", "api", "compileOnly",
 internal fun looksLikeCoordinate(s: String): Boolean =
     s.split(":").let { it.size in 2..3 && it.all { p -> p.isNotBlank() } }
 
+/**
+ * Drop what a `group:name:version` can never contain: whitespace and any zero-width, bidi-mark or control
+ * character. A coordinate copied out of a documentation code block often carries a `U+200B ZERO WIDTH
+ * SPACE` line-break hint, which is invisible in the field yet makes the artifact URL 404. `trim()` leaves
+ * it, since U+200B is not whitespace. The backend normalizes the declaration it persists as well; this
+ * keeps the row the user is about to tap showing the coordinate that will actually be added.
+ */
+internal fun sanitizeCoordinateInput(s: String): String =
+    s.filterNot { it.isWhitespace() || it.category == CharCategory.FORMAT || it.category == CharCategory.CONTROL }
+
 internal fun shortCoord(coord: String): String =
     coord.split(":").let { if (it.size >= 3) "${it[1]}:${it[2]}" else coord }
 
@@ -273,7 +283,7 @@ internal class AddDependencyState(
         }
         // Debounced artifact search. `collectLatest` cancels an in-flight search when the query moves on.
         scope.launch {
-            snapshotFlow { query.trim() to mode }.collectLatest { (typed, current) ->
+            snapshotFlow { sanitizeCoordinateInput(query) to mode }.collectLatest { (typed, current) ->
                 if (typed.length < 2 || current == AddMode.Module || current == AddMode.Local) {
                     results = emptyList()
                     searching = false
@@ -483,7 +493,7 @@ internal class EditDependencyState(
     val updateAvailable: Boolean
         get() = newest != null && node.version in versions && newest != node.version
 
-    val trimmedVersion: String get() = versionText.trim()
+    val trimmedVersion: String get() = sanitizeCoordinateInput(versionText)
     val parsedExclusions: List<String>
         get() = exclusionsText.split(',', ' ', '\n', '\t').map { it.trim() }.filter { it.isNotEmpty() }
 
