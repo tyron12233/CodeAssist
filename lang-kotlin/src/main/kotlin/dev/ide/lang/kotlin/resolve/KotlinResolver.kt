@@ -66,6 +66,16 @@ class KotlinResolverCaches {
     /** Per-flow-root result of the CFG var-nullability pass: the var references it proves non-null (see
      *  [KotlinVarNullFlow]). Keyed by the analysed body block. */
     val varNonNull = HashMap<PsiElement, Set<PsiElement>>()
+
+    /**
+     * Symbols for local `val`/`var` and value-parameter DECLARATIONS, keyed by the declaration.
+     * [dev.ide.lang.kotlin.resolve.localsAt] runs once per name resolution and rebuilds a symbol for every
+     * local in scope, each of which re-types its declaration (a declared type through `typeFromText`, an
+     * inferred one through `inferType` of the initializer). A body with N locals and N references therefore
+     * did O(N²) symbol construction — a quarter of the analyze pass's time and most of its garbage. Within
+     * one parse snapshot a symbol is a pure function of its declaration, so it is built once.
+     */
+    val localSymbols = HashMap<PsiElement, KotlinSymbol>()
 }
 
 /**

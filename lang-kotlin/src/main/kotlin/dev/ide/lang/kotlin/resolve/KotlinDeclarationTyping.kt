@@ -120,15 +120,34 @@ internal fun KotlinResolver.delegateContainsUninferableCall(delegate: KtExpressi
     return found
 }
 
-internal fun KotlinResolver.localVar(p: KtProperty) = KotlinSymbol(
-    name = p.name ?: "_",
-    kind = SymbolKind.LOCAL_VARIABLE,
-    type = service.typeFromText(p.typeReference?.text, fileContext, enclosingClassFqnOf(p))
-        ?: inferType(p.initializer)
-        ?: p.delegateExpression?.let(::delegatedValueType),
-    origin = SOURCE,
-    declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
-)
+internal fun KotlinResolver.localVar(p: KtProperty): KotlinSymbol = cachedLocalSymbol(p) {
+    KotlinSymbol(
+        name = p.name ?: "_",
+        kind = SymbolKind.LOCAL_VARIABLE,
+        type = service.typeFromText(p.typeReference?.text, fileContext, enclosingClassFqnOf(p))
+            ?: inferType(p.initializer)
+            ?: p.delegateExpression?.let(::delegatedValueType),
+        origin = SOURCE,
+        declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
+    )
+}
+
+/**
+ * Memoize a local/parameter declaration's symbol for this parse snapshot (see
+ * [dev.ide.lang.kotlin.resolve.KotlinResolverCaches.localSymbols]).
+ *
+ * Bypassed under the same conditions [inferType] bypasses its own cache: a pushed smart-cast narrowing or a
+ * lambda-shape override makes an inferred initializer type context-dependent, so it is not a property of the
+ * declaration alone and must not be cached where a later, unnarrowed query would read it.
+ */
+private inline fun KotlinResolver.cachedLocalSymbol(
+    decl: PsiElement,
+    build: () -> KotlinSymbol,
+): KotlinSymbol {
+    if (narrowings.isNotEmpty() || lambdaShapeOverrides.isNotEmpty()) return build()
+    caches.localSymbols[decl]?.let { return it }
+    return build().also { caches.localSymbols[decl] = it }
+}
 
 /** A `by`-delegated property's value type: the type of the delegate's `value` member (the State/Lazy
  *  `.value` convention — `by remember { mutableStateOf("") }` types as `String`). Null for a delegate that
@@ -213,13 +232,15 @@ internal fun KotlinResolver.loopParam(p: KtParameter, element: KotlinType?) = Ko
     declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
 )
 
-internal fun KotlinResolver.param(p: KtParameter) = KotlinSymbol(
-    name = p.name ?: "_",
-    kind = SymbolKind.PARAMETER,
-    type = paramType(p),
-    origin = SOURCE,
-    declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
-)
+internal fun KotlinResolver.param(p: KtParameter): KotlinSymbol = cachedLocalSymbol(p) {
+    KotlinSymbol(
+        name = p.name ?: "_",
+        kind = SymbolKind.PARAMETER,
+        type = paramType(p),
+        origin = SOURCE,
+        declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
+    )
+}
 
 /** A value parameter's type as SEEN inside the body. A `vararg x: E` is an array there, not the element `E`
  *  (`vararg x: Int` -> `IntArray`; a non-primitive -> `Array<E>`), so `fun f(vararg x: Int) { x.sum() }`
