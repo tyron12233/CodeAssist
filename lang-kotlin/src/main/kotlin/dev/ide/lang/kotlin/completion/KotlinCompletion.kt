@@ -1354,27 +1354,33 @@ class KotlinCompletion(
         }
 
         /** Neutral package-relevance rank: non-types and ordinary library types share it, so [packageRankOf]
-         *  only ever re-orders classifiers whose package is notably more (androidx/Compose, kotlin) or less
-         *  (JDK reflection/internal) relevant than the norm. */
-        private const val PKG_NEUTRAL = 3
+         *  only ever re-orders classifiers whose package is notably more (the project's own sources,
+         *  androidx/Compose, kotlin) or less (JDK reflection/internal) relevant than the norm. */
+        private const val PKG_NEUTRAL = 4
 
         /**
          * A LOW-priority ranking key (see [RANK]) that breaks ties between classifiers sharing a simple name by
-         * package relevance in the app's ecosystem — so completing `Modif` floats `androidx.compose.ui.Modifier`
-         * above `java.lang.reflect.Modifier`. Lower sorts earlier. Only classifiers ([TYPE_KINDS]) are ranked;
+         * relevance in the app's ecosystem — so completing `Modif` floats `androidx.compose.ui.Modifier` above
+         * `java.lang.reflect.Modifier`. Lower sorts earlier. Only classifiers ([TYPE_KINDS]) are ranked;
          * everything else is [PKG_NEUTRAL] (types already separate from callables on `proximity`, so this never
          * reshuffles them). `androidx.*` reaches completion only in an Android module (the non-Android exclusion
          * drops it elsewhere), so preferring it here needs no extra platform check.
+         *
+         * The project's OWN types rank first. Ranking them at [PKG_NEUTRAL] put every stdlib classifier above
+         * them, so `val b: Bo` in a module declaring `class Box` offered `Boolean` and `BooleanArray` ahead of
+         * `Box`, and `Col` offered `Collection` ahead of a project `enum class Color`. A declaration the user
+         * wrote is the most relevant thing a type position can offer.
          */
         private fun packageRankOf(s: KotlinSymbol): Int {
             if (s.kind !in TYPE_KINDS) return PKG_NEUTRAL
+            if (s.origin.fromSource) return 0
             val pkg = (s.type as? KotlinType)?.qualifiedName?.substringBeforeLast('.', "") ?: return PKG_NEUTRAL
             return when {
-                pkg.startsWith("androidx.compose") -> 0
-                pkg.startsWith("androidx.") || pkg.startsWith("android.") || pkg.startsWith("com.google.android.") -> 1
-                pkg == "kotlin" || pkg.startsWith("kotlin.") -> 2
+                pkg.startsWith("androidx.compose") -> 1
+                pkg.startsWith("androidx.") || pkg.startsWith("android.") || pkg.startsWith("com.google.android.") -> 2
+                pkg == "kotlin" || pkg.startsWith("kotlin.") -> 3
                 pkg.startsWith("java.lang.reflect") || pkg.startsWith("java.beans") ||
-                    pkg.startsWith("sun.") || pkg.startsWith("com.sun.") || pkg.startsWith("jdk.internal") -> 6
+                    pkg.startsWith("sun.") || pkg.startsWith("com.sun.") || pkg.startsWith("jdk.internal") -> 7
                 else -> PKG_NEUTRAL
             }
         }
