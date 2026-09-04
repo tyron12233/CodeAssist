@@ -145,3 +145,25 @@ fun suspendCoroutineResumeWithException(): String {
     })
     return out
 }
+
+/** A Kotlin enum, the shape interpreted libraries actually carry: the compiler fills `$VALUES` through a
+ *  synthetic `$values()`, and `entries` hands that array to the stdlib's (bridged) `EnumEntries`. */
+enum class Tier { FREE, PRO, TEAM }
+
+fun tierSetSize(): Int = java.util.EnumSet.of(Tier.FREE, Tier.TEAM).size
+
+fun tierAllOfText(): String = java.util.EnumSet.allOf(Tier::class.java).toString()
+
+fun tierEntriesText(): String = Tier.entries.joinToString(",")
+
+fun tierValueOfName(): String = java.lang.Enum.valueOf(Tier::class.java, "PRO").name
+
+fun tierMapText(): String {
+    val counts = java.util.EnumMap<Tier, Int>(Tier::class.java)
+    counts[Tier.TEAM] = 3
+    counts[Tier.FREE] = 1
+    return counts.toString()
+}
+
+/** Sorting through real code compares the peers, so `Enum.compareTo` has to see one declaring class. */
+fun tierSortedText(): String = listOf(Tier.PRO, Tier.FREE, Tier.TEAM).sorted().joinToString(",")

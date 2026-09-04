@@ -77,6 +77,20 @@ class Vm(
      *  carry their monitor on the object itself. Guarded by `this` map's own reference. */
     private val bridgedMonitors = IdentityHashMap<Any, VmMonitor>()
 
+    /** Real enum classes standing for interpreted enums, by internal name (see [enumPeerClass]). */
+    private val enumPeerClasses = java.util.concurrent.ConcurrentHashMap<String, Class<*>>()
+
+    /** The classes an enum's shared peer forwards to, by the enum's internal name (see [enumOverrideSources]):
+     *  cached because the peer shape is rebuilt for every constant the enum constructs. */
+    private val enumConstantClasses = java.util.concurrent.ConcurrentHashMap<String, List<VmClass>>()
+
+    /** The compiler-generated array of an enum's constants, in ordinal order (see [enumConstantPeers]). */
+    private val ENUM_VALUES_FIELD = "\$VALUES"
+
+    /** `java.lang.Enum(String name, int ordinal)` — the constructor every enum constant runs, and so the super
+     *  constructor of every enum peer. */
+    private val ENUM_SUPER_CTOR = "(Ljava/lang/String;I)V"
+
     /** `Thread(ThreadGroup, Runnable, String, long stackSize)` — the one public constructor that takes a stack
      *  size; every other Thread construction is remapped to it when [threadStackSize] is set. */
     private val THREAD_STACK_CTOR =
@@ -436,6 +450,12 @@ class Vm(
             return classForInterpreted(elementName)?.let { arrayClassOf(it) }
         }
         val cls = resolve(internalName) ?: return null
+        // An interpreted ENUM's class literal is its PEER class, which is a real enum: `EnumSet.allOf(E.class)`,
+        // `new EnumMap<>(E.class)`, `Enum.valueOf(E.class, …)` and `E.class.getEnumConstants()` all work off
+        // `Class.isEnum()` and the `values()` universe, which the reflection stand-in below cannot answer. It is
+        // also the class the constants' peers report from `getClass()`, so `x.getClass() == E.class` holds as it
+        // does for real.
+        enumBaseOf(cls)?.let { return enumPeerClass(it) }
         val ctors = cls.methods
             .filter { it.name == "<init>" && it.access and Opcodes.ACC_PUBLIC != 0 }
             .map {
@@ -602,26 +622,98 @@ class Vm(
     }
 
     /** The peer shape for [vmClass]: its nearest real superclass, the real interfaces it declares, the
-     *  real-supertype methods it overrides, and the abstract supertype methods it leaves unimplemented. */
+     *  real-supertype methods it overrides, and the abstract supertype methods it leaves unimplemented. An
+     *  ENUM's constants all share ONE peer class (a real enum, whose `values()` universe is that enum's
+     *  constants), so the shape is taken from the enum itself even for a constant with a body, and covers
+     *  every body's overrides. */
     private fun peerSpec(vmClass: VmClass): PeerSpec {
-        val superClass = loadReal(realSuperName(vmClass))
-        val interfaces = realInterfaceNames(vmClass).map { loadReal(it) }
+        val enumClass = enumBaseOf(vmClass)
+        val shapeOf = enumClass ?: vmClass
+        val superClass = loadReal(realSuperName(shapeOf))
+        val interfaces = realInterfaceNames(shapeOf).map { loadReal(it) }
         val candidates = overridableMethods(superClass, interfaces)
+        val implementors = enumClass?.let { enumOverrideSources(it) } ?: listOf(vmClass)
         val methods = ArrayList<PeerMethod>()
         val stubs = ArrayList<PeerMethod>()
         for ((_, candidate) in candidates) {
             when {
-                declaresInChain(
-                    vmClass,
-                    candidate.method.name,
-                    candidate.method.descriptor
-                ) -> methods.add(candidate.method)
+                implementors.any {
+                    declaresInChain(
+                        it,
+                        candidate.method.name,
+                        candidate.method.descriptor
+                    )
+                } -> methods.add(candidate.method)
 
                 candidate.abstract -> stubs.add(candidate.method)
             }
         }
-        return PeerSpec(superClass, interfaces, methods, stubs, vmClass.name)
+        return PeerSpec(
+            superClass,
+            interfaces,
+            methods,
+            stubs,
+            shapeOf.name,
+            enumConstants = enumClass?.let { e -> { enumConstantPeers(e) } },
+        )
     }
+
+    /** The interpreted ENUM in [vmClass]'s chain — [vmClass] itself, or the enum a constant WITH A BODY belongs
+     *  to (the compiler makes each such body a subclass of the enum) — or null when it is not an enum. `ACC_ENUM`
+     *  alone does not identify it: the compiler marks those constant subclasses with it too, and only the enum
+     *  itself extends `java.lang.Enum` directly. */
+    private fun enumBaseOf(vmClass: VmClass): VmClass? {
+        var c: VmClass? = vmClass
+        while (c != null) {
+            if (c.access and Opcodes.ACC_ENUM != 0 && c.superName == "java/lang/Enum") return c
+            c = c.superName?.let { resolve(it) }
+        }
+        return null
+    }
+
+    /** The interpreted classes whose bodies one enum peer class must forward to: the enum, plus the
+     *  constant-body subclasses its initializer instantiates. Because those constants share the enum's single
+     *  peer class, a real supertype method ANY body implements has to be an override on that peer rather than an
+     *  abstract stub — `enum Op implements IntBinaryOperator { PLUS { … }, TIMES { … } }` implements
+     *  `applyAsInt` nowhere else. */
+    private fun enumOverrideSources(enumClass: VmClass): List<VmClass> =
+        enumConstantClasses.computeIfAbsent(enumClass.name) {
+            val out = LinkedHashSet<VmClass>()
+            out.add(enumClass)
+            enumClass.declaredMethod("<clinit>", "()V")?.instructions?.toArray()?.forEach { insn ->
+                if (insn.opcode == Opcodes.NEW) {
+                    val created = resolve((insn as org.objectweb.asm.tree.TypeInsnNode).desc)
+                    if (created != null && created.superName == enumClass.name) out.add(created)
+                }
+            }
+            out.toList()
+        }
+
+    /** The peers of [enumClass]'s constants, ordinal-indexed, for its peer's `values()`. The constants come from
+     *  the interpreted `$VALUES` array the compiler generates (falling back to the enum's own static fields of
+     *  its type), and each already HAS its peer: a constant's constructor runs `super(name, ordinal)` into
+     *  `java.lang.Enum`, which is where [initPeer] built the peer with that name and ordinal. Sorted by the
+     *  peer's real ordinal, because the platform indexes the universe by it. */
+    private fun enumConstantPeers(enumClass: VmClass): List<Any> {
+        ensureInitialized(enumClass)
+        val values = enumClass.statics[ENUM_VALUES_FIELD]
+        val constants = if (values is VmArray) {
+            values.data.filterIsInstance<VmObject>()
+        } else {
+            enumClass.staticFieldDescs.filterValues { it == "L${enumClass.name};" }
+                .keys.mapNotNull { enumClass.statics[it] as? VmObject }
+        }
+        return constants.map { peerOf(it) }.sortedBy { (it as? Enum<*>)?.ordinal ?: 0 }
+    }
+
+    /** The real enum class that stands for interpreted enum [enumClass], generated on demand: an enum constant's
+     *  constructor always calls `Enum(String, int)`, so the peer's super constructor is known without an
+     *  instance. Cached per name — the class itself is cached by the factory, but the shape it is keyed on costs
+     *  reflection over the real supertype to rebuild. */
+    private fun enumPeerClass(enumClass: VmClass): Class<*> =
+        enumPeerClasses.getOrPut(enumClass.name) {
+            peerFactory.peerClass(peerSpec(enumClass), ENUM_SUPER_CTOR)
+        }
 
     /** The first ancestor of [vmClass] that is not itself interpreted (a real superclass), or `Object`. */
     internal fun realSuperName(vmClass: VmClass): String {

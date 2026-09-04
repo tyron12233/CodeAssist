@@ -13,6 +13,12 @@ import dev.ide.jvm.kfixtures.manhattan
 import dev.ide.jvm.kfixtures.pointEquals
 import dev.ide.jvm.kfixtures.pointHashStable
 import dev.ide.jvm.kfixtures.pointToString
+import dev.ide.jvm.kfixtures.tierAllOfText
+import dev.ide.jvm.kfixtures.tierEntriesText
+import dev.ide.jvm.kfixtures.tierMapText
+import dev.ide.jvm.kfixtures.tierSetSize
+import dev.ide.jvm.kfixtures.tierSortedText
+import dev.ide.jvm.kfixtures.tierValueOfName
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -90,5 +96,19 @@ class KotlinBytecodeTest {
         assertEquals(elvis(3, -1), call("elvis", "(II)I", 3, -1))
         assertEquals(elvis(-3, -1), call("elvis", "(II)I", -3, -1))
         assertEquals(higherOrder(20), call("higherOrder", "(I)I", 20))
+    }
+
+    /**
+     * A Kotlin enum handed to the platform's enum machinery. `EnumSet`/`EnumMap`/`Enum.valueOf` and `entries`
+     * all read the real enum contract (`Class.isEnum()`, the `values()` universe, `getDeclaringClass()`) off
+     * the peer, which therefore has to be a real enum shared by the whole enum's constants.
+     */
+    @Test fun enumAcrossTheBridge() {
+        assertEquals(tierSetSize(), call("tierSetSize", "()I"))
+        assertEquals(tierAllOfText(), call("tierAllOfText", "()Ljava/lang/String;"))
+        assertEquals(tierEntriesText(), call("tierEntriesText", "()Ljava/lang/String;"))
+        assertEquals(tierValueOfName(), call("tierValueOfName", "()Ljava/lang/String;"))
+        assertEquals(tierMapText(), call("tierMapText", "()Ljava/lang/String;"))
+        assertEquals(tierSortedText(), call("tierSortedText", "()Ljava/lang/String;"))
     }
 }

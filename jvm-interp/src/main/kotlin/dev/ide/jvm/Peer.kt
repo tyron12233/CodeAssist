@@ -43,6 +43,19 @@ class PeerSpec(
     val abstractStubs: List<PeerMethod>,
     /** The interpreted class's internal name, used to give the generated peer a traceable name. */
     val className: String,
+    /**
+     * Set when [className] is an interpreted ENUM, supplying the peers of its constants in ordinal order. The
+     * peer is then generated as a real enum — `ACC_ENUM` over `java.lang.Enum`, with a `values()` returning
+     * those peers — because the platform's enum machinery (`EnumSet`, `EnumMap`, `Enum.valueOf`,
+     * `Class.getEnumConstants`) is written against `Class.isEnum()` and that universe, and rejects an instance
+     * whose class answers neither (`EnumSet.of` fails with "not an enum").
+     *
+     * ONE peer class stands for the whole enum, shared by every constant — including a constant with a body,
+     * which the compiler makes a subclass of the enum — so that `getDeclaringClass()` and the universe agree;
+     * [className] is therefore the enum's own name, and the class is never shared with an unrelated class of
+     * the same shape.
+     */
+    val enumConstants: (() -> List<Any>)? = null,
 ) {
     /** True when the interpreted class adds no real supertype behavior, so it needs no peer. */
     val isTrivial: Boolean
