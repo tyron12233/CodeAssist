@@ -65,11 +65,13 @@ const val PLUGIN_API_VERSION: Int = 3
  *    (`outputDir` became nullable, which narrows an existing override rather than breaking it);
  *  - added the `lang.backend`, `model.moduleType` and `model.facet` capabilities such a plugin declares.
  *
- * `docs/plugin-spi-2.0-migration.md` is the upgrade path for a plugin written against `1.x`.
+ * `docs/plugin-spi-2.0-migration.md` is the upgrade path for a plugin written against `1.x`. Note that
+ * `2.0.0` itself was never published, so `2.1.0` below is the first `2.x` coordinate that resolves; it
+ * carries the whole of the change described above.
  *
  * `2.1.0` opened the interpreter: a new artifact, `interp-api`, through which a plugin runs the code in the
- * user's project, plus the pieces a plugin needs to show or run the result. It is additive, so
- * [PLUGIN_API_VERSION] is unchanged and a `2.0.0` plugin keeps loading. It added:
+ * user's project, plus the pieces a plugin needs to show or run the result. It is additive over `2.0.0`, so
+ * [PLUGIN_API_VERSION] stays at `3`. It added:
  *
  *  - `dev.ide.interp.api.CodeInterpreter` (the `platform.codeInterpreter` service) and its sessions, for
  *    interpreting a project's Kotlin source with no compile step or its compiled classes on the bytecode VM;

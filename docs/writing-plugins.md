@@ -2090,7 +2090,7 @@ the IDE's own runtime:
 ```kotlin
 dependencies {
     // The BOM carries the versions, including the Compose the IDE provides.
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.0.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.1.0"))
 
     compileOnly("io.github.tyron12233:plugin-ui-api")
     compileOnly("androidx.compose.runtime:runtime")
@@ -2148,7 +2148,7 @@ not part of it, so an id or an anchor that is wrong still shows up only once the
 The engine SPI is published, so the extension points in these modules are available to a plugin app:
 
 ```kotlin
-compileOnly(platform("io.github.tyron12233:plugin-bom:2.0.0")) // one version for everything below
+compileOnly(platform("io.github.tyron12233:plugin-bom:2.1.0")) // one version for everything below
 
 compileOnly("io.github.tyron12233:plugin-api")        // actions, menus, palette commands
 compileOnly("io.github.tyron12233:platform-core")     // scoped services, settings pages, logging
@@ -2179,7 +2179,7 @@ The SPI is published, so it is an ordinary dependency:
 
 ```kotlin
 dependencies {
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.0.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.1.0"))
     compileOnly("io.github.tyron12233:plugin-api")
     compileOnly("io.github.tyron12233:platform-core")
 }

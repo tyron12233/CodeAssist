@@ -1,8 +1,12 @@
 # Migrating a plugin to SPI 2.0.0
 
-SPI `2.0.0` is the first release that can stop an existing plugin from compiling, and
+SPI `2.0.0` is the first change that can stop an existing plugin from compiling, and
 `PLUGIN_API_VERSION` moved from `2` to `3`, so **every plugin built against `1.x` is refused at the
 gate** with a version mismatch rather than allowed to fail later as a linkage error.
+
+**The coordinate to ask for is `2.1.0`.** `2.0.0` itself was never published, so `2.1.0` is the first `2.x`
+artifact and it carries everything described here plus the interpreter SPI
+([plugin-interpreter.md](plugin-interpreter.md)).
 
 Recompiling is usually the whole migration. Most plugins need one dependency bump and nothing else.
 
@@ -10,7 +14,7 @@ Recompiling is usually the whole migration. Most plugins need one dependency bum
 
 ```kotlin
 dependencies {
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.0.0"))   // was 1.3.0
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.1.0"))   // was 1.3.0
     compileOnly("io.github.tyron12233:plugin-api")
     compileOnly("io.github.tyron12233:platform-core")
 }
@@ -121,7 +125,7 @@ language, contributes a module type, or attaches its own module configuration. A
 
 ## 3. Checklist
 
-- [ ] `plugin-bom` bumped to `2.0.0`, manifest `apiVersion = 3`.
+- [ ] `plugin-bom` bumped to `2.1.0`, manifest `apiVersion = 3`.
 - [ ] Any exhaustive `when` over the six vocabularies has an `else`.
 - [ ] Any `valueOf` used for validation checks `entries` instead.
 - [ ] A dependency scope of your own is passed to `DependencyScope.register`.
