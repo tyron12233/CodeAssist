@@ -60,6 +60,7 @@ import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParameterList
 import org.jetbrains.kotlin.psi.KtPrimaryConstructor
 import org.jetbrains.kotlin.psi.KtSecondaryConstructor
+import org.jetbrains.kotlin.psi.KtStringTemplateEntryWithExpression
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import org.jetbrains.kotlin.psi.KtSuperTypeEntry
 import org.jetbrains.kotlin.psi.KtDelegatedSuperTypeEntry
@@ -902,11 +903,15 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         return null
     }
 
-    /** Whether [e] is (conservatively) a compile-time constant: a literal, a plain string, an arithmetic/prefix of
-     *  constants, or a bare name / `A.B` reference (which MAY be another `const val` — not flagged to avoid FP). */
+    /** Whether [e] is (conservatively) a compile-time constant: a literal, a string template whose interpolations are
+     *  themselves constants (`"$BASE/path"` — Kotlin constant-folds those), an arithmetic/prefix of constants, or a
+     *  bare name / `A.B` reference (which MAY be another `const val` — not flagged to avoid FP). */
     private fun isCompileTimeConstant(e: KtExpression): Boolean = when (val u = unwrapParen(e)) {
         is KtConstantExpression -> true
-        is KtStringTemplateExpression -> u.entries.all { it is KtLiteralStringTemplateEntry }
+        is KtStringTemplateExpression -> u.entries.all { entry ->
+            // Literal text and escapes are constant; `$x` / `${...}` only if the interpolated expression is.
+            entry !is KtStringTemplateEntryWithExpression || entry.expression?.let { isCompileTimeConstant(it) } == true
+        }
         is KtNameReferenceExpression, is KtQualifiedExpression -> true // possibly a const val / enum — conservative
         is KtBinaryExpression -> u.left?.let { isCompileTimeConstant(it) } == true && u.right?.let { isCompileTimeConstant(it) } == true
         is KtPrefixExpression -> u.baseExpression?.let { isCompileTimeConstant(it) } == true

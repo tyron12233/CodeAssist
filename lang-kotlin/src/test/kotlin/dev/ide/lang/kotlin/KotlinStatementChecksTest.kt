@@ -97,6 +97,19 @@ class KotlinStatementChecksTest {
         for (o in ok) assertTrue(diagnose("Cok.kt", b(o)).none { it.code == "kt.constMisuse" }, "`$o` must be clean; got ${diagnose("Cok.kt", b(o))}")
     }
 
+    @Test
+    fun constStringTemplateOfConstantsIsClean() {
+        val base = "const val A = \"x\"\n"
+        val ok = listOf(
+            base + "const val B = \"\$A/y\"",
+            base + "const val B = \"\${A}!\"",
+            base + "const val B = \"\"\"<color name=\"n\">\$A</color>\"\"\"",
+        )
+        for (o in ok) assertTrue(diagnose("Ct1.kt", b(o)).none { it.code == "kt.constMisuse" }, "`$o` must be clean; got ${diagnose("Ct1.kt", b(o))}")
+        val bad = "fun foo() = 5\nconst val B = \"v\${foo()}\""
+        assertTrue(diagnose("Ct2.kt", b(bad)).any { it.code == "kt.constMisuse" }, "a template interpolating a call is not constant; got ${diagnose("Ct2.kt", b(bad))}")
+    }
+
     // --- name shadowing (2026-07-07) ---
 
     @Test
