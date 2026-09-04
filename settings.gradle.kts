@@ -87,6 +87,8 @@ include(
     ":decompiler", // navigate-into-library: read a classpath class → attached source, else decompile (Vineflower for Java, @Metadata stub for Kotlin)
     ":jvm-build", // JVM-language build system: JavaBuildSystem/JavaPlugin compose lang-jdt+lang-kotlin compile tasks over build-engine
     ":interp-core", // on-device Kotlin interpreter: tree-walks lang-kotlin's ResolvedTree (Compose interpreter, step 3)
+    ":interp-api",  // published SPI: the narrowed interpreter surface a plugin runs project code through
+    ":interp-impl", // the engine behind it: source sessions over :interp-core, bytecode sessions over :jvm-interp
     ":jvm-interp", // PoC: standalone .class bytecode-interpreting VM + Android/native bridge seam (Play dynamic-code compliance spike)
     ":deps-api",
     ":deps-impl",

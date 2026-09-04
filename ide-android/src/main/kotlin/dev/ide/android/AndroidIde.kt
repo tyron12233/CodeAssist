@@ -18,6 +18,7 @@ import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.analytics.impl.AnalyticsLogSink
 import dev.ide.analytics.impl.DefaultAnalyticsService
 import dev.ide.analytics.impl.SupabaseSink
+import dev.ide.interp.impl.VM_PEER_FACTORY
 import dev.ide.core.ANALYTICS_SERVICE
 import dev.ide.core.APP_RESTARTER
 import dev.ide.core.NOTIFICATION_PRESENTER
@@ -94,6 +95,11 @@ object AndroidIde {
         val appContext = context.applicationContext
         // Analytics is an application-scoped host service now; register it before the backend resolves it.
         manager.applicationContainer.registerServiceIfAbsent(ANALYTICS_SERVICE) { analytics }
+        // A plugin's bytecode session (interp-api) needs peers dexed on ART: defining a class from class-file
+        // bytes is not possible here, so the default ASM factory cannot realize a peer for an interpreted
+        // class that extends a concrete platform class. Same factory the console run and the Compose preview
+        // use. A class implementing only interfaces needs no peer at all, so this matters for the rest.
+        manager.applicationContainer.registerServiceIfAbsent(VM_PEER_FACTORY) { DexPeerFactory() }
         // The remote Projects Store, from the same baked-in Supabase config. Registered here for the same
         // reason as analytics: it is built from transport config the manager knows nothing about. An empty
         // URL or key leaves it unconfigured and the store falls back to the bundled catalog.

@@ -34,6 +34,10 @@ interface UiContributionScope {
     /** Teach the editor how to color, comment, and indent a language ([EditorLanguageProfile]). This is the
      *  text-level layer; a language wanting parsing and resolution also registers a `LanguageBackend`. */
     fun editorLanguage(profile: EditorLanguageProfile): Registration
+
+    /** Add a preview pane for a file kind ([EditorPreviewContribution]): the Preview/Split surface for
+     *  something the IDE's four built-in panes do not cover. */
+    fun editorPreview(preview: EditorPreviewContribution): Registration
 }
 
 /**
@@ -93,5 +97,8 @@ object UiPluginHost {
 
         override fun editorLanguage(profile: EditorLanguageProfile): Registration =
             EditorLanguageRegistry.register(profile)
+
+        override fun editorPreview(preview: EditorPreviewContribution): Registration =
+            EditorPreviewRegistry.register(preview)
     }
 }

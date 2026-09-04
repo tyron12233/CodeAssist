@@ -33,7 +33,7 @@ class ToolkitTest {
     }
 
     private companion object {
-        // Mirrors dev.ide.build.engine.RunPointer / RunKey, which the toolkit does not depend on.
+        // Mirrors dev.ide.build.RunPointer / RunKey, which the toolkit does not depend on.
         const val POINTER_DOWN = 0
         const val POINTER_MOVE = 1
         const val POINTER_UP = 2

@@ -119,6 +119,11 @@ import dev.ide.model.module
 import dev.ide.model.sync.BUILD_FILE_WRITER_EP
 import dev.ide.model.sync.PROJECT_IMPORTER_EP
 import dev.ide.platform.ServiceScopeLevel
+import dev.ide.core.services.KotlinProgramLowering
+import dev.ide.interp.api.CODE_INTERPRETER
+import dev.ide.interp.api.LowerResult
+import dev.ide.interp.impl.CodeInterpreterImpl
+import dev.ide.interp.impl.RESTRICT_ALL
 import dev.ide.plugin.Plugin
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.PluginRegistration
@@ -180,6 +185,7 @@ object BuiltInPlugins {
         BuiltInPlugin(XmlAnalysisPlugin(env)),
         BuiltInPlugin(AndroidXmlPlugin(env)),
         BuiltInPlugin(IdeCoreServicesPlugin()),
+        BuiltInPlugin(InterpreterPlugin(env)),
         BuiltInPlugin(IdeCoreActionsPlugin(env)),
         BuiltInPlugin(EditorTextActionsPlugin()),
         // The AI agent: engine facet (settings page + AgentBackend wiring) + its Compose chat UI, one entry.
@@ -820,6 +826,44 @@ private class IdeCoreServicesPlugin : Plugin {
         }
         reg.service(ICON_MANAGER_SERVICE, ServiceScopeLevel.WORKSPACE) {
             IconManagerService(getService(ENGINE_CONTEXT))
+        }
+        reg.service(INTERPRETER_LOWERING, ServiceScopeLevel.WORKSPACE) {
+            KotlinProgramLowering(getService(ENGINE_CONTEXT))
+        }
+    }
+}
+
+/**
+ * The plugin-facing interpreter: `CODE_INTERPRETER`, through which an installed plugin runs the user's project
+ * code: its own preview of a framework the IDE knows nothing about, or a framework's entry point (see
+ * docs/plugin-interpreter.md).
+ *
+ * APPLICATION-scoped, unlike the engine services around it, because a plugin resolves services through
+ * `PluginRegistration.appServices` and holds no project. It therefore follows whichever project is open, via
+ * [ApplicationEnvironment.activeEngine], and answers `LowerResult.NotReady` when there is none, the same
+ * shape as "still indexing", which is the honest answer for a caller that should retry rather than report.
+ *
+ * Non-essential on purpose: a plugin that needs it declares `dependsOn = ["interpreter"]`, so a user who
+ * turns this off turns off what depends on it instead of leaving it half-working.
+ */
+private class InterpreterPlugin(private val env: ApplicationEnvironment) : Plugin {
+    override val manifest = PluginManifest(
+        id = "interpreter", name = "Interpreter",
+        description = "Lets a plugin run the open project's code interpreted, for a preview or a run of its own.",
+    )
+
+    override fun register(reg: PluginRegistration) {
+        reg.service(CODE_INTERPRETER, ServiceScopeLevel.APPLICATION) {
+            CodeInterpreterImpl(
+                lowering = { request ->
+                    env.activeEngine?.interpreterLowering?.lower(request)
+                        ?: LowerResult.NotReady("no project is open")
+                },
+                // A plugin that names no categories gets the ones the USER configured for previews, not a free
+                // hand; with no project open there is nothing to read, so restrict everything.
+                projectSandbox = { env.activeEngine?.composePreviewSandbox() ?: RESTRICT_ALL },
+                appServices = container,
+            )
         }
     }
 }

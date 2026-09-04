@@ -140,6 +140,61 @@ object ScreenRegistry {
 }
 
 // ---------------------------------------------------------------------------
+// Editor preview panes (the Preview / Split surface for a file kind)
+// ---------------------------------------------------------------------------
+
+/** What an editor-preview body is handed: the file, its live buffer, the surface's scheme, and where to
+ *  report problems. Mirrors what the built-in Compose/layout/resource panes already receive. */
+interface EditorPreviewContext {
+    val backend: IdeBackend
+    val path: String
+
+    /** The editor's live buffer for [path]. A preview follows the buffer, not the file on disk. */
+    val text: String
+
+    /** Whether the preview surface is showing its dark scheme. */
+    val dark: Boolean
+
+    /** Problems to show in the shared chip above the pane; an empty list clears them. */
+    fun reportProblems(problems: List<String>)
+
+    /** Open [path] in the editor with the caret at [offset]. See [ToolWindowContext.openFile]. */
+    fun openFile(path: String, offset: Int = 0) {}
+
+    /** Navigate to a contributed [ScreenContribution] by id. */
+    fun openScreen(id: String) {}
+}
+
+/**
+ * A preview pane for the files [appliesTo] claims. The built-in panes (Compose, layout, resource, Markdown)
+ * are still chosen first; this is what the editor falls back to before defaulting to the Compose pane, and
+ * what makes "preview" available for a file kind the IDE itself knows nothing about.
+ */
+class EditorPreviewContribution(
+    val id: String,
+    val title: String,
+    val appliesTo: (String) -> Boolean,
+    val content: @Composable (EditorPreviewContext) -> Unit,
+)
+
+object EditorPreviewRegistry {
+    private val items = mutableStateListOf<EditorPreviewContribution>()
+
+    fun register(preview: EditorPreviewContribution): Registration {
+        items.add(preview)
+        return Registration { items.remove(preview) }
+    }
+
+    /** The first contributed pane claiming [path], or null. Registration order decides, so a built-in UI
+     *  plugin's pane wins over a later-loaded plugin's, matching how the other registries resolve. A
+     *  contributor whose predicate throws is skipped rather than allowed to break the editor. */
+    fun forPath(path: String): EditorPreviewContribution? =
+        items.firstOrNull { runCatching { it.appliesTo(path) }.getOrDefault(false) }
+
+    fun all(): List<EditorPreviewContribution> = items.toList()
+}
+
+// ---------------------------------------------------------------------------
 // Editor view modes (beyond Code / Blocks / Preview / Split)
 // ---------------------------------------------------------------------------
 

@@ -32,7 +32,7 @@ const val PLUGIN_API_VERSION: Int = 3
  * scaffolded with a coordinate that resolves:
  *
  * ```
- * compileOnly(platform("io.github.tyron12233:plugin-bom:2.0.0"))
+ * compileOnly(platform("io.github.tyron12233:plugin-bom:2.1.0"))
  * compileOnly("io.github.tyron12233:plugin-api")
  * compileOnly("io.github.tyron12233:platform-core")
  * ```
@@ -66,8 +66,23 @@ const val PLUGIN_API_VERSION: Int = 3
  *  - added the `lang.backend`, `model.moduleType` and `model.facet` capabilities such a plugin declares.
  *
  * `docs/plugin-spi-2.0-migration.md` is the upgrade path for a plugin written against `1.x`.
+ *
+ * `2.1.0` opened the interpreter: a new artifact, `interp-api`, through which a plugin runs the code in the
+ * user's project, plus the pieces a plugin needs to show or run the result. It is additive, so
+ * [PLUGIN_API_VERSION] is unchanged and a `2.0.0` plugin keeps loading. It added:
+ *
+ *  - `dev.ide.interp.api.CodeInterpreter` (the `platform.codeInterpreter` service) and its sessions, for
+ *    interpreting a project's Kotlin source with no compile step or its compiled classes on the bytecode VM;
+ *  - `dev.ide.plugin.ui.EditorPreview`, a preview pane for a file kind the IDE's own four do not cover, and
+ *    `UiRegistration.editorPreview` to register one;
+ *  - the interpret-run surface in `build-api` (`ProgramInterpreter`, `InterpretRunRequest`,
+ *    `InterpretExecTask`, `ProgramIo` and `RunWindow`, previously unpublished), and
+ *    `BuildContext.programInterpreter`, so a plugin's own Run row can run what it built;
+ *  - the `interp.run` and `ui.editorPreview` capabilities.
+ *
+ * `docs/plugin-interpreter.md` is the guide to that surface.
  */
-const val PLUGIN_SPI_VERSION: String = "2.0.0"
+const val PLUGIN_SPI_VERSION: String = "2.1.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry

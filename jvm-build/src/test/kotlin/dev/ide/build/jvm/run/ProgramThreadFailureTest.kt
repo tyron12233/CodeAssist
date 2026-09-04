@@ -1,7 +1,7 @@
 package dev.ide.build.jvm.run
 
-import dev.ide.build.engine.InterpretRunRequest
-import dev.ide.build.engine.ProgramIo
+import dev.ide.build.InterpretRunRequest
+import dev.ide.build.ProgramIo
 import dev.ide.build.jvm.run.programs.ThreadPrograms
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Timeout

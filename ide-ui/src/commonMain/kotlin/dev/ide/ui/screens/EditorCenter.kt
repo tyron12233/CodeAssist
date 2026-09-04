@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.LocalPluginFileOpener
 import dev.ide.ui.LocalPluginNavigator
 import dev.ide.ui.theme.Ide
 import androidx.compose.animation.core.animateFloatAsState
@@ -39,7 +40,9 @@ import dev.ide.ui.editor.folding.FoldRegion
 import dev.ide.ui.editor.preview.ComposePreviewPane
 import dev.ide.ui.editor.preview.LayoutPreviewPane
 import dev.ide.ui.editor.preview.MarkdownPreviewPane
+import dev.ide.ui.editor.preview.PluginPreviewPane
 import dev.ide.ui.editor.preview.ResourcePreviewPane
+import dev.ide.ui.ext.EditorPreviewRegistry
 import dev.ide.ui.editor.preview.isLayoutPreviewable
 import dev.ide.ui.editor.preview.isMarkdownPreviewable
 import dev.ide.ui.editor.preview.isPreviewable
@@ -69,6 +72,7 @@ internal fun EditorCenter(
     val depsState by state.backend.deps.depsState.collectAsState()
     val depsScope = rememberCoroutineScope()
     val pluginNavigator = LocalPluginNavigator.current
+    val pluginFileOpener = LocalPluginFileOpener.current
     // Gradle compatibility mode: non-null only for a project imported from Gradle. Drives the top-bar compat
     // chip + the details banner below the toolbar; the chip re-opens a dismissed banner. `compatEpoch` re-keys
     // the disk read so a convert/revert (which drops/re-adds the marker without changing rootPath) refreshes it
@@ -308,6 +312,8 @@ internal fun EditorCenter(
                         },
                     )
                 }
+                // The plugin-contributed pane claiming this file, if any (see PluginPreviewPane).
+                val pluginPreview = EditorPreviewRegistry.forPath(active.path)
                 // `split` is true only in the Split view (editor + preview together): the Compose preview then
                 // hides its chrome bars and fits to width so dragging the divider doesn't rescale it.
                 val previewSurface: @Composable (Modifier, Boolean) -> Unit = { mod, split ->
@@ -330,6 +336,20 @@ internal fun EditorCenter(
                             path = active.path,
                             text = active.text,
                             backend = state.backend,
+                            modifier = mod,
+                        )
+
+                        // A plugin's own pane, for a file kind the four built-ins do not cover (a game
+                        // scene, a shader, a diagram). Consulted AFTER them on purpose: a plugin cannot take
+                        // `.xml` away from the layout preview by claiming it.
+                        pluginPreview != null -> PluginPreviewPane(
+                            preview = pluginPreview,
+                            path = active.path,
+                            text = active.text,
+                            backend = state.backend,
+                            dark = Ide.colors.isDark,
+                            onOpenFile = pluginFileOpener,
+                            onOpenScreen = pluginNavigator,
                             modifier = mod,
                         )
 

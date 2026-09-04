@@ -147,6 +147,58 @@ class ExternalUiPluginTest {
         assertEquals("/stub", seen?.projectPath)
     }
 
+    /** A preview pane's declaration, including the predicate that decides which files it claims. */
+    @Test
+    fun editorPreviewDeclarationIsCarriedOver() {
+        val facet = facet { ui ->
+            ui.editorPreview(
+                dev.ide.plugin.ui.EditorPreview(
+                    id = "com.example.scene",
+                    title = "Scene",
+                    appliesTo = { it.endsWith(".scene.kt") },
+                ) { },
+            )
+        }
+        val scope = RecordingScope("com.example.x")
+
+        facet.asUiPlugin("com.example.x").contributeUi(scope)
+
+        val contributed = scope.editorPreviews.single()
+        assertEquals("com.example.scene", contributed.id)
+        assertEquals("Scene", contributed.title)
+        assertTrue(contributed.appliesTo("/p/Level.scene.kt"))
+        assertTrue(!contributed.appliesTo("/p/Level.kt"))
+    }
+
+    /**
+     * What a preview body sees: the file, the LIVE buffer rather than the file on disk, and a way to report
+     * problems back into the host's chip.
+     */
+    @Test
+    fun thePreviewBodySeesTheLiveBufferAndCanReportProblems() {
+        var seen: dev.ide.plugin.ui.EditorPreviewContext? = null
+        val facet = facet { ui ->
+            ui.editorPreview(
+                dev.ide.plugin.ui.EditorPreview("id", "Scene", { true }) { ctx -> seen = ctx },
+            )
+        }
+        val scope = RecordingScope("com.example.x")
+        facet.asUiPlugin("com.example.x").contributeUi(scope)
+        val host = FakePreviewContext(path = "/stub/src/Level.scene.kt", text = "half-typed", dark = true)
+
+        composeOnce { scope.editorPreviews.single().content(host) }
+
+        val ctx = requireNotNull(seen)
+        assertEquals("/stub/src/Level.scene.kt", ctx.path)
+        assertEquals("/stub/src/Level.scene.kt", ctx.activeFilePath, "the previewed file is the active one")
+        assertEquals("half-typed", ctx.text)
+        assertTrue(ctx.dark)
+        assertEquals("/stub", ctx.projectPath)
+
+        ctx.reportProblems(listOf("no scene root"))
+        assertEquals(listOf("no scene root"), host.reported)
+    }
+
     // --- fixtures ----------------------------------------------------------------------------------
 
     private var registeredFor: String? = null
@@ -170,11 +222,22 @@ class ExternalUiPluginTest {
 
     private class FakeOverlayContext(override val backend: IdeBackend = StubBackend()) : OverlayContext
 
+    private class FakePreviewContext(
+        override val path: String,
+        override val text: String,
+        override val dark: Boolean = false,
+        override val backend: IdeBackend = StubBackend(),
+    ) : EditorPreviewContext {
+        var reported: List<String> = emptyList()
+        override fun reportProblems(problems: List<String>) { reported = problems }
+    }
+
     /** A [UiContributionScope] that records what the bridge hands it. */
     private class RecordingScope(override val pluginId: String) : UiContributionScope {
         val toolWindows = mutableListOf<ToolWindowContribution>()
         val screens = mutableListOf<ScreenContribution>()
         val overlays = mutableListOf<OverlayContribution>()
+        val editorPreviews = mutableListOf<EditorPreviewContribution>()
         var disposed = 0
             private set
 
@@ -188,6 +251,8 @@ class ExternalUiPluginTest {
         override fun tabDecoration(decoration: TabDecorationContribution) = handle()
         override fun treeIcon(iconId: String, icon: TreeIcon) = handle()
         override fun editorLanguage(profile: EditorLanguageProfile) = handle()
+        override fun editorPreview(preview: EditorPreviewContribution) =
+            handle().also { editorPreviews += preview }
     }
 
     // --- headless composition harness (no UI) ---

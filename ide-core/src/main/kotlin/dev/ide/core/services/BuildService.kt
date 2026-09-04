@@ -32,8 +32,8 @@ import dev.ide.build.engine.DefaultBuildEnv
 import dev.ide.build.engine.GuardCategory
 import dev.ide.build.engine.Guards
 import dev.ide.build.engine.PermissionBroker
-import dev.ide.build.engine.ProgramIo
-import dev.ide.build.engine.RunWindow
+import dev.ide.build.ProgramIo
+import dev.ide.build.RunWindow
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.TaskStatus
@@ -602,6 +602,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
         // Held here and drained by [launch] into that run's log and Problems list, so a contributed plugin the
         // build system had to skip is visible where the user is already looking.
         onExtensionError = { extensionWarnings.add(it) },
+        // So a contributed Run row can run what it built: an `InterpretExecTask` in a plugin's own graph gets
+        // the same VM, sandbox and I/O plumbing the built-in console run uses.
+        programInterpreter = ctx.programInterpreter,
     )
 
     /** Messages from [buildContext]'s error channel, awaiting the next [launch]. */

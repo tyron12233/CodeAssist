@@ -191,7 +191,7 @@ class SwingRunSessionArtSpike {
         /** `new Color(0x2D, 0x6C, 0xDF)` in the fixture, opaque. */
         const val FIXTURE_BLUE = 0xFF2D6CDF.toInt()
 
-        // Mirrors dev.ide.build.engine.RunPointer.
+        // Mirrors dev.ide.build.RunPointer.
         const val POINTER_DOWN = 0
         const val POINTER_UP = 2
 

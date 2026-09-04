@@ -228,6 +228,31 @@ class Interpreter(
 
     fun call(fn: ResolvedFunction, args: List<Any?>): Any? = invokeFunction(fn, NO_RECEIVER, args)
 
+    // -- embedding façade ---------------------------------------------------------------------------------
+    //
+    // The four members below are what a host driving the interpreter from OUTSIDE a render needs: build one of
+    // the program's objects, call into it, and read or write its properties. The Compose preview never needed
+    // them (it calls one composable and lets the tree do the rest), so construction and property access were
+    // private; a plugin's own preview drives an object's lifecycle itself (`create`, `render`, `resize`), which
+    // is what they exist for. See `:interp-api` and docs/plugin-interpreter.md.
+
+    /** Build an instance of the program's source type [typeName] (fully-qualified, or its simple name), with
+     *  [args] as its primary-constructor arguments. Null when the program has no such type. */
+    fun newInstance(typeName: String, args: List<Any?> = emptyList()): SourceObject? =
+        sourceClass(typeName)?.let { instantiate(it, args) }
+
+    /** Invoke [obj]'s member [name] with [args], dispatched virtually by `name/arity` (an override on the
+     *  instance's own class wins). Throws [InterpreterException] when it declares no such member. */
+    fun invokeMember(obj: SourceObject, name: String, args: List<Any?> = emptyList()): Any? =
+        (obj.proxyInvoker ?: throw InterpreterException("`${obj.cls.fqn}` was not built by this interpreter"))
+            .invoke(name, args)
+
+    /** Read property [name] off [receiver] (a [SourceObject], or a library value the dispatcher can read). */
+    fun readMember(receiver: Any, name: String): Any? = readProperty(receiver, name)
+
+    /** Write property [name] on [receiver]. */
+    fun writeMember(receiver: Any, name: String, value: Any?) = writeProperty(receiver, name, value)
+
     /** Marker for [invokeFunction]: no receiver to bind (a plain call), distinct from a genuine `null` receiver
      *  (a nullable extension receiver, `fun String?.f()` called on null). */
     private val NO_RECEIVER = Any()

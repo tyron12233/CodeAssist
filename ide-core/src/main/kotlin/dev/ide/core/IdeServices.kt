@@ -48,7 +48,7 @@ import dev.ide.android.support.tools.KeystoreRegistry
 import dev.ide.block.BLOCK_MAPPING_EP
 import dev.ide.block.impl.JavaBlockMapping
 import dev.ide.build.RunCapture
-import dev.ide.build.engine.ProgramInterpreter
+import dev.ide.build.ProgramInterpreter
 import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.core.IdeServices.Companion.PARSER_WARMUP_MIN_FREE_BYTES
 import dev.ide.core.IdeServices.Companion.openStore
@@ -68,6 +68,7 @@ import dev.ide.core.services.BuildService
 import dev.ide.core.services.ComposePreviewService
 import dev.ide.core.services.DependencyService
 import dev.ide.core.services.IconManagerService
+import dev.ide.core.services.KotlinProgramLowering
 import dev.ide.core.services.KotlinEditorService
 import dev.ide.core.services.LanguageFeatureService
 import dev.ide.core.services.ModuleService
@@ -438,6 +439,11 @@ internal val REFACTOR_SERVICE = ServiceKey<RefactorService>("ide.service.refacto
 internal val KOTLIN_EDITOR_SERVICE = ServiceKey<KotlinEditorService>("ide.service.kotlinEditor")
 internal val COMPOSE_PREVIEW_SERVICE = ServiceKey<ComposePreviewService>("ide.service.composePreview")
 internal val ICON_MANAGER_SERVICE = ServiceKey<IconManagerService>("ide.service.icons")
+
+/** WORKSPACE-scoped: lowers a Kotlin declaration for the plugin-facing interpreter (`:interp-api`). Separate
+ *  from [COMPOSE_PREVIEW_SERVICE] because what a plugin names as an entry is not a `@Preview` composable; the
+ *  lowering work itself is shared (`loweredModelFor`). */
+internal val INTERPRETER_LOWERING = ServiceKey<KotlinProgramLowering>("ide.service.interpreterLowering")
 
 /**
  * APPLICATION-scoped shared toolchain services — reachable with no project open (the picker's Settings &
@@ -822,6 +828,12 @@ class IdeServices private constructor(
     /** WORKSPACE-scoped icon browsing, the drawable/mipmap catalogue, and asset writing. */
     internal val icons: IconManagerService
         get() = store.workspaceContainer.getService(ICON_MANAGER_SERVICE)
+
+    /** WORKSPACE-scoped lowering for the plugin-facing interpreter. Reached from the APPLICATION-scoped
+     *  `CODE_INTERPRETER` a plugin resolves, through [ApplicationEnvironment.activeEngine]: a plugin holds no
+     *  project, so the published service follows whichever one is open. */
+    internal val interpreterLowering: KotlinProgramLowering
+        get() = store.workspaceContainer.getService(INTERPRETER_LOWERING)
 
     /** Set the Maven version-conflict policy (delegates to the dependency service). Kept here so the settings
      *  surface can reach it through the engine without depending on the service type. */

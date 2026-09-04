@@ -953,6 +953,9 @@ dependencies {
     // VmViewFactory) instead of dexing them, and DexPeerFactory realizes their peers. Reaches the app
     // transitively through :interp-compose's jvmShared (api), but the real-view code uses it directly.
     implementation(project(":jvm-interp"))
+    // The plugin-facing interpreter's engine, for the one thing the launcher owns: registering the peer
+    // factory a bytecode session needs on ART (see VM_PEER_FACTORY in AndroidIde).
+    implementation(project(":interp-impl"))
 
     // The owned java.awt/javax.swing toolkit. It has to be in the APP dex, not the test APK: an interpreted
     // program's window class reaches ART as a peer that SUBCLASSES `dev.ide.swing.JPanel`, so the toolkit must

@@ -87,6 +87,20 @@ class BuildContext(
      * that assembles a graph must pass it to `applyBuildPlugins`.
      */
     val onExtensionError: (String) -> Unit = {},
+
+    /**
+     * Runs a compiled program by interpreting its bytecode, for a graph that needs to execute what it built.
+     *
+     * This is how a plugin's own Run row runs something: put an [InterpretExecTask] in the graph and the
+     * program runs on the VM, with its output, input and (for a windowed program) its frames and input events
+     * going through the [ProgramIo] the host supplied. There is no other way to run code, and deliberately so:
+     * the IDE dexes nothing and hands no class loader the user's code, which is what keeps a run inside the
+     * dynamic-code rules it has to live by.
+     *
+     * Null when the host wired none (a test, or a build-only engine that never runs anything). A plugin that
+     * needs it should say so rather than assume: report that running is unavailable here.
+     */
+    val programInterpreter: ProgramInterpreter? = null,
 )
 
 data class BuildRequest(

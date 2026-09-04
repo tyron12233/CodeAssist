@@ -66,6 +66,9 @@ interface UiRegistration {
 
     /** Add a floating layer drawn above every screen. See [Overlay]. */
     fun overlay(overlay: Overlay): UiHandle
+
+    /** Add a preview pane for the files this plugin can render. See [EditorPreview]. */
+    fun editorPreview(preview: EditorPreview): UiHandle
 }
 
 /** Removes one contribution. */

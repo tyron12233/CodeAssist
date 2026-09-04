@@ -34,6 +34,7 @@ import dev.ide.ui.LeftPanelId
 import dev.ide.ui.OpenFile
 import dev.ide.ui.components.Breadcrumb
 import dev.ide.ui.editor.preview.isLayoutPreviewable
+import dev.ide.ui.ext.EditorPreviewRegistry
 import dev.ide.ui.editor.preview.isMarkdownPreviewable
 import dev.ide.ui.editor.preview.isPreviewable
 import dev.ide.ui.generated.resources.Res
@@ -74,7 +75,10 @@ internal fun BreadcrumbBar(
         else listOfNotNull(state.backend.files.moduleNameForFile(active.path)) + structure
     }
     val canPreview = isPreviewable(active.path) || isLayoutPreviewable(active.path) ||
-            isMarkdownPreviewable(active.path) || hasPreview
+            isMarkdownPreviewable(active.path) || hasPreview ||
+            // A plugin's contributed pane counts as previewable too, or the toggle would omit Preview for
+            // exactly the files a plugin added it for.
+            EditorPreviewRegistry.forPath(active.path) != null
     Row(
         Modifier.fillMaxWidth()
             .background(Ide.colors.editorBg)

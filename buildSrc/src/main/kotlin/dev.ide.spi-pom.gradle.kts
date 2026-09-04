@@ -57,6 +57,9 @@ publishing {
                             "run tasks."
                     "vfs-api" ->
                         "The CodeAssist virtual file system, which the other SPI artifacts expose."
+                    "interp-api" ->
+                        "The CodeAssist interpreter SPI: lowering a project's Kotlin and running it, or its " +
+                            "compiled classes, from a plugin, for a preview or a run of the plugin's own."
                     "plugin-bom" ->
                         "Versions for everything a CodeAssist plugin compiles against: the SPI artifacts " +
                             "and the Compose the IDE provides at runtime."

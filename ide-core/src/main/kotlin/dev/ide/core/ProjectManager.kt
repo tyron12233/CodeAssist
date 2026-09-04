@@ -3,7 +3,7 @@ package dev.ide.core
 import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.android.support.tools.KeystoreRegistry
-import dev.ide.build.engine.ProgramInterpreter
+import dev.ide.build.ProgramInterpreter
 import dev.ide.core.gradle.GradleProjectExport
 import dev.ide.core.plugins.KnownPlugin
 import dev.ide.core.plugins.PluginChanges

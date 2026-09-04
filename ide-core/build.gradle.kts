@@ -19,6 +19,11 @@ dependencies {
     implementation(project(":lang-xml")) // XML language backend (Android layouts/values/manifest)
     implementation(project(":lang-kotlin")) // editor-only Kotlin language backend (PSI parse + own completion)
     implementation(project(":lang-ksp")) // KSP2 source generation: KspSourceGenerator + bundled thin runner/processors (Room)
+    // The plugin-facing interpreter (docs/plugin-interpreter.md): `api` on interp-api because the published
+    // CODE_INTERPRETER key is registered from here and a launcher may resolve it; interp-impl supplies the
+    // sessions and the concrete LoweredProgram this module's lowering produces.
+    api(project(":interp-api"))
+    implementation(project(":interp-impl"))
     implementation(project(":decompiler")) // navigate-into-library: attached source, else Vineflower/@Metadata decompile
     implementation(project(":index-api"))
     implementation(project(":index-impl"))

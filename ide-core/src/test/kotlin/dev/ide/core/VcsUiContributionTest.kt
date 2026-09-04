@@ -120,5 +120,12 @@ class VcsUiContributionTest {
         }
 
         override fun treeIcon(iconId: String, icon: TreeIcon): Registration = Registration {}
+
+        val editorPreviews = mutableListOf<dev.ide.ui.ext.EditorPreviewContribution>()
+
+        override fun editorPreview(preview: dev.ide.ui.ext.EditorPreviewContribution): Registration {
+            editorPreviews += preview
+            return Registration {}
+        }
     }
 }

@@ -117,4 +117,53 @@ fun Vm.interpretedStaticValue(fqn: String, field: String): Any? {
     return Marshalling.vmToReal(toReal(value), desc)
 }
 
+/**
+ * Read an instance field of the interpreted object [instance] (a peer) stands for, in real conventions.
+ *
+ * Fields of an interpreted class live on the interpreted object, not on the peer, so reflection over the peer
+ * cannot see them; this is the way in. Only a field an interpreted class in the chain DECLARES is readable:
+ * one inherited from a real supertype lives on the peer and is reachable reflectively there.
+ */
+fun Vm.interpretedFieldValue(instance: Any, field: String): Any? {
+    val obj = vmObjectOf(instance)
+    val desc = fieldDescriptor(obj.vmClass, field)
+        ?: throw VmUnsupportedException("no field $field on ${obj.vmClass.name.replace('/', '.')}")
+    val slot = obj.fields[field]
+    val value = if (isVolatileInstanceField(obj.vmClass, field)) {
+        @Suppress("UNCHECKED_CAST")
+        (slot as java.util.concurrent.atomic.AtomicReference<Any?>).get()
+    } else slot
+    return Marshalling.vmToReal(toReal(value), desc)
+}
+
+/** Write an instance field of the interpreted object [instance] stands for; see [interpretedFieldValue]. */
+fun Vm.setInterpretedFieldValue(instance: Any, field: String, value: Any?) {
+    val obj = vmObjectOf(instance)
+    val desc = fieldDescriptor(obj.vmClass, field)
+        ?: throw VmUnsupportedException("no field $field on ${obj.vmClass.name.replace('/', '.')}")
+    val vmValue = Marshalling.realToVm(value, desc)
+    if (isVolatileInstanceField(obj.vmClass, field)) {
+        @Suppress("UNCHECKED_CAST")
+        (obj.fields[field] as java.util.concurrent.atomic.AtomicReference<Any?>).set(vmValue)
+    } else {
+        // The key set is fixed at allocation (see VmObject.fields), so this replaces a value and never grows
+        // the map, which is what makes the plain HashMap safe across the program's real threads.
+        obj.fields[field] = vmValue
+    }
+}
+
+private fun vmObjectOf(instance: Any): VmObject =
+    (instance as? VmPeer)?.vmObject() as? VmObject
+        ?: throw VmUnsupportedException("${instance.javaClass.name} does not stand for an interpreted instance")
+
+/** The descriptor of instance field [name] as declared by [start] or an interpreted supertype, or null. */
+private fun Vm.fieldDescriptor(start: VmClass, name: String): String? {
+    var c: VmClass? = start
+    while (c != null) {
+        c.instanceFieldDescs[name]?.let { return it }
+        c = c.superName?.let { resolve(it) }
+    }
+    return null
+}
+
 private fun internalOf(fqn: String): String = fqn.replace('.', '/')

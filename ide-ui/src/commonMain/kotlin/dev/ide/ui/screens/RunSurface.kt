@@ -152,7 +152,7 @@ private fun toProgramSpace(x: Float, y: Float, frame: RunFrameUi, drawn: IntSize
     return px to py
 }
 
-// Mirrors dev.ide.build.engine.RunPointer / RunKey, which this multiplatform module cannot depend on.
+// Mirrors dev.ide.build.RunPointer / RunKey, which this multiplatform module cannot depend on.
 private const val RUN_POINTER_DOWN = 0
 private const val RUN_POINTER_MOVE = 1
 private const val RUN_POINTER_UP = 2

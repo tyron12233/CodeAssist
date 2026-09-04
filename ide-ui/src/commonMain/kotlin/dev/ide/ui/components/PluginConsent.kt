@@ -147,6 +147,9 @@ internal fun describeCapability(capability: String): String = when (capability) 
     "ui.screen" -> "Add a screen to the IDE"
     "ui.overlay" -> "Show a prompt over any screen"
     "ui.editorAction" -> "Add actions at the cursor in the editor"
+    "ui.editorPreview" -> "Add a preview pane for some of your files"
+    // Phrased as what it does to the user's own code, since that is the part worth deciding about.
+    "interp.run" -> "Run your project's code inside the IDE, to preview or run it"
     "build.task" -> "Add steps to your builds"
     "build.sourceGenerator" -> "Generate source code into your modules"
     "build.runTask" -> "Add an entry to the Run picker"

@@ -205,6 +205,28 @@ whichever ports the launcher supplied on the application container, and `IdeServ
 its in-process default; `getServiceOrNull` is the single resolution path. The `desktop`/`onDevice` launcher
 factories are unchanged.
 
+## Running the user's code (`interp-api`)
+
+A plugin can run the code in the open project, which is what lets it preview or run a framework the IDE knows
+nothing about. `CODE_INTERPRETER` (`interp-api`, APPLICATION scope) offers two kinds of session: one over
+interpreted Kotlin **source**, with no compile or dex step, so it can run the buffer the user is typing in;
+and one over **compiled classes** on the bytecode VM. `dev.ide.plugin.ui.EditorPreview` is the surface for
+showing the result, a fifth preview pane beside the IDE's own four.
+
+Two things are deliberately not exposed, and both follow the same rule the promoted services follow:
+
+- **`ResolvedTree`**, the resolver-to-interpreter contract, stays private. `:interp-core` re-exports it and
+  `InterpreterHooks.beforeCall` takes an `RNode.Call`, so publishing that module would freeze a contract that
+  changes with every lowering fix, and a plugin compiled against last month's tree would fail at its first
+  call rather than at load. `LoweredProgram` is an opaque handle instead, and the hook seam is re-declared
+  over the owner and member names a policy actually needs.
+- **`Vm`** stays private, because its model is typed in ASM's `MethodNode` and publishing it would put
+  `asm-tree` in the plugin ABI. `BytecodeSession` is the narrowed alternative.
+
+Lowering lives in `:ide-core` (it needs the open project's analyzers, indexes and module graph); the sessions
+live in `:interp-impl`, which owns the concrete `LoweredProgram` so both halves share the real lowered types
+while a plugin sees only the interface. Design: [plugin-interpreter.md](plugin-interpreter.md).
+
 ## Installed plugins
 
 A plugin does not have to ship inside the IDE. On Android, a plugin is a **separate app the user installs**,
@@ -361,13 +383,18 @@ declared and shown at the consent gate, but nothing enforces it yet.
 
 ## Future work
 
+- **An isolated process for a plugin's preview:** the built-in Compose preview renders in the `:preview`
+  process, so a runaway recomposition pegs that process rather than the IDE. A plugin session runs in the IDE
+  process, because the isolation seam is Compose-specific (its AIDL surface serializes a lowered Compose
+  preview). The interpreter's own recursion and wall-clock bounds are what stand in for it today.
+
 - **Enforcing capabilities:** an installed plugin's declared `capabilities` drive install-time consent and a
   runtime permission broker modelled on the run sandbox's. See `docs/ui-extensibility-and-plugin-api.md`.
 - **A desktop plugin source:** the same SPI over a plugins directory (`URLClassLoader`, parent = app
   classloader), plus install and uninstall for both hosts.
 - **The rest of the UI surface for installed plugins:** editor view modes, UI host actions and tab decorations
-  are built-in-only, because their contexts carry `IdeBackend`. Tool windows, screens and overlays are
-  reachable (see [Installed plugins](#installed-plugins)).
+  are built-in-only, because their contexts carry `IdeBackend`. Tool windows, screens, overlays and editor
+  preview panes are reachable (see [Installed plugins](#installed-plugins)).
 - **UI contribution unification:** an `ide-ui-api` module homing the Compose-bearing registries (tool windows,
   screens, editor view modes, UI actions, tree icons) so UI contributions flow through the same plugin model.
 - **Remaining host capabilities:** the `IdeServicesBackend`-layer ports (analytics, the build-runner factory,
@@ -377,7 +404,8 @@ declared and shown at the consent gate, but nothing enforces it yet.
   any plugin can resolve an APPLICATION-scoped service (`Module.service` / `Workspace.service` already
   covered the other two scopes from an extension-point callback), and four engine services are now nameable
   from the published SPI: `BUILD_CONTROL` (`build-api`), `SYMBOL_SEARCH` (`index-api`), `MODULE_SOURCES`
-  (`project-model-api`) and `MODULE_ANALYSIS` (`analysis-api`). Each is a **narrowed** interface over the
+  (`project-model-api`) and `MODULE_ANALYSIS` (`analysis-api`), joined since by `CODE_INTERPRETER`
+  (`interp-api`). Each is a **narrowed** interface over the
   engine class, registered as an alias against the same instance the internal key resolves, so only the
   promoted members are frozen as plugin API while the rest of each service stays `internal`. What is left is
   case-by-case: the remaining keys in Appendix C are still built-in-only, the public platform ports

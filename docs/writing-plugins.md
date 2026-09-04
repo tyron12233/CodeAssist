@@ -798,10 +798,12 @@ A key is usable only if you can name its type, and that differs by tier:
 Resolution itself is available to both tiers: `reg.appServices` for APPLICATION scope, and
 `Module.service` / `Workspace.service` from the callbacks above. What differs is what you can *name*.
 
-Five engine capabilities are nameable from the published SPI. `WORKSPACE_SERVICE` is the bound `Workspace`.
-The other four are the promoted services (`BUILD_CONTROL`, `SYMBOL_SEARCH`, `MODULE_SOURCES`,
-`MODULE_ANALYSIS`), each declared in the api module whose types it already speaks, and each typed to a
-*narrowed* interface rather than to the engine class behind it. `:ide-core` registers the narrow key
+Six engine capabilities are nameable from the published SPI. `WORKSPACE_SERVICE` is the bound `Workspace`.
+Four are the promoted services (`BUILD_CONTROL`, `SYMBOL_SEARCH`, `MODULE_SOURCES`, `MODULE_ANALYSIS`), each
+declared in the api module whose types it already speaks, and each typed to a *narrowed* interface rather
+than to the engine class behind it. The sixth is `CODE_INTERPRETER` (`interp-api`), the only one at
+APPLICATION scope: it runs the code in the user's project, and it follows whichever project is open rather
+than being scoped to one (see section 14b). `:ide-core` registers the narrow key
 alongside its own and resolves both to one instance, so a plugin and the IDE act on the same build, the same
 index, and the same module model.
 
@@ -1243,6 +1245,33 @@ scope.viewMode(
 
 `appliesTo` gates the mode per file, so it is only offered for files it can actually render. `ViewModeContext`
 carries `backend`, `filePath`, and the live `text`.
+
+### 10.6b Editor preview panes
+
+The Preview (and Split) surface for a file kind the IDE has no pane for. The four built-in panes are the
+Compose `@Preview`, Android XML layouts, resources and Markdown; a plugin adds a fifth for something else
+entirely, such as a game scene or a shader.
+
+```kotlin
+ui.editorPreview(
+    EditorPreview(
+        id = "hello.scene",
+        title = "Scene",
+        appliesTo = { path -> path.endsWith(".scene.kt") },
+        content = { ctx -> ScenePane(ctx.path, ctx.text, ctx.dark, ctx::reportProblems) },
+    ),
+)
+```
+
+`appliesTo` is asked per open file during composition, so keep it cheap. The built-in panes are consulted
+first, which is what stops a plugin taking `.xml` away from the layout preview.
+
+`EditorPreviewContext` carries `path`, the live `text` (the editor buffer, not the file on disk, so the body
+recomposes as the user types), `dark` for the surface's scheme, and `reportProblems`. Problems go into the
+same chip the built-in previews use; report on every pass, since an empty list is what clears it.
+
+Combined with the interpreter (section 16), this is how a plugin renders what the user's code actually
+produces rather than a description of it.
 
 ### 10.7 UI host actions
 
@@ -1819,6 +1848,110 @@ For rendering, `:ide-ui` desktop tests snapshot composables headlessly with `Ima
 
 ---
 
+## 14b. Run the project's code
+
+`interp-api` lets a plugin run the code in the user's project. It is what makes a preview of a framework the
+IDE knows nothing about possible: instead of parsing the user's source and drawing an approximation, the
+plugin runs it and shows the result.
+
+Two kinds of session, matching the two interpreters the IDE has.
+
+### Source: no compile step
+
+```kotlin
+class GamePlugin : Plugin {
+    override val manifest = PluginManifest(
+        id = "libgdx",
+        name = "LibGDX",
+        capabilities = listOf(PluginCapabilities.INTERP_RUN),
+        dependsOn = listOf("interpreter"),
+    )
+
+    private var services: ServiceLookup = ServiceLookup.Empty
+    override fun register(reg: PluginRegistration) { services = reg.appServices }
+
+    /** Called from the plugin's own preview pane, on every edit. */
+    fun preview(path: Path, buffer: String): ApplicationListener? {
+        val interp = services.getServiceOrNull(CODE_INTERPRETER) ?: return null
+        val program = when (val r = interp.lower(LowerRequest(path, entry = "MyGame", text = buffer))) {
+            is LowerResult.Lowered -> r.program
+            is LowerResult.NotReady -> return null            // retry; do not report
+            is LowerResult.Failed -> { show(r.problems); return null }
+        }
+        val session = interp.openSource(
+            program,
+            InterpretConfig(libraryLoader = javaClass.classLoader),
+        )
+        return session.instantiate("MyGame").proxy(ApplicationListener::class.java)
+    }
+}
+```
+
+Three things in that example carry most of the weight:
+
+- **`dependsOn = ["interpreter"]`**, so a user who disables the interpreter disables what depends on it
+  rather than leaving it half-working, and `LowerResult.NotReady` is a retry rather than a failure. A module's
+  Kotlin classpath index builds in the background, so the first lower after a project opens legitimately
+  answers "not yet".
+- **`libraryLoader = javaClass.classLoader`** bridges the framework the plugin bundles in its own APK as real,
+  dexed code, leaving only the user's own source interpreted. This is the difference between a preview that
+  runs at a usable speed and one that does not, and it needs no dynamic loading of anything.
+- **`proxy(ApplicationListener::class.java)`** hands the interpreted object to code that has no idea an
+  interpreter is involved. An interpreted object is not an instance of anything, so a framework that wants to
+  own an object's lifecycle needs this.
+
+### Compiled classes: the bytecode VM
+
+For a plugin that builds first, or that needs code with no source in the project:
+
+```kotlin
+val session = interp.openBytecode(
+    BytecodeConfig(
+        classpath = module.classpath(DependencyScope.RUNTIME).entries.map { it.path },
+        interpretPrefixes = listOf("com.example."),   // the user's code
+        libraryLoader = javaClass.classLoader,        // the framework, real
+    )
+)
+session.construct("com.example.MyGame").call("create")
+```
+
+The VM reads `.class` bytes off that classpath; nothing is dexed and no class loader is handed the user's
+code. `interpretPrefixes` is worth setting: it keeps the VM from parsing a whole framework it could have
+bridged instead.
+
+### Running a program from your own Run row
+
+A `RunTaskProvider` gets a `BuildContext`, which carries the interpreter a graph needs to execute what it
+built:
+
+```kotlin
+override fun actionFor(spec: RunTaskSpec, project: Project, module: Module, ctx: BuildContext): RunAction? {
+    val interpreter = ctx.programInterpreter ?: return null   // no runner on this host
+    return RunAction(
+        header = "Run ${module.name}",
+        graph = graph(compileTask, InterpretExecTask(TaskName(":run"), mainClass, ::classpath, interpreter)),
+    )
+}
+```
+
+`ProgramIo` also models a **windowed** program: implement `frame` and `windowed` and the host draws the
+program's frames and forwards pointer and key events, which is how the AWT/Swing support works.
+
+### What to expect
+
+- **Speed.** Only the user's own code should be interpreted; bridge the rest. A warm interpreted call is
+  single-digit milliseconds on a device, the first call into a large interpreted jar pays a one-time parse,
+  and fully interpreted UI at 60 fps is not reachable. Prefer rendering a frame per edit over an open loop.
+- **Bounds, not isolation.** The source interpreter aborts a call that exceeds its recursion depth or
+  wall-clock deadline, and a bytecode session can be cancelled. It runs in the IDE's process, though, so a
+  plugin preview is not insulated the way the built-in Compose preview (which renders in its own process) is.
+- **The sandbox.** A session defaults to the project's own preview sandbox, so a plugin's preview is held to
+  the rules the user configured rather than getting more access to the device than the built-in one has.
+  `InterpretConfig.sandbox` can widen or narrow it, and `InterpretHooks` can refuse or stand in for individual
+  calls: a fixed clock, a stub asset loader, a canvas of the plugin's own.
+
+`docs/plugin-interpreter.md` covers the design, including what is deliberately not exposed and why.
+
 ## 15. Ship your plugin as its own app
 
 Everything above is the internal tier, where a plugin is a module inside the IDE. A plugin can instead be a
@@ -2280,11 +2413,18 @@ with `Module.service(key)` / `Workspace.service(key)` from an extension point ca
 | `dev.ide.index.SYMBOL_SEARCH` | WORKSPACE | `SymbolSearch` | Symbol and member lookup over the workspace indexes |
 | `dev.ide.model.MODULE_SOURCES` | WORKSPACE | `ModuleSources` | A module's source sets and source roots, including adding one |
 | `dev.ide.analysis.MODULE_ANALYSIS` | MODULE | `ModuleAnalysis` | The module's `SourceAnalyzer` per language: resolution and diagnostics for code the plugin did not parse |
+| `dev.ide.interp.api.CODE_INTERPRETER` | APPLICATION | `CodeInterpreter` | Run the code in the user's project: lower its Kotlin with no compile step, or run its compiled classes on the bytecode VM (section 14b) |
 
-The keys an installed plugin can name. The four below `WORKSPACE_SERVICE` are **narrowed aliases** of engine
-services listed further down: the interface is the promoted slice, declared in the api module whose types it
-already speaks, and `IdeCoreServicesPlugin` registers it against the same instance the internal key
-resolves. So a plugin gets the live service, and the members it can reach are the ones the IDE committed to.
+The keys an installed plugin can name. The four between `WORKSPACE_SERVICE` and `CODE_INTERPRETER` are
+**narrowed aliases** of engine services listed further down: the interface is the promoted slice, declared in
+the api module whose types it already speaks, and `IdeCoreServicesPlugin` registers it against the same
+instance the internal key resolves. So a plugin gets the live service, and the members it can reach are the
+ones the IDE committed to.
+
+`CODE_INTERPRETER` is not an alias of a workspace service. It is registered at APPLICATION scope by
+`InterpreterPlugin` and reads whichever project is open, because a plugin resolves services through
+`appServices` and holds no project of its own. With none open it answers `LowerResult.NotReady`, the same
+shape as "still indexing", which is what a caller should retry rather than report.
 
 ### Engine services: [`IdeServices.kt`](../ide-core/src/main/kotlin/dev/ide/core/IdeServices.kt)
 
@@ -2309,6 +2449,7 @@ above.
 | `ANDROID_RESOURCE_SERVICE` | WORKSPACE | Android resource navigation and preview |
 | `COMPOSE_PREVIEW_SERVICE` | WORKSPACE | The on-device Compose `@Preview` interpreter path |
 | `ICON_MANAGER_SERVICE` | WORKSPACE | Browsable icon repositories and a module's existing drawables |
+| `INTERPRETER_LOWERING` | WORKSPACE | Lowers a Kotlin declaration for the plugin-facing interpreter. **SPI**: reached through `CODE_INTERPRETER` |
 | `SIGNING_SERVICE` | WORKSPACE | The keystore registry and APK signing configuration |
 | `BLOCK_SERVICE` | WORKSPACE | The projectional (block) editor's projection of a buffer |
 | `ACTION_MANAGER` | WORKSPACE | Resolves and dispatches what is contributed to `UI_ACTION_EP` / `ACTION_GROUP_EP` |

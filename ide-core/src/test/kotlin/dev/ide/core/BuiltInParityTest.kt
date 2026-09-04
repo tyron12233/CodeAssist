@@ -69,7 +69,7 @@ class BuiltInParityTest {
             "ide.service.dependencies", "ide.service.modules", "ide.service.build",
             "ide.service.projectSync", "ide.service.languageFeatures", "ide.service.androidResources",
             "ide.service.refactor", "ide.service.kotlinEditor", "ide.service.composePreview",
-            "ide.service.icons",
+            "ide.service.icons", "ide.service.interpreterLowering",
             // The android plugin's shared resource-repository cache, which the synthetic `R` resolves through
             // the workspace it is handed rather than through the open project.
             "android.resourceRepository",
@@ -80,11 +80,19 @@ class BuiltInParityTest {
         val spiModuleAliases = setOf("platform.moduleAnalysis")
         val spiWorkspaceAliases =
             setOf("platform.buildControl", "platform.symbolSearch", "platform.moduleSources")
+        // The plugin-facing interpreter (interp-api) is the one published service at APPLICATION scope: a
+        // plugin resolves services through `PluginRegistration.appServices` and holds no project, so it
+        // follows whichever project is open rather than being scoped to one.
+        val spiApplicationServices = setOf("platform.codeInterpreter")
         assertEquals(
-            moduleAnalyzers + workspaceServices + spiModuleAliases + spiWorkspaceAliases,
+            moduleAnalyzers + workspaceServices + spiModuleAliases + spiWorkspaceAliases +
+                spiApplicationServices,
             byId.keys,
-            "exactly the 16 engine services plus the 4 published-SPI aliases",
+            "exactly the 17 engine services plus the 5 published-SPI keys",
         )
+        spiApplicationServices.forEach {
+            assertEquals(ServiceScopeLevel.APPLICATION, byId.getValue(it).level, it)
+        }
         (moduleAnalyzers + spiModuleAliases).forEach {
             assertEquals(ServiceScopeLevel.MODULE, byId.getValue(it).level, it)
         }

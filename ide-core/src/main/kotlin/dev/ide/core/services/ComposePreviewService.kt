@@ -26,49 +26,11 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         const val INDEXING_MESSAGE = "Preparing preview — indexing dependencies…"
     }
 
-    /**
-     * The cross-MODULE-expanded preview model for [vf] (already parsed in [entry]'s analyzer): seed from the
-     * entry file, then run the reachable-declaration expansion across [module] PLUS its transitive dependency
-     * MODULES — so a `data class`/helper declared in a dependency module is lowered + merged and the interpreter
-     * can construct/call it (not just same-module siblings).
-     *
-     * Resolution is OWNERSHIP-routed: a module's source model already spans its dependency modules' sources, so
-     * several modules' analyzers can SEE the same dependency file. We LOCATE a reached declaration via any module
-     * that can see it (the entry module first), then LOWER it with the analyzer of the module that actually OWNS
-     * the file (its own source root contains it) — so a dependency file resolves against ITS module's full
-     * classpath, not the entry module's narrower view.
-     */
+    /** The cross-module lowered model for [vf], shared with the plugin-facing interpreter (see
+     *  [loweredModelFor], which carries the ownership-routing rationale). */
     private fun previewModelFor(
         module: Module, vf: VirtualFile, entry: KotlinSourceAnalyzer,
-    ): dev.ide.lang.kotlin.interp.PreviewModel? {
-        val kotlinModules = ctx.moduleBuildClosure(module).mapNotNull { m ->
-            (ctx.analyzerFor(m, KotlinLanguageBackend.LANGUAGE_ID) as? KotlinSourceAnalyzer)?.let {
-                Triple(m, it, ctx.sourceRoots(m).map { r -> r.normalize() })
-            }
-        }
-
-        // Lazy handles: the expansion pulls exactly the reached declaration out of the located file, so
-        // following one helper into a big screen file doesn't lower its unrelated siblings (the cold-preview
-        // dominant cost on a big project).
-        fun lazyByOwner(pf: dev.ide.lang.kotlin.symbols.KotlinSymbolService.PreviewSourceFile): dev.ide.lang.kotlin.interp.PreviewLazyFile? {
-            val path = runCatching { java.nio.file.Paths.get(pf.file.path).normalize() }.getOrNull()
-            val owner = path?.let { p ->
-                kotlinModules.firstOrNull { (_, _, roots) -> roots.any { p.startsWith(it) } }?.second
-            }
-            return (owner ?: entry).lazyLoweredFile(pf)
-        }
-
-        val provider = object : dev.ide.lang.kotlin.interp.LazyPreviewDeclProvider {
-            override fun fileDeclaringType(fqn: String): dev.ide.lang.kotlin.interp.PreviewLazyFile? =
-                kotlinModules.firstNotNullOfOrNull { (_, a, _) -> a.findDeclaringTypeFile(fqn) }
-                    ?.let(::lazyByOwner)
-
-            override fun filesDeclaringFunction(name: String): List<dev.ide.lang.kotlin.interp.PreviewLazyFile> =
-                kotlinModules.flatMap { (_, a, _) -> a.findDeclaringFunctionFiles(name) }
-                    .distinctBy { it.file.path }.mapNotNull(::lazyByOwner)
-        }
-        return entry.lowerFileWithDeps(vf, provider)
-    }
+    ): dev.ide.lang.kotlin.interp.PreviewModel? = loweredModelFor(ctx, module, vf, entry)
 
     /**
      * Run the `@Preview` composable [functionName] in [file] (buffer [text]): lower the file, verify the

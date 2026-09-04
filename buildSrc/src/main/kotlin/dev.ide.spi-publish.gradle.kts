@@ -1,7 +1,7 @@
 // Publishing for the modules a plugin author compiles against: the plugin SPI (:plugin-api and, for a
 // plugin contributing Compose UI, :plugin-ui-api), the substrate it exposes (:platform-core), and the
 // feature SPIs a plugin extends (:project-model-api, :language-api, :analysis-api, :index-api, :build-api,
-// and :vfs-api, which the others expose transitively). Nothing else in this build is published.
+// :interp-api, and :vfs-api, which the others expose transitively). Nothing else in this build is published.
 //
 // These carry their own version rather than the app's. The SPI changes far less often than the IDE ships,
 // and whether a plugin is compatible is decided by PLUGIN_API_VERSION plus the manifest's minHostVersion,

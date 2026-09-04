@@ -3,12 +3,15 @@ id = "com.example.hello"
 name = "Hello Plugin"
 version = "1.0.0"
 apiVersion = 3
-description = "Sample plugin shipped as its own app: a settings page, a palette command, an editor action, a tool window, and build logic (a task on every build, a source generator, a Run row)."
+description = "Sample plugin shipped as its own app: a settings page, a palette command, an editor action, a tool window, a preview pane that runs the file through the interpreter, and build logic (a task on every build, a source generator, a Run row)."
 entryPoints = ["com.example.hello.HelloPlugin"]
 # The Compose UI facet, instantiated off the same APK and the same classloader as the entry point above.
 uiEntryPoints = ["com.example.hello.HelloUiPlugin"]
 capabilities = [
-    "ui.settingsPage", "ui.action", "ui.editorAction", "ui.toolWindow",
+    "ui.settingsPage", "ui.action", "ui.editorAction", "ui.toolWindow", "ui.editorPreview",
     "build.task", "build.sourceGenerator", "build.runTask",
+    "interp.run",
 ]
-minHostVersion = "3.12.0"
+# The preview pane and the interpreter arrived together, in the release carrying SPI 2.1.0. Declaring the
+# floor is what puts a readable reason on this plugin's row instead of letting it fail at first render.
+minHostVersion = "3.14.0"

@@ -2,7 +2,7 @@ package dev.ide.core
 
 import dev.ide.android.support.resources.ResourceRepository
 import dev.ide.android.support.tools.KeystoreRegistry
-import dev.ide.build.engine.ProgramInterpreter
+import dev.ide.build.ProgramInterpreter
 import dev.ide.core.services.DependencyService
 import dev.ide.index.IndexService
 import dev.ide.lang.LanguageId

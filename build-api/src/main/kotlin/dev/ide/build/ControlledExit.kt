@@ -1,4 +1,4 @@
-package dev.ide.build.engine
+package dev.ide.build
 
 /**
  * Thrown by the run's bytecode bridge when the interpreted program calls `System.exit`/`Runtime.exit`/

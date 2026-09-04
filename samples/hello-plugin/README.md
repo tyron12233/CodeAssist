@@ -169,3 +169,12 @@ with `kotlin.compiler.runViaBuildToolsApi=true` in `gradle.properties`. Without 
 - Build contributions have their own capabilities (`build.task`, `build.sourceGenerator`,
   `build.runTask`), so the consent gate names them like any other. Declare the ones you actually register:
   the editor flags a capability no facet can deliver, and an unknown one as a typo.
+- This sample tracks the SPI **in this checkout**, so its `minHostVersion` is the release that carries it.
+  On an older IDE it is refused with that reason on its row, which is the point of declaring the floor: the
+  preview pane and the interpreter are members that do not exist there, and a plugin that omitted the floor
+  would fail at first render instead.
+- The preview pane runs `greeting()` out of the edited buffer through `CODE_INTERPRETER` and shows what it
+  returned. Three rules in `HelloInterpreter` are worth copying: resolve the service lazily (`register` runs
+  before any project is open), treat `LowerResult.NotReady` as "come back later" rather than a failure, and
+  interpret off the composition thread. A framework plugin does the same thing at a larger scale, handing the
+  user's class to the real framework through `InterpretedObject.proxy`.

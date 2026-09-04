@@ -460,6 +460,8 @@ class InstalledPluginsTest {
             dev.ide.ui.ext.Registration {}
         override fun treeIcon(iconId: String, icon: dev.ide.ui.icons.TreeIcon) = dev.ide.ui.ext.Registration {}
         override fun editorLanguage(profile: dev.ide.ui.ext.EditorLanguageProfile) = dev.ide.ui.ext.Registration {}
+        override fun editorPreview(preview: dev.ide.ui.ext.EditorPreviewContribution) =
+            dev.ide.ui.ext.Registration {}
     }
 
     @Test

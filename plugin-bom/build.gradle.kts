@@ -55,6 +55,7 @@ dependencies {
         api(project(":index-api"))
         api(project(":build-api"))
         api(project(":vfs-api"))
+        api(project(":interp-api"))
 
         // The Compose the IDE provides at runtime. `androidx.compose.*` rather than the Compose
         // Multiplatform coordinates, because a plugin is an Android app and that is what those map to there.

@@ -73,17 +73,32 @@ object PluginCapabilities {
     /** Makes network requests. */
     const val NET = "net"
 
+    /** Contributes a preview pane for a file kind the IDE has none for. UI facet. */
+    const val UI_EDITOR_PREVIEW = "ui.editorPreview"
+
+    /**
+     * Runs the code in the user's project, inside the IDE, on the interpreter.
+     *
+     * The one capability here that is about the user's own code rather than the IDE's surfaces, which is why
+     * it is worth showing plainly: a plugin declaring it executes what the user wrote (a preview of a scene, a
+     * framework's entry point) rather than only reading it. Interpreted code is held to the project's preview
+     * sandbox by default, and the plugin itself is not sandboxed at all, so this says what the plugin does,
+     * not what it is prevented from doing. Engine facet.
+     */
+    const val INTERP_RUN = "interp.run"
+
     /** Every capability this build understands. A manifest naming anything else is flagged as a typo. */
     val KNOWN: Set<String> = linkedSetOf(
         UI_ACTION, UI_SETTINGS_PAGE, UI_EDITOR_ACTION,
-        UI_TOOL_WINDOW, UI_SCREEN, UI_OVERLAY,
+        UI_TOOL_WINDOW, UI_SCREEN, UI_OVERLAY, UI_EDITOR_PREVIEW,
         BUILD_TASK, BUILD_SOURCE_GENERATOR, BUILD_RUN_TASK,
         LANG_BACKEND, MODEL_MODULE_TYPE, MODEL_FACET,
+        INTERP_RUN,
         FS_READ, FS_WRITE, NET,
     )
 
     /** Capabilities only a [PluginManifest.uiEntryPoints] class can deliver: they are Compose contributions. */
-    val NEEDS_UI_FACET: Set<String> = linkedSetOf(UI_TOOL_WINDOW, UI_SCREEN, UI_OVERLAY)
+    val NEEDS_UI_FACET: Set<String> = linkedSetOf(UI_TOOL_WINDOW, UI_SCREEN, UI_OVERLAY, UI_EDITOR_PREVIEW)
 
     /**
      * Capabilities only a [PluginManifest.entryPoints] class can deliver: they are registrations against
@@ -96,5 +111,8 @@ object PluginCapabilities {
         UI_ACTION, UI_SETTINGS_PAGE, UI_EDITOR_ACTION,
         BUILD_TASK, BUILD_SOURCE_GENERATOR, BUILD_RUN_TASK,
         LANG_BACKEND, MODEL_MODULE_TYPE, MODEL_FACET,
+        // The interpreter is resolved through `PluginRegistration.appServices`, which only an engine facet
+        // has. A UI facet reaches it the way it reaches everything else: through its own engine facet.
+        INTERP_RUN,
     )
 }

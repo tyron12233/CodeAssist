@@ -2,6 +2,8 @@ package dev.ide.ui.ext
 
 import androidx.compose.runtime.remember
 import dev.ide.plugin.ui.Overlay
+import dev.ide.plugin.ui.EditorPreview as ExternalEditorPreview
+import dev.ide.plugin.ui.EditorPreviewContext as ExternalPreviewContext
 import dev.ide.plugin.ui.Screen
 import dev.ide.plugin.ui.ScreenUiContext
 import dev.ide.plugin.ui.ToolWindow
@@ -80,6 +82,24 @@ private class BridgedRegistration(
         )
         return UiHandle { registration.dispose() }
     }
+
+    override fun editorPreview(preview: ExternalEditorPreview): UiHandle {
+        val registration = scope.editorPreview(
+            EditorPreviewContribution(
+                id = preview.id,
+                title = preview.title,
+                appliesTo = preview.appliesTo,
+            ) { ctx ->
+                // Not remembered on the context alone: unlike a tool window, a preview context changes on
+                // every keystroke (it carries the buffer), so remembering it per instance would allocate a
+                // wrapper per frame for nothing. Keyed on what a body can actually observe instead.
+                preview.content(
+                    remember(ctx.path, ctx.text, ctx.dark, ctx) { PreviewUiContext(ctx) }
+                )
+            },
+        )
+        return UiHandle { registration.dispose() }
+    }
 }
 
 private fun ExternalAnchor.internal(): ToolWindowAnchor = when (this) {
@@ -104,6 +124,20 @@ private class OverlayUiContext(private val ctx: OverlayContext) : UiContext {
 
     /** An overlay is app-wide, not tied to a tab; the host hands it no file. */
     override val activeFilePath: String? get() = null
+    override fun openFile(path: String, offset: Int) = ctx.openFile(path, offset)
+    override fun openScreen(id: String) = ctx.openScreen(id)
+}
+
+private class PreviewUiContext(private val ctx: EditorPreviewContext) : ExternalPreviewContext {
+    override val projectPath: String? get() = projectPathOf(ctx.backend)
+
+    /** The previewed file IS the active one, so both answer the same path; [path] is the non-null form a
+     *  preview body can rely on. */
+    override val activeFilePath: String get() = ctx.path
+    override val path: String get() = ctx.path
+    override val text: String get() = ctx.text
+    override val dark: Boolean get() = ctx.dark
+    override fun reportProblems(problems: List<String>) = ctx.reportProblems(problems)
     override fun openFile(path: String, offset: Int) = ctx.openFile(path, offset)
     override fun openScreen(id: String) = ctx.openScreen(id)
 }

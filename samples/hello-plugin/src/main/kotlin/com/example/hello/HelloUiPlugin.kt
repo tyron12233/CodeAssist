@@ -8,9 +8,15 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.ide.plugin.ui.EditorPreview
+import dev.ide.plugin.ui.EditorPreviewContext
 import dev.ide.plugin.ui.ToolWindow
 import dev.ide.plugin.ui.ToolWindowAnchor
 import dev.ide.plugin.ui.UiContext
@@ -46,6 +52,17 @@ class HelloUiPlugin : UiPlugin {
                 anchor = ToolWindowAnchor.LEFT,
             ) { ctx -> HelloPanel(ctx) },
         )
+
+        // A preview pane for the files this plugin can show something for. The IDE's own four panes (Compose
+        // previews, Android layouts, resources, Markdown) are tried first, so a claim here only decides what
+        // happens for files none of them handle.
+        ui.editorPreview(
+            EditorPreview(
+                id = "com.example.hello.preview",
+                title = "Greeting",
+                appliesTo = { path -> path.endsWith(".hello.kt") },
+            ) { ctx -> GreetingPreview(ctx) },
+        )
     }
 }
 
@@ -73,6 +90,58 @@ private fun HelloPanel(ctx: UiContext) {
         )
 
         Button(onClick = { HelloState.greeted("the panel") }) { Text("Say hello") }
+    }
+}
+
+/**
+ * The preview pane for a `*.hello.kt` file: it runs the file's `greeting()` function through the IDE's
+ * interpreter and shows what it returned, updating as the user types.
+ *
+ * This is the point of a plugin-contributed pane. The IDE has no idea what a `.hello.kt` file means, and this
+ * is not a description of the code or a rendering of its syntax: it is the value the user's own function
+ * actually produced, with no compile step in between.
+ */
+@Composable
+private fun GreetingPreview(ctx: EditorPreviewContext) {
+    // Off the composition thread, and keyed on the buffer so a keystroke re-runs it and nothing else does.
+    // Interpretation is bounded but not free, and a preview that runs it inline janks the editor with it.
+    val state by produceState<HelloInterpreter.Outcome>(
+        HelloInterpreter.Outcome.Waiting("Running..."),
+        ctx.path,
+        ctx.text,
+    ) {
+        value = withContext(Dispatchers.Default) { HelloInterpreter.greeting(ctx.path, ctx.text) }
+    }
+    // Read once into a local: a delegated property cannot be smart-cast in the `when` below.
+    val outcome = state
+
+    // Problems belong in the host's chip rather than drawn over the content, and reporting on every pass is
+    // what clears the previous one.
+    ctx.reportProblems(
+        when (outcome) {
+            is HelloInterpreter.Outcome.Problem -> outcome.reasons
+            else -> emptyList()
+        }
+    )
+
+    Column(
+        Modifier.fillMaxWidth().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("greeting()", style = MaterialTheme.typography.labelMedium)
+        Text(
+            when (outcome) {
+                is HelloInterpreter.Outcome.Value -> outcome.text
+                is HelloInterpreter.Outcome.Waiting -> outcome.why
+                is HelloInterpreter.Outcome.Problem -> "Could not run it."
+                HelloInterpreter.Outcome.Unsupported -> "This IDE has no interpreter."
+            },
+            style = MaterialTheme.typography.headlineSmall,
+        )
+        Text(
+            ctx.path.substringAfterLast('/'),
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 

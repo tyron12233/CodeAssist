@@ -51,6 +51,8 @@ dependencies {
     // The build SPI (HelloBuildPlugin): build plugins, tasks, source generators, Run-picker rows. It brings
     // project-model-api, vfs-api and platform-core with it.
     compileOnly(project(":build-api"))
+    // The interpreter SPI (HelloInterpreter): running the open project's code with no compile step.
+    compileOnly(project(":interp-api"))
 
     // Compose, at the versions the IDE bundles and in the coordinates an out-of-tree plugin would use, so
     // this sample also checks that those pins are the right ones. compileOnly for the same reason as the

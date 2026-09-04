@@ -1,14 +1,5 @@
-package dev.ide.build.engine
+package dev.ide.build
 
-import dev.ide.build.AlwaysRun
-import dev.ide.build.Task
-import dev.ide.build.TaskContext
-import dev.ide.build.TaskInputs
-import dev.ide.build.TaskInputsImpl
-import dev.ide.build.TaskName
-import dev.ide.build.TaskOutputs
-import dev.ide.build.TaskOutputsImpl
-import dev.ide.build.TaskResult
 import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path

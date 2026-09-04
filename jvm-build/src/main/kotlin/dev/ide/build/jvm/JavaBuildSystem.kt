@@ -11,9 +11,9 @@ import dev.ide.build.TaskGraph
 import dev.ide.build.TaskName
 import dev.ide.build.engine.DefaultBuildEnv
 import dev.ide.build.engine.DefaultTaskContainer
-import dev.ide.build.engine.InterpretExecTask
-import dev.ide.build.engine.ProgramInterpreter
-import dev.ide.build.engine.ProgramIo
+import dev.ide.build.InterpretExecTask
+import dev.ide.build.ProgramInterpreter
+import dev.ide.build.ProgramIo
 import dev.ide.build.engine.SimpleBuildConfiguration
 import dev.ide.build.engine.applyBuildPlugins
 import dev.ide.build.engine.classOutputs

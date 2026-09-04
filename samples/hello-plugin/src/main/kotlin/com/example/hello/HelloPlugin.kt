@@ -44,6 +44,10 @@ class HelloPlugin : Plugin {
         val log = reg.logger("HelloPlugin")
         log.info("loaded from a separate APK")
 
+        // Hand the service lookup to the object the UI facet reads. Resolution itself stays lazy: `register`
+        // runs at startup, before any project is open, and the interpreter follows whichever one is.
+        HelloInterpreter.services = reg.appServices
+
         reg.register(
             UI_ACTION_EP,
             SimpleAction(
