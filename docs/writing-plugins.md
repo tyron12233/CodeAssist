@@ -1921,16 +1921,32 @@ bridged instead.
 
 ### Running a program from your own Run row
 
-A `RunTaskProvider` gets a `BuildContext`, which carries the interpreter a graph needs to execute what it
-built:
+There are two ways in, and the first is usually the right one.
+
+**Reuse a built-in id.** A `RunTaskSpec` whose id carries a built-in prefix (`build:`, `run:`, `assemble:`) is
+dispatched by the host's own pipeline, which builds the graph, runs it and streams the console. Such a
+provider needs no `actionFor` at all:
+
+```kotlin
+override fun tasksFor(module: Module): List<RunTaskSpec> =
+    listOf(RunTaskSpec("run:${module.name}", "Run ${module.name}", group = "run"))
+```
+
+**Or build your own graph**, when the run needs steps the host's pipeline does not have. `BuildContext`
+carries the interpreter for it:
 
 ```kotlin
 override fun actionFor(spec: RunTaskSpec, project: Project, module: Module, ctx: BuildContext): RunAction? {
     val interpreter = ctx.programInterpreter ?: return null   // no runner on this host
-    return RunAction(
-        header = "Run ${module.name}",
-        graph = graph(compileTask, InterpretExecTask(TaskName(":run"), mainClass, ::classpath, interpreter)),
-    )
+    val run = InterpretExecTask(TaskName(":run"), mainClass, ::classpath, interpreter)
+    return RunAction(header = "Run ${module.name}", graph = OneTask(run))
+}
+
+/** `TaskGraph` is published; the engine's builder for it is not, so a plugin implements the three members. */
+private class OneTask(private val task: Task) : TaskGraph {
+    override val tasks = listOf(task)
+    override fun dependencies(t: Task) = emptyList<Task>()
+    override fun topologicalLevels() = listOf(tasks)
 }
 ```
 

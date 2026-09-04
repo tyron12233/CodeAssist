@@ -77,12 +77,15 @@ unpublished `:build-engine` into `build-api`, and `BuildContext` gains `programI
 ```kotlin
 override fun actionFor(spec: RunTaskSpec, project: Project, module: Module, ctx: BuildContext): RunAction? {
     val interp = ctx.programInterpreter ?: return null
-    return RunAction(
-        header = "Run ${module.name}",
-        graph = graphOf(compileTask, InterpretExecTask(TaskName(":run"), mainClass, { cp }, interp)),
-    )
+    val run = InterpretExecTask(TaskName(":run"), mainClass, { cp }, interp)
+    return RunAction(header = "Run ${module.name}", graph = OneTask(run))
 }
 ```
+
+`TaskGraph` is published but the engine's builder for it is not, so a plugin that wants its own graph
+implements the interface's three members (`tasks`, `dependencies`, `topologicalLevels`). That gap predates
+this work and applies to `BUILD_SYSTEM_EP` equally; a plugin that only wants "build this module and run its
+main" avoids it by naming a built-in id prefix and letting the host's pipeline build the graph.
 
 Because `ProgramIo` already carries `frame`/`windowed`, a plugin that implements it gets a windowed program
 for free: the host draws the frames and forwards input.
