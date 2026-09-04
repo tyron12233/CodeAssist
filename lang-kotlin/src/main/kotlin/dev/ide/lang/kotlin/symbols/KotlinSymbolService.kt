@@ -893,7 +893,7 @@ class KotlinSymbolService(
             // the head segment; if that yields a different FQN and the re-attached nested name is real, use it
             // — so a source extension's nested receiver type keys to the same FQN the use site infers.
             val head = simple.substringBefore('.')
-            val headFqn = resolveTypeName(head, ctx)
+            val headFqn = resolveTypeName(head, ctx, enclosingClassFqn)
             if (headFqn != null && headFqn != head) {
                 val cand = "$headFqn.${simple.substringAfter('.')}"
                 if (isKnownType(cand)) return cand
@@ -906,7 +906,29 @@ class KotlinSymbolService(
         //    that happens to share the simple name (e.g. `import icons.automirrored.filled.List` → the icon
         //    object must not displace `kotlin.collections.List` in type-annotation position).
         Builtins.DEFAULT_SIMPLE_TYPES[simple]?.let { return it }
-        // 2. An explicit (non-star) import. It wins when it resolves to a KNOWN type. When the imported FQN is
+        // 2. A NESTED SOURCE type reached by SIMPLE name from within an enclosing class (`Plan` inside
+        //    `class Game { private class Plan }`, or a sibling nested type). Kotlin scopes a classifier
+        //    INNERMOST-OUT, so this comes before the file-level steps below: a nested type SHADOWS a
+        //    same-named import, same-package, or star-imported one. Running it last, as it used to, meant a
+        //    nested `object Cfg` lost to a top-level `class Cfg` in the same package and every reference to
+        //    the object read as a classifier used as a value. (The built-in simple types above stay first —
+        //    see their note; they are intrinsic to the language, not file-level scope.)
+        //
+        //    Sitting ahead of the file-level steps means this runs on EVERY simple-name resolution, so it is
+        //    kept to a [ModuleSourceModel.nestedSimpleNames] set probe plus, only for a name that IS some
+        //    class's nested type, a walk of map lookups. The type-SHAPE probe for a nested BINARY stays at
+        //    step 8 (below), where it is reached only if nothing else resolved: an enclosing class taken from
+        //    this file's PSI is a source class, so its nested types live in the source model.
+        if (enclosingClassFqn != null && simple in model().nestedSimpleNames) {
+            val classes = model().classByFqn
+            var owner: String? = enclosingClassFqn
+            while (!owner.isNullOrEmpty()) {
+                val cand = "$owner.$simple"
+                if (cand in classes) return cand
+                owner = owner.substringBeforeLast('.', "").ifEmpty { null }
+            }
+        }
+        // 3. An explicit (non-star) import. It wins when it resolves to a KNOWN type. When the imported FQN is
         //    NOT known (a stale/typo'd import whose target doesn't exist — `import com.foo.Food` alongside a
         //    same-file `data class Food`), it must NOT shadow a real same-file/same-package declaration of the
         //    same simple name: Kotlin resolves the name to that local type and flags the import, rather than
@@ -917,12 +939,12 @@ class KotlinSymbolService(
         val explicitImportFqn =
             ctx?.imports?.firstOrNull { !it.isStar && it.simpleName == simple }?.fqn
         explicitImportFqn?.let { if (isKnownType(it)) return it }
-        // 3. The file's own package (source, then classpath) — a same-package type needs no import.
+        // 4. The file's own package (source, then classpath) — a same-package type needs no import.
         ctx?.packageName?.takeIf { it.isNotEmpty() }?.let { pkg ->
             "$pkg.$simple".let { cand -> if (cand in model().classByFqn || typeShape(cand) != null) return cand }
         }
-        // 4. A SAME-PACKAGE project SOURCE class by simple name — needs no import. Kotlin sources come from the
-        //    model (step 3 also covers these when the file has a package directive); Java sources from the index
+        // 5. A SAME-PACKAGE project SOURCE class by simple name — needs no import. Kotlin sources come from the
+        //    model (step 4 also covers these when the file has a package directive); Java sources from the index
         //    (SOURCE origin, no `.class` on disk yet). A DIFFERENT-package project type needs an import just like
         //    a library type does, so it is NOT resolved bare here: its use stays unresolved (the unresolved-TYPE
         //    diagnostic flags the missing import), and completion offers no members on it — matching Kotlin. A
@@ -938,19 +960,19 @@ class KotlinSymbolService(
         val starPackages =
             (ctx?.imports?.filter { it.isStar }?.map { it.packageName } ?: emptyList()) +
                     DefaultImports.STAR_PACKAGES
-        // 5. A top-level synthetic class (Android `R`/`BuildConfig`, a ViewBinding) by simple name; nested
+        // 6. A top-level synthetic class (Android `R`/`BuildConfig`, a ViewBinding) by simple name; nested
         //    types (`R.layout`) are reached through their outer, never resolved bare. Being generated changes
         //    nothing about SCOPE: like a source class it resolves bare only from its own package, and needs an
-        //    import anywhere else. An explicit import already resolved it at step 2 (a synthetic FQN satisfies
+        //    import anywhere else. An explicit import already resolved it at step 3 (a synthetic FQN satisfies
         //    [isKnownType]), so what remains here is the same-package case and a star import of its package,
-        //    which the step-6 loop below cannot cover, since a synthetic has no type shape to probe.
+        //    which the step-7 loop below cannot cover, since a synthetic has no type shape to probe.
         //    Resolving one from ANY package, as this did, is why `R.string.app_name` in a subpackage read as
         //    fine in the editor and then failed to compile.
         synthetic().topLevelFqns.firstOrNull {
             it.substringAfterLast('.') == simple &&
                 it.substringBeforeLast('.', "").let { pkg -> pkg == samePkg || pkg in starPackages }
         }?.let { return it }
-        // 6. A star-imported package, then Kotlin's implicit default star imports (kotlin.*, java.lang, …):
+        // 7. A star-imported package, then Kotlin's implicit default star imports (kotlin.*, java.lang, …):
         //    a simple name is visible if it lives in one of these packages.
         for (pkg in starPackages) { // existence via the type-shape index (self-gates in dumb mode); no live probe when wired
             val cand = "$pkg.$simple"
@@ -959,18 +981,17 @@ class KotlinSymbolService(
             // the way the same-package step above already handles.
             if (cand in model().classByFqn || typeShape(cand) != null) return cand
         }
-        // 7. An explicit import whose target is not a known type and that nothing local shadowed: return its FQN
-        // 7a. A NESTED type reached by SIMPLE name from within an enclosing class (`Plan` inside `class Game {
-        //    private class Plan }`, or a sibling nested type). Walk up the enclosing chain trying `<owner>.<simple>`,
-        //    so a member typed as the nested class (`var pending: Plan?`) resolves instead of staying unresolved.
+        // 8. A nested type in the enclosing chain that has a compiled type SHAPE but no source class (step 2
+        //    covers the source model). Last-resort, as it always was, so the index probe stays off the hot path.
         if (enclosingClassFqn != null) {
             var owner: String? = enclosingClassFqn
             while (!owner.isNullOrEmpty()) {
                 val cand = "$owner.$simple"
-                if (cand in model().classByFqn || typeShape(cand) != null) return cand
+                if (typeShape(cand) != null) return cand
                 owner = owner.substringBeforeLast('.', "").ifEmpty { null }
             }
         }
+        // 9. An explicit import whose target is not a known type and that nothing local shadowed: return its FQN
         //    so the unresolved-type/import diagnostic still points at the intended name (the pre-fix behaviour
         //    for the no-conflict case — a genuinely missing import with no same-named local declaration).
         explicitImportFqn?.let { return it }

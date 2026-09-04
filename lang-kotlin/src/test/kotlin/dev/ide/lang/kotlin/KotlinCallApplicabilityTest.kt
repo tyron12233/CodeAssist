@@ -423,4 +423,144 @@ class KotlinCallApplicabilityTest {
         val d = diagnose("package p\nfun f() {\n val run: () -> Unit = {}\n run()\n}")
         assertTrue(d.none { it.code == "kt.notCallable" }, "invoking a function-typed value must NOT be flagged; got $d")
     }
+
+    /** A NESTED class constructed by its simple name from inside the enclosing body. The bare-name path
+     *  (`typeOfName`) resolves such a name through the enclosing chain, but the CONSTRUCTOR paths did not, so
+     *  the call fell through to the classifier-as-value type and read "Expression 'Level' of type Level cannot
+     *  be invoked as a function". */
+    @Test
+    fun nestedClassConstructorIsNotFlagged() {
+        val d = diagnose(
+            """
+            package p
+            object Api {
+                data class Level(val api: Int, val release: String)
+                val LEVELS: List<Level> = listOf(Level(21, "5.0"))
+                val ONE: Level = Level(22, "5.1")
+            }
+            """.trimIndent(),
+        )
+        assertTrue(d.none { it.code == "kt.notCallable" }, "a nested-class constructor is not a value invocation; got $d")
+        assertTrue(d.none { it.code == "kt.unresolved" }, "a nested-class constructor must resolve by simple name; got $d")
+    }
+
+    @Test
+    fun nestedClassConstructorTypesAsItsOwnType() {
+        // Positive proof the call typed as `Level` (not merely that nothing was flagged): `.api` is an Int.
+        val d = diagnose(
+            """
+            package p
+            object Api {
+                data class Level(val api: Int, val release: String)
+                val bad: Boolean = Level(21, "5.0").api
+            }
+            """.trimIndent(),
+        )
+        assertTrue(
+            d.any { it.code == "kt.typeMismatch" && it.message.contains("Int") && it.message.contains("Boolean") },
+            "`Level(21, \"5.0\").api` is Int, so a Boolean target must mismatch; got $d",
+        )
+    }
+
+    /** Argument validation for a NESTED class. `constructorCallMismatch` can't do it (its
+     *  `constructorsOf(fqn)` is empty for an un-compiled source class), so it falls to
+     *  `sameFileConstructorMismatch`, whose class lookup used to scan only the file's TOP-LEVEL declarations. */
+    @Test
+    fun nestedClassConstructorArityIsFlagged() {
+        val tooFew = diagnose(
+            """
+            package p
+            object Api {
+                data class Level(val api: Int, val release: String)
+                val ONE: Level = Level(21)
+            }
+            """.trimIndent(),
+        )
+        assertTrue(
+            tooFew.any { it.code == "kt.constructorArgs" && it.message.contains("1 argument(s)") },
+            "`Level(21)` on a nested 2-param constructor must be flagged; got $tooFew",
+        )
+        val tooMany = diagnose(
+            """
+            package p
+            object Api {
+                data class Level(val api: Int, val release: String)
+                val ONE: Level = Level(21, "5.0", 3)
+            }
+            """.trimIndent(),
+        )
+        assertTrue(
+            tooMany.any { it.code == "kt.constructorArgs" && it.message.contains("3 argument(s)") },
+            "`Level(21, \"5.0\", 3)` on a nested 2-param constructor must be flagged; got $tooMany",
+        )
+    }
+
+    @Test
+    fun nestedClassConstructorArgTypeIsFlagged() {
+        val d = diagnose(
+            """
+            package p
+            object Api {
+                data class Level(val api: Int, val release: String)
+                val ONE: Level = Level("5.0", 21)
+            }
+            """.trimIndent(),
+        )
+        assertTrue(
+            d.any { it.code == "kt.typeMismatch" && it.message.contains("String") && it.message.contains("Int") },
+            "the swapped arguments of a nested constructor must be flagged; got $d",
+        )
+    }
+
+    /** The conservative back-offs must survive the wider lookup: a defaulted parameter makes the arity a
+     *  range, a vararg makes it open, and a companion object may carry an `invoke` operator. */
+    @Test
+    fun nestedClassConstructorBackOffsAreClean() {
+        val ok = listOf(
+            "object Api {\n data class Level(val api: Int, val release: String = \"\")\n val ONE: Level = Level(21)\n}",
+            "object Api {\n class Level(vararg val n: Int)\n val ONE: Level = Level(1, 2, 3)\n}",
+            "object Api {\n class Level(val n: Int) { companion object { operator fun invoke(a: Int, b: Int) = Level(a) } }\n val ONE: Level = Level(1, 2)\n}",
+        )
+        for (o in ok) {
+            val d = diagnose("package p\n$o")
+            assertTrue(d.none { it.code == "kt.constructorArgs" || it.code == "kt.typeMismatch" }, "`$o` must be clean; got $d")
+        }
+    }
+
+    /** A nested class SHADOWS a same-named top-level one, so the call must be judged against the nested
+     *  constructor's arity (1), not the top-level's (2). */
+    @Test
+    fun nestedClassShadowsSameNamedTopLevelClass() {
+        val d = diagnose(
+            """
+            package p
+            class Level(val a: Int, val b: Int)
+            object Api {
+                class Level(val n: Int)
+                val ONE = Level(1, 2)
+            }
+            """.trimIndent(),
+        )
+        assertTrue(
+            d.any { it.code == "kt.constructorArgs" && it.message.contains("expected 1") },
+            "`Level(1, 2)` inside Api names the NESTED 1-param Level; got $d",
+        )
+    }
+
+    @Test
+    fun siblingAndDeeperNestedConstructorsResolve() {
+        val d = diagnose(
+            """
+            package p
+            class Host {
+                class A(val n: Int)
+                class B { fun make(): A = A(1) }
+                object Mid { class Leaf(val n: Int) }
+                val leaf = Mid.Leaf(2)
+            }
+            """.trimIndent(),
+        )
+        assertTrue(d.none { it.code == "kt.notCallable" }, "a sibling / `Mid.Leaf` constructor is not a value invocation; got $d")
+        assertTrue(d.none { it.code == "kt.unresolved" }, "sibling and deeper nested constructors must resolve; got $d")
+    }
 }

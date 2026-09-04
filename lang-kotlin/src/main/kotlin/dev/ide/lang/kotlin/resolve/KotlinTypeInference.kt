@@ -278,7 +278,7 @@ internal fun KotlinResolver.castType(e: KtBinaryExpressionWithTypeRHS): KotlinTy
     val raw = e.right?.text?.trim() ?: return null
     val safe = e.operationReference.getReferencedNameElementType() == KtTokens.AS_SAFE
     val nullable = safe || raw.endsWith("?")
-    val t = service.typeFromText(raw.removeSuffix("?"), fileContext) ?: return null
+    val t = service.typeFromText(raw.removeSuffix("?"), fileContext, enclosingClassFqnOf(e)) ?: return null
     return if (nullable) t.withNullable(true) else t
 }
 
@@ -470,7 +470,10 @@ internal fun KotlinResolver.typeOfCall(
                 call
             )
         }
-        service.resolveTypeName(name, fileContext)?.let { typeFqn ->
+        // The enclosing class is passed so a NESTED type constructed by its simple name from inside the
+        // enclosing body types as its own constructor result (`Level(21, "x")` inside
+        // `object Api { data class Level(…) }`), matching the bare-name path in `typeOfName`.
+        service.resolveTypeName(name, fileContext, enclosingClassFqn(call.textRange.startOffset))?.let { typeFqn ->
             // A capitalized no-receiver call on a name that resolves to a TYPE is normally a constructor
             // (`Box("s")` → `Box<String>`). Two cases are NOT, and both route to a same-named top-level FACTORY
             // function instead — falling through to the function path below, but ONLY when one actually exists:

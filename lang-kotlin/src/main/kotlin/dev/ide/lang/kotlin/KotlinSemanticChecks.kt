@@ -528,7 +528,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (inTypeReference(full)) return null
 
         // Resolve to a classifier; back off unless it is confidently a known class that is NOT a valid value.
-        val fqn = runCatching { service.resolveTypeName(qualifiedName, resolver.fileContext) }.getOrNull() ?: return null
+        // The ENCLOSING class is passed so a NESTED declaration wins over a same-named one at file/package
+        // level, as Kotlin scopes it: a nested `object Cfg` beside a top-level `class Cfg` used to resolve to
+        // the class, and every read of the object was flagged as a classifier used as a value.
+        val fqn = runCatching {
+            service.resolveTypeName(qualifiedName, resolver.fileContext, resolver.enclosingClassFqn(ref.textRange.startOffset))
+        }.getOrNull() ?: return null
         if (!service.isKnownType(fqn)) return null
         if (service.isObject(fqn) || service.typeHasCompanionObject(fqn)) return null
         if (fqn.substringAfterLast('.') == "Companion") return null
@@ -1821,11 +1826,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
     /**
      * The same check as [constructorCallMismatch] but for a class declared in THIS file, where the PSI gives
      * exact arity (default values + varargs) — the binary path can't (the typeShape index/decode has no source
-     * class, and binary metadata hides defaults). A bare `Foo(args)` whose callee is a same-file top-level
-     * `KtClass`: its argument count must fit some constructor's required..max, and each argument's inferred
-     * type must be assignable to the corresponding parameter of the unique arity-fitting constructor (the
-     * [isMismatch] rule). Backs off on overloads it can't reason about: a companion object (a possible
-     * `invoke` operator), any variadic constructor, and non-instantiable kinds.
+     * class, and binary metadata hides defaults). A bare `Foo(args)` whose callee is a same-file `KtClass`
+     * ([sameFileClassNamed] scopes the name: a NESTED or sibling class first, then the file's top level): its
+     * argument count must fit some constructor's required..max, and each argument's inferred type must be
+     * assignable to the corresponding parameter of the unique arity-fitting constructor (the [isMismatch]
+     * rule). Backs off on overloads it can't reason about: a companion object (a possible `invoke` operator),
+     * any variadic constructor, and non-instantiable kinds.
      */
     private fun sameFileConstructorMismatch(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
         val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
@@ -1833,7 +1839,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (call.valueArguments.any { it.isNamed() || it.getSpreadElement() != null }) return null
         val name = callee.getReferencedName()
         if (name.firstOrNull()?.isUpperCase() != true) return null
-        val cls = call.containingKtFile.declarations.filterIsInstance<KtClass>().firstOrNull { it.name == name } ?: return null
+        val cls = sameFileClassNamed(call, name) ?: return null
         if (cls.isInterface() || cls.isAnnotation() || cls.isEnum() || cls.companionObjects.isNotEmpty()) return null
         val ctors = constructorParameterLists(cls)
         if (ctors.any { params -> params.any { it.isVarArg } }) return null // open arity → don't guess
@@ -1856,6 +1862,33 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 val r = expr.textRange
                 return mismatchDiagnostic(r.startOffset, r.endOffset, at, pt)
             }
+        }
+        return null
+    }
+
+    /**
+     * The same-file `KtClass` that a bare capitalized callee names, scoped the way Kotlin scopes a classifier:
+     * the LEXICALLY enclosing classes innermost-out — so a NESTED class (`Level` inside `object Api { data
+     * class Level(…) }`) or a sibling nested class is found before the file's top level, which is tried last.
+     * Only the first scope that claims the name is consulted; an inner scope's declaration shadows an outer
+     * one, and reaching past it would judge the call against a class it doesn't mean.
+     *
+     * Null when the claiming scope can't be judged: two same-named classes there, or a non-constructible
+     * `object` of that name (which shadows an outer class but is not what `Level(…)` calls). Supertypes are
+     * NOT walked — an inherited nested class is a miss, never a wrong verdict.
+     */
+    private fun sameFileClassNamed(call: KtCallExpression, name: String): KtClass? {
+        val scopes = ArrayList<List<KtDeclaration>>()
+        var node: PsiElement? = call
+        while (node != null) {
+            if (node is KtClassOrObject) scopes += node.declarations
+            node = node.parent
+        }
+        scopes += call.containingKtFile.declarations
+        for (decls in scopes) {
+            val hits = decls.filterIsInstance<KtClass>().filter { it.name == name }
+            if (hits.isNotEmpty()) return hits.singleOrNull()
+            if (decls.any { it is KtObjectDeclaration && it.name == name }) return null
         }
         return null
     }

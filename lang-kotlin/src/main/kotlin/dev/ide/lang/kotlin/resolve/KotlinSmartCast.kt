@@ -13,6 +13,7 @@ import org.jetbrains.kotlin.psi.KtIsExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtReturnExpression
 import org.jetbrains.kotlin.psi.KtThrowExpression
+import org.jetbrains.kotlin.psi.KtTypeReference
 import org.jetbrains.kotlin.psi.KtWhenConditionIsPattern
 import org.jetbrains.kotlin.psi.KtWhenConditionWithExpression
 import org.jetbrains.kotlin.psi.KtWhenEntry
@@ -111,7 +112,7 @@ internal fun KotlinResolver.conditionNarrowing(
         is KtIsExpression -> {
             val lhs =
                 (unwrapParens(c.leftHandSide) as? KtNameReferenceExpression)?.getReferencedName()
-            if (lhs == name && whenTrue != c.isNegated) typeFromIsTarget(c.typeReference?.text) else null
+            if (lhs == name && whenTrue != c.isNegated) typeFromIsTarget(c.typeReference) else null
         }
 
         is KtBinaryExpression -> when (c.operationToken) {
@@ -142,7 +143,7 @@ internal fun KotlinResolver.whenSubjectNarrowing(
         if (subjectName != name) return null
         // Only a single positive `is T` narrows; a comma branch (`is A, is B`) doesn't smart-cast.
         val pattern = entry.conditions.singleOrNull() as? KtWhenConditionIsPattern ?: return null
-        return if (pattern.isNegated) null else typeFromIsTarget(pattern.typeReference?.text)
+        return if (pattern.isNegated) null else typeFromIsTarget(pattern.typeReference)
     }
     // Subjectless `when { name is T -> … }`: the branch condition is a boolean expression on names.
     val condExpr = (entry.conditions.singleOrNull() as? KtWhenConditionWithExpression)?.expression
@@ -187,10 +188,11 @@ internal fun KotlinResolver.branchAlwaysJumps(branch: KtExpression?): Boolean =
         else -> false
     }
 
-/** The classifier a smart-cast `is T` narrows to: generic args erased and made non-null. Null when [typeText]
- *  is absent or doesn't resolve. */
-internal fun KotlinResolver.typeFromIsTarget(typeText: String?): KotlinType? {
-    val text = typeText?.substringBefore('<')?.removeSuffix("?")?.trim()?.takeIf { it.isNotEmpty() }
+/** The classifier a smart-cast `is T` narrows to: generic args erased and made non-null. Null when [ref] is
+ *  absent or doesn't resolve. Takes the type REFERENCE, not its text, so the enclosing class is available and
+ *  a nested `is T` target resolves by simple name. */
+internal fun KotlinResolver.typeFromIsTarget(ref: KtTypeReference?): KotlinType? {
+    val text = ref?.text?.substringBefore('<')?.removeSuffix("?")?.trim()?.takeIf { it.isNotEmpty() }
         ?: return null
-    return runCatching { service.typeFromText(text, fileContext) }.getOrNull()
+    return runCatching { service.typeFromText(text, fileContext, enclosingClassFqnOf(ref)) }.getOrNull()
 }

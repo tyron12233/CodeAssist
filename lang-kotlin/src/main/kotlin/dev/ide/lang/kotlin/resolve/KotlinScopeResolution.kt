@@ -239,7 +239,7 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
                     }
                 } else {
                     params.forEachIndexed { i, p ->
-                        val t = service.typeFromText(p.typeReference?.text, fileContext)
+                        val t = service.typeFromText(p.typeReference?.text, fileContext, enclosingClassFqnOf(p))
                             ?: inputs.getOrNull(i)
                         // A destructuring lambda parameter (`forEach { (k, v) -> }`) binds its entries by
                         // componentN of the parameter's type (the Map.Entry / Pair / data class it receives),
@@ -332,13 +332,14 @@ internal fun KotlinResolver.localFunctionsInScope(offset: Int, name: String? = n
 internal fun KotlinResolver.localFunction(fn: KtNamedFunction): KotlinSymbol {
     val params = fn.valueParameters.map { (it.name ?: "_") to it.typeReference?.text }
     val retText = fn.typeReference?.text
+    val owner = enclosingClassFqnOf(fn) // the same for every parameter, so resolved once
     return KotlinSymbol(
         name = fn.name ?: "_", kind = SymbolKind.METHOD,
-        type = retText?.let { service.typeFromText(it, fileContext) },
+        type = retText?.let { service.typeFromText(it, fileContext, owner) },
         origin = SOURCE,
         signature = "(" + params.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" + (retText?.let { ": $it" }
             ?: ""),
-        paramTypes = params.map { (_, t) -> service.typeFromText(t, fileContext) },
+        paramTypes = params.map { (_, t) -> service.typeFromText(t, fileContext, owner) },
         paramNames = params.map { (n, _) -> n },
         paramHasDefault = fn.valueParameters.map { it.hasDefaultValue() },
         varargParamIndex = fn.valueParameters.indexOfFirst { it.isVarArg },
@@ -362,7 +363,8 @@ internal fun KotlinResolver.accessorScopeLocals(offset: Int): List<KotlinSymbol>
         ?: return emptyList()
     val prop = accessor.parent as? KtProperty ?: return emptyList()
     val propType =
-        service.typeFromText(prop.typeReference?.text, fileContext) ?: inferType(prop.initializer)
+        service.typeFromText(prop.typeReference?.text, fileContext, enclosingClassFqnOf(prop))
+            ?: inferType(prop.initializer)
     val out = ArrayList<KotlinSymbol>(2)
     out += KotlinSymbol(
         "field", SymbolKind.FIELD, type = propType, origin = SOURCE,
@@ -372,7 +374,7 @@ internal fun KotlinResolver.accessorScopeLocals(offset: Int): List<KotlinSymbol>
         out += KotlinSymbol(
             p.name ?: "value",
             SymbolKind.PARAMETER,
-            type = service.typeFromText(p.typeReference?.text, fileContext) ?: propType,
+            type = service.typeFromText(p.typeReference?.text, fileContext, enclosingClassFqnOf(p)) ?: propType,
             origin = SOURCE,
             declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
         )
@@ -449,9 +451,14 @@ fun KotlinResolver.typeDenotationFqn(expr: KtExpression): String? = when (expr) 
             // An `object` singleton (`CardDefaults`, `MaterialTheme`, a local `object`) is an INSTANCE, not a
             // type — its members are reached like an instance's, so it is NOT a type/static receiver. A local
             // `class Foo` in scope resolves by its synthetic FQN first (it isn't a resolvable type name).
+            // The ENCLOSING class is passed so a NESTED type named by its simple name from inside the
+            // enclosing body denotes a type (`Lvl` inside `object Api { enum class Lvl { A, B } }`) — without
+            // it `Lvl.A` had no type denotation, so `unresolvedMember`'s enum-constant escape never fired and
+            // the constant read "Unresolved reference: A".
             else -> (localTypesInScope(expr.textRange.startOffset)[name] ?: service.resolveTypeName(
                 name,
-                fileContext
+                fileContext,
+                enclosingClassFqn(expr.textRange.startOffset)
             ))
                 ?.takeIf { service.isKnownType(it) && !service.isSingletonObject(it) }
         }
@@ -466,13 +473,41 @@ fun KotlinResolver.typeDenotationFqn(expr: KtExpression): String? = when (expr) 
                 !service.isSingletonObject(expr.text) -> expr.text
             // (b) nested type through a resolved outer: `R.layout`, `Outer.Inner` — but a nested SINGLETON
             // (`Foo.Companion`, `object Outer { object Inner }`) is an instance, same as (a).
-            else -> typeDenotationFqn(expr.receiverExpression)?.let {
-                "$it.$sel".takeIf { f -> service.isKnownType(f) && !service.isSingletonObject(f) }
+            else -> {
+                // A nested type can also hang off an `object` QUALIFIER (`Api.Lvl` where `Api` is an object),
+                // which [typeDenotationFqn] itself rejects since a bare `Api` is the instance. Only probed for
+                // a CAPITALIZED selector — one that could name a type at all — so the common member selector
+                // (`MaterialTheme.colorScheme`) costs exactly what it did before.
+                val container = typeDenotationFqn(expr.receiverExpression)
+                    ?: if (sel.firstOrNull()?.isUpperCase() == true) objectQualifierFqn(expr.receiverExpression) else null
+                container?.let { "$it.$sel".takeIf { f -> service.isKnownType(f) && !service.isSingletonObject(f) } }
             }
         }
     }
 
     else -> null // calls, literals, `this`, `super` → instances
+}
+
+/** The `object` singleton an expression names when it stands in the QUALIFIER half of a nested-type lookup:
+ *  `Api.Lvl` names the nested enum even though `Api` is an object. A BARE `Api` is the INSTANCE, which is why
+ *  [typeDenotationFqn] excludes singletons — but here the name is a qualifier, not a value. The singleton
+ *  filter still applies to the RESULT of the nested lookup, so `Foo.Companion` is never a type denotation. */
+private fun KotlinResolver.objectQualifierFqn(expr: KtExpression): String? = when (expr) {
+    is KtParenthesizedExpression -> expr.expression?.let { objectQualifierFqn(it) }
+    is KtNameReferenceExpression -> {
+        val name = expr.getReferencedName()
+        val offset = expr.textRange.startOffset
+        if (localsAt(offset).any { it.name == name }) null // a value of that name shadows the object
+        else (localTypesInScope(offset)[name]
+            ?: service.resolveTypeName(name, fileContext, enclosingClassFqn(offset)))
+            ?.takeIf { service.isSingletonObject(it) }
+    }
+    is KtQualifiedExpression -> (expr.selectorExpression as? KtNameReferenceExpression)?.let { sel ->
+        (typeDenotationFqn(expr.receiverExpression) ?: objectQualifierFqn(expr.receiverExpression))
+            ?.let { "$it.${sel.getReferencedName()}" }
+            ?.takeIf { service.isSingletonObject(it) }
+    }
+    else -> null
 }
 
 /**
@@ -809,11 +844,23 @@ fun KotlinResolver.constructorTypeFqn(name: String, offset: Int): String? {
     if ('.' !in name) localTypesInScope(offset)[name]?.let { return it } // a local `class Foo` in scope
     // A different-package project type isn't a resolvable bare constructor call until imported, so `Foo()` for
     // such a type is flagged unresolved (and arg-validation backs off) rather than silently resolving.
-    return service.resolveTypeName(name, fileContext)?.takeIf { service.isKnownType(it) }
+    // The ENCLOSING class is passed so a NESTED type constructed by its simple name from inside the enclosing
+    // body resolves (`Level(21, "x")` inside `object Api { data class Level(…) }`). Without it the name named no
+    // constructor here, while the bare-name path (`typeOfName`) DID resolve it through the enclosing chain — so
+    // the call fell through to the classifier-as-value type and [notCallable] reported "Expression 'Level' of
+    // type Level cannot be invoked as a function".
+    return service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))?.takeIf { service.isKnownType(it) }
 }
 
-fun KotlinResolver.enclosingClassFqn(offset: Int): String? {
-    var node: PsiElement? = elementAt(offset)
+fun KotlinResolver.enclosingClassFqn(offset: Int): String? = elementAt(offset)?.let { enclosingClassFqnOf(it) }
+
+/** The FQN of the innermost `KtClassOrObject` lexically containing [element] — the enclosing-class half of
+ *  [dev.ide.lang.kotlin.symbols.KotlinSymbolService.resolveTypeName]'s nested-type scoping, walked straight
+ *  from the PSI parent chain. Preferred over [enclosingClassFqn] wherever the element is already in hand: the
+ *  declaration-typing paths run per parameter/local on every diagnostics and completion pass, and this skips
+ *  the `elementAt` offset lookup. */
+internal fun enclosingClassFqnOf(element: PsiElement): String? {
+    var node: PsiElement? = element
     while (node != null) {
         if (node is KtClassOrObject) return node.fqName?.asString()
         node = node.parent
@@ -928,7 +975,9 @@ internal fun KotlinResolver.sameFileFunction(fn: KtNamedFunction, ownerFqn: Stri
             ?: "")
     return KotlinSymbol(
         name = fn.name ?: "_", kind = SymbolKind.METHOD,
-        type = retText?.let { service.typeFromText(it, fileContext) },
+        // Resolved with [ownerFqn] as the enclosing class, so a signature naming a NESTED class of the owner
+        // (`fun f(t: T): T` inside `object Api { class T }`) types by simple name — as [sameFileProperty] does.
+        type = retText?.let { service.typeFromText(it, fileContext, ownerFqn) },
         owner = ownerFqn?.let {
             KotlinSymbol(
                 it.substringAfterLast('.'),
@@ -937,7 +986,7 @@ internal fun KotlinResolver.sameFileFunction(fn: KtNamedFunction, ownerFqn: Stri
             )
         },
         origin = SOURCE, signature = sig,
-        paramTypes = params.map { (_, t) -> service.typeFromText(t, fileContext) },
+        paramTypes = params.map { (_, t) -> service.typeFromText(t, fileContext, ownerFqn) },
         paramNames = params.map { (n, _) -> n },
         paramHasDefault = fn.valueParameters.map { it.hasDefaultValue() },
         varargParamIndex = fn.valueParameters.indexOfFirst { it.isVarArg },

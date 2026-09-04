@@ -123,7 +123,7 @@ internal fun KotlinResolver.delegateContainsUninferableCall(delegate: KtExpressi
 internal fun KotlinResolver.localVar(p: KtProperty) = KotlinSymbol(
     name = p.name ?: "_",
     kind = SymbolKind.LOCAL_VARIABLE,
-    type = service.typeFromText(p.typeReference?.text, fileContext)
+    type = service.typeFromText(p.typeReference?.text, fileContext, enclosingClassFqnOf(p))
         ?: inferType(p.initializer)
         ?: p.delegateExpression?.let(::delegatedValueType),
     origin = SOURCE,
@@ -208,7 +208,7 @@ internal fun KotlinResolver.iterationElementType(iterableType: KotlinType?): Kot
 internal fun KotlinResolver.loopParam(p: KtParameter, element: KotlinType?) = KotlinSymbol(
     name = p.name ?: "_",
     kind = SymbolKind.PARAMETER,
-    type = service.typeFromText(p.typeReference?.text, fileContext) ?: element,
+    type = service.typeFromText(p.typeReference?.text, fileContext, enclosingClassFqnOf(p)) ?: element,
     origin = SOURCE,
     declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
 )
@@ -226,5 +226,7 @@ internal fun KotlinResolver.param(p: KtParameter) = KotlinSymbol(
  *  resolves `sum` on `IntArray`. See [varargArrayText]. Non-vararg params type verbatim. */
 internal fun KotlinResolver.paramType(p: KtParameter): KotlinType? {
     val text = p.typeReference?.text?.trim() ?: return null
-    return service.typeFromText(if (p.isVarArg) varargArrayText(text) else text, fileContext)
+    return service.typeFromText(
+        if (p.isVarArg) varargArrayText(text) else text, fileContext, enclosingClassFqnOf(p),
+    )
 }

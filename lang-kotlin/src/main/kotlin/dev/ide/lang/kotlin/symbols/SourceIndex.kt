@@ -208,6 +208,21 @@ class ModuleSourceModel(val files: List<SourceFile>) {
             }
     }
 
+    /**
+     * The SIMPLE names of every NESTED class in the model — one whose owner FQN is itself a known class.
+     * Guards the enclosing-chain step of `KotlinSymbolService.resolveTypeName`: that step sits ahead of the
+     * file-level steps (Kotlin scopes a classifier innermost-out), so it runs on EVERY simple-name
+     * resolution, and resolution is the hottest path in completion and diagnostics. One set probe rules out
+     * the overwhelming majority of names before any string concatenation or map lookup.
+     */
+    val nestedSimpleNames: Set<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        val all = classByFqn
+        all.keys.mapNotNullTo(HashSet()) { fqn ->
+            val owner = fqn.substringBeforeLast('.', "")
+            if (owner.isNotEmpty() && owner in all) fqn.substringAfterLast('.') else null
+        }
+    }
+
     /** Project typealiases keyed by SIMPLE name, for alias expansion. A cross-package simple-name collision keeps
      *  the first — project aliases are effectively unique by simple name in practice. */
     val typeAliasBySimpleName: Map<String, TypeAliasDecl> = files.flatMap { it.typeAliases }.associateBy { it.simpleName }

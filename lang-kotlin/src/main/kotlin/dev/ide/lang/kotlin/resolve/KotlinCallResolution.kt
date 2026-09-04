@@ -478,8 +478,10 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
         }
     }
     // A capitalized callee is a constructor call (`Foo(…)`): its parameters come from the type's constructors.
+    // The enclosing class is passed so a NESTED type reached by its simple name from inside the enclosing body
+    // yields its constructors (`Level(21, "x")` inside `object Api { data class Level(…) }`).
     if (name.firstOrNull()?.isUpperCase() == true) {
-        service.resolveTypeName(name, fileContext)?.let { fqn ->
+        service.resolveTypeName(name, fileContext, enclosingClassFqn(call.textRange.startOffset))?.let { fqn ->
             out += service.constructorsOf(fqn)
             service.sourceClass(fqn)?.constructors?.forEach { rc ->
                 out += sourceCtorSymbol(
