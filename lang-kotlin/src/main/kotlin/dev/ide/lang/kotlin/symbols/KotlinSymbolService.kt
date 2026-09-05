@@ -239,6 +239,36 @@ class KotlinSymbolService(
     // SOURCE-class half stays uncached (a Java class added mid-edit must resolve without a rebuild).
     private val classpathTypeExistsMemo = ConcurrentHashMap<String, Boolean>()
 
+    // Per-fqn memo of the classpath type SHAPE and the Kotlin built-in shape — the two disk-segment `exact`
+    // queries behind [typeShape] / [builtinShape]. Session-stable for the same reason as the sibling classpath
+    // memos, and — the point — the MISS is cached too: [resolveTypeName]'s star-import loop probes
+    // `<pkg>.<Name>` once per default-imported package for every simple name that isn't a type (i.e. every
+    // ordinary call/member name in a file), and a miss costs a segment probe per artifact. Empty-Optional =
+    // "queried, not there", so the second such probe of a name is a map lookup.
+    private val classpathShapeMemo = ConcurrentHashMap<String, java.util.Optional<TypeShape>>()
+    private val builtinShapeMemo = ConcurrentHashMap<String, java.util.Optional<TypeShape>>()
+
+    /** Key for [typeNameMemo]: a simple/qualified type name, resolved in one file scope ([FileContext.scopeKey])
+     *  and one enclosing-class chain. A small allocation per lookup, but every field's `hashCode` is a cached
+     *  String hash, so the probe is far cheaper than the resolution it replaces. */
+    private class TypeNameKey(val scope: String, val enclosing: String?, val name: String) {
+        override fun hashCode(): Int =
+            (scope.hashCode() * 31 + (enclosing?.hashCode() ?: 0)) * 31 + name.hashCode()
+
+        override fun equals(other: Any?): Boolean =
+            other is TypeNameKey && name == other.name && enclosing == other.enclosing && scope == other.scope
+    }
+
+    // Memo of [resolveTypeName] — the single most-called resolution entry point (60-odd call sites across the
+    // checks, the highlighter and every resolution phase), and previously uncached, so the same name was walked
+    // through the whole import/package/star-import/nested chain once per REFERENCE rather than once per name.
+    // Its inputs are the file scope, the enclosing class chain, the source model, the synthetic classes and the
+    // classpath index, so it is dropped exactly where those change: with the source memos in [setOverlay] /
+    // [syncFocal], in [synthetic] when the provider swaps its list, and on an index (re)build via
+    // [classpathCacheUsable]. Optional-wrapped so the (rare) null answer is memoized too.
+    @Volatile
+    private var typeNameMemo = ConcurrentHashMap<TypeNameKey, java.util.Optional<String>>()
+
     // Per-fqn memo of a type's FULL own+inherited member list (the recursive [ownAndInherited] walk) — the
     // dominant editor cost on a member-heavy file (every `view.x`, `canvas.drawBitmap`, `bmp.width` otherwise
     // re-walks the whole View/Canvas/Bitmap member+supertype closure). Only the UNBOUND (no-type-args) list is
@@ -271,6 +301,7 @@ class KotlinSymbolService(
         val building = status.building
         if (building && !extMemoBuilding) {
             classpathExtMemo.clear(); checkMembersMemo.clear(); companionMembersMemo.clear(); mappedStaticsMemo.clear(); classpathTypeExistsMemo.clear(); classpathOwnMembersMemo.clear(); classpathSupertypeMemo.clear(); topLevelLibMemo.clear(); topLevelBuiltinMemo.clear()
+            classpathShapeMemo.clear(); builtinShapeMemo.clear(); typeNameMemo = ConcurrentHashMap()
         }
         extMemoBuilding = building
         // Not ready ⇒ queries return PARTIAL results (whatever segments are open) for progressive completion;
@@ -406,6 +437,7 @@ class KotlinSymbolService(
             sourceSupertypeArgTemplateMemo = ConcurrentHashMap()
             sourceOwnMembersMemo =
                 ConcurrentHashMap() // a source type's members change on edit; classpath memo stays warm
+            typeNameMemo = ConcurrentHashMap() // a name can now resolve to a different (source) class
         }
     }
 
@@ -429,6 +461,7 @@ class KotlinSymbolService(
             sourceSupertypeArgTemplateMemo = ConcurrentHashMap()
             sourceOwnMembersMemo =
                 ConcurrentHashMap() // a source type's members change on edit; classpath memo stays warm
+            typeNameMemo = ConcurrentHashMap() // a name can now resolve to a different (source) class
         }
     }
 
@@ -572,6 +605,10 @@ class KotlinSymbolService(
     private fun synthetic(): SyntheticIndex {
         val current = runCatching { syntheticProvider() }.getOrDefault(emptyList())
         syntheticCache?.let { if (current === syntheticCacheKey) return it }
+        // The provider swapped its list — a generated class (Android `R`/`BuildConfig`, a ViewBinding) may have
+        // appeared or gone, and a simple name can resolve to one (step 6 of [resolveTypeName]). Drop the
+        // type-name memo so it isn't answered from the previous resource epoch.
+        typeNameMemo = ConcurrentHashMap()
         if (current.isEmpty()) return SyntheticIndex.EMPTY.also {
             syntheticCache = it; syntheticCacheKey = current
         }
@@ -887,6 +924,24 @@ class KotlinSymbolService(
     fun resolveTypeName(name: String, ctx: FileContext?, enclosingClassFqn: String? = null): String? {
         val simple = name.trim().removeSuffix("?").substringBefore('<').trim()
         if (simple.isEmpty()) return null
+        // Memoized per (file scope, enclosing chain, name) — see [typeNameMemo] for the inputs this depends on
+        // and where it is dropped. Keyed on the NORMALIZED [simple], so `Foo`, `Foo?` and `Foo<Bar>` share one
+        // entry. The recursive qualified-name step below re-enters through here, so its head lookup is memoized
+        // too. A memo-less path (no context at all) can't collide with a real scope: [FileContext.scopeKey] of
+        // a file with no package and no imports is "", and so is the null-ctx key — which is correct, they
+        // resolve identically.
+        val memo = typeNameMemo
+        val key = TypeNameKey(ctx?.scopeKey ?: "", enclosingClassFqn, simple)
+        memo[key]?.let { return it.orElse(null) }
+        val computed = resolveTypeNameUncached(simple, ctx, enclosingClassFqn)
+        // Only publish into the map this lookup started from: an invalidation mid-resolution swaps in a fresh
+        // map, and a result computed against the OLD model must not land in the NEW one.
+        if (typeNameMemo === memo) memo[key] = java.util.Optional.ofNullable(computed)
+        return computed
+    }
+
+    /** [resolveTypeName]'s resolution proper, on an already-normalized [simple] name. */
+    private fun resolveTypeNameUncached(simple: String, ctx: FileContext?, enclosingClassFqn: String?): String? {
         if ('.' in simple) {
             // A qualified name. It may already be a full FQN (`java.util.Locale`) or an `Outer.Inner` whose
             // outer is reached by its simple name (`Icons.AutoMirrored.Filled`, with `Icons` imported). Resolve
@@ -957,9 +1012,12 @@ class KotlinSymbolService(
         //    LIBRARY type likewise never resolves bare (index SOURCE-origin only), so `ComponentActivity` (an
         //    unimported classpath type) is always flagged.
         val samePkg = ctx?.packageName ?: ""
-        model().classByFqn.keys.firstOrNull {
-            it.substringAfterLast('.') == simple && it.substringBeforeLast('.', "") == samePkg
-        }?.let { return it }
+        // Equivalent to the scan over `classByFqn.keys` this used to run ("the key whose simple name is [simple]
+        // and whose package is [samePkg]"), as an O(1) probe: for a NON-empty package that key is exactly
+        // `$samePkg.$simple`, which step 4 above has already tested, so the only case left for the scan to find
+        // is a file with no package directive, where the key IS the bare simple name. The scan was O(classes in
+        // the module) with two substring allocations per key, run on every simple name that isn't a type.
+        if (samePkg.isEmpty() && simple in model().classByFqn) return simple
         index?.exactAll<ClassNameValue>(CLASS_NAMES, simple)
             ?.firstOrNull { it.origin == IndexOrigin.SOURCE && it.fqn.substringBeforeLast('.', "") == samePkg }
             ?.let { return it.fqn }
@@ -1687,8 +1745,22 @@ class KotlinSymbolService(
      * degrades gracefully while the index is still building. Kotlin mapped types are routed to their JVM type
      * (`kotlin.collections.List` → `java.util.List`) for both, matching the live `javaShape` lookup. Returns
      * null for a non-classpath type (handled elsewhere: source model, built-ins, synthetic, Java source index).
+     *
+     * Memoized in [classpathShapeMemo], where the MISS matters as much as the hit: a simple name that is not a
+     * type is probed once per default-imported package by [resolveTypeName]'s star-import loop, and each probe
+     * is a segment read per classpath artifact. Bypassed (live query) when no index is wired or while one is
+     * building — [classpathCacheUsable] — so a partial index is never cached. Alias chains re-enter through the
+     * depth-carrying overload below, which is deliberately NOT memoized: the depth is part of its meaning, and
+     * the chain is bounded and rare.
      */
-    private fun typeShape(fqn: String): TypeShape? = typeShape(fqn, aliasDepth = 0)
+    private fun typeShape(fqn: String): TypeShape? {
+        val idx = index ?: return typeShape(fqn, aliasDepth = 0)
+        if (!classpathCacheUsable(idx)) return typeShape(fqn, aliasDepth = 0)
+        classpathShapeMemo[fqn]?.let { return it.orElse(null) }
+        val computed = typeShape(fqn, aliasDepth = 0)
+        classpathShapeMemo[fqn] = java.util.Optional.ofNullable(computed)
+        return computed
+    }
 
     private fun typeShape(fqn: String, aliasDepth: Int): TypeShape? {
         // The type-shape index is keyed by dot-form FQNs, but a binary's supertype FQN arrives in bytecode
@@ -1737,11 +1809,17 @@ class KotlinSymbolService(
      * Like [typeShape], the index is the sole source once wired — no live `.kotlin_builtins` read.
      */
     private fun builtinShape(fqn: String): TypeShape? {
-        index?.let { idx ->
+        val idx = index ?: return builtins.lookup(fqn, this)
+        // Memoized (hit AND miss) like [typeShape]: the abstract-instantiation / non-instantiable / companion
+        // probes each fall through to this for the same fqn, and a non-built-in name misses here every time.
+        if (!classpathCacheUsable(idx)) {
             if (!idx.status.ready) return null
             return idx.exact<TypeShape>(BUILTINS, fqn).firstOrNull()?.withContext(this)
         }
-        return builtins.lookup(fqn, this)
+        builtinShapeMemo[fqn]?.let { return it.orElse(null) }
+        val computed = idx.exact<TypeShape>(BUILTINS, fqn).firstOrNull()?.withContext(this)
+        builtinShapeMemo[fqn] = java.util.Optional.ofNullable(computed)
+        return computed
     }
 
     /** Enumerate one type level from its [shape]: own members (with the receiver's [typeArgs] bound into their
