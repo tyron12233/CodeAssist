@@ -407,10 +407,13 @@ object ModelPersistence {
 
     // --- helpers ---
 
-    /** Parse a persisted `group:name:version` BOM coordinate (a missing version tolerated as blank). */
+    /** Parse a persisted `group:name:version[:classifier]` coordinate (a missing version tolerated as blank). */
     private fun parseCoordinate(s: String): Coordinate {
         val parts = sanitizeCoordinate(s).split(":")
-        return Coordinate(parts.getOrElse(0) { "" }, parts.getOrElse(1) { "" }, parts.getOrElse(2) { "" })
+        return Coordinate(
+            parts.getOrElse(0) { "" }, parts.getOrElse(1) { "" }, parts.getOrElse(2) { "" },
+            parts.getOrNull(3)?.ifBlank { null },
+        )
     }
 
     private fun resolveRel(base: Path, rel: String): Path =

@@ -556,7 +556,10 @@ class AndroidBuildSystem(
         val javaResFilter = PackagingRules.resourceFilter(facet.packaging.resources)
         // externalJars are static (resolved on disk); only the sub-module jars need building first.
         tasks.task(mergeNativeLibs) {
-            MergeNativeLibsTask(mergeNativeLibs, jniDirs, externalJars, nativeLibsFilter, layout.mergedNativeLibs)
+            MergeNativeLibsTask(
+                mergeNativeLibs, jniDirs, externalJars, nativeLibsFilter, layout.mergedNativeLibs,
+                libs.nativeWarnings,
+            )
         }
         tasks.task(mergeJavaRes, moduleJarProducers) {
             MergeJavaResourcesTask(mergeJavaRes, javaResDirs, subProjectJars + externalJars, javaResFilter, layout.mergedJavaRes)

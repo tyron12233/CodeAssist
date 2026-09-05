@@ -48,6 +48,7 @@ import dev.ide.ui.backend.UiDepModule
 import dev.ide.ui.backend.UiDependencyNode
 import dev.ide.ui.backend.UiModuleDeps
 import dev.ide.ui.backend.UiRepository
+import dev.ide.ui.backend.UiDependencyWarning
 import dev.ide.ui.backend.UiUnresolvedDependency
 import dev.ide.ui.backend.UiVersionConflict
 import dev.ide.vfs.VirtualFile
@@ -190,6 +191,12 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
     private val DEFAULT_UNRESOLVED_REASON =
         "Not resolved. Check your internet connection, then tap Retry."
 
+    /** Why each declared coordinate that resolved to NOTHING contributes nothing, keyed by declared library
+     *  name, from the most recent resolve ([ResolutionResult.artifactless]). Deliberately separate from
+     *  [unresolvedReasons]: nothing failed, so this must not reach the build's unresolved-dependency gate or
+     *  keep reconciliation retrying forever. Read by [computeWarnings]. */
+    private val artifactlessReasons = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     /** Modules carrying at least one Maven-coordinate library dependency — the reconcilable set. */
     private fun mavenDepModules(): List<Module> = ctx.modules().filter { m ->
         m.dependencies.any { it is LibraryDependency && parseCoordinate(it.library.name) != null }
@@ -291,11 +298,17 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         }
     }
 
+    /** Every declared dependency across the workspace that resolved to nothing useful, with its module. */
+    private fun computeWarnings(): List<UiDependencyWarning> = ctx.modules().flatMap { m ->
+        m.dependencies.filterIsInstance<LibraryDependency>().map { it.library.name }
+            .mapNotNull { coord -> artifactlessReasons[coord]?.let { UiDependencyWarning(m.name, coord, it) } }
+    }
+
     /** Publish the current dependency-health into [depsState] (the persistent project error state), and mirror
      *  it to the sidecar so the next open can show the banner before re-resolving. */
     private fun publishDependencyHealth() {
         val unresolved = computeUnresolved()
-        _depsState.update { it.copy(unresolved = unresolved) }
+        _depsState.update { it.copy(unresolved = unresolved, warnings = computeWarnings()) }
         persistUnresolved()
     }
 
@@ -319,6 +332,13 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             if ("${c.group}:${c.name}" in failedGAs) unresolvedReasons[name] =
                 unresolvedReasonFor(anyResolved)
             else unresolvedReasons.remove(name)
+        }
+        // A declaration that resolved to no artifact and no transitives: a warning, not a failure, so it
+        // rides its own channel. Keyed by declared library name, like the reasons above.
+        val artifactless = result.artifactless.associateBy { "${it.coordinate.group}:${it.coordinate.name}" }
+        for ((name, c) in declared) {
+            val hit = artifactless["${c.group}:${c.name}"]
+            if (hit != null) artifactlessReasons[name] = hit.reason else artifactlessReasons.remove(name)
         }
         // Mirror the fresh verdict to disk so the banner survives a restart and shows before any re-resolve.
         persistUnresolved()
@@ -391,7 +411,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                 // Clear the resolving flag and refresh the project error state from what's now on disk
                 // (reasons stamped during the resolves), so any genuinely-unresolved dep keeps its banner.
                 _depsState.update {
-                    it.copy(resolving = false, message = "", unresolved = computeUnresolved())
+                    it.copy(resolving = false, message = "", unresolved = computeUnresolved(), warnings = computeWarnings())
                 }
             }
         }
@@ -468,6 +488,9 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             platforms = declaredPlatforms(module),
             exclusions = exclusions,
         )
+        // Keyed by the FULL coordinate (classifier included), so a declaration naming a secondary artifact
+        // reads its own kind rather than a sibling classifier's.
+        val byCoordinate = result.resolved.associateBy { it.coordinate }
         val byGa = result.resolved.associateBy { it.coordinate.group to it.coordinate.name }
         val partition = DependencyPartition.partition(directs, result.resolved)
         // Stamp a why-it-failed on each declared coordinate that didn't resolve (cleared if it did), so the
@@ -497,7 +520,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             if (existing?.classesRoots?.map { it.path }
                     ?.toSet() == freshClasses && existing.sourcesRoots.map { it.path }
                     .toSet() == freshSources) continue // already correct
-            val primary = byGa[coord.group to coord.name]
+            val primary = byCoordinate[coord] ?: byGa[coord.group to coord.name]
             ctx.store.workspace.libraryTable.create(libName).apply {
                 kind = if (primary?.kind == ArtifactKind.AAR) LibraryKind.AAR else LibraryKind.JAR
                 artifacts.forEach { a ->
@@ -605,6 +628,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                         message = "Dependencies resolved",
                         log = appendDepsLog(it.log, "Dependencies resolved"),
                         unresolved = computeUnresolved(),
+                        warnings = computeWarnings(),
                     )
                 }
             }
@@ -669,6 +693,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                     message = "Dependencies resolved",
                     log = appendDepsLog(it.log, "Dependencies resolved"),
                     unresolved = computeUnresolved(),
+                    warnings = computeWarnings(),
                 )
             }
         }
@@ -714,11 +739,15 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         "Android archives (.aar) need an Android module; '${module.name}' is a ${module.type.displayName.lowercase()}"
 
     private fun parseCoordinate(name: String): Coordinate? =
-        sanitizeCoordinate(name).split(":").takeIf { it.size >= 3 }?.let { Coordinate(it[0], it[1], it[2]) }
+        Coordinate.parseOrNull(name)?.takeIf { it.version.isNotBlank() }
 
     /**
      * Parse a user-entered dependency coordinate. Accepts:
      *  - `group:name:version` — a full coordinate.
+     *  - `group:name:version:classifier`: a SECONDARY artifact of that module (the Gradle four-part
+     *    notation), which for some modules is the only artifact there is: `gdx-platform` publishes no main
+     *    jar, only `natives-arm64-v8a`, `natives-armeabi-v7a`, … Dropping the fourth segment resolved the
+     *    declaration to nothing at all.
      *  - `group:name` (2nd segment NOT version-like) — the versionless form, whose version an imported
      *    platform BOM fills in at resolve time (blank version here).
      *  - `name:version` (2nd segment version-like, e.g. `kotlinx-coroutines-core:1.10.2`) — a real version
@@ -730,6 +759,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                 it.size == 2 && looksLikeVersion(it[1]) -> Coordinate("", it[0], it[1])
                 it.size == 2 -> Coordinate(it[0], it[1], "")
                 it.size == 3 -> Coordinate(it[0], it[1], it[2])
+                it.size == 4 && it.none(String::isBlank) -> Coordinate(it[0], it[1], it[2], it[3])
                 else -> null
             }
         }
@@ -757,13 +787,20 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
 
     private fun scopeLabel(scope: DependencyScope): String = scope.id
 
+    /** The scope a UI configuration chip (or an API caller's label) names. The spellings below are matched
+     *  loosely because they arrive from several places; anything else is looked up among the registered
+     *  scopes by configuration id then persisted name, so a plugin-defined one resolves to the real scope
+     *  with its real classpath semantics instead of being silently read as `implementation`. */
     private fun parseScope(label: String): DependencyScope =
         when (label.lowercase().replace("_", "").replace("-", "")) {
             "api" -> DependencyScope.API
             "compileonly" -> DependencyScope.COMPILE_ONLY
             "runtimeonly" -> DependencyScope.RUNTIME_ONLY
             "testimplementation", "test" -> DependencyScope.TEST_IMPLEMENTATION
-            else -> DependencyScope.IMPLEMENTATION
+            "natives" -> DependencyScope.NATIVES
+            else -> DependencyScope.byId(label)
+                ?: DependencyScope.registered().firstOrNull { it.name == label }
+                ?: DependencyScope.IMPLEMENTATION
         }
 
     /** Dependency-declaring modules + their build system + AAR compatibility (the screen's module switcher). */
@@ -1021,7 +1058,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             if (added.success) declareInBuildFiles(moduleName, coordinate, scope, added) else added
         } finally {
             // resolveAndAttach → assembleModuleClasspath already stamped reasons; refresh the error state.
-            _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved()) }
+            _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved(), warnings = computeWarnings()) }
         }
     }
 
@@ -1042,7 +1079,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             false, "No module '$moduleName'."
         )
         val parsed = parseInputCoordinate(coordinate) ?: return UiAddResult(
-            false, "Invalid coordinate — expected group:name[:version]."
+            false, "Invalid coordinate. Expected group:name[:version[:classifier]]."
         )
         // A `name:version` typed without its group (e.g. `kotlinx-coroutines-core:1.10.2`): discover the
         // group from a repository search so the user doesn't have to know it.
@@ -1075,13 +1112,19 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             return UiAddResult(false, "Resolution failed: ${e.message}")
         }
 
-        val primary =
-            result.resolved.firstOrNull { it.coordinate.group == coord.group && it.coordinate.name == coord.name }
-                ?: return UiAddResult(
-                    false,
-                    if (versionless) "No imported platform provides a version for ${coord.group}:${coord.name}."
+        // The declared artifact: the one matching the requested classifier when there is one, since a module
+        // can contribute several files under one `group:name`.
+        val ofModule = result.resolved.filter { it.coordinate.group == coord.group && it.coordinate.name == coord.name }
+        val primary = ofModule.firstOrNull { it.coordinate.classifier == coord.classifier }
+            ?: ofModule.firstOrNull()
+            ?: return UiAddResult(
+                false,
+                // "Couldn't find it" would be a lie for a coordinate that resolved and simply gave nothing
+                // back: the repository answered, and the reason names what to declare instead.
+                result.artifactless.firstOrNull { it.coordinate.group == coord.group && it.coordinate.name == coord.name }?.reason
+                    ?: if (versionless) "No imported platform provides a version for ${coord.group}:${coord.name}."
                     else "Couldn't find $coordinate in the configured repositories."
-                )
+            )
         if (primary.kind == ArtifactKind.AAR && !acceptsAar(module)) return UiAddResult(
             false, "$coordinate is an Android library (.aar) — ${aarReason(module)}."
         )
@@ -1393,7 +1436,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         } catch (e: Exception) {
             UiAddResult(false, "Re-resolution failed: ${e.message}")
         } finally {
-            _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved()) }
+            _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved(), warnings = computeWarnings()) }
         }
     }
 
@@ -1512,7 +1555,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         } catch (e: Exception) {
             UiAddResult(false, "Update failed: ${e.message}")
         } finally {
-            _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved()) }
+            _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved(), warnings = computeWarnings()) }
         }
     }
 

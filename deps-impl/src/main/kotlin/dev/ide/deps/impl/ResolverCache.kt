@@ -17,7 +17,13 @@ class ResolverCache(val root: Path) {
 
     private val base: Path = root.resolve(".platform").resolve("caches").resolve("resolved-deps")
 
-    /** Maven-layout relative path for an artifact, e.g. `com/squareup/okhttp3/okhttp/4.12.0/okhttp-4.12.0.jar`. */
+    /**
+     * Maven-layout relative path for an artifact, e.g. `com/squareup/okhttp3/okhttp/4.12.0/okhttp-4.12.0.jar`.
+     *
+     * [classifier] is passed EXPLICITLY rather than read off [c]: a coordinate carrying one still has a
+     * single, classifier-less `.pom` and `.module` (a classifier names a secondary artifact of the module,
+     * not a separate module), so defaulting it would send every metadata probe to a path that 404s.
+     */
     fun relativePath(c: Coordinate, ext: String, classifier: String? = null): String {
         val groupPath = c.group.replace('.', '/')
         val suffix = if (classifier.isNullOrEmpty()) "" else "-$classifier"
@@ -64,9 +70,13 @@ class ResolverCache(val root: Path) {
         return target
     }
 
-    /** Directory an `.aar` is exploded into (e.g. its `classes.jar`, `res/`, `assets/`). */
-    fun explodedDir(c: Coordinate): Path =
-        base.resolve(c.group.replace('.', '/')).resolve(c.name).resolve(c.version).resolve("${c.name}-${c.version}-exploded")
+    /** Directory an `.aar` is exploded into (e.g. its `classes.jar`, `res/`, `assets/`). A classifier joins the
+     *  directory name, so two secondary AARs of one `group:name:version` don't explode over each other. */
+    fun explodedDir(c: Coordinate): Path {
+        val suffix = if (c.classifier.isNullOrEmpty()) "" else "-${c.classifier}"
+        return base.resolve(c.group.replace('.', '/')).resolve(c.name).resolve(c.version)
+            .resolve("${c.name}-${c.version}$suffix-exploded")
+    }
 
     // --- cached-version management ---------------------------------------------------------------
     // The Dependencies screen lets the user see which versions of an artifact are downloaded (each version

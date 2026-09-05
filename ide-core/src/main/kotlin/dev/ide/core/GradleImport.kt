@@ -349,9 +349,17 @@ object GradleImport {
         "annotationProcessor" to DependencyScope.COMPILE_ONLY,
         "kapt" to DependencyScope.COMPILE_ONLY,
         "ksp" to DependencyScope.COMPILE_ONLY,
+        // Not a Gradle built-in: `natives` is the configuration a libGDX-style build creates by hand
+        // (`configurations { natives }`) to carry the per-ABI classifier jars a native library publishes,
+        // paired with a task that unpacks them into `jniLibs`. The model has that as a real scope, so the
+        // declarations import instead of being dropped along with the custom configuration.
+        "natives" to DependencyScope.NATIVES,
     )
 
-    private val COORD_RE = Regex("""[\w.\-]+:[\w.\-]+(?::[\w.\-+]*)?""")
+    /** A `group:name[:version[:classifier]]` coordinate. The classifier segment is what addresses a module's
+     *  secondary artifacts (`gdx-platform:1.14.2:natives-arm64-v8a`), which for some modules is all they
+     *  publish; without it such a declaration matched nothing and was skipped. */
+    private val COORD_RE = Regex("""[\w.\-]+:[\w.\-]+(?::[\w.\-+]*(?::[\w.\-+]+)?)?""")
 
     private fun parseDependencies(
         depBody: String,
@@ -435,7 +443,13 @@ object GradleImport {
     /** The scope for a dependency statement's leading configuration, plus the build-variant qualifier a
      *  `debugImplementation`/`freeApi`-style config carries (`null` for a plain, shared configuration). */
     private fun scopeAndVariant(st: String): Pair<DependencyScope, String?>? {
-        val kw = firstGroup(st, """^\s*([A-Za-z]\w*)[\s(]""") ?: return null
+        // Two spellings of the same statement. A built-in configuration is called directly
+        // (`implementation("…")`); one the script created itself has no generated accessor and is addressed
+        // by name in the Kotlin DSL (`"natives"("…")`), which is also the form this project's own Gradle
+        // export writes, so an exported project imports back with its native libraries intact.
+        val kw = firstGroup(st, """^\s*["']([A-Za-z]\w*)["']\s*\(""")
+            ?: firstGroup(st, """^\s*([A-Za-z]\w*)[\s(]""")
+            ?: return null
         SCOPE_KEYWORDS[kw]?.let { return it to null }
         fun variantScope(suffix: String, base: DependencyScope): Pair<DependencyScope, String?>? {
             if (!kw.endsWith(suffix) || kw.length == suffix.length) return null

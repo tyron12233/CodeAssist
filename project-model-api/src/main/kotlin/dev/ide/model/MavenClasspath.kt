@@ -18,8 +18,17 @@ package dev.ide.model
 object MavenClasspath {
 
     /** A Maven artifact recovered from a classpath jar's path: [artifactKey] is the artifact directory (stable
-     *  across versions of one `group:name`), [version] its per-version child — the inputs to "newest wins". */
-    private class Artifact(val artifactKey: String, val version: String)
+     *  across versions of one `group:name`), [version] its per-version child: the inputs to "newest wins".
+     *  [classifier] (`""` for the main artifact) separates the SECONDARY artifacts a module publishes under
+     *  one `group:name:version`. */
+    private class Artifact(val artifactKey: String, val version: String, val classifier: String) {
+        /**
+         * The "newest wins" key. Two classifiers of one `group:name` are DIFFERENT artifacts, not two
+         * versions of one, so each gets its own slot: the six `gdx-platform-1.14.2-natives-*.jar` files must
+         * all survive. Folding them onto one key made the first path seen evict the other five.
+         */
+        val conflictKey: String get() = if (classifier.isEmpty()) artifactKey else "$artifactKey|$classifier"
+    }
 
     /**
      * Dedupe a raw jar list for an Android **dex** input: at most one jar per artifact, so D8 never sees a
@@ -64,11 +73,12 @@ object MavenClasspath {
 
     private class ParsedJar(val path: java.nio.file.Path, val base: String?, val version: String?)
 
-    /** Artifact name + version for a dex input: Maven layout first (plain jar OR exploded AAR), else file name. */
+    /** Artifact name + version for a dex input: Maven layout first (plain jar OR exploded AAR), else file name.
+     *  The name carries the classifier, so two secondary artifacts of one module don't share a dex slot. */
     private fun dexCoordinate(path: java.nio.file.Path): Pair<String, String>? {
         coordinateOf(path.toString())?.let { c ->
             val name = java.nio.file.Paths.get(c.artifactKey).fileName?.toString()
-            if (name != null) return name to c.version
+            if (name != null) return (if (c.classifier.isEmpty()) name else "$name|${c.classifier}") to c.version
         }
         val file = path.fileName?.toString() ?: return null
         if (!file.endsWith(".jar", ignoreCase = true)) return null
@@ -82,13 +92,13 @@ object MavenClasspath {
         val winner = HashMap<String, String>()
         for (e in items) {
             val c = coordinateOf(e.root.path) ?: continue
-            val cur = winner[c.artifactKey]
-            if (cur == null || isNewer(c.version, cur)) winner[c.artifactKey] = c.version
+            val cur = winner[c.conflictKey]
+            if (cur == null || isNewer(c.version, cur)) winner[c.conflictKey] = c.version
         }
         val out = LinkedHashMap<String, ClasspathEntry>()
         for (e in items) {
             val c = coordinateOf(e.root.path)
-            if (c != null && winner[c.artifactKey] != c.version) continue   // a superseded version of this artifact — drop it
+            if (c != null && winner[c.conflictKey] != c.version) continue   // a superseded version of this artifact, dropped
             out.putIfAbsent("${e.kind.id}|${e.root.path}", e)
         }
         return out.values.toList()
@@ -116,10 +126,16 @@ object MavenClasspath {
         val name = artifactDir.fileName?.toString() ?: return null
         // Confirm the Maven naming convention so an arbitrary `a/b/c.jar` tree isn't misread as a coordinate.
         val matchesConvention = if (file.equals("classes.jar", ignoreCase = true))
-            parent.fileName?.toString() == "$name-$version-exploded"
+            parent.fileName?.toString()?.startsWith("$name-$version") == true
         else file.removeSuffix(".jar").startsWith("$name-$version")
         if (!matchesConvention) return null
-        return Artifact(artifactDir.toString(), version)
+        // Whatever follows `<name>-<version>` in the file name is the classifier (`-natives-arm64-v8a`), and
+        // for an exploded AAR it follows it in the DIRECTORY name (`<name>-<version>[-cls]-exploded`).
+        val stem = if (file.equals("classes.jar", ignoreCase = true))
+            parent.fileName?.toString()?.removeSuffix("-exploded").orEmpty()
+        else file.removeSuffix(".jar")
+        val classifier = stem.removePrefix("$name-$version").removePrefix("-")
+        return Artifact(artifactDir.toString(), version, classifier)
     }
 
     /** "newest wins" version comparison: numeric segments compared numerically, a numeric segment outranks a

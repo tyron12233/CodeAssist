@@ -96,6 +96,7 @@ import dev.ide.ui.generated.resources.edchrome_build_console
 import dev.ide.ui.generated.resources.edchrome_build_variant
 import dev.ide.ui.generated.resources.edchrome_command_palette
 import dev.ide.ui.generated.resources.edchrome_compose_preview
+import dev.ide.ui.generated.resources.edchrome_empty_dependencies
 import dev.ide.ui.generated.resources.edchrome_find_replace
 import dev.ide.ui.generated.resources.edchrome_gradle_compat
 import dev.ide.ui.generated.resources.edchrome_gradle_compatibility_mode
@@ -119,9 +120,9 @@ import dev.ide.ui.generated.resources.edchrome_show_unresolved_dependencies
 import dev.ide.ui.generated.resources.edchrome_toggle_inlay_hints
 import dev.ide.ui.generated.resources.edchrome_toggle_navigator
 import dev.ide.ui.generated.resources.edchrome_unresolved_dependencies
-import dev.ide.ui.generated.resources.redo
 import dev.ide.ui.generated.resources.edview_no_file_open_hint
 import dev.ide.ui.generated.resources.edview_no_file_open_title
+import dev.ide.ui.generated.resources.redo
 import dev.ide.ui.generated.resources.retry
 import dev.ide.ui.generated.resources.run
 import dev.ide.ui.generated.resources.save
@@ -537,6 +538,9 @@ private fun OverflowItem(
 fun DepsProgressBar(state: DepsResolveState, onRetry: () -> Unit) {
     if (!state.resolving) {
         if (state.unresolved.isNotEmpty()) UnresolvedDepsBanner(state, onRetry)
+        // Only when nothing actually failed: a real failure is the more urgent thing to say, and the
+        // warning stays visible on the Dependencies screen either way.
+        else if (state.warnings.isNotEmpty()) ArtifactlessDepsBanner(state)
         return
     }
     var expanded by remember { mutableStateOf(false) }
@@ -596,6 +600,80 @@ fun DepsProgressBar(state: DepsResolveState, onRetry: () -> Unit) {
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth(),
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The counterpart to [UnresolvedDepsBanner] for declarations that resolved and gave nothing back: a
+ * `pom`-packaged module with no artifact and no dependencies, whose real files hang off a Maven classifier.
+ * Nothing failed, so there is no Retry to offer and no build to block; the point is simply that the
+ * declaration reads as healthy while contributing nothing, which the user has no other way to notice.
+ */
+@Composable
+private fun ArtifactlessDepsBanner(state: DepsResolveState) {
+    var expanded by remember { mutableStateOf(false) }
+    val n = state.warnings.size
+    GlassSurface(modifier = Modifier.fillMaxWidth(), material = GlassMaterial.Regular) {
+        Column(
+            Modifier.fillMaxWidth()
+                .background(Ide.colors.warning.copy(alpha = 0.08f))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(CaIcons.warning, null, Modifier.size(16.dp), tint = Ide.colors.warning)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        pluralStringResource(Res.plurals.edchrome_empty_dependencies, n, n),
+                        color = Ide.colors.warning,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        state.warnings.first().coordinate,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = Ide.type.codeSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconButtonCa(
+                    if (expanded) CaIcons.caretDown else CaIcons.caretRight,
+                    if (expanded) stringResource(Res.string.edchrome_hide_unresolved_dependencies) else stringResource(Res.string.edchrome_show_unresolved_dependencies),
+                    { expanded = !expanded }, boxSize = 24, iconSize = 14,
+                )
+            }
+            AnimatedVisibility(expanded) {
+                Column(
+                    Modifier.fillMaxWidth().heightIn(max = 200.dp).padding(top = 8.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    for (w in state.warnings) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(
+                                w.coordinate,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = Ide.type.codeSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                "${w.message}  ·  ${w.module}",
+                                color = MaterialTheme.colorScheme.outline,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 4,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }

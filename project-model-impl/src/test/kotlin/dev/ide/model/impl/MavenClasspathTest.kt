@@ -37,6 +37,27 @@ class MavenClasspathTest {
     }
 
     @Test
+    fun twoClassifiersOfOneArtifactBothSurvive() {
+        // `gdx-platform` publishes one jar per ABI under the same `group:name:version`. They are different
+        // artifacts, not two versions of one, so newest-wins must not pick between them: collapsing them onto
+        // a single key left only the first path seen and dropped every other ABI.
+        val base = "/cache/resolved-deps/com/badlogicgames/gdx/gdx-platform/1.14.2"
+        val abis = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+        val jars = abis.map { "$base/gdx-platform-1.14.2-natives-$it.jar" }
+        assertEquals(jars, paths(jars.map { entry(it) }))
+    }
+
+    @Test
+    fun aClassifierArtifactStillDropsItsOwnOlderVersion() {
+        val base = "/cache/resolved-deps/com/badlogicgames/gdx/gdx-platform"
+        val result = paths(listOf(
+            entry("$base/1.13.1/gdx-platform-1.13.1-natives-arm64-v8a.jar"),
+            entry("$base/1.14.2/gdx-platform-1.14.2-natives-arm64-v8a.jar"),
+        ))
+        assertEquals(listOf("$base/1.14.2/gdx-platform-1.14.2-natives-arm64-v8a.jar"), result)
+    }
+
+    @Test
     fun nonMavenPathsPassThroughUntouched() {
         // Module outputs / local jars / the SDK aren't Maven-shaped → never collapsed, even same file name.
         val items = listOf(

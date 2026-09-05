@@ -28,9 +28,14 @@ class GradleBuildFileWriter : BuildFileWriter {
         val text = runCatching { file.readText() }.getOrNull()
             ?: return WriteOutcome.failed("Couldn't read ${file.fileName}.")
         val kts = file.fileName.toString().endsWith(".kts")
-        val entry = GradleDependencyEdits.declaration(kts, gradleConfiguration(scope), coordinate.toString())
-        val updated = GradleDependencyEdits.add(text, kts, gradleConfiguration(scope), coordinate)
+        val configuration = gradleConfiguration(scope)
+        val entry = GradleDependencyEdits.declaration(kts, configuration, coordinate.toString(), scope.offClasspath)
+        val added = GradleDependencyEdits.add(text, kts, configuration, coordinate, scope.offClasspath)
             ?: return WriteOutcome.ok(file, "${coordinate.group}:${coordinate.name} is already declared in ${file.fileName}.")
+        // A scope Gradle has no configuration for (`natives`) has to be created before it can be declared
+        // into, or the script the IDE just wrote no longer builds.
+        val updated =
+            if (scope.offClasspath) GradleDependencyEdits.ensureConfiguration(added, kts, configuration) else added
         return runCatching {
             file.writeText(updated)
             WriteOutcome.ok(file, "Declared $entry in ${file.fileName}.")
@@ -73,18 +78,28 @@ internal object GradleDependencyEdits {
 
     private const val DEFAULT_INDENT = "    "
 
-    /** `implementation("g:a:v")` in the Kotlin DSL, `implementation 'g:a:v'` in Groovy. */
-    fun declaration(kts: Boolean, configuration: String, notation: String): String =
-        if (kts) "$configuration(\"$notation\")" else "$configuration '$notation'"
+    /**
+     * One dependency declaration: `implementation("g:a:v")` in the Kotlin DSL, `implementation 'g:a:v'` in
+     * Groovy. [byName] addresses the configuration as a string (`"natives"("g:a:v")`), which is how the
+     * Kotlin DSL declares into a configuration the script created itself: those have no generated accessor,
+     * so the plain call form would not compile. Groovy resolves the name dynamically either way.
+     */
+    fun declaration(kts: Boolean, configuration: String, notation: String, byName: Boolean = false): String = when {
+        kts && byName -> "\"$configuration\"(\"$notation\")"
+        kts -> "$configuration(\"$notation\")"
+        else -> "$configuration '$notation'"
+    }
 
     /**
      * [text] with [coordinate] declared at [configuration], or null when it is already declared. A script with
      * no `dependencies { }` block gets one appended.
      */
-    fun add(text: String, kts: Boolean, configuration: String, coordinate: Coordinate): String? {
+    fun add(
+        text: String, kts: Boolean, configuration: String, coordinate: Coordinate, byName: Boolean = false,
+    ): String? {
         val mask = GradleScript.maskComments(text)
         val body = GradleScript.blockBodyRange(mask, "dependencies")
-        val entry = declaration(kts, configuration, coordinate.toString())
+        val entry = declaration(kts, configuration, coordinate.toString(), byName)
         if (body != null && declares(mask.substring(body.first, body.last + 1), coordinate)) return null
 
         if (body == null) {
@@ -112,6 +127,34 @@ internal object GradleDependencyEdits {
         }
         if (removed == 0) return null
         return text.substring(0, body.first) + kept.toString().dropLast(1) + text.substring(body.last + 1)
+    }
+
+    /**
+     * [text] with [configuration] created, if the script does not create it already. Gradle provides no
+     * configuration for a scope the model owns alone (`natives`), so a declaration into one is only valid
+     * once the script has made it: `configurations { create("natives") }` in the Kotlin DSL,
+     * `configurations { natives }` in Groovy. The block is added before `dependencies { }` when the script
+     * has no `configurations { }` of its own, since Gradle resolves the name at that point.
+     */
+    fun ensureConfiguration(text: String, kts: Boolean, configuration: String): String {
+        val mask = GradleScript.maskComments(text)
+        val existing = GradleScript.blockBodyRange(mask, "configurations")
+        val entry = if (kts) "create(\"$configuration\")" else configuration
+        if (existing != null) {
+            val bodyText = mask.substring(existing.first, existing.last + 1)
+            if (Regex("""(^|[^\w.])${Regex.escape(configuration)}($|[^\w])""").containsMatchIn(bodyText)) return text
+            val insertAt = existing.last + 1
+            val indent = indentOf(text.substring(existing.first, insertAt))
+            val prefix = if (insertAt == 0 || text[insertAt - 1] == '\n') "" else "\n"
+            return text.substring(0, insertAt) + prefix + indent + entry + "\n" + text.substring(insertAt)
+        }
+        val block = "configurations {\n$DEFAULT_INDENT$entry\n}\n"
+        // Before `dependencies { }` so the configuration exists by the time it is declared into; a script
+        // without one (nothing was ever declared) takes it at the end.
+        val deps = Regex("""(?m)^[ \t]*dependencies\s*\{""").find(mask)
+            ?: return text.trimEnd('\n') + "\n\n" + block
+        val at = deps.range.first   // the start of the `dependencies` line, so the blank line above it stays
+        return text.substring(0, at) + block + "\n" + text.substring(at)
     }
 
     /** True when [text] quotes a `group:name` notation for [coordinate], whatever version it pins. */

@@ -53,7 +53,23 @@ data class ResolutionResult(
      *  hard miss (won't fix itself; the resolver records those in its negative cache). Lets a caller skip a
      *  futile re-walk on the next open while still auto-retrying a real offline failure. Defaults false. */
     val retriable: Boolean = false,
+    /**
+     * Declared coordinates that resolved SUCCESSFULLY yet contributed nothing: no artifact of their own and
+     * no transitive dependencies. Distinct from [unresolved], where a fetch actually failed. Retrying can't
+     * help and the declaration isn't build-blocking, so this is a warning channel rather than an error one,
+     * but it must be surfaced: the declaration otherwise looks healthy while the classpath stays empty.
+     */
+    val artifactless: List<ArtifactlessDependency> = emptyList(),
 )
+
+/**
+ * A declared coordinate that resolved to no artifact and no dependencies, with the [reason] to show the user.
+ *
+ * The archetype is a classifier-only module: `com.badlogicgames.gdx:gdx-platform` is `pom`-packaged with an
+ * empty `<dependencies>`, and everything it publishes hangs off a classifier (`natives-arm64-v8a`,
+ * `natives-armeabi-v7a`, `natives-desktop`, …). The plain three-part coordinate is resolvable and useless.
+ */
+data class ArtifactlessDependency(val coordinate: Coordinate, val reason: String)
 
 data class ResolvedArtifact(
     val coordinate: Coordinate,

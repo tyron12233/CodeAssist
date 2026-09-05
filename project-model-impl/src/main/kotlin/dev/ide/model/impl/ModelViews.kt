@@ -123,7 +123,7 @@ internal class ModuleImpl(
         val items = ArrayList<ClasspathEntry>()
         val visitedModules = hashSetOf(data.id)
         for (entry in data.dependencies) {
-            if (directInPhase(scope, entry.scope) && includedInVariant(entry, variant))
+            if (directInPhase(scope, entry) && includedInVariant(entry, variant))
                 addEntry(entry, scope, transitive, variant, items, visitedModules)
         }
         return ClasspathSnapshot.of(MavenClasspath.resolveVersionConflicts(items))
@@ -156,7 +156,10 @@ internal class ModuleImpl(
             is ModuleDependency -> {
                 val target = findModule(entry.target) ?: return
                 if (!visited.add(target.module.id)) return
-                out.add(ClasspathEntry(moduleOutput(target.project, target.module), ClasspathEntryKind.MODULE_OUTPUT))
+                // An off-classpath phase has no reading of a module's compiled output: it collects the
+                // artifacts declared in it, and the module dependency is only the route to them.
+                if (!scope.offClasspath)
+                    out.add(ClasspathEntry(moduleOutput(target.project, target.module), ClasspathEntryKind.MODULE_OUTPUT))
                 if (transitive) {
                     for (te in target.module.dependencies) {
                         if (propagates(scope, te) && includedInVariant(te, variant))
@@ -168,15 +171,28 @@ internal class ModuleImpl(
     }
 
     /** Which of this module's own direct entries belong on the requested classpath. */
-    private fun directInPhase(requested: DependencyScope, entry: DependencyScope): Boolean = when (requested) {
-        DependencyScope.RUNTIME_ONLY -> entry.onRuntime
-        DependencyScope.TEST_IMPLEMENTATION -> entry.onTest
-        else -> entry.onCompile // API / IMPLEMENTATION / COMPILE_ONLY -> the compile classpath
+    private fun directInPhase(requested: DependencyScope, entry: OrderEntry): Boolean = when {
+        requested == DependencyScope.RUNTIME_ONLY -> entry.scope.onRuntime
+        requested == DependencyScope.TEST_IMPLEMENTATION -> entry.scope.onTest
+        // A scope on none of the three standard classpaths is its own phase, so the toolchain that owns it
+        // (`natives` to the packaged `lib/<abi>/`, a plugin's C++ `linkOnly`) can ask for it by name and get
+        // what was declared in it. Without this an off-classpath scope was unreachable: it matched no phase,
+        // so `classpath(NATIVES)` fell through to the compile test and always came back empty.
+        //
+        // A MODULE dependency is always descended into, whatever scope it was declared in: the module is the
+        // carrier of the phase rather than a member of it, so a library module's native libraries reach the
+        // app that packages them exactly the way that module's own `jniLibs` do.
+        requested.offClasspath -> entry.scope == requested || entry is ModuleDependency
+        else -> entry.scope.onCompile // API / IMPLEMENTATION / COMPILE_ONLY -> the compile classpath
     }
 
     /** Which of a dependency's entries propagate transitively for the requested classpath. */
-    private fun propagates(requested: DependencyScope, entry: OrderEntry): Boolean = when (requested) {
-        DependencyScope.RUNTIME_ONLY -> entry.scope.onRuntime // full runtime closure
+    private fun propagates(requested: DependencyScope, entry: OrderEntry): Boolean = when {
+        requested == DependencyScope.RUNTIME_ONLY -> entry.scope.onRuntime // full runtime closure
+        // Same reading as [directInPhase] one level down: the phase's own declarations, plus the module
+        // dependencies that carry them. `exported` does not gate this, since packaging is not an api/
+        // implementation distinction.
+        requested.offClasspath -> entry.scope == requested || entry is ModuleDependency
         else -> entry.exported // compile/test: only `api` (exported) propagates
     }
 

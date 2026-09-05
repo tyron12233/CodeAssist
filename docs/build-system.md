@@ -360,6 +360,15 @@ mergeNativeLibs, mergeJavaResource ⇒ packageApk    (run alongside dexing; feed
   or unconfigured duplicate keeps the module's own copy. Native `.so` are packaged as-is: debug-symbol stripping
   needs the NDK, absent on device (AGP without an NDK does the same). For an app bundle these merges feed the
   base-module zip too (Java resources under `root/`, `.so` under `lib`).
+- **Prebuilt native libraries from dependencies.** A native library published for Android ships one artifact
+  per ABI, addressed by a Maven **classifier**: `com.badlogicgames.gdx:gdx-platform:1.14.2:natives-arm64-v8a`
+  holds a bare `libgdx.so` with no `lib/<abi>/` prefix, and the module publishes no main artifact at all. Such
+  an artifact defines no classes, so it belongs on no classpath, and the packaging merge (like AGP's) only
+  lifts `.so` files already under `lib/<abi>/`. `DependencyScope.NATIVES` is the configuration for it: an
+  artifact declared there is resolved and unpacked by `NativeLibraries` into `<abi>/lib*.so` (the ABI read
+  from the classifier, or kept verbatim when the archive already carries one), and the resulting directory
+  joins `jniLibs` for the merge. A classifier that names no Android ABI (`natives-desktop`, `natives-ios`)
+  packages nothing and reports a build warning rather than shipping an unloadable library.
 - **Decoupled library R.** Each library module gets a non-final R from its own resources (kept out of
   its dexed output, so ids are not inlined); the app generates and dexes the final R for all library
   packages. A library is therefore compiled once, independent of the app, with no duplicate R.
@@ -468,7 +477,14 @@ What crosses is what Gradle also models:
 - **Dependencies**: module deps as `project(":x")`, libraries as their Maven coordinates (versionless ones
   included, since a `platform(...)` BOM supplies the version), `Exclusion`s as `exclude(group =, module =)`,
   and a build-variant qualifier as the configuration prefix (`debugImplementation`). The IDE's bundled
-  `kotlin-stdlib` is dropped: the Kotlin plugin brings its own.
+  `kotlin-stdlib` is dropped: the Kotlin plugin brings its own. A classifier coordinate keeps its fourth
+  segment.
+- **Native libraries**: `natives` is not a Gradle configuration, so the export creates it
+  (`configurations { create("natives") }`), declares into it by name (`"natives"("g:a:v:natives-arm64-v8a")`,
+  since a configuration the script creates has no generated accessor), and writes an `unpackNatives` task that
+  unzips each classifier jar into `build/unpackedNatives/<abi>` and registers that as a `jniLibs` source
+  directory. It resolves the configuration at execution time, so it is not configuration-cache compatible,
+  which the notes say.
 - **The Android facet**: namespace, SDK levels, versionCode/Name when set, manifest placeholders, build types
   (only where they say something AGP would not do by itself), flavor dimensions and flavors, `buildFeatures`,
   `packaging`, core-library desugaring, and any source root that is not where Gradle already looks.

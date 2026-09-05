@@ -493,6 +493,13 @@ data class DepsResolveState(
      * until it's resolved. Each carries a best-effort [UiUnresolvedDependency.reason].
      */
     val unresolved: List<UiUnresolvedDependency> = emptyList(),
+    /**
+     * Declared dependencies that resolved without failing yet contribute nothing to the module: no artifact
+     * of their own and no transitives. Not an error (nothing failed, and retrying can't change the outcome)
+     * and never build-blocking, but the declaration looks healthy while the classpath stays empty, so it has
+     * to be said out loud. Kept alongside [unresolved] for the same reason: it survives [resolving].
+     */
+    val warnings: List<UiDependencyWarning> = emptyList(),
 )
 
 /** A declared dependency the engine couldn't resolve, with the module that declares it and a why. */
@@ -500,6 +507,13 @@ data class UiUnresolvedDependency(
     val module: String,
     val coordinate: String,
     val reason: String,
+)
+
+/** A declared dependency that resolved to nothing useful, with the module that declares it and a why. */
+data class UiDependencyWarning(
+    val module: String,
+    val coordinate: String,
+    val message: String,
 )
 
 /** A dependency-declaring module for the screen's module switcher. */

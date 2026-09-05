@@ -19,6 +19,13 @@ class DependencyPartitionTest {
 
     private fun coord(name: String) = Coordinate("g", name, "1.0")
 
+    /** A module's SECONDARY artifact, named by a Maven classifier (one natives jar per ABI). */
+    private fun classified(name: String, classifier: String) = ResolvedArtifact(
+        coordinate = coord(name).copy(classifier = classifier),
+        kind = ArtifactKind.JAR,
+        classesRoot = FakeFile("/cache/g/$name/1.0/$name-1.0-$classifier.jar"),
+    )
+
     private fun names(buckets: Map<String, List<ResolvedArtifact>>) =
         buckets.mapValues { (_, v) -> v.map { it.coordinate.name }.sorted() }
 
@@ -50,6 +57,39 @@ class DependencyPartitionTest {
         // No artifact duplicated across buckets.
         val all = out.values.flatten().map { it.coordinate.name }
         assertEquals(all.size, all.toSet().size)
+    }
+
+    @Test
+    fun eachClassifierDeclarationOwnsTheArtifactItNamed() {
+        // `gdx-platform` publishes one jar per ABI under one `group:name:version`, so two declarations share
+        // a `group:name` and each has to end up with its own file. Claiming per `group:name` gave the first
+        // declarer both jars and left the second with an empty partition (read as "didn't resolve").
+        val arm64 = classified("gdx-platform", "natives-arm64-v8a")
+        val armv7 = classified("gdx-platform", "natives-armeabi-v7a")
+        val out = DependencyPartition.partition(
+            listOf(
+                "g:gdx-platform:1.0:natives-arm64-v8a" to coord("gdx-platform").copy(classifier = "natives-arm64-v8a"),
+                "g:gdx-platform:1.0:natives-armeabi-v7a" to coord("gdx-platform").copy(classifier = "natives-armeabi-v7a"),
+            ),
+            listOf(arm64, armv7),
+        )
+        assertEquals(
+            mapOf(
+                "g:gdx-platform:1.0:natives-arm64-v8a" to listOf("natives-arm64-v8a"),
+                "g:gdx-platform:1.0:natives-armeabi-v7a" to listOf("natives-armeabi-v7a"),
+            ),
+            out.mapValues { (_, v) -> v.mapNotNull { it.coordinate.classifier }.sorted() },
+        )
+    }
+
+    @Test
+    fun aPlainDeclarationStillTakesEveryArtifactOfItsModule() {
+        // Declared without a classifier, so there is no named artifact to single out: the module's whole
+        // contribution belongs to that one declaration.
+        val main = art("lib")
+        val extra = classified("lib", "natives-arm64-v8a")
+        val out = DependencyPartition.partition(listOf("g:lib:1.0" to coord("lib")), listOf(main, extra))
+        assertEquals(2, out.getValue("g:lib:1.0").size, "both artifacts of the module: ${out.getValue("g:lib:1.0")}")
     }
 
     @Test

@@ -432,8 +432,78 @@ object GradleProjectExport {
             }
         }
         k.line()
+        nativesConfiguration(k, module)
         dependenciesBlock(k, module, modules, libraries, notes)
+        nativesUnpackTask(k, module, notes)
         return k.text().trimEnd() + "\n"
+    }
+
+    /** Every `natives`-scoped declaration of [module] (the per-ABI classifier jars). */
+    private fun nativesDeps(module: Exported): List<LibraryDependency> =
+        module.data.dependencies.filterIsInstance<LibraryDependency>()
+            .filter { it.scope == DependencyScope.NATIVES }
+
+    /**
+     * `natives` is the IDE's own scope, not a Gradle configuration, so an exported build has to create it
+     * before anything can declare into it. Written only when the module actually uses it, so an ordinary
+     * build script is unchanged.
+     */
+    private fun nativesConfiguration(k: Kts, module: Exported) {
+        if (nativesDeps(module).isEmpty()) return
+        k.line("// Native libraries: each classifier jar holds a bare `.so` with no `lib/<abi>/` prefix, so")
+        k.line("// the ABI comes from the classifier and the jars are unpacked rather than compiled against.")
+        k.block("configurations") { line("create(\"natives\")") }
+        k.line()
+    }
+
+    /**
+     * The counterpart of [nativesConfiguration]: unpack each resolved `natives` jar into
+     * `build/unpackedNatives/<abi>/`, taking the ABI from the artifact's classifier, and register that
+     * directory as a `jniLibs` source directory so the Android plugin packages it. Wiring the task provider
+     * into `srcDir` is what makes the merge depend on it, with no task-ordering hook to get wrong.
+     *
+     * This is the copy task a libGDX-style build writes by hand; like that one it resolves the configuration
+     * inside `doLast`, so it is not configuration-cache compatible (noted in the export report).
+     */
+    private fun nativesUnpackTask(k: Kts, module: Exported, notes: MutableList<String>) {
+        if (nativesDeps(module).isEmpty()) return
+        if (module.android == null) {
+            notes += "Module '${module.data.name}' declares native libraries, which only an Android module " +
+                "packages. They were exported into a `natives` configuration that nothing consumes."
+            return
+        }
+        k.line()
+        k.block("val unpackNatives by tasks.registering") {
+            line("val outDir = layout.buildDirectory.dir(\"unpackedNatives\")")
+            line("val nativeJars = configurations[\"natives\"]")
+            line("inputs.files(nativeJars)")
+            line("outputs.dir(outDir)")
+            block("doLast") {
+                line("val abis = setOf(\"armeabi-v7a\", \"arm64-v8a\", \"x86\", \"x86_64\")")
+                block("nativeJars.resolvedConfiguration.resolvedArtifacts.forEach") {
+                    line("artifact ->")
+                    line("val abi = artifact.classifier?.removePrefix(\"natives-\")")
+                    line("if (abi == null || abi !in abis) return@forEach")
+                    block("copy") {
+                        block("from(zipTree(artifact.file))") {
+                            line("include(\"**/*.so\")")
+                            // The `.so` sits at the archive root in some jars and under an ABI dir in others;
+                            // flattening to the file name makes both land as `<abi>/lib*.so`.
+                            line("eachFile { path = name }")
+                        }
+                        line("into(outDir.get().dir(abi))")
+                        line("includeEmptyDirs = false")
+                    }
+                }
+            }
+        }
+        k.line()
+        k.block("android") {
+            line("sourceSets.getByName(\"main\").jniLibs.srcDir(unpackNatives)")
+        }
+        notes += "Module '${module.data.name}' unpacks its native libraries with the generated " +
+            "`unpackNatives` task, which resolves a configuration at execution time and so is not " +
+            "configuration-cache compatible."
     }
 
     private fun androidBlock(k: Kts, module: Exported, facet: AndroidFacet, notes: MutableList<String>) {
@@ -684,7 +754,9 @@ object GradleProjectExport {
             return
         }
         val parts = name.split(':')
-        if (parts.size !in 2..3 || parts.any { it.isBlank() }) {
+        // `group:name:version:classifier` is a valid Gradle declaration too (a module's secondary artifact),
+        // so four segments are as writable as three.
+        if (parts.size !in 2..4 || parts.any { it.isBlank() }) {
             // Not a Maven coordinate, so there is nothing to declare: it is a library the IDE resolved to
             // files of its own. Left as a comment on the spot it belongs, and reported.
             val jars = libraries[name]?.classes?.size ?: 0
@@ -693,11 +765,17 @@ object GradleProjectExport {
                 "coordinate to write into a Gradle build file. Add it by hand."
             return
         }
+        // A configuration the script itself created has no generated accessor, so `natives("…")` would not
+        // compile. The Kotlin DSL's `"name"(notation)` form addresses a configuration by name and takes the
+        // same optional configuration block.
+        val declare =
+            if (entry.scope.offClasspath) "\"$configuration\"(\"${escape(name)}\")"
+            else "$configuration(\"${escape(name)}\")"
         if (entry.exclusions.isEmpty()) {
-            k.line("$configuration(\"${escape(name)}\")")
+            k.line(declare)
             return
         }
-        k.block("$configuration(\"${escape(name)}\")") {
+        k.block(declare) {
             for (exclusion in entry.exclusions) {
                 val group = exclusion.group.takeIf { it != "*" }
                 val artifact = exclusion.name.takeIf { it != "*" }
@@ -734,6 +812,12 @@ object GradleProjectExport {
     private fun configurationFor(entry: OrderEntry, module: Exported, notes: MutableList<String>): String {
         val base = gradleConfiguration(entry.scope)
         val variant = entry.variant ?: return base
+        if (entry.scope.offClasspath) {
+            notes += "A native-library dependency of module '${module.data.name}' was scoped to the " +
+                "'$variant' variant, which was dropped: the exported project carries one `$base` " +
+                "configuration, packaged into every variant."
+            return base
+        }
         if (entry.scope == DependencyScope.TEST_IMPLEMENTATION) {
             notes += "A test dependency of module '${module.data.name}' was scoped to the '$variant' variant, " +
                 "which was dropped: it is declared as a plain testImplementation."

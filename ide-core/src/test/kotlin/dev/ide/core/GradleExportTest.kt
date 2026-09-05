@@ -131,6 +131,70 @@ class GradleExportTest {
         dir.writeSource("lib/src/main/kotlin/com/example/lib/Greeter.kt", "package com.example.lib\n\nclass Greeter")
     }
 
+    /** An Android app whose only unusual dependency is a per-ABI native library in the `natives` scope. */
+    private fun writeNativesProject(dir: Path, platform: PlatformCore) {
+        val types = ModuleTypeRegistry(platform.extensions)
+        types.register(TestType("android-app"), PluginId("android-support"))
+        val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
+        store.workspace.beginModification().apply {
+            addProject("Game", BuildSystemId.NATIVE, store.vfs.root()); commit()
+        }
+        store.workspace.projects.single().beginModification().apply {
+            addModule("app", types.resolve("android-app")).apply {
+                languageLevel = LanguageLevel.JAVA_17
+                addSourceSet(androidSourceSet("main"))
+                addDependency(LibraryDependency(LibraryRef("com.badlogicgames.gdx:gdx:1.14.2"), DependencyScope.IMPLEMENTATION))
+                for (abi in listOf("arm64-v8a", "armeabi-v7a")) {
+                    addDependency(
+                        LibraryDependency(
+                            LibraryRef("com.badlogicgames.gdx:gdx-platform:1.14.2:natives-$abi"),
+                            DependencyScope.NATIVES,
+                        ),
+                    )
+                }
+                putFacet(AndroidFacet(namespace = "com.example.game", compileSdk = 34, minSdk = 24))
+            }
+            commit()
+        }
+        store.save()
+        dir.writeSource("app/src/main/AndroidManifest.xml", """<manifest/>""")
+        dir.writeSource("app/src/main/java/com/example/game/Main.kt", "package com.example.game\n\nclass Main")
+    }
+
+    @Test
+    fun exportsNativeLibrariesAsTheirOwnConfigurationWithAnUnpackTask() {
+        testEnv("gradle-export-natives") { env ->
+            writeNativesProject(env.dir, env.platform)
+            val app = assertNotNull(GradleProjectExport.render(env.dir).files["app/build.gradle.kts"])
+
+            // `natives` is the IDE's scope, not a Gradle one, so the exported script has to create it before
+            // anything declares into it.
+            assertContains(app, """create("natives")""")
+            // The four-part coordinate is a real Gradle declaration and must be written as one, not commented
+            // out as "no Maven coordinate".
+            // Addressed by name: a configuration the script creates itself has no generated accessor, so
+            // the bare `natives("…")` call form would not compile.
+            assertContains(app, """"natives"("com.badlogicgames.gdx:gdx-platform:1.14.2:natives-arm64-v8a")""")
+            assertContains(app, """"natives"("com.badlogicgames.gdx:gdx-platform:1.14.2:natives-armeabi-v7a")""")
+            assertFalse("// natives" in app, "the declarations must not be commented out:\n$app")
+            // A jar whose `.so` sits at the archive root is unpacked into an ABI directory and packaged from
+            // there; nothing about it belongs on a classpath.
+            assertContains(app, "val unpackNatives by tasks.registering")
+            assertContains(app, """artifact.classifier?.removePrefix("natives-")""")
+            assertContains(app, """jniLibs.srcDir(unpackNatives)""")
+            assertContains(app, """implementation("com.badlogicgames.gdx:gdx:1.14.2")""")
+        }
+    }
+
+    @Test
+    fun anOrdinaryProjectExportsNoNativesScaffolding() {
+        testEnv("gradle-export-no-natives") { env ->
+            writeProject(env.dir, env.platform)
+            val app = assertNotNull(GradleProjectExport.render(env.dir).files["app/build.gradle.kts"])
+            assertFalse("natives" in app, "a project with no native libraries gets none of it:\n$app")
+        }
+    }
+
     @Test
     fun rendersSettingsAndRootScriptForEveryModule() {
         testEnv("gradle-export") { env ->
@@ -411,6 +475,35 @@ class GradleExportTest {
             val lib = spec.modules.first { it.name == "lib" }
             assertEquals(GradleImport.Kind.JAVA, lib.kind)
             assertContains(lib.mavenDeps.map { it.coordinate }, "com.google.guava:guava:33.4.8-jre")
+        }
+    }
+
+    /** The natives half of the round trip: the by-name declaration form the exporter has to write is one
+     *  the importer has to read, or an exported game project comes back with no native libraries. */
+    @Test
+    fun theNativesExportImportsBackWithItsClassifiersAndScope() {
+        testEnv("gradle-export-natives-roundtrip") { env ->
+            writeNativesProject(env.dir, env.platform)
+            val exported = env.dir.resolve("exported")
+            for ((rel, text) in GradleProjectExport.render(env.dir).files) {
+                exported.writeSource(rel, text, trim = false)
+            }
+            exported.writeSource("app/src/main/AndroidManifest.xml", """<manifest/>""")
+
+            val app = assertNotNull(GradleImport.parse(exported)).modules.single()
+            val natives = app.mavenDeps.filter { it.scope == DependencyScope.NATIVES }
+            assertEquals(
+                listOf(
+                    "com.badlogicgames.gdx:gdx-platform:1.14.2:natives-arm64-v8a",
+                    "com.badlogicgames.gdx:gdx-platform:1.14.2:natives-armeabi-v7a",
+                ),
+                natives.map { it.coordinate }.sorted(),
+                "the four-part coordinates and their scope must both survive: ${app.mavenDeps}",
+            )
+            assertContains(
+                app.mavenDeps.filter { it.scope == DependencyScope.IMPLEMENTATION }.map { it.coordinate },
+                "com.badlogicgames.gdx:gdx:1.14.2",
+            )
         }
     }
 }

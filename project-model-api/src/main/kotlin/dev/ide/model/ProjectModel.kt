@@ -36,9 +36,40 @@ value class BuildSystemId(val value: String) {
     }
 }
 
-/** A Maven-style artifact identity. Fundamental enough to live in the model; deps-api reuses it. */
-data class Coordinate(val group: String, val name: String, val version: String) {
-    override fun toString() = "$group:$name:$version"
+/**
+ * A Maven-style artifact identity. Fundamental enough to live in the model; deps-api reuses it.
+ *
+ * [classifier] names a SECONDARY artifact of the same module: the fourth segment of Gradle's
+ * `group:name:version:classifier` notation. A module can publish files that are not its main artifact, keyed
+ * by classifier: `com.badlogicgames.gdx:gdx-platform` publishes no main jar at all, only
+ * `natives-arm64-v8a`, `natives-armeabi-v7a`, `natives-desktop`, … Without a classifier there is nothing to
+ * declare for such a module, and the plain three-part coordinate resolves to nothing.
+ *
+ * The classifier is part of the identity (two classifiers of one `group:name:version` are different
+ * artifacts, not two versions of one) but NOT of the conflict-resolution key: Maven picks one version per
+ * `group:name`, and every classifier of that module resolves at that version.
+ */
+data class Coordinate(
+    val group: String,
+    val name: String,
+    val version: String,
+    val classifier: String? = null,
+) {
+    override fun toString() =
+        if (classifier.isNullOrEmpty()) "$group:$name:$version" else "$group:$name:$version:$classifier"
+
+    companion object {
+        /**
+         * Parse `group:name`, `group:name:version` or `group:name:version:classifier` (the Gradle spellings),
+         * or null when [s] is not a coordinate. A two-part form leaves [version] blank: the versionless
+         * declaration an imported BOM fills in. Blank segments are rejected, so `a::1.0` isn't a coordinate.
+         */
+        fun parseOrNull(s: String): Coordinate? {
+            val p = sanitizeCoordinate(s).split(":")
+            if (p.size !in 2..4 || p.any(String::isBlank)) return null
+            return Coordinate(p[0], p[1], p.getOrElse(2) { "" }, p.getOrNull(3))
+        }
+    }
 }
 
 /**
@@ -65,6 +96,7 @@ fun sanitizeCoordinate(raw: Coordinate): Coordinate = Coordinate(
     sanitizeCoordinate(raw.group),
     sanitizeCoordinate(raw.name),
     sanitizeCoordinate(raw.version),
+    raw.classifier?.let { sanitizeCoordinate(it) },
 )
 
 /**
@@ -458,6 +490,14 @@ class DependencyScope(
     override fun hashCode(): Int = name.hashCode()
     override fun toString(): String = name
 
+    /**
+     * True when this scope lands on none of the three standard classpaths: a scope whose artifacts a
+     * specific toolchain consumes directly rather than compiling against ([NATIVES], or a plugin's C++
+     * `linkOnly`). Such a scope is its own phase: [Module.classpath] asked for it returns exactly the
+     * entries declared in it, so the toolchain that owns it can find them.
+     */
+    val offClasspath: Boolean get() = !onCompile && !onRuntime && !onTest
+
     companion object {
         val API = DependencyScope("API", "api", onCompile = true, onRuntime = true, onTest = true)
 
@@ -476,9 +516,26 @@ class DependencyScope(
                 onCompile = false, onRuntime = false, onTest = true,
             )
 
+        /**
+         * Prebuilt native libraries, the dependency counterpart of [ContentRole.JNI_LIBS]: an artifact
+         * declared here is downloaded and its `.so` files are unpacked into the packaged `lib/<abi>/`, and it
+         * is on NO classpath, because there is nothing in it to compile or analyze against.
+         *
+         * This is what a classifier-per-ABI natives module needs. `com.badlogicgames.gdx:gdx-platform`
+         * publishes one jar per ABI (`natives-arm64-v8a`, `natives-armeabi-v7a`, …), each holding a bare
+         * `libgdx.so` with no `lib/<abi>/` prefix, so the ABI is carried by the CLASSIFIER, not by the
+         * archive layout, and putting such a jar on the compile/dex classpath packages nothing at all. AGP
+         * has the same gap, which is why the upstream libGDX build declares its own `natives` configuration
+         * and a copy task; this scope is that configuration, modeled.
+         *
+         * [offClasspath], so requesting it from [Module.classpath] yields exactly what was declared in it.
+         */
+        val NATIVES =
+            DependencyScope("NATIVES", "natives", onCompile = false, onRuntime = false, onTest = false)
+
         /** The scopes the IDE itself provides, in classpath-declaration order. */
         val entries: List<DependencyScope> =
-            listOf(API, IMPLEMENTATION, COMPILE_ONLY, RUNTIME_ONLY, TEST_IMPLEMENTATION)
+            listOf(API, IMPLEMENTATION, COMPILE_ONLY, RUNTIME_ONLY, TEST_IMPLEMENTATION, NATIVES)
 
         fun values(): List<DependencyScope> = entries
 

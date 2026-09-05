@@ -1,6 +1,7 @@
 package dev.ide.deps.impl
 
 import dev.ide.deps.ArtifactKind
+import dev.ide.deps.ArtifactlessDependency
 import dev.ide.deps.ConflictPolicy
 import dev.ide.deps.DependencyResolver
 import dev.ide.deps.Repository
@@ -134,6 +135,17 @@ class MavenDependencyResolver(
         val chosen = LinkedHashMap<GA, String>()                    // winning version, per artifact
         val edges = LinkedHashMap<GA, LinkedHashSet<GA>>()          // dependsOn graph (by artifact)
         val packagingByGa = HashMap<GA, String>()
+        // The artifacts each module was asked for, `classifier -> file extension`. The `""` key is the
+        // module's MAIN artifact (its extension comes from packaging / Gradle Module Metadata below); any
+        // other key is a Maven classifier: a secondary file published under the same `group:name:version`,
+        // which is the only artifact some modules publish at all (`gdx-platform` ships one jar per ABI and
+        // no main jar). Conflict resolution still runs per `group:name`, so every classifier of a module is
+        // fetched at the one version the graph chose for it.
+        val classifiersByGa = LinkedHashMap<GA, LinkedHashMap<String, String>>()
+        fun requestArtifact(ga: GA, classifier: String?, type: String) {
+            classifiersByGa.getOrPut(ga) { LinkedHashMap() }[classifier.orEmpty()] =
+                if (classifier.isNullOrEmpty()) "" else type.ifBlank { "jar" }
+        }
         // GMM variant selection can redirect an artifact to a different file/coordinate (a KMP root's
         // `-android` platform module) and publish more than one file. Keyed by the ORIGINAL ga (so
         // version/edges/alignment stay coherent); the download pass fetches these instead of the default path.
@@ -174,6 +186,7 @@ class MavenDependencyResolver(
                 c0.copy(version = v)
             } else c0
             directVersions[c.ga] = c.version
+            requestArtifact(c.ga, c.classifier, "jar")
             // Seed this direct dependency's subtree with the caller's declared exclusions (keyed by the
             // as-passed coordinate, so a versionless one matches its blank-version form). They merge with the
             // POM-declared exclusions accumulated below, exactly like Gradle/Maven per-declaration excludes.
@@ -278,7 +291,8 @@ class MavenDependencyResolver(
                         d.strictly?.ifBlank { null }?.let { strictVersions.putIfAbsent(childGa, it) }
                         edges.getOrPut(ga) { linkedSetOf() }.add(childGa)
                         if (d.type.equals("aar", ignoreCase = true)) packagingByGa.putIfAbsent(childGa, "aar")
-                        queue.add(Req(Coordinate(d.group, d.name, version), req.exclusions + d.exclusions, direct = false))
+                        requestArtifact(childGa, d.classifier, d.type)
+                        queue.add(Req(Coordinate(d.group, d.name, version, d.classifier), req.exclusions + d.exclusions, direct = false))
                     }
                     if (processed.incrementAndGet() % 4 == 0) progress.report(-1.0, "Resolving ${coord.name}…")
                 }
@@ -394,7 +408,12 @@ class MavenDependencyResolver(
         // against. Pass 1 fetches + AAR-explodes every chosen artifact in parallel; pass 2 fetches the
         // matching `-sources.jar`s (optional, often absent → a 404 we don't want on the critical path) and
         // grafts them onto the already-resolved artifacts.
-        val total = chosen.size.coerceAtLeast(1)
+        // One download slot per (module, artifact) pair, not per module: a module asked for several
+        // classifiers contributes one file each (the six `gdx-platform-1.14.2-natives-*.jar`).
+        val requests = chosen.entries.flatMap { (ga, ver) ->
+            (classifiersByGa[ga] ?: linkedMapOf("" to "")).entries.map { (cls, ext) -> Triple(ga, ver, cls to ext) }
+        }
+        val total = requests.size.coerceAtLeast(1)
         val downloaded = AtomicInteger(0)
         // Per-artifact byte fraction (0..1) of the downloads currently in flight, so the resolve bar advances
         // smoothly WITHIN each download instead of only jumping as whole artifacts finish. Global fraction =
@@ -402,36 +421,48 @@ class MavenDependencyResolver(
         val inflight = ConcurrentHashMap<String, Double>()
         val outcomes = coroutineScope {
             val sem = Semaphore(downloadConcurrency)
-            chosen.entries.map { (ga, ver) ->
+            requests.map { (ga, ver, artifact) ->
+                val (classifier, declaredExt) = artifact
                 async(Dispatchers.IO) {
                     sem.withPermit {
                         progress.checkCanceled()
-                        val coord = Coordinate(ga.group, ga.name, ver)
+                        val coord = Coordinate(ga.group, ga.name, ver, classifier.ifEmpty { null })
                         // A post-walk alignment/constraint can bump `chosen[ga]` to a version we never walked, so
                         // the captured gmmArtifacts/packaging point at the OLD version's files (e.g. lifecycle-
                         // runtime-ktx chosen at 2.10.0 but captured at 2.6.1 → downloading the 2.6.1 aar under a
                         // 2.10.0 label, duplicating FlowExtKt against lifecycle-runtime-android). Re-load the
                         // chosen version's metadata so we fetch ITS file and follow ITS `available-at`.
-                        val bumpedNode = if (metaVersion[ga]?.let { it != ver } == true) loadNode(coord, repos) else null
+                        val bumpedNode = if (metaVersion[ga]?.let { it != ver } == true) loadNode(coord.copy(classifier = null), repos) else null
                         // GMM variant selection may have redirected this artifact (a KMP `-android` module) and
                         // may publish more than one file; otherwise fetch by the default packaging URL (POM path).
-                        val gmm = (bumpedNode?.artifacts ?: gmmArtifacts[ga]).orEmpty()
+                        // A CLASSIFIER request never takes the GMM path: variant metadata describes the module's
+                        // main artifact, while a classifier addresses a file by its Maven name directly.
+                        val gmm = if (classifier.isNotEmpty()) emptyList()
+                            else (bumpedNode?.artifacts ?: gmmArtifacts[ga]).orEmpty()
                         val packaging = (bumpedNode?.packaging ?: packagingByGa[ga]) ?: "jar"
-                        if (gmm.isEmpty() && packaging.equals("pom", ignoreCase = true)) return@withPermit null  // BOM/metadata-only
+                        // `pom` packaging means the module publishes no main artifact: a BOM, or a
+                        // metadata-only/classifier-only module. Its CLASSIFIER artifacts still exist and are
+                        // still what was asked for, so only the main-artifact request is skipped here.
+                        if (gmm.isEmpty() && classifier.isEmpty() && packaging.equals("pom", ignoreCase = true))
+                            return@withPermit null  // BOM/metadata-only
                         val primary = gmm.firstOrNull()
+                        val ext = if (classifier.isEmpty()) packaging else declaredExt
                         val kind = primary?.kind
-                            ?: if (packaging.equals("aar", ignoreCase = true)) ArtifactKind.AAR else ArtifactKind.JAR
+                            ?: if (ext.equals("aar", ignoreCase = true)) ArtifactKind.AAR else ArtifactKind.JAR
 
                         // Byte-level progress: as this artifact streams, publish its fraction into `inflight` and
                         // recompute the global bar. The first callback also logs the "Downloading …" line once.
-                        val key = "${ga.group}:${ga.name}"
+                        val key = coord.toString()
                         val onBytes: (Long, Long) -> Unit = { readB, totalB ->
                             val first = inflight.put(key, if (totalB > 0) (readB.toDouble() / totalB).coerceIn(0.0, 1.0) else 0.0) == null
                             val frac = ((downloaded.get() + inflight.values.sum()) / total).coerceIn(0.0, 0.999)
                             progress.report(frac, if (first) "Downloading ${coord.name}…" else null)
                         }
                         val fetch = if (primary != null) fetchRel(primary.coord, primary.rel, repos, onBytes)
-                            else fetchArtifact(coord, if (kind == ArtifactKind.AAR) "aar" else "jar", repos, onBytes = onBytes)
+                            else fetchArtifact(
+                                coord, if (kind == ArtifactKind.AAR) "aar" else "jar", repos,
+                                classifier = classifier.ifEmpty { null }, onBytes = onBytes,
+                            )
                         // Streaming for this artifact is over (success or failure) → drop it from the in-flight set
                         // so a partial/failed download can't leave its fraction inflating the bar.
                         inflight.remove(key)
@@ -481,6 +512,9 @@ class MavenDependencyResolver(
                 async(Dispatchers.IO) {
                     sem.withPermit {
                         progress.checkCanceled()
+                        // A classifier artifact has no sources jar of its own (there is no
+                        // `-natives-arm64-v8a-sources.jar` convention), so don't spend a 404 probing for one.
+                        if (art.coordinate.classifier != null) return@withPermit art
                         val src = gmmSources[art.coordinate.ga]
                         val sources = runCatching {
                             if (src != null) fetchRel(src.coord, src.rel, repos) else fetchArtifact(art.coordinate, "jar", repos, classifier = "sources")
@@ -503,12 +537,28 @@ class MavenDependencyResolver(
         // When every failure is a known 404, re-walking won't help (the caller can stop retrying every open).
         val retriable = unresolved.any { c ->
             !cache.isKnownMissing(cache.relativePath(c, "pom")) &&
-                !cache.isKnownMissing(cache.relativePath(c, "jar")) &&
-                !cache.isKnownMissing(cache.relativePath(c, "aar"))
+                !cache.isKnownMissing(cache.relativePath(c, "jar", c.classifier)) &&
+                !cache.isKnownMissing(cache.relativePath(c, "aar", c.classifier))
         }
+
+        // --- declarations that resolved to NOTHING -----------------------------------------------
+        // A declared coordinate can resolve perfectly and still contribute nothing: `pom` packaging (so no
+        // artifact of its own), no dependencies to pull in, and no classifier asked for. That is not a
+        // failure the code above can see (every fetch it attempted succeeded), so it used to be dropped in
+        // silence, and the declaration sat in the Dependencies screen looking healthy while the classpath
+        // stayed empty. Name it instead, once per declaration.
+        val withArtifact = resolved.mapTo(HashSet()) { it.coordinate.ga }
+        val artifactless = directVersions.keys
+            .filter { ga ->
+                ga in chosen && ga !in withArtifact && edges[ga].isNullOrEmpty() &&
+                    unresolved.none { it.ga == ga }
+            }
+            .map { ga -> ArtifactlessDependency(Coordinate(ga.group, ga.name, chosen.getValue(ga)), ARTIFACTLESS_REASON) }
+
         if (unresolved.isEmpty()) log.info("resolve done: ${resolved.size} artifact(s) resolved, none unresolved")
         else log.warn("resolve done: ${resolved.size} resolved, ${unresolved.size} UNRESOLVED${if (retriable) " (retriable)" else " (all hard 404)"}: ${unresolved.joinToString { it.toString() }}")
-        return ResolutionResult(resolved, unresolved.toList(), conflicts, retriable = retriable)
+        for (a in artifactless) log.warn("resolved to NO artifact: ${a.coordinate} (${a.reason})")
+        return ResolutionResult(resolved, unresolved.toList(), conflicts, retriable = retriable, artifactless = artifactless)
     }
 
     /**
@@ -753,10 +803,11 @@ class MavenDependencyResolver(
     )
 
     /** A transitive edge / constraint in resolver-neutral form. [strictly] (a Gradle `strictly` pin) forces
-     *  the version — conflict resolution must not bump it. */
+     *  the version, so conflict resolution must not bump it. [classifier] names a SECONDARY artifact of the
+     *  target module (a POM `<classifier>`); the edge still resolves one version for the whole module. */
     private data class ChildDep(
         val group: String, val name: String, val version: String?, val strictly: String?,
-        val exclusions: Set<GA>, val type: String,
+        val exclusions: Set<GA>, val type: String, val classifier: String? = null,
     )
 
     /** A GMM-selected artifact to download in place of the requesting coordinate's default file. */
@@ -865,7 +916,7 @@ class MavenDependencyResolver(
         // com.itextpdf:itext7-core relocates to :itext-core, whose aggregator pom pulls the real kernel/io/… jars.
         transitives = listOfNotNull(relocation?.let { ChildDep(it.group, it.name, it.version, null, emptySet(), "jar") }) +
             dependencies.filter { it.isTransitivelyIncluded() }
-                .map { ChildDep(it.groupId, it.artifactId, it.version?.ifBlank { null }, null, it.exclusions, it.type) },
+                .map { ChildDep(it.groupId, it.artifactId, it.version?.ifBlank { null }, null, it.exclusions, it.type, it.classifier?.ifBlank { null }) },
         constraints = emptyList(),
         artifacts = emptyList(),   // no GMM → fetch by the default packaging-based URL
         sources = null,
@@ -1171,6 +1222,15 @@ class MavenDependencyResolver(
 
     private companion object {
         const val MAX_NODES = 4000
+
+        /** Why a `pom`-packaged, dependency-less declaration adds nothing, and what to do about it. Such a
+         *  module publishes its real files under Maven CLASSIFIERS (`gdx-platform` ships one jar per ABI and
+         *  no main jar), which the four-part coordinate addresses. */
+        const val ARTIFACTLESS_REASON =
+            "This module publishes no artifact of its own (packaging is 'pom') and declares no dependencies, " +
+                "so it adds nothing to the classpath. Modules like this publish their files under Maven " +
+                "classifiers: declare the one you need as group:name:version:classifier. Android native " +
+                "libraries belong in the 'natives' configuration."
 
         /** A `<version>X</version>` entry in `maven-metadata.xml`. */
         val METADATA_VERSION = Regex("<version>([^<]+)</version>")

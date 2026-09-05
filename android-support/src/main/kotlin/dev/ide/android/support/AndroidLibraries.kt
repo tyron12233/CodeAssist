@@ -26,13 +26,16 @@ class ResolvedLibraries(
     val dexJars: List<Path>,       // dexed into the APK (the runtime/packaged subset; excludes compileOnly)
     val resDirs: List<Path>,       // AAR `res/` merged by aapt2
     val assetsDirs: List<Path>,    // AAR `assets/` packaged under `assets/`
-    val jniLibDirs: List<Path>,    // AAR `jni/<abi>/` packaged under `lib/`
+    val jniLibDirs: List<Path>,    // AAR `jni/<abi>/` + unpacked `natives` jars, packaged under `lib/`
     val aidlDirs: List<Path>,      // AAR `aidl/`: import roots for the consumer's own AIDL compilation
     val aarPackages: List<String>, // AAR manifest packages → aapt2 `--extra-packages` (their `R` + custom attrs)
     val consumerProguardFiles: List<Path>, // AAR `proguard.txt` consumer keep rules, applied by the app's R8
     val aarManifests: List<Path>,  // AAR `AndroidManifest.xml` files → merged into the app manifest
     val aarMetadata: List<AarMetadataRef>, // compile-scope AAR `aar-metadata.properties` → checkAarMetadata
     val aarSymbols: List<AarSymbolTable>,  // AAR package + `R.txt` → the R classes a LIBRARY module compiles against
+    /** Why a `natives`-scoped dependency contributed no native library (see [NativeLibraries.unpack]). The
+     *  build logs these: the declaration resolved fine, so nothing else would report it. */
+    val nativeWarnings: List<String> = emptyList(),
 )
 
 /**
@@ -43,13 +46,18 @@ class ResolvedLibraries(
  *
  * Compile vs dex scope is honoured: the compile classpath uses the compile-visible set (`api` +
  * `implementation` + `compileOnly`); only the runtime set is dexed/packaged, so a `compileOnly` library
- * (the `provided` semantics — e.g. an annotation API) is on the classpath but never lands in the APK.
+ * (the `provided` semantics, e.g. an annotation API) is on the classpath but never lands in the APK.
+ * `natives` is on neither: its artifacts hold prebuilt `.so` files, so they are unpacked into the packaged
+ * `lib/<abi>/` by [NativeLibraries] instead.
  */
 object AndroidLibraries {
 
     fun resolve(module: Module, explodeRoot: Path, variant: Set<String>? = null): ResolvedLibraries {
         val compileRoots = libraryRoots(module, DependencyScope.IMPLEMENTATION, variant)
         val runtimeRoots = libraryRoots(module, DependencyScope.RUNTIME_ONLY, variant)
+        // `natives` is on no classpath at all: those artifacts are unpacked into the packaged `lib/<abi>/`
+        // and never compiled or dexed against. See [DependencyScope.NATIVES].
+        val nativeRoots = libraryRoots(module, DependencyScope.NATIVES, variant)
 
         val compileJars = ArrayList<Path>()
         val dexJars = ArrayList<Path>()
@@ -103,6 +111,8 @@ object AndroidLibraries {
             isExplodedAar(root) -> dexJars.add(root)
             isJar(root) -> dexJars.add(root)
         }
+        val natives = NativeLibraries.unpack(nativeRoots.filter { isJar(it) }, explodeRoot.resolve("natives"))
+        jniLibDirs.addAll(natives.dirs)
         // At most one jar per artifact before dexing/compiling: a plain `.distinct()` only collapses the same
         // path, but the IDE injects its bundled `kotlin-stdlib-<v>.jar` (a non-Maven `.platform/…` path) into
         // every Kotlin module, which collides with any Maven `kotlin-stdlib` the graph resolves (directly or
@@ -116,6 +126,7 @@ object AndroidLibraries {
             resDirs.distinct(), assetsDirs.distinct(),
             jniLibDirs.distinct(), aidlDirs.distinct(), aarPackages.distinct(), consumerProguardFiles.distinct(),
             aarManifests.distinct(), aarMetadata.distinct(), aarSymbols.distinct(),
+            natives.warnings,
         )
     }
 

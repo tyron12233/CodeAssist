@@ -15,6 +15,8 @@ import dev.ide.android.support.tools.Shrinker
 import dev.ide.android.support.tools.SigningConfig
 import dev.ide.android.support.viewbinding.LayoutBindingModel
 import dev.ide.android.support.viewbinding.ViewBindingJavaSource
+import dev.ide.build.BuildDiagnostic
+import dev.ide.build.BuildSeverity
 import dev.ide.build.DiagnosticKind
 import dev.ide.build.KotlinCompilerPlugin
 import dev.ide.build.Task
@@ -2068,17 +2070,29 @@ internal class MergeNativeLibsTask(
     private val jars: List<Path>,
     private val filter: PackagingRules.Filter,
     private val outDir: Path,
+    /** Advisories from unpacking the `natives`-scoped dependencies (see `NativeLibraries.unpack`). Reported
+     *  here because this is the step that would have packaged what they are about. Part of the fingerprint,
+     *  so a build that only changed a natives declaration re-runs and re-reports instead of going up-to-date
+     *  with the warning invisible. */
+    private val warnings: List<String> = emptyList(),
 ) : Task {
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
             dirPaths("jni", jniDirs)
             filePaths("jars", jars)
             property("rules", filter.fingerprint)
+            property("nativeWarnings", warnings.joinToString("\n"))
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("merged", outDir) }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
+        for (w in warnings) {
+            ctx.logger()("mergeNativeLibs: $w")
+            ctx.diagnostics.report(
+                BuildDiagnostic(BuildSeverity.WARNING, w, DiagnosticKind.PACKAGING, source = "natives"),
+            )
+        }
         return runCatching {
             val n = NativeLibsMerger.merge(jniDirs, jars, filter, outDir) { ctx.logger()("mergeNativeLibs: $it") }
             ctx.logger()("mergeNativeLibs -> ${outDir.fileName} ($n libraries)")

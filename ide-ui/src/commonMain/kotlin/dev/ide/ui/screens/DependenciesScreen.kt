@@ -122,6 +122,7 @@ import dev.ide.ui.generated.resources.dep_downloaded_help
 import dev.ide.ui.generated.resources.dep_downloading_artifacts
 import dev.ide.ui.generated.resources.dep_edit_dependency
 import dev.ide.ui.generated.resources.dep_edit_named
+import dev.ide.ui.generated.resources.dep_empty_count
 import dev.ide.ui.generated.resources.dep_exclude_named
 import dev.ide.ui.generated.resources.dep_excluded
 import dev.ide.ui.generated.resources.dep_exclusions_help
@@ -437,8 +438,14 @@ private fun DepBody(
         when {
             isLoading -> ResolvingPanel(resolveState)
             deps == null -> Empty(stringResource(Res.string.dep_load_failed))
-            // The persistent error state carries the (heuristic) why per coordinate — surface it here too.
-            else -> DepContent(deps, tab, resolvedView, codeFont, resolveState.unresolved.associate { it.coordinate to it.reason }, onRemove, onEdit, onExcludeTransitive, onRemoveExclusion)
+            // The persistent error state carries the (heuristic) why per coordinate, surfaced here too, and
+            // alongside it the declarations that resolved to nothing at all.
+            else -> DepContent(
+                deps, tab, resolvedView, codeFont,
+                resolveState.unresolved.associate { it.coordinate to it.reason },
+                resolveState.warnings.associate { it.coordinate to it.message },
+                onRemove, onEdit, onExcludeTransitive, onRemoveExclusion,
+            )
         }
     }
 }
@@ -477,7 +484,7 @@ private fun ResolveBar(fraction: Double) {
 }
 
 @Composable
-private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, codeFont: FontFamily, reasons: Map<String, String>, onRemove: (String) -> Unit, onEdit: (UiDependencyNode) -> Unit, onExcludeTransitive: (root: UiDependencyNode, transitive: UiDependencyNode) -> Unit, onRemoveExclusion: (root: UiDependencyNode, exclusion: String) -> Unit) {
+private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, codeFont: FontFamily, reasons: Map<String, String>, emptyReasons: Map<String, String>, onRemove: (String) -> Unit, onEdit: (UiDependencyNode) -> Unit, onExcludeTransitive: (root: UiDependencyNode, transitive: UiDependencyNode) -> Unit, onRemoveExclusion: (root: UiDependencyNode, exclusion: String) -> Unit) {
     val nodesByCoord = remember(deps) { deps.nodes.associateBy { it.coordinate } }
     val expanded = remember(deps) { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
     val unresolvedSet = remember(deps) { deps.unresolved.toSet() }
@@ -502,6 +509,16 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
                 deps.unresolved.forEach { coord ->
                     Text(coord, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont))
                     reasons[coord]?.let { Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall) }
+                }
+            }
+        }
+        // Declarations that resolved cleanly and contributed nothing: no artifact of their own, no
+        // transitives. A caution rather than an error, since nothing failed and there is nothing to retry.
+        if (emptyReasons.isNotEmpty()) item("resolved-empty") {
+            BannerCard(CaIcons.warning, Ide.colors.warning, stringResource(Res.string.dep_empty_count, emptyReasons.size), Modifier.animateItem()) {
+                emptyReasons.forEach { (coord, why) ->
+                    Text(coord, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont))
+                    Text(why, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }

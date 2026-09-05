@@ -20,6 +20,57 @@ import kotlin.test.assertTrue
 
 class GradleImportTest {
 
+    /**
+     * The libGDX Android shape, which is where a four-part coordinate is most often met: a hand-created
+     * `natives` configuration carrying one classifier jar per ABI, plus the copy task that unpacks them.
+     * Both the coordinates and the configuration used to be dropped, the coordinates because a fourth
+     * segment matched no coordinate pattern and the configuration because it is not a Gradle built-in.
+     */
+    @Test
+    fun importsAHandCreatedNativesConfigurationWithItsClassifierCoordinates() {
+        withTempDir("gradle-import-natives") { dir ->
+            fun w(rel: String, text: String) {
+                val f = dir.resolve(rel); Files.createDirectories(f.parent); f.writeText(text.trimIndent())
+            }
+            w("settings.gradle", """
+                rootProject.name = 'MyGame'
+                include ':app'
+            """)
+            w("build.gradle", "// top-level")
+            w("app/build.gradle", """
+                apply plugin: 'com.android.application'
+                android {
+                    namespace "com.example.game"
+                    compileSdkVersion 34
+                    defaultConfig { minSdkVersion 24 }
+                }
+                configurations { natives }
+                dependencies {
+                    implementation "com.badlogicgames.gdx:gdx:1.14.2"
+                    implementation "com.badlogicgames.gdx:gdx-backend-android:1.14.2"
+                    natives "com.badlogicgames.gdx:gdx-platform:1.14.2:natives-armeabi-v7a"
+                    natives "com.badlogicgames.gdx:gdx-platform:1.14.2:natives-arm64-v8a"
+                    natives "com.badlogicgames.gdx:gdx-platform:1.14.2:natives-x86_64"
+                }
+            """)
+            Files.createDirectories(dir.resolve("app/src/main/java"))
+
+            val app = assertNotNull(GradleImport.parse(dir)).modules.single()
+            assertEquals(
+                listOf(
+                    "com.badlogicgames.gdx:gdx-platform:1.14.2:natives-arm64-v8a",
+                    "com.badlogicgames.gdx:gdx-platform:1.14.2:natives-armeabi-v7a",
+                    "com.badlogicgames.gdx:gdx-platform:1.14.2:natives-x86_64",
+                ),
+                app.mavenDeps.filter { it.scope == DependencyScope.NATIVES }.map { it.coordinate }.sorted(),
+            )
+            assertEquals(
+                listOf("com.badlogicgames.gdx:gdx-backend-android:1.14.2", "com.badlogicgames.gdx:gdx:1.14.2"),
+                app.mavenDeps.filter { it.scope == DependencyScope.IMPLEMENTATION }.map { it.coordinate }.sorted(),
+            )
+        }
+    }
+
     /** Lay down a two-module legacy Gradle project (android `app` -> java `core`) like older versions produced. */
     private fun writeLegacyGradleProject(dir: Path) {
         fun w(rel: String, text: String) {

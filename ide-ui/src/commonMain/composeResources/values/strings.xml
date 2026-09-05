@@ -441,6 +441,10 @@ We never collect your code, file or project names, which features you use, or an
         <item quantity="one">%1$d dependency couldn't be resolved</item>
         <item quantity="other">%1$d dependencies couldn't be resolved</item>
     </plurals>
+    <plurals name="edchrome_empty_dependencies">
+        <item quantity="one">%1$d dependency resolved to nothing</item>
+        <item quantity="other">%1$d dependencies resolved to nothing</item>
+    </plurals>
     <string name="edchrome_search_tasks">Search tasks…</string>
     <string name="edchrome_nothing_to_run">Nothing to run</string>
     <string name="edchrome_no_matching_tasks">No matching tasks</string>
@@ -1128,6 +1132,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="dep_resolving_dependencies">Resolving dependencies</string>
     <string name="dep_downloading_artifacts">Downloading POMs &amp; artifacts…</string>
     <string name="dep_unresolved_count">%1$d unresolved</string>
+    <string name="dep_empty_count">%1$d resolved to nothing</string>
     <string name="dep_none_declared">No dependencies declared. Tap Add to download one.</string>
     <string name="dep_nothing_resolved">Nothing resolved yet.</string>
     <string name="dep_not_resolved">not resolved. Check the version/repository or re-resolve</string>

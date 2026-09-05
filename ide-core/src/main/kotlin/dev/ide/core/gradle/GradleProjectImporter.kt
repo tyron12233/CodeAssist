@@ -163,14 +163,10 @@ class GradleProjectImporter : ProjectImporter {
         ),
     )
 
-    private fun coordinateOrNull(coordinate: String): Coordinate? {
-        val parts = coordinate.split(":")
-        return when (parts.size) {
-            2 -> Coordinate(parts[0], parts[1], "")
-            3 -> Coordinate(parts[0], parts[1], parts[2])
-            else -> null
-        }
-    }
+    /** A declared `group:name[:version[:classifier]]`, or null when the text isn't a coordinate. The
+     *  four-part form names a secondary artifact of the module (libGDX's per-ABI `natives-*` jars); it used
+     *  to fall through to null, so importing such a build silently dropped those declarations. */
+    private fun coordinateOrNull(coordinate: String): Coordinate? = Coordinate.parseOrNull(coordinate)
 
     private companion object {
         /** Only a fallback: it applies when the scripts declare no `compileSdk` at all (an unreadable

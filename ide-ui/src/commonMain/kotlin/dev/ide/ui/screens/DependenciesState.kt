@@ -44,12 +44,22 @@ internal enum class AddMode { Library, Platform, Module, Local }
 /** A transient confirmation/result toast. */
 internal data class ToastMsg(val text: String, val error: Boolean)
 
-/** The Gradle configurations a declaration can go into, in the order the chips are offered. */
-internal val DEP_CONFIGURATIONS = listOf("implementation", "api", "compileOnly", "runtimeOnly", "testImplementation")
+/** The Gradle configurations a declaration can go into, in the order the chips are offered. `natives` is
+ *  last because it is the narrow one: it packages an artifact's prebuilt `.so` files into the APK and puts
+ *  it on no classpath, which is what a per-ABI native library (`gdx-platform:…:natives-arm64-v8a`) needs. */
+internal val DEP_CONFIGURATIONS =
+    listOf("implementation", "api", "compileOnly", "runtimeOnly", "testImplementation", "natives")
 
-/** A typed string is treated as a direct coordinate when it carries a `:`: `group:name[:version]`. */
+/**
+ * A typed string is treated as a direct coordinate when it carries a `:`:
+ * `group:name[:version[:classifier]]`.
+ *
+ * The four-part form addresses a module's secondary artifact, and for some modules is the only artifact
+ * there is: `com.badlogicgames.gdx:gdx-platform` publishes no main jar, only one per ABI. Rejecting it left
+ * the search with nothing to show and no way to add the coordinate at all.
+ */
 internal fun looksLikeCoordinate(s: String): Boolean =
-    s.split(":").let { it.size in 2..3 && it.all { p -> p.isNotBlank() } }
+    s.split(":").let { it.size in 2..4 && it.all { p -> p.isNotBlank() } }
 
 /**
  * Drop what a `group:name:version` can never contain: whitespace and any zero-width, bidi-mark or control
@@ -61,8 +71,16 @@ internal fun looksLikeCoordinate(s: String): Boolean =
 internal fun sanitizeCoordinateInput(s: String): String =
     s.filterNot { it.isWhitespace() || it.category == CharCategory.FORMAT || it.category == CharCategory.CONTROL }
 
+/** `name:version` for a row label, keeping a classifier so two secondary artifacts of one module read
+ *  apart (`gdx-platform:1.14.2:natives-arm64-v8a` vs `…:natives-armeabi-v7a`). */
 internal fun shortCoord(coord: String): String =
-    coord.split(":").let { if (it.size >= 3) "${it[1]}:${it[2]}" else coord }
+    coord.split(":").let {
+        when {
+            it.size >= 4 -> "${it[1]}:${it[2]}:${it[3]}"
+            it.size == 3 -> "${it[1]}:${it[2]}"
+            else -> coord
+        }
+    }
 
 /**
  * State and intents for the per-module dependency manager ([DependenciesPane]): which tab/view is showing,

@@ -3,6 +3,7 @@ package dev.ide.core.gradle
 import dev.ide.model.Coordinate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -13,6 +14,94 @@ import kotlin.test.assertTrue
 class GradleDependencyEditsTest {
 
     private val okhttp = Coordinate("com.squareup.okhttp3", "okhttp", "4.12.0")
+
+    private val gdxNatives =
+        Coordinate("com.badlogicgames.gdx", "gdx-platform", "1.14.2", "natives-arm64-v8a")
+
+    /** A configuration Gradle does not provide has to be created before it can be declared into, or the
+     *  script the IDE just wrote no longer builds. */
+    @Test
+    fun creatingTheNativesConfigurationInAKotlinDslScriptThatHasNone() {
+        val script = """
+            plugins {
+                id("com.android.application")
+            }
+
+            dependencies {
+                implementation("com.badlogicgames.gdx:gdx:1.14.2")
+            }
+        """.trimIndent() + "\n"
+
+        val added = assertNotNull(
+            GradleDependencyEdits.add(script, kts = true, configuration = "natives", coordinate = gdxNatives, byName = true),
+        )
+        val updated = GradleDependencyEdits.ensureConfiguration(added, kts = true, configuration = "natives")
+
+        assertEquals(
+            """
+                plugins {
+                    id("com.android.application")
+                }
+
+                configurations {
+                    create("natives")
+                }
+
+                dependencies {
+                    implementation("com.badlogicgames.gdx:gdx:1.14.2")
+                    "natives"("com.badlogicgames.gdx:gdx-platform:1.14.2:natives-arm64-v8a")
+                }
+            """.trimIndent() + "\n",
+            updated,
+        )
+    }
+
+    @Test
+    fun anExistingConfigurationsBlockGainsOnlyTheMissingName() {
+        val script = """
+            configurations {
+                create("tools")
+            }
+
+            dependencies {
+                implementation("g:a:1.0")
+            }
+        """.trimIndent() + "\n"
+
+        val once = GradleDependencyEdits.ensureConfiguration(script, kts = true, configuration = "natives")
+        assertTrue("""create("natives")""" in once, once)
+        assertTrue("""create("tools")""" in once, "the script's own configuration must survive: $once")
+        // Idempotent: declaring a second natives artifact must not create the configuration twice.
+        assertEquals(once, GradleDependencyEdits.ensureConfiguration(once, kts = true, configuration = "natives"))
+    }
+
+    @Test
+    fun groovyCreatesTheConfigurationByBareNameAndDeclaresItDirectly() {
+        val script = """
+            dependencies {
+                implementation 'g:a:1.0'
+            }
+        """.trimIndent() + "\n"
+
+        val added = assertNotNull(
+            GradleDependencyEdits.add(script, kts = false, configuration = "natives", coordinate = gdxNatives, byName = true),
+        )
+        val updated = GradleDependencyEdits.ensureConfiguration(added, kts = false, configuration = "natives")
+
+        assertEquals(
+            """
+                configurations {
+                    natives
+                }
+
+                dependencies {
+                    implementation 'g:a:1.0'
+                    natives 'com.badlogicgames.gdx:gdx-platform:1.14.2:natives-arm64-v8a'
+                }
+            """.trimIndent() + "\n",
+            updated,
+        )
+    }
 
     @Test
     fun addsToAnExistingKotlinDslBlockKeepingIndentation() {
