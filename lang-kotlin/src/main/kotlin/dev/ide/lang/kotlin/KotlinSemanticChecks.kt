@@ -457,6 +457,14 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      *  same-named factory FUNCTION. */
     private fun abstractInstantiation(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
         val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
+        // A factory FUNCTION of the same name (`MutableList(…)`, a user factory) means this is a call, not a
+        // constructor — callTargets surfaces it as a METHOD. Only flag a pure constructor call. This exclusion
+        // is checked FIRST because it is the cheap one: `callTargets` is memoized per snapshot (the
+        // applicability checks earlier in `sem.call` already populated it), whereas the type resolution below
+        // is not — and every ORDINARY call (`repaint()`, `g.drawString(…)`, `println(…)`) binds to a method, so
+        // running the type probes on it only to discard the answer was the check's whole cost. Same condition,
+        // same verdict as when it ran last; only the order changed.
+        if (runCatching { resolver.callTargets(call) }.getOrDefault(emptyList()).any { it.kind == SymbolKind.METHOD }) return null
         val name = callee.getReferencedName()
         val fqn = service.resolveTypeName(name, resolver.fileContext) ?: return null
         if (service.isNonInstantiableType(fqn) != true) return null
@@ -467,9 +475,6 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         // trailing lambda is still an error), so back off only when the callee is an interface invoked with a
         // lone functional argument.
         if (service.isInterfaceType(fqn) == true && isSamConversion(call)) return null
-        // A factory FUNCTION of the same name (`MutableList(…)`, a user factory) means this is a call, not a
-        // constructor — callTargets surfaces it as a METHOD. Only flag a pure constructor call.
-        if (runCatching { resolver.callTargets(call) }.getOrDefault(emptyList()).any { it.kind == SymbolKind.METHOD }) return null
         val r = callee.textRange
         return Diagnostic(
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
