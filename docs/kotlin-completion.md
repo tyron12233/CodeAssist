@@ -213,9 +213,11 @@ producing a false error.
 
 Diagnostics carry code-keyed fixes into the editor lightbulb / Alt-Enter:
 
-- **Import** — for each `kt.unresolved` name under the caret, one fix per candidate FQN (top-level callable
-  or type), spliced in sorted position; a `kt.delegateOperator` additionally offers the missing
-  `getValue`/`setValue` import (`import androidx.compose.runtime.getValue` for `by mutableStateOf`).
+- **Import** — for each `kt.unresolved` name under the caret, one fix per candidate FQN (a top-level callable
+  or type, or a NESTED type by its own simple name: `LayoutParams` offers
+  `import android.widget.LinearLayout.LayoutParams`), spliced in sorted position; a `kt.delegateOperator`
+  additionally offers the missing `getValue`/`setValue` import (`import androidx.compose.runtime.getValue`
+  for `by mutableStateOf`).
 - **Implement members** — for `kt.abstractNotImplemented`, generate `override` stubs for the unimplemented
   inherited members and insert them into the class body (same stub text completion's override items use).
 

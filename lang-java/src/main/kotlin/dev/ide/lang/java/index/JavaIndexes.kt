@@ -17,6 +17,7 @@ import dev.ide.index.StringKeyDescriptor
 import dev.ide.index.SymbolExternalizer
 import dev.ide.index.SymbolValue
 import dev.ide.index.classEntryToFqn
+import dev.ide.index.nestedClassEntryToFqn
 import dev.ide.index.normalizedJarKey
 import dev.ide.index.packagePrefixes
 import dev.ide.lang.java.index.JavaSourceIndexer.DeclKind
@@ -41,6 +42,10 @@ private fun isSource(i: IndexInput) =
 private val TYPE_KINDS =
     setOf(DeclKind.CLASS, DeclKind.INTERFACE, DeclKind.ENUM, DeclKind.RECORD, DeclKind.ANNOTATION)
 
+/** Cap on the outer-class chain a nested SOURCE type's FQN is built from: past any real nesting depth, and a
+ *  bound on the climb even for a pathological file (`class A { class A { } }`). */
+private const val MAX_NESTING = 8
+
 /** The raw ASM [org.objectweb.asm.ClassReader] for [input], constructed ONCE per class and SHARED — via the
  *  cross-family [IndexInput.CLASS_READER] key — with the Kotlin binary indexes, so a library `.class`' constant
  *  pool is parsed a single time for the whole pass instead of once per index (≈6× on every android.jar class). */
@@ -56,18 +61,25 @@ private fun sharedReader(input: IndexInput): org.objectweb.asm.ClassReader? =
 private fun sharedBytecode(input: IndexInput): JavaBytecode.ClassInfo? =
     input.shared("java.classfile") { sharedReader(input)?.let { JavaBytecode.read(it) } }
 
-/** The declaration kind of a library/SDK class file if it declares a `public` top-level type (JPMS gates
- *  packages, not the package-private types inside them), read from the ASM access flags; null when the type
- *  is non-public or the bytecode can't be read. Returning the kind (not just a boolean) lets the class-name
- *  indexes label a binary annotation/interface/enum correctly instead of the blanket `"class"` — so e.g. an
- *  `@`-annotation completion filter can tell `@Composable` from an ordinary class. */
+/** The declaration kind of a library/SDK class file if it declares a `public` type (JPMS gates packages, not
+ *  the package-private types inside them), read from the ASM access flags; null when the type is non-public or
+ *  the bytecode can't be read. A NESTED type's class-file flags carry its declared visibility except that
+ *  `private` reads as package-private (so it is dropped, as it should be) and `protected` as public.
+ *  Returning the kind (not just a boolean) lets the class-name indexes label a binary annotation/interface/
+ *  enum correctly instead of the blanket `"class"` — so e.g. an `@`-annotation completion filter can tell
+ *  `@Composable` from an ordinary class. */
 private fun publicBytecodeKind(input: IndexInput): String? =
     sharedBytecode(input)?.takeIf { JavaBytecode.isPublic(it.access) }?.let { JavaBytecode.kindOf(it.access) }
 
 /** classNames: simple type name -> FQN/origin/kind. Library/SDK from the entry path; source from the PSI parse. */
 object JavaClassNamesIndex : IndexExtension<String, ClassNameValue> {
     override val id = IndexId("java.classNames")
-    override val version = 4
+    // v5: NESTED types are keyed by their own simple name with the dotted FQN an `import` spells
+    // (`LayoutParams` -> `android.widget.LinearLayout.LayoutParams`), on both the binary and the source side.
+    // Before this a nested library type was absent from the index entirely, so nothing offered to import
+    // `LinearLayout.LayoutParams`/`Map.Entry` by name, and a nested SOURCE type was recorded under a wrong
+    // (outer-less) FQN. The bump discards persisted `v4` partitions.
+    override val version = 5
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = ClassNameExternalizer
     override val matching = MatchingMode.PREFIX_AND_FUZZY
@@ -76,14 +88,26 @@ object JavaClassNamesIndex : IndexExtension<String, ClassNameValue> {
     override fun index(input: IndexInput): Map<String, Collection<ClassNameValue>> {
         if (isClassFile(input)) {
             val kind = publicBytecodeKind(input) ?: return emptyMap()
-            val (fqn, simple) = classEntryToFqn(input.unitName!!) ?: return emptyMap()
+            val entry = input.unitName!!
+            val (fqn, simple) = classEntryToFqn(entry) ?: nestedClassEntryToFqn(entry) ?: return emptyMap()
             return mapOf(simple to listOf(ClassNameValue(fqn, input.origin, kind)))
         }
         val parsed = JavaSourceIndexer.sharedParsed(input)
+        val types = parsed.decls.filter { it.kind in TYPE_KINDS }
+        // A nested type's FQN is its whole outer chain (`app.Outer.Inner`), which [JavaSourceIndexer.Decl]
+        // records one level at a time (`container` = the immediate outer's simple name), so climb it. First
+        // declaration wins per name, and the climb is depth-capped, so a same-named nested type can't loop.
+        val containerOf = HashMap<String, String?>(types.size)
+        types.forEach { containerOf.putIfAbsent(it.name, it.container) }
         val out = HashMap<String, MutableList<ClassNameValue>>()
-        for (d in parsed.decls) {
-            if (d.kind !in TYPE_KINDS) continue
-            val fqn = if (parsed.packageName.isNullOrEmpty()) d.name else "${parsed.packageName}.${d.name}"
+        for (d in types) {
+            val chain = ArrayList<String>()
+            var name: String? = d.name
+            while (name != null && chain.size < MAX_NESTING) {
+                chain.add(0, name)
+                name = containerOf[name]
+            }
+            val fqn = (listOfNotNull(parsed.packageName?.ifEmpty { null }) + chain).joinToString(".")
             out.getOrPut(d.name) { ArrayList() }.add(ClassNameValue(fqn, IndexOrigin.SOURCE, d.kind.name.lowercase()))
         }
         return out
@@ -110,7 +134,9 @@ object JavaClassLocatorIndex : IndexExtension<String, String> {
 /** packageTypes: package FQN -> the types directly in it (exact-package keyed, for `java.util.` completion). */
 object JavaPackageTypesIndex : IndexExtension<String, ClassNameValue> {
     override val id = IndexId("java.packageTypes")
-    override val version = 4
+    // v5: a NESTED source type is no longer listed as a direct member of the package (it never was on the
+    // binary side, whose `$` entries [classEntryToFqn] drops). The bump discards persisted `v4` partitions.
+    override val version = 5
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = ClassNameExternalizer
     override val matching = MatchingMode.PREFIX_ONLY
@@ -127,7 +153,7 @@ object JavaPackageTypesIndex : IndexExtension<String, ClassNameValue> {
         val pkg = parsed.packageName?.takeIf { it.isNotEmpty() } ?: return emptyMap()
         val out = HashMap<String, MutableList<ClassNameValue>>()
         for (d in parsed.decls) {
-            if (d.kind !in TYPE_KINDS) continue
+            if (d.kind !in TYPE_KINDS || d.container != null) continue // a nested type is not IN the package
             out.getOrPut(pkg) { ArrayList() }
                 .add(ClassNameValue("$pkg.${d.name}", IndexOrigin.SOURCE, d.kind.name.lowercase()))
         }
