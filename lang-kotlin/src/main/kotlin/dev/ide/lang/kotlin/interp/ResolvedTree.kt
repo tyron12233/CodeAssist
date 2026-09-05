@@ -464,8 +464,36 @@ fun reachableSourceFunctions(
     classes: List<ResolvedClass>,
 ): Set<ResolvedFunction> = computeReachable(entry, program, classes).functions
 
-/** Reachability closure: the source classes AND top-level program functions [entry] can transitively touch. */
-private class Reachable(val classes: Set<String>, val functions: Set<ResolvedFunction>)
+/**
+ * The source functions [entry] reaches that are NOT in [program] — code the lowering was supposed to supply
+ * and didn't, as `"name/arity"` keys.
+ *
+ * The resolver bound these calls to a project-source declaration, so the interpreter will look them up in the
+ * program by exactly this key and throw ``no source function `name/arity` `` when they're absent. That happens
+ * MID-COMPOSITION, after the enclosing statement may already have opened Compose groups, so the preview gate
+ * has to refuse the program up front rather than let the render discover it. A declaration goes missing when
+ * its file didn't parse cleanly (the cross-file parse drops a malformed dependency), when the cross-module
+ * locate didn't find its owner, or when the expansion's file cap cut the walk short — all of them "the user's
+ * code is incomplete right now", which is exactly what must never be interpreted.
+ *
+ * Only the two dispatches the interpreter resolves THROUGH the program are reported (`TOP_LEVEL` and
+ * `EXTENSION`); a member call is dispatched on its receiver's class instead, so a miss there is not this
+ * check's business. The lookup mirrors the interpreter's own ([Interpreter] `sourceFunctionFor`): declared
+ * arity first, then the call's argument count.
+ */
+fun missingSourceCallees(
+    entry: ResolvedFunction,
+    program: Map<String, ResolvedFunction>,
+    classes: List<ResolvedClass>,
+): Set<String> = computeReachable(entry, program, classes).missingCallees
+
+/** Reachability closure: the source classes AND top-level program functions [entry] can transitively touch,
+ *  plus the source callees it reaches that the program never supplied (see [missingSourceCallees]). */
+private class Reachable(
+    val classes: Set<String>,
+    val functions: Set<ResolvedFunction>,
+    val missingCallees: Set<String>,
+)
 
 private fun computeReachable(
     entry: ResolvedFunction,
@@ -481,6 +509,9 @@ private fun computeReachable(
     // that calls a broken same-file/cross-file composable is refused instead of crashing the render.
     val reachedFns = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<ResolvedFunction, Boolean>())
     reachedFns.add(entry)
+    // Source callees the program doesn't carry — the interpreter would throw on them mid-render (see
+    // [missingSourceCallees]).
+    val missingCallees = LinkedHashSet<String>()
     // Bodies still to scan, de-duplicated by identity (a tree's structural hash would be costly and a function
     // is only ever the same object instance within one lowering).
     val scanned = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<RNode, Boolean>())
@@ -517,7 +548,15 @@ private fun computeReachable(
                             // the callee's DECLARED arity (from `declId`) so a call that omits trailing defaulted
                             // arguments still follows the function's body (else its reachable classes are missed).
                             val declaredArity = callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size
-                            program["${callee.displayName}/$declaredArity"]?.let { if (reachedFns.add(it)) addBody(it.body) }
+                            // The interpreter's own lookup order (declared arity, then call arity), so a call
+                            // this walk calls "missing" is exactly one the interpreter would fail to find.
+                            val target = program["${callee.displayName}/$declaredArity"]
+                                ?: program["${callee.displayName}/${node.args.size}"]
+                            if (target != null) {
+                                if (reachedFns.add(target)) addBody(target.body)
+                            } else if (node.dispatch == DispatchKind.TOP_LEVEL || node.dispatch == DispatchKind.EXTENSION) {
+                                missingCallees += "${callee.displayName}/$declaredArity"
+                            }
                             if ('.' in owner) reachClass(owner.substringBeforeLast('.').removeSuffix(".Companion"))
                         }
                     }
@@ -533,7 +572,7 @@ private fun computeReachable(
             }
         }
     }
-    return Reachable(reached, reachedFns)
+    return Reachable(reached, reachedFns, missingCallees)
 }
 
 /** Direct child nodes, for traversal. */

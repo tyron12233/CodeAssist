@@ -7,6 +7,7 @@ import dev.ide.lang.SourceAnalyzer
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.ParsedFile
+import dev.ide.lang.dom.Severity
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.incremental.IncrementalParser
@@ -575,6 +576,25 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      *  [KotlinPreviewLowering.hasSyntaxErrors] for why. */
     fun hasSyntaxErrors(file: VirtualFile): Boolean =
         lastByFile[file.path]?.let { previewLowering.hasSyntaxErrors(it) } ?: false
+
+    /**
+     * The messages of [file]'s ERROR diagnostics that must stop the Compose preview interpreting it — the
+     * [KotlinDiagnosticCodes.PREVIEW_BLOCKING] codes, which documents why this set and not "any error".
+     *
+     * This is the gate for the errors that survive [hasSyntaxErrors]: half-typed code very often parses into a
+     * clean tree (the parser recovers) and lowers into a clean tree too, and only then feeds the real Compose
+     * runtime a value of the wrong shape. Runs the same semantic pass the editor runs per keystroke, over the
+     * same snapshot and the same per-declaration cache, so on the preview's (debounced, later) pass it is
+     * normally a cache hit; the analysis it does pay for is a fraction of the lowering it saves by refusing.
+     */
+    fun previewBlockingErrors(file: VirtualFile): List<String> {
+        val parsed = lastByFile[file.path] ?: return emptyList()
+        refreshOverlay()
+        syncFocal(parsed)
+        return (parsed.diagnostics + incrementalAnalysis.diagnostics(parsed))
+            .filter { it.severity == Severity.ERROR && it.code in KotlinDiagnosticCodes.PREVIEW_BLOCKING }
+            .map { it.message }
+    }
 
     /** Best-effort FQN of a `@PreviewParameter` provider named by [simpleName] in [file] (imports/same package)
      *  — so the renderer can load a library provider class reflectively when it isn't project source. */

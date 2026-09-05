@@ -140,4 +140,41 @@ object KotlinDiagnosticCodes {
 
     const val PREVIEW_NOT_COMPOSABLE = "kt.previewNotComposable"
     const val PREVIEW_PARAMETERS = "kt.previewParameters"
+
+    /**
+     * The ERROR codes that must stop the Compose `@Preview` interpreter from running the file at all.
+     *
+     * Lowering already refuses a call it cannot resolve, but the errors listed here are the ones that lower
+     * *cleanly* into a tree that is nonetheless wrong: a mid-typed argument list, an argument of the wrong
+     * type, a name used as a value, an uninferable type variable. The interpreter then builds values the
+     * previewed code never asked for and hands them to the REAL Compose runtime, which fails in its
+     * measure/layout/semantics pass — after the interpreter has returned, outside any guard it owns, taking
+     * the composition (and with it the IDE) down. Refusing up front is the only place that failure is
+     * catchable, so the preview holds its last good render until the buffer is clean again.
+     *
+     * Deliberately a NAMED SET rather than "any ERROR": a broken supertype or a missing `override` elsewhere
+     * in the file is a real error but cannot corrupt the values a preview composes, and blanking a working
+     * preview over one would be worse than the risk it removes. These are the ones that can.
+     */
+    val PREVIEW_BLOCKING: Set<String> = setOf(
+        SYNTAX,
+        UNRESOLVED,
+        TYPE_MISMATCH,
+        ARGUMENT_COUNT,
+        CONSTRUCTOR_ARGS,
+        NAMED_ARGUMENT,
+        NOT_CALLABLE,
+        CANNOT_INFER_TYPE,
+        OVERLOAD_AMBIGUITY,
+        CLASSIFIER_AS_VALUE,
+        FUNCTION_CALL_EXPECTED,
+        DESTRUCTURING,
+        DELEGATE_OPERATOR,
+        NO_TYPE_NO_INITIALIZER,
+        MUST_BE_INITIALIZED,
+        UNINITIALIZED_VARIABLE,
+        VARIABLE_EXPECTED,
+        ABSTRACT_INSTANTIATION,
+        TYPE_ARGUMENT_COUNT,
+    )
 }

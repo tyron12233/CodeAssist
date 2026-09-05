@@ -19,9 +19,15 @@ import kotlin.test.assertTrue
  * INCOMPLETE reachable function; the lesson host renders that with `tolerateGaps = false`, so the interpreter
  * threw when it invoked `Counter`, and the diagnostics said the misleading "lowered with no diagnostics".
  *
+ * The gate is now the SAME for every caller (there is no lenient editor mode): a preview whose reachable
+ * helper didn't lower cleanly is refused for the editor too, because the editor's `tolerateGaps = true`
+ * interpreter skips such a statement MID-COMPOSITION, which can leave the live composer's groups unbalanced
+ * and take the IDE down with it. `tolerateGaps` stays a backstop for a construct WE don't support inside
+ * otherwise-valid code; it is not a licence to interpret the user's broken code.
+ *
  * This drives the scratch WITHOUT attaching the compose AARs (so `Column`/`remember` resolve to 0 candidates,
- * exactly the pre-attach state) — no network needed — and asserts the strict lesson path refuses it, the
- * lenient editor path still renders (its interpreter skips the gap), and the diagnostics name the real reason.
+ * exactly the pre-attach state) — no network needed — and asserts the lowering refuses it and the diagnostics
+ * name the real reason.
  */
 class LearnComposePreviewGateTest {
 
@@ -58,7 +64,7 @@ class LearnComposePreviewGateTest {
     """.trimIndent()
 
     @Test
-    fun strictLoweringRefusesAPreviewWhoseHelperDidNotResolve() = runBlocking {
+    fun loweringRefusesAPreviewWhoseReachableHelperDidNotLower() = runBlocking {
         withTempDir("learn-compose-gate") { home ->
             val projects = home.resolve("projects")
             Files.createDirectories(projects)
@@ -82,15 +88,11 @@ class LearnComposePreviewGateTest {
             // Not ready (compose not attached) — the host polls this and keeps retrying rather than latching.
             assertFalse(services.composePreviewReady(path), "scratch without compose attached must report not-ready")
 
-            // The reachable helper is broken; the strict (tolerateGaps = false, Learn) path must refuse the whole
-            // preview so the host stays in its retry loop instead of rendering a tree that throws mid-render.
-            val strict = services.lowerComposePreview(path, counter, preview.functionName, preview.arity, strict = true)
-            assertNull(strict, "strict lowering must refuse a preview whose reachable helper didn't lower cleanly")
-
-            // The lenient (tolerateGaps = true) editor path is unchanged: it still lowers, and its interpreter
-            // SKIPS the incomplete helper rather than throwing — so a live-edited real project keeps rendering.
-            val lenient = services.lowerComposePreview(path, counter, preview.functionName, preview.arity, strict = false)
-            assertNotNull(lenient, "the lenient editor path must keep rendering (it tolerates the gap)")
+            // The reachable helper is broken, so the preview must be refused — for the Learn host (which
+            // renders with tolerateGaps = false and would throw mid-render) AND for the editor (whose
+            // gap-skipping interpreter would silently drop a statement that had already opened Compose groups).
+            val lowered = services.lowerComposePreview(path, counter, preview.functionName, preview.arity)
+            assertNull(lowered, "lowering must refuse a preview whose reachable helper didn't lower cleanly")
 
             // Diagnostics must name the REAL reason (the broken helper), not the misleading "no diagnostics".
             val diags = services.composePreviewDiagnostics(path, counter, preview.functionName, preview.arity)

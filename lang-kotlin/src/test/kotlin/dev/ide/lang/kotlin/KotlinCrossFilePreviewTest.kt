@@ -4,6 +4,7 @@ import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.interp.PreviewDeclProvider
 import dev.ide.lang.kotlin.interp.PreviewFileModel
 import dev.ide.lang.kotlin.interp.PreviewModel
+import dev.ide.lang.kotlin.interp.missingSourceCallees
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
@@ -81,6 +82,59 @@ class KotlinCrossFilePreviewTest {
         val model = lowerCrossFile(service, dir, "Use.kt", entry)
         assertTrue(model.program["caller/0"]?.isComplete == true, "caller should lower")
         assertNotNull(model.program["helper/1"], "the cross-file helper function must be merged into the program")
+    }
+
+    @Test
+    fun aCalleeWhoseFileDoesNotParseIsReportedAsMissing() {
+        // The preview gate's "missing code" case. `helper` lives in a sibling file the user is mid-edit in, so
+        // it has a syntax error; the cross-file parse DROPS such a file (a malformed dependency would lower
+        // into wrong-typed declarations), and the resolver — which reads the symbol index, not the PSI — still
+        // binds `helper(2)` to project source. The call therefore lowers cleanly into a program that has no
+        // `helper/1`, and the interpreter only discovers that MID-COMPOSITION, throwing
+        // "no source function `helper/1`" with Compose groups already open. [missingSourceCallees] is what lets
+        // the preview refuse it up front instead.
+        val entry = """
+            package com.example.compose
+            fun caller(): Int = helper(2)
+        """.trimIndent()
+        val (service, dir) = serviceOver(
+            mapOf(
+                // Unbalanced brace: parses with an error element, so the dependency is dropped.
+                "Helper.kt" to "package com.example.compose\n\nfun helper(n: Int): Int { return n +\n",
+                "Use.kt" to entry,
+            ),
+        )
+        val model = lowerCrossFile(service, dir, "Use.kt", entry)
+        val caller = assertNotNull(model.program["caller/0"], "the entry function should lower")
+        assertNull(model.program["helper/1"], "the malformed sibling must not be merged")
+        assertEquals(
+            setOf("helper/1"),
+            missingSourceCallees(caller, model.program, model.classes),
+            "a reached source callee the program never supplied must be reported, so the preview can refuse it",
+        )
+    }
+
+    @Test
+    fun aFullyLoweredPreviewReportsNoMissingCallees() {
+        // The other side of the gate: it must not refuse a preview whose cross-file helper DID merge, including
+        // a call that omits a defaulted argument (which is keyed by DECLARED arity, not the call's).
+        val entry = """
+            package com.example.compose
+            fun caller(): Int = helper(2)
+        """.trimIndent()
+        val (service, dir) = serviceOver(
+            mapOf(
+                "Helper.kt" to "package com.example.compose\n\nfun helper(n: Int, bump: Int = 1): Int = n + bump\n",
+                "Use.kt" to entry,
+            ),
+        )
+        val model = lowerCrossFile(service, dir, "Use.kt", entry)
+        val caller = assertNotNull(model.program["caller/0"], "the entry function should lower")
+        assertEquals(
+            emptySet(),
+            missingSourceCallees(caller, model.program, model.classes),
+            "an omitted-defaults call to a merged helper is not a missing callee",
+        )
     }
 
     @Test

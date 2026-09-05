@@ -392,10 +392,35 @@ and no real super-instance, so the interpreter no-ops it. The point is that an u
 preview's file (a `MainActivity.onCreate`) now lowers without a diagnostic. CI-tested
 (`SuperCallAndReachabilityTest`).
 
-**Preview gate scoping.** `IdeServices.lowerComposePreview` requires only the source classes the preview can
-actually REACH to lower cleanly (`reachableSourceClasses`: the transitive closure of constructed types, source
-calls, object/enum/property references, and their supertypes/members from the entry function), not every class
-in the file. An unrelated `Activity` the preview never instantiates can no longer block rendering.
+**The preview gate.** `IdeServices.lowerComposePreview` answers null — the host then keeps its last good
+render — unless the buffer is provably safe to interpret. Refusing costs a stale frame; interpreting half-typed
+code costs the IDE, because the interpreter emits into the *live* composer and a statement skipped mid-flight
+can leave its groups unbalanced, which the real Compose runtime only discovers in a later phase that no
+interpreter guard can catch. So the gate is:
+
+1. **No syntax errors** in the buffer. The error-tolerant parser still yields a whole tree, but a stray token
+   mis-shapes declarations (`data class Project(dsad val id: …)` shifts every constructor parameter), and the
+   interpreter then builds objects with wrong-typed fields.
+2. **No `KotlinDiagnosticCodes.PREVIEW_BLOCKING` errors** in the buffer — the resolution/shape errors that
+   half-typed code produces while *still parsing and lowering cleanly*, so nothing earlier catches them. A
+   named set, not "any error": a missing `override` elsewhere in the file cannot corrupt the values a preview
+   composes, and blanking a working preview over one would be worse than the risk it removes.
+3. **Everything REACHABLE lowered cleanly and is present** — the entry, plus the transitive closure of
+   constructed types, source calls, object/enum/property references and their supertypes/members
+   (`reachableSourceClasses` / `reachableSourceFunctions`), plus `missingSourceCallees` for a callee the
+   resolver bound to project source that lowering never supplied (a malformed dependency file, a cross-module
+   locate miss). Scoped to what the render can actually touch, so an unrelated `Activity` the preview never
+   instantiates does not block it.
+
+There is no "lenient" variant. The interpreter's `tolerateGaps` remains a backstop for a construct *we* don't
+support inside otherwise-valid code (one missing icon shouldn't blank a screen); it is not a licence to
+interpret the user's broken code. `composePreviewDiagnostics` reports the very same refusals, so a refused
+preview always names its reason.
+
+**Superseded passes.** A preview pass is cancelled on every debounced keystroke. Hosts run each engine call
+through `previewAttempt` (ordinary failure → null, cancellation → rethrown) and every publish through
+`ensurePreviewPassCurrent`, so a pass that outlives its buffer — routine on a slow device, where one lower can
+span several keystrokes — drops its result instead of landing an older program on top of a newer one.
 
 **Remaining:**
 - **`@Composable` content lambdas passed to non-composable scope builders** (`LazyColumn { items(xs) { i -> Text(i) } }`).
