@@ -3141,6 +3141,22 @@ class KotlinSymbolService(
     }
 
     /**
+     * Whether [fqn] is a LOCAL/anonymous source type at least one of whose declared supertypes does not
+     * resolve (`object : ViewOutlineProvider() { }` before the import is added). Its supertype closure is then
+     * incomplete, so nothing can be concluded about what it is assignable to: the missing reference is the
+     * real finding, and a caller asking about assignability must back off rather than report a second error
+     * on top of it. False for a type that isn't a known local one, and for one whose supertypes all resolve.
+     */
+    fun hasUnresolvedSupertype(fqn: String): Boolean {
+        val rc = model().classByFqn[fqn]?.takeIf { it.isLocal } ?: return false
+        return rc.superTypeTexts.any { text ->
+            // A supertype text carries its constructor call and type arguments (`Adapter()`, `Comparator<Int>`).
+            val name = text.substringBefore('<').substringBefore('(').trim()
+            if (name.isEmpty()) false else resolveTypeName(name, rc.ctx)?.let { !isKnownType(it) } ?: true
+        }
+    }
+
+    /**
      * Whether [fqn] is a type that CANNOT be created with a constructor call (`Foo()`) — an `interface` or an
      * `abstract`/`sealed` class. Returns `null` when it can't be decided (the type doesn't resolve in any
      * source/classpath/built-in source, or the classpath index is in dumb mode), so the caller MUST back off

@@ -81,6 +81,27 @@ class KotlinNestedTypeImportTest {
         )
     }
 
+    @Test
+    fun objectLiteralOnAnUnimportedSupertypeOffersTheImport() {
+        assumeTrue(androidJar != null, "no android.jar; skipping nested-type import test")
+        // The reported shape: the supertype of an object literal, still unimported. The only finding is the
+        // missing reference, and the Import fix sits on it (see KotlinUnresolvedSupertypeCascadeTest for the
+        // mismatch that used to be reported over the whole literal).
+        val code = "package demo\nimport android.view.View\n" +
+            "fun f(v: View) { v.outlineProvider = object : ViewOutlineProvider() { } }\n"
+        val doc = SnippetDoc(code, DiskFile(srcDir.resolve("Use.kt")))
+        val (diags, titles) = runBlocking {
+            analyzer.incrementalParser.parseFull(doc)
+            val d = analyzer.analyze(doc.file).diagnostics
+            d to analyzer.importFixesAt(doc.file, code.indexOf("ViewOutlineProvider") + 1).map { it.title }
+        }
+        assertTrue(diags.none { it.code == "kt.typeMismatch" }, "no mismatch on top of the missing import; got $diags")
+        assertTrue(
+            "Import android.view.ViewOutlineProvider" in titles,
+            "an object literal's unimported supertype must offer its import; got $titles",
+        )
+    }
+
     /** The `java.classNames` producer's keying (see the class KDoc): a class entry under its simple name, with
      *  the dotted FQN an `import` spells; synthetic `$` names are left out. */
     private object LibraryClassNames : IndexExtension<String, ClassNameValue> {

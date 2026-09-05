@@ -2577,6 +2577,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (declared == null || actual == null) return false
         if (declared.isTypeParameter || actual.isTypeParameter) return false
         if (actual.qualifiedName == "kotlin.Nothing") return false
+        // An object literal whose SUPERTYPE doesn't resolve (`object : ViewOutlineProvider() { }` with the
+        // import still missing) has an incomplete supertype closure, so it looks assignable to nothing. The
+        // unresolved reference IS the error; adding "inferred type is <anonymous : ViewOutlineProvider> but
+        // ViewOutlineProvider was expected" on top of it underlined the whole literal and buried the one
+        // finding that carries an Import fix.
+        if (brokenLocalClosure(declared) || brokenLocalClosure(actual)) return false
         // A type read from Java bytecode keeps its JVM name (`java.lang.String`); it IS the Kotlin type it maps
         // to. Canonicalize both sides so a `java.lang.String` target accepts a `kotlin.String` value (and is
         // `isKnownType`), matching the mapping member/supertype lookup already applies (`Builtins.kotlinTypeFor`).
@@ -2588,6 +2594,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (d.isAssignableFrom(a)) return genericArgsMismatch(d, a)
         return !(d.qualifiedName in NUMERIC && a.qualifiedName in NUMERIC)
     }
+
+    /** Whether [t] is a local/anonymous type whose declared supertype doesn't resolve, i.e. one this model
+     *  cannot answer assignability for (see [KotlinSymbolService.hasUnresolvedSupertype]). The synthetic-key
+     *  test comes first so an ordinary type never reaches the source-model lookup. */
+    private fun brokenLocalClosure(t: KotlinType): Boolean =
+        isSyntheticLocalTypeFqn(t.qualifiedName) && service.hasUnresolvedSupertype(t.qualifiedName)
 
     /** Whether same-classifier generic types clash on a type argument — each compared position holding two
      *  UNRELATED FINAL types (`List<String>` vs `List<Int>`, `Map<String, …>` vs `Map<Int, …>`). Requires the
