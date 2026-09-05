@@ -83,11 +83,12 @@ fun KotlinResolver.expectedTypeAt(offset: Int): KotlinType? {
 internal fun KotlinResolver.enclosingFunctionReturnType(from: PsiElement): KotlinType? {
     var node: PsiElement? = from.parent
     while (node != null) {
-        if (node is KtNamedFunction) return node.typeReference?.text?.let {
-            service.typeFromText(
-                it,
-                fileContext
-            )
+        if (node is KtNamedFunction) {
+            node.typeReference?.text?.let { return service.typeFromText(it, fileContext) }
+            // No declared type: a BLOCK body's return type is `Unit` (so `return f()` there expects Unit, which
+            // is what coerces a lambda-bound result, see [coerceLambdaReturnVarToUnit]); an EXPRESSION body's
+            // is inferred FROM the returned expression, so the context demands nothing.
+            return if (node.hasBlockBody()) service.typeByFqn("kotlin.Unit") else null
         }
         if (node is KtLambdaExpression) return null // a return@label leaves the lambda's type to inference
         node = node.parent

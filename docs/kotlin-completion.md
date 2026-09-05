@@ -86,6 +86,12 @@ handles lower-bound propagation, uninferable type parameters, and missing-argume
 `KotlinLambdaInference` supplies the expected functional type, receiver, and parameter types for a lambda
 from its enclosing call slot.
 
+A lambda whose expected functional return type is `Unit` discards its body's result (Kotlin's coercion to
+Unit), so that result neither has to fit the return nor constrains it. That is what makes
+`forEach { list.add(x) }` applicable despite `add` returning `Boolean`, and what fixes `coroutineScope`'s
+`<R>` to `Unit` in `suspend fun main(): Unit = coroutineScope { launch { … } }` rather than to the trailing
+`launch`'s `Job`, which had the whole body reported as a `Job`-vs-`Unit` mismatch.
+
 ### Smart casts
 
 A simple-name reference is narrowed by an enclosing `is` check, purely from its **position** in the

@@ -44,6 +44,19 @@ internal fun KotlinResolver.bindLambdaReturn(
     }
 }
 
+/**
+ * Kotlin's COERCION TO UNIT: a lambda whose expected functional return type is `Unit` DISCARDS its body's
+ * result. The last expression's type neither has to fit that return nor tells inference anything about it, so
+ * `forEach { list.add(x) }` is fine despite `add` returning `Boolean`, and `fun f(): Unit = coroutineScope
+ * { launch { … } }` fixes `coroutineScope`'s `<R>` to `Unit` rather than to the trailing `launch`'s `Job`.
+ * Exactly `Unit` counts: a `Unit?` return keeps the value, and a still-free type VARIABLE is one inference
+ * has yet to fix (the call sites substitute what is known before asking).
+ */
+internal fun coercesResultToUnit(functionalReturn: TypeRef?): Boolean {
+    val r = functionalReturn as? KotlinType ?: return false
+    return !r.isTypeParameter && !r.nullable && r.qualifiedName == "kotlin.Unit"
+}
+
 internal fun KotlinResolver.inferLambdaResult(lambda: KtLambdaExpression): TypeRef? {
     val statements = lambda.bodyExpression?.statements ?: return null
     // An empty lambda body (`{ }`) has result type Unit. This is what makes `remember { }` type as Unit — and

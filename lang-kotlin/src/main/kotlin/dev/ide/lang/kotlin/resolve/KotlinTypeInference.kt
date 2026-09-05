@@ -512,7 +512,8 @@ internal fun KotlinResolver.typeOfCall(
     // generic, or the expected type driving an argument-less generic. Additive: applied ONLY where the ad-hoc
     // pass didn't confidently pin the variable, so a resolved binding is never overridden.
     if (sym.typeParameters.isNotEmpty()) {
-        val solved = inferCallBindings(sym, call, expectedTypeAt(call.textRange.startOffset))
+        val expected = expectedTypeAt(call.textRange.startOffset)
+        val solved = inferCallBindings(sym, call, expected)
         for ((k, v) in solved) {
             if ((v as? KotlinType)?.isTypeParameter != false) continue
             val cur = bindings[k] as? KotlinType
@@ -520,6 +521,9 @@ internal fun KotlinResolver.typeOfCall(
                     (k !in inferred && cur.qualifiedName == (erasure[k] as? KotlinType)?.qualifiedName)
             if (onlyErased) bindings[k] = v
         }
+        // A `Unit`-expecting context coerces a lambda-bound return variable to Unit, OVERRIDING what the
+        // block's last expression bound it to above ([coerceLambdaReturnVarToUnit]).
+        coerceLambdaReturnVarToUnit(sym, call, expected, bindings)
     }
     // The callee's declared return type; when it has none (an expression-body function `fun f() = expr`, whose
     // type neither the same-file symbol nor the disk index carries), infer it from the body.

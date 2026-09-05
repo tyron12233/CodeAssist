@@ -64,6 +64,45 @@ internal fun KotlinResolver.returnParamGotNullLambda(
     return false
 }
 
+/**
+ * Coercion to Unit ([coercesResultToUnit]) applied to the type ARGUMENT a lambda's result bound: when the
+ * context expects the call's value to be `Unit` and the callee returns exactly its own type parameter `R`,
+ * bound from a lambda argument's result (`fun <R> coroutineScope(block: suspend CoroutineScope.() -> R): R`),
+ * the block's last expression is discarded and `R` is `Unit`. So `suspend fun main(): Unit = coroutineScope
+ * { launch { … } }` types as `Unit`, which is valid Kotlin, where binding `R` from the trailing `launch`
+ * reported the whole body as a `Job`-vs-`Unit` mismatch. Only a LAMBDA-bound return variable is rewritten, so
+ * a value argument's binding (`fun <T> id(t: T): T`, `val u: Unit = id(5)`) still surfaces the real mismatch.
+ */
+internal fun KotlinResolver.coerceLambdaReturnVarToUnit(
+    sym: KotlinSymbol,
+    call: KtCallExpression,
+    expected: KotlinType?,
+    bindings: MutableMap<String, TypeRef>
+) {
+    if (expected == null || expected.nullable || expected.qualifiedName != "kotlin.Unit") return
+    val ret = sym.type as? KotlinType ?: return
+    if (!ret.isTypeParameter || ret.qualifiedName !in sym.typeParameters) return
+    if (!bindsFunctionalReturnFromLambda(sym, call, ret.qualifiedName)) return
+    bindings[ret.qualifiedName] = service.typeByFqn("kotlin.Unit")
+}
+
+/** Whether [call] passes a LAMBDA to a parameter whose functional return type is the type parameter [param],
+ *  i.e. [param] is bound from that lambda's result (`coroutineScope { … }`'s `block: … -> R`). */
+private fun KotlinResolver.bindsFunctionalReturnFromLambda(
+    sym: KotlinSymbol,
+    call: KtCallExpression,
+    param: String
+): Boolean {
+    call.valueArguments.forEachIndexed { i, arg ->
+        if (arg.getArgumentExpression() !is KtLambdaExpression) return@forEachIndexed
+        val pt = (sym.paramTypes.getOrNull(lambdaParamIndex(call, i, sym))
+            ?: sym.paramTypes.lastOrNull()) as? KotlinType ?: return@forEachIndexed
+        val ret = service.functionalShape(pt)?.returnType as? KotlinType ?: return@forEachIndexed
+        if (ret.isTypeParameter && ret.qualifiedName == param) return true
+    }
+    return false
+}
+
 /** Each of a function's own type parameters mapped to its erased upper bound, so any that argument
  *  inference leaves unbound still resolves to a concrete type rather than a member-less `T`. */
 internal fun KotlinResolver.methodTypeParamErasure(sym: KotlinSymbol): Map<String, TypeRef> {

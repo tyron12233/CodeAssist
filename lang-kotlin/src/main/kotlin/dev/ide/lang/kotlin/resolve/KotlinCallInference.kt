@@ -63,7 +63,13 @@ internal fun KotlinResolver.inferCallBindings(
                     )
                 }
             }
-            val bodyResult = withLambdaShape(
+            // Coercion to Unit ([coercesResultToUnit]): a block whose result is `Unit`, either declared
+            // (`() -> Unit`) or already fixed to it by the expected type (`fun f(): Unit = coroutineScope { … }`
+            // bounds `<R>` above by `Unit`), DISCARDS its body's result, so that result constrains nothing.
+            // Without this the trailing `launch`'s `Job` became a lower bound on an `R` the expected type had
+            // capped at `Unit`: a contradiction, and a `Job`-typed call.
+            val functionalReturn = (shape.returnType as? KotlinType)?.let { service.substitute(it, partial) }
+            val bodyResult = if (coercesResultToUnit(functionalReturn)) null else withLambdaShape(
                 expr,
                 KotlinSymbolService.FunctionalShape(inputs, shape.returnType, shape.isExtension)
             ) {

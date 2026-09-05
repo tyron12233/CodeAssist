@@ -323,6 +323,10 @@ private fun KotlinResolver.addArgumentConstraints(
                 ?: return@forEachIndexed
             val shape = service.functionalShape(pt) ?: return@forEachIndexed
             val lambda = expr as? KtLambdaExpression ?: return@forEachIndexed
+            // A `Unit`-returning block coerces its result away ([coercesResultToUnit]), so its body constrains
+            // nothing: `forEach { list.add(x) }` must not be inapplicable because `add` returns `Boolean`.
+            // Skipping it also spares typing every Unit content lambda's body during scoring.
+            if (coercesResultToUnit(shape.returnType)) return@forEachIndexed
             val bodyResult =
                 withLambdaShape(lambda, shape) { inferLambdaResult(lambda) as? KotlinType }
             if (bodyResult != null) cs.addSubtypeConstraint(bodyResult, shape.returnType)
