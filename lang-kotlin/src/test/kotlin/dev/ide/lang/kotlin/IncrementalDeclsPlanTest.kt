@@ -63,6 +63,64 @@ class IncrementalDeclsPlanTest {
         assertTrue(plan(v1, v2) is IncrementalDecls.Plan.Full)
     }
 
+    // ---- class keys: a method-body keystroke must NOT read as a class signature change ----
+
+    private val cls = "package demo\n" +
+        "class View {\n" +
+        "    private val label: String = \"hi\"\n" +
+        "    init { println(label) }\n" +
+        "    fun alpha() { val x = 1 }\n" +
+        "    val sized: Int get() { return 7 }\n" +
+        "    constructor() { println(\"ctor\") }\n" +
+        "}\n" +
+        "fun outside() { View().alpha() }\n"
+
+    @Test
+    fun methodBodyEditInsideAClassIsABodyOnlyChange() {
+        val p = plan(cls, cls.replace("val x = 1", "val x = 42")) as IncrementalDecls.Plan.Partial
+        // Only the class recomputes — `outside` references `View`/`alpha` but neither signature moved.
+        assertEquals(setOf(0), p.recompute)
+        assertEquals(0, p.fineReuse) // and is eligible for per-member reuse
+    }
+
+    @Test
+    fun initBlockAndSecondaryConstructorBodiesAreBodyOnlyToo() {
+        for (v2 in listOf(
+            cls.replace("println(label)", "println(label.length)"),
+            cls.replace("println(\"ctor\")", "println(\"built\")"),
+            cls.replace("return 7", "return 8"),
+        )) {
+            val p = plan(cls, v2) as IncrementalDecls.Plan.Partial
+            assertEquals(setOf(0), p.recompute, "body edit in <$v2>")
+            assertEquals(0, p.fineReuse, "body edit in <$v2>")
+        }
+    }
+
+    @Test
+    fun memberSignatureEditInsideAClassFiresDependents() {
+        val p = plan(cls, cls.replace("fun alpha()", "fun alpha(seed: Int)")) as IncrementalDecls.Plan.Partial
+        // A member's signature IS the class's signature: `outside` calls alpha() and must re-check.
+        assertEquals(setOf(0, 1), p.recompute)
+        assertEquals(null, p.fineReuse) // a signature change disables sub-declaration reuse
+    }
+
+    @Test
+    fun propertyInitializerEditInsideAClassFiresDependents() {
+        // An initializer types the property, so it is signature, not body — even though it sits in the body.
+        val p = plan(cls, cls.replace("val label: String = \"hi\"", "val label: String = \"bye\"")) as IncrementalDecls.Plan.Partial
+        assertEquals(null, p.fineReuse)
+    }
+
+    @Test
+    fun anUntypedPropertysAccessorBodyStaysInTheHeader() {
+        // `val n get() { … }` would take its type FROM the accessor body, so that body must NOT be cut from
+        // the header the way a typed accessor's is.
+        val src = "package demo\nclass C {\n    val n get() { return 1 }\n}\n"
+        val k1 = IncrementalDecls.keyOf(parse(src).declarations[0])
+        val k2 = IncrementalDecls.keyOf(parse(src.replace("return 1", "return \"s\"")).declarations[0])
+        assertTrue(k1.header != k2.header, "an untyped accessor's body is part of the class signature")
+    }
+
     @Test
     fun noTextChangeReusesEverything() {
         val v1 = "package demo\nfun a() { val x = 1 }\nfun b() { val y = 2 }\n"

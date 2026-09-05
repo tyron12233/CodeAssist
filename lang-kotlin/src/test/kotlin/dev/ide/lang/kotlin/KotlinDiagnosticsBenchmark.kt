@@ -91,6 +91,75 @@ class KotlinDiagnosticsBenchmark {
         assertTrue(Bench.sink >= 0L || Bench.sink < 0L)
     }
 
+    /**
+     * The shape most real Kotlin files actually have: ONE top-level class, edited inside one method body.
+     * Per-DECLARATION incremental reuse gives nothing here (there is one declaration), so before per-MEMBER
+     * reuse every keystroke re-checked the whole class — the whole file. This measures exactly that keystroke.
+     * Distinct from `diagnosticsPassHoldsAgainstBaseline`, which edits a top-level FUNCTION and therefore
+     * already exercised the statement-level path.
+     */
+    @Test
+    fun classMemberEditHoldsAgainstBaseline() {
+        val compose = composeRuntimeJarOrNull()
+        assumeTrue(compose != null, "Compose runtime jar not on the test classpath — skipping")
+        val stdlib = stdlibJarPath()
+
+        val index = IndexServiceImpl(listOf(KotlinTypeShapeIndex, KotlinCallableIndex), cacheRoot = Files.createTempDirectory("diag-cls-idx"))
+        runBlocking { index.ensureUpToDate(IndexScope(libraryJars = listOf(stdlib, compose!!))) }
+
+        val srcDir = tempProject(mapOf("app/Widget.kt" to "package app\n"))
+        val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir, libJars = listOf(stdlib, compose!!))).apply {
+            indexService = index
+            extensionCacheDir = Files.createTempDirectory("diag-cls-ext")
+        }
+        val vf = DiskFile(srcDir.resolve("app/Widget.kt"))
+
+        // One class, 30 methods of member-access-heavy code. `edit` lands in the body of ONE method, so a
+        // keystroke changes exactly one member's text and nothing else's — the steady-state editing case.
+        fun code(edit: Int) = buildString {
+            append("package app\n")
+            append("class Widget(private val s: String, private val xs: List<Int>) {\n")
+            append("  private val seed: Int = 7\n")
+            append("  fun touched(): Int {\n    val e = $edit\n    return s.length + e + seed\n  }\n")
+            repeat(30) { i ->
+                append("  fun m$i(): Int {\n")
+                append("    val a = s.uppercase().trim().length + $i\n")
+                append("    val b = xs.map { it + $i }.filter { it > $i }.sum()\n")
+                append("    val c = xs.indexOf($i) + xs.size + seed\n")
+                append("    return a + b + c\n")
+                append("  }\n")
+            }
+            append("}\n")
+        }
+        var edit = 0
+        fun analyzeOnce(): Long {
+            analyzer.incrementalParser.parseFull(SnippetDoc(code(++edit), vf))
+            return runBlocking { analyzer.analyze(vf) }.diagnostics.size.toLong()
+        }
+
+        repeat(3) { analyzeOnce() }
+        val suite = RegressionSuite("kotlin-diagnostics-latency")
+
+        val ns = Bench.nsPerOp(warmup = 2, runs = 5, ops = 3) { analyzeOnce() }
+        val bytes = Bench.allocPerOp(warmup = 2, ops = 3) { analyzeOnce() }
+        println("\n=== Kotlin diagnostics: keystroke inside a CLASS member (30 methods, Compose-scale) ===\nper pass: ${Bench.ns(ns)}, alloc: ${Bench.bytes(bytes.toDouble())}\n")
+        suite.latencyNs("analyze.class-member.ns", ns, tolerance = 1.5, ceilingNs = 500_000_000.0)
+        suite.allocBytes("analyze.class-member.bytes", bytes, tolerance = 0.40, ceilingBytes = 256.0 * 1024 * 1024)
+
+        run {
+            val lines = ArrayList<String>()
+            val sink = LogSink { r -> if (r.tag == "kotlin-perf") lines += r.message }
+            Log.addSink(sink); KotlinPerf.enabled = true
+            try { repeat(6) { analyzeOnce() } } finally { KotlinPerf.enabled = false; Log.removeSink(sink) }
+            println("=== class-member stage breakdown (last 3 of ${lines.size}) ===")
+            lines.takeLast(3).forEach { println("  $it") }
+            println()
+        }
+
+        suite.finishAndAssert()
+        assertTrue(Bench.sink >= 0L || Bench.sink < 0L)
+    }
+
     companion object {
         fun composeRuntimeJarOrNull(): Path? =
             System.getProperty("java.class.path").split(File.pathSeparator)

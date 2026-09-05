@@ -1,11 +1,17 @@
 package dev.ide.lang.kotlin
 
+import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.psi.KtAnonymousInitializer
+import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtDeclaration
+import org.jetbrains.kotlin.psi.KtDeclarationWithBody
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.KtPropertyAccessor
 
 /**
  * Per-top-level-declaration incremental-reuse machinery for the editor passes that are "Σ over the file's
@@ -19,10 +25,11 @@ import org.jetbrains.kotlin.psi.KtNamedFunction
  *  - The edited span is located by a prefix/suffix text diff ([changedRange]) so only the declaration(s) it
  *    overlaps are text-compared; everything outside is byte-identical and reused (this is the platform-
  *    independent substitute for the desktop-only incremental PSI reparse).
- *  - A declaration whose only change is its BODY re-checks itself alone (its signature is unchanged, so
- *    nothing else resolves differently).
- *  - A declaration whose SIGNATURE changed (or a whole class edit) re-checks itself plus the declarations
- *    that REFERENCE a name it [provides][Facts.provides] (its dependents), found via each cached declaration's
+ *  - A declaration whose only change is a BODY re-checks itself alone (its signature is unchanged, so nothing
+ *    else resolves differently) — including a method body inside a class, since [keyOf]'s header cuts block
+ *    bodies out of the whole subtree.
+ *  - A declaration whose SIGNATURE changed re-checks itself plus the declarations that REFERENCE a name it
+ *    [provides][Facts.provides] (its dependents), found via each cached declaration's
  *    [references][Facts.references] set. Unrelated declarations are reused.
  *  - An import edit re-checks only the declarations referencing the added/removed names; a star-import change
  *    or a package change can't be scoped, so it falls back to a full recompute.
@@ -55,18 +62,68 @@ internal object IncrementalDecls {
 
         /**
          * Recompute the declarations at [recompute] (reuse all others, re-anchored). [fineReuse], when non-null,
-         * is the single body-only-changed function eligible for intra-function statement reuse; the rest of
-         * [recompute] must re-check fully (their own text is unchanged but their resolution context moved).
+         * is the single body-only-changed declaration eligible for SUB-declaration reuse — a function's
+         * unchanged body statements, or a class's unchanged members; the rest of [recompute] must re-check
+         * fully (their own text is unchanged but their resolution context moved).
          */
         class Partial(val recompute: Set<Int>, val fineReuse: Int?) : Plan
     }
 
-    /** The signature [Key] for [d] (materializes its text once); the header excludes a function's block body. */
+    /**
+     * The signature [Key] for [d] (materializes its text once). The header is what OTHER declarations can see,
+     * so it excludes every BLOCK BODY in [d]'s subtree — a function's, a secondary constructor's, an `init`
+     * block's, and a typed property accessor's. A block body can't change what the declaration exposes (a
+     * block-bodied function with no declared return type is `Unit`; a block-bodied accessor requires its
+     * property to declare a type), so an edit inside one is a body-only change that invalidates nothing else.
+     *
+     * This is what makes a CLASS incrementally analyzable. A class's header used to be its ENTIRE text, so any
+     * keystroke inside any method read as a signature change: [plan] fired every dependent and disabled the
+     * body-only path, and the whole class — for most Kotlin files, the whole file — was re-checked from
+     * scratch on every keystroke. Everything an inferred type could depend on (a property initializer, an
+     * expression body, a supertype list, a primary constructor) stays IN the header.
+     */
     fun keyOf(d: KtDeclaration): Key {
         val t = d.text
-        val header = (d as? KtNamedFunction)?.bodyBlockExpression
-            ?.let { t.substring(0, it.textRange.startOffset - d.textRange.startOffset) } ?: t
-        return Key(header, t)
+        val cuts = ArrayList<IntArray>()
+        collectBodyCuts(d, d.textRange.startOffset, cuts)
+        if (cuts.isEmpty()) return Key(t, t)
+        val sb = StringBuilder(t.length)
+        var pos = 0
+        for (c in cuts) {
+            if (c[0] > pos) sb.append(t, pos, c[0])
+            pos = maxOf(pos, c[1])
+        }
+        if (pos < t.length) sb.append(t, pos, t.length)
+        return Key(sb.toString(), t)
+    }
+
+    /**
+     * Append (start, end) offsets — RELATIVE to [base] — of every block body in [psi]'s subtree that carries no
+     * signature information, in document order and without overlap (a cut is not descended into, so a nested
+     * declaration's body inside an outer body is already covered by the outer cut).
+     *
+     * A property ACCESSOR's block body is cut only when the property declares its type: `val x: Int get() { … }`
+     * exposes `Int` whatever the body does, whereas an accessor-typed property would take its type FROM the
+     * body. (An expression body — `get() = …` — is never cut, for the same reason.)
+     */
+    private fun collectBodyCuts(psi: PsiElement, base: Int, out: MutableList<IntArray>) {
+        val body = when (psi) {
+            is KtPropertyAccessor ->
+                if ((psi.parent as? KtProperty)?.typeReference != null) psi.bodyBlockExpression else null
+
+            is KtDeclarationWithBody -> psi.bodyBlockExpression
+            is KtAnonymousInitializer -> psi.body as? KtBlockExpression
+            else -> null
+        }
+        if (body != null) {
+            val r = body.textRange
+            out += intArrayOf(r.startOffset - base, r.endOffset - base)
+            return // everything inside this body is already covered by the cut
+        }
+        var c = psi.firstChild
+        while (c != null) {
+            collectBodyCuts(c, base, out); c = c.nextSibling
+        }
     }
 
     /** Full dependency [Facts] for [d]. Call only when (re)caching a recomputed declaration (walks its subtree). */

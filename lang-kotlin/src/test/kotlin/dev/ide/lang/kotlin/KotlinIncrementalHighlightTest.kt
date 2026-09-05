@@ -51,6 +51,62 @@ class KotlinIncrementalHighlightTest {
 
     @Test fun noOpReHighlight() = assertIncrementalMatchesFull("noop", base, base)
 
+    // ---- intra-CLASS member reuse: the one-class-per-file shape, where per-declaration reuse alone gave
+    // nothing (any keystroke re-colored the whole class, i.e. the whole file).
+
+    private val cls = "package demo\n" +
+        "@Composable fun Card() {}\n" +
+        "class Screen : Any() {\n" +
+        "    private val title: String = \"t\"\n" +
+        "    init { println(title) }\n" +
+        "    fun alpha(): Int {\n        val a = 1\n        Card()\n        return a\n    }\n" +
+        "    fun beta(): Int {\n        val b = 100\n        return b\n    }\n" +
+        "    private class Nested(val n: Int)\n" +
+        "}\n"
+
+    @Test fun classMethodBodyEdit() {
+        assertIncrementalMatchesFull("clsBody", cls, cls.replace("val b = 100", "val b = 999"))
+    }
+
+    @Test fun classMethodBodyEditShiftingLaterMembers() {
+        // alpha's body grows → title/init are above it but beta and Nested shift down; their reused tokens
+        // must be re-anchored.
+        assertIncrementalMatchesFull("clsShift", cls, cls.replace("val a = 1", "val a = 1\n        val a2 = Card()\n        val a3 = 3"))
+    }
+
+    @Test fun classMemberSignatureEdit() {
+        assertIncrementalMatchesFull("clsSig", cls, cls.replace("fun alpha(): Int", "fun alpha(): Long"))
+    }
+
+    @Test fun classMemberAdded() {
+        assertIncrementalMatchesFull("clsAdd", cls, cls.replace("    private class Nested", "    fun gamma(): Int = 42\n    private class Nested"))
+    }
+
+    @Test fun classMemberRemoved() {
+        assertIncrementalMatchesFull("clsRm", cls, cls.replace("    private class Nested(val n: Int)\n", ""))
+    }
+
+    @Test fun classPropertyInitializerEdit() {
+        assertIncrementalMatchesFull("clsProp", cls, cls.replace("private val title: String = \"t\"", "private val title: String = \"other\""))
+    }
+
+    @Test fun classInitBlockEdit() {
+        assertIncrementalMatchesFull("clsInit", cls, cls.replace("println(title)", "println(title.length)"))
+    }
+
+    @Test fun classSupertypeEdit() {
+        assertIncrementalMatchesFull("clsSuper", cls, cls.replace("class Screen : Any()", "class Screen"))
+    }
+
+    @Test fun repeatedClassMethodBodyEdits() {
+        // Several keystrokes through the SAME analyzer, so each pass reuses the previous member cache.
+        rawToks("HlIncSeq.kt", cls)
+        for (b in listOf("1", "10", "100", "1000")) rawToks("HlIncSeq.kt", cls.replace("val b = 100", "val b = $b"))
+        val incremental = rawToks("HlIncSeq.kt", cls.replace("val b = 100", "val b = 55"))
+        val full = rawToks("HlFullSeq.kt", cls.replace("val b = 100", "val b = 55"))
+        assertEquals(full, incremental, "incremental highlighting diverged after repeated member edits")
+    }
+
     companion object {
         val srcDir: Path = tempProject(mapOf("Seed.kt" to "package demo\n"))
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))

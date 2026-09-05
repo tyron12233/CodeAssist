@@ -84,7 +84,16 @@ class KotlinSemanticHighlighter(
     // Per-top-level-declaration token cache (see [IncrementalDecls]). An edit re-colors only the changed
     // declaration and reuses every other declaration's tokens, re-anchored to its shifted offset — so a
     // keystroke no longer re-resolves the WHOLE file. One instance per analyzer (this cache is its state).
-    private class DeclTokens(val facts: IncrementalDecls.Facts, val rel: List<SemanticToken>)
+    private class DeclTokens(
+        val facts: IncrementalDecls.Facts,
+        val rel: List<SemanticToken>,
+        /** Per-MEMBER tokens for a top-level class/object (relative to each member's own start), so a keystroke
+         *  in one method re-colors that method alone instead of the whole class — which, for the common
+         *  one-class-per-file shape, was the whole file. Null for any other declaration. */
+        val members: List<MemberTokens>? = null,
+    )
+
+    private class MemberTokens(val text: String, val rel: List<SemanticToken>)
     private class Snapshot(
         val imports: IncrementalDecls.Imports,
         val fileText: String,
@@ -127,6 +136,7 @@ class KotlinSemanticHighlighter(
                 )
             }
             val recompute: Set<Int>? = (plan as? IncrementalDecls.Plan.Partial)?.recompute
+            val fineReuseIndex: Int? = (plan as? IncrementalDecls.Plan.Partial)?.fineReuse
             val newEntries = ArrayList<DeclTokens>(topDecls.size)
             KotlinPerf.span("walk") {
                 for ((i, d) in topDecls.withIndex()) {
@@ -136,6 +146,19 @@ class KotlinSemanticHighlighter(
                             prev!!.decls[i] // unaffected → reuse this declaration's tokens, re-anchored
                         cached.rel.forEach { out += shift(it, base) }
                         newEntries += cached
+                    } else if (d is KtClassOrObject && d.declarations.isNotEmpty()) {
+                        // A class re-colors member by member. Its unchanged members are reused ONLY when this
+                        // is the single body-only change ([fineReuseIndex]); a dependent's members have
+                        // unchanged text but a changed resolution context, so they must re-resolve.
+                        val prevMembers =
+                            if (fineReuseIndex == i) prev?.decls?.getOrNull(i)?.members else null
+                        val (abs, members) = collectClass(d, prevMembers, resolver)
+                        out += abs
+                        newEntries += DeclTokens(
+                            IncrementalDecls.factsOf(d),
+                            abs.map { shift(it, -base) },
+                            members = members,
+                        )
                     } else {
                         val abs = ArrayList<SemanticToken>()
                         collectInto(d, resolver, abs)
@@ -150,16 +173,54 @@ class KotlinSemanticHighlighter(
             return@trace out
         }
 
+    /**
+     * Color one top-level class/object, reusing the tokens of unchanged MEMBERS. Returns the class's tokens
+     * (absolute offsets) plus the per-member cache. The frame — the class node, its modifiers, type parameters,
+     * primary constructor, supertype list and the class-body braces — is re-colored every time (it is small and
+     * carries the signature the edit may have touched); each member is reused when its text is byte-identical.
+     * Frame + members is exactly the subtree walk it replaces, since [collectInto]'s `stopAt` prunes precisely
+     * the member subtrees that are then walked individually.
+     */
+    private fun collectClass(
+        cls: KtClassOrObject,
+        prevMembers: List<MemberTokens>?,
+        resolver: KotlinResolver,
+    ): Pair<List<SemanticToken>, List<MemberTokens>> {
+        val members = cls.declarations
+        val out = ArrayList<SemanticToken>(128)
+        collectInto(cls, resolver, out, stopAt = members.toHashSet())
+        val aligned = prevMembers != null && prevMembers.size == members.size
+        val newMembers = ArrayList<MemberTokens>(members.size)
+        for ((i, m) in members.withIndex()) {
+            val mBase = m.textRange.startOffset
+            val text = m.text
+            val prevM = if (aligned) prevMembers[i] else null
+            if (prevM != null && prevM.text == text) {
+                prevM.rel.forEach { out += shift(it, mBase) }
+                newMembers += prevM
+            } else {
+                val abs = ArrayList<SemanticToken>()
+                collectInto(m, resolver, abs)
+                out += abs
+                newMembers += MemberTokens(text, abs.map { shift(it, -mBase) })
+            }
+        }
+        return out to newMembers
+    }
+
     /** Shift a token's range by [delta] (relative⇄absolute re-anchoring; [SemanticToken] has no copy()). */
     private fun shift(t: SemanticToken, delta: Int): SemanticToken =
         SemanticToken(TextRange(t.range.start + delta, t.range.end + delta), t.kind, t.modifiers)
 
     /** Walk [root]'s subtree depth-first, emitting a [SemanticToken] per classifiable identifier into [out] —
-     *  the same classification the whole-file pass used, now scoped to a subtree so it runs per declaration. */
+     *  the same classification the whole-file pass used, now scoped to a subtree so it runs per declaration.
+     *  [stopAt] prunes the subtrees the caller colors separately (a class's members), exactly as the diagnostic
+     *  driver's own `stopAt` does, so the union of frame + parts is identical to one whole-subtree walk. */
     private fun collectInto(
         root: PsiElement,
         resolver: KotlinResolver,
-        out: MutableList<SemanticToken>
+        out: MutableList<SemanticToken>,
+        stopAt: Set<PsiElement> = emptySet(),
     ) {
         var seen = 0
         fun emit(
@@ -172,6 +233,7 @@ class KotlinSemanticHighlighter(
         }
 
         fun walk(psi: PsiElement) {
+            if (psi in stopAt) return
             if (seen++ % 64 == 0) EngineCancellation.checkCanceled()
             when (psi) {
                 is KtObjectDeclaration ->

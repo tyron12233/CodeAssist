@@ -9,6 +9,7 @@ import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.typeAliasNamesIn
 import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
+import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import java.util.concurrent.ConcurrentHashMap
@@ -40,11 +41,22 @@ internal class IncrementalSemanticAnalysis(
     // [declares] = the statement introduces a name (a later statement's scope depends on it), so a change to it
     // invalidates the reuse of everything after it.
     private class StmtDiags(val text: String, val declares: Boolean, val rel: List<Diagnostic>)
+    // One MEMBER of a top-level class/object (a method, property, `init`, nested class), relative to the
+    // MEMBER's start. [bodyStmts] is its per-statement cache when the member is a block-bodied function, so a
+    // keystroke inside one method reuses both the sibling members AND that method's untouched statements.
+    private class MemberDiags(val text: String, val rel: List<Diagnostic>, val bodyStmts: List<StmtDiags>?)
     // [bodyStmts] is present for a block-bodied function — it enables INTRA-function reuse (a keystroke in a
-    // 150-line @Composable re-checks only the touched statement, not all ~50 calls). Null for other declarations.
+    // 150-line @Composable re-checks only the touched statement, not all ~50 calls). [members] is the
+    // equivalent for a class/object: a keystroke in one method reuses every other member. Both null for a
+    // declaration that is neither (a top-level property, a typealias).
     // [facts] carries the declaration's change-detection key plus its dependency surface (provided/referenced
     // names) so [IncrementalDecls.plan] can invalidate only the declarations a change actually affects.
-    private class DeclDiags(val facts: IncrementalDecls.Facts, val rel: List<Diagnostic>, val bodyStmts: List<StmtDiags>? = null)
+    private class DeclDiags(
+        val facts: IncrementalDecls.Facts,
+        val rel: List<Diagnostic>,
+        val bodyStmts: List<StmtDiags>? = null,
+        val members: List<MemberDiags>? = null,
+    )
     // [externalStamp] = the content versions of OTHER source files at cache time ([KotlinSymbolService.
     // externalContentStamp]); when it changes, a cross-file dependency was edited, so this file's cached
     // diagnostics may be stale (e.g. a class whose property type changed in another file) → full re-analyze.
@@ -135,22 +147,29 @@ internal class IncrementalSemanticAnalysis(
                 perDecl += cached.rel.map { it.copy(range = TextRange(it.range.start + base, it.range.end + base)) }
                 newEntries += cached
             } else {
-                // Recompute this declaration. A block-bodied function reuses its unchanged statements ONLY when it
-                // is the single body-only change ([fineReuseIndex]); a dependent (re-checked because a sibling's
-                // signature moved) has unchanged text but changed resolution, so it re-checks fully. Either way it
-                // records per-statement entries so the NEXT edit can reuse them.
+                // Recompute this declaration. A block-bodied function reuses its unchanged statements, and a
+                // class/object its unchanged MEMBERS, ONLY when it is the single body-only change
+                // ([fineReuseIndex]); a dependent (re-checked because a sibling's signature moved) has
+                // unchanged text but changed resolution, so it re-checks fully. Either way it records the
+                // sub-declaration entries so the NEXT edit can reuse them.
+                val prevEntry = if (fineReuseIndex == i) prev?.decls?.getOrNull(i) else null
+                fun rel(diags: List<Diagnostic>) =
+                    diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) }
                 val fn = d as? KtNamedFunction
                 if (fn != null && fn.bodyBlockExpression != null) {
-                    val prevEntry = if (fineReuseIndex == i) prev?.decls?.getOrNull(i) else null
-                    val (diags, stmts) = analyzeFunctionBody(fn, prevEntry, session)
+                    val (diags, stmts) = analyzeFunctionBody(fn, prevEntry?.bodyStmts, session)
                     perDecl += diags
-                    newEntries += DeclDiags(IncrementalDecls.factsOf(d), diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) }, stmts)
+                    newEntries += DeclDiags(IncrementalDecls.factsOf(d), rel(diags), bodyStmts = stmts)
+                } else if (d is KtClassOrObject && d.declarations.isNotEmpty()) {
+                    val (diags, members) = analyzeClassBody(d, prevEntry?.members, session)
+                    perDecl += diags
+                    newEntries += DeclDiags(IncrementalDecls.factsOf(d), rel(diags), members = members)
                 } else {
                     val reporter = DiagnosticReporter()
                     driver.run(d, session, reporter)
                     val diags = reporter.drain()
                     perDecl += diags
-                    newEntries += DeclDiags(IncrementalDecls.factsOf(d), diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) })
+                    newEntries += DeclDiags(IncrementalDecls.factsOf(d), rel(diags))
                 }
             }
         } }
@@ -177,7 +196,7 @@ internal class IncrementalSemanticAnalysis(
      *    unchanged AND no earlier statement that declares a name changed (so its visible scope is identical).
      */
     private fun analyzeFunctionBody(
-        fn: KtNamedFunction, prev: DeclDiags?, session: KotlinAnalysisSession,
+        fn: KtNamedFunction, prevStmts: List<StmtDiags>?, session: KotlinAnalysisSession,
     ): Pair<List<Diagnostic>, List<StmtDiags>> {
         val body = fn.bodyBlockExpression!!
         val statements = body.statements
@@ -191,7 +210,6 @@ internal class IncrementalSemanticAnalysis(
         }
         KotlinPerf.span("localDecl") { checks.localDeclarationChecks(fn, out) }
 
-        val prevStmts = prev?.bodyStmts
         // A structural change (statement added/removed/reordered) → no index alignment, recompute every statement.
         var scopeDirty = prevStmts == null || prevStmts.size != statements.size
         val newStmts = ArrayList<StmtDiags>(statements.size)
@@ -215,5 +233,68 @@ internal class IncrementalSemanticAnalysis(
             if (changed && declares) scopeDirty = true
         }
         return out to newStmts
+    }
+
+    /**
+     * Analyze one top-level class/object, reusing the diagnostics of unchanged MEMBERS (against [prevMembers]).
+     * Returns the class's diagnostics (absolute offsets) plus the per-member cache to store for next time.
+     * Equivalent to a full driver walk of the whole class, verified by `KotlinIncrementalAnalyzeTest`.
+     *
+     * The same split [analyzeFunctionBody] makes for a function's statements, one level up:
+     *  - **frame** — the class node, its modifiers, type parameters, primary constructor, supertype list and
+     *    the class-BODY node, walked fresh each edit but stopping at each member. The cross-member checks live
+     *    here (inheritance/abstract-not-implemented on the class node, duplicate declarations on the class
+     *    body), so they can never be stale-reused.
+     *  - **per-member** — each member's own diagnostics, REUSED when its text is unchanged. Members do not
+     *    need the statements' ordering rule: Kotlin scopes every member over the whole class regardless of
+     *    order, so a member whose text is unchanged can only resolve differently if the class's SIGNATURE
+     *    changed — and that is a header change, which [IncrementalDecls.plan] answers with a full recompute of
+     *    the class (no [prevMembers] reaches here at all).
+     *
+     * A member that is itself a block-bodied function recurses into the statement-level reuse, so a keystroke
+     * inside one method of a large class re-checks one statement of one method.
+     */
+    private fun analyzeClassBody(
+        cls: KtClassOrObject, prevMembers: List<MemberDiags>?, session: KotlinAnalysisSession,
+    ): Pair<List<Diagnostic>, List<MemberDiags>> {
+        val members = cls.declarations
+        val out = ArrayList<Diagnostic>()
+        KotlinPerf.span("frame") {
+            val reporter = DiagnosticReporter()
+            driver.run(cls, session, reporter, stopAt = members.toHashSet())
+            out += reporter.drain()
+        }
+        // A structural change (member added/removed) → no index alignment, recompute every member. (The plan
+        // already forces a full class recompute for that case; this is the belt-and-braces guard.)
+        val aligned = prevMembers != null && prevMembers.size == members.size
+        val newMembers = ArrayList<MemberDiags>(members.size)
+        for ((i, m) in members.withIndex()) {
+            val mBase = m.textRange.startOffset
+            val text = m.text
+            val prevM = if (aligned) prevMembers[i] else null
+            if (prevM != null && prevM.text == text) {
+                prevM.rel.forEach { out += it.copy(range = TextRange(it.range.start + mBase, it.range.end + mBase)) }
+                newMembers += prevM
+                continue
+            }
+            val mfn = m as? KtNamedFunction
+            val diags: List<Diagnostic>
+            val stmts: List<StmtDiags>?
+            if (mfn != null && mfn.bodyBlockExpression != null) {
+                val r = analyzeFunctionBody(mfn, prevM?.bodyStmts, session)
+                diags = r.first; stmts = r.second
+            } else {
+                val reporter = DiagnosticReporter()
+                driver.run(m, session, reporter)
+                diags = reporter.drain(); stmts = null
+            }
+            out += diags
+            newMembers += MemberDiags(
+                text,
+                diags.map { it.copy(range = TextRange(it.range.start - mBase, it.range.end - mBase)) },
+                stmts,
+            )
+        }
+        return out to newMembers
     }
 }

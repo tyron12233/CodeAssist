@@ -165,6 +165,115 @@ class KotlinIncrementalAnalyzeTest {
         assertScopedEqualsFull(v2, v1)
     }
 
+    // ---- intra-CLASS member reuse (one top-level class; an edit re-checks only the touched member) ----
+    //
+    // This is the shape of most real Kotlin files: ONE top-level class. Before per-member reuse, a class's
+    // change key was its whole text, so every keystroke anywhere inside it read as a signature change and the
+    // entire class — i.e. the entire file — was re-checked. Each case below edits one spot and asserts the
+    // scoped result still equals a full walk.
+
+    /** A class with several members, so an edit exercises the per-MEMBER reuse path. */
+    private fun bigClass(
+        header: String = "class View : Any()",
+        prop: String = "private val label: String = \"hi\"",
+        initBlock: String = "init { println(label) }",
+        bodyA: String = "val x = 1",
+        bodyB: String = "val y = 2",
+        sigB: String = "fun beta(): Int",
+        extra: String = "",
+    ): String = buildString {
+        appendLine("package demo")
+        appendLine()
+        appendLine("$header {")
+        appendLine("    $prop")
+        appendLine("    $initBlock")
+        appendLine("    fun alpha() {")
+        appendLine("        $bodyA")
+        appendLine("    }")
+        appendLine("    $sigB {")
+        appendLine("        $bodyB")
+        appendLine("        return 0")
+        appendLine("    }")
+        appendLine("    private class Nested(val n: Int)")
+        if (extra.isNotEmpty()) appendLine("    $extra")
+        appendLine("}")
+    }
+
+    @Test
+    fun methodBodyEditInsideAClassMatchesFull() {
+        assertScopedEqualsFull(bigClass(bodyA = "val x = bogusInMethod"), bigClass(bodyA = "val x = 1"))
+        assertScopedEqualsFull(bigClass(bodyA = "val x = 1"), bigClass(bodyA = "val x = alsoMissing"))
+    }
+
+    @Test
+    fun methodBodyEditShiftingLaterMembersMatchesFull() {
+        // Growing alpha's body shifts the property/init/beta/Nested below it — every reused member's
+        // diagnostics must be re-anchored to its new offset.
+        val v1 = bigClass(bodyA = "val x = 1")
+        val v2 = bigClass(bodyA = "val x = 1\n        val y2 = 2\n        val z = missingHere\n        println(y2)")
+        assertScopedEqualsFull(v1, v2)
+        assertScopedEqualsFull(v2, v1)
+    }
+
+    @Test
+    fun memberSignatureEditInsideAClassMatchesFull() {
+        // beta's parameter list changes — a header change, so the class re-checks fully. Still must equal full.
+        assertScopedEqualsFull(bigClass(sigB = "fun beta(): Int"), bigClass(sigB = "fun beta(seed: Int): Int"))
+    }
+
+    @Test
+    fun propertyInitializerEditInsideAClassMatchesFull() {
+        // A property initializer is NOT a body: it types the property, so it stays in the class's header and
+        // an edit to it invalidates the members that resolve against it. `label.length` is valid on String,
+        // not on Int.
+        val v1 = bigClass(prop = "private val label: String = \"hi\"", bodyA = "val x = label.length")
+        val v2 = bigClass(prop = "private val label = 7", bodyA = "val x = label.length")
+        assertScopedEqualsFull(v1, v2)
+        assertScopedEqualsFull(v2, v1)
+    }
+
+    @Test
+    fun initBlockEditInsideAClassMatchesFull() {
+        assertScopedEqualsFull(bigClass(initBlock = "init { println(label) }"), bigClass(initBlock = "init { println(nopeMissing) }"))
+    }
+
+    @Test
+    fun addingAndRemovingAMemberMatchesFull() {
+        // A structural change to the member list: the per-member cache can't align, so the class recomputes.
+        assertScopedEqualsFull(bigClass(), bigClass(extra = "fun added(): Int = 3"))
+        assertScopedEqualsFull(bigClass(extra = "fun added(): Int = 3"), bigClass())
+    }
+
+    @Test
+    fun aMemberBecomingUsedClearsTheUnusedWarningOnAnUnchangedMember() {
+        // `Nested` is unused in v1 (a private declaration → warning); v2 references it from a method body.
+        // The warning sits on Nested, whose OWN text never changes — so this only passes if the whole-file
+        // checks are recomputed rather than reused per member.
+        val v1 = bigClass(bodyA = "val x = 1")
+        val v2 = bigClass(bodyA = "val x = Nested(1)")
+        assertScopedEqualsFull(v1, v2)
+        assertScopedEqualsFull(v2, v1)
+    }
+
+    @Test
+    fun supertypeEditInsideAClassMatchesFull() {
+        assertScopedEqualsFull(bigClass(header = "class View : Any()"), bigClass(header = "class View"))
+    }
+
+    @Test
+    fun repeatedMethodBodyEditsStayEqualToFull() {
+        // Several keystrokes in a row through the SAME analyzer: each reuses the previous pass's member cache,
+        // so a re-anchoring or alignment bug compounds rather than cancelling out.
+        val srcDir = tempProject(mapOf("Big.kt" to bigClass(bodyA = "val x = 4")))
+        val incremental = KotlinSourceAnalyzer(fakeContext(srcDir))
+        for (v in listOf("val x = 1", "val x = 12", "val x = 123", "val x = missing1", "val x = 4")) {
+            diagsOf(srcDir, "Big.kt", bigClass(bodyA = v), incremental)
+        }
+        val scoped = diagsOf(srcDir, "Big.kt", bigClass(bodyA = "val x = 4"), incremental)
+        val full = diagsOf(srcDir, "Big.kt", bigClass(bodyA = "val x = 4"), KotlinSourceAnalyzer(fakeContext(srcDir)))
+        assertEquals(full, scoped, "scoped analyze diverged from full analyze after repeated member edits")
+    }
+
     companion object {
         private fun body() = KotlinIncrementalAnalyzeTest().file()
     }
