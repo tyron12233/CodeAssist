@@ -16,6 +16,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import java.nio.file.Files
+import java.nio.file.Path
 
 private val EP = ExtensionPoint<String>("test.ep")
 
@@ -52,6 +54,50 @@ class PluginManagerTest {
         )
         assertEquals(listOf("a", "b"), order)
         assertEquals(listOf("a-impl", "b-impl"), reg.extensions(EP))
+    }
+
+    /** Captures the [PluginRegistration.dataDir] a plugin is handed. */
+    private class DataDirPlugin(id: String) : Plugin {
+        override val manifest = PluginManifest(id = id, name = id)
+        lateinit var dir: Path
+            private set
+
+        override fun register(reg: PluginRegistration) {
+            dir = reg.dataDir
+        }
+    }
+
+    @Test
+    fun `each plugin gets its own data directory, created on read`() {
+        val root = Files.createTempDirectory("plugin-data-root")
+        try {
+            val a = DataDirPlugin("alpha")
+            val b = DataDirPlugin("beta")
+            PluginManager(ExtensionRegistryImpl(), dataRoot = root).loadAll(listOf(a, b))
+
+            assertEquals(root.resolve("alpha"), a.dir)
+            assertEquals(root.resolve("beta"), b.dir)
+            assertTrue(Files.isDirectory(a.dir), "reading dataDir must create it, so a plugin can write at once")
+            assertTrue(Files.isDirectory(b.dir))
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `a plugin id that is not a safe path name cannot escape the data root`() {
+        val root = Files.createTempDirectory("plugin-data-root")
+        try {
+            // An id comes from a manifest its author wrote, so it is reduced rather than trusted.
+            val evil = DataDirPlugin("../../etc")
+            PluginManager(ExtensionRegistryImpl(), dataRoot = root).loadAll(listOf(evil))
+            assertTrue(
+                evil.dir.normalize().startsWith(root),
+                "dataDir must stay under the root, was ${evil.dir}",
+            )
+        } finally {
+            root.toFile().deleteRecursively()
+        }
     }
 
     @Test

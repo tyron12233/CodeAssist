@@ -16,6 +16,8 @@ import dev.ide.platform.impl.CompositeDisposable
 import dev.ide.platform.log.Log
 import dev.ide.platform.log.Logger
 import dev.ide.plugin.PluginRegistration
+import java.nio.file.Files
+import java.nio.file.Path
 
 /**
  * The [PluginRegistration] a [PluginManager] hands to one plugin's `register`. It attributes every
@@ -30,9 +32,25 @@ internal class PluginRegistrationImpl(
     private val bus: MessageBus,
     override val hostVersion: String? = null,
     override val appServices: ServiceLookup = ServiceLookup.Empty,
+    /** Where this plugin's [dataDir] goes. See [PluginManager] for what a host supplies and what a
+     *  standalone caller gets instead. */
+    private val dataRoot: Path = defaultDataRoot(),
 ) : PluginRegistration {
 
     override val messageBus: MessageBus get() = bus
+
+    /**
+     * Derived from [pluginId], never from anything the plugin says, so a plugin cannot name another's
+     * directory. `by lazy` because reading it creates it: a plugin that never stores anything should not
+     * leave an empty directory behind, and every plugin's `register` would otherwise make one.
+     */
+    override val dataDir: Path by lazy {
+        // A plugin id is an identifier in practice, but it arrives from a manifest an author wrote, so it is
+        // reduced to path-safe characters rather than trusted: `..` or a separator here would escape the root.
+        val safe = pluginId.value.map { if (it.isLetterOrDigit() || it in "-_.") it else '_' }
+            .joinToString("").trim('.').ifEmpty { "plugin" }
+        dataRoot.resolve(safe).also { runCatching { Files.createDirectories(it) } }
+    }
 
     override fun <T : Any> register(ep: ExtensionPoint<T>, impl: T): Disposable =
         teardown.add(registry.register(ep, impl, pluginId))
@@ -55,3 +73,12 @@ internal class PluginRegistrationImpl(
 
     override fun logger(tag: String): Logger = Log.logger(tag, source = pluginId.value)
 }
+
+/**
+ * Where a plugin's [PluginRegistration.dataDir] goes when no host supplied a root: a per-process temporary
+ * directory. A standalone caller (a test, a one-off bootstrap) has no app storage to point at, and a plugin
+ * under test that writes a file should still work rather than throw on a path that does not exist. Nothing
+ * written there is expected to survive the process.
+ */
+internal fun defaultDataRoot(): Path =
+    Path.of(System.getProperty("java.io.tmpdir"), "codeassist-plugin-data")

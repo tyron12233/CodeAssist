@@ -72,6 +72,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
+import dev.ide.ui.backend.UiTextEdit
 
 /**
  * The code editor surface: the document is a line-indexed buffer ([EditorSession]/EditorDocument), a keystroke
@@ -118,6 +119,8 @@ fun CodeEditor(
      * actions still list but do nothing, so the host must wire this for them to work.
      */
     onEditorAction: suspend (actionId: String, selStart: Int, selEnd: Int) -> Unit = { _, _, _ -> },
+    /** Applies a code action's edits to files other than this one; see [rememberEditorActionsController]. */
+    onOtherFileEdits: suspend (Map<String, List<UiTextEdit>>) -> Unit = { },
     /** Whether typing auto-opens the completion popup (Settings → Completion); Ctrl-Space always works. */
     completionAutoPopup: Boolean = true,
     /** Debounce (ms) before an auto-popup completion request (Settings → Completion → Advanced). */
@@ -180,6 +183,7 @@ fun CodeEditor(
             fontLigatures,
             obscured,
             onEditorAction,
+            onOtherFileEdits,
         )
     }
 }
@@ -210,6 +214,8 @@ private fun CodeEditorContent(
     fontLigatures: Boolean = true,
     obscured: Boolean = false,
     onEditorAction: suspend (actionId: String, selStart: Int, selEnd: Int) -> Unit = { _, _, _ -> },
+    /** Applies a code action's edits to files other than this one; see [rememberEditorActionsController]. */
+    onOtherFileEdits: suspend (Map<String, List<UiTextEdit>>) -> Unit = { },
 ) {
     val colors = Ca.colors
     val scope = rememberCoroutineScope()
@@ -266,7 +272,9 @@ private fun CodeEditorContent(
     // Active snippet/template expansion (tab-stop stepping), or null. Reset when the file changes.
     var snippet by remember(path) { mutableStateOf<SnippetSession?>(null) }
     val sig = rememberSignatureHelpController(path, backend)
-    val acts = rememberEditorActionsController(path, editorSession, backend, onEditorAction) { completion.dismiss() }
+    val acts = rememberEditorActionsController(
+        path, editorSession, backend, onEditorAction, onOtherFileEdits,
+    ) { completion.dismiss() }
     // Animate the "expand selection" gesture: the logical selection snaps to the enclosing node immediately,
     // while the DRAWN highlight grows from the previous range to it over a short tween (1f = settled). Keyed on
     // the request token so each expansion (and each step of a chain) restarts the growth from the new base.

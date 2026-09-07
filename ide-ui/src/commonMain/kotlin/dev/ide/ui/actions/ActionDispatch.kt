@@ -60,7 +60,7 @@ suspend fun IdeUiState.applyActionEffects(
  * The active file is done last: editing another tab has to make it active to drive its session, so doing
  * the active one first would lose the caret the action may still want to place.
  */
-private suspend fun IdeUiState.applyWorkspaceEdits(edits: Map<String, List<UiTextEdit>>) {
+internal suspend fun IdeUiState.applyWorkspaceEdits(edits: Map<String, List<UiTextEdit>>) {
     val activePath = active?.path
     for ((path, fileEdits) in edits.entries.sortedBy { it.key == activePath }) {
         if (fileEdits.isEmpty()) continue

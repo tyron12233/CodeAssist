@@ -7,6 +7,7 @@ import dev.ide.platform.ServiceLookup
 import dev.ide.platform.impl.CompositeDisposable
 import dev.ide.platform.impl.MessageBusImpl
 import dev.ide.plugin.Plugin
+import java.nio.file.Path
 
 /**
  * Loads and unloads [Plugin]s over one [ExtensionRegistry]. The host builds a manager over its application
@@ -32,6 +33,10 @@ class PluginManager(
      *  order registered. Defaults to nothing registered (a standalone test); the host passes its
      *  `ApplicationContainer`. */
     private val appServices: ServiceLookup = ServiceLookup.Empty,
+    /** Where each plugin's [PluginRegistration.dataDir] is created, one subdirectory per plugin id. Null in a
+     *  standalone test, which gets a per-process temporary root instead, so a plugin under test can still
+     *  write; a host passes a directory under its own app storage, which is backed up and cleaned up with it. */
+    private val dataRoot: Path? = null,
 ) {
 
     private class Loaded(val plugin: Plugin, val teardown: CompositeDisposable)
@@ -93,7 +98,12 @@ class PluginManager(
         // registry that only unload() can sweep, and unload() needs the entry to find them.
         loaded[id] = Loaded(plugin, teardown)
         try {
-            plugin.register(PluginRegistrationImpl(id, registry, teardown, bus, hostVersion, appServices))
+            plugin.register(
+                PluginRegistrationImpl(
+                    id, registry, teardown, bus, hostVersion, appServices,
+                    dataRoot ?: defaultDataRoot(),
+                )
+            )
         } catch (t: Throwable) {
             unload(id)
             throw t

@@ -37,7 +37,7 @@ class CodeActionsTest {
         val actions = ide.editorActions(main, text, caret, caret)
         val idx = actions.indexOfFirst { it.title.startsWith("Introduce local variable") }
         assertTrue(idx >= 0, "expected an introduce-variable action, got ${actions.map { it.title }}")
-        val result = applyEdits(text, ide.applyEditorAction(main, text, caret, caret, idx))
+        val result = applyEdits(text, ide.run { applyEditorAction(main, text, caret, caret, idx).editsFor(main) })
         // `format` returns String — the declaration must name that type (never `var`, which is invalid pre-Java 10).
         assertFalse("var " in result, "should use the resolved type, not `var`:\n$result")
         assertTrue(
@@ -58,7 +58,7 @@ class CodeActionsTest {
         val actions = ide.editorActions(main, text, caret, caret)
         val idx = actions.indexOfFirst { it.title.startsWith("Introduce local variable") }
         assertTrue(idx >= 0, "expected an introduce-variable action, got ${actions.map { it.title }}")
-        val result = applyEdits(text, ide.applyEditorAction(main, text, caret, caret, idx))
+        val result = applyEdits(text, ide.run { applyEditorAction(main, text, caret, caret, idx).editsFor(main) })
         assertFalse("var " in result, "should use the resolved type, not `var`:\n$result")
         assertTrue(
             Regex("""List<String> \w+ = java\.util\.Arrays\.asList\("a"\);""").containsMatchIn(result),
@@ -74,7 +74,7 @@ class CodeActionsTest {
         val actions = ide.editorActions(main, text, caret, caret)
         val idx = actions.indexOfFirst { it.title == "Surround with try/catch" }
         assertTrue(idx >= 0, "expected surround-with-try/catch, got ${actions.map { it.title }}")
-        val result = applyEdits(text, ide.applyEditorAction(main, text, caret, caret, idx))
+        val result = applyEdits(text, ide.run { applyEditorAction(main, text, caret, caret, idx).editsFor(main) })
         assertTrue("try {" in result && "catch (Exception e)" in result, "the statement was not wrapped:\n$result")
     }
 
@@ -91,7 +91,7 @@ class CodeActionsTest {
         val actions = ide.editorActions(main, text, at, at)
         val idx = actions.indexOfFirst { it.title.startsWith("Add") && it.title.contains("throws") }
         assertTrue(idx >= 0, "expected add-to-throws, got ${actions.map { it.title }}")
-        val result = applyEdits(text, ide.applyEditorAction(main, text, at, at, idx))
+        val result = applyEdits(text, ide.run { applyEditorAction(main, text, at, at, idx).editsFor(main) })
         assertTrue("throws IOException" in result, "throws clause not added:\n$result")
         assertTrue("import java.io.IOException;" in result, "IOException import not added:\n$result")
     }
@@ -107,7 +107,7 @@ class CodeActionsTest {
         val actions = ide.editorActions(main, text, at, at)
         val idx = actions.indexOfFirst { it.title.contains("Change variable type") }
         assertTrue(idx >= 0, "expected change-variable-type, got ${actions.map { it.title }}")
-        val result = applyEdits(text, ide.applyEditorAction(main, text, at, at, idx))
+        val result = applyEdits(text, ide.run { applyEditorAction(main, text, at, at, idx).editsFor(main) })
         assertTrue(Regex("""\bint n = 5;""").containsMatchIn(result), "declaration not retyped to int:\n$result")
     }
 
@@ -122,7 +122,7 @@ class CodeActionsTest {
         val actions = ide.editorActions(main, text, at, at)
         val idx = actions.indexOfFirst { it.title == "Create method 'compute'" }
         assertTrue(idx >= 0, "expected create-method, got ${actions.map { it.title }}")
-        val result = applyEdits(text, ide.applyEditorAction(main, text, at, at, idx))
+        val result = applyEdits(text, ide.run { applyEditorAction(main, text, at, at, idx).editsFor(main) })
         // `main` is static; `int r = …` gives the return type; args infer the parameter types.
         assertTrue(
             Regex("""private static int compute\(int p0, String p1\)""").containsMatchIn(result),
@@ -137,7 +137,7 @@ class CodeActionsTest {
         val actions = ide.editorActions(main, text, at, at)
         val idx = actions.indexOfFirst { it.title == "Implement methods" }
         assertTrue(idx >= 0, "expected implement-methods, got ${actions.map { it.title }}")
-        val result = applyEdits(text, ide.applyEditorAction(main, text, at, at, idx))
+        val result = applyEdits(text, ide.run { applyEditorAction(main, text, at, at, idx).editsFor(main) })
         assertTrue("@Override" in result && "public void run()" in result, "run() stub not generated:\n$result")
     }
 
@@ -152,7 +152,7 @@ class CodeActionsTest {
         val actions = ide.editorActions(main, text, at, at)
         val idx = actions.indexOfFirst { it.title == "Remove unused import" }
         assertTrue(idx >= 0, "expected remove-unused-import, got ${actions.map { it.title }}")
-        val result = applyEdits(text, ide.applyEditorAction(main, text, at, at, idx))
+        val result = applyEdits(text, ide.run { applyEditorAction(main, text, at, at, idx).editsFor(main) })
         assertFalse("java.util.List" in result, "the unused import was not removed:\n$result")
     }
 }

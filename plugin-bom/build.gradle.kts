@@ -7,9 +7,9 @@ plugins {
 //
 // A plugin compiles against the SPI artifacts and, if it contributes UI, against the exact Compose the IDE
 // bundles: its `@Composable` bodies bind to the IDE's own copy at runtime, so a version the host does not
-// provide is a link error the author sees only after installing the APK on a device. Nine coordinates plus
-// four Compose ones is a lot of numbers to keep right by hand, and the failure lands late. With this, they
-// are one number:
+// provide is a link error the author sees only after installing the APK on a device. Twelve coordinates plus
+// four Compose ones and coroutines is a lot of numbers to keep right by hand, and the failure lands late.
+// With this, they are one number:
 //
 //     dependencies {
 //         compileOnly(platform("io.github.tyron12233:plugin-bom:<version>"))
@@ -42,6 +42,9 @@ fun templatePin(constant: String): String {
 val composeVersion = templatePin("COMPOSE")
 val material3Version = templatePin("MATERIAL3")
 
+/** The coroutines the IDE bundles, read from the version catalog so the BOM cannot pin a different one. */
+val coroutinesVersion: String = libs.versions.coroutines.get()
+
 dependencies {
     constraints {
         // The published SPI. Project dependencies rather than literal coordinates, so a module that changes
@@ -56,6 +59,14 @@ dependencies {
         api(project(":build-api"))
         api(project(":vfs-api"))
         api(project(":interp-api"))
+        api(project(":vcs-api"))
+        api(project(":agent-api"))
+        api(project(":block-api"))
+
+        // Coroutines, which `:agent-api` exposes and which a plugin's own suspend code binds against. Like
+        // Compose, the version has to be the one the IDE bundles rather than whatever a plugin resolves on
+        // its own: a mismatch links at compile time and fails on the device.
+        api("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
 
         // The Compose the IDE provides at runtime. `androidx.compose.*` rather than the Compose
         // Multiplatform coordinates, because a plugin is an Android app and that is what those map to there.

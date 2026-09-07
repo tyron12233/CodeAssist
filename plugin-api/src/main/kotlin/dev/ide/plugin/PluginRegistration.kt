@@ -14,6 +14,7 @@ import dev.ide.platform.ServiceKey
 import dev.ide.platform.ServiceLookup
 import dev.ide.platform.ServiceScopeLevel
 import dev.ide.platform.log.Logger
+import java.nio.file.Path
 
 /**
  * The registrar handed to [Plugin.register]. Every contribution is attributed to this plugin's [pluginId]
@@ -75,6 +76,23 @@ interface PluginRegistration {
      *  contributions), so its subscriptions are removed automatically when the plugin unloads. The normal
      *  way for a plugin to listen: `busConnection().subscribe(SomeTopics.CHANGES, listener)`. */
     fun busConnection(): MessageBusConnection
+
+    /**
+     * A directory this plugin owns, created on first read and removed when the plugin is uninstalled.
+     *
+     * For state that is not a setting: a cache, a downloaded index or ruleset, a small database, a log of the
+     * plugin's own. [dev.ide.platform.settings.PreferenceStore] covers string key/value and nothing else, and
+     * a plugin that picks its own path lands somewhere the IDE neither cleans up nor backs up, differently in
+     * every plugin.
+     *
+     * Application-scoped, so it survives a project switch and is shared across the user's projects. Content
+     * belonging to ONE project belongs in that project instead, through
+     * [dev.ide.model.ModuleResources] or the file system.
+     *
+     * Reading it creates it, so a plugin can write immediately. It is not shared between plugins: the
+     * platform derives it from [pluginId] and a caller cannot ask for another plugin's.
+     */
+    val dataDir: Path
 
     /** A [Logger] whose records are attributed to this plugin (via [pluginId]) so the in-app Logs viewer can
      *  filter by plugin. The attribution is set by the platform and cannot be forged by the caller. */

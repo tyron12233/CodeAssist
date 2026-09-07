@@ -763,6 +763,11 @@ selection as plain strings and offsets, with no model object, so it can resolve 
 services fits better on `ACTION_PROVIDER_EP`, which is given an `AnalysisTarget`.
 
 **From the registrar**, for an APPLICATION-scoped service with no scope object in sight.
+`reg.dataDir` is a directory this plugin owns, created on first read and removed when the plugin is
+uninstalled: for a cache, a downloaded index, a small database, anything that is state rather than a setting.
+It is application-scoped, so it survives a project switch; per-project content belongs in the project, through
+`MODULE_RESOURCES` or the file system.
+
 `reg.appServices` is a read-only
 [`ServiceLookup`](../platform-core/src/main/kotlin/dev/ide/platform/Services.kt) over the application
 container: it resolves keys, and cannot define a service, evict an instance, or dispose a scope.
@@ -2240,6 +2245,9 @@ compileOnly("io.github.tyron12233:analysis-api")      // analyzers, diagnostics,
 compileOnly("io.github.tyron12233:index-api")         // persisted indexes
 compileOnly("io.github.tyron12233:build-api")         // build systems, build plugins, tasks, source generators
 compileOnly("io.github.tyron12233:plugin-ui-api")     // tool windows, screens, overlays (see part 4)
+compileOnly("io.github.tyron12233:vcs-api")           // version-control providers
+compileOnly("io.github.tyron12233:agent-api")         // agent tools, workspace, LLM providers
+compileOnly("io.github.tyron12233:block-api")         // block-editor mappings
 ```
 
 Take only the ones you use; each brings the ones below it transitively (`plugin-ui-api` brings nothing: it
@@ -2515,6 +2523,7 @@ with `Module.service(key)` / `Workspace.service(key)` from an extension point ca
 | `dev.ide.model.MODULE_RESOURCES` | WORKSPACE | `ModuleResources` | A module's resources: generate a file into a content root of any `ContentRole` and have the IDE see it, plus the Android resource model (query `@type/name`, write `res/values` entries and file resources) |
 | `dev.ide.analysis.MODULE_ANALYSIS` | MODULE | `ModuleAnalysis` | The module's `SourceAnalyzer` per language: resolution and diagnostics for code the plugin did not parse |
 | `dev.ide.interp.api.CODE_INTERPRETER` | APPLICATION | `CodeInterpreter` | Run the code in the user's project: lower its Kotlin with no compile step, or run its compiled classes on the bytecode VM (section 14b) |
+| `dev.ide.platform.settings.SETTINGS_ACCESS` | APPLICATION | `SettingsAccess` | Read your own settings page's stored values at any time, not only inside `onChanged` / `onAction` |
 
 The keys an installed plugin can name. The five between `WORKSPACE_SERVICE` and `CODE_INTERPRETER` are
 **narrowed aliases** of engine services listed further down: the interface is the promoted slice, declared in

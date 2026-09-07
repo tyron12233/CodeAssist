@@ -56,7 +56,7 @@ class PackageMismatchInspectionTest {
         val idx = actions.indexOfFirst { it.title == "Set package to 'com.example.core'" }
         assertTrue(idx >= 0, "expected a 'Set package' action; got ${actions.map { it.title }}")
 
-        val fixed = applyEdits(text, s.applyEditorAction(f, text, caret, caret, idx))
+        val fixed = applyEdits(text, s.run { applyEditorAction(f, text, caret, caret, idx).editsFor(f) })
         assertTrue("package com.example.core" in fixed, "the package should be corrected:\n$fixed")
         assertFalse("com.example.wrong" in fixed, "the wrong package should be gone:\n$fixed")
         assertTrue("class Widget" in fixed, "the rest of the file is untouched:\n$fixed")
@@ -76,7 +76,7 @@ class PackageMismatchInspectionTest {
         val idx = actions.indexOfFirst { it.title == "Set package to 'com.example.core'" }
         assertTrue(idx >= 0, "expected a 'Set package' action; got ${actions.map { it.title }}")
 
-        val fixed = applyEdits(text, s.applyEditorAction(f, text, caret, caret, idx))
+        val fixed = applyEdits(text, s.run { applyEditorAction(f, text, caret, caret, idx).editsFor(f) })
         assertTrue("package com.example.core;" in fixed, "the package should be corrected (with semicolon):\n$fixed")
         assertFalse("com.example.wrong" in fixed, "the wrong package should be gone:\n$fixed")
     }

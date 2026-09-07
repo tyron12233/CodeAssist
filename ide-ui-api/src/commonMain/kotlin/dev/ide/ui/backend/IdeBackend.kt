@@ -1380,6 +1380,25 @@ data class UiTextRange(val start: Int, val end: Int)
 data class UiTextEdit(val start: Int, val end: Int, val newText: String)
 
 /**
+ * What a code action produced: the edits for the buffer it was invoked in, and the edits it makes to OTHER
+ * files, keyed by absolute path.
+ *
+ * The split is the two ways an edit has to be applied. [focal] goes through the editor session, so it lands
+ * in the same undo step as typing and the caret can be placed against it. [others] goes through the
+ * multi-file writer, which edits an open tab in place and writes a closed file through.
+ *
+ * [others] used to be discarded at this boundary: the round trip returned a flat edit list, so a fix that
+ * touched a second file half-applied with no error and no log. None of the built-in fixes do it, which is
+ * why it went unnoticed, and it is the ordinary case for a plugin's.
+ */
+data class UiActionEdits(
+    val focal: List<UiTextEdit> = emptyList(),
+    val others: Map<String, List<UiTextEdit>> = emptyMap(),
+) {
+    val isEmpty: Boolean get() = focal.isEmpty() && others.values.all { it.isEmpty() }
+}
+
+/**
  * Post-accept caret placement, neutral to the language that produced it: put the caret [offset] chars into
  * the inserted text and, if [selectionLength] > 0, select that many chars from there (a placeholder to
  * overtype). The editor clamps both into the inserted range.

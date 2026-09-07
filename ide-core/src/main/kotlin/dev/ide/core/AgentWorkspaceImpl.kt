@@ -290,9 +290,11 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
             val (start, end) = lineRange(text, line)
             val actions = engine().editorActions(file, text, start, end)
             if (index !in actions.indices) return@background null
-            val edits = engine().applyEditorAction(file, text, start, end, index)
-            if (edits.isNotEmpty()) engine().applyDocumentEdits(file, edits)
-            actions[index].title to edits.size
+            // Every file the fix touches, not just this one: a fix that adds an import in another file used
+            // to have that half silently dropped.
+            val byFile = engine().applyEditorAction(file, text, start, end, index)
+            byFile.forEach { (target, edits) -> engine().applyDocumentEdits(target, edits) }
+            actions[index].title to byFile.values.sumOf { it.size }
         } ?: throw IllegalArgumentException("No quick fix at index $index on line $line.")
         ctx.bumpFileSystemEpoch()
         return "Applied \"${applied.first}\" (${applied.second} edit(s))."

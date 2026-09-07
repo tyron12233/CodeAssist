@@ -2634,14 +2634,18 @@ class IdeServices private constructor(
 
     /**
      * Compute (don't apply) the edits of the action at [index] in [editorActions]'s list for [file]'s buffer
-     * [text] at `[start, end)`, returning the document edits for [file] itself — the editor applies them to
-     * its buffer (the action round-trip, like a block edit). Edits in other files (rare; none of the
-     * built-ins do this) are not returned here.
+     * [text] at `[start, end)`, keyed by the file each one belongs to.
+     *
+     * EVERY file the action touches is returned, [file] included. It used to return only [file]'s own edits,
+     * on the reasoning that no built-in fix reaches past the current file; a `QuickFix` returns a
+     * [WorkspaceEdit] keyed by file, so the API invites the multi-file case, and dropping the rest here made
+     * such a fix half-apply with no error and no log. Applying is still the caller's: [file]'s edits go
+     * through the editor session (undoable, caret-aware) and the others through the multi-file writer.
      */
     fun applyEditorAction(
         file: Path, text: String, start: Int, end: Int, index: Int
-    ): List<DocumentEdit> {
-        if (analysisDisabled(file) || moduleForEditableFile(file) == null) return emptyList()
+    ): Map<Path, List<DocumentEdit>> {
+        if (analysisDisabled(file) || moduleForEditableFile(file) == null) return emptyMap()
         updateDocument(file, text)
         val vf = store.vfs.fileFor(file)
         return try {
@@ -2649,12 +2653,19 @@ class IdeServices private constructor(
                 analysisEngine.computeActionEdits(
                     vf, TextRange(start, end), index
                 )
-            }.edits.entries.firstOrNull { it.key.path == vf.path }?.value ?: emptyList()
+            }.edits.entries
+                .filter { it.value.isNotEmpty() }
+                .associate { Paths.get(it.key.path) to it.value }
         } catch (e: LinkageError) {
             analysisUnavailable.add(languageFor(file))
-            emptyList()
+            emptyMap()
         }
     }
+
+    /** The edits for [file] itself out of an [applyEditorAction] result: the ones the editor applies to the
+     *  buffer the action ran in, as opposed to the other files it also touched. */
+    internal fun Map<Path, List<DocumentEdit>>.editsFor(file: Path): List<DocumentEdit> =
+        this[file.toAbsolutePath().normalize()].orEmpty()
 
     // ---- rename refactoring ----------------------------------------------------------------------
 
@@ -4480,10 +4491,15 @@ class IdeServices private constructor(
         }
 
         /** The plain-Java multi-module demo (`app → util → core`) — the fixture for the Java build/run/completion tests. */
-        fun bootstrapJavaDemo(root: Path): IdeServices {
+        fun bootstrapJavaDemo(
+            root: Path,
+            /** Defaulted, like the sibling factories: a caller that needs to contribute an extension the
+             *  engine snapshots at construction (analyzers, action providers) builds the environment,
+             *  registers on it, and passes it here. */
+            env: ApplicationEnvironment = ApplicationEnvironment(),
+        ): IdeServices {
             if (Files.exists(root)) root.toFile().deleteRecursively()
             Files.createDirectories(root)
-            val env = ApplicationEnvironment()
             val (platform, store) = openStore(root, env)
             store.replaceSdks(listOf(JdkSdkProvider.detect()))
             SampleProject.generate(

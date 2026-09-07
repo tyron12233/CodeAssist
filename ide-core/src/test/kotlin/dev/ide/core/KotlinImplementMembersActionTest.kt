@@ -64,7 +64,7 @@ class KotlinImplementMembersActionTest {
         val idx = actions.indexOfFirst { it.title == "Implement members" }
         assertTrue(idx >= 0, "expected an 'Implement members' action; got ${actions.map { it.title }}")
 
-        val result = applyEdits(text, s.applyEditorAction(probe, text, caret, caret, idx))
+        val result = applyEdits(text, s.run { applyEditorAction(probe, text, caret, caret, idx).editsFor(probe) })
         assertTrue(
             Regex("""override fun run\(input: String\): Int""").containsMatchIn(result),
             "the override stub for `run` was not generated:\n$result",

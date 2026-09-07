@@ -19,6 +19,7 @@ import dev.ide.plugin.impl.ExternalPluginLoader
 import dev.ide.plugin.impl.PluginCatalog
 import dev.ide.plugin.impl.PluginManager
 import dev.ide.ui.ext.UiPlugin
+import java.nio.file.Path
 
 /**
  * An installed plugin as the host saw it this launch: the manifest its package declared, where it came from,
@@ -68,6 +69,12 @@ class ApplicationEnvironment(
      *  that check (the host did not supply a version). Also read by the editor's manifest checks, so an
      *  authored `minHostVersion` is judged against the same value the loader uses. */
     val hostVersion: String? = null,
+    /**
+     * Where each plugin's `PluginRegistration.dataDir` is created, one subdirectory per plugin id. The host
+     * passes a directory under its own app storage so a plugin's files are backed up and removed with the
+     * app; null (desktop bootstraps, tests) falls back to a per-process temporary root.
+     */
+    val pluginDataRoot: Path? = null,
 ) : AutoCloseable {
 
     /** The app substrate: app-global extension registry + message bus + model lock. */
@@ -89,7 +96,7 @@ class ApplicationEnvironment(
     /** Drives the IDE's built-in plugins onto [platform]'s app-global registry. The app-wide message bus is
      *  passed so a plugin's registrar can publish/subscribe on the same bus the engine's events flow through. */
     private val pluginManager =
-        PluginManager(platform.extensions, platform.messageBus, hostVersion, container)
+        PluginManager(platform.extensions, platform.messageBus, hostVersion, container, pluginDataRoot)
 
     /**
      * The built-in plugin catalog: every built-in plus which are active, given the host's persisted disabled

@@ -56,6 +56,8 @@ import dev.ide.ui.backend.UiTextEdit
 import dev.ide.ui.backend.UiTextRange
 import java.nio.file.Paths
 import kotlinx.coroutines.withContext
+import dev.ide.lang.incremental.DocumentEdit
+import dev.ide.ui.backend.UiActionEdits
 
 /**
  * [EditorService]: the editor-time language features for the active buffer. Runs on the shared serialized
@@ -421,11 +423,21 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     override suspend fun applyAction(
         path: String, text: String, selStart: Int, selEnd: Int, actionId: Int
-    ): List<UiTextEdit> = withContext(ctx.engineDispatcher) {
-        ctx.services.applyEditorAction(
-            Paths.get(path), text, selStart, selEnd, actionId
+    ): UiActionEdits {
+        val focalPath = Paths.get(path).toAbsolutePath().normalize()
+        val byFile = withContext(ctx.engineDispatcher) {
+            ctx.services.applyEditorAction(focalPath, text, selStart, selEnd, actionId)
+        }
+        return UiActionEdits(
+            focal = byFile[focalPath].orEmpty().map { it.toUiTextEdit() },
+            others = byFile.filterKeys { it != focalPath }
+                .map { (file, edits) -> file.toString() to edits.map { it.toUiTextEdit() } }
+                .toMap(),
         )
-    }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
+    }
+
+    private fun DocumentEdit.toUiTextEdit() =
+        UiTextEdit(offset, offset + oldLength, newText.toString())
 
     override suspend fun formatDocument(path: String, text: String): List<UiTextEdit> {
         val style = currentFormatStyle(path)

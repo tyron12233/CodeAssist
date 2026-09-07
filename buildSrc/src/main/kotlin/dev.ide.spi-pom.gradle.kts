@@ -60,6 +60,16 @@ publishing {
                     "interp-api" ->
                         "The CodeAssist interpreter SPI: lowering a project's Kotlin and running it, or its " +
                             "compiled classes, from a plugin, for a preview or a run of the plugin's own."
+                    "vcs-api" ->
+                        "The CodeAssist version-control SPI: the repository, branch, commit and status " +
+                            "model, the provider extension point a checkout is resolved through, and the " +
+                            "account, credential and forge ports a sign-in flow is built on."
+                    "agent-api" ->
+                        "The CodeAssist coding-agent SPI: the tools an agent can call, the workspace it " +
+                            "reads and edits, and the provider-neutral LLM interface behind it."
+                    "block-api" ->
+                        "The CodeAssist block-editor SPI: the projection of a language's syntax tree onto " +
+                            "a block surface, and the mapping a language contributes to define it."
                     "plugin-bom" ->
                         "Versions for everything a CodeAssist plugin compiles against: the SPI artifacts " +
                             "and the Compose the IDE provides at runtime."

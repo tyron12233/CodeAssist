@@ -52,6 +52,7 @@ import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
+import dev.ide.ui.actions.applyWorkspaceEdits
 
 /**
  * Top bar + deps progress + tabs + breadcrumb row + the code canvas — the editor column shared by both
@@ -292,6 +293,10 @@ internal fun EditorCenter(
                         // effects (edit, move the caret, open a file, navigate) behave identically. The caret
                         // snapshot is fetched at invoke time rather than kept on hand: it is only needed when
                         // an action actually runs, and refetching it guarantees it matches this buffer.
+                        // A fix that reaches past this buffer (an import added in another file, a
+                        // declaration moved) goes through the multi-file writer, which edits an open tab in
+                        // place and writes a closed file through. Dropped here until it was wired up.
+                        onOtherFileEdits = { edits -> state.applyWorkspaceEdits(edits) },
                         onEditorAction = { actionId, selStart, selEnd ->
                             state.dispatchAction(
                                 actionId,

@@ -54,7 +54,7 @@ class UnifiedLanguageAnalysisTest {
         val actions = s.editorActions(layout, text, caret, caret)
         val idx = actions.indexOfFirst { it.title.contains("xmlns:android") }
         assertTrue(idx >= 0, "an 'Add xmlns:android' fix should be offered: ${actions.map { it.title }}")
-        val edits = s.applyEditorAction(layout, text, caret, caret, idx)
+        val edits = s.run { applyEditorAction(layout, text, caret, caret, idx).editsFor(layout) }
         assertTrue(edits.any { it.newText.contains("xmlns:android") }, "applying the fix should insert the namespace: $edits")
     }
 }

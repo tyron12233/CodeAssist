@@ -102,6 +102,16 @@ const val PLUGIN_API_VERSION: Int = 3
  *    for had all three implied. A module whose type is not Android's is answered, not thrown at.
  *
  * A plugin that writes declares [PluginCapabilities.FS_WRITE]; nothing here needed a capability of its own.
+ *
+ * `2.2.0` also opened three SPI modules that were finished and simply never published, none of which needed
+ * an API change to do it: `vcs-api` (version-control providers, which the built-in Git plugin already
+ * dogfoods), `agent-api` (agent tools, the workspace they act on, and the provider-neutral LLM interface),
+ * and `block-api` (block-editor mappings). `plugin-bom` therefore pins coroutines as well as Compose, since
+ * `agent-api` exposes `Flow` and a plugin's suspend code has to bind to the copy the IDE bundles.
+ *
+ * And it added [PluginRegistration.dataDir], a directory a plugin owns for state that is not a setting:
+ * [dev.ide.platform.settings.PreferenceStore] covers string key/value, and a plugin with a cache or a
+ * downloaded index was otherwise picking a path the IDE neither cleans up nor backs up.
  */
 const val PLUGIN_SPI_VERSION: String = "2.2.0"
 

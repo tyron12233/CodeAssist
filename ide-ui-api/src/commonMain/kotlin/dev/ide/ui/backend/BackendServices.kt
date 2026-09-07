@@ -142,8 +142,15 @@ interface EditorService {
      */
     suspend fun caretContext(path: String, text: String, offset: Int): UiCaretContext? = null
 
-    /** Compute the edits for the code action [actionId] from [actionsAt] over the same buffer + selection. */
-    suspend fun applyAction(path: String, text: String, selStart: Int, selEnd: Int, actionId: Int): List<UiTextEdit> = emptyList()
+    /**
+     * Compute the edits for the code action [actionId] from [actionsAt] over the same buffer + selection.
+     *
+     * Returns the focal buffer's edits and any it makes to other files separately, because the two are
+     * applied by different paths; see [UiActionEdits].
+     */
+    suspend fun applyAction(
+        path: String, text: String, selStart: Int, selEnd: Int, actionId: Int,
+    ): UiActionEdits = UiActionEdits()
 
     /** Reformat the whole buffer to the active code style. Empty if unsupported / already formatted. */
     suspend fun formatDocument(path: String, text: String): List<UiTextEdit> = emptyList()

@@ -22,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
+import dev.ide.ui.backend.UiTextEdit
 
 /**
  * Code-actions (the lightbulb: quick-fixes + caret intentions) and the diagnostic sheet, pulled out of
@@ -42,6 +43,10 @@ internal class EditorActionsController(
     /** Runs a plugin-tier editor action (see [UiAction.actionId]) through the host's action dispatcher. */
     private val onPluginAction: suspend (actionId: String, selStart: Int, selEnd: Int) -> Unit =
         { _, _, _ -> },
+    /** Applies the edits an action makes to files OTHER than this one, through the host's multi-file writer
+     *  (an open tab edited in place, a closed file written through). This controller drives one session and
+     *  cannot reach another tab itself. */
+    private val onOtherFileEdits: suspend (Map<String, List<UiTextEdit>>) -> Unit = { },
 ) {
     var available by mutableStateOf<List<UiAction>>(emptyList())
         private set
@@ -261,10 +266,15 @@ internal class EditorActionsController(
         }
         val text = session.doc.text
         scope.launch {
-            val raw = runCatching { backend.editor.applyAction(path, text, ctxStart, ctxEnd, act.id) }.getOrNull().orEmpty()
-            if (raw.isEmpty()) return@launch
+            val result = runCatching { backend.editor.applyAction(path, text, ctxStart, ctxEnd, act.id) }
+                .getOrNull() ?: return@launch
+            if (result.isEmpty) return@launch
+            // The other files first: editing another tab has to make it active, and doing that after this
+            // buffer's edit would move the caret away from where the fix just put it.
+            if (result.others.isNotEmpty()) runCatching { onOtherFileEdits(result.others) }
+            if (result.focal.isEmpty()) return@launch
             val len = session.doc.length
-            val edits = raw.map { e ->
+            val edits = result.focal.map { e ->
                 val st = e.start.coerceIn(0, len)
                 RangeEdit(st, e.end.coerceIn(st, len), e.newText, st + e.newText.length)
             }
@@ -291,15 +301,19 @@ internal fun rememberEditorActionsController(
     session: EditorSession,
     backend: IdeBackend,
     onPluginAction: suspend (actionId: String, selStart: Int, selEnd: Int) -> Unit = { _, _, _ -> },
+    onOtherFileEdits: suspend (Map<String, List<UiTextEdit>>) -> Unit = { },
     dismissCompletion: () -> Unit,
 ): EditorActionsController {
     val scope = rememberCoroutineScope()
-    // The callback is re-read through a ref so a recomposition with a new lambda does not rebuild the
+    // The callbacks are re-read through a ref so a recomposition with a new lambda does not rebuild the
     // controller (which would drop the open menu and the resolved action list).
     val cb = rememberUpdatedState(onPluginAction)
+    val other = rememberUpdatedState(onOtherFileEdits)
     return remember(path) {
-        EditorActionsController(session, backend, path, scope, dismissCompletion) { id, s, e ->
-            cb.value(id, s, e)
-        }
+        EditorActionsController(
+            session, backend, path, scope, dismissCompletion,
+            onPluginAction = { id, s, e -> cb.value(id, s, e) },
+            onOtherFileEdits = { edits -> other.value(edits) },
+        )
     }
 }

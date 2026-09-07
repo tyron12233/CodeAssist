@@ -149,6 +149,9 @@ class ProjectManager private constructor(
         consentedPluginIds = consentedPlugins(),
         pluginSources = pluginSources,
         hostVersion = hostVersion,
+        // Under the app's own home rather than a cache dir: a plugin's data is its state, not something the
+        // IDE may drop to reclaim space, and it is swept up by the same backup the projects are.
+        pluginDataRoot = homeDir.resolve("plugin-data"),
     )
 
     /**

@@ -410,8 +410,9 @@ declared and shown at the consent gate, but nothing enforces it yet.
   promoted members are frozen as plugin API while the rest of each service stays `internal`. What is left is
   case-by-case: the remaining keys in Appendix C are still built-in-only, the public platform ports
   (`ANALYTICS_SERVICE`, `NOTIFICATION_PRESENTER`, the Store ports) still sit in an unpublished module, and
-  there is still no pull-style read of a plugin's own settings (a `SettingsPage` only receives its values
-  in `onChanged` / `onAction`). Promote each the same way, or grow the host facade that
+  a plugin still has no way to raise a notification, ask a question or report progress. Reading a plugin's
+  own settings outside a callback is no longer among these: `SETTINGS_ACCESS` (published `platform-core`)
+  answers it. Promote each the same way, or grow the host facade that
   `PluginRegistration.hostVersion` starts, which is also where `capabilities` enforcement would land. The
   full inventory, and what each tier can name, is in
   [writing-plugins.md, Appendix C](writing-plugins.md#appendix-c-service-index).
