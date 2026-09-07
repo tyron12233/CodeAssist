@@ -32,7 +32,7 @@ const val PLUGIN_API_VERSION: Int = 3
  * scaffolded with a coordinate that resolves:
  *
  * ```
- * compileOnly(platform("io.github.tyron12233:plugin-bom:2.1.0"))
+ * compileOnly(platform("io.github.tyron12233:plugin-bom:2.2.0"))
  * compileOnly("io.github.tyron12233:plugin-api")
  * compileOnly("io.github.tyron12233:platform-core")
  * ```
@@ -83,8 +83,27 @@ const val PLUGIN_API_VERSION: Int = 3
  *  - the `interp.run` and `ui.editorPreview` capabilities.
  *
  * `docs/plugin-interpreter.md` is the guide to that surface.
+ *
+ * `2.2.0` opened the user's resources: [dev.ide.model.ModuleResources] (the `platform.moduleResources`
+ * service), through which a plugin reads what a module holds and generates into it. Additive over `2.1.0` in
+ * an already-published artifact (`project-model-api`), so [PLUGIN_API_VERSION] stays at `3` and no coordinate
+ * is added to `plugin-bom`. It added:
+ *
+ *  - the module-type-neutral half: `resourceRoots` and `putResourceFile` over any [dev.ide.model.ContentRole],
+ *    plus [dev.ide.model.contentRootsFor] under them. This is what "generate a file into the user's module
+ *    and have the IDE notice" needed: writing the file was always possible, and getting the build, the index
+ *    and the editor to see it was not. It works on `src/main/resources`, on `assets/`, and on a role a plugin
+ *    defined for a module type of its own;
+ *  - the Android resource model on top: the query half ([dev.ide.model.ResourceEntry],
+ *    [dev.ide.model.ResourceFilter]), reading the same merged, buffer-aware repository the IDE's own
+ *    `@type/name` resolution and synthetic `R` read, and `putValueResource`/`createResourceFile`, which are
+ *    the engine's resource authoring with the module, the conflict policy and the outcome named
+ *    ([dev.ide.model.ResourceConflict], [dev.ide.model.ResourceWrite]) where the quick fix they were written
+ *    for had all three implied. A module whose type is not Android's is answered, not thrown at.
+ *
+ * A plugin that writes declares [PluginCapabilities.FS_WRITE]; nothing here needed a capability of its own.
  */
-const val PLUGIN_SPI_VERSION: String = "2.1.0"
+const val PLUGIN_SPI_VERSION: String = "2.2.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry

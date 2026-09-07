@@ -798,11 +798,11 @@ A key is usable only if you can name its type, and that differs by tier:
 Resolution itself is available to both tiers: `reg.appServices` for APPLICATION scope, and
 `Module.service` / `Workspace.service` from the callbacks above. What differs is what you can *name*.
 
-Six engine capabilities are nameable from the published SPI. `WORKSPACE_SERVICE` is the bound `Workspace`.
-Four are the promoted services (`BUILD_CONTROL`, `SYMBOL_SEARCH`, `MODULE_SOURCES`, `MODULE_ANALYSIS`), each
-declared in the api module whose types it already speaks, and each typed to a *narrowed* interface rather
-than to the engine class behind it. The sixth is `CODE_INTERPRETER` (`interp-api`), the only one at
-APPLICATION scope: it runs the code in the user's project, and it follows whichever project is open rather
+Seven engine capabilities are nameable from the published SPI. `WORKSPACE_SERVICE` is the bound `Workspace`.
+Five are the promoted services (`BUILD_CONTROL`, `SYMBOL_SEARCH`, `MODULE_SOURCES`, `MODULE_ANALYSIS`,
+`MODULE_RESOURCES`), each declared in the api module whose types it already speaks, and each typed to a
+*narrowed* interface rather than to the engine class behind it. The seventh is `CODE_INTERPRETER`
+(`interp-api`), the only one at APPLICATION scope: it runs the code in the user's project, and it follows whichever project is open rather
 than being scoped to one (see section 14b). `:ide-core` registers the narrow key
 alongside its own and resolves both to one instance, so a plugin and the IDE act on the same build, the same
 index, and the same module model.
@@ -1968,6 +1968,88 @@ program's frames and forwards pointer and key events, which is how the AWT/Swing
 
 `docs/plugin-interpreter.md` covers the design, including what is deliberately not exposed and why.
 
+## 14c. Generate into the user's project
+
+Writing a file into a module is easy. Getting the IDE to *see* it is the part a plugin cannot do on its own:
+the build's staleness check, the indexes, the synthetic classes (Android's `R`, ViewBinding) and the editor's
+resolution all hang off the workspace's file-event stream, and a plugin that writes with `java.nio` and stops
+there has produced a file nothing knows about until the next full reopen.
+
+`MODULE_RESOURCES` (`dev.ide.model.ModuleResources`, WORKSPACE) is the write that publishes.
+
+### Any module type
+
+`resourceRoots` and `putResourceFile` are phrased in `ContentRole`, so they are not about Android:
+
+```kotlin
+val resources = workspace.service(MODULE_RESOURCES)
+
+when (val write = resources.putResourceFile(
+    module,
+    ContentRole.RESOURCE,               // src/main/resources on a JVM module
+    "META-INF/services/dev.ide.Thing",  // may name directories; a path that escapes the root is refused
+    text,
+    onConflict = ResourceConflict.FAIL, // or RENAME (suffixes the base name) / REPLACE
+)) {
+    is ResourceWrite.Written -> log.info("wrote ${write.file}")
+    is ResourceWrite.AlreadyExists -> log.info("left ${write.file} alone")
+    ResourceWrite.NoResourceRoot -> log.info("this module type declares no such root")
+    else -> log.warn("not written: $write")
+}
+```
+
+`ContentRole` is open, so the role can be `RESOURCE`, `ASSETS`, `ANDROID_RES`, or one your own module type
+declares. `resourceRoots(module, role)` returns the module's own roots for that role with the `main` source
+set's first, which is where a write lands: a file authored into `src/debug/res` is missing from every build
+that does not select that variant. A module that declares no root of the role answers `NoResourceRoot`, so a
+plugin sweeping a mixed project does not have to ask what kind of module it landed on. There is a `ByteArray`
+overload for content that is not text.
+
+If the module has no root yet, `MODULE_SOURCES` declares one (`addSourceRoot`) and the two compose.
+
+Give a `when` over `ResourceWrite` an `else`: an outcome added in a later SPI minor must not stop your plugin
+compiling.
+
+### Android's resource model
+
+On top of that, the same service speaks `@type/name`. The read side is the merged, buffer-aware repository the
+IDE's own reference resolution and synthetic `R` read, so you see what the editor sees, a `<string>` typed into
+an open `res/` file and not yet saved included:
+
+```kotlin
+resources.has(module, "string", "app_name")             // dependency modules and AARs included
+resources.names(module, "string")                       // what R.string exposes
+resources.find(module, ResourceFilter(rClass = "color", namePrefix = "brand_"))
+resources.find(module, ResourceFilter(nameContains = "title", limit = 20))
+resources.find(module, ResourceFilter(rClass = "style", allConfigs = true))   // one entry per config
+```
+
+`ResourceFilter.moduleOnly` narrows to what the module declares itself. That is a different question from
+`has`: overriding a library's `@string/app_name` is what an override *is*, so "defined somewhere on the
+classpath" must not be read as "taken".
+
+The write side is the code behind the editor's own "Create `@string/…`" fix:
+
+```kotlin
+resources.putValueResource(module, "string", "greeting", "Hello")   // res/values/strings.xml
+resources.createResourceFile(module, "layout", "activity_detail")   // res/layout/…, with a valid stub
+```
+
+`putValueResource` picks the file the type conventionally lives in (`strings.xml`, `colors.xml`,
+`dimens.xml`, else `values.xml`), escapes the value, and creates the file if it is not there.
+`isValueType` / `isFileType` say which of the two a given R class belongs to. Conflicts are judged against
+what the module declares itself in the default config, which is where the write goes.
+
+A module whose type is not Android's answers empty from every query here and `NoResourceRoot` from every
+write, rather than throwing.
+
+### When not to use it
+
+These writes go to disk and publish, which means they write **through** an open editor buffer of the same
+file rather than through it. When the target is a file the user is looking at, use the editor tier instead:
+an `ActionEffect.ApplyWorkspaceEdit` from a `UI_ACTION_EP` action, or a `WorkspaceEdit` from a `QuickFix`,
+both of which go through the editor's own text path and land in the same undo step as typing.
+
 ## 15. Ship your plugin as its own app
 
 Everything above is the internal tier, where a plugin is a module inside the IDE. A plugin can instead be a
@@ -2090,7 +2172,7 @@ the IDE's own runtime:
 ```kotlin
 dependencies {
     // The BOM carries the versions, including the Compose the IDE provides.
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.1.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.2.0"))
 
     compileOnly("io.github.tyron12233:plugin-ui-api")
     compileOnly("androidx.compose.runtime:runtime")
@@ -2148,7 +2230,7 @@ not part of it, so an id or an anchor that is wrong still shows up only once the
 The engine SPI is published, so the extension points in these modules are available to a plugin app:
 
 ```kotlin
-compileOnly(platform("io.github.tyron12233:plugin-bom:2.1.0")) // one version for everything below
+compileOnly(platform("io.github.tyron12233:plugin-bom:2.2.0")) // one version for everything below
 
 compileOnly("io.github.tyron12233:plugin-api")        // actions, menus, palette commands
 compileOnly("io.github.tyron12233:platform-core")     // scoped services, settings pages, logging
@@ -2179,7 +2261,7 @@ The SPI is published, so it is an ordinary dependency:
 
 ```kotlin
 dependencies {
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.1.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.2.0"))
     compileOnly("io.github.tyron12233:plugin-api")
     compileOnly("io.github.tyron12233:platform-core")
 }
@@ -2356,6 +2438,8 @@ See also [extension-points.md](extension-points.md) for how the built-ins are wi
 | `dev.ide.model.template.ProjectTemplate` / `ProjectScaffold` / `TemplateParameter` | [ProjectTemplate.kt](../project-model-api/src/main/kotlin/dev/ide/model/template/ProjectTemplate.kt) |
 | `dev.ide.model.sync.ProjectImporter` / `ExternalProjectModel` / `BuildFileWriter` | [ProjectSync.kt](../project-model-api/src/main/kotlin/dev/ide/model/sync/ProjectSync.kt) |
 | `dev.ide.model.ModuleSources` | [ModuleSources.kt](../project-model-api/src/main/kotlin/dev/ide/model/ModuleSources.kt) |
+| `dev.ide.model.ModuleResources` / `ResourceEntry` / `ResourceFilter` / `ResourceConflict` / `ResourceWrite` | [ModuleResources.kt](../project-model-api/src/main/kotlin/dev/ide/model/ModuleResources.kt) |
+| `dev.ide.model.contentRootsFor` | [ProjectModel.kt](../project-model-api/src/main/kotlin/dev/ide/model/ProjectModel.kt) |
 
 The four registries are the read side of the model's extension points; they moved here from the unpublished
 `:project-model-impl` in SPI `2.0.0`, so a plugin resolves module types, facet codecs, templates and file
@@ -2428,10 +2512,11 @@ with `Module.service(key)` / `Workspace.service(key)` from an extension point ca
 | `dev.ide.build.BUILD_CONTROL` | WORKSPACE | `BuildControl` | Start or stop the build; compile and run a module's `main` and capture its output |
 | `dev.ide.index.SYMBOL_SEARCH` | WORKSPACE | `SymbolSearch` | Symbol and member lookup over the workspace indexes |
 | `dev.ide.model.MODULE_SOURCES` | WORKSPACE | `ModuleSources` | A module's source sets and source roots, including adding one |
+| `dev.ide.model.MODULE_RESOURCES` | WORKSPACE | `ModuleResources` | A module's resources: generate a file into a content root of any `ContentRole` and have the IDE see it, plus the Android resource model (query `@type/name`, write `res/values` entries and file resources) |
 | `dev.ide.analysis.MODULE_ANALYSIS` | MODULE | `ModuleAnalysis` | The module's `SourceAnalyzer` per language: resolution and diagnostics for code the plugin did not parse |
 | `dev.ide.interp.api.CODE_INTERPRETER` | APPLICATION | `CodeInterpreter` | Run the code in the user's project: lower its Kotlin with no compile step, or run its compiled classes on the bytecode VM (section 14b) |
 
-The keys an installed plugin can name. The four between `WORKSPACE_SERVICE` and `CODE_INTERPRETER` are
+The keys an installed plugin can name. The five between `WORKSPACE_SERVICE` and `CODE_INTERPRETER` are
 **narrowed aliases** of engine services listed further down: the interface is the promoted slice, declared in
 the api module whose types it already speaks, and `IdeCoreServicesPlugin` registers it against the same
 instance the internal key resolves. So a plugin gets the live service, and the members it can reach are the
@@ -2462,7 +2547,7 @@ above.
 | `REFACTOR_SERVICE` | WORKSPACE | The Java rename refactoring |
 | `LANGUAGE_FEATURE_SERVICE` | WORKSPACE | On-demand editor features that delegate to a language backend |
 | `KOTLIN_EDITOR_SERVICE` | WORKSPACE | Kotlin-analyzer-backed editor queries |
-| `ANDROID_RESOURCE_SERVICE` | WORKSPACE | Android resource navigation and preview |
+| `ANDROID_RESOURCE_SERVICE` | WORKSPACE | Android resource navigation, preview, query and authoring. **SPI**: `MODULE_RESOURCES` |
 | `COMPOSE_PREVIEW_SERVICE` | WORKSPACE | The on-device Compose `@Preview` interpreter path |
 | `ICON_MANAGER_SERVICE` | WORKSPACE | Browsable icon repositories and a module's existing drawables |
 | `INTERPRETER_LOWERING` | WORKSPACE | Lowers a Kotlin declaration for the plugin-facing interpreter. **SPI**: reached through `CODE_INTERPRETER` |

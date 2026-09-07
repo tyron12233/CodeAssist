@@ -111,6 +111,7 @@ import dev.ide.lang.xml.XmlLanguageBackend
 import dev.ide.lang.xml.lint.XmlAnalysisSupport
 import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.FileIconRegistry
+import dev.ide.model.MODULE_RESOURCES
 import dev.ide.model.MODULE_SOURCES
 import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.ProjectTemplateRegistry
@@ -799,9 +800,12 @@ private class IdeCoreServicesPlugin : Plugin {
         // The same instances again, under the keys the PUBLISHED api modules declare, so an installed
         // plugin can NAME them: it compiles against build-api / index-api / project-model-api /
         // analysis-api, never against `:ide-core`. The published keys are typed to narrowed interfaces
-        // (BuildControl, SymbolSearch, ModuleSources, ModuleAnalysis), so only the promoted members are
-        // frozen as plugin API and the rest of each service stays internal and free to change. Each alias
-        // resolves the internal key, so a scope holds ONE instance however it is asked for.
+        // (BuildControl, SymbolSearch, ModuleSources, ModuleAnalysis, ModuleResources), so only the promoted
+        // members are frozen as plugin API and the rest of each service stays internal and free to change.
+        // Each alias resolves the internal key, so a scope holds ONE instance however it is asked for.
+        //
+        // MODULE_RESOURCES sits beside its service rather than up here because the ordering matters for
+        // nothing else: the alias resolves ANDROID_RESOURCE_SERVICE lazily, like every other one.
         reg.service(BUILD_CONTROL, ServiceScopeLevel.WORKSPACE) { getService(BUILD_SERVICE) }
         reg.service(SYMBOL_SEARCH, ServiceScopeLevel.WORKSPACE) { getService(SEARCH_SERVICE) }
         reg.service(MODULE_SOURCES, ServiceScopeLevel.WORKSPACE) { getService(MODULE_SERVICE) }
@@ -815,6 +819,7 @@ private class IdeCoreServicesPlugin : Plugin {
         reg.service(ANDROID_RESOURCE_SERVICE, ServiceScopeLevel.WORKSPACE) {
             AndroidResourceService(getService(ENGINE_CONTEXT))
         }
+        reg.service(MODULE_RESOURCES, ServiceScopeLevel.WORKSPACE) { getService(ANDROID_RESOURCE_SERVICE) }
         reg.service(REFACTOR_SERVICE, ServiceScopeLevel.WORKSPACE) {
             RefactorService(getService(ENGINE_CONTEXT))
         }

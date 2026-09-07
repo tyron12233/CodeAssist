@@ -202,7 +202,10 @@ import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.PlatformKind
 import dev.ide.model.Project
 import dev.ide.model.ProjectTemplateRegistry
+import dev.ide.model.ResourceConflict
+import dev.ide.model.ResourceWrite
 import dev.ide.model.SdkResolution
+import dev.ide.model.contentRootsFor
 import dev.ide.model.impl.DefaultFileIconProvider
 import dev.ide.model.impl.ExternalModelApplier
 import dev.ide.model.impl.ModelPersistence
@@ -3138,24 +3141,30 @@ class IdeServices private constructor(
             return resourceRepo(module)?.has(type, name) == true
         }
 
-        override fun isValueType(rClass: String): Boolean =
-            ResourceType.byRClass(rClass)?.isValueType() == true
+        override fun isValueType(rClass: String): Boolean = resources.isValueType(rClass)
 
+        // The fix runs in the file the unresolved reference sits in (a layout, say), so the module comes from
+        // that file; the write itself is the same call a plugin makes. RENAME because the fix must always
+        // produce something to point `@string/…` at, even where the user has typed a name that is taken.
         override fun appendValueResource(
             file: VirtualFile, rClass: String, name: String, value: String
         ): String {
-            val type = ResourceType.byRClass(rClass) ?: return name
             val module = moduleForEditableFile(Paths.get(file.path)) ?: return name
-            return this@IdeServices.appendValueResource(module, type, name, value)
+            val write = resources.putValueResource(module, rClass, name, value, ResourceConflict.RENAME)
+            return (write as? ResourceWrite.Written)?.name ?: name
         }
 
-        override fun isFileType(rClass: String): Boolean =
-            ResourceType.byRClass(rClass)?.isFileResource() == true
+        override fun isFileType(rClass: String): Boolean = resources.isFileType(rClass)
 
         override fun createResourceFile(file: VirtualFile, rClass: String, name: String): String? {
-            val type = ResourceType.byRClass(rClass) ?: return null
             val module = moduleForEditableFile(Paths.get(file.path)) ?: return null
-            return this@IdeServices.createResourceFile(module, type, name)
+            // FAIL, then reuse what is already there: the fix's contract is "open a file for this resource",
+            // and an existing one is that file. A rename would leave the reference unresolved.
+            return when (val write = resources.createResourceFile(module, rClass, name)) {
+                is ResourceWrite.Written -> write.file.toString()
+                is ResourceWrite.AlreadyExists -> write.file?.toString()
+                else -> null
+            }
         }
     }
 
@@ -3171,106 +3180,9 @@ class IdeServices private constructor(
             }
         }.getOrDefault(false)
 
-    // ---- Android resource helpers shared by the XML lint host + go-to-definition ----
-
-    private fun ResourceType.isValueType(): Boolean = this in setOf(
-        ResourceType.STRING,
-        ResourceType.COLOR,
-        ResourceType.DIMEN,
-        ResourceType.BOOL,
-        ResourceType.INTEGER,
-        ResourceType.ID,
-    )
-
-    /** A resource that lives as a standalone XML file under `res/<type>/` (so a missing one is created from a
-     *  stub, not appended to `res/values`). */
-    private fun ResourceType.isFileResource(): Boolean = this in setOf(
-        ResourceType.LAYOUT,
-        ResourceType.DRAWABLE,
-        ResourceType.MENU,
-        ResourceType.ANIM,
-        ResourceType.ANIMATOR,
-    )
-
     /** A tag that should carry layout params: a known framework widget (from the SDK metadata) or a custom view. */
     private fun isViewLike(tag: String): Boolean =
         sdkLayoutMetadata().isWidgetTag(tag) || tag.contains('.')
-
-    /** Append `<type name="name">value</type>` to the module's `res/values/<file>.xml` (creating it if needed),
-     *  de-duplicating the name, then refresh R + the resource index. Returns the (possibly suffixed) name. */
-    private fun appendValueResource(
-        module: Module, type: ResourceType, name: String, value: String
-    ): String {
-        val valuesDir = resourceRoots(module).firstOrNull()?.resolve("values") ?: return name
-        val target = valuesDir.resolve(valuesFileName(type))
-        val existing =
-            runCatching { if (Files.exists(target)) target.readText() else null }.getOrNull()
-        var unique = name
-        var i = 1
-        while (existing != null && Regex("name\\s*=\\s*\"${Regex.escape(unique)}\"").containsMatchIn(
-                existing
-            )
-        ) unique = "${name}_${i++}"
-        val entry = "    <${type.rClass} name=\"$unique\">${escapeXml(value)}</${type.rClass}>\n"
-        runCatching {
-            Files.createDirectories(valuesDir)
-            if (existing == null) {
-                target.writeText("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n$entry</resources>\n")
-            } else {
-                val idx = existing.lastIndexOf("</resources>")
-                val merged = if (idx >= 0) existing.substring(
-                    0, idx
-                ) + entry + existing.substring(idx) else existing + entry
-                target.writeText(merged)
-            }
-            // Reaction (res .xml): refresh R + re-index the file.
-            if (existing == null) events.fileCreated(target) else events.fileChanged(target)
-        }
-        return unique
-    }
-
-    private fun valuesFileName(type: ResourceType): String = when (type) {
-        ResourceType.STRING -> "strings.xml"
-        ResourceType.COLOR -> "colors.xml"
-        ResourceType.DIMEN -> "dimens.xml"
-        else -> "values.xml"
-    }
-
-    private fun escapeXml(s: String): String =
-        s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    /** Create `res/<type>/<name>.xml` with a minimal stub for a file resource (layout/drawable/menu/anim),
-     *  then refresh R + the resource index. Returns the new file's path, the existing one if it already
-     *  exists, or null on failure. */
-    private fun createResourceFile(module: Module, type: ResourceType, name: String): String? {
-        val resRoot = resourceRoots(module).firstOrNull() ?: return null
-        val folder = resRoot.resolve(type.rClass)
-        val target = folder.resolve("$name.xml")
-        if (Files.exists(target)) return target.toString()
-        return runCatching {
-            Files.createDirectories(folder)
-            target.writeText(resourceFileStub(type))
-            events.fileCreated(target) // reaction (res .xml): refresh R + re-index the file
-            target.toString()
-        }.getOrNull()
-    }
-
-    /** A minimal, valid starting document for a newly created file resource of [type]. */
-    private fun resourceFileStub(type: ResourceType): String {
-        val ns = "http://schemas.android.com/apk/res/android"
-        val head = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-        return head + when (type) {
-            ResourceType.LAYOUT -> "<FrameLayout xmlns:android=\"$ns\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"match_parent\">\n\n</FrameLayout>\n"
-
-            ResourceType.DRAWABLE -> "<shape xmlns:android=\"$ns\" android:shape=\"rectangle\">\n    <solid android:color=\"#FF000000\" />\n</shape>\n"
-
-            ResourceType.MENU -> "<menu xmlns:android=\"$ns\" xmlns:app=\"http://schemas.android.com/apk/res-auto\">\n\n</menu>\n"
-
-            ResourceType.ANIM, ResourceType.ANIMATOR -> "<set xmlns:android=\"$ns\">\n\n</set>\n"
-
-            else -> "<resources>\n\n</resources>\n"
-        }
-    }
 
     /**
      * Go-to-definition for the Android resource the caret sits on — an `@type/name` reference in res XML, or
@@ -4296,9 +4208,7 @@ class IdeServices private constructor(
 
     private fun sanitizeResName(s: String): String = s.replace('.', '_').replace('-', '_').trim()
 
-    private fun resourceRoots(m: Module): List<Path> =
-        m.sourceSets.flatMap { it.contentRoots }.filter { ContentRole.ANDROID_RES in it.roles }
-            .map { Paths.get(it.dir.path) }
+    private fun resourceRoots(m: Module): List<Path> = m.contentRootsFor(ContentRole.ANDROID_RES)
 
     /** The module whose `aidl/` tree contains [file], or null. AIDL roots are deliberately not source roots
      *  (nothing there compiles as Java or Kotlin), so a `.aidl` needs its own way back to its module. */

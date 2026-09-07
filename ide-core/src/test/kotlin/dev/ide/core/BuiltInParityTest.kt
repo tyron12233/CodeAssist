@@ -78,8 +78,10 @@ class BuiltInParityTest {
         // installed plugin can name them (docs/writing-plugins.md, Appendix C). Each sits at the scope of the
         // service it aliases, since it resolves that service's key.
         val spiModuleAliases = setOf("platform.moduleAnalysis")
-        val spiWorkspaceAliases =
-            setOf("platform.buildControl", "platform.symbolSearch", "platform.moduleSources")
+        val spiWorkspaceAliases = setOf(
+            "platform.buildControl", "platform.symbolSearch", "platform.moduleSources",
+            "platform.moduleResources",
+        )
         // The plugin-facing interpreter (interp-api) is the one published service at APPLICATION scope: a
         // plugin resolves services through `PluginRegistration.appServices` and holds no project, so it
         // follows whichever project is open rather than being scoped to one.
@@ -88,7 +90,7 @@ class BuiltInParityTest {
             moduleAnalyzers + workspaceServices + spiModuleAliases + spiWorkspaceAliases +
                 spiApplicationServices,
             byId.keys,
-            "exactly the 17 engine services plus the 5 published-SPI keys",
+            "exactly the 17 engine services plus the 6 published-SPI keys",
         )
         spiApplicationServices.forEach {
             assertEquals(ServiceScopeLevel.APPLICATION, byId.getValue(it).level, it)

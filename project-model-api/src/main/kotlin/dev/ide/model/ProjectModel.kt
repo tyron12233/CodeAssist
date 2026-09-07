@@ -4,6 +4,8 @@ import dev.ide.platform.ContentHash
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.ServiceScope
 import dev.ide.vfs.VirtualFile
+import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * project-model-api — the spine of the framework. Everything (build, language backends, indexing,
@@ -300,6 +302,26 @@ value class ContentRole(val id: String) {
         fun values(): List<ContentRole> = entries
     }
 }
+
+/**
+ * This module's own content-root directories carrying [role], across every source set and with no dependency
+ * walk. Empty for a module that declares none, which is the honest answer for a role its module type has no
+ * notion of.
+ *
+ * The `main` source set's roots come FIRST, the rest following in declaration order, because a caller
+ * generating a file takes the first and `main` is the only source set every variant builds. Declaration
+ * order alone puts a variant's roots (`src/debug/res`, ahead of `src/main/res` on the android-app module
+ * type) at the front, and a file written there is missing from every build that does not select that
+ * variant.
+ *
+ * The role is a parameter rather than a fixed set because [ContentRole] is open: a plugin that contributes a
+ * module type asks about its own role here the same way the IDE asks about [ContentRole.ANDROID_RES].
+ */
+fun Module.contentRootsFor(role: ContentRole): List<Path> =
+    sourceSets.sortedBy { if (it.name == "main") 0 else 1 } // stable sort: ties keep their declaration order
+        .flatMap { it.contentRoots }
+        .filter { role in it.roles }
+        .mapNotNull { runCatching { Paths.get(it.dir.path) }.getOrNull() }
 
 interface ProjectSettings {
     fun get(key: String): String?

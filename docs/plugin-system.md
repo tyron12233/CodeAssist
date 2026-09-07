@@ -405,7 +405,7 @@ declared and shown at the consent gate, but nothing enforces it yet.
   covered the other two scopes from an extension-point callback), and four engine services are now nameable
   from the published SPI: `BUILD_CONTROL` (`build-api`), `SYMBOL_SEARCH` (`index-api`), `MODULE_SOURCES`
   (`project-model-api`) and `MODULE_ANALYSIS` (`analysis-api`), joined since by `CODE_INTERPRETER`
-  (`interp-api`). Each is a **narrowed** interface over the
+  (`interp-api`) and `MODULE_RESOURCES` (`project-model-api`). Each is a **narrowed** interface over the
   engine class, registered as an alias against the same instance the internal key resolves, so only the
   promoted members are frozen as plugin API while the rest of each service stays `internal`. What is left is
   case-by-case: the remaining keys in Appendix C are still built-in-only, the public platform ports
