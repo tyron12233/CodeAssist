@@ -57,6 +57,11 @@ val STORE_SUBMISSION_SERVICE = ServiceKey<dev.ide.store.StoreSubmissionService>(
 /** Ratings and reviews. Reads are anonymous; writes need the account service, so the launcher builds both. */
 val STORE_REVIEW_SERVICE = ServiceKey<dev.ide.store.StoreReviewService>("platform.storeReviews")
 
+/** Daily coding challenges. Registered by the launcher, which is the only place that knows both the
+ *  Supabase config and where the judge is deployed. Absent (desktop / tests) resolves to a service that
+ *  reports challenges unavailable, and the tab explains itself rather than failing. */
+val DAILY_CHALLENGE_SERVICE = ServiceKey<dev.ide.store.DailyChallengeService>("platform.dailyChallenges")
+
 /**
  * A host that can raise an OS-level notification.
  *

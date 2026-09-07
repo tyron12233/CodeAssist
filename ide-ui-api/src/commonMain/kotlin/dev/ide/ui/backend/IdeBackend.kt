@@ -59,6 +59,9 @@ interface IdeBackend {
      *  local progress. Optional — a backend that wires no content inherits [LearnService.Unsupported]. */
     val learn: LearnService get() = LearnService.Unsupported
 
+    /** Daily coding challenges. Unsupported when no challenge backend is configured. */
+    val challenges: ChallengeService get() = ChallengeService.Unsupported
+
     /** The SDK manager (Android SDK + JDK sources/docs). */
     val sdk: SdkService
 

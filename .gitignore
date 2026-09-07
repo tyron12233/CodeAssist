@@ -24,6 +24,10 @@ keystore.properties
 # Local agent secrets — never commit
 agent.properties
 
+# The daily-challenge judge: a separate Vercel service, with deployment config tied to an account.
+# Kept out of the public repo for the same reason supabase/ is.
+judge/
+
 # Internal / agent working files — not part of the public project
 .claude/
 CLAUDE.md

@@ -22,6 +22,7 @@ import dev.ide.interp.impl.VM_PEER_FACTORY
 import dev.ide.core.ANALYTICS_SERVICE
 import dev.ide.core.APP_RESTARTER
 import dev.ide.core.NOTIFICATION_PRESENTER
+import dev.ide.core.DAILY_CHALLENGE_SERVICE
 import dev.ide.core.STORE_ACCOUNT_SERVICE
 import dev.ide.core.STORE_CATALOG_SOURCE
 import dev.ide.core.STORE_REVIEW_SERVICE
@@ -122,6 +123,11 @@ object AndroidIde {
         // one and still works without.
         manager.applicationContainer.registerServiceIfAbsent(STORE_REVIEW_SERVICE) {
             buildStoreReviews(supabaseAccounts)
+        }
+        // Daily challenges. Reads go to the same Supabase project; submissions go to the judge, which is a
+        // different service and can be absent without taking the tab down with it.
+        manager.applicationContainer.registerServiceIfAbsent(DAILY_CHALLENGE_SERVICE) {
+            buildDailyChallenges(supabaseAccounts)
         }
         val backend = IdeServicesBackend(
             initial = null, manager = manager,
@@ -530,6 +536,24 @@ object AndroidIde {
                 dev.ide.store.StoreProvider.GITHUB,
                 dev.ide.store.StoreProvider.GOOGLE,
             ),
+        )
+    }
+
+    private fun buildDailyChallenges(
+        accounts: dev.ide.store.impl.SupabaseAccountService?,
+    ): dev.ide.store.DailyChallengeService {
+        val url = BuildConfig.SUPABASE_URL
+        val key = BuildConfig.SUPABASE_KEY
+        if (url.isBlank() || key.isBlank() || accounts == null) {
+            return dev.ide.store.DailyChallengeService.Unsupported
+        }
+        return dev.ide.store.impl.SupabaseDailyService(
+            url = url,
+            apiKey = key,
+            // Blank is a supported state: browsing and the leaderboard still work, and Submit reports that
+            // judging is not configured rather than failing at the moment someone presses it.
+            judgeUrl = BuildConfig.JUDGE_URL,
+            accounts = accounts,
         )
     }
 

@@ -12,6 +12,7 @@ import dev.ide.ui.HomeTab
 import dev.ide.ui.components.AppNavBar
 import dev.ide.ui.components.NavDestination
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.home_challenges
 import dev.ide.ui.generated.resources.home_learn
 import dev.ide.ui.generated.resources.home_store
 import dev.ide.ui.generated.resources.projects
@@ -21,7 +22,7 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * The home/landing scaffold: the selected [HomeTab]'s content above a [AppNavBar] that switches between
- * the project manager, the Projects Store, and Learn. Each tab's content is supplied by the host (so all the
+ * the project manager, the Projects Store, Learn, and the daily challenge. Each tab's content is supplied by the host (so all the
  * picker/store/learn wiring stays in one place) and crossfades on switch. Only shown on `Screen.Projects`;
  * full-screen destinations (editor, settings, run) push over it without the nav bar.
  */
@@ -32,6 +33,7 @@ fun HomeScreen(
     projectsContent: @Composable () -> Unit,
     storeContent: @Composable () -> Unit,
     learnContent: @Composable () -> Unit,
+    challengesContent: @Composable () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
         Crossfade(
@@ -45,6 +47,7 @@ fun HomeScreen(
                     HomeTab.Projects -> projectsContent()
                     HomeTab.Store -> storeContent()
                     HomeTab.Learn -> learnContent()
+                    HomeTab.Challenges -> challengesContent()
                 }
             }
         }
@@ -53,6 +56,7 @@ fun HomeScreen(
                 NavDestination(HomeTab.Projects.name, stringResource(Res.string.projects), CaSymbols.folderOpen),
                 NavDestination(HomeTab.Store.name, stringResource(Res.string.home_store), CaSymbols.travelExplore),
                 NavDestination(HomeTab.Learn.name, stringResource(Res.string.home_learn), CaSymbols.school),
+                NavDestination(HomeTab.Challenges.name, stringResource(Res.string.home_challenges), CaSymbols.bolt),
             ),
             selectedId = tab.name,
             onSelect = { id -> onSelectTab(HomeTab.valueOf(id)) },

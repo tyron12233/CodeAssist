@@ -141,6 +141,14 @@ class CodeAssistAppState(
     var learnEpoch: Int by mutableStateOf(0)
         private set
 
+    /** The challenge day being solved or shown on the board. Empty means today. */
+    var challengeDate: String by mutableStateOf("")
+        private set
+
+    /** Bumped when a challenge is solved or the tab is refreshed, so the tab re-reads its three payloads. */
+    var challengeEpoch: Int by mutableStateOf(0)
+        private set
+
     /** The store item shown on the full-screen detail page (set when a card is tapped in the Explore tab). */
     var storeItem: UiStoreItem? by mutableStateOf(null)
         private set
@@ -595,6 +603,34 @@ class CodeAssistAppState(
         screen = Screen.LessonTrack
     }
 
+    /** Opens the solve screen for [date] (empty for today). */
+    fun openChallenge(date: String = "") {
+        challengeDate = date
+        screen = Screen.ChallengePlayer
+    }
+
+    /** Leaves the solve screen for the Challenges tab, re-reading the day so a new result shows. */
+    fun exitChallenge() {
+        challengeEpoch++
+        screen = Screen.Projects
+        homeTab = HomeTab.Challenges
+    }
+
+    fun openChallengeBoard(date: String = "") {
+        challengeDate = date
+        screen = Screen.ChallengeBoard
+    }
+
+    fun exitChallengeBoard() {
+        screen = Screen.Projects
+        homeTab = HomeTab.Challenges
+    }
+
+    /** Re-reads the Challenges tab, after a sign-in or a pull to refresh. */
+    fun refreshChallenges() {
+        challengeEpoch++
+    }
+
     fun openLesson(lessonId: String, initialStep: Int = 0) {
         currentLessonId = lessonId
         lessonInitialStep = initialStep
@@ -746,6 +782,9 @@ class CodeAssistAppState(
             screen == Screen.SubmitProject -> screen = Screen.Projects
             screen == Screen.PublishingGuide -> screen = Screen.Projects
             screen == Screen.PublisherProfile -> screen = Screen.Projects
+
+            screen == Screen.ChallengePlayer -> exitChallenge()
+            screen == Screen.ChallengeBoard -> exitChallengeBoard()
 
             screen == Screen.CreateProject -> screen = Screen.Projects
             screen == Screen.ImportProject -> cancelImportPreview()

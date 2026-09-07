@@ -509,6 +509,7 @@ We never collect your code, file or project names, which features you use, or an
     <!-- home/store/learn/search/logs/palette — reuses projects, join_the_community -->
     <string name="home_store">Explore</string>
     <string name="home_learn">Learn</string>
+    <string name="home_challenges">Daily</string>
     <!-- Home / Projects tab, Material 3 Expressive redesign -->
     <string name="home_your_projects">Your projects</string>
     <string name="home_good_morning">Good morning</string>

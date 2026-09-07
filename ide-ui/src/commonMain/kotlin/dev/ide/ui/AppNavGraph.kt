@@ -24,6 +24,9 @@ import dev.ide.ui.screens.NotificationBell
 import dev.ide.ui.screens.NotificationsSheet
 import dev.ide.ui.screens.PublisherProfileScreen
 import dev.ide.ui.screens.PublishingGuideScreen
+import dev.ide.ui.screens.ChallengeBoardScreen
+import dev.ide.ui.screens.ChallengePlayerScreen
+import dev.ide.ui.screens.DailyChallengeScreen
 import dev.ide.ui.screens.StoreSignInSheet
 import dev.ide.ui.screens.SubmitProjectScreen
 import dev.ide.ui.screens.CodeStyleScreen
@@ -143,6 +146,20 @@ internal fun AppNavGraph(
                 inlayHintsEnabled = state.inlayHintsEnabled,
                 host = state.composePreviewHost,
                 onExit = app::exitLessonPlayer,
+            )
+
+            Screen.ChallengePlayer -> ChallengePlayerScreen(
+                backend = backend,
+                date = app.challengeDate,
+                inlayHintsEnabled = state.inlayHintsEnabled,
+                onExit = app::exitChallenge,
+                onSolved = app::refreshChallenges,
+            )
+
+            Screen.ChallengeBoard -> ChallengeBoardScreen(
+                backend = backend,
+                date = app.challengeDate,
+                onBack = app::exitChallengeBoard,
             )
 
             Screen.PublisherProfile -> PublisherProfileScreen(
@@ -431,6 +448,7 @@ private fun HomeRoute(app: CodeAssistAppState, fileActions: FileActions) {
         projectsContent = { ProjectPickerRoute(app, fileActions, projects) },
         storeContent = { StoreRoute(app, fileActions) },
         learnContent = { LearnRoute(app, fileActions) },
+        challengesContent = { ChallengeRoute(app, fileActions) },
     )
 }
 
@@ -564,6 +582,39 @@ private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
             onDismiss = { signInVisible = false },
             onSubmitProject = if (app.backend.store.submissionsAvailable()) ({ app.openSubmitProject() }) else null,
             // Null when the host cannot open a browser, which the sheet reports rather than working around.
+            onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
+        )
+    }
+}
+
+/**
+ * The Challenges tab.
+ *
+ * Signing in is offered through the same sheet the store uses, because it is the same account: a user
+ * who signed in to publish a project is already signed in to compete.
+ */
+@Composable
+private fun ChallengeRoute(app: CodeAssistAppState, fileActions: FileActions) {
+    var signInVisible by remember { mutableStateOf(false) }
+    val signedIn = app.backend.store.authState().collectAsState().value.signedIn
+    DailyChallengeScreen(
+        backend = app.backend,
+        epoch = app.challengeEpoch,
+        signedIn = signedIn,
+        onSolve = { app.openChallenge() },
+        onSignIn = { signInVisible = true },
+        onOpenBoard = { app.openChallengeBoard() },
+        onOpenArchive = { date -> app.openChallenge(date) },
+    )
+    if (signInVisible) {
+        StoreSignInSheet(
+            backend = app.backend,
+            onDismiss = {
+                signInVisible = false
+                // A sign-in changes what the tab can show, and the sheet cannot know whether one happened.
+                app.refreshChallenges()
+            },
+            onSubmitProject = null,
             onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
         )
     }

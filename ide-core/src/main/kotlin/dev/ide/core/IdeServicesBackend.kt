@@ -373,6 +373,14 @@ class IdeServicesBackend(
         this, storeCatalogSource, storeAccountService, storeSubmissionService, notificationCenter,
         storeReviewService,
     )
+
+    /** Daily challenges, resolved like the rest of the online ports. */
+    private val dailyChallengeService: dev.ide.store.DailyChallengeService =
+        manager?.applicationContainer?.getServiceOrNull(DAILY_CHALLENGE_SERVICE)
+            ?: dev.ide.store.DailyChallengeService.Unsupported
+
+    override val challenges: dev.ide.ui.backend.ChallengeService =
+        dev.ide.core.backend.ChallengeBackend(this, dailyChallengeService)
     // Held as the concrete type so the Compose preview host can reach its ide-core-only lesson-lowering methods
     // ([lowerLessonComposePreview]) that return an ide-core type the [LearnService] UI interface can't name.
     private val learnBackend = LearnBackend(this)

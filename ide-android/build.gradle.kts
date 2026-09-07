@@ -416,6 +416,14 @@ android {
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_KEY", "\"$supabaseKey\"")
 
+        // Where the daily-challenge judge is deployed. Separate from the Supabase pair because it is a
+        // separate service: Supabase holds the problems and the leaderboard, and the judge is the only
+        // thing that compiles and runs a submission. Blank leaves the tab readable and submitting
+        // disabled, which is what a fork with no judge of its own should get.
+        val judgeUrl = (findProperty("JUDGE_URL") as String?) ?: System.getenv("JUDGE_URL")
+            ?: "https://codeassist-judge.vercel.app"
+        buildConfigField("String", "JUDGE_URL", "\"$judgeUrl\"")
+
         // AdMob defaults = Google TEST ids. Debug inherits these as-is; `release` overrides to the real ids
         // below, and `profile` (a local perf build) is forced back to test. The App id reaches the manifest
         // via ${admobAppId}; the native ad-unit id is read from BuildConfig by AndroidAdHost.
