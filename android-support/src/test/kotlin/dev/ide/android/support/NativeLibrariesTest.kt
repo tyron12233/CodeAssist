@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Unpacking a `natives`-scoped dependency into the `<abi>/lib*.so` layout the packager reads.
+ * Unpacking a dependency's prebuilt native libraries into the `<abi>/lib*.so` layout the packager reads.
  *
  * The shape under test is libGDX's: `gdx-platform-1.14.2-natives-arm64-v8a.jar` holds one `libgdx.so` at
  * the archive root, so the ABI exists only in the file name's classifier. A jar already laid out under
@@ -26,6 +26,9 @@ class NativeLibrariesTest {
 
             assertTrue(unpacked.warnings.isEmpty(), "unexpected warnings: ${unpacked.warnings}")
             val root = unpacked.dirs.single()
+            // Only the library: everything under an unpacked root is packaged verbatim into the APK's
+            // `lib/`, so the reuse marker has to live outside it or it ships as `lib/.unpacked` and two
+            // ABIs of one artifact collide on the name.
             assertEquals(listOf("arm64-v8a/libgdx.so"), relativeFiles(root))
         }
     }
@@ -113,6 +116,24 @@ class NativeLibrariesTest {
     }
 
     @Test
+    fun aPerAbiClassifierArtifactIsRecognisedWhateverScopeDeclaresIt() {
+        withDirs { dir, _ ->
+            // What the Android packager screens a classpath with, so a `natives-arm64-v8a` jar declared as
+            // `implementation` still reaches the APK. It has to be narrow: an ordinary library is left alone.
+            val jars = listOf(
+                jar(dir, "gdx-platform-1.14.2-natives-arm64-v8a.jar", "libgdx.so"),
+                jar(dir, "gdx-platform-1.14.2-natives-desktop.jar", "libgdx64.so"),
+                jar(dir, "kotlin-stdlib-2.4.0.jar", "kotlin/Unit.class"),
+            )
+
+            assertEquals(
+                listOf("gdx-platform-1.14.2-natives-arm64-v8a.jar"),
+                NativeLibraries.abiClassifierJars(jars).map { it.fileName.toString() },
+            )
+        }
+    }
+
+    @Test
     fun theAbiIsReadFromTheClassifierWithoutMistakingX86_64ForX86() {
         assertEquals("arm64-v8a", NativeLibraries.abiFromFileName("gdx-platform-1.14.2-natives-arm64-v8a.jar"))
         assertEquals("armeabi-v7a", NativeLibraries.abiFromFileName("gdx-platform-1.14.2-natives-armeabi-v7a.jar"))
@@ -140,7 +161,6 @@ class NativeLibrariesTest {
         Files.walk(root).use { s ->
             s.filter { Files.isRegularFile(it) }
                 .map { root.relativize(it).toString().replace('\\', '/') }
-                .filter { it != ".unpacked" }
                 .sorted()
                 .collect(java.util.stream.Collectors.toList())
         }

@@ -111,8 +111,20 @@ object AndroidLibraries {
             isExplodedAar(root) -> dexJars.add(root)
             isJar(root) -> dexJars.add(root)
         }
-        val natives = NativeLibraries.unpack(nativeRoots.filter { isJar(it) }, explodeRoot.resolve("natives"))
+        val nativesRoot = explodeRoot.resolve("natives")
+        val nativeJars = nativeRoots.filter { isJar(it) }
+        val natives = NativeLibraries.unpack(nativeJars, nativesRoot)
         jniLibDirs.addAll(natives.dirs)
+        // The same artifact declared on a classpath instead (`implementation …:natives-arm64-v8a`, which is
+        // what the add flow's default configuration and an imported libGDX-style build both produce) is
+        // unpacked too. Nothing else would package it: its `.so` is at the archive root, not under `lib/`,
+        // so the merge skips it, and the app crashes on `System.loadLibrary` with a build that reported no
+        // problem. The jar keeps its classpath place, since dexing an artifact with no classes costs
+        // nothing and this way no declaration is quietly reinterpreted. Only the `natives`-scoped set
+        // warns: there the user named the scope, so a classifier that packages nothing is a mistake worth
+        // reporting, while `implementation` of an ordinary jar that merely ends in an ABI name is not.
+        val strayNativeJars = NativeLibraries.abiClassifierJars((compileRoots + runtimeRoots).filter { isJar(it) })
+        jniLibDirs.addAll(NativeLibraries.unpack(strayNativeJars - nativeJars.toSet(), nativesRoot).dirs)
         // At most one jar per artifact before dexing/compiling: a plain `.distinct()` only collapses the same
         // path, but the IDE injects its bundled `kotlin-stdlib-<v>.jar` (a non-Maven `.platform/…` path) into
         // every Kotlin module, which collides with any Maven `kotlin-stdlib` the graph resolves (directly or

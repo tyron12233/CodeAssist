@@ -1,6 +1,7 @@
 package dev.ide.core.services
 
 import dev.ide.android.support.AndroidVariants
+import dev.ide.android.support.NativeLibraries
 import dev.ide.android.support.gms.GoogleServices
 import dev.ide.android.support.tools.AarExtractor
 import dev.ide.core.DependencyPartition
@@ -729,6 +730,26 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         if (changed) ctx.store.save()
     }
 
+    /**
+     * `natives` when [coordinate] addresses a per-ABI native artifact of an ANDROID module
+     * (`com.badlogicgames.gdx:gdx-platform:1.14.2:natives-arm64-v8a`), else null to keep the caller's scope.
+     *
+     * Such a jar holds one bare `.so` and defines no class, so on a classpath it compiles against nothing,
+     * dexes to nothing and packages nothing: the app builds clean and dies on `System.loadLibrary`. There is
+     * no configuration other than `natives` where the declaration does anything, and the add flow offers
+     * `implementation` first, so the scope is corrected here rather than left to fail silently at run time.
+     *
+     * Android only. A JVM module DOES consume such a jar from its runtime classpath, since a desktop loader
+     * extracts the library out of the classpath itself.
+     */
+    private fun nativesScopeFor(moduleName: String, coordinate: String): String? {
+        val classifier = parseInputCoordinate(coordinate)?.classifier?.takeIf { it.isNotBlank() } ?: return null
+        if (NativeLibraries.abiFromClassifier(classifier) == null) return null
+        val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return null
+        if (!acceptsAar(module)) return null
+        return scopeLabel(DependencyScope.NATIVES)
+    }
+
     /** A module can consume an Android archive (`.aar`) iff it's an Android module — facet or type. */
     private fun acceptsAar(module: Module): Boolean =
         module.facets.get(dev.ide.android.support.AndroidFacet.KEY) != null || module.type.id.startsWith(
@@ -1039,6 +1060,10 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         // A pasted coordinate can carry invisible characters that no repository path can contain; drop them
         // before the string becomes the declared library name. See [sanitizeCoordinate].
         val coordinate = sanitizeCoordinate(rawCoordinate)
+        // A per-ABI native artifact is declared in `natives` whichever configuration was asked for: see
+        // [nativesScopeFor]. One effective scope for the model, `module.toml` and the build file, so all
+        // three read the same.
+        val effective = nativesScopeFor(moduleName, coordinate) ?: scope
         // The standalone "add" (Dependencies screen): owns the resolve-state flag; the resolution core is
         // shared with the deferred template-dependency loop ([startPendingDependencyResolution]).
         _depsState.value = DepsResolveState(
@@ -1050,12 +1075,18 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             val added = resolveAndAttach(
                 moduleName,
                 coordinate,
-                scope,
+                effective,
                 depsProgress(),
                 exclusions = exclusions.mapNotNull(Exclusion::parse),
                 variant = variant,
             )
-            if (added.success) declareInBuildFiles(moduleName, coordinate, scope, added) else added
+            if (!added.success) added
+            else declareInBuildFiles(moduleName, coordinate, effective, added).let { outcome ->
+                if (effective == scope) outcome else outcome.copy(
+                    message = outcome.message + " Declared in `natives`: a per-ABI native artifact is " +
+                        "unpacked into the APK's lib/<abi>/ instead of going on a classpath.",
+                )
+            }
         } finally {
             // resolveAndAttach → assembleModuleClasspath already stamped reasons; refresh the error state.
             _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved(), warnings = computeWarnings()) }

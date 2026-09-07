@@ -39,6 +39,11 @@ import kotlin.test.assertTrue
  * and a `META-INF/MANIFEST.MF`. The signed APK must contain both `.so` files under `lib/`, the Java
  * resource at the root, and the merged services file — while the per-jar `MANIFEST.MF` is dropped by the
  * default excludes.
+ *
+ * It also covers the OTHER shape a native library arrives in: a per-ABI classifier artifact
+ * (`gdx-platform:1.14.2:natives-arm64-v8a`) holding one bare `libgdx.so` at the archive root. That one is
+ * packaged from whichever configuration it was declared in, since a classpath does nothing with it and the
+ * failure is invisible until the app calls `System.loadLibrary`.
  */
 class AndroidPackagingBuildTest {
 
@@ -52,18 +57,27 @@ class AndroidPackagingBuildTest {
             // A runtime JAR dependency whose non-class content must reach the APK: a native lib, a service
             // registration, and manifest noise (which the default excludes must strip).
             val depJar = buildDepJar(dir.resolve("depjar-build"), dir.resolve("depjar.jar"), sdk.androidJar)
+            // Per-ABI native artifacts: a bare `.so` at the archive root, the ABI only in the file name's
+            // classifier. One declared on a CLASSPATH (what the add flow's default configuration produces,
+            // and what a libGDX-style Gradle build imports as) and one in the scope meant for it.
+            val gdxArm = nativesJar(dir.resolve("gdx-platform-1.14.2-natives-arm64-v8a.jar"), "arm-native")
+            val gdxX86 = nativesJar(dir.resolve("gdx-platform-1.14.2-natives-x86_64.jar"), "x86-native")
 
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
             val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
             store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
             store.workspace.libraryTable.create("depjar").apply { kind = LibraryKind.JAR; addClassesRoot(store.vfs.fileFor(depJar)); commit() }
+            store.workspace.libraryTable.create("gdx-arm").apply { kind = LibraryKind.JAR; addClassesRoot(store.vfs.fileFor(gdxArm)); commit() }
+            store.workspace.libraryTable.create("gdx-x86").apply { kind = LibraryKind.JAR; addClassesRoot(store.vfs.fileFor(gdxX86)); commit() }
 
             store.workspace.projects.single().beginModification().apply {
                 addModule("app", appType).apply {
                     languageLevel = LanguageLevel.JAVA_17
                     putFacet(AndroidFacet(namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34))
                     addDependency(LibraryDependency(LibraryRef("depjar"), DependencyScope.IMPLEMENTATION))
+                    addDependency(LibraryDependency(LibraryRef("gdx-arm"), DependencyScope.IMPLEMENTATION))
+                    addDependency(LibraryDependency(LibraryRef("gdx-x86"), DependencyScope.NATIVES))
                 }
                 commit()
             }
@@ -95,6 +109,15 @@ class AndroidPackagingBuildTest {
             assertTrue("lib/x86/libapp.so" in entries.keys, "app native lib missing: ${entries.keys}")
             assertTrue("lib/arm64-v8a/libjar.so" in entries.keys, "jar native lib missing: ${entries.keys}")
             assertEquals("app-native", entries["lib/x86/libapp.so"])
+
+            // The classifier artifacts, unpacked into the ABI their file name names. The `implementation`
+            // one is the reported crash: it resolved, it built, and the APK carried no `libgdx.so` at all.
+            assertEquals("arm-native", entries["lib/arm64-v8a/libgdx.so"], "classpath-scoped natives jar not packaged: ${entries.keys}")
+            assertEquals("x86-native", entries["lib/x86_64/libgdx.so"], "natives-scoped jar not packaged: ${entries.keys}")
+            // The unpack marker is bookkeeping, not a library: it must not ship, and two ABIs of the same
+            // artifact must not collide on it.
+            assertTrue(entries.keys.none { it.startsWith("lib/.") }, "unpack bookkeeping shipped: ${entries.keys}")
+            assertFalse("Duplicate native library" in log.toString(), "bogus duplicate report:\n$log")
 
             // Java resources: the module's file at the APK root.
             assertTrue("foo/data.txt" in entries.keys, "java resource missing: ${entries.keys}")
@@ -135,6 +158,15 @@ class AndroidPackagingBuildTest {
             put("lib/arm64-v8a/libjar.so", "jar-native".toByteArray())
             put("META-INF/services/com.example.Svc", "com.example.JarImpl".toByteArray())
             put("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n".toByteArray())
+        }
+        return jar
+    }
+
+    /** A per-ABI natives artifact: one `.so` at the archive ROOT, so only the file name says which ABI. */
+    private fun nativesJar(jar: Path, content: String): Path {
+        Files.createDirectories(jar.parent)
+        ZipOutputStream(Files.newOutputStream(jar)).use { zos ->
+            zos.putNextEntry(ZipEntry("libgdx.so")); zos.write(content.toByteArray()); zos.closeEntry()
         }
         return jar
     }

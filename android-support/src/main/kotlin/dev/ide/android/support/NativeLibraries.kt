@@ -7,7 +7,8 @@ import java.util.zip.ZipFile
 import kotlin.io.path.writeText
 
 /**
- * Unpacks a `natives`-scoped dependency into the `<abi>/lib*.so` layout the packager expects.
+ * Unpacks a dependency holding prebuilt native libraries into the `<abi>/lib*.so` layout the packager
+ * expects.
  *
  * A native library published for Android arrives as one jar per ABI, addressed by a Maven CLASSIFIER:
  * `com.badlogicgames.gdx:gdx-platform:1.14.2:natives-arm64-v8a` holds a single `libgdx.so` at the archive
@@ -25,10 +26,10 @@ object NativeLibraries {
     val ABIS: List<String> = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
 
     /**
-     * Version of the unpacked layout, written into each output dir's marker. Bump it whenever what this
-     * lays down changes, so a directory left by an older build is re-unpacked instead of reused.
+     * Version of the unpacked layout, written into each output's marker. Bump it whenever what this lays
+     * down changes, so a directory left by an older build is re-unpacked instead of reused.
      */
-    private const val LAYOUT_VERSION = "1"
+    private const val LAYOUT_VERSION = "2"
 
     /** [dirs] are `<abi>/`-laid-out roots to package; [warnings] name jars that contributed nothing. */
     data class Unpacked(val dirs: List<Path>, val warnings: List<String>)
@@ -46,7 +47,11 @@ object NativeLibraries {
             if (!Files.isRegularFile(jar)) continue
             val name = jar.fileName.toString()
             val target = outRoot.resolve(name.substringBeforeLast('.'))
-            val marker = target.resolve(".unpacked")
+            // The marker is a SIBLING of the output directory, never a file inside it: everything under an
+            // unpacked root is packaged verbatim into the APK's `lib/`, so a marker within it would ship as
+            // `lib/.unpacked`, and a second ABI's jar offering that same name would be reported as a
+            // duplicate native library.
+            val marker = outRoot.resolve("$name.unpacked")
             if (runCatching { Files.readString(marker).trim() }.getOrNull() == LAYOUT_VERSION) {
                 if (hasNativeLibrary(target)) dirs.add(target) else warnings.add(noNativesWarning(name))
                 continue
@@ -63,6 +68,20 @@ object NativeLibraries {
         return Unpacked(dirs, warnings)
     }
 
+    /**
+     * The subset of [jars] that a Maven CLASSIFIER names an Android ABI for (`…-natives-arm64-v8a.jar`).
+     *
+     * Such an artifact holds prebuilt `.so` files and nothing else, so it belongs in
+     * [dev.ide.model.DependencyScope.NATIVES]. It rarely arrives there: `implementation` is the
+     * configuration every add flow offers first, and an imported Gradle project declares it wherever its own
+     * build script did. On a classpath it packages nothing at all, because the jar defines no class to dex
+     * and its `.so` sits at the archive root, where the packaging merge (like AGP's) does not look. The
+     * build stays green and the app dies on its first `System.loadLibrary`, so the Android packager unpacks
+     * these wherever they are declared.
+     */
+    fun abiClassifierJars(jars: List<Path>): List<Path> =
+        jars.filter { abiFromFileName(it.fileName.toString()) != null }
+
     private fun noNativesWarning(jarName: String): String =
         "'$jarName' carries no Android native library, so nothing was packaged from it. A per-ABI native " +
             "artifact is named by its classifier: declare ${ABIS.joinToString(" / ") { "natives-$it" }} " +
@@ -70,7 +89,7 @@ object NativeLibraries {
 
     /** Copy each `.so` in [jar] to its `<abi>/` place under [target]; returns how many were written. */
     private fun extract(jar: Path, target: Path): Int {
-        deleteTree(target)
+        deleteTree(target)   // also clears a marker an older layout left INSIDE the directory
         Files.createDirectories(target)
         val fallbackAbi = abiFromFileName(jar.fileName.toString())
         var written = 0
@@ -111,10 +130,13 @@ object NativeLibraries {
 
     /** The ABI a natives jar's file name encodes, e.g. `gdx-platform-1.14.2-natives-arm64-v8a.jar`. The
      *  classifier is the only place it is written down, so the file name is where it has to be read from. */
-    internal fun abiFromFileName(fileName: String): String? {
-        val stem = fileName.substringBeforeLast('.')
-        return ABIS.firstOrNull { stem.endsWith(it, ignoreCase = true) }
-    }
+    internal fun abiFromFileName(fileName: String): String? =
+        abiFromClassifier(fileName.substringBeforeLast('.'))
+
+    /** The Android ABI a Maven [classifier] names (`natives-arm64-v8a` gives `arm64-v8a`), else null: the
+     *  one place that decides whether a coordinate addresses a per-ABI Android native artifact. */
+    fun abiFromClassifier(classifier: String): String? =
+        ABIS.firstOrNull { classifier.endsWith(it, ignoreCase = true) }
 
     private fun hasNativeLibrary(dir: Path): Boolean = runCatching {
         Files.walk(dir).use { s -> s.anyMatch { Files.isRegularFile(it) && it.toString().endsWith(".so", true) } }
