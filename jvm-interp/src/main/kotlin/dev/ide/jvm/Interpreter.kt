@@ -1348,9 +1348,22 @@ internal class Interpreter(private val vm: Vm) {
 
             is VmObject -> {
                 val found = vm.findInHierarchy(receiver.vmClass, name, descriptor)
-                // A method the interpreted class inherits from a real supertype (not overridden) runs on the peer.
-                if (found == null) vm.bridgeVirtual(vm.peerOf(receiver), name, descriptor, args)
-                else execute(found.first, found.second, receiver, args)
+                when {
+                    found != null -> execute(found.first, found.second, receiver, args)
+                    // `getClass()` answers with the class STANDING FOR the interpreted type, the same object
+                    // `X.class` yields, so `x.getClass() == X.class` holds. The peer answers the wrong class
+                    // twice over: peers are keyed by SHAPE (see [AsmPeerFactory.key]), so every interpreted
+                    // class with no real supertype and no `Object` override shares ONE peer class, and a peer
+                    // carries only the class's REAL interfaces. Reading a type argument off a value's
+                    // `getClass()` therefore found one class, named after an unrelated type, implementing
+                    // nothing the value's class declared.
+                    name == "getClass" && descriptor == "()Ljava/lang/Class;" ->
+                        vm.classForInterpreted(receiver.vmClass.name)
+                            ?: vm.bridgeVirtual(vm.peerOf(receiver), name, descriptor, args)
+                    // A method the interpreted class inherits from a real supertype (not overridden) runs on
+                    // the peer.
+                    else -> vm.bridgeVirtual(vm.peerOf(receiver), name, descriptor, args)
+                }
             }
             // An interpreted array (`VmArray`) has no real class: `clone()` copies it; other Object methods run
             // on its real mirror. (Java arrays are Cloneable, but VmArray is not, so a bridged clone would fail.)

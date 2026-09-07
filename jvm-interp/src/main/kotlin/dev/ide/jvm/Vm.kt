@@ -362,7 +362,10 @@ class Vm(
             .also { syncArraysBack(vmArgs) }
     }
 
-    /** Carries a reflection-interception result (the value may legitimately be null). */
+    /** Carries a reflection-interception result (the value may legitimately be null). The value goes straight
+     *  to the interpreted caller, bypassing the bridge's own marshalling, so a PRIMITIVE result must already be
+     *  in the interpreter's computational form (`Z`/`B`/`C`/`S` as an [Int], see [Marshalling.realPrimToVm]).
+     *  A real wrapper pushed into a primitive slot is silently read as zero. */
     private class Reflected(val value: Any?)
 
     /**
@@ -403,6 +406,49 @@ class Vm(
             if (ok) return Reflected(receiver)
             throw ClassCastException("$recvName is not assignable to ${targetName ?: target.name}")
         }
+
+        // Class.getName()/getTypeName()/getSimpleName()/toString() on a class standing for an INTERPRETED type
+        // name THAT type, not the generated stand-in (`dev.ide.jvm.reflect.a_b_C_R7`) or, for an enum, its peer
+        // (`dev.ide.jvm.peers.a_b_E_Peer3`), neither of which any part of the program named. A logged type
+        // name, an error message quoting a class, and `Class.forName(x.getClass().getName())` (which resolves
+        // back through this interception) all read these.
+        if (receiver is Class<*> && descriptor == "()Ljava/lang/String;") {
+            peerFactory.interpretedNameOf(receiver)?.let { internal ->
+                when (name) {
+                    "getName", "getTypeName" -> return Reflected(internal.replace('/', '.'))
+                    "getSimpleName" -> return Reflected(simpleNameOf(internal))
+                    "toString" -> return Reflected(classToStringOf(internal))
+                }
+            }
+        }
+
+        // Class.isInstance(o) / isAssignableFrom(c) / cast(o) on a class standing for an INTERPRETED type,
+        // answered from the interpreted hierarchy: the stand-in's own hierarchy is bare `Object`, so the real
+        // call denies every interpreted subtype. `getClass()` hands this class to the program, which makes
+        // `x.getClass().isInstance(x)` and a container's type match against a bean class arrive here.
+        if (receiver is Class<*> && (name == "isInstance" || name == "isAssignableFrom" || name == "cast")) {
+            val recvName = peerFactory.interpretedNameOf(receiver) ?: return null
+            val arg = args.getOrNull(0)
+            val instance =
+                if (name == "isAssignableFrom") null else (arg as? VmPeer)?.vmObject() as? VmObject
+            val fromName =
+                if (name == "isAssignableFrom") (arg as? Class<*>)?.let { peerFactory.interpretedNameOf(it) }
+                else instance?.vmClass?.name
+            // Only the VM creates instances of an interpreted type, so a real class or a real object is never
+            // one: an argument that names no interpreted type answers false instead of bridging.
+            val assignable = fromName?.let { f -> resolve(f)?.let { isSubtype(it, recvName) } } == true
+            if (name != "cast") return Reflected(Marshalling.realPrimToVm(assignable))
+            if (arg == null) return Reflected(null)
+            // The cast's result re-enters interpreted code, so it is the interpreted instance rather than the
+            // peer the argument arrived as.
+            if (assignable) return Reflected(instance ?: arg)
+            throw VmException(
+                ClassCastException(
+                    "cannot cast ${(fromName ?: arg.javaClass.name).replace('/', '.')} to " +
+                        recvName.replace('/', '.'),
+                ),
+            )
+        }
         // Constructor.newInstance(args) on a reflection-class constructor: run the interpreted constructor.
         if (receiver is java.lang.reflect.Constructor<*> && name == "newInstance") {
             val internal = peerFactory.interpretedNameOf(receiver.declaringClass) ?: return null
@@ -425,6 +471,19 @@ class Vm(
             return Reflected(VmArray.multi("[".repeat(dims.size) + element, dims))
         }
         return null
+    }
+
+    /** The simple name `Class.getSimpleName` reports for interpreted internal name [internalName]: the last
+     *  `$`-separated segment, empty for an anonymous class (whose segment is all digits) and with a local
+     *  class's leading digits stripped. */
+    private fun simpleNameOf(internalName: String): String =
+        internalName.substringAfterLast('/').substringAfterLast('$').dropWhile { it.isDigit() }
+
+    /** What `Class.toString` reports for interpreted internal name [internalName]: `class a.b.C`, or
+     *  `interface a.b.I` for an interface (which an annotation type also is). */
+    private fun classToStringOf(internalName: String): String {
+        val isInterface = resolve(internalName)?.let { it.access and Opcodes.ACC_INTERFACE != 0 } == true
+        return (if (isInterface) "interface " else "class ") + internalName.replace('/', '.')
     }
 
     /** The interpreted element descriptor an array-component [Class] stands for: `Ldev/ide/Foo;` for the
