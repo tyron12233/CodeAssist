@@ -556,7 +556,9 @@ class Interpreter(
 
                 else -> {
                     val receiver = eval(receiverNode, env)
-                        ?: throw InterpreterException("cannot read property `${binding.name}` on a null receiver")
+                        ?: throw InterpreterException(
+                            "cannot read property `${binding.name}` on a null receiver${nullReceiverCause(receiverNode)}"
+                        )
                     // The receiver evaluated to a CLASS
                     if (receiver is Class<*>) readStaticMember(receiver, binding.name)
                     else {
@@ -587,7 +589,9 @@ class Interpreter(
             val receiverNode = node.receiver
                 ?: throw InterpreterException("top-level property write `${node.binding.name}` not supported")
             val receiver = eval(receiverNode, env)
-                ?: throw InterpreterException("cannot write property `${node.binding.name}` on a null receiver")
+                ?: throw InterpreterException(
+                    "cannot write property `${node.binding.name}` on a null receiver${nullReceiverCause(receiverNode)}"
+                )
             val value = eval(node.value, env)
             // A LIBRARY extension property (`var SemanticsPropertyReceiver.role`, written `role = …` inside a
             // `semantics { }` receiver lambda) has NO member setter — its setter is a STATIC method on the `…Kt`
@@ -2778,6 +2782,35 @@ class Interpreter(
     /** Read a property by reflection: the Kotlin getter (`value` → `getValue()`), else a same-named no-arg
      *  method. A `MutableState.value` read goes through the real `getValue()`, so the snapshot system records
      *  the dependency on the enclosing recompose scope — which is what drives recomposition. */
+    /**
+     * What produced the null a dereference tripped on: the receiver expression's SHAPE and its source offsets,
+     * appended to the "null receiver" message.
+     *
+     * Without it the message names only the property that could not be read — the victim, not the cause. A
+     * device report of `cannot read property \`primary\` on a null receiver` said nothing about WHICH read
+     * returned null or where it was written, which is the whole diagnosis; it now names, e.g., `the receiver is
+     * a read of \`colorScheme\` on androidx.compose.material3.MaterialTheme`.
+     */
+    private fun nullReceiverCause(receiverNode: RNode): String {
+        val what = when (receiverNode) {
+            is RNode.PropertyGet -> {
+                val owner = (receiverNode.binding as? Binding.Property)?.ownerFqn
+                "a read of `${receiverNode.binding.name}`" + (owner?.let { " on $it" } ?: "")
+            }
+
+            is RNode.Call -> "a call to `${receiverNode.callee.displayName}`"
+            is RNode.Name -> when (val b = receiverNode.binding) {
+                is Binding.ObjectRef -> "the object `${b.fqn}`"
+                is Binding.EnumEntry -> "the enum entry `${b.enumFqn}.${b.name}`"
+                else -> "`${b.name}`"
+            }
+
+            else -> receiverNode::class.simpleName ?: "an expression"
+        }
+        val span = receiverNode.source
+        return ": the receiver is $what, which evaluated to null (at ${span.start}..${span.end})"
+    }
+
     private fun readProperty(receiver: Any, name: String): Any? {
         if (receiver is SourceObject) return readSourceProperty(receiver, name)
         hookPropertyRead(null, name, receiver)?.let { return it.value }
@@ -2818,6 +2851,13 @@ class Interpreter(
         // The Compose-aware dispatcher threads the live composer through it; the plain reflective dispatcher
         // returns null and we fall through to the honest boundary.
         dispatcher.readComposableProperty(receiver, name)?.let { return it.value }
+        // It IS a `@Composable` property, but there is no live composer to thread — the read is happening
+        // outside the composition pass (a lambda the preview runs at measure/draw/event time, or after the pass
+        // finished). Say that, rather than "no readable property", which reads like the property doesn't exist.
+        if (dispatcher.isComposableProperty(receiver, name)) throw InterpreterException(
+            "property `$name` on ${receiver.javaClass.name} is @Composable — its getter needs a live Composer, " +
+                    "and this read is outside the composition"
+        )
         throw InterpreterException("no readable property `$name` on ${receiver.javaClass.name}")
     }
 

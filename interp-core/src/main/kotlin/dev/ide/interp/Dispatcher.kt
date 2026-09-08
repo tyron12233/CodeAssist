@@ -196,6 +196,13 @@ interface Dispatcher {
      *  honest boundary). The default reflective dispatcher has no `Composer` to thread, so it returns null. */
     fun readComposableProperty(receiver: Any, propertyName: String): ComposablePropertyValue? = null
 
+    /** Whether [propertyName] on [receiver] IS a `@Composable` property (its JVM getter takes a `Composer`),
+     *  asked when [readComposableProperty] declined — which it also does when there is no live composer to
+     *  thread. The two cases need different messages: a property that doesn't exist, versus one that exists
+     *  and cannot be read HERE because this code is running outside the composition. Default false (the
+     *  reflective dispatcher knows nothing about `@Composable`). */
+    fun isComposableProperty(receiver: Any, propertyName: String): Boolean = false
+
     /** A preview-specific value for an extension-property read the real facade getter cannot serve on an
      *  interpreted [receiver] — an interpreted class extending a library type (a `SourceObject`) whose
      *  extension the getter can't accept, most notably `androidx.lifecycle` `viewModelScope` (its real getter

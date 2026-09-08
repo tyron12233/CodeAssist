@@ -357,6 +357,12 @@ class ComposeDispatcher(
         return if (result === ComposableAbi.NotComposableProperty) null else ComposablePropertyValue(result)
     }
 
+    /** The shape test behind [readComposableProperty], asked when it declined — including the case it declines
+     *  for lack of a live composer, which is the one worth naming. */
+    override fun isComposableProperty(receiver: Any, propertyName: String): Boolean =
+        (vmComposables?.takeIf { it.ownsInstance(receiver) } == null) &&
+            ComposableAbi.composableGetter(receiver, propertyName) != null
+
     /**
      * `androidx.lifecycle` `viewModelScope` on an interpreted `ViewModel` subclass. The real getter lazily
      * builds a scope on `Dispatchers.Main.immediate`, which a headless / non-Android preview has no main

@@ -254,12 +254,7 @@ object ComposableAbi {
      * aware and the Composer matched by name, mirroring [isComposableCall].
      */
     fun readComposableProperty(receiver: Any, propertyName: String, composer: Any): Any? {
-        val getter =
-            "get" + propertyName.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-        val m = receiver.javaClass.methods.firstOrNull { method ->
-            KotlinJvmNames.matches(receiver.javaClass, method.name, getter) && composerIndex(method) == 0 &&
-                    (1 until method.parameterCount).all { method.parameterTypes[it] == Int::class.javaPrimitiveType }
-        } ?: return NotComposableProperty
+        val m = composableGetter(receiver, propertyName) ?: return NotComposableProperty
         // Shape: (Composer, $changed…) — no value params. Thread the composer, zero the trailing $changed ints.
         val args = ArrayList<Any?>(m.parameterCount)
         args.add(composer)
@@ -271,6 +266,24 @@ object ComposableAbi {
     /** Sentinel returned by [readComposableProperty] when the property isn't a composable getter (so the value
      *  itself — possibly `null` — stays distinguishable from "not handled"). */
     val NotComposableProperty = Any()
+
+    /**
+     * [receiver]'s `@Composable` getter for [propertyName] — a `get<Name>` whose FIRST parameter is the
+     * `Composer` and whose remaining parameters are all the transform's `$changed` ints (so no value params).
+     * Null when the property has no such getter.
+     *
+     * Split out from [readComposableProperty] so the shape can be tested WITHOUT a composer: a read attempted
+     * outside a composition has none to thread, and "this property is `@Composable`, so it needs a live
+     * composer" is a different report from "this property does not exist".
+     */
+    fun composableGetter(receiver: Any, propertyName: String): Method? {
+        val getter =
+            "get" + propertyName.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        return receiver.javaClass.methods.firstOrNull { method ->
+            KotlinJvmNames.matches(receiver.javaClass, method.name, getter) && composerIndex(method) == 0 &&
+                    (1 until method.parameterCount).all { method.parameterTypes[it] == Int::class.javaPrimitiveType }
+        }
+    }
 
     /**
      * Box an unboxed inline-value-class value for a NULLABLE/boxed value-class parameter. An inline value class
