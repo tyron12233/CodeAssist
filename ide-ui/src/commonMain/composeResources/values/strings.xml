@@ -350,6 +350,11 @@ We never collect your code, file or project names, which features you use, or an
     <string name="codeaction_severity_info">Info</string>
     <string name="codeaction_severity_hint">Hint</string>
     <string name="codeaction_quick_fixes">Quick fixes</string>
+    <string name="codeaction_same_span">%1$d on the same span</string>
+    <plurals name="codeaction_problems_here">
+        <item quantity="one">%1$d problem here</item>
+        <item quantity="other">%1$d problems here</item>
+    </plurals>
     <string name="completion_no_suggestions">No suggestions</string>
     <string name="completion_back_to_suggestions">Back to suggestions</string>
     <string name="completion_show_documentation">Show documentation</string>

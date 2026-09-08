@@ -35,9 +35,40 @@ import kotlin.math.roundToInt
  */
 
 /**
- * Inline diagnostic chips — one per line, the most severe diagnostic on it, positioned in the layout phase so
- * scrolling moves them without recomposition. Only Error and Warning get a chip (Info/Hint stay quiet: squiggle
- * + gutter only).
+ * Every diagnostic grouped by the line it *starts* on, each group ordered most severe first and then by
+ * position. This is the unit the whole diagnostic surface speaks in: one chip per group (showing the group's
+ * loudest message), the chip's badge counting the group, and the sheet listing the group when it is tapped,
+ * so a problem hidden behind a more severe one on the same line, or on the very same span, stays reachable.
+ * Grouping on the START line (not everything a span covers) keeps a degenerate multi-line span from inflating
+ * the count of every line it crosses, and matches where the chip and the gutter glyph are drawn.
+ *
+ * [lineOf] maps a diagnostic's start offset to its document line (the caller clamps it to the buffer).
+ */
+internal fun diagnosticsByStartLine(
+    diagnostics: List<UiDiagnostic>,
+    lineOf: (Int) -> Int,
+): Map<Int, List<UiDiagnostic>> {
+    if (diagnostics.isEmpty()) return emptyMap()
+    val byLine = HashMap<Int, MutableList<UiDiagnostic>>()
+    for (d in diagnostics) byLine.getOrPut(lineOf(d.startOffset)) { ArrayList(2) }.add(d)
+    // lower severity ordinal = more severe (Error before Warning before Info before Hint)
+    val order = compareBy<UiDiagnostic>({ it.severity.ordinal }, { it.startOffset }, { it.endOffset })
+    return byLine.mapValues { (_, group) -> if (group.size > 1) group.sortedWith(order) else group }
+}
+
+/**
+ * One line's chip: [primary] is the message the chip shows (the most severe Error/Warning starting on that
+ * line) and [count] is how many diagnostics of ANY severity start there. A count above 1 badges the chip, and
+ * a tap opens the whole line's group in the sheet, so the quieter problems stacked behind the loudest one
+ * (and the Info/Hints that never get a chip of their own) are still reachable.
+ */
+private class ChipGroup(val primary: UiDiagnostic, val count: Int)
+
+/**
+ * Inline diagnostic chips: one per line, showing the most severe diagnostic on it, positioned in the layout
+ * phase so scrolling moves them without recomposition. Only a line carrying an Error or Warning gets a chip
+ * (a line of Info/Hint alone stays quiet: squiggle + gutter only), but the chip speaks for every diagnostic on
+ * its line: it badges the total and its tap opens them all.
  */
 @Composable
 internal fun BoxScope.DiagnosticChipsLayer(
@@ -54,19 +85,22 @@ internal fun BoxScope.DiagnosticChipsLayer(
     onChipExtent: (Float) -> Unit,
 ) {
     val doc = session.doc
-    // The most-severe Error/Warning per line, memoized on (diagnostics, doc): a caret-only move leaves the
-    // buffer untouched, so this is a cache hit then — it changes only on an actual edit.
+    // Per line: the most-severe Error/Warning plus how many diagnostics live there in total. Memoized on
+    // (diagnostics, doc): a caret-only move leaves the buffer untouched, so this is a cache hit then, and it
+    // changes only on an actual edit (or a fresh analysis).
     val chipPerLine = remember(diagnostics, doc) {
-        val m = HashMap<Int, UiDiagnostic>()
-        for (d in diagnostics) {
-            if (d.severity != UiSeverity.Error && d.severity != UiSeverity.Warning) continue
-            val off = d.startOffset.coerceIn(0, doc.length)
-            val ln = doc.lineForOffset(off)
-            val cur = m[ln]
-            // lower ordinal = more severe (Error before Warning)
-            if (cur == null || d.severity.ordinal < cur.severity.ordinal) m[ln] = d
+        val byLine = diagnosticsByStartLine(diagnostics) { doc.lineForOffset(it.coerceIn(0, doc.length)) }
+        // A line only gets a chip when it carries an Error/Warning; one of Info/Hint alone stays quiet. The
+        // group is severity-ordered, so the first such entry is the loudest message on the line; every
+        // severity in the group counts towards the badge, since the sheet lists them all.
+        buildMap {
+            for ((ln, group) in byLine) {
+                val primary = group.firstOrNull {
+                    it.severity == UiSeverity.Error || it.severity == UiSeverity.Warning
+                } ?: continue
+                put(ln, ChipGroup(primary, group.size))
+            }
         }
-        m
     }
     val fm = session.foldModel
     val density = LocalDensity.current
@@ -81,19 +115,30 @@ internal fun BoxScope.DiagnosticChipsLayer(
         // Icon (em*0.95) + row spacing (em*0.35) + horizontal padding (em*0.5 each side) around the message.
         val chrome = em * (0.95f + 0.35f + 1.0f)
         var maxRight = 0f
-        for ((ln, d) in chipPerLine) {
+        for ((ln, g) in chipPerLine) {
             if (fm.isHidden(ln)) continue
             val chipLayout =
                 if (fm.foldStartingAt(ln) != null) render.compositeLayoutFor(ln) else render.layoutFor(ln)
             val lastSub = if (wordWrap) (chipLayout.lineCount - 1).coerceAtLeast(0) else 0
             val lineWidth = if (wordWrap) chipLayout.getLineRight(lastSub) else chipLayout.size.width.toFloat()
             val textW = measurer.measure(
-                d.message,
+                g.primary.message,
                 TextStyle(fontSize = fontSize, fontWeight = FontWeight.SemiBold),
                 maxLines = 1,
             ).size.width.toFloat()
+            // The count badge (only when the line stacks several) adds its own gap + icon + padding + digits.
+            val badgeW = if (g.count > 1) {
+                val digits = measurer.measure(
+                    g.count.toString(),
+                    TextStyle(fontSize = fontSize * CountBadgeTextScale, fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                ).size.width.toFloat()
+                em * (0.35f + 0.7f + 0.12f + 0.56f) + digits
+            } else {
+                0f
+            }
             // Right edge in the same (gutter-excluded) frame [contentWidth] uses: padLeft + line + gap + chip.
-            val right = metrics.padLeft + lineWidth + metrics.charWidth * 3f + chrome + textW
+            val right = metrics.padLeft + lineWidth + metrics.charWidth * 3f + chrome + textW + badgeW
             if (right > maxRight) maxRight = right
         }
         maxRight
@@ -107,8 +152,9 @@ internal fun BoxScope.DiagnosticChipsLayer(
             clipRect(left = gutterWidthPx) { this@drawWithContent.drawContent() }
         },
     ) {
-        for ((ln, d) in chipPerLine) {
+        for ((ln, g) in chipPerLine) {
             if (fm.isHidden(ln)) continue // diagnostic inside a collapsed region → no chip
+            val d = g.primary
             // Place after the composite text on a fold-start line, else after the real line. When wrapping, sit
             // after the end of the line's LAST wrapped row.
             val chipLayout =
@@ -120,6 +166,7 @@ internal fun BoxScope.DiagnosticChipsLayer(
                 d.severity,
                 d.unused,
                 d.message,
+                count = g.count,
                 fontSize = render.codeStyle.fontSize, // zoom-scaled code size, so the chip grows with the editor
                 lineHeightPx = metrics.lineHeight,
                 onClick = { onOpenSheet(d) },

@@ -1171,13 +1171,14 @@ private fun CodeEditorContent(
             )
         }
 
-        // diagnostic sheet — full (scrollable) message + that diagnostic's fixes, docked at the pane bottom
-        if (engaged) acts.sheet?.let { d ->
+        // diagnostic sheet: every diagnostic in the tapped area, plus the selected one's full (scrollable)
+        // message and its fixes, docked at the pane bottom
+        if (engaged && acts.sheetGroup.isNotEmpty()) {
             DiagnosticSheet(
-                severity = d.severity,
-                unused = d.unused,
-                message = d.message,
+                diagnostics = acts.sheetGroup,
+                selected = acts.sheetSelected,
                 actions = acts.sheetActions,
+                onSelect = { acts.selectSheet(it) },
                 onPick = { acts.applySheetFix(it) },
                 onDismiss = { acts.closeSheet() },
             )

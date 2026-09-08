@@ -76,6 +76,7 @@ import kotlinx.coroutines.delay
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.codeaction_problems_here
 import dev.ide.ui.generated.resources.quickdoc_parameters
 import dev.ide.ui.generated.resources.quickdoc_returns
 import dev.ide.ui.generated.resources.quickdoc_see_also
@@ -94,6 +95,7 @@ import dev.ide.ui.generated.resources.edoverlay_renaming
 import dev.ide.ui.generated.resources.edoverlay_select_all
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 // Editor overlay chrome: the small Compose surfaces that float over the canvas (rename prompt, inline
@@ -292,8 +294,16 @@ private fun docSectionLabel(title: String): String = when (title) {
     else -> title
 }
 
+/** The count badge's text size, as a fraction of the chip's code font size. Shared with the chips layer,
+ *  which measures the badge to keep an overhanging chip inside the horizontal scroll extent. */
+internal const val CountBadgeTextScale = 0.8f
+
 /** The inline diagnostic chip: a pill at the right of a diagnostic line — severity-tinted fill, icon,
  *  message. Colour/icon follow [severity]; an [unused] warning is muted rather than alarming.
+ *
+ *  [count] is how many diagnostics that line carries in all. Above one, a layers badge with the count closes
+ *  the pill: the line has more problems than the one message shown, either stacked on the very same span
+ *  (where nothing in the text could tell them apart) or elsewhere on the line, and tapping opens them all.
  *
  *  Sized off the editor's (zoom-scaled) code metrics so it reads as text ON its line: the pill's text is the
  *  code [fontSize], icon + paddings are derived from that same em, and the whole thing is vertically centred
@@ -303,6 +313,7 @@ internal fun DiagnosticChip(
     severity: UiSeverity,
     unused: Boolean,
     message: String,
+    count: Int,
     fontSize: TextUnit,
     lineHeightPx: Float,
     onClick: () -> Unit,
@@ -359,7 +370,34 @@ internal fun DiagnosticChip(
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                // Weighted (but not filling): the badge is measured first and always fits, and a long message
+                // ellipsizes instead of pushing the count out of the pill.
+                modifier = Modifier.weight(1f, fill = false),
             )
+            if (count > 1) {
+                Row(
+                    Modifier
+                        .background(color.copy(alpha = 0.22f), RoundedCornerShape(Ca.radius.pill))
+                        .padding(horizontal = em * 0.28f, vertical = em * 0.04f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(em * 0.12f),
+                ) {
+                    Icon(
+                        CaIcons.layers,
+                        pluralStringResource(Res.plurals.codeaction_problems_here, count, count),
+                        Modifier.size(em * 0.7f),
+                        tint = color,
+                    )
+                    Text(
+                        count.toString(),
+                        color = color,
+                        fontSize = fontSize * CountBadgeTextScale,
+                        lineHeight = fontSize * CountBadgeTextScale,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
 }

@@ -19,6 +19,7 @@ import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.RangeEdit
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -62,10 +63,20 @@ internal class EditorActionsController(
         private set
     var menuSelected by mutableIntStateOf(0)
         private set
-    var sheet by mutableStateOf<UiDiagnostic?>(null)
+    /** Every diagnostic in the open sheet's area, i.e. the whole line the tapped chip/gutter glyph speaks
+     *  for, most severe first. Empty means no sheet. */
+    var sheetGroup by mutableStateOf<List<UiDiagnostic>>(emptyList())
         private set
+    /** Which of [sheetGroup] the sheet is showing in full (message + fixes). */
+    var sheetSelected by mutableIntStateOf(0)
+        private set
+    /** The diagnostic the sheet currently details, or null when the sheet is closed. */
+    val sheet: UiDiagnostic? get() = sheetGroup.getOrNull(sheetSelected)
     var sheetActions by mutableStateOf<List<UiAction>>(emptyList())
         private set
+    // The in-flight quick-fix resolution for the sheet's selected diagnostic. Cancelled when the selection
+    // moves to a sibling, so a slow earlier fetch can't land on top of the newer one.
+    private var sheetActionsJob: Job? = null
 
     /** The plugin action tree for the editor context menu (groups become submenus). Empty until resolved. */
     var editorMenu by mutableStateOf(UiMenuGroup())
@@ -199,14 +210,42 @@ internal class EditorActionsController(
         return best
     }
 
-    /** Open the diagnostic sheet for [d] and fetch the quick-fixes registered for its range. */
+    /** Open the diagnostic sheet on [d], carrying every other diagnostic that starts on the same line, and
+     *  fetch the quick-fixes registered for [d]'s range. The chip and the gutter glyph only ever show the most
+     *  severe message on a line; the sheet is where the rest of them become visible and fixable, including
+     *  the ones stacked on the very same span and the Info/Hints that get no chip. */
     fun openSheet(d: UiDiagnostic) {
         dismissCompletion()
         menuOpen = false
-        sheet = d
+        val group = diagnosticGroupFor(d)
+        sheetGroup = group
+        sheetSelected = group.indexOf(d).coerceAtLeast(0)
+        fetchSheetActions(group.getOrNull(sheetSelected) ?: d)
+    }
+
+    /** Switch the open sheet to another diagnostic of its group (its quick-fixes are re-resolved). */
+    fun selectSheet(index: Int) {
+        val d = sheetGroup.getOrNull(index) ?: return
+        if (index == sheetSelected) return
+        sheetSelected = index
+        fetchSheetActions(d)
+    }
+
+    /** The diagnostics sharing [d]'s line: the very group its chip counted ([diagnosticsByStartLine]), in the
+     *  same severity-then-position order, so which one was tapped never changes the group's shape. */
+    private fun diagnosticGroupFor(d: UiDiagnostic): List<UiDiagnostic> {
+        val doc = session.doc
+        val lineOf = { off: Int -> doc.lineForOffset(off.coerceIn(0, doc.length)) }
+        val group = diagnosticsByStartLine(session.diagnostics, lineOf)[lineOf(d.startOffset)].orEmpty()
+        // The daemon may have replaced `diagnostics` since the chip was drawn; fall back to the tapped one.
+        return if (group.isEmpty()) listOf(d) else group
+    }
+
+    private fun fetchSheetActions(d: UiDiagnostic) {
         sheetActions = emptyList()
         val text = session.doc.text
-        scope.launch {
+        sheetActionsJob?.cancel()
+        sheetActionsJob = scope.launch {
             // Analysis-tier entries only. The sheet answers "what fixes this problem?", so the plugin
             // actions that apply anywhere the caret is (they carry an `actionId`) are excluded; they stay
             // reachable from the Alt-Enter popup and the editor overflow menu.
@@ -215,7 +254,12 @@ internal class EditorActionsController(
         }
     }
 
-    fun closeSheet() { sheet = null }
+    fun closeSheet() {
+        sheetActionsJob?.cancel()
+        sheetGroup = emptyList()
+        sheetSelected = 0
+        sheetActions = emptyList()
+    }
 
     /** Expand the selection to the smallest enclosing structural node — the "expand selection" gesture. Walks
      *  UP the backend's tolerant DOM one level (word → expression → statement → block → method → class …), so
@@ -249,7 +293,7 @@ internal class EditorActionsController(
     fun applySheetFix(index: Int) {
         val d = sheet ?: return
         val act = sheetActions.getOrNull(index) ?: return
-        sheet = null
+        closeSheet()
         runAction(act, d.startOffset, d.endOffset)
     }
 

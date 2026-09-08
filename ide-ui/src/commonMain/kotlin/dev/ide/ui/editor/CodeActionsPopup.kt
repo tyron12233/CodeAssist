@@ -60,11 +60,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiAction
 import dev.ide.ui.backend.UiActionKind
+import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.codeaction_dismiss
 import dev.ide.ui.generated.resources.codeaction_preview_composable
+import dev.ide.ui.generated.resources.codeaction_problems_here
 import dev.ide.ui.generated.resources.codeaction_quick_fixes
+import dev.ide.ui.generated.resources.codeaction_same_span
 import dev.ide.ui.generated.resources.codeaction_severity_error
 import dev.ide.ui.generated.resources.codeaction_severity_hint
 import dev.ide.ui.generated.resources.codeaction_severity_info
@@ -74,6 +77,7 @@ import dev.ide.ui.generated.resources.codeaction_show_context_actions
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -291,31 +295,28 @@ private fun commonPrefixLen(lists: List<List<String>>): Int {
 }
 
 /**
- * A bottom-docked sheet for a single diagnostic: the **full** (selectable, scrollable) message — so a long
- * error is readable on a phone where the inline chip is truncated — plus its quick-fixes as large touch
- * targets. Tapping the scrim or the × dismisses it. Pure UI; the host fetches the [actions] for the
- * diagnostic's range and applies the picked one over the [dev.ide.ui.backend.IdeBackend.applyAction] round-trip.
+ * A bottom-docked sheet for the diagnostics of one area (the line a chip or gutter glyph was tapped on): the
+ * **full** (selectable, scrollable) message of the [selected] one (so a long error is readable on a phone
+ * where the inline chip is truncated), plus its quick-fixes as large touch targets. When the area holds more
+ * than one problem, they are all listed above the message and any of them can be picked; diagnostics sitting
+ * on the *same span*, which no squiggle or chip can tell apart, are labelled as such. Tapping the scrim or the
+ * × dismisses it. Pure UI; the host fetches the [actions] for the selected diagnostic's range and applies the
+ * picked one over the [dev.ide.ui.backend.IdeBackend.applyAction] round-trip.
  */
 @Composable
 fun DiagnosticSheet(
-    severity: UiSeverity,
-    unused: Boolean,
-    message: String,
+    diagnostics: List<UiDiagnostic>,
+    selected: Int,
     actions: List<UiAction>,
+    onSelect: (Int) -> Unit,
     onPick: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val color = when (severity) {
-        UiSeverity.Error -> MaterialTheme.colorScheme.error
-        UiSeverity.Warning -> if (unused) MaterialTheme.colorScheme.outline else Ide.colors.warning
-        UiSeverity.Info -> Ide.colors.info
-        UiSeverity.Hint -> MaterialTheme.colorScheme.outline
-    }
-    val icon = when (severity) {
-        UiSeverity.Error -> CaIcons.error
-        UiSeverity.Warning -> CaIcons.warning
-        UiSeverity.Info, UiSeverity.Hint -> CaIcons.info
-    }
+    val d = diagnostics.getOrNull(selected) ?: return
+    val severity = d.severity
+    val unused = d.unused
+    val color = severityColor(severity, unused)
+    val icon = severityIcon(severity)
     val label = when (severity) {
         UiSeverity.Error -> stringResource(Res.string.codeaction_severity_error)
         UiSeverity.Warning -> if (unused) stringResource(Res.string.codeaction_severity_unused) else stringResource(Res.string.codeaction_severity_warning)
@@ -342,18 +343,34 @@ fun DiagnosticSheet(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(icon, null, Modifier.size(18.dp), tint = color)
                 Text(label, color = color, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(0.dp).weight(1f))
+                if (diagnostics.size > 1) {
+                    Text(
+                        pluralStringResource(Res.plurals.codeaction_problems_here, diagnostics.size, diagnostics.size),
+                        color = MaterialTheme.colorScheme.outline,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
                 Box(
                     Modifier.size(30.dp).clip(CircleShape).clickable(onClick = onDismiss),
                     contentAlignment = Alignment.Center,
                 ) { Icon(CaIcons.close, stringResource(Res.string.codeaction_dismiss), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
+            if (diagnostics.size > 1) {
+                Spacer(Modifier.height(8.dp))
+                DiagnosticGroupList(diagnostics, selected, onSelect)
+                Spacer(Modifier.height(8.dp))
+                // Separates the area's problem list from the detail of the one picked out of it.
+                Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+            }
             Spacer(Modifier.height(10.dp))
             SelectionContainer {
                 Text(
-                    message,
+                    d.message,
                     color = MaterialTheme.colorScheme.onSurface,
                     style = Ide.type.code,
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp).verticalScroll(rememberScrollState()),
+                    modifier = Modifier.fillMaxWidth()
+                        .heightIn(max = if (diagnostics.size > 1) 120.dp else 180.dp)
+                        .verticalScroll(rememberScrollState()),
                 )
             }
             if (actions.isNotEmpty()) {
@@ -366,5 +383,79 @@ fun DiagnosticSheet(
             }
             Spacer(Modifier.height(8.dp))
         }
+    }
+}
+
+/** Severity tint shared by the diagnostic sheet and its group rows; an [unused] warning is muted. */
+@Composable
+private fun severityColor(severity: UiSeverity, unused: Boolean): Color = when (severity) {
+    UiSeverity.Error -> MaterialTheme.colorScheme.error
+    UiSeverity.Warning -> if (unused) MaterialTheme.colorScheme.outline else Ide.colors.warning
+    UiSeverity.Info -> Ide.colors.info
+    UiSeverity.Hint -> MaterialTheme.colorScheme.outline
+}
+
+/** Severity glyph shared by the diagnostic sheet and its group rows. */
+private fun severityIcon(severity: UiSeverity) = when (severity) {
+    UiSeverity.Error -> CaIcons.error
+    UiSeverity.Warning -> CaIcons.warning
+    UiSeverity.Info, UiSeverity.Hint -> CaIcons.info
+}
+
+/**
+ * The "problems here" list inside [DiagnosticSheet]: one row per diagnostic in the tapped area, the detailed
+ * one highlighted, each row switching the sheet to it. Rows are clustered by span, and a cluster of two or
+ * more is labelled as sharing one, since those are exactly the diagnostics the editor itself cannot tell
+ * apart: the same characters underlined once, a single chip speaking for all of them.
+ */
+@Composable
+private fun DiagnosticGroupList(diagnostics: List<UiDiagnostic>, selected: Int, onSelect: (Int) -> Unit) {
+    // Keyed on the exact range. The group arrives sorted (severity, then position), and groupBy keeps that
+    // order, so every cluster is a contiguous run and the most severe span stays on top.
+    val clusters = remember(diagnostics) {
+        diagnostics.withIndex().groupBy { (_, d) -> d.startOffset to d.endOffset }.values.toList()
+    }
+    Column(Modifier.fillMaxWidth().heightIn(max = 168.dp).verticalScroll(rememberScrollState())) {
+        for (cluster in clusters) {
+            if (cluster.size > 1) {
+                Text(
+                    stringResource(Res.string.codeaction_same_span, cluster.size),
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 10.dp, top = 4.dp, bottom = 2.dp),
+                )
+            }
+            for ((index, d) in cluster) {
+                DiagnosticGroupRow(d, selected = index == selected, onClick = { onSelect(index) })
+            }
+        }
+    }
+}
+
+/** One row of [DiagnosticGroupList]: severity glyph + message, tinted while it is the detailed one. */
+@Composable
+private fun DiagnosticGroupRow(d: UiDiagnostic, selected: Boolean, onClick: () -> Unit) {
+    val color = severityColor(d.severity, d.unused)
+    val shape = RoundedCornerShape(Ca.radius.sm)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(if (selected) color.copy(alpha = 0.14f) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(severityIcon(d.severity), null, Modifier.padding(top = 1.dp).size(15.dp), tint = color)
+        Text(
+            d.message,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
