@@ -299,6 +299,28 @@ class KotlinSymbolService(
     @Volatile
     private var extMemoBuilding = false
 
+    /**
+     * The wired [index] when it can be trusted to ANSWER a classpath query, else null — which routes the query
+     * to the live classpath reader, the same source a standalone/test run uses.
+     *
+     * It is withheld in exactly one state: the index has SETTLED ([IndexStatus.settled] — a build ran to its
+     * end) without becoming [IndexStatus.ready]. That is a real, reachable state, not a hypothetical: the
+     * builder publishes `ready = skipped == 0 && missing == 0`, so one skipped artifact or one unbuilt segment
+     * leaves a permanently partial index. Its misses are then meaningless, and the Compose preview deliberately
+     * proceeds on a settled-but-partial index rather than wedge on "Preparing" forever — so those misses
+     * reached the user as a wall of "unresolved" on ordinary library calls (`Column` → `candidates=0` in a
+     * two-line file, with `Text` from a neighbouring artifact resolving fine). The JDT name environment already
+     * keeps probing the classpath when the index isn't ready; this is the Kotlin side of the same rule.
+     *
+     * The two states that look similar and must NOT fall back:
+     *  - **Still building.** Partial answers there are progressive by design, and a live jar scan per miss on a
+     *    slow device is exactly the cost the index exists to remove.
+     *  - **Never built.** A probe would duplicate the build that is about to run, at cold start, where it hurts
+     *    most.
+     */
+    private val queryIndex: IndexService?
+        get() = index?.takeIf { val s = it.status; !(s.settled && !s.ready) }
+
     /** True when the classpath memos are safe to use: clears them on a (re)build start, never caches mid-build. */
     private fun classpathCacheUsable(idx: IndexService): Boolean {
         val status = idx.status
@@ -310,7 +332,10 @@ class KotlinSymbolService(
         extMemoBuilding = building
         // Not ready ⇒ queries return PARTIAL results (whatever segments are open) for progressive completion;
         // those must never enter the session memos or they'd keep serving the partial view after the build.
-        return !building && status.ready
+        // A SETTLED-but-partial index is the exception: [queryIndex] withholds it, so the answers being cached
+        // there come from the live reader over jars that cannot change under us — as session-stable as a ready
+        // index, and the state where re-reading bytecode per lookup would hurt most.
+        return !building && (status.ready || status.settled)
     }
 
     /**
@@ -1511,7 +1536,7 @@ class KotlinSymbolService(
         // is applied BEFORE bindExtensionReceiver, which allocates a fresh symbol per generic receiver.
         // A camel-hump prefix pushes only its guaranteed first character into the packed key
         // ([PrefixMatcher.indexPrefix]); the matcher then narrows the bucket before symbols materialize.
-        val idx = index
+        val idx = queryIndex
         val fromClasspath = if (idx != null) {
             // Progressive while indexing ("dumb mode"): the query runs over whatever segments are already
             // open — partial results instead of a blackout — and [classpathCacheUsable] keeps those partial
@@ -1758,6 +1783,10 @@ class KotlinSymbolService(
      * the chain is bounded and rare.
      */
     private fun typeShape(fqn: String): TypeShape? {
+        // The raw [index] here, not [queryIndex]: this gate is about whether the ANSWER is stable enough to
+        // cache, which [classpathCacheUsable] already decides (a settled-but-partial index answers from the
+        // live reader, and jars can't change under us, so those answers memoize too). Which source answers is
+        // the inner overload's decision.
         val idx = index ?: return typeShape(fqn, aliasDepth = 0)
         if (!classpathCacheUsable(idx)) return typeShape(fqn, aliasDepth = 0)
         classpathShapeMemo[fqn]?.let { return it.orElse(null) }
@@ -1775,7 +1804,7 @@ class KotlinSymbolService(
         // `$` via classBytes's `.`↔`$` retry; only the index's exact-key lookup needs the dot form.
         val dotFqn = if ('$' in fqn) fqn.replace('$', '.') else fqn
         val lookupFqn = Builtins.javaTypeFor(dotFqn) ?: dotFqn
-        index?.let { idx ->
+        queryIndex?.let { idx ->
             // The persistent `kotlin.typeShape` index is the SOLE source for classpath binaries once wired —
             // no live decode/bytecode read, ever (that's the index's job; it decoded these at build time).
             // Empty until the index is ready ("dumb mode"); a genuine post-ready miss simply doesn't resolve
@@ -1813,7 +1842,7 @@ class KotlinSymbolService(
      * Like [typeShape], the index is the sole source once wired — no live `.kotlin_builtins` read.
      */
     private fun builtinShape(fqn: String): TypeShape? {
-        val idx = index ?: return builtins.lookup(fqn, this)
+        val idx = queryIndex ?: return builtins.lookup(fqn, this)
         // Memoized (hit AND miss) like [typeShape]: the abstract-instantiation / non-instantiable / companion
         // probes each fall through to this for the same fqn, and a non-built-in name misses here every time.
         if (!classpathCacheUsable(idx)) {
@@ -2317,7 +2346,7 @@ class KotlinSymbolService(
         val src = model().topLevel
             .filter { prefix.isEmpty() || m.matches(it.name) }
             .map { toSymbol(it, null) }
-        val idx = index
+        val idx = queryIndex
         val cp = if (idx != null) {
             run {
                 // Prefix-query the persistent index; an empty prefix (the explicit "show all" / resolution path,
@@ -2653,7 +2682,7 @@ class KotlinSymbolService(
         // Not filtered by visibility — see [topLevelCallables]; cross-file private is enforced at the use sites
         // (completion / the unresolved-reference diagnostic), so same-file private resolution keeps working.
         val src = model().topLevel.filter { it.name == name }.map { toSymbol(it, null) }
-        val idx = index
+        val idx = queryIndex
         val cp = if (idx != null) {
             // Index only — the stdlib (`println`, `listOf`) is indexed alongside every other library jar.
             // While building this sees the already-open segments (partial, progressive); resolution-driven

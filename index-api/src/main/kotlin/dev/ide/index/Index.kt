@@ -85,7 +85,21 @@ data class IndexStatus(
     /** Aggregate stats for the last completed build (phase times, cache hit/miss, file counts). Non-null only
      *  once a build has finished. */
     val stats: IndexBuildStats? = null,
-)
+) {
+    /**
+     * A build has run to its END — completely, partially, or by failing — and none is running now. So a MISS in
+     * this index is as good as it will ever get until the next build, unlike a miss taken mid-build (partial by
+     * design, progressive) or before the first build (nothing is there yet).
+     *
+     * [ready] says whether that outcome was a COMPLETE index. When it wasn't — a skipped artifact, a segment
+     * that isn't built, a failed build — a consumer that can reach the real classpath should PROBE it rather
+     * than trust the miss, or it reports ordinary library code as unresolved. Distinguished from "never built"
+     * (where a probe would only duplicate the build that is about to run) by the terminal status the builder
+     * publishes: aggregate [stats] on a finished build, and [fraction] at 1.0 on either a finished or a failed
+     * one.
+     */
+    val settled: Boolean get() = !building && (stats != null || fraction >= 1.0)
+}
 
 interface IndexService {
     fun <V : Any> exact(id: IndexId, key: String): Sequence<V>
