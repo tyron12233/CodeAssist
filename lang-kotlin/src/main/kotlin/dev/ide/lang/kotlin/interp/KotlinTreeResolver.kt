@@ -1134,6 +1134,15 @@ class KotlinTreeResolver(
                 }
             }
         }
+        // A bare read of a member an `import` brought in through an object or companion
+        // (`import …KeyEventType.Companion.KeyUp` → `KeyUp`, `import …Dp.Companion.Unspecified`). Lowers to the
+        // same nodes the qualified spelling (`KeyEventType.KeyUp`) already produces: the singleton, then the
+        // property read off it.
+        importedSingletonOwner(name)?.let { owner ->
+            propertyBinding(name, service.typeByFqn(owner))?.let {
+                return RNode.PropertyGet(singletonRef(owner, e), it, span(e))
+            }
+        }
         return unsupported("unresolved name `$name`", e)
     }
 
@@ -1552,6 +1561,81 @@ class KotlinTreeResolver(
     }
 
     /**
+     * The function VALUE a call's callee names, for Kotlin's invoke convention: `tab.content()` where
+     * `content` is a `val content: @Composable () -> Unit`, or the same read off an implicit `this`. Null when
+     * the callee names no such property — then the call really is unresolved.
+     *
+     * `x.invoke(…)` is the explicit spelling of the same convention, and resolves to the receiver itself.
+     *
+     * For a PROJECT-SOURCE receiver the property's declared type isn't available here (the file-class index
+     * carries names, not types), so the test is structural instead: a property of that name with no method of
+     * that name AND arity. Kotlin has exactly one reading for that call — read the property, invoke the value —
+     * so the reading is unambiguous even without the type. A LIBRARY receiver has its symbol, so there the
+     * property's type must actually be functional.
+     */
+    private fun functionValueNode(call: KtCallExpression, receiverNode: RNode?, receiverExpr: KtExpression?): RNode? {
+        val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+        val arity = call.valueArguments.size
+        if (name == "invoke") {
+            // A literal method named `invoke` would have resolved above (this runs only after every named-callee
+            // path declined), so the operator convention is the one reading left — accept it unless the receiver
+            // is KNOWN not to be functional. An un-inferable receiver (a source class's property, whose declared
+            // type this pass can't see) still lowers, and a genuinely non-callable value then fails at render
+            // with what it actually is instead of a bare "unresolved call `invoke`".
+            val rt = receiverExpr?.let { runCatching { resolver.inferType(it) }.getOrNull() }
+            return receiverNode?.takeIf { rt == null || isFunctionType(rt) }
+        }
+        if (receiverNode != null) {
+            sourceClassOfReceiver(receiverExpr)?.let { srcCls ->
+                val (props, methods) = inheritedMembers(srcCls)
+                if (name !in props || methods[name]?.any { it.arity == arity } == true) return null
+                return RNode.PropertyGet(receiverNode, Binding.Property(name, srcCls.fqn, backingField = false), span(call))
+            }
+            val rt = receiverExpr?.let { runCatching { resolver.inferType(it) }.getOrNull() } ?: return null
+            val prop = runCatching {
+                service.membersForCompletion(rt.qualifiedName, rt.typeArguments, name)
+                    .firstOrNull { it.name == name && it.kind == SymbolKind.FIELD && !it.isExtension }
+            }.getOrNull() ?: return null
+            if (!isFunctionType(prop.type as? KotlinType ?: return null)) return null
+            return propertyBinding(name, rt)?.let { RNode.PropertyGet(receiverNode, it, span(call)) }
+        }
+        // A bare `content()` inside the class that holds the slot — the same read off the implicit `this`.
+        val ctx = classStack.lastOrNull() ?: return null
+        if (name !in ctx.propertyNames) return null
+        return RNode.PropertyGet(thisRef(ctx, call), Binding.Property(name, ctx.fqn, backingField = false), span(call))
+    }
+
+    /**
+     * The `object`/companion singleton an `import` uses to bring [name] into scope by its simple name —
+     * `import androidx.compose.material3.CardDefaults.cardColors` (an object's member),
+     * `import androidx.compose.ui.input.key.KeyEventType.Companion.KeyUp` (a companion's) — or null when no
+     * import does. That member takes no dispatch receiver in SOURCE, but its JVM method/field is an instance
+     * one on the singleton, so the lowering has to supply the singleton the source omits.
+     *
+     * Returns the CONTAINER, not the resolved symbol's declaring class: an inherited member's declaring class
+     * is a supertype, and it is the singleton that has to be materialized. Mirrors
+     * [KotlinResolver.importedSingletonMembers], which is what put the member in scope for the resolver.
+     */
+    private fun importedSingletonOwner(name: String): String? {
+        for (imp in resolver.fileContext.imports) {
+            if (imp.alias != null) continue
+            if (!imp.isStar && imp.fqn.substringAfterLast('.') != name) continue
+            val container = if (imp.isStar) imp.fqn else imp.fqn.substringBeforeLast('.', "")
+            if (container.isEmpty()) continue
+            if (container.substringAfterLast('.').firstOrNull()?.isUpperCase() != true) continue
+            if (runCatching { service.isSingletonObject(container) }.getOrDefault(false)) return container
+            // `import Foo.bar` where `Foo` is a CLASS: the member comes off its companion, and the companion
+            // is the singleton to dispatch on.
+            runCatching { service.companionObjectFqn(container) }.getOrNull()?.let { return it }
+        }
+        return null
+    }
+
+    /** A reference to the singleton [fqn] — the receiver an imported singleton member needs. */
+    private fun singletonRef(fqn: String, at: PsiElement): RNode =
+        RNode.Name(Binding.ObjectRef(fqn, fqn.substringAfterLast('.')), span(at))
+
+    /**
      * Whether the extension [sym] is actually in scope here — Kotlin resolves an extension only when it is
      * imported (explicitly or via a star/default import) or declared in the file's own package. Without this
      * gate the resolver binds `16.dp` even when `androidx.compose.ui.unit.dp` was never imported, and the
@@ -1781,6 +1865,15 @@ class KotlinTreeResolver(
                     }
                 }
             }
+            // Kotlin's INVOKE CONVENTION on a property of function type: `tab.content()` where `content` is a
+            // `val content: @Composable () -> Unit` reads the property and invokes the function value. There is
+            // no function named `content`, which is why nothing above resolved it. A class holding composable
+            // slots this way is a common Compose idiom (JetNews's `TabContent(section, content)`), and the same
+            // shape covers a plain `holder.onClick()`. Reached only after every named-callee path declined, so a
+            // real member function of that name still wins, as Kotlin requires.
+            functionValueNode(call, receiverNode, receiverExpr)?.let { fnValue ->
+                return RNode.Call(synthMember("invoke"), DispatchKind.INVOKE, fnValue, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+            }
             return unsupported(callDiagnostic(call), call)
         }
         val args = lowerArgs(call)
@@ -1815,6 +1908,13 @@ class KotlinTreeResolver(
         if (receiverNode == null && chosen.kind == SymbolKind.METHOD) {
             chosen.declaringClassFqn?.let { findScopeReceiver(it) }?.let { scope ->
                 return RNode.Call(callee, DispatchKind.MEMBER, scope, args, key, span(call), typeArguments = typeArgs)
+            }
+            // A bare call to a member an `import` brought in through an `object`/companion
+            // (`import …CardDefaults.cardColors` → `cardColors()`, `import …PullToRefreshDefaults.Indicator` →
+            // `Indicator(…)`). Source omits the receiver; the JVM method is an instance one on the singleton,
+            // so dispatch it there rather than falling to a receiver-less TOP_LEVEL call.
+            bareCalleeName?.let { n -> importedSingletonOwner(n) }?.let { owner ->
+                return RNode.Call(callee, DispatchKind.MEMBER, singletonRef(owner, call), args, key, span(call), typeArguments = typeArgs)
             }
         }
         val dispatch = when {

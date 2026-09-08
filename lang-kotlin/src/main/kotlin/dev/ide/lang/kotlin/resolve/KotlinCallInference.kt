@@ -71,7 +71,13 @@ internal fun KotlinResolver.inferCallBindings(
             val functionalReturn = (shape.returnType as? KotlinType)?.let { service.substitute(it, partial) }
             val bodyResult = if (coercesResultToUnit(functionalReturn)) null else withLambdaShape(
                 expr,
-                KotlinSymbolService.FunctionalShape(inputs, shape.returnType, shape.isExtension)
+                KotlinSymbolService.FunctionalShape(
+                    inputs, shape.returnType, shape.isExtension,
+                    // Carried so a lambda scored top-down keeps the receiver its shape provides (a SAM
+                    // `fun interface`'s extension receiver has no other route into [expectedLambdaShape]).
+                    receiverType = (shape.receiverType as? KotlinType)?.let { service.substitute(it, partial) }
+                        ?: shape.receiverType,
+                )
             ) {
                 inferLambdaResult(expr) as? KotlinType
             }

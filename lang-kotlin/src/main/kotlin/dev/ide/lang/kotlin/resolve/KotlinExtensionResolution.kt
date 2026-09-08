@@ -195,6 +195,57 @@ private fun KotlinResolver.importedSingletonExtensions(
     return out
 }
 
+/**
+ * The PLAIN (non-extension) members an `import` brings into scope by simple name through an `object` or a
+ * companion object: `import androidx.compose.material3.CardDefaults.cardColors` makes `cardColors()` a bare
+ * call, `import androidx.compose.ui.input.key.KeyEventType.Companion.KeyUp` makes `KeyUp` a bare read. A
+ * member of a singleton needs no dispatch receiver at the call site, which is exactly why Kotlin lets it be
+ * imported; a member of a regular class can never be.
+ *
+ * The same rule as [importedSingletonExtensions], for the other half of it: there the import puts a member
+ * EXTENSION on some receiver, here it puts a plain member in the bare-name scope. Both import spellings are
+ * accepted (through the companion, `Foo.Companion.bar`, and through the enclosing class, `Foo.bar`), plus a
+ * star import of either. Off the hot path by the same guard as its sibling — the container's last segment must
+ * be capitalized, so an ordinary package import is rejected before any type lookup.
+ *
+ * An ALIASED import (`import Foo.bar as baz`) is skipped: the symbol would have to be renamed to be found by
+ * the alias, and the callers key on the symbol's own name to dispatch it.
+ */
+internal fun KotlinResolver.importedSingletonMembers(
+    namePrefix: String,
+    exactName: Boolean,
+): List<KotlinSymbol> {
+    var out: ArrayList<KotlinSymbol>? = null
+    for (imp in fileContext.imports) {
+        if (imp.alias != null) continue
+        val container = if (imp.isStar) imp.fqn else imp.fqn.substringBeforeLast('.', "")
+        if (container.isEmpty()) continue
+        if (container.substringAfterLast('.').firstOrNull()?.isUpperCase() != true) continue
+        // A non-star import names ONE member, so a name that can't match it skips the lookup entirely.
+        val member = if (imp.isStar) null else imp.fqn.substringAfterLast('.')
+        if (member != null && namePrefix.isNotEmpty()) {
+            if (exactName) {
+                if (member != namePrefix) continue
+            } else if (!member.startsWith(namePrefix, ignoreCase = true)) continue
+        }
+        val candidates =
+            if (service.isSingletonObject(container)) service.membersForCompletion(container, emptyList(), member ?: namePrefix)
+            // Not a singleton itself: the import may still reach its COMPANION's member (`import Foo.bar`).
+            else service.companionMembersFor(container, member ?: namePrefix)
+        for (c in candidates) {
+            if (c.isExtension) continue // its sibling's business — it needs a receiver, not a bare name
+            if (member != null && c.name != member) continue
+            if (member == null && c.name in IMPORTED_OBJECT_NOISE) continue // a star import shouldn't shadow these
+            (out ?: ArrayList<KotlinSymbol>().also { out = it }) += c
+        }
+    }
+    return out ?: emptyList()
+}
+
+/** `equals`/`hashCode`/`toString` are members of every object, so `import Obj.*` must not put them in the
+ *  bare-name scope where they'd compete with the enclosing class's own. */
+private val IMPORTED_OBJECT_NOISE = setOf("equals", "hashCode", "toString")
+
 /** Bind a member-extension's receiver type parameters from the actual [receiverType] (`fun <T> List<T>.x()`
  *  on `List<String>` → T = String), so its return/param types resolve concretely. */
 internal fun KotlinResolver.bindMemberExtensionReceiver(

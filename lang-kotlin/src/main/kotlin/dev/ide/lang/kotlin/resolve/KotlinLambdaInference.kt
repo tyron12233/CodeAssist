@@ -68,10 +68,19 @@ internal fun KotlinResolver.inferLambdaResult(lambda: KtLambdaExpression): TypeR
 
 /** The `(P…) -> R` type a lambda is expected to be (from the parameter it fills), receiver-bound — used
  *  to type the lambda's `it`/named parameters. */
-/** When [lambda] fills an EXTENSION-function-typed parameter (`RowScope.() -> Unit`), the receiver type its
- *  body has as an implicit `this` (the Compose-scope content-lambda case); null for a plain lambda. */
+/**
+ * When [lambda] fills an EXTENSION-function-typed parameter (`RowScope.() -> Unit`), the receiver type its
+ * body has as an implicit `this` (the Compose-scope content-lambda case); null for a plain lambda.
+ *
+ * Also covers the SAM form of the same thing: a parameter of `fun interface` type whose abstract method is a
+ * member extension (`Layout`'s `MeasurePolicy` is `MeasureScope.measure(…)`) converts a lambda that likewise
+ * gets that receiver — see [KotlinSymbolService.FunctionalShape.receiverType]. The full-shape lookup only runs
+ * when the expected type isn't an extension function type, so the common Compose content lambda still answers
+ * from the cheap path.
+ */
 fun KotlinResolver.lambdaReceiverType(lambda: KtLambdaExpression): KotlinType? =
     expectedFunctionTypeFor(lambda)?.takeIf { it.isExtensionFunctionType }?.typeArguments?.firstOrNull() as? KotlinType
+        ?: expectedLambdaShape(lambda)?.receiverType as? KotlinType
 
 /**
  * The functional type a lambda is expected to be from its DECLARED context (not a call argument): the type

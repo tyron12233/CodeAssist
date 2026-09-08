@@ -54,9 +54,10 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
     var node: PsiElement? = elementAt(offset)
     while (node != null) {
         when (node) {
-            is KtLambdaExpression -> expectedFunctionTypeFor(node)
-                ?.takeIf { it.isExtensionFunctionType }
-                ?.let { (it.typeArguments.firstOrNull() as? KotlinType)?.let(out::add) }
+            // A receiver lambda's implicit `this` — both spellings of it: an extension function type
+            // (`ColumnScope.() -> Unit`) and a `fun interface` whose abstract method is a member extension
+            // (`MeasurePolicy` is `MeasureScope.measure(…)`, so `Layout { }`'s body has a `MeasureScope`).
+            is KtLambdaExpression -> lambdaReceiverType(node)?.let(out::add)
 
             is KtNamedFunction -> node.receiverTypeReference?.text
                 ?.let { service.typeFromText(it, fileContext) }?.let(out::add)
@@ -890,6 +891,10 @@ fun KotlinResolver.scopeSymbolsAt(
     }
     // Bare-accessible members of an enclosing class's companion object (`CONST`, a companion `factory()`).
     out += enclosingCompanionMembers(offset)
+    // Members an `import` brought in through an `object`/companion — `import …CardDefaults.cardColors` makes
+    // `cardColors()` a bare call, `import …KeyEventType.Companion.KeyUp` makes `KeyUp` a bare read. Added after
+    // the locals/receivers/companion above, so a name declared closer still wins.
+    out += importedSingletonMembers(namePrefix, exactName)
     // Named local types in scope (`class Foo` / `object O` in a body) — offered by simple name.
     localTypesInScope(offset).forEach { (simple, fqn) ->
         out += KotlinSymbol(

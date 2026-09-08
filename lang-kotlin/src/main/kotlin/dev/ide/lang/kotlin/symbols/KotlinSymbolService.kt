@@ -120,7 +120,11 @@ class KotlinSymbolService(
     class FunctionalShape(
         val parameterTypes: List<TypeRef?>,
         val returnType: TypeRef?,
-        val isExtension: Boolean
+        val isExtension: Boolean,
+        /** The receiver a lambda of this shape has as its implicit `this` — the receiver of an extension
+         *  function type (`ColumnScope.() -> Unit`), or the extension receiver of a `fun interface`'s abstract
+         *  method (`MeasurePolicy` is `MeasureScope.measure(…)`). Null when the shape provides none. */
+        val receiverType: TypeRef? = null,
     )
 
     @Volatile
@@ -2013,16 +2017,19 @@ class KotlinSymbolService(
     }
 
     /** The lambda-relevant signature of a functional [type]: its value-parameter types + result type, with the
-     *  type's arguments substituted. Handles a Kotlin `FunctionN` and a Java single-abstract-method interface
-     *  (`java.util.function.Function`, `Comparator`, …) — so a lambda passed where either is expected can be
-     *  typed. Null when [type] isn't functional. */
+     *  type's arguments substituted. Handles a Kotlin `FunctionN` and a single-abstract-method interface
+     *  (`java.util.function.Function`, `Comparator`, a Kotlin `fun interface`) — so a lambda passed where
+     *  either is expected can be typed. Null when [type] isn't functional. */
     fun functionalShape(type: KotlinType): FunctionalShape? {
         if (TypeRendering.isFunctionType(type.qualifiedName) && type.typeArguments.isNotEmpty()) {
             val params = type.typeArguments.dropLast(1)
             val inputs = if (type.isExtensionFunctionType) params.drop(1) else params
-            return FunctionalShape(inputs, type.typeArguments.last(), type.isExtensionFunctionType)
+            return FunctionalShape(
+                inputs, type.typeArguments.last(), type.isExtensionFunctionType,
+                receiverType = if (type.isExtensionFunctionType) params.firstOrNull() else null,
+            )
         }
-        // A Java SAM: the unique abstract, non-static instance method (Object's methods don't count).
+        // A SAM: the unique abstract, non-static instance method (Object's methods don't count).
         val abstracts =
             membersOf(type.qualifiedName, type.typeArguments, null).filterIsInstance<KotlinSymbol>()
                 .filter {
@@ -2030,7 +2037,16 @@ class KotlinSymbolService(
                             Modifier.STATIC !in it.modifiers && it.name !in OBJECT_METHODS
                 }
         val sam = abstracts.singleOrNull() ?: return null
-        return FunctionalShape(sam.paramTypes, sam.type, isExtension = false)
+        // A Kotlin `fun interface` may declare its abstract method as a member EXTENSION — Compose's
+        // `MeasurePolicy` is `MeasureScope.measure(measurables, constraints)` — and then the lambda converted to
+        // it has that receiver as its implicit `this`. Dropping it is what left `layout(…)` unresolved and
+        // `Dp.roundToPx()` ambiguous inside `Layout { … }`: with no receiver in scope, nothing selects the
+        // `Density` member. A Java SAM has no extension receiver, so this is null there.
+        val samReceiver = sam.receiverTypeFqn?.let { typeByFqn(it, sam.receiverTypeArgs) }
+        return FunctionalShape(
+            sam.paramTypes, sam.type,
+            isExtension = samReceiver != null, receiverType = samReceiver,
+        )
     }
 
     /** Bind an extension's receiver type params from the actual receiver: `T.also` → T = the receiver type;
