@@ -183,7 +183,16 @@ val layers = mapOf(
     "plugins" to listOf("plugin-api", "plugin-ui-api", "plugin-bom", "plugin-impl"),
     // The IDE itself: the Compose UI, its backend port, and the desktop/Android shells.
     "app" to listOf("ide-ui-api", "ide-ui", "ide-core", "ide-desktop", "ide-android"),
+    // Test-only harnesses, consumed via testImplementation.
+    "tools" to listOf("test-support", "bench-support"),
 )
+
+// `samples` holds plugins built as their own apps; it is already a directory, so it needs no mapping.
+val unlayered = rootProject.children.map { it.name } - layers.values.flatten().toSet() - setOf("samples")
+require(unlayered.isEmpty()) {
+    "settings.gradle.kts: $unlayered are included but not assigned a layer directory, so Gradle would " +
+        "look for them at the repo root. Add each to the `layers` map above."
+}
 
 // Only remap what this build actually included — CI_CORE_ONLY leaves the shells out.
 val included = rootProject.children.map { it.name }.toSet()
