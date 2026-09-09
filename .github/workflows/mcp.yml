@@ -53,7 +53,7 @@ jobs:
         with:
           name: mcp-test-reports
           path: |
-            agent-mcp/build/reports/tests/**
-            agent-mcp/build/test-results/**
+            services/agent-mcp/build/reports/tests/**
+            services/agent-mcp/build/test-results/**
           if-no-files-found: ignore
           retention-days: 14

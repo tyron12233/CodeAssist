@@ -173,6 +173,12 @@ val layers = mapOf(
         "android-support", "android-sdk-metadata", "art-compat",
         "layout-preview-api", "layout-preview-impl", "applog-runtime",
     ),
+    // Cross-cutting services, each an api/impl pair (plus its own Compose UI where it has one):
+    // dependency resolution, version control, the Projects Store, analytics, the AI agent.
+    "services" to listOf(
+        "deps-api", "deps-impl", "vcs-api", "vcs-impl", "vcs-ui", "store-api", "store-impl",
+        "analytics-api", "analytics-impl", "agent-api", "agent-impl", "agent-mcp", "agent-ui",
+    ),
 )
 
 // Only remap what this build actually included — CI_CORE_ONLY leaves the shells out.
