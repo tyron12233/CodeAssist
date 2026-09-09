@@ -32,10 +32,18 @@ class StoreFeedWiringTest {
      * Read from `:store-impl`'s test resources **by path** rather than off the classpath: another module's
      * test resources are not a published artifact, and the alternatives were either build plumbing
      * (`java-test-fixtures`) or a second copy of the fixtures that could drift from the one the parser
-     * tests use. Tests run with the module directory as the working directory.
+     * tests use.
+     *
+     * The directory comes from a system property the build sets, not from a path relative to this module.
+     * It used to be `../store-impl/...`, which held only while every module sat directly in the repo root;
+     * grouping the modules into layer directories broke it, and a relative guess would break again on the
+     * next move. Only the build knows where `:store-impl` is.
      */
     private fun fixture(name: String): String {
-        val f = java.io.File("../store-impl/src/test/resources/$name")
+        val root = checkNotNull(System.getProperty("store.impl.testResources")) {
+            "the test task must set -Dstore.impl.testResources (see ide-core/build.gradle.kts)"
+        }
+        val f = java.io.File(root, name)
         check(f.isFile) { "missing fixture ${f.absolutePath}" }
         return f.readText()
     }

@@ -17,18 +17,15 @@ class PluginBomTest {
     @Test
     fun `the BOM constrains every module this build publishes`() {
         val root = repoRoot()
-        val published = root.listFiles().orEmpty()
-            .filter { it.isDirectory }
-            .filter { module ->
-                val buildFile = File(module, "build.gradle.kts")
-                buildFile.isFile && "dev.ide.spi-publish" in buildFile.readText()
-            }
+        val modules = moduleDirs(root)
+        val published = modules
+            .filter { "dev.ide.spi-publish" in File(it, "build.gradle.kts").readText() }
             .map { it.name }
             .sorted()
         assertTrue(published.isNotEmpty(), "found no published modules under $root; has the layout changed?")
 
-        val bom = File(root, "plugin-bom/build.gradle.kts")
-        assertTrue(bom.isFile, "the BOM is missing: $bom")
+        val bom = modules.singleOrNull { it.name == "plugin-bom" }?.let { File(it, "build.gradle.kts") }
+        assertTrue(bom != null && bom.isFile, "the BOM is missing under $root")
         val text = bom.readText()
         for (module in published) {
             assertTrue(
@@ -36,6 +33,20 @@ class PluginBomTest {
                 ":$module is published but the BOM carries no version for it",
             )
         }
+    }
+
+    /**
+     * Every Gradle module in the checkout, found rather than listed.
+     *
+     * Modules are grouped into layer directories (`plugins/plugin-api`, `app/ide-ui`, ...), so they are one
+     * level below the root -- except `samples/`, which nests one deeper. Searching two levels down covers
+     * both and does not need updating when a module changes layer, which is the whole point of the Gradle
+     * paths being independent of the directories.
+     */
+    private fun moduleDirs(root: File): List<File> {
+        val depthOne = root.listFiles().orEmpty().filter { it.isDirectory && !it.name.startsWith(".") }
+        val depthTwo = depthOne.flatMap { it.listFiles().orEmpty().filter(File::isDirectory) }
+        return (depthOne + depthTwo).filter { File(it, "build.gradle.kts").isFile }
     }
 
     /** The checkout root, from whichever directory the test worker was started in. */

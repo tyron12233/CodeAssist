@@ -96,3 +96,13 @@ dependencies { swingApiStubs(project(mapOf("path" to ":awt-toolkit", "configurat
 tasks.named<ProcessResources>("processResources") {
     from(swingApiStubs) { into("swing") }
 }
+
+// StoreFeedWiringTest parses fixtures captured from a live `store_explore()`, which live in :store-impl's
+// test resources (see its KDoc for why they are read by path rather than off the classpath). Hand the test
+// that directory instead of letting it compose a relative one -- the module layout is the build's business.
+tasks.named<Test>("test") {
+    systemProperty(
+        "store.impl.testResources",
+        project(":store-impl").layout.projectDirectory.dir("src/test/resources").asFile.absolutePath,
+    )
+}
