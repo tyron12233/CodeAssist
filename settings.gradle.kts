@@ -140,3 +140,24 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":samples:hello-plugin",
     )
 }
+
+// ---------------------------------------------------------------------------------------------------
+// Where each module lives on disk.
+//
+// Modules are grouped into layer directories, but their Gradle paths stay FLAT: the Kotlin editor
+// backend is `:lang-kotlin` at `lang/lang-kotlin`, never `:lang:kotlin`. Every `project(":x")`
+// dependency, `./gradlew :x:test` invocation, CI task path and published coordinate therefore reads
+// the same before and after the grouping. This block is the only place the two are tied together.
+//
+// A module listed in the `include(...)` calls above but missing here is still expected at the repo
+// root; the `require` below turns that into a clear message rather than a missing-directory error.
+val layers = mapOf(
+    // The framework's foundation: services, the virtual file system, the project/module model.
+    "platform" to listOf("platform-core", "vfs-api", "project-model-api", "project-model-impl"),
+)
+
+// Only remap what this build actually included — CI_CORE_ONLY leaves the shells out.
+val included = rootProject.children.map { it.name }.toSet()
+layers.forEach { (layer, modules) ->
+    modules.filter { it in included }.forEach { project(":$it").projectDir = file("$layer/$it") }
+}
