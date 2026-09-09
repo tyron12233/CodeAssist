@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.ComposePreviewHost
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiContentBlock
+import dev.ide.ui.components.CodeSample
 import dev.ide.ui.editor.CodeLanguage
 import dev.ide.ui.editor.highlight
 import dev.ide.ui.editor.preview.LessonComposePreview
@@ -86,31 +87,7 @@ fun LessonBlocks(
     }
 }
 
-/** A read-only, syntax-highlighted code sample on a soft editor-toned card; scrolls horizontally if wide. */
-@Composable
-fun CodeSample(code: String, language: String = "kotlin", modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(Ca.radius.md)
-    val highlighted = highlight(code, codeLanguageOf(language), Ide.colors.syntax)
-    Box(
-        modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(Ide.colors.editorBg)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-    ) {
-        Text(highlighted, style = Ide.type.code)
-    }
-}
 
-/** Map a lesson block's language string to the editor's [CodeLanguage] for highlighting. */
-fun codeLanguageOf(language: String): CodeLanguage = when {
-    language.startsWith("java") -> CodeLanguage.Java
-    language.startsWith("kotlin") || language == "kt" -> CodeLanguage.Kotlin
-    language == "xml" -> CodeLanguage.Xml
-    else -> CodeLanguage.Plain
-}
 
 @Composable
 private fun Callout(kind: String, text: String) {

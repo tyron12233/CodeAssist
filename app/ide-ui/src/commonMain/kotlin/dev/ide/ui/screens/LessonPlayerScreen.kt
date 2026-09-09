@@ -59,6 +59,7 @@ import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiExerciseResult
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiLessonStep
+import dev.ide.ui.components.CodeSample
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.entrancePop
 import dev.ide.ui.components.entranceSlideUp

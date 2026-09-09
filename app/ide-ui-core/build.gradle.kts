@@ -42,6 +42,7 @@ kotlin {
             api(compose.foundation)
             api(compose.material3)
             api(compose.ui)
+            implementation(compose.preview) // the @Preview annotation on BlockShapes.kt's shape previews
             implementation(libs.kotlinx.coroutines.core)
         }
 

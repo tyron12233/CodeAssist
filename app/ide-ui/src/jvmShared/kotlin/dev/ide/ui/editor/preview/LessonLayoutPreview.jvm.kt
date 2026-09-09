@@ -45,10 +45,10 @@ import dev.ide.ui.backend.EditorService
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.components.CodeSample
 import dev.ide.ui.editor.CodeEditor
 import dev.ide.ui.editor.CodeLanguage
 import dev.ide.ui.editor.core.EditorSession
-import dev.ide.ui.screens.CodeSample
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.delay
 import kotlin.math.min
