@@ -15,7 +15,7 @@ val projectUrl = "https://github.com/tyron12233/CodeAssist"
 
 /** The published SPI version, taken from the constant the Create-Project template also emits. */
 val spiVersion: String = run {
-    val source = rootProject.file("plugin-api/src/main/kotlin/dev/ide/plugin/PluginManifest.kt")
+    val source = rootProject.file("plugins/plugin-api/src/main/kotlin/dev/ide/plugin/PluginManifest.kt")
     val match = Regex("""PLUGIN_SPI_VERSION:\s*String\s*=\s*"([^"]+)"""").find(source.readText())
     requireNotNull(match) {
         "PLUGIN_SPI_VERSION not found in ${source.name}. The publish version is read from that constant so " +

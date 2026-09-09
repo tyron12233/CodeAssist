@@ -179,6 +179,8 @@ val layers = mapOf(
         "deps-api", "deps-impl", "vcs-api", "vcs-impl", "vcs-ui", "store-api", "store-impl",
         "analytics-api", "analytics-impl", "agent-api", "agent-impl", "agent-mcp", "agent-ui",
     ),
+    // The plugin SPI a third-party plugin compiles against, and the host that resolves it.
+    "plugins" to listOf("plugin-api", "plugin-ui-api", "plugin-bom", "plugin-impl"),
 )
 
 // Only remap what this build actually included — CI_CORE_ONLY leaves the shells out.
