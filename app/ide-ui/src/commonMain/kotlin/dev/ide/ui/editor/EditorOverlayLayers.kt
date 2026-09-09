@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiSeverity
-import dev.ide.ui.components.clipForClipboard
+import dev.ide.ui.clipForClipboard
 import dev.ide.ui.editor.core.EditorSession
 import kotlin.math.max
 import kotlin.math.roundToInt

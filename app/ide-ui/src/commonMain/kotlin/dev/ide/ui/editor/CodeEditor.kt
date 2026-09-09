@@ -45,7 +45,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import dev.ide.ui.backend.IdeBackend
-import dev.ide.ui.components.clipForClipboard
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiAction
 import dev.ide.ui.backend.UiMenuGroup
@@ -55,6 +54,7 @@ import dev.ide.ui.backend.UiNavOption
 import dev.ide.ui.backend.UiNavTarget
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiRenameResult
+import dev.ide.ui.clipForClipboard
 import dev.ide.ui.editor.core.EditorImeHandle
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.RangeEdit

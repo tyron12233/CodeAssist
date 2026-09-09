@@ -1,6 +1,6 @@
 package dev.ide.ui
 
-import dev.ide.ui.components.clipForClipboard
+import dev.ide.ui.clipForClipboard
 import dev.ide.ui.editor.core.EditorDocument
 import dev.ide.ui.editor.preview.completionPrefix
 import kotlinx.coroutines.Dispatchers

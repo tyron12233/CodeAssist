@@ -25,7 +25,9 @@ import dev.ide.ui.editor.folding.FoldModel
  * line count changes (both rare); frame-to-frame [setRows] corrections update the tree incrementally. Pure (no
  * Compose) so the mapping is unit-testable headlessly. Owned by one editor surface; not thread-safe.
  */
-internal class WrapModel {
+// Public rather than internal because the editor composables that lay text out now live in :ide-ui,
+// a different module; `internal` is per-module and can no longer reach them.
+class WrapModel {
     private var rows = IntArray(0)       // wrap rows per doc line, ignoring folds; always >= 1
     // Fenwick over the fold-aware per-line contribution. `contrib[i]` mirrors the value currently reflected in
     // `tree` for line i (0 hidden / 1 collapsed-start / else rows[i]) so [setRows] can compute an exact delta.

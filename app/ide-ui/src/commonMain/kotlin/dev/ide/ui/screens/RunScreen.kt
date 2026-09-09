@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.clipForClipboard
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
@@ -60,7 +61,6 @@ import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.components.AdSlot
-import dev.ide.ui.components.clipForClipboard
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.generated.resources.Res

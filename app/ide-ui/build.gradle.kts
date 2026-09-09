@@ -40,6 +40,9 @@ kotlin {
             // `api` so the UI modules split out of here still see the one shared `Res` class; the
             // resources themselves live in :ide-ui-resources (see its build script for why).
             api(project(":ide-ui-resources"))
+            // The shared lower layer (theme, platform, editor model, app state). `api` because this module's
+            // composables take its types in their signatures, and :ide-core renders them.
+            api(project(":ide-ui-core"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)

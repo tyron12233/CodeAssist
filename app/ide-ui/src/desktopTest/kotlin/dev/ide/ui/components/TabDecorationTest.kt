@@ -70,9 +70,7 @@ class TabDecorationTest {
     @Test
     fun changedOnDiskOutranksErrors() {
         UiPluginHost.ensureLoaded()
-        val tab = tab("Diverged.kt", errors = 1, warnings = 0).also { it.staleOnDisk = true }
-
-        val decoration = decorate(tab)
+        val decoration = decorate(tab("Diverged.kt", errors = 1, warnings = 0), stale = true)
 
         assertSame(IconTint.Info, decoration?.tint)
         assertEquals("changed on disk since you edited it", decoration?.description)
@@ -171,11 +169,16 @@ class TabDecorationTest {
         file: OpenFile,
         active: Boolean = true,
         backend: StubBackend = StubBackend(),
+        stale: Boolean = false,
     ): TabDecoration? {
         var decoration: TabDecoration? = null
-        composeOnce {
-            decoration = TabDecorationRegistry.decorationFor(OpenTabDecorationContext(file, active, backend))
+        // `OpenFile.staleOnDisk` has an internal setter, and its only writer -- IdeUiState.syncOpenTabsFromDisk
+        // -- now lives in :ide-ui-core. The rule under test reads the flag off TabDecorationContext, not off
+        // OpenFile, so it is set there instead; every other value still comes from the real OpenFile mapping.
+        val context = object : TabDecorationContext by OpenTabDecorationContext(file, active, backend) {
+            override val staleOnDisk = stale
         }
+        composeOnce { decoration = TabDecorationRegistry.decorationFor(context) }
         return decoration
     }
 

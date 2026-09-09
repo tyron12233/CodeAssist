@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.clipForClipboard
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
@@ -43,7 +44,6 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiLogEntry
 import dev.ide.ui.components.PeekTimestampReveal
-import dev.ide.ui.components.clipForClipboard
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.logs_copy_all
 import dev.ide.ui.generated.resources.logs_empty

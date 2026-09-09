@@ -366,14 +366,7 @@ fun PreviewSurface(
     }
 }
 
-/** Severity of a [PreviewIssue] — a warning (amber) or an error (red), driving the chip's icon + tint. */
-enum class PreviewIssueLevel { WARNING, ERROR }
 
-/**
- * A problem surfaced by a preview, shown in the shared [PreviewProblemChip]: a layout-inflation warning
- * (unknown tag, unresolved include) or a Compose interpret/render failure.
- */
-data class PreviewIssue(val level: PreviewIssueLevel, val title: String, val message: String)
 
 /**
  * The shared render-problem affordance both Preview views use: a small glass chip (severity icon + count)

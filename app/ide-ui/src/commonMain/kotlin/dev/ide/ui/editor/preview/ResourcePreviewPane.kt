@@ -46,28 +46,6 @@ import dev.ide.ui.generated.resources.respreview_unsupported
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 
-/** Which resource preview a file gets — or null when it has none (so the Preview toggle stays hidden). */
-enum class PreviewKind { DRAWABLE, COLOR, BITMAP }
-
-private val IMAGE_EXTS = setOf("png", "webp", "jpg", "jpeg", "gif", "bmp")
-
-/**
- * The preview a file qualifies for, by Android `res/` convention: a drawable/color/mipmap XML renders as a
- * drawable, an image file as a bitmap, and a `res/values` file named `*color*` as a color swatch list.
- */
-fun previewKindOf(path: String): PreviewKind? {
-    val p = path.replace('\\', '/').lowercase()
-    if (!p.contains("/res/")) return null
-    val file = p.substringAfterLast('/')
-    val ext = file.substringAfterLast('.', "")
-    val folder = p.substringBeforeLast('/').substringAfterLast('/').substringBefore('-')
-    return when (ext) {
-        "xml" if (folder == "drawable" || folder == "color" || folder == "mipmap") -> PreviewKind.DRAWABLE
-        in IMAGE_EXTS -> PreviewKind.BITMAP
-        "xml" if folder == "values" && file.contains("color") -> PreviewKind.COLOR
-        else -> null
-    }
-}
 
 fun isPreviewable(path: String): Boolean = previewKindOf(path) != null
 

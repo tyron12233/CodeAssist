@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.clipForClipboard
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.core.RepeatMode
@@ -387,19 +388,6 @@ private fun CopyButton(label: String, provide: () -> String, boxSize: Int = 28) 
         iconSize = 16,
         tint = if (copied) Ide.colors.run else MaterialTheme.colorScheme.onSurfaceVariant,
     )
-}
-
-// Android delivers clipboard data over a Binder transaction whose buffer (~1 MB, shared process-wide) a long
-// build log overflows, throwing TransactionTooLargeException and taking down the app. Cap the copied text well
-// under that, keeping the TAIL (a build's errors and final status live at the end of the log) and noting the
-// drop. Not localized: this is diagnostic clipboard payload, like the log lines themselves, not UI chrome.
-private const val MAX_CLIPBOARD_CHARS = 200_000
-
-internal fun clipForClipboard(text: String): String {
-    if (text.length <= MAX_CLIPBOARD_CHARS) return text
-    val dropped = text.length - MAX_CLIPBOARD_CHARS
-    return "[... $dropped earlier characters truncated to fit the clipboard ...]\n" +
-        text.substring(text.length - MAX_CLIPBOARD_CHARS)
 }
 
 private fun renderLogForCopy(l: BuildLogLine): String = buildString {
