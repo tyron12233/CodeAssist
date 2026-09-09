@@ -50,7 +50,13 @@ docs/handoff_onboarding_compose/
 docs/design/
 docs/*.png
 
-# Built app artifacts (never commit; releases attach these, Play gets the AAB)
+# Release staging area. Built APKs/AABs and the announcement drafts that ship with them belong in
+# `dist/`, not at the repo root -- one release leaves four files behind and they accumulate. Nothing
+# in the build reads this directory; it is a place to put things, kept out of git entirely.
+dist/
+
+# Built app artifacts (never commit; releases attach these, Play gets the AAB). Still ignored
+# wherever they land, so a stray root-level build output cannot be committed by accident.
 *.aab
 *.apk
 

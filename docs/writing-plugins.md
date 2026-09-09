@@ -350,7 +350,7 @@ dependencies {
 ```
 
 Finally, add `implementation(project(":hello-impl"))` to
-[`ide-core/build.gradle.kts`](../ide-core/build.gradle.kts) so `BuiltInPlugins` can reference your entry point.
+[`app/ide-core/build.gradle.kts`](../ide-core/build.gradle.kts) so `BuiltInPlugins` can reference your entry point.
 
 ### Step 3: Write the `Plugin`
 
@@ -1404,7 +1404,7 @@ kotlin {
 }
 ```
 
-[`vcs-ui/build.gradle.kts`](../vcs-ui/build.gradle.kts) is the reference. Two conventions it follows:
+[`services/vcs-ui/build.gradle.kts`](../vcs-ui/build.gradle.kts) is the reference. Two conventions it follows:
 
 - **Talk to the engine only through `IdeBackend`.** No `:ide-core`, no `java.nio`, no engine types.
 - **Keep your strings in your own module.** `compose.resources { publicResClass = false; packageOfResClass =
@@ -1635,7 +1635,7 @@ Everything above joins the app through three edits outside the plugin's own modu
 // settings.gradle.kts: inside the CI_CORE_ONLY guarded block, because vcs-ui applies Compose + AGP
 ":vcs-ui",
 
-// ide-core/build.gradle.kts
+// app/ide-core/build.gradle.kts
 implementation(project(":vcs-impl"))
 implementation(project(":vcs-ui"))
 

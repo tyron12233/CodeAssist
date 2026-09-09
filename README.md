@@ -132,6 +132,24 @@ The badges and the numbers in this section are regenerated automatically on each
 
 ## Module layout
 
+Sixty modules, grouped on disk by the layer they belong to:
+
+```
+platform/      no domain knowledge; depended on by all
+lang/          reading source: the language SPI, indexes, analysis, per-language backends
+build-system/  the incremental task engine and the JVM build pipelines over it
+run/           executing project code on device: source interpreter, bytecode VM, AWT/Swing
+android/       Android as a target: facets, variants, SDK metadata, layout preview, ART shims
+services/      cross-cutting api/impl pairs: deps, version control, store, analytics, agent
+plugins/       the SPI a third-party plugin compiles against, and the host that resolves it
+app/           the IDE itself: the Compose UI and the desktop/Android shells
+tools/         test-only harnesses
+```
+
+Gradle paths stay flat, so a module's directory never has to be spelled out to build it: the Kotlin
+editor backend is `:lang-kotlin` even though it lives at `lang/lang-kotlin`. `settings.gradle.kts`
+maps the two, and is the only place that mapping exists.
+
 Dependencies point downward only (acyclic). Platform modules carry no domain knowledge; domain behavior
 is contributed through extension points.
 

@@ -7,7 +7,7 @@ locale; **no user-facing string is hardcoded in a composable**.
 ## Where strings live
 
 ```
-ide-ui/src/commonMain/composeResources/
+app/ide-ui/src/commonMain/composeResources/
   values/strings.xml         # default (English) — the source of truth for keys
   values-zh/strings.xml      # Chinese translation
   values-<lang>/strings.xml  # add a locale by adding a directory
@@ -19,7 +19,7 @@ until a translator fills the gap. New keys are added to `values/strings.xml` onl
 add the matching entries to each locale later.
 
 The generated accessor class is `dev.ide.ui.generated.resources.Res` (configured in
-`ide-ui/build.gradle.kts` under `compose.resources { ... }`, `publicResClass = false` so it stays
+`app/ide-ui/build.gradle.kts` under `compose.resources { ... }`, `publicResClass = false` so it stays
 an internal `dev.ide.ui` detail).
 
 ## Using a string in code

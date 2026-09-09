@@ -156,7 +156,7 @@ RAM we are isolating away. Serialize the already-lowered program instead.
   the `ResourceRepository` and the `PreviewResourceResolver`. (Or relink a `resources.ap_` like the XML path —
   decide during Phase 1.)
 
-## AIDL surface (new, in `ide-android/src/main/aidl/dev/ide/android/preview/`)
+## AIDL surface (new, in `app/ide-android/src/main/aidl/dev/ide/android/preview/`)
 
 A session-oriented interface, distinct from the one-shot `IPreviewRenderer` (which stays for XML):
 
@@ -309,7 +309,7 @@ mirroring how `RemoteRealViewRuntime` falls back to `AndroidRealViewRuntime`.
 - `docs/build-process-isolation.md` — the `:build` daemon precedent (AIDL + shared-FS + DeathRecipient).
 - XML/RealView isolation (the template): `ide-android/.../preview/PreviewRenderService.kt`,
   `PreviewRenderClient.kt`, `ide-android/.../preview/realview/RemoteRealViewRuntime.kt`,
-  `ide-android/src/main/aidl/dev/ide/android/preview/IPreviewRenderer.aidl`.
+  `app/ide-android/src/main/aidl/dev/ide/android/preview/IPreviewRenderer.aidl`.
 - Seams: `ComposePreviewRunner` (`ide-core/.../IdeServices.kt:366`), `LoweredComposePreview`
   (`IdeServices.kt:318`), `ComposePreviewRenderer.Render` (`interp-compose/.../ComposePreviewRenderer.kt:98`),
   `AndroidComposePreviewHost` (`ide-android/.../AndroidComposePreviewHost.kt`), `ResolvedTree.kt`

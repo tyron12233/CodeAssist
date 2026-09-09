@@ -9,12 +9,12 @@ The official F-Droid repo builds every app **from source on its own buildserver*
 access for arbitrary downloads and no prebuilt binaries. CodeAssist's on-device Android pipeline
 cannot meet that today:
 
-- **Prebuilt `aapt2`** (`ide-android/src/main/jniLibs/<abi>/libaapt2.so`, fetched from the ReVanced
+- **Prebuilt `aapt2`** (`app/ide-android/src/main/jniLibs/<abi>/libaapt2.so`, fetched from the ReVanced
   GitHub releases by the `fetchAndroidBuildTools` Gradle task). aapt2 is itself free software (AOSP,
   Apache-2.0) but building it from source on the F-Droid buildserver is infeasible, and F-Droid will
   not ship a binary it did not build.
 - **Build-time network download** (`fetchAndroidBuildTools`) — forbidden on the buildserver.
-- **Bundled `android.jar`** (`ide-android/src/main/assets/android.jar`) — the Android SDK platform
+- **Bundled `android.jar`** (`app/ide-android/src/main/assets/android.jar`) — the Android SDK platform
   stubs, shipped inside the APK as the on-device compiler boot classpath. The Android SDK is under
   Google's non-free SDK licence, so shipping it is a non-free asset.
 
@@ -49,7 +49,7 @@ uninstall/reinstall.
 IzzyOnDroid's updater watches the GitHub **Releases** of the repo and picks up the APK asset whose
 `versionCode` is newest.
 
-1. **Bump the version** in `ide-android/build.gradle.kts` (`versionCode` must strictly increase;
+1. **Bump the version** in `app/ide-android/build.gradle.kts` (`versionCode` must strictly increase;
    `versionName` is the human label, e.g. `3.0.0`).
 2. **Add a changelog** `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
 3. **Build a signed release APK** (not an AAB — IzzyOnDroid distributes APKs):
@@ -57,7 +57,7 @@ IzzyOnDroid's updater watches the GitHub **Releases** of the repo and picks up t
    ```sh
    export JAVA_HOME="/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home"
    ./gradlew :ide-android:assembleRelease
-   # → ide-android/build/outputs/apk/release/ide-android-release.apk
+   # → app/ide-android/build/outputs/apk/release/ide-android-release.apk
    ```
 
 4. **Tag and publish a GitHub release**, attaching the APK:
@@ -65,7 +65,7 @@ IzzyOnDroid's updater watches the GitHub **Releases** of the repo and picks up t
    ```sh
    git tag v3.0.0 && git push origin v3.0.0
    gh release create v3.0.0 \
-     ide-android/build/outputs/apk/release/ide-android-release.apk \
+     app/ide-android/build/outputs/apk/release/ide-android-release.apk \
      --title "CodeAssist 3.0" \
      --notes-file fastlane/metadata/android/en-US/changelogs/31.txt
    ```

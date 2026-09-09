@@ -35,7 +35,7 @@ plugin can contribute its own icon library and it appears in the picker with no 
 Two ship built in:
 
 - **Material Symbols (bundled)**: a curated subset committed as a resource
-  (`android-support/src/main/resources/dev/ide/android/support/icons/material-symbols.tsv`), outlined and
+  (`android/android-support/src/main/resources/dev/ide/android/support/icons/material-symbols.tsv`), outlined and
   filled, ordered by Google's own popularity metadata. Works offline, with no project open. Regenerate it with
   `.github/scripts/fetch_material_icons.py`; do not hand-edit it.
 - **Material Symbols (all)**: the full upstream set, fetched from `google/material-design-icons` on demand.

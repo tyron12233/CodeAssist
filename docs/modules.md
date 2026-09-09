@@ -1,5 +1,39 @@
 # Module map
 
+## Where the modules live
+
+The sixty modules are grouped on disk by layer. The directory says what kind of thing a module is;
+the dependency graph further down says what it is allowed to know about.
+
+```
+platform/      platform-core, vfs-api, project-model-{api,impl}
+lang/          language-api, index-{api,impl}, analysis-{api,impl}, lang-{java,jdt,kotlin,ksp,xml},
+               lang-kotlin-index, kotlin-compiler-deps, intellij-psi-host, decompiler,
+               block-{api,impl}
+build-system/  build-api, build-engine, jvm-build
+run/           interp-{api,core,impl,compose}, jvm-interp, awt-toolkit
+android/       android-support, android-sdk-metadata, art-compat, layout-preview-{api,impl},
+               applog-runtime
+services/      deps-{api,impl}, vcs-{api,impl,ui}, store-{api,impl}, analytics-{api,impl},
+               agent-{api,impl,mcp,ui}
+plugins/       plugin-{api,ui-api,bom,impl}
+app/           ide-ui{,-api}, ide-core, ide-desktop, ide-android
+tools/         test-support, bench-support
+```
+
+Gradle project paths are **flat and independent of that layout**: the Kotlin editor backend is
+`:lang-kotlin`, never `:lang:kotlin`, even though it lives at `lang/lang-kotlin`. So a module can be
+moved between layers without touching a single `project(":x")` dependency, CI task path, or published
+Maven coordinate. `settings.gradle.kts` holds the one mapping from project path to directory, and
+fails configuration with a named message if an included module is missing from it.
+
+`build-system/` is spelled out rather than `build/` because `build/` is the root project's own Gradle
+output directory. `buildSrc/`, `build-logic/` (an included build, because its plugins need AGP's
+classloader) and `samples/` (plugins built as their own apps) stay at the root, where Gradle expects
+them.
+
+## Dependency direction
+
 Dependencies point downward only (acyclic). Platform modules carry no domain knowledge; domain
 behavior is contributed through extension points.
 
