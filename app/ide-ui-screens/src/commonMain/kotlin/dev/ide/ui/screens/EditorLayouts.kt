@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +61,7 @@ import dev.ide.ui.components.fileOpPath
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.NewSourceLang
+import dev.ide.ui.components.PanelContent
 import dev.ide.ui.components.ProjectTile
 import dev.ide.ui.components.PushDrawer
 import dev.ide.ui.components.RailActionItem
@@ -415,6 +417,9 @@ internal fun CompactLayout(
         onNewFile, onNewFolder, onNewResource, onNewImageAsset, onNewSource, onFileOp, onOpenDependencies, onOpenModuleConfig,
         closeDrawer = { state.selectedLeftPanel = null }, // a navigating action closes the drawer on phone
     )
+    // The panels' saveable state (their scroll positions above all), held out here where it survives the
+    // drawer: a closed drawer composes no panel at all, so this is what reopens one where it was left.
+    val panelState = rememberSaveableStateHolder()
     Box(Modifier.fillMaxSize()) {
         // The push drawer hosts the selected left panel; a segmented switcher on top flips between panels
         // (built-in + plugin). Opens by edge swipe, by a rightward swipe once the editor is at its horizontal
@@ -441,8 +446,7 @@ internal fun CompactLayout(
                             label = "drawerPanelSwitch",
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                         ) { id ->
-                            val panel = leftPanels.firstOrNull { it.id == id }
-                            Box(Modifier.fillMaxSize()) { panel?.content?.invoke() }
+                            PanelContent(leftPanels.firstOrNull { it.id == id }, panelState, Modifier.fillMaxSize())
                         }
                         // A native ad pinned to the foot of the left drawer, below the tool content (mirrors the
                         // desktop SidebarPane footer). Self-collapses when ads are inactive.

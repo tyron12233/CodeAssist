@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -53,7 +54,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -143,7 +143,6 @@ import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
-import kotlinx.coroutines.launch
 
 /**
  * Top bar (a solid Material `surfaceContainer` toolbar), pared back to the essentials: sidebar toggle · project name · index status ·
@@ -1088,13 +1087,21 @@ fun TabsStrip(
     /** Handed to the tab-decoration producers, which read their state through it. Null draws the tabs with
      *  no decorations (the `@Preview` below, which has no engine to hand them). */
     backend: IdeBackend? = null,
+    /** The strip's scroll position, hoistable by the host; it is also what the active tab is scrolled into
+     *  view on. */
+    state: LazyListState = rememberLazyListState(),
 ) {
     if (openFiles.isEmpty()) return
 
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
     // The chevron only earns its place when the tabs actually spill past the strip's width.
-    val overflowing = listState.canScrollForward || listState.canScrollBackward
+    val overflowing = state.canScrollForward || state.canScrollBackward
+    // Keep the active tab on screen: a newly opened file's tab is appended past the trailing edge, and
+    // activating a file that is already open (a jump to a declaration, the overflow menu, closing the tab in
+    // front) can select one scrolled well out of view. A tab that is already fully visible is left alone, so
+    // tapping a tab never shifts the strip under the finger.
+    LaunchedEffect(activeIndex, openFiles.size) {
+        if (activeIndex in openFiles.indices) state.revealItem(activeIndex)
+    }
 
     Row(
         Modifier
@@ -1106,7 +1113,7 @@ fun TabsStrip(
     ) {
         LazyRow(
             Modifier.weight(1f).fillMaxHeight(),
-            state = listState,
+            state = state,
             contentPadding = PaddingValues(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1136,10 +1143,7 @@ fun TabsStrip(
         if (overflowing) {
             // A hairline separates the pinned chevron from the scrolling tabs.
             Box(Modifier.fillMaxHeight(0.55f).width(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-            TabsOverflowMenu(openFiles, activeIndex, backend) { index ->
-                onSelect(index)
-                scope.launch { runCatching { listState.animateScrollToItem(index) } }
-            }
+            TabsOverflowMenu(openFiles, activeIndex, backend, onSelect)
         }
     }
     // a hairline under the tabs

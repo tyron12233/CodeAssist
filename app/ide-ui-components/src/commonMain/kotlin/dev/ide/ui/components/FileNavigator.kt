@@ -22,7 +22,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,11 +32,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -173,6 +177,9 @@ fun FileNavigator(
     /** The expansion state (keyed by [TreeNode.id]), hoisted by the host so it survives navigation and is
      *  persisted per project + mode. Null falls back to a local, default-seeded map (used by previews/tests). */
     expandedState: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean>? = null,
+    /** The tree's scroll position. Hoistable like [expandedState]; the default is saved and restored with the
+     *  rest of the panel's state, so the tree reopens where the user left it (see [PanelContent]). */
+    listState: LazyListState = rememberLazyListState(),
 ) {
     // Host-owned expansion (persisted, survives navigation) when provided; else a local default-seeded map
     // re-seeded when the view mode flips (the two modes shape the tree with different node ids).
@@ -252,6 +259,19 @@ fun FileNavigator(
         val rows by remember(root, sort, expanded) {
             derivedStateOf { flattenVisible(root.children, 0, expanded, sort) }
         }
+        // Follow the editor: a file opened anywhere else (a search hit, a jump to a declaration, a file just
+        // created) scrolls its row into view, so the tree shows what is being edited rather than wherever it
+        // was left. Each file is revealed once, and that is remembered across the pane closing, so reopening
+        // the tree on the same file keeps the scroll position instead of jumping back to the active row. A
+        // file whose branch is collapsed has no row to scroll to and leaves the tree alone.
+        var revealed by rememberSaveable { mutableStateOf<String?>(null) }
+        LaunchedEffect(activePath, rows) {
+            val path = activePath
+            if (path == null || path == revealed || rows.isEmpty()) return@LaunchedEffect
+            revealed = path
+            val index = rows.indexOfFirst { it.node.filePath == path }
+            if (index >= 0) listState.revealItem(index)
+        }
         // Pull-to-refresh re-reads the tree from disk. `refreshTree` is synchronous, so hold the spinner up
         // for a short beat afterwards purely so the gesture registers visually.
         val refreshScope = rememberCoroutineScope()
@@ -270,7 +290,7 @@ fun FileNavigator(
                 .weight(1f)
                 .padding(vertical = 6.dp),
         ) {
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.fillMaxSize(), state = listState) {
                 items(rows, key = { it.node.id }) { row ->
                     TreeRowContent(
                         row.node,

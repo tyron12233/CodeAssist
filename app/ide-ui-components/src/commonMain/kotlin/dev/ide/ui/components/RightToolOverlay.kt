@@ -26,6 +26,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -70,6 +71,9 @@ fun RightToolOverlay(state: IdeUiState) {
     if (panels.isEmpty()) return
     // The drawer opens the currently-selected panel, defaulting to the first.
     val primaryId = panels.first().id
+    // The panels' saveable state (their scroll positions above all), held outside the `if (visible)` below:
+    // a closed drawer composes nothing, so this is what brings a panel back where the user left it.
+    val panelState = rememberSaveableStateHolder()
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
@@ -197,8 +201,14 @@ fun RightToolOverlay(state: IdeUiState) {
                             label = "rightPanelSwitch",
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                         ) { id ->
-                            val panel = panels.firstOrNull { it.id == id } ?: panels.first()
-                            Box(Modifier.fillMaxSize()) { panel.content() }
+                            // Keyed by the id being shown, not by the panel it resolved to: a stale selection
+                            // falls back to the first panel, which the panel it is crossfading with may be.
+                            PanelContent(
+                                panels.firstOrNull { it.id == id } ?: panels.first(),
+                                panelState,
+                                Modifier.fillMaxSize(),
+                                key = id,
+                            )
                         }
                     }
                 }

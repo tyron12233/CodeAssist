@@ -41,6 +41,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.SaveableStateHolder
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,6 +86,31 @@ class SidebarPanel(
 
 /** Which edge a rail/pane sits on — drives the open/collapse animation direction and the divider placement. */
 enum class RailSide { Left, Right }
+
+/**
+ * Render [panel]'s body with the saveable state [holder] keeps for it under its id: its list scroll positions
+ * (and anything else it holds in `rememberSaveable`) come back as the user left them.
+ *
+ * A panel host composes only the panel it is showing, and composes nothing at all while it is collapsed,
+ * which is what makes a closed drawer cost the editor nothing. That also disposes the panel, so its scroll
+ * offset is gone by the time it is shown again unless it is saved on the way out. [holder] must therefore be
+ * remembered in the host's own body, OUTSIDE the conditional that composes the panel: see [SidebarPane].
+ *
+ * [key] is the slot the state is saved under and defaults to the panel's id. A host that can show one panel
+ * under more than one id (a stale selection falling back to the first panel) passes the id it resolved from
+ * instead, since two slots alive at once under one key is an error.
+ */
+@Composable
+fun PanelContent(
+    panel: SidebarPanel?,
+    holder: SaveableStateHolder,
+    modifier: Modifier = Modifier,
+    key: Any? = null,
+) {
+    Box(modifier) {
+        if (panel != null) holder.SaveableStateProvider(key ?: panel.id) { panel.content() }
+    }
+}
 
 private val RailWidth = 76.dp
 private val RailIconBox = 46.dp
@@ -218,6 +245,10 @@ fun SidebarPane(
     modifier: Modifier = Modifier,
     paneWidth: Dp = 300.dp,
 ) {
+    // Each panel's own saveable state, held here rather than inside the pane: the pane's content is disposed
+    // when the pane collapses or another panel is selected, so this is what brings a panel back scrolled to
+    // where it was left. Keyed by panel id, so plugin tool windows get it too.
+    val panelState = rememberSaveableStateHolder()
     // Hold the last non-null selection so the exit animation still has content to show (updated off-composition).
     var displayId by remember { mutableStateOf(selectedId) }
     LaunchedEffect(selectedId) { if (selectedId != null) displayId = selectedId }
@@ -254,8 +285,7 @@ fun SidebarPane(
                         label = "sidebarPanelSwitch",
                         modifier = Modifier.weight(1f),
                     ) { id ->
-                        val panel = panels.firstOrNull { it.id == id }
-                        Box(Modifier.fillMaxSize()) { panel?.content?.invoke() }
+                        PanelContent(panels.firstOrNull { it.id == id }, panelState, Modifier.fillMaxSize())
                     }
                     // A native ad pinned to the foot of the LEFT tool pane — below the tool content, off the
                     // editor canvas entirely. AdSlot self-collapses when ads are inactive (desktop / ads off).
