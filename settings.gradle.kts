@@ -181,6 +181,8 @@ val layers = mapOf(
     ),
     // The plugin SPI a third-party plugin compiles against, and the host that resolves it.
     "plugins" to listOf("plugin-api", "plugin-ui-api", "plugin-bom", "plugin-impl"),
+    // The IDE itself: the Compose UI, its backend port, and the desktop/Android shells.
+    "app" to listOf("ide-ui-api", "ide-ui", "ide-core", "ide-desktop", "ide-android"),
 )
 
 // Only remap what this build actually included — CI_CORE_ONLY leaves the shells out.

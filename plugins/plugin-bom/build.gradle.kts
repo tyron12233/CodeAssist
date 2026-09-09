@@ -27,7 +27,7 @@ plugins {
 
 /** What the Create-Project template pins a scaffolded plugin to, read from the template itself. */
 val templateSource = rootProject
-    .file("ide-core/src/main/kotlin/dev/ide/core/templates/PluginTemplate.kt")
+    .file("app/ide-core/src/main/kotlin/dev/ide/core/templates/PluginTemplate.kt")
     .readText()
 
 fun templatePin(constant: String): String {

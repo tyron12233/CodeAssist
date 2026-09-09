@@ -65,4 +65,4 @@ supabase/
 # push (that needs the service account, which lives in a Supabase secret), so committing it is defensible —
 # but it is a decision to make deliberately rather than by accident, and it cannot be un-published once it
 # is in the history. Builds without it simply have push disabled.
-ide-android/google-services.json
+app/ide-android/google-services.json

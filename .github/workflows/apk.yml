@@ -53,6 +53,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: codeassist-debug-apk
-          path: ide-android/build/outputs/apk/debug/*.apk
+          path: app/ide-android/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
