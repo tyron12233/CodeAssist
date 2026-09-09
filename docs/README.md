@@ -11,6 +11,10 @@ and follow the links into each subsystem.
   SPI, extension points, scoped services, events and logging, settings pages, actions, Compose UI
   contributions (tool windows, screens, overlays), shipping a plugin as its own installable app, and the
   Git and AI-agent plugins as worked examples.
+- [custom-project-templates.md](custom-project-templates.md) — the step-by-step guide to adding an entry
+  to the Create-Project gallery: declaring a template's inputs so the screen renders itself, authoring the
+  project model, configuring a facet whose class is out of reach, writing generated files, and declaring the
+  dependencies the host resolves afterwards.
 - [plugin-spi-2.0-migration.md](plugin-spi-2.0-migration.md) — the upgrade path for a plugin written
   against SPI `1.x`: what the opened project-model vocabularies break (an exhaustive `when`), where the
   model registries moved, and what `Module.dir` replaces.

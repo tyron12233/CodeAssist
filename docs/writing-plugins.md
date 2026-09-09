@@ -599,6 +599,8 @@ override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
 ```
 
 The keys are the ones that plugin's `encode` produces; the module type's `defaultFacets()` supply the rest.
+[custom-project-templates.md](custom-project-templates.md) is the full guide to the template this example is
+taken from.
 Do not reach the same end by declaring a facet of your own and pointing its codec at another plugin's table.
 Codecs are resolved by table with last-registration-wins and an installed plugin loads after the built-ins,
 so that takes over persistence for the table in every project on the device, not only the ones your template
@@ -2588,7 +2590,7 @@ Every published extension point, its id, the type it carries, and what contribut
 | --- | --- | --- | --- |
 | `dev.ide.model.ModuleTypeExtensionPoint` | `platform.moduleType` | `ModuleType` | A module type |
 | `dev.ide.model.FileIconExtensionPoint` | `platform.fileIcon` | `FileIconProvider` | File-tree icon classification |
-| `dev.ide.model.template.ProjectTemplateExtensionPoint` | `platform.projectTemplate` | `ProjectTemplate` | A Create-Project template |
+| `dev.ide.model.template.ProjectTemplateExtensionPoint` | `platform.projectTemplate` | `ProjectTemplate` | A Create-Project template ([guide](custom-project-templates.md)) |
 | `dev.ide.model.FACET_CODEC_EP` | `platform.facetCodec` | `FacetCodec<*>` | Persistence for a module facet |
 | `dev.ide.model.sync.PROJECT_IMPORTER_EP` | `platform.projectImporter` | `ProjectImporter` | Import of a foreign project layout |
 | `dev.ide.model.sync.BUILD_FILE_WRITER_EP` | `platform.buildFileWriter` | `BuildFileWriter` | Writing changes back to a build file |
