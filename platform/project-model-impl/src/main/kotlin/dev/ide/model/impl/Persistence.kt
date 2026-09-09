@@ -14,6 +14,7 @@ import dev.ide.model.ModuleId
 import dev.ide.model.OrderEntry
 import dev.ide.model.PlatformDependency
 import dev.ide.model.PlatformKind
+import dev.ide.model.RESERVED_FACET_TABLES
 import dev.ide.model.SdkDependency
 import dev.ide.model.SdkRef
 import dev.ide.model.impl.format.Json
@@ -63,8 +64,6 @@ object ModelPersistence {
     private const val LIBRARIES_FILE = "libraries.json"
     private const val SDKS_FILE = "sdks.json"
     private const val MODULE_FILE = "module.toml"
-
-    private val RESERVED_TABLES = setOf("module", "sourceSets", "dependencies")
 
     private val log = Log.logger("ide.model")
 
@@ -380,7 +379,7 @@ object ModelPersistence {
         }
 
         val facets = doc.entries
-            .filter { it.key !in RESERVED_TABLES && it.key != "version" && it.value is Map<*, *> }
+            .filter { it.key !in RESERVED_FACET_TABLES && it.value is Map<*, *> }
             .map { e -> FacetData(e.key, (e.value as Map<*, *>).entries.associate { it.key.toString() to it.value }) }
 
         return ModuleData(id, name, dirRelPath, typeId, languageLevel, output, sourceSets, deps, facets, sdk)

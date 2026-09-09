@@ -15,6 +15,7 @@ import dev.ide.model.OrderEntry
 import dev.ide.model.Project
 import dev.ide.model.ProjectId
 import dev.ide.model.ProjectModelTransaction
+import dev.ide.model.RESERVED_FACET_TABLES
 import dev.ide.model.SdkRef
 import dev.ide.model.SourceSetTemplate
 import dev.ide.model.WorkspaceTransaction
@@ -255,12 +256,15 @@ internal class ModuleBuilder(
 
     override fun <T : Facet> putFacet(facet: T) {
         val fd = codecs.encode(facet) ?: error("no FacetCodec registered for facet '${facet.key.id}'")
-        facets[fd.tomlTable] = fd
-        facetsChanged = true
+        putFacetData(fd)
     }
 
-    /** Stage facet data directly (used for module-type default facets and internal wiring). */
-    fun putFacetData(data: FacetData) {
+    override fun putFacetData(data: FacetData) {
+        require(data.tomlTable !in RESERVED_FACET_TABLES) {
+            "facet table '${data.tomlTable}' is one the model owns (${RESERVED_FACET_TABLES.joinToString()}); " +
+                "writing it would overwrite the module's own configuration"
+        }
+        for ((key, value) in data.values) requireTomlValue(data.tomlTable, key, value)
         facets[data.tomlTable] = data
         facetsChanged = true
     }
@@ -277,4 +281,30 @@ internal class ModuleBuilder(
         facets = facets.values.toList(),
         sdk = sdkField?.name,
     )
+}
+
+/**
+ * Reject a facet value `module.toml` cannot hold, at the point it is staged.
+ *
+ * The TOML writer fails on one too, but only at the next save, by which time the offending table is one of many
+ * in a document being written for an unrelated reason and the caller that staged it is long gone. The set
+ * accepted here is exactly what the writer formats.
+ */
+private fun requireTomlValue(table: String, key: String, value: Any?) {
+    when (value) {
+        null -> throw IllegalArgumentException(
+            "facet table '$table', key '$key': null has no TOML representation, omit the key instead",
+        )
+        is String, is Boolean, is Int, is Long, is Double, is Float -> Unit
+        is List<*> -> for (item in value) requireTomlValue(table, key, item)
+        is Map<*, *> -> for ((k, v) in value) {
+            require(k is String) {
+                "facet table '$table', key '$key': inline-table keys must be String, was ${k?.javaClass?.name}"
+            }
+            requireTomlValue(table, key, v)
+        }
+        else -> throw IllegalArgumentException(
+            "facet table '$table', key '$key': ${value.javaClass.name} has no TOML representation",
+        )
+    }
 }

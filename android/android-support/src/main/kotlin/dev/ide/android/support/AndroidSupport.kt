@@ -27,7 +27,7 @@ object AndroidSupport {
     fun register(moduleTypes: ModuleTypeRegistry, codecs: FacetCodecRegistry) {
         moduleTypes.register(AndroidAppModuleType, PLUGIN)
         moduleTypes.register(AndroidLibModuleType, PLUGIN)
-        codecs.register(AndroidFacetCodec)
+        codecs.register(AndroidFacetCodec, PLUGIN)
     }
 
     /** Contribute the Android tree icons (res/assets/manifest/android-module) to a host's icon registry. */

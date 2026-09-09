@@ -112,8 +112,25 @@ const val PLUGIN_API_VERSION: Int = 3
  * And it added [PluginRegistration.dataDir], a directory a plugin owns for state that is not a setting:
  * [dev.ide.platform.settings.PreferenceStore] covers string key/value, and a plugin with a cache or a
  * downloaded index was otherwise picking a path the IDE neither cleans up nor backs up.
+ *
+ * `2.3.0` opened facet configuration to a plugin that does not own the facet:
+ * [dev.ide.model.ModifiableModule.putFacetData] writes one as its `module.toml` table plus values, with no
+ * [dev.ide.model.Facet] instance to encode. A project template scaffolding a module of another plugin's type,
+ * or an importer translating a foreign build file, knows the table and the values but not the class, which
+ * only the plugin declaring the facet has. The way through before was to declare a duplicate facet and aim
+ * its codec at the same table, which silently takes over that table's persistence for every module in every
+ * project. Additive over `2.2.0`, so [PLUGIN_API_VERSION] stays at `3`. It also tightened what the model
+ * accepts around facets, all of it previously undetected until a save or a later read:
+ *
+ *  - a facet table in [dev.ide.model.RESERVED_FACET_TABLES] is refused, by both `putFacetData` and
+ *    [dev.ide.model.FacetCodecRegistry.register]. Those tables are the model's own, and a facet claiming one
+ *    overwrote the module's configuration on the next save;
+ *  - facet values are checked against what TOML can hold where they are staged, so a codec emitting a null or
+ *    a value type with no representation names its own table instead of failing an unrelated save later;
+ *  - a `module.toml` table two codecs claim is logged, naming both. Last registration still wins, but the
+ *    loser keeps working through [dev.ide.model.FacetCodecRegistry.codecFor], so the takeover had no symptom.
  */
-const val PLUGIN_SPI_VERSION: String = "2.2.0"
+const val PLUGIN_SPI_VERSION: String = "2.3.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry

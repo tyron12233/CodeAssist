@@ -786,4 +786,22 @@ interface ModifiableModule {
     /** Drop the content root at [dirRelPath] from [sourceSetName] (model-only; doesn't touch disk). */
     fun removeContentRoot(sourceSetName: String, dirRelPath: String)
     fun <T : Facet> putFacet(facet: T)
+
+    /**
+     * Write a facet as the `module.toml` table it occupies plus its values, with no [Facet] instance to
+     * encode. Replaces whatever the table currently holds, exactly as [putFacet] does.
+     *
+     * [putFacet] is the typed route and needs the facet class, which only the plugin declaring it has.
+     * This is the route for a caller that has to configure a facet it cannot see: a [ModuleType]'s default
+     * facets, an importer translating a foreign build file, or a
+     * [dev.ide.model.template.ProjectTemplate] scaffolding a module of another plugin's type. All three know
+     * the table and the values without knowing the class. [FacetCodec.tomlTable] names the table
+     * (`android`, `java`), and [FacetCodec.encode] defines the value map a codec will read back.
+     *
+     * Values must be TOML-representable: `String`, `Boolean`, `Int`, `Long`, `Double`, and lists or
+     * string-keyed maps of those. An unset field is an absent key, never a null. A table no registered
+     * [FacetCodec] claims is kept as written and round-trips untouched, so writing one is a way to carry
+     * configuration for a plugin that is not installed yet, not an error.
+     */
+    fun putFacetData(data: FacetData)
 }

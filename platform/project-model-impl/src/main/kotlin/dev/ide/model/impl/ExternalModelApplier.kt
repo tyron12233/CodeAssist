@@ -19,6 +19,9 @@ import dev.ide.model.sync.ExternalModule
 import dev.ide.model.sync.ExternalModuleRef
 import dev.ide.model.sync.ExternalPlatform
 import dev.ide.model.sync.ExternalProjectModel
+import dev.ide.platform.log.Log
+
+private val log = Log.logger("ide.model")
 
 /**
  * Applies a [ExternalProjectModel] snapshot (what a [dev.ide.model.sync.ProjectImporter] read out of a
@@ -147,11 +150,16 @@ class ExternalModelApplier(private val store: ProjectModelStore) {
         for (dependency in external.dependencies) module.addDependency(orderEntry(dependency))
 
         // Facets travel as table + values so an importer needs no facet class; the codec registered for the
-        // table turns them back into a real Facet. An unknown table is skipped rather than failing the sync.
-        val builder = module as? ModuleBuilder
+        // table turns them back into a real Facet. An unknown table is skipped rather than failing the sync,
+        // and so is one carrying a value the model cannot persist: a sync is driven by build files the user
+        // may not control, so one bad facet costs that facet rather than the import.
         for (facet in external.facets) {
             if (store.facetCodecs.codecForTable(facet.table) == null) continue
-            builder?.putFacetData(FacetData(facet.table, facet.values))
+            try {
+                module.putFacetData(FacetData(facet.table, facet.values))
+            } catch (e: IllegalArgumentException) {
+                log.warn("skipped facet '${facet.table}' on module '${external.name}': ${e.message}")
+            }
         }
     }
 

@@ -552,14 +552,57 @@ data class PythonFacet(val interpreter: String, val venv: String?) : Facet {
 object PythonFacetCodec : FacetCodec<PythonFacet> {
     override val key = PYTHON_FACET
     override val tomlTable = "python"          // the [python] table in module.toml
-    override fun encode(f: PythonFacet) = mapOf("interpreter" to f.interpreter, "venv" to f.venv)
+    override fun encode(f: PythonFacet) = buildMap {
+        put("interpreter", f.interpreter)
+        f.venv?.let { put("venv", it) }        // an unset field is an absent key, never a null
+    }
     override fun decode(v: Map<String, Any?>) =
         PythonFacet(v["interpreter"] as? String ?: "python3", v["venv"] as? String)
 }
 ```
 
-Codec values must be TOML-representable (`String`, `Long`, `Boolean`, and lists of those), so that an
-`encode` and a load-from-disk produce structurally equal values.
+Codec values must be TOML-representable (`String`, `Boolean`, `Int`, `Long`, `Double`, and lists or
+string-keyed maps of those), so that an `encode` and a load-from-disk produce structurally equal values. A
+null has no representation: omit the key instead, so that what `encode` returns matches what the loader
+produces. Values are checked when they are staged, so a bad one names your table rather than failing an
+unrelated save later.
+
+`version`, `module`, `sourceSets` and `dependencies` (`RESERVED_FACET_TABLES`) are the model's own tables and
+cannot be used as a `tomlTable`.
+
+**A facet can be configured by a plugin that does not own it.** The facet class and its codec belong to one
+plugin. A project template that scaffolds an Android module, or an importer that reads a foreign build file,
+has to configure that facet without being able to name it: `:android-support` is not a published artifact,
+so `AndroidFacet` is out of reach. `putFacetData` writes the table and the values directly, which is all such
+a caller has:
+
+```kotlin
+override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
+    scaffold.workspace.projects.first { it.name == args.name }.beginModification().apply {
+        addModule("app", scaffold.moduleType("android-app")).apply {
+            languageLevel = scaffold.languageLevel
+            putFacetData(
+                FacetData(
+                    "android",                        // the table AndroidFacetCodec persists to
+                    linkedMapOf(
+                        "namespace" to args.packageName,
+                        "compileSdk" to 36L,
+                        "minSdk" to args.int("minSdk", 26).toLong(),
+                        "isApplication" to true,
+                    ),
+                ),
+            )
+        }
+        commit()
+    }
+}
+```
+
+The keys are the ones that plugin's `encode` produces; the module type's `defaultFacets()` supply the rest.
+Do not reach the same end by declaring a facet of your own and pointing its codec at another plugin's table.
+Codecs are resolved by table with last-registration-wins and an installed plugin loads after the built-ins,
+so that takes over persistence for the table in every project on the device, not only the ones your template
+created. The registry logs it; nothing else about it is visible from either plugin.
 
 **The model's vocabularies are open, so your layout does not have to lie.** `ContentRole`, `PlatformKind`,
 `LibraryKind`, `LanguageLevel` and `DependencyScope` were enums until SPI `2.0.0`. They are now value types
@@ -2177,7 +2220,7 @@ the IDE's own runtime:
 ```kotlin
 dependencies {
     // The BOM carries the versions, including the Compose the IDE provides.
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.2.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.3.0"))
 
     compileOnly("io.github.tyron12233:plugin-ui-api")
     compileOnly("androidx.compose.runtime:runtime")
@@ -2235,7 +2278,7 @@ not part of it, so an id or an anchor that is wrong still shows up only once the
 The engine SPI is published, so the extension points in these modules are available to a plugin app:
 
 ```kotlin
-compileOnly(platform("io.github.tyron12233:plugin-bom:2.2.0")) // one version for everything below
+compileOnly(platform("io.github.tyron12233:plugin-bom:2.3.0")) // one version for everything below
 
 compileOnly("io.github.tyron12233:plugin-api")        // actions, menus, palette commands
 compileOnly("io.github.tyron12233:platform-core")     // scoped services, settings pages, logging
@@ -2269,7 +2312,7 @@ The SPI is published, so it is an ordinary dependency:
 
 ```kotlin
 dependencies {
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.2.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.3.0"))
     compileOnly("io.github.tyron12233:plugin-api")
     compileOnly("io.github.tyron12233:platform-core")
 }
