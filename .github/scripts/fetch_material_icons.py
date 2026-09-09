@@ -29,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 METADATA_URL = "https://fonts.google.com/metadata/icons?incomplete=1&key=material_symbols"
 SVG_URL = ("https://raw.githubusercontent.com/google/material-design-icons/master"
            "/symbols/web/{name}/materialsymbolsoutlined/{name}{suffix}_24px.svg")
-OUT_PATH = "android-support/src/main/resources/dev/ide/android/support/icons/material-symbols.tsv"
+OUT_PATH = "android/android-support/src/main/resources/dev/ide/android/support/icons/material-symbols.tsv"
 
 SYMBOLS_FAMILY = "Material Symbols Outlined"
 EXPECTED_VIEWBOX = "0 -960 960 960"

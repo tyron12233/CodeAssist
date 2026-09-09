@@ -167,6 +167,12 @@ val layers = mapOf(
     // Executing project code on device: the source interpreter, the bytecode VM, and the AWT/Swing
     // surface an interpreted program draws into.
     "run" to listOf("interp-api", "interp-core", "interp-impl", "interp-compose", "jvm-interp", "awt-toolkit"),
+    // Android as a target platform: the facet/variant model, the SDK metadata, the XML layout
+    // preview, and the ART compatibility shims.
+    "android" to listOf(
+        "android-support", "android-sdk-metadata", "art-compat",
+        "layout-preview-api", "layout-preview-impl", "applog-runtime",
+    ),
 )
 
 // Only remap what this build actually included — CI_CORE_ONLY leaves the shells out.
