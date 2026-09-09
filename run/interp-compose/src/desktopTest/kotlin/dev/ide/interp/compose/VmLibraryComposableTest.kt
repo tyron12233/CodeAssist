@@ -104,6 +104,35 @@ class VmLibraryComposableTest {
         assertEquals("themed:plain", value, "the composable getter ran interpreted with the live composer")
     }
 
+    @Test fun disposableEffectObserverOfASubInterfaceIsRegisteredDispatchedAndRemoved() {
+        // The reported preview stop: a `LifecycleEventObserver { _, e -> }` built inside a DisposableEffect and
+        // handed to `lifecycle.addObserver(LifecycleObserver)`. The compiler coerces the lambda to the marker
+        // SUPER-interface first (`cannot cast dev.ide.jvm.VmLambda to androidx/lifecycle/LifecycleObserver`); past
+        // that, the registry must find the lambda's OWN interface behind the marker to dispatch it at all, and
+        // the dispose block's removeObserver must name the very object addObserver registered.
+        val d = dispatcher()
+        val log = mutableListOf<String>()
+        val registry = HostRegistry()
+        val call = libComposableCall(
+            "LibObserve", paramCount = 2,
+            rawArgs = listOf(RArg(RNode.Const(0, null, span)), RArg(RNode.Const(0, null, span))),
+        )
+        val recomposer = Recomposer(EmptyCoroutineContext)
+        val composition = Composition(UnitApplier, recomposer)
+        composition.setContent {
+            d.composer = currentComposer
+            d.dispatch(call, receiver = null, args = listOf(registry, log))
+        }
+        assertEquals(null, d.contentLambdaError?.message, "the effect block ran without a partial-render error")
+        registry.dispatch("resumed")
+        composition.dispose()
+        registry.dispatch("paused")
+        recomposer.cancel()
+        assertEquals(listOf("event:resumed"), log, "dispatched while composed, silent after dispose")
+        assertEquals(0, registry.size, "removeObserver named the object addObserver registered")
+        assertEquals(0, registry.ignored, "the lambda crossed as its own interface, not as a bare marker")
+    }
+
     @Test fun interpretedLambdaFailureInvokedByRealCodeIsRecordedNotThrown() {
         // The graphicsLayer-block crash shape: REAL code invokes an interpreted callback whose body fails
         // (e.g. a property read on a slot a skipped statement never wrote). The guarded proxy must record the

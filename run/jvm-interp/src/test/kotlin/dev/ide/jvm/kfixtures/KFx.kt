@@ -167,3 +167,31 @@ fun tierMapText(): String {
 
 /** Sorting through real code compares the peers, so `Enum.compareTo` has to see one declaring class. */
 fun tierSortedText(): String = listOf(Tier.PRO, Tier.FREE, Tier.TEAM).sorted().joinToString(",")
+
+/** The lifecycle shape as Kotlin `fun interface`s: a lambda of the sub-interface reaches a parameter typed as
+ *  the marker super-interface, and the platform decides what it is by `is`. */
+interface Marker
+
+fun interface EventSink : Marker {
+    fun onEvent(e: String)
+}
+
+fun register(m: Marker): String = if (m is EventSink) { m.onEvent("x"); "sink" } else "marker"
+
+fun samLambdaAsItsSuperInterface(): String {
+    val sb = StringBuilder()
+    val sink = EventSink { sb.append(it) }
+    val held: Any = sink
+    return register(held as Marker) + ":" + sb + ":" + (held is Marker) + ":" + (held is Runnable)
+}
+
+/** A `fun interface` whose single abstract method is INHERITED from a real interface: its lambda is a Runnable. */
+fun interface Task : Runnable
+
+fun samLambdaAsItsRealSuperInterface(): String {
+    val sb = StringBuilder()
+    val task = Task { sb.append("ran") }
+    val held: Any = task
+    (held as Runnable).run()
+    return "$sb:${held is Runnable}"
+}

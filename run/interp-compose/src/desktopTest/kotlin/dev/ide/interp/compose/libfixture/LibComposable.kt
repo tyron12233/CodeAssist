@@ -1,10 +1,13 @@
 package dev.ide.interp.compose.libfixture
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
+import dev.ide.interp.compose.HostEventObserver
+import dev.ide.interp.compose.HostRegistry
 
 /** Library composables for VmLibraryComposableTest — the "jar-only library composable" shape (a transformed
  *  method with defaults, and a container taking `@Composable` content), interpreted by the bytecode VM with
@@ -55,4 +58,16 @@ object LibTheme {
 
     val label: String
         @Composable get() = remember { "themed:$plain" }
+}
+
+/** The reported `ObserveState` shape: a `DisposableEffect` whose block builds a SAM lambda of the event
+ *  sub-interface, registers it through the marker SUPER-interface (the compiler casts it to the parameter type
+ *  first), and unregisters the same observer on dispose. */
+@Composable
+fun LibObserve(registry: HostRegistry, log: MutableList<String>) {
+    DisposableEffect(registry) {
+        val observer = HostEventObserver { event -> log.add("event:$event") }
+        registry.addObserver(observer)
+        onDispose { registry.removeObserver(observer) }
+    }
 }

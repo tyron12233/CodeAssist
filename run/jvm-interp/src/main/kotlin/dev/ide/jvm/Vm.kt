@@ -851,6 +851,22 @@ class Vm(
         return realSupers.any { target.isAssignableFrom(it) }
     }
 
+    /**
+     * Whether a functional-interface value (a [VmLambda]) of [interfaceType] is a [target], for
+     * `checkcast`/`instanceof`: its own interface or `Object`, or a SUPERTYPE of that interface, in the
+     * interpreted hierarchy for a project `fun interface` and in the real one for a bridged interface. The
+     * compiler emits such casts routinely: a `LifecycleEventObserver { _, e -> }` handed to
+     * `Lifecycle.addObserver(LifecycleObserver)` is coerced with `checkcast LifecycleObserver` first, and a
+     * lambda whose type is checked against only its exact interface fails it.
+     */
+    internal fun lambdaIsA(interfaceType: String, target: String): Boolean {
+        if (target == "java/lang/Object" || target == interfaceType) return true
+        resolve(interfaceType)?.let { return isSubtype(it, target) || isRealInstance(it, target) }
+        val from = runCatching { loadReal(interfaceType) }.getOrNull() ?: return false
+        val to = runCatching { loadReal(target) }.getOrNull() ?: return false
+        return to.isAssignableFrom(from)
+    }
+
     /** A candidate supertype method a peer may override, paired with whether it is abstract. */
     private class Candidate(val method: PeerMethod, val abstract: Boolean)
 

@@ -188,6 +188,20 @@ internal class VmLambda(
                 ?: RuntimeException("uninterpreted exception escaped a lambda: ${ve.value}")
         }
 
+    /** The real proxies platform code has been handed for this lambda, one per interface (see
+     *  [ReflectiveBridge.proxyFor]). Lazily allocated: most lambdas never cross. */
+    private var proxies: MutableMap<Class<*>, Any>? = null
+
+    /**
+     * The proxy of [iface] standing for this lambda on the platform side, created once by [create] and handed
+     * out on EVERY crossing after that. Platform registries pair crossings by identity or equality, so the
+     * `lifecycle.addObserver(observer)` in an effect and the `removeObserver(observer)` in its dispose block
+     * must name one object: a fresh proxy per crossing left the first one registered for good.
+     */
+    internal fun proxyAs(iface: Class<*>, create: () -> Any): Any = synchronized(this) {
+        (proxies ?: HashMap<Class<*>, Any>(2).also { proxies = it }).getOrPut(iface, create)
+    }
+
     override fun toString(): String = "VmLambda($interfaceType.$samName)"
 }
 

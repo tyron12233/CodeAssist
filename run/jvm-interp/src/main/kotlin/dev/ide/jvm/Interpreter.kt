@@ -1344,7 +1344,7 @@ internal class Interpreter(private val vm: Vm) {
         return when (receiver) {
             is VmLambda ->
                 if (name == receiver.samName) receiver.invokeSam(args)
-                else throw VmUnsupportedException("method $name on a functional-interface value is not supported")
+                else invokeOnLambda(receiver, name, descriptor, args)
 
             is VmObject -> {
                 val found = vm.findInHierarchy(receiver.vmClass, name, descriptor)
@@ -1375,6 +1375,25 @@ internal class Interpreter(private val vm: Vm) {
 
             else -> vm.bridgeVirtual(receiver, name, descriptor, args)
         }
+    }
+
+    /**
+     * A method other than the abstract one on a functional-interface value. The `Object` methods a lambda has by
+     * identity (`hashCode`/`equals` when it is a map key or a registry entry, `toString` when logged) are
+     * answered here. A default method of an INTERPRETED interface runs in the interpreter with the lambda as
+     * `this` (its calls to the abstract method dispatch back to the lambda body); a default method of a real
+     * interface (`Comparator.reversed`) is run by the platform on the lambda's proxy, through the bridge.
+     */
+    private fun invokeOnLambda(lambda: VmLambda, name: String, descriptor: String, args: List<Any?>): Any? {
+        when (name + descriptor) {
+            "hashCode()I" -> return System.identityHashCode(lambda)
+            "equals(Ljava/lang/Object;)Z" -> return if (args[0] === lambda) 1 else 0
+            "toString()Ljava/lang/String;" -> return lambda.toString()
+        }
+        val iface = vm.resolve(lambda.interfaceType) ?: return vm.bridgeVirtual(lambda, name, descriptor, args)
+        val (declaring, method) = vm.findInHierarchy(iface, name, descriptor)?.takeIf { it.second.access and ACC_ABSTRACT == 0 }
+            ?: throw VmUnsupportedException("no method $name$descriptor on functional interface ${lambda.interfaceType}")
+        return execute(declaring, method, lambda, args)
     }
 
     /** Whether [name]/[descriptor] is one of `Object`'s monitor methods (exact descriptors, so an unrelated
@@ -1626,15 +1645,12 @@ internal class Interpreter(private val vm: Vm) {
 
     private fun instanceOf(v: Any?, target: String): Boolean = when (v) {
         null -> false
-        is VmObject -> {
-            val t = if (target.startsWith("L")) target.substring(1).trimEnd(';') else target
-            // Match the interpreted hierarchy by name, or a real supertype (a real interface or class reached
-            // through a bridged super) by assignability.
-            vm.isSubtype(v.vmClass, t) || vm.isRealInstance(v.vmClass, t)
-        }
-
+        // Match the interpreted hierarchy by name, or a real supertype (a real interface or class reached
+        // through a bridged super) by assignability.
+        is VmObject -> internalNameOf(target).let { vm.isSubtype(v.vmClass, it) || vm.isRealInstance(v.vmClass, it) }
         is VmArray -> target.startsWith("[")
-        is VmLambda -> target == "java/lang/Object" || target == v.interfaceType
+        // A lambda is its functional interface AND every supertype of it (see [Vm.lambdaIsA]).
+        is VmLambda -> vm.lambdaIsA(v.interfaceType, internalNameOf(target))
         // A real array cast to an array target: trust it. The element type may be an interpreted class (a
         // bridged call returning `T[]` for an interpreted `T`, e.g. Spannable.getSpans), which the real
         // classloader can't resolve, so an exact check would wrongly reject a compiler-emitted cast.
@@ -1643,6 +1659,11 @@ internal class Interpreter(private val vm: Vm) {
             Class.forName(target.replace('/', '.'), false, javaClass.classLoader).isInstance(v)
         }.getOrDefault(false)
     }
+
+    /** A type operand as an internal name: a reified marker may arm a DESCRIPTOR (`Lfoo/Bar;`), which is
+     *  unwrapped; an internal name (which never ends in `;`) is kept as-is. */
+    private fun internalNameOf(target: String): String =
+        if (target.startsWith("L") && target.endsWith(";")) target.substring(1, target.length - 1) else target
 
     /** The length of a [VmArray] or a real Java array (returned from a bridge call). */
     private fun arrayLength(a: Any?): Int = when (a) {

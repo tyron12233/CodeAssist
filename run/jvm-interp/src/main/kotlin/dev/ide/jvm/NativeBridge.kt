@@ -2,6 +2,7 @@ package dev.ide.jvm
 
 import java.lang.reflect.Constructor
 import java.lang.reflect.Field
+import java.lang.reflect.InvocationHandler
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
@@ -32,8 +33,8 @@ interface NativeBridge {
  * A [NativeBridge] that forwards to the real JVM by reflection. It marshals arguments and results between the
  * interpreter's representation and reflection: an `int` parameter is a Kotlin [Int] the reflection layer
  * autoboxes; a `boolean` parameter is materialized from `0`/`1`; a returned `char` comes back as an [Int]. A
- * [VmLambda] argument is wrapped in a [Proxy] of the target functional interface whose calls re-enter the
- * interpreter. A [VmObject] argument has no real counterpart and is rejected.
+ * [VmLambda] argument is wrapped in a [Proxy] of its own functional interface (see [realLambda]) whose calls
+ * re-enter the interpreter. A [VmObject] argument has no real counterpart and is rejected.
  */
 class ReflectiveBridge(
     private val loader: ClassLoader = ReflectiveBridge::class.java.classLoader,
@@ -128,19 +129,9 @@ class ReflectiveBridge(
         else -> error("bad type descriptor: $descriptor")
     }
 
-    /** Convert an interpreter value into the form reflection expects for a parameter of [descriptor]. A lambda
-     *  passed through an Object-typed parameter (stored in a container, an AtomicReference) is proxied as its
-     *  OWN functional interface from the lambda's call site, since Object names no interface to implement. */
+    /** Convert an interpreter value into the form reflection expects for a parameter of [descriptor]. */
     private fun marshalIn(value: Any?, descriptor: String): Any? = when {
-        value is VmLambda -> {
-            val target = if (descriptor == "Ljava/lang/Object;") "L${value.interfaceType};" else descriptor
-            // A host-absent interface (a project Compose type the bundled runtime lacks, e.g. foundation.style.Style):
-            // no host code can INVOKE the SAM — it holds no reference to the interface — so it can only store the
-            // value and hand it back to interpreted code. Pass the interpreted lambda through opaquely rather than
-            // fail building a Proxy of a class that isn't on the host. (A VmObject already passes through, below.)
-            if (target.startsWith("L") && !classLoadable(target.substring(1, target.length - 1))) value
-            else proxyFor(value, target)
-        }
+        value is VmLambda -> realLambda(value, descriptor)
         descriptor == "Z" -> (value as Int) != 0
         descriptor == "B" -> (value as Int).toByte()
         descriptor == "C" -> (value as Int).toChar()
@@ -173,9 +164,12 @@ class ReflectiveBridge(
     override fun invokeVirtual(receiver: Any, name: String, descriptor: String, args: List<Any?>): Any? {
         if (receiver is VmObject) throw VmUnsupportedException("virtual call `$name` on an interpreted object requires a real peer")
         rejectVmObjects(args)
-        val m = resolveMethod(receiver.javaClass, name, descriptor)
-            ?: throw VmUnsupportedException("no method $name$descriptor on ${receiver.javaClass.name}")
-        return marshalOut(invoked { m.invoke(receiver, *marshalArgs(descriptor, args)) }, Descriptors.returnType(descriptor))
+        // A lambda receiver is a call to a method of its REAL interface other than the abstract one (a default
+        // method; the interpreter answers the abstract method and Object's itself): run it on the lambda's proxy.
+        val target = if (receiver is VmLambda) realLambda(receiver, "Ljava/lang/Object;") else receiver
+        val m = resolveMethod(target.javaClass, name, descriptor)
+            ?: throw VmUnsupportedException("no method $name$descriptor on ${target.javaClass.name}")
+        return marshalOut(invoked { m.invoke(target, *marshalArgs(descriptor, args)) }, Descriptors.returnType(descriptor))
     }
 
     override fun construct(owner: String, descriptor: String, args: List<Any?>): Any {
@@ -236,37 +230,79 @@ class ReflectiveBridge(
     }
 
     /**
-     * Wrap [lambda] in a real proxy of the functional interface named by [descriptor], so platform code that
-     * expects that interface can call it. Each abstract-method call marshals its arguments into the
-     * interpreter's representation, runs the lambda, and marshals the result back to the method's return type.
+     * The real object a [VmLambda] crosses as when platform code expects a value of [descriptor]: a [Proxy] of
+     * the lambda's OWN functional interface whenever the host has that interface. The parameter type is often
+     * only a SUPERTYPE of it (`Lifecycle.addObserver(LifecycleObserver)` receiving a
+     * `LifecycleEventObserver { _, e -> }`), and a proxy of the parameter type alone carries none of the lambda's
+     * methods: the registry finds no `LifecycleEventObserver` behind the marker interface and never dispatches
+     * `onStateChanged`, silently. An `Object` parameter (a lambda stored in a container or an AtomicReference)
+     * names no interface at all, so it too takes the lambda's own type.
+     *
+     * Only when the lambda's interface is host-absent (a project `fun interface`, or a newer Compose type the
+     * bundled runtime lacks) is the parameter's interface proxied instead; and when that is absent as well the
+     * interpreted lambda passes through opaquely: no host code can INVOKE a SAM it holds no reference to, it
+     * can only store the value and hand it back to interpreted code. (A VmObject already passes through.)
+     *
+     * One proxy per (lambda, interface), so every crossing hands the platform the same object (see
+     * [VmLambda.proxyAs]).
      */
-    private fun proxyFor(lambda: VmLambda, descriptor: String): Any {
-        require(descriptor.startsWith("L")) { "a lambda argument must target an interface type, got $descriptor" }
-        val iface = loadClass(descriptor.substring(1, descriptor.length - 1))
+    private fun realLambda(lambda: VmLambda, descriptor: String): Any {
+        val own = lambda.interfaceType.takeIf(::classLoadable)?.let(::loadClass)
+        val param = descriptor.takeIf { it.startsWith("L") && it != "Ljava/lang/Object;" }
+            ?.let { it.substring(1, it.length - 1) }?.takeIf(::classLoadable)?.let(::loadClass)
+        val iface = when {
+            own != null && (param == null || param.isAssignableFrom(own)) -> own
+            param != null -> param
+            else -> return lambda
+        }
+        return lambda.proxyAs(iface) { proxyFor(lambda, iface) }
+    }
+
+    /**
+     * Wrap [lambda] in a real proxy of the functional interface [iface], so platform code that expects that
+     * interface can call it. Each abstract-method call marshals its arguments into the interpreter's
+     * representation, runs the lambda, and marshals the result back to the method's return type. Callers go
+     * through [realLambda], which caches the proxy on the lambda.
+     */
+    private fun proxyFor(lambda: VmLambda, iface: Class<*>): Any {
         require(iface.isInterface) { "${iface.name} is not a functional interface" }
-        return Proxy.newProxyInstance(loader, arrayOf(iface)) { proxy, method, callArgs ->
-            when (method.name) {
+        return Proxy.newProxyInstance(loader, arrayOf(iface), LambdaHandler(lambda))
+    }
+
+    /**
+     * The handler behind a lambda's proxy. `Object`'s methods are answered by the lambda's identity: two
+     * proxies of one lambda are equal, whichever interface each was made for. A DEFAULT method of the interface
+     * (`Comparator.reversed`) runs its own body on the proxy, so its calls to the abstract method re-enter here
+     * and reach the lambda; where the platform cannot run a default method on a proxy the call falls through to
+     * the lambda body, as every call did before. Everything else is the abstract method itself.
+     */
+    private inner class LambdaHandler(val lambda: VmLambda) : InvocationHandler {
+        override fun invoke(proxy: Any, method: Method, callArgs: Array<Any?>?): Any? {
+            if (method.declaringClass == Any::class.java) return when (method.name) {
                 "toString" -> lambda.toString()
                 "hashCode" -> System.identityHashCode(lambda)
-                "equals" -> callArgs?.getOrNull(0) === proxy
-                else -> {
-                    val paramTypes = method.parameterTypes
-                    val vmArgs = (callArgs ?: emptyArray()).mapIndexed { i, a -> realArgToVm(a, paramTypes[i]) }
-                    // invokeSamReal (not invokeSam): the result crosses to platform code here, so an interpreted
-                    // object return (e.g. a `DisposableEffectResult` from an inlined `onDispose { }`) is converted
-                    // to its real peer — else the raw VmObject reaches the caller and ClassCastExceptions there.
-                    val guarded = proxyExceptionSink != null || proxyFallback != null
-                    if (!guarded) marshalReturn(lambda.invokeSamReal(vmArgs), method.returnType)
-                    else try {
-                        marshalReturn(lambda.invokeSamReal(vmArgs), method.returnType)
-                    } catch (t: Throwable) {
-                        proxyExceptionSink?.invoke(t)
-                        proxyFallback?.invoke(method, callArgs ?: emptyArray(), t) ?: zeroReturn(method.returnType)
-                    }
-                }
+                else -> callArgs?.getOrNull(0).let { it === proxy || lambdaBehind(it) === lambda } // equals
+            }
+            if (method.isDefault) invokeDefaultMethod?.let { return it(proxy, method, callArgs) }
+            val paramTypes = method.parameterTypes
+            val vmArgs = (callArgs ?: emptyArray()).mapIndexed { i, a -> realArgToVm(a, paramTypes[i]) }
+            // invokeSamReal (not invokeSam): the result crosses to platform code here, so an interpreted object
+            // return (e.g. a `DisposableEffectResult` from an inlined `onDispose { }`) is converted to its real
+            // peer, else the raw VmObject reaches the caller and ClassCastExceptions there.
+            val guarded = proxyExceptionSink != null || proxyFallback != null
+            return if (!guarded) marshalReturn(lambda.invokeSamReal(vmArgs), method.returnType)
+            else try {
+                marshalReturn(lambda.invokeSamReal(vmArgs), method.returnType)
+            } catch (t: Throwable) {
+                proxyExceptionSink?.invoke(t)
+                proxyFallback?.invoke(method, callArgs ?: emptyArray(), t) ?: zeroReturn(method.returnType)
             }
         }
     }
+
+    /** The [VmLambda] a lambda proxy of this bridge stands for, or null for any other value. */
+    private fun lambdaBehind(value: Any?): VmLambda? =
+        if (value is Proxy) (Proxy.getInvocationHandler(value) as? LambdaHandler)?.lambda else null
 
     /** A type-correct zero for [returnType], returned when a guarded proxy call fails (see [proxyExceptionSink]). */
     private fun zeroReturn(returnType: Class<*>): Any? = when (returnType) {
@@ -351,4 +387,24 @@ class ReflectiveBridge(
 
     private fun paramsMatch(actual: Array<Class<*>>, expected: Array<Class<*>>): Boolean =
         actual.size == expected.size && actual.indices.all { actual[it] == expected[it] }
+
+    private companion object {
+        /**
+         * `InvocationHandler.invokeDefault(proxy, method, args)`, which runs an interface's default method on a
+         * proxy (Java 16+; absent on older ART releases, resolved reflectively so a missing method is a null here
+         * and not a `NoSuchMethodError` at the first proxied call). The default method's own exception surfaces
+         * unwrapped, as it would from a direct call.
+         */
+        val invokeDefaultMethod: ((Any, Method, Array<Any?>?) -> Any?)? = runCatching {
+            InvocationHandler::class.java.getMethod("invokeDefault", Any::class.java, Method::class.java, Array<Any>::class.java)
+        }.getOrNull()?.let { m ->
+            { proxy: Any, method: Method, args: Array<Any?>? ->
+                try {
+                    m.invoke(null, proxy, method, args)
+                } catch (e: InvocationTargetException) {
+                    throw e.targetException ?: e
+                }
+            }
+        }
+    }
 }
