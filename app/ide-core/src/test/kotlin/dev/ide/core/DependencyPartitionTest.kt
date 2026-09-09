@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.build.DependencyPartition
 import dev.ide.deps.ArtifactKind
 import dev.ide.deps.ResolvedArtifact
 import dev.ide.model.Coordinate

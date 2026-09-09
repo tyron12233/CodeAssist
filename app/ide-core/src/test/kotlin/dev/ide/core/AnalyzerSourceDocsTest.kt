@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.analysis.AnalyzerSourceDocs
 import dev.ide.lang.JvmIndexScopeProvider
 import dev.ide.lang.java.JavaSourceAnalyzer
 import java.nio.file.Files

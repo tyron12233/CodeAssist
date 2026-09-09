@@ -1,9 +1,9 @@
 package dev.ide.android.daemon
 
 import android.content.Context
-import dev.ide.core.AppLogLevel
-import dev.ide.core.AppLogSnapshot
-import dev.ide.core.BuildRunner
+import dev.ide.core.applog.AppLogLevel
+import dev.ide.core.applog.AppLogSnapshot
+import dev.ide.core.build.BuildRunner
 import dev.ide.core.IdeServices
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.AppLogLineUi

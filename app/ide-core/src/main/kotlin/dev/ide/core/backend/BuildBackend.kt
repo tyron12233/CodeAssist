@@ -1,7 +1,7 @@
 package dev.ide.core.backend
 
 import dev.ide.core.BackendContext
-import dev.ide.core.BuildRunner
+import dev.ide.core.build.BuildRunner
 import dev.ide.core.IdeServices
 import dev.ide.ui.backend.AppLogUi
 import dev.ide.ui.backend.BuildService

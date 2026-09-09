@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import dev.ide.core.preview.previewAttempt
 import dev.ide.interp.PreviewResourceResolver
 import dev.ide.interp.PreviewSandboxPolicy
 import dev.ide.interp.SandboxCategory
@@ -53,10 +54,9 @@ import androidx.compose.ui.unit.sp
 import dev.ide.android.preview.ComposePreviewRemoteClient
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.LoweredComposePreview
-import dev.ide.core.PreviewOutcome
-import dev.ide.core.ensurePreviewPassCurrent
-import dev.ide.core.previewAttempt
-import dev.ide.core.resolvePreviewOutcome
+import dev.ide.core.preview.PreviewOutcome
+import dev.ide.core.preview.ensurePreviewPassCurrent
+import dev.ide.core.preview.resolvePreviewOutcome
 import dev.ide.interp.compose.ComposePreviewRenderer
 import dev.ide.interp.compose.PreviewParameterBinding
 import dev.ide.interp.compose.VmLibraryExecutor

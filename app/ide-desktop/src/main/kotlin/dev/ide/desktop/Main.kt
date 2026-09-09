@@ -7,7 +7,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.ide.core.IdeServicesBackend
-import dev.ide.core.ProjectManager
+import dev.ide.core.project.ProjectManager
 import dev.ide.ui.CodeAssistApp
 import java.nio.file.Path
 

@@ -1,5 +1,14 @@
 package dev.ide.core
 
+import dev.ide.core.agent.AgentBackend
+import dev.ide.core.build.BuildFailureKind
+import dev.ide.core.build.BuildRunner
+import dev.ide.core.perf.MemSample
+import dev.ide.core.perf.PerfSampler
+import dev.ide.core.plugins.AgentPlugin
+import dev.ide.core.plugins.VcsPlugin
+import dev.ide.core.project.ProjectManager
+import dev.ide.core.sdk.SdkManagerService
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.ActionService
 import dev.ide.ui.backend.BlockService

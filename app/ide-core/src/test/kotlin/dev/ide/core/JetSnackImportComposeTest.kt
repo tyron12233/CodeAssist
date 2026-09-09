@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.gradle.GradleImport
 import dev.ide.model.DependencyScope
 import dev.ide.testkit.withTempDir
 import java.nio.file.Files

@@ -2,6 +2,7 @@ package dev.ide.core
 
 import dev.ide.analytics.AnalyticsService
 import dev.ide.build.ProgramInterpreter
+import dev.ide.core.applog.AppLogChannel
 import dev.ide.lang.kotlin.compile.KotlinCompilerBackend
 import dev.ide.lang.kotlin.compile.KotlinPluginLoader
 import dev.ide.platform.ServiceKey

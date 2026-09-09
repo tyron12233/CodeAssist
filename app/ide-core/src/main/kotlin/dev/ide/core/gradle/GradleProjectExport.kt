@@ -35,7 +35,7 @@ import java.util.zip.ZipOutputStream
  * flavors, build features, packaging). What Gradle has no equivalent for (a signing config that lives in
  * the app's keystore registry, a bundled KSP processor with no declared Gradle plugin, a library with no
  * Maven coordinate) is left out of the scripts and reported as a note instead of being guessed at. The
- * reverse direction is [dev.ide.core.GradleImport]; the two are symmetric enough that an export re-imports.
+ * reverse direction is [dev.ide.core.gradle.GradleImport]; the two are symmetric enough that an export re-imports.
  */
 object GradleProjectExport {
 

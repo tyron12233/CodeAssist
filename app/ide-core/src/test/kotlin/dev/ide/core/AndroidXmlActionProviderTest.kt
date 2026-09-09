@@ -2,6 +2,7 @@ package dev.ide.core
 
 import dev.ide.analysis.AnalysisTarget
 import dev.ide.analysis.FixContext
+import dev.ide.core.android.AndroidXmlActionProvider
 import dev.ide.index.IndexService
 import dev.ide.lang.SourceAnalyzer
 import dev.ide.lang.dom.ParsedFile

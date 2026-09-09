@@ -3,6 +3,8 @@ package dev.ide.core
 import dev.ide.android.support.resources.ResourceRepository
 import dev.ide.android.support.tools.KeystoreRegistry
 import dev.ide.build.ProgramInterpreter
+import dev.ide.core.applog.AppLogChannel
+import dev.ide.core.sdk.SdkManagerService
 import dev.ide.core.services.DependencyService
 import dev.ide.index.IndexService
 import dev.ide.lang.LanguageId

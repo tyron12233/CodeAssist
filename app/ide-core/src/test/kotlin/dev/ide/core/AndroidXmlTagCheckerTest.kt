@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.android.AndroidXmlTagChecker
 import dev.ide.lang.xml.lint.TagInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals

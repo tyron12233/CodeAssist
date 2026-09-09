@@ -27,10 +27,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.LoweredComposePreview
-import dev.ide.core.PreviewOutcome
-import dev.ide.core.ensurePreviewPassCurrent
-import dev.ide.core.previewAttempt
-import dev.ide.core.resolvePreviewOutcome
+import dev.ide.core.preview.PreviewOutcome
+import dev.ide.core.preview.ensurePreviewPassCurrent
+import dev.ide.core.preview.previewAttempt
+import dev.ide.core.preview.resolvePreviewOutcome
 import dev.ide.interp.PreviewResourceResolver
 import dev.ide.interp.PreviewSandboxPolicy
 import dev.ide.interp.SandboxCategory

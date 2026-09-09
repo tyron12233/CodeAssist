@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.project.ProjectManager
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope

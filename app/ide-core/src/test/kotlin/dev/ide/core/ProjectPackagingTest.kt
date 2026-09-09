@@ -1,5 +1,9 @@
 package dev.ide.core
 
+import dev.ide.core.project.CaprojFormat
+import dev.ide.core.project.CaprojManifest
+import dev.ide.core.project.ProjectManager
+import dev.ide.core.project.ProjectPackaging
 import dev.ide.testkit.withTempDir
 import org.junit.jupiter.api.Test
 import java.nio.file.Files

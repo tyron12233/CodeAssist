@@ -30,7 +30,7 @@ import java.nio.file.Path
 
 /**
  * [LearnService] for the home screen's Learn tab. Serves the bundled [LearnContent] catalog, persists local
- * progress through the [ProjectManager][dev.ide.core.ProjectManager] preferences, and auto-checks interactive
+ * progress through the [ProjectManager][dev.ide.core.project.ProjectManager] preferences, and auto-checks interactive
  * exercises by compiling + running the learner's code in a hidden scratch project ([ProjectManager.scratch]
  * → [IdeServices.runAndCapture]) and comparing its output to the step's [ExerciseCheck]. Exercise answers
  * never leave the backend; only the pass/fail result + captured output are returned. The interface is exactly

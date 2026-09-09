@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import dev.ide.core.project.ImportableKind
+import dev.ide.core.project.ProjectManager
 import dev.ide.core.sync.UnrecognizedProjectMarker
 import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking

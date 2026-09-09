@@ -16,9 +16,9 @@ import android.os.Process
 import dev.ide.android.AndroidIde
 import dev.ide.android.AppLogSinkRegistry
 import dev.ide.android.support.AndroidSupport
-import dev.ide.core.AppLogLevel
+import dev.ide.core.applog.AppLogLevel
 import dev.ide.core.IdeServices
-import dev.ide.core.ProjectManager
+import dev.ide.core.project.ProjectManager
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
@@ -235,7 +235,7 @@ class BuildDaemonService : Service() {
 
     /** Stream the app-log (Logcat tab) deltas: new lines + connection/session changes. The daemon hosts the
      *  LocalServerSocket the debug app connects to; [dev.ide.core.IdeServices.appLogState] carries the ring
-     *  buffer + a monotonic [dev.ide.core.AppLogSnapshot.totalAppended] so we forward only the lines the UI
+     *  buffer + a monotonic [dev.ide.core.applog.AppLogSnapshot.totalAppended] so we forward only the lines the UI
      *  hasn't seen even after the buffer trims, and detect a session reset (the counter going backwards). */
     private suspend fun streamAppLog(svc: IdeServices) {
         var lastTotal = 0L

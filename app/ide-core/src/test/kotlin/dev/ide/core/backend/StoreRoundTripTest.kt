@@ -1,7 +1,7 @@
 package dev.ide.core.backend
 
 import dev.ide.core.IdeServices
-import dev.ide.core.ProjectManager
+import dev.ide.core.project.ProjectManager
 import dev.ide.store.RemoteCatalog
 import dev.ide.store.RemoteStoreItem
 import dev.ide.store.StoreCatalogSource

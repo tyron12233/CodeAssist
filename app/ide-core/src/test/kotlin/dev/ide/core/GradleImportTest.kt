@@ -1,6 +1,8 @@
 package dev.ide.core
 
+import dev.ide.core.gradle.GradleImport
 import dev.ide.core.gradle.GradleProjectImporter
+import dev.ide.core.project.ProjectManager
 import dev.ide.platform.ProgressReporter
 import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking

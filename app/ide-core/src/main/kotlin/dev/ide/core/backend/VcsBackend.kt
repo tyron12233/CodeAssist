@@ -1,8 +1,8 @@
 package dev.ide.core.backend
 
 import dev.ide.core.BackendContext
-import dev.ide.core.ImportableKind
-import dev.ide.core.VcsPlugin
+import dev.ide.core.project.ImportableKind
+import dev.ide.core.plugins.VcsPlugin
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.UiForgePullRequest
 import dev.ide.ui.backend.UiForgeRepo

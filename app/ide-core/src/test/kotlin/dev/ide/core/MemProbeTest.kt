@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import dev.ide.core.perf.MemSample
+import dev.ide.core.perf.PeakHeap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

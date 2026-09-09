@@ -5,6 +5,8 @@ import dev.ide.android.support.metadata.AttrsXmlParser
 import dev.ide.android.support.resources.ResourceItem
 import dev.ide.android.support.resources.ResourceRepository
 import dev.ide.android.support.resources.ResourceType
+import dev.ide.core.android.AndroidXmlContributor
+import dev.ide.core.android.ResourceCandidate
 import dev.ide.lang.completion.CompletionRequest
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.lang.incremental.DocumentSnapshot

@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.perf.PerfSampler
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

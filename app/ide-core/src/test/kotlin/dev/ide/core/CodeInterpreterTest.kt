@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.project.ProjectManager
 import dev.ide.interp.api.CODE_INTERPRETER
 import dev.ide.interp.api.CodeInterpreter
 import dev.ide.interp.api.LoweredProgram

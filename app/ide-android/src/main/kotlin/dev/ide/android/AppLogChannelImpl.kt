@@ -1,10 +1,10 @@
 package dev.ide.android
 
-import dev.ide.core.AppLogChannel
-import dev.ide.core.AppLogEntry
-import dev.ide.core.AppLogEvent
-import dev.ide.core.AppLogSnapshot
-import dev.ide.core.AppLogWire
+import dev.ide.core.applog.AppLogChannel
+import dev.ide.core.applog.AppLogEntry
+import dev.ide.core.applog.AppLogEvent
+import dev.ide.core.applog.AppLogSnapshot
+import dev.ide.core.applog.AppLogWire
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 

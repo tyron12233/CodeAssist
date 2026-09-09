@@ -2,6 +2,7 @@ package dev.ide.core
 
 import dev.ide.android.support.metadata.AndroidSdkMetadata
 import dev.ide.android.support.metadata.AttrsXmlParser
+import dev.ide.core.android.AndroidXmlChecker
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.xml.XmlIncrementalParser
 import dev.ide.lang.xml.lint.AttrInfo

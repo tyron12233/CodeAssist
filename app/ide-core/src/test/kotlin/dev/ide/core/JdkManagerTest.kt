@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.sdk.JdkManager
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue

@@ -6,7 +6,7 @@ import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.BuildFeatures
 import dev.ide.android.support.BuildType
 import dev.ide.android.support.ProductFlavor
-import dev.ide.core.GradleImport
+import dev.ide.core.gradle.GradleImport
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.Coordinate

@@ -1,5 +1,8 @@
 package dev.ide.core
 
+import dev.ide.core.build.BuildRunner
+import dev.ide.core.project.ProjectManager
+import dev.ide.core.sdk.SdkManagerService
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiError
 import kotlinx.coroutines.CoroutineDispatcher
@@ -22,7 +25,7 @@ internal interface BackendContext {
     /** The shared, APPLICATION-scoped SDK / toolchain download manager — resolved from the [manager] so it's
      *  reachable with no project open (the picker's Settings & Tools hub), falling back to the active engine
      *  on the manager-less (test) path. Null only when neither a manager nor an open project exists. */
-    val sdkManager: dev.ide.core.SdkManagerService?
+    val sdkManager: dev.ide.core.sdk.SdkManagerService?
 
     /** The shared, APPLICATION-scoped signing-keystore registry — same resolution as [sdkManager], so keystore
      *  create/import/validate/delete work from the picker's hub before any project is open. */

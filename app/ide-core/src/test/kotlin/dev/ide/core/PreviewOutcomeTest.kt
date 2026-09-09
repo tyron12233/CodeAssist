@@ -1,5 +1,9 @@
 package dev.ide.core
 
+import dev.ide.core.preview.PreviewOutcome
+import dev.ide.core.preview.ensurePreviewPassCurrent
+import dev.ide.core.preview.previewAttempt
+import dev.ide.core.preview.resolvePreviewOutcome
 import dev.ide.lang.kotlin.interp.RNode
 import dev.ide.lang.kotlin.interp.ResolvedFunction
 import dev.ide.lang.kotlin.interp.SourceSpan

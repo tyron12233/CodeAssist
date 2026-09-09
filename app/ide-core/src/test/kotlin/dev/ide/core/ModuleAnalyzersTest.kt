@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.analysis.ModuleAnalyzers
 import dev.ide.lang.AnalysisResult
 import dev.ide.lang.CacheInvalidation
 import dev.ide.lang.LanguageId

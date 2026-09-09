@@ -7,7 +7,7 @@ import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.core.content.FileProvider
-import dev.ide.core.CaprojFormat
+import dev.ide.core.project.CaprojFormat
 import dev.ide.ui.backend.IdeBackend
 import java.io.File
 

@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.project.ProjectManager
 import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 

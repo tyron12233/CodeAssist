@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.plugins.BuiltInPlugins
 import dev.ide.core.plugins.ExternalUiFacets
 import dev.ide.core.plugins.PluginManifestToml
 import dev.ide.model.FacetCodecRegistry

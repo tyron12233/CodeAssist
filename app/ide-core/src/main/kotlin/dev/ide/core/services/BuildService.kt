@@ -39,15 +39,15 @@ import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.TaskStatus
 import dev.ide.build.engine.jarPath
 import dev.ide.build.jvm.JavaBuildSystem
-import dev.ide.core.AppLogEntry
-import dev.ide.core.AppLogLevel
-import dev.ide.core.AppLogSnapshot
-import dev.ide.core.BuildFailureKind
+import dev.ide.core.applog.AppLogEntry
+import dev.ide.core.applog.AppLogLevel
+import dev.ide.core.applog.AppLogSnapshot
+import dev.ide.core.build.BuildFailureKind
 import dev.ide.core.EngineContext
-import dev.ide.core.MEM_HEARTBEAT_EVERY_SAMPLES
-import dev.ide.core.MEM_SAMPLE_INTERVAL_MS
-import dev.ide.core.MemSample
-import dev.ide.core.PeakHeap
+import dev.ide.core.perf.MEM_HEARTBEAT_EVERY_SAMPLES
+import dev.ide.core.perf.MEM_SAMPLE_INTERVAL_MS
+import dev.ide.core.perf.MemSample
+import dev.ide.core.perf.PeakHeap
 import dev.ide.core.PermissionPolicy
 import dev.ide.core.event.BuildEvent
 import dev.ide.core.event.IdeEventTopics
@@ -111,8 +111,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * WORKSPACE-scoped engine service: build + run orchestration — the native Java/Kotlin + Android build
  * systems, the live build/run state, the run-task list, interactive console I/O, and the run-sandbox
- * permission broker. Carved out of [dev.ide.core.IdeServices]; [dev.ide.core.InProcessBuildRunner] (the
- * in-process arm of [dev.ide.core.BuildRunner]) delegates here. Disposable: it cancels the current run's I/O
+ * permission broker. Carved out of [dev.ide.core.IdeServices]; [dev.ide.core.build.InProcessBuildRunner] (the
+ * in-process arm of [dev.ide.core.build.BuildRunner]) delegates here. Disposable: it cancels the current run's I/O
  * and clears the process-global sandbox broker on dispose. Build results land in the model + the build-state
  * flow, which the editor reads, so the rest of the engine stays decoupled. Reaches shared infrastructure
  * (model, compilers, classpath, ports) through [EngineContext].
@@ -297,7 +297,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
     private val _buildState = MutableStateFlow(BuildState())
     val buildState: StateFlow<BuildState> get() = _buildState
 
-    /** Logcat-style logs from the running debug app, mapped from the [dev.ide.core.AppLogChannel] port's
+    /** Logcat-style logs from the running debug app, mapped from the [dev.ide.core.applog.AppLogChannel] port's
      *  snapshot to the UI DTO. Empty flow off-device. Coalesced upstream (~10/s), so the per-emit list map is
      *  bounded by the channel's ring-buffer cap. */
     val appLog: StateFlow<AppLogUi> =

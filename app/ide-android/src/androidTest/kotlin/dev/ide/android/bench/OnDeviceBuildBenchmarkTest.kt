@@ -601,7 +601,7 @@ class OnDeviceBuildBenchmarkTest {
 
     /**
      * Partition a whole-graph resolution closure back across its declarers — a local copy of the real
-     * `dev.ide.core.DependencyPartition` (internal to ide-core, so unavailable from this androidTest module).
+     * `dev.ide.core.build.DependencyPartition` (internal to ide-core, so unavailable from this androidTest module).
      * Each artifact goes to the FIRST declarer (declaration order) whose `dependsOn` chain reaches it; leftovers
      * attach to the first declarer so nothing is dropped from the classpath.
      */

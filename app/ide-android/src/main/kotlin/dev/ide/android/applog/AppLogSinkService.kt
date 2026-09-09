@@ -6,7 +6,7 @@ import android.os.Binder
 import android.os.IBinder
 import android.os.Parcel
 import dev.ide.android.AppLogSinkRegistry
-import dev.ide.core.AppLogWire
+import dev.ide.core.applog.AppLogWire
 
 /**
  * The exported Binder service the log bridge injected into a running debug app binds to (resolved by the

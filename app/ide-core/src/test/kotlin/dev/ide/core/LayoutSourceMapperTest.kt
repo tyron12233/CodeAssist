@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.android.LayoutSourceMapper
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.xml.XmlIncrementalParser
 import dev.ide.lang.xml.XmlParsedFile

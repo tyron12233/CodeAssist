@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.build.BuildFailureKind
 import dev.ide.ui.backend.BuildDiagnosticUi
 import dev.ide.ui.backend.BuildLogLine
 import dev.ide.ui.backend.UiLogLevel

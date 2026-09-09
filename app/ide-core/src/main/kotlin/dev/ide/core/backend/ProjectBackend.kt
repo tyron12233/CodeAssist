@@ -2,10 +2,10 @@ package dev.ide.core.backend
 
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.core.BackendContext
-import dev.ide.core.ImportableKind
-import dev.ide.core.CaprojFormat
-import dev.ide.core.ProjectIconLocator
-import dev.ide.core.ProjectPackaging
+import dev.ide.core.project.ImportableKind
+import dev.ide.core.project.CaprojFormat
+import dev.ide.core.project.ProjectIconLocator
+import dev.ide.core.project.ProjectPackaging
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateParameter
 import dev.ide.model.template.TextValidation

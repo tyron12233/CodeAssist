@@ -2,7 +2,7 @@ package dev.ide.android.spike
 
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import dev.ide.core.SwingApiStubs
+import dev.ide.core.sdk.SwingApiStubs
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test

@@ -1,7 +1,7 @@
 package dev.ide.core.backend
 
 import dev.ide.core.BackendContext
-import dev.ide.core.LayoutAttrInfo
+import dev.ide.core.android.LayoutAttrInfo
 import dev.ide.ui.backend.PreviewProgress
 import dev.ide.ui.backend.PreviewService
 import dev.ide.ui.backend.UiAttrKind

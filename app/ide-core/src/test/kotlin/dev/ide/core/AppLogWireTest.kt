@@ -1,5 +1,8 @@
 package dev.ide.core
 
+import dev.ide.core.applog.AppLogEvent
+import dev.ide.core.applog.AppLogLevel
+import dev.ide.core.applog.AppLogWire
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import kotlin.test.Test

@@ -4,7 +4,7 @@ import dev.ide.android.support.AndroidVariants
 import dev.ide.android.support.NativeLibraries
 import dev.ide.android.support.gms.GoogleServices
 import dev.ide.android.support.tools.AarExtractor
-import dev.ide.core.DependencyPartition
+import dev.ide.core.build.DependencyPartition
 import dev.ide.core.EngineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.readText

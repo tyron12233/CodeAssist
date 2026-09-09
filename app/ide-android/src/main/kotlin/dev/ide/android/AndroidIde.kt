@@ -28,7 +28,7 @@ import dev.ide.core.STORE_CATALOG_SOURCE
 import dev.ide.core.STORE_REVIEW_SERVICE
 import dev.ide.core.STORE_SUBMISSION_SERVICE
 import dev.ide.core.IdeServicesBackend
-import dev.ide.core.ProjectManager
+import dev.ide.core.project.ProjectManager
 import dev.ide.core.settings.BuiltInSettingsPages
 import dev.ide.platform.log.Log
 import dev.ide.platform.log.Log.addSink
