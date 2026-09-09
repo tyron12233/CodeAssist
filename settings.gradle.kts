@@ -164,6 +164,9 @@ val layers = mapOf(
     // The build system. Named `build-system` rather than `build` because `build/` is the root
     // project's own Gradle output directory.
     "build-system" to listOf("build-api", "build-engine", "jvm-build"),
+    // Executing project code on device: the source interpreter, the bytecode VM, and the AWT/Swing
+    // surface an interpreted program draws into.
+    "run" to listOf("interp-api", "interp-core", "interp-impl", "interp-compose", "jvm-interp", "awt-toolkit"),
 )
 
 // Only remap what this build actually included — CI_CORE_ONLY leaves the shells out.
