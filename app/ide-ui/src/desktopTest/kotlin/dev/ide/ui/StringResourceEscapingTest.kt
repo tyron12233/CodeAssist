@@ -32,12 +32,15 @@ class StringResourceEscapingTest {
      */
     @Test
     fun noStringResourceCarriesAnAndroidStyleEscape() {
-        // The test task's working directory is the module dir.
-        val files = File("src/commonMain/composeResources").listFiles()
+        // The strings live in :ide-ui-resources; its build script passes the directory in, so this test
+        // cannot quietly pass by scanning a path that no longer exists.
+        val root = System.getProperty("ide.ui.composeResources")
+        assertTrue(root != null, "the desktopTest task must set -Dide.ui.composeResources (see build.gradle.kts)")
+        val files = File(root).listFiles()
             ?.filter { it.isDirectory && it.name.startsWith("values") }
             ?.mapNotNull { dir -> File(dir, "strings.xml").takeIf { it.isFile } }
             .orEmpty()
-        assertTrue(files.isNotEmpty(), "expected to find the composeResources strings.xml files")
+        assertTrue(files.isNotEmpty(), "expected to find the composeResources strings.xml files under $root")
 
         val offenders = files.flatMap { f ->
             f.readLines().withIndex()

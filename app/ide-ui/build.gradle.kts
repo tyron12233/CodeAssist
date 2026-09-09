@@ -37,12 +37,14 @@ kotlin {
             // The IdeBackend port + DTOs + UI-contribution model live in :ide-ui-api; `api` re-exposes them so
             // :ide-core (which depends on :ide-ui) keeps seeing them transitively without a build change.
             api(project(":ide-ui-api"))
+            // `api` so the UI modules split out of here still see the one shared `Res` class; the
+            // resources themselves live in :ide-ui-resources (see its build script for why).
+            api(project(":ide-ui-resources"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(compose.ui)
             implementation(compose.preview) // the @Preview annotation (BlockEditor.kt previews)
-            implementation(compose.components.resources) // bundled fonts (JetBrains Mono) via composeResources/
             implementation(libs.kotlinx.coroutines.core)
         }
 
@@ -72,6 +74,9 @@ kotlin {
         }
 
         // Unit tests for the toolkit-agnostic editor logic (state, diagnostic shifting) on the JVM target.
+        // StringResourceEscapingTest scans the raw strings.xml files, which live in :ide-ui-resources; the
+        // directory is passed in below rather than spelled out in Kotlin, so moving that module cannot
+        // silently turn the scan into a no-op.
         val desktopTest by getting {
             dependencies {
                 implementation(kotlin("test"))
@@ -82,10 +87,12 @@ kotlin {
     }
 }
 
-// Generated accessor for the bundled fonts (JetBrains Mono lives under commonMain/composeResources/font/).
-// Pinned package + non-public so it stays an internal `dev.ide.ui` detail the theme reads.
-compose.resources {
-    publicResClass = false
-    packageOfResClass = "dev.ide.ui.generated.resources"
-    generateResClass = always
+// StringResourceEscapingTest reads the strings.xml sources directly (see its KDoc: it covers every string in
+// every locale without naming them). They belong to :ide-ui-resources, and only the build knows where that
+// module sits, so hand the test the path instead of letting it guess a relative one.
+tasks.named<Test>("desktopTest") {
+    systemProperty(
+        "ide.ui.composeResources",
+        project(":ide-ui-resources").layout.projectDirectory.dir("src/commonMain/composeResources").asFile.absolutePath,
+    )
 }

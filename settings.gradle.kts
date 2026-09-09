@@ -123,6 +123,7 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
     include(
         ":interp-compose", // Compose bridge + render surface (KMP: desktop+android) — needs the Compose plugin
         ":ide-ui-api", // neutral IdeBackend port + DTOs + UI-contribution model, shared by :ide-ui and :ide-core
+        ":ide-ui-resources", // the fonts/drawables/i18n strings the UI modules share, and the one `Res` class over them
         ":ide-ui",
         ":agent-ui", // the AI agent's Compose UI as a self-contained plugin module (chat panel + provider sheet + permission overlay)
         ":vcs-ui", // the version-control Compose UI as a self-contained plugin module (Git panel, branches, history, sign-in, clone)
@@ -182,7 +183,7 @@ val layers = mapOf(
     // The plugin SPI a third-party plugin compiles against, and the host that resolves it.
     "plugins" to listOf("plugin-api", "plugin-ui-api", "plugin-bom", "plugin-impl"),
     // The IDE itself: the Compose UI, its backend port, and the desktop/Android shells.
-    "app" to listOf("ide-ui-api", "ide-ui", "ide-core", "ide-desktop", "ide-android"),
+    "app" to listOf("ide-ui-api", "ide-ui-resources", "ide-ui", "ide-core", "ide-desktop", "ide-android"),
     // Test-only harnesses, consumed via testImplementation.
     "tools" to listOf("test-support", "bench-support"),
 )

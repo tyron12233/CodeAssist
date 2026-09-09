@@ -335,7 +335,7 @@ val bundleR8DexAsset = tasks.register<JavaExec>("bundleR8DexAsset") {
 // NOTE: the `dev.ide.ui.generated.resources` segment must match :ide-ui's `packageOfResClass`.
 val bundleComposeFontsAsset = tasks.register<Copy>("bundleComposeFontsAsset") {
     description = "Stage :ide-ui's JetBrains Mono compose-resource fonts into the APK assets (Android packaging gap)."
-    from(project(":ide-ui").layout.projectDirectory.dir("src/commonMain/composeResources/font")) {
+    from(project(":ide-ui-resources").layout.projectDirectory.dir("src/commonMain/composeResources/font")) {
         include("*.ttf")
     }
     into(layout.buildDirectory.dir("compose-fonts-asset/composeResources/dev.ide.ui.generated.resources/font"))
@@ -347,7 +347,7 @@ val bundleComposeFontsAsset = tasks.register<Copy>("bundleComposeFontsAsset") {
 // composeResources/<resClass-package>/drawable/… — so `Res.drawable.preview_*` resolves on device.
 val bundleComposeDrawablesAsset = tasks.register<Copy>("bundleComposeDrawablesAsset") {
     description = "Stage :ide-ui's compose-resource drawables (sample previews) into the APK assets (Android packaging gap)."
-    from(project(":ide-ui").layout.projectDirectory.dir("src/commonMain/composeResources/drawable")) {
+    from(project(":ide-ui-resources").layout.projectDirectory.dir("src/commonMain/composeResources/drawable")) {
         include("*.png")
     }
     into(layout.buildDirectory.dir("compose-drawables-asset/composeResources/dev.ide.ui.generated.resources/drawable"))
@@ -668,16 +668,16 @@ tasks.named("preBuild").configure {
     dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleVcsUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
 }
 
-// Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's
+// Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui-resources'
 // values/strings.xml is compiled by the Compose resources plugin into binary `.cvr` files (unlike fonts,
 // which are copied verbatim), so we stage the *processed* output, not the source. The compiled strings are
 // platform-independent, so the desktop target's processedResources is a reliable source; depend on the
 // task that produces them (desktopProcessResources) rather than the whole :ide-ui build. Staged at the
 // exact path the Compose resource runtime reads on device — composeResources/<resClass-package>/values*/.
 val bundleComposeStringAsset = tasks.register<Copy>("bundleComposeStringAsset") {
-    description = "Stage :ide-ui's i18n compose-resource strings into the APK assets (Android packaging gap)."
-    dependsOn(":ide-ui:desktopProcessResources")
-    from(project(":ide-ui").layout.buildDirectory.dir("processedResources/desktop/main/composeResources/dev.ide.ui.generated.resources")) {
+    description = "Stage the shared i18n compose-resource strings into the APK assets (Android packaging gap)."
+    dependsOn(":ide-ui-resources:desktopProcessResources")
+    from(project(":ide-ui-resources").layout.buildDirectory.dir("processedResources/desktop/main/composeResources/dev.ide.ui.generated.resources")) {
         include("values*/**/*.cvr")
     }
     into(layout.buildDirectory.dir("compose-strings-asset/composeResources/dev.ide.ui.generated.resources"))
