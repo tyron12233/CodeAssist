@@ -91,9 +91,9 @@ import dev.ide.agent.ui.generated.resources.chat_send
 import dev.ide.agent.ui.generated.resources.chat_stop
 import dev.ide.agent.ui.generated.resources.chat_thinking
 import dev.ide.agent.ui.generated.resources.chat_title
+import dev.ide.ui.components.CodeSample
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.markdown.Markdown
-import dev.ide.ui.screens.CodeSample
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 

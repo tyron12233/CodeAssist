@@ -1,11 +1,13 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-// The reusable IDE UI, authored once in Compose Multiplatform `commonMain` so the same composables run
-// on desktop and Android. It is toolkit- and backend-agnostic: it talks only to the `IdeBackend` port
-// (see commonMain/.../backend), which each host implements — ide-desktop over IdeServices, ide-android
-// over its own backend. Both the desktop (JVM) and Android targets are wired here; commonMain is shared
-// verbatim. Under AGP 9 the Android target is declared via the `com.android.kotlin.multiplatform.library`
-// plugin inside the `kotlin {}` block (the old `androidTarget()` + top-level `android {}` form is gone).
+// The app shell: the navigation graph, the overlay stack, the root composable, and the application state
+// object that wires them to a host. It is what a launcher calls -- :ide-desktop and :ide-android each build
+// an `IdeBackend` and hand it to `CodeAssistApp` -- and it is the only UI module that knows what all the
+// screens are.
+//
+// Everything it renders lives below it, one module per layer: :ide-ui-core (theme, platform, editor model,
+// app state), :ide-ui-components, :ide-ui-editor, :ide-ui-screens. The split is not cosmetic -- before it,
+// this module was 63k lines whose graph ran in both directions between the shell and the screens.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kmp.library)
@@ -34,56 +36,25 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            // The IdeBackend port + DTOs + UI-contribution model live in :ide-ui-api; `api` re-exposes them so
-            // :ide-core (which depends on :ide-ui) keeps seeing them transitively without a build change.
+            // `api` throughout: :ide-core renders `CodeAssistApp` and builds the state it takes, so the
+            // types from every layer below reach it through this module.
             api(project(":ide-ui-api"))
-            // `api` so the UI modules split out of here still see the one shared `Res` class; the
-            // resources themselves live in :ide-ui-resources (see its build script for why).
             api(project(":ide-ui-resources"))
-            // The shared lower layer (theme, platform, editor model, app state). `api` because this module's
-            // composables take its types in their signatures, and :ide-core renders them.
             api(project(":ide-ui-core"))
-            implementation(compose.runtime)
-            implementation(compose.foundation)
-            implementation(compose.material3)
-            implementation(compose.ui)
-            implementation(compose.preview) // the @Preview annotation (BlockEditor.kt previews)
-            implementation(libs.kotlinx.coroutines.core)
+            api(project(":ide-ui-components"))
+            api(project(":ide-ui-editor"))
+            api(project(":ide-ui-screens"))
         }
 
-        // An intermediate JVM-only source set shared by the desktop + android targets, so it can depend on
-        // the plain-JVM `layout-preview-api` (which commonMain — platform-agnostic — cannot). The layout
-        // preview pane + its Compose-backed RCanvas live here; commonMain reaches them via an expect/actual.
-        val jvmShared = create("jvmShared") {
-            dependsOn(getByName("commonMain"))
-            dependencies { implementation(project(":layout-preview-api")) }
-        }
-        getByName("desktopMain").dependsOn(jvmShared)
-        getByName("androidMain").dependsOn(jvmShared)
-
-        // `compose.uiTooling` carries `ComposeViewAdapter`, the harness the preview pane instantiates to
-        // render an @Preview. Without it on the target's classpath, Studio/IntelliJ fail with
-        // `ClassNotFoundException: androidx.compose.ui.tooling.ComposeViewAdapter`. Added per target so
-        // both the Android (Studio) and desktop (IntelliJ) preview renderers can find it.
-        androidMain.dependencies {
-            implementation(compose.uiTooling)
-            // androidx.activity.compose.BackHandler — backs the platform back handler (PlatformBackHandler).
-            implementation(libs.androidx.activity.compose)
-        }
-        val desktopMain by getting {
-            dependencies {
-                implementation(compose.uiTooling)
-            }
-        }
-
-        // Unit tests for the toolkit-agnostic editor logic (state, diagnostic shifting) on the JVM target.
+        // Tests for the shell itself: the app state object, the save action, and the plugin-surface seam.
         // StringResourceEscapingTest scans the raw strings.xml files, which live in :ide-ui-resources; the
         // directory is passed in below rather than spelled out in Kotlin, so moving that module cannot
         // silently turn the scan into a no-op.
         val desktopTest by getting {
             dependencies {
                 implementation(kotlin("test"))
-                implementation(libs.kotlinx.coroutines.test) // virtual-clock tests for the editor engine daemon
+                implementation(project(":ide-ui-testing"))
+                implementation(libs.kotlinx.coroutines.test)
                 implementation(compose.desktop.currentOs) // skiko native runtime for off-screen ImageComposeScene snapshots
             }
         }

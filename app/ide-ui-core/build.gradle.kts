@@ -42,7 +42,9 @@ kotlin {
             api(compose.foundation)
             api(compose.material3)
             api(compose.ui)
-            implementation(compose.preview) // the @Preview annotation on BlockShapes.kt's shape previews
+            // `api`: @Preview-annotated composables exist in every UI layer (BlockShapes here, the tab
+            // strip in components, the block surface in the editor), so expose it once from the bottom.
+            api(compose.preview)
             implementation(libs.kotlinx.coroutines.core)
         }
 
@@ -50,7 +52,12 @@ kotlin {
         // which only a test inside this module can see. A test that needs nothing internal stays in the
         // module whose behaviour it describes.
         val desktopTest by getting {
-            dependencies { implementation(kotlin("test")) }
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(project(":ide-ui-testing"))
+                implementation(libs.kotlinx.coroutines.test)
+                implementation(compose.desktop.currentOs) // skiko, for the text-measurement and rope benchmarks
+            }
         }
 
         androidMain.dependencies {

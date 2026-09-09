@@ -125,6 +125,10 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":ide-ui-api", // neutral IdeBackend port + DTOs + UI-contribution model, shared by :ide-ui and :ide-core
         ":ide-ui-resources", // the fonts/drawables/i18n strings the UI modules share, and the one `Res` class over them
         ":ide-ui-core", // theme + platform expect/actual + the editor document model + app state: what the UI layers share
+        ":ide-ui-components", // the reusable widgets (+ the shared Markdown renderer and the ad slot)
+        ":ide-ui-editor", // the code editor: canvas, completion, blocks, folding chrome, preview panes
+        ":ide-ui-screens", // the destinations: home, store, Learn, challenges, settings, run/logs, managers
+        ":ide-ui-testing", // test-only: StubBackend, the empty IdeBackend every UI layer's tests render against
         ":ide-ui",
         ":agent-ui", // the AI agent's Compose UI as a self-contained plugin module (chat panel + provider sheet + permission overlay)
         ":vcs-ui", // the version-control Compose UI as a self-contained plugin module (Git panel, branches, history, sign-in, clone)
@@ -184,7 +188,10 @@ val layers = mapOf(
     // The plugin SPI a third-party plugin compiles against, and the host that resolves it.
     "plugins" to listOf("plugin-api", "plugin-ui-api", "plugin-bom", "plugin-impl"),
     // The IDE itself: the Compose UI, its backend port, and the desktop/Android shells.
-    "app" to listOf("ide-ui-api", "ide-ui-resources", "ide-ui-core", "ide-ui", "ide-core", "ide-desktop", "ide-android"),
+    "app" to listOf(
+        "ide-ui-api", "ide-ui-resources", "ide-ui-core", "ide-ui-components", "ide-ui-editor",
+        "ide-ui-screens", "ide-ui-testing", "ide-ui", "ide-core", "ide-desktop", "ide-android",
+    ),
     // Test-only harnesses, consumed via testImplementation.
     "tools" to listOf("test-support", "bench-support"),
 )
