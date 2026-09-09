@@ -20,6 +20,7 @@ import dev.ide.core.sync.ProjectSyncService
 import dev.ide.lang.kotlin.compile.KotlinCompilerBackend
 import dev.ide.platform.ServiceKey
 import dev.ide.plugin.impl.ActionManager
+import dev.ide.plugin.impl.EditorDecorationCollector
 
 /*
  * The keys the engine registers its scoped services against.
@@ -47,6 +48,8 @@ internal val SIGNING_SERVICE = ServiceKey<SigningService>("ide.service.signing")
 internal val SEARCH_SERVICE = ServiceKey<SearchService>("ide.service.search")
 internal val BLOCK_SERVICE = ServiceKey<BlockService>("ide.service.blocks")
 internal val ACTION_MANAGER = ServiceKey<ActionManager>("ide.service.actions")
+internal val EDITOR_DECORATIONS =
+    ServiceKey<EditorDecorationCollector>("ide.service.editorDecorations")
 internal val DEPENDENCY_SERVICE = ServiceKey<DependencyService>("ide.service.dependencies")
 internal val MODULE_SERVICE = ServiceKey<ModuleService>("ide.service.modules")
 internal val BUILD_SERVICE = ServiceKey<BuildService>("ide.service.build")

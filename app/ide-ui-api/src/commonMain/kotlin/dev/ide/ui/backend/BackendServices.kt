@@ -128,6 +128,17 @@ interface EditorService {
     /** Foldable regions for the live buffer. May throw [AnalysisPreempted]. */
     suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> = emptyList()
 
+    /**
+     * What the plugin tier marks on this file: tinted ranges, gutter glyphs and inlays, collected from the
+     * `platform.editorDecoration` providers.
+     *
+     * Empty is the overwhelmingly common answer (most files have no decorating plugin), so this is cheap to
+     * call on every pass run. Unlike the language passes it does not throw [AnalysisPreempted]: a provider
+     * that was preempted contributes nothing rather than asking the daemon to retry the whole pass, because
+     * a plugin's marks are not worth a second trip through the engine worker.
+     */
+    suspend fun decorations(path: String, text: String): UiEditorDecorations = UiEditorDecorations.EMPTY
+
     /** Code actions at the selection `[selStart, selEnd)`: analysis quick-fixes and intentions merged with
      *  the plugin actions placed on [UiActionPlaces.EDITOR] (those carry a [UiAction.actionId]). */
     suspend fun actionsAt(path: String, text: String, selStart: Int, selEnd: Int): List<UiAction> = emptyList()

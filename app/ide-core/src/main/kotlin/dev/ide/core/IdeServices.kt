@@ -212,6 +212,9 @@ import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
 import dev.ide.model.FacetCodecRegistry
+import dev.ide.plugin.editor.EditorDecorationContext
+import dev.ide.plugin.editor.EditorDecorations
+import dev.ide.plugin.impl.EditorDecorationCollector
 import dev.ide.model.FileIconRegistry
 import dev.ide.model.IconTarget
 import dev.ide.model.LanguageLevel
@@ -349,6 +352,7 @@ class IdeServices private constructor(
     @Volatile
     internal var lastOpenPeak: MemSample? = null
     private val memLog = Log.logger("ide.mem")
+    private val decorationLog by lazy { Log.logger("ide.editorDecorations") }
 
     // Platform ports resolved from the application service container the host ([ProjectManager]) registered
     // them on — not constructor-injected. Absent (desktop / a standalone test with no host) → null → the
@@ -649,6 +653,10 @@ class IdeServices private constructor(
 
     /** WORKSPACE-scoped action surface (resolves/invokes the contributed toolbar/menu/palette actions). */
     internal val actions: ActionManager get() = store.workspaceContainer.getService(ACTION_MANAGER)
+
+    /** WORKSPACE-scoped editor decoration surface (collects the contributed ranges, gutter marks, inlays). */
+    internal val decorationCollector: EditorDecorationCollector
+        get() = store.workspaceContainer.getService(EDITOR_DECORATIONS)
 
     /** WORKSPACE-scoped dependency management (Maven add/resolve, platforms, local libs, repositories). */
     internal val dependencies: DependencyService
@@ -2084,6 +2092,25 @@ class IdeServices private constructor(
     /** Foldable regions for [file]'s live buffer — imports, type/function bodies, block comments. */
     fun codeFolds(file: Path, text: String): List<dev.ide.lang.folding.FoldRegion> =
         languageFeatures.codeFolds(file, text)
+
+    /**
+     * What the `platform.editorDecoration` plugins mark on [file]'s live buffer.
+     *
+     * Suspending rather than [runSync] like its neighbours: a provider is plugin code that may reach the
+     * index or the network, so the caller's cancellation has to reach it. It is also not gated on a module,
+     * unlike the analyzer-backed passes — a decorating plugin is not a language, and a file outside every
+     * source root (a `library://` tab, a loose script) is exactly the kind of thing one might mark.
+     */
+    suspend fun editorDecorations(file: Path, text: String): EditorDecorations {
+        val ctx = object : EditorDecorationContext {
+            override val path: String = file.toString()
+            override val text: String = text
+            override val languageId: String? = languageFor(file).id.takeIf { it.isNotBlank() }
+        }
+        return decorationCollector.collect(ctx) { providerId, error ->
+            decorationLog.warn("editor decoration provider '$providerId' failed on $file", error)
+        }
+    }
 
     /** Reformat the whole live buffer of [file] to [style]; minimal edits, or empty if the language has no
      *  formatter / the buffer is already formatted / can't be safely formatted. */

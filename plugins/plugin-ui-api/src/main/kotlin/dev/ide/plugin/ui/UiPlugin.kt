@@ -69,6 +69,17 @@ interface UiRegistration {
 
     /** Add a preview pane for the files this plugin can render. See [EditorPreview]. */
     fun editorPreview(preview: EditorPreview): UiHandle
+
+    /** Place composables at document positions in the code editor. See [EditorLayer]. Prefer an engine-tier
+     *  `platform.editorDecoration` provider for anything expressible as data. */
+    fun editorLayer(layer: EditorLayer): UiHandle
+
+    /** Draw into the code editor's canvas. See [EditorPainter]. Runs per frame, and a painter that throws is
+     *  retired for the session. */
+    fun editorPainter(painter: EditorPainter): UiHandle
+
+    /** Add a surface for a tab beside Code / Blocks / Preview / Split. See [EditorViewMode]. */
+    fun viewMode(mode: EditorViewMode): UiHandle
 }
 
 /** Removes one contribution. */

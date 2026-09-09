@@ -127,5 +127,11 @@ class VcsUiContributionTest {
             editorPreviews += preview
             return Registration {}
         }
+
+        override fun editorLayer(layer: dev.ide.ui.ext.EditorLayerContribution): Registration =
+            Registration {}
+
+        override fun editorPainter(painter: dev.ide.ui.ext.EditorPainterContribution): Registration =
+            Registration {}
     }
 }

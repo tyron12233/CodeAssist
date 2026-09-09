@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.text.TextRange
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,6 +44,8 @@ import dev.ide.ui.editor.preview.MarkdownPreviewPane
 import dev.ide.ui.editor.preview.PluginPreviewPane
 import dev.ide.ui.editor.preview.ResourcePreviewPane
 import dev.ide.ui.ext.EditorPreviewRegistry
+import dev.ide.ui.ext.ViewModeContext
+import dev.ide.ui.ext.ViewModeRegistry
 import dev.ide.ui.editor.preview.isLayoutPreviewable
 import dev.ide.ui.editor.preview.isMarkdownPreviewable
 import dev.ide.ui.editor.preview.isPreviewable
@@ -388,7 +391,20 @@ internal fun EditorCenter(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
 
-                    else -> codeSurface(Modifier.weight(1f).fillMaxWidth())
+                    // A mode a plugin contributed for this file. Resolved by id, so a tab restored into a
+                    // mode whose plugin is no longer installed falls through to the code editor below rather
+                    // than showing an empty pane.
+                    else -> {
+                        val contributed = ViewModeRegistry.find(active.viewMode.id)
+                            ?.takeIf { runCatching { it.appliesTo(active.path) }.getOrDefault(false) }
+                        if (contributed == null) {
+                            codeSurface(Modifier.weight(1f).fillMaxWidth())
+                        } else {
+                            Box(Modifier.weight(1f).fillMaxWidth()) {
+                                contributed.content(rememberViewModeContext(state, active))
+                            }
+                        }
+                    }
                 }
             } else {
                 NoOpenFilesView(Modifier.weight(1f).fillMaxWidth())
@@ -398,9 +414,42 @@ internal fun EditorCenter(
 }
 
 /**
+ * The [ViewModeContext] a contributed pane renders against.
+ *
+ * It is a view OF the tab, not a copy: [ViewModeContext.text] reads the same [EditorSession] the code editor
+ * edits, and [ViewModeContext.replaceText] writes through it, so a pane's edit is undoable, is analysed, and
+ * marks the tab dirty exactly as typing does. Remembered on what a pane can observe rather than on the tab,
+ * since the text changes on every keystroke.
+ */
+@Composable
+private fun rememberViewModeContext(state: IdeUiState, active: OpenFile): ViewModeContext {
+    val text = active.text
+    val caret = active.session.selection.min
+    return remember(active.path, text, caret, state.backend) {
+        object : ViewModeContext {
+            override val backend = state.backend
+            override val filePath = active.path
+            override val text = text
+            override val caretOffset = caret
+
+            override fun replaceText(start: Int, end: Int, newText: String) {
+                val length = active.session.doc.length
+                val from = start.coerceIn(0, length)
+                val to = end.coerceIn(from, length)
+                active.session.replaceRange(from, to, newText, TextRange(from + newText.length))
+            }
+
+            override fun openFile(path: String, offset: Int) {
+                state.openAt(path, offset)
+            }
+        }
+    }
+}
+
+/**
  * Drives the editor's highlighting daemon ([EditorEngineDaemon], modelled on IntelliJ's `DaemonCodeAnalyzer`)
  * for [active] — ONE restartable, prioritized, cancellable pass run per settled edit (diagnostics → semantic →
- * inlay → folds → @Preview markers) with a unified preempt-retry, replacing the old per-channel debounced
+ * inlay → folds → @Preview markers → plugin decorations) with a unified preempt-retry, replacing the old per-channel debounced
  * effects scattered across this screen and [CodeEditor]. It lives HERE (not in CodeEditor) so it runs in every
  * view mode — diagnostics + dirty state keep updating while the user is in Blocks/Preview, not just code view.
  *
@@ -433,6 +482,7 @@ private fun EditorDaemonEffect(
     }
     daemon.onComposePreviews =
         { active.session.applyComposePreviews(it); onHasPreview(it.isNotEmpty()) }
+    daemon.onDecorations = { active.session.applyDecorations(it.ranges, it.gutter, it.inlays) }
     daemon.appliesTo = { pass ->
         when (pass) {
             // Semantic coloring + folding are Java/Kotlin; @Preview markers are Kotlin-only; diagnostics + inlay

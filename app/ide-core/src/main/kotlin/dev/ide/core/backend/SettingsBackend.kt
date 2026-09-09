@@ -23,6 +23,7 @@ import dev.ide.ui.backend.UiPluginChange
 import dev.ide.ui.backend.UiPluginChangeKind
 import dev.ide.ui.backend.UiPluginInfo
 import dev.ide.ui.backend.UiSettingControl
+import dev.ide.ui.ext.displayShortcut
 import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.backend.UiSettingsPage
 import dev.ide.ui.backend.UiSeverity
@@ -438,6 +439,21 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
             is SettingControl.Text -> UiSettingControl.Text(c.key, c.title, c.description, raw ?: c.default, c.placeholder, c.advanced, c.group)
             is SettingControl.Action -> UiSettingControl.Action(c.key, c.title, c.description, c.buttonLabel, c.destructive, c.advanced, c.group)
             is SettingControl.Color -> UiSettingControl.Color(c.key, c.title, c.description, raw?.trim()?.toLongOrNull() ?: c.default, c.advanced, c.group)
+            is SettingControl.Shortcut -> {
+                // A STORED blank is a shortcut the user removed, which is different from nothing stored, so
+                // the default only applies when the key is absent entirely.
+                val value = raw ?: c.default
+                UiSettingControl.Shortcut(
+                    key = c.key,
+                    title = c.title,
+                    description = c.description,
+                    value = value,
+                    defaultValue = c.default,
+                    display = if (value.isEmpty()) "" else displayShortcut(value),
+                    advanced = c.advanced,
+                    group = c.group,
+                )
+            }
         }
     }
 

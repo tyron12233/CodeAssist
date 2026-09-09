@@ -14,6 +14,7 @@ import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.TreeViewMode
+import dev.ide.ui.ext.ViewModeRegistry
 import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.backend.UiSymbolKey
 import dev.ide.ui.backend.UiSourceRootRole
@@ -73,27 +74,42 @@ object LeftPanelId {
     const val SOURCE = "source"
 }
 
-/** Editor surface for a tab: the plain text editor, the projectional block editor over the same AST, a
- *  full-pane preview, or [Split] — code and its preview together (so you can edit and watch it update,
- *  the one layout that works on a phone where the panes can't otherwise share the screen). */
-enum class EditorViewMode { Text, Blocks, Preview, Split }
+/**
+ * Editor surface for a tab: the plain text editor, the projectional block editor over the same AST, a
+ * full-pane preview, [Split] (code and its preview together, the one layout that works on a phone where the
+ * panes cannot otherwise share the screen), or a mode a plugin contributed.
+ *
+ * An open value over the persisted id rather than an enum, for the same reason the project model's
+ * vocabularies stopped being enums: a plugin can contribute a surface (`dev.ide.ui.ext.ViewModeRegistry`),
+ * and an enum leaves no way to name one. The four built-ins keep the ids they have always been persisted
+ * under, so this is not a format change. A `when` over a mode therefore needs an `else`, which is correct:
+ * the surface for an id nothing claims is the code editor.
+ */
+@JvmInline
+value class EditorViewMode(val id: String) {
+    companion object {
+        val Text = EditorViewMode("text")
+        val Blocks = EditorViewMode("blocks")
+        val Preview = EditorViewMode("preview")
+        val Split = EditorViewMode("split")
+
+        /** The surfaces the IDE ships, in the order the toggle offers them. */
+        val BUILT_IN: List<EditorViewMode> = listOf(Text, Blocks, Preview, Split)
+    }
+}
 
 /** Stable persisted id for a tab's [EditorViewMode] (see `UiOpenTab.viewMode`). */
-internal fun EditorViewMode.persistId(): String = when (this) {
-    EditorViewMode.Text -> "text"
-    EditorViewMode.Blocks -> "blocks"
-    EditorViewMode.Preview -> "preview"
-    EditorViewMode.Split -> "split"
-}
+internal fun EditorViewMode.persistId(): String = id
 
-/** Parse a persisted [EditorViewMode] id, or null when unknown (so the tab keeps its default surface). */
-internal fun editorViewModeOf(id: String?): EditorViewMode? = when (id) {
-    "text" -> EditorViewMode.Text
-    "blocks" -> EditorViewMode.Blocks
-    "preview" -> EditorViewMode.Preview
-    "split" -> EditorViewMode.Split
-    else -> null
-}
+/**
+ * Parse a persisted [EditorViewMode] id, or null for a blank one.
+ *
+ * An id this build does not recognize is kept rather than rejected: it may belong to a plugin that is simply
+ * not loaded yet, and a tab restored into a mode nothing claims falls through to the code editor, which is
+ * the same place an unknown id used to land.
+ */
+internal fun editorViewModeOf(id: String?): EditorViewMode? =
+    id?.trim()?.takeIf { it.isNotEmpty() }?.let { EditorViewMode(it) }
 
 /**
  * One open editor tab. Its buffer-of-record is the [EditorSession] (the rope-backed model both the text
@@ -135,11 +151,17 @@ class OpenFile(
     var staleOnDisk by mutableStateOf(false)
         internal set
 
-    /** Which surface this tab shows — text, blocks, or resource preview (text/blocks edit the one [session]).
-     *  Image resources open straight into Preview (their bytes aren't editable text). */
+    /**
+     * Which surface this tab shows: text, blocks, resource preview, or a mode a plugin claimed for this file
+     * kind (text and blocks edit the one [session]).
+     *
+     * A plugin's claim is checked FIRST, before the image rule, so a plugin can take over a kind the IDE
+     * already has an opinion about (its own image editor over the built-in bitmap preview). Image resources
+     * otherwise open straight into Preview, since their bytes are not editable text.
+     */
     var viewMode by mutableStateOf(
-        if (previewKindOf(path) == PreviewKind.BITMAP)
-            EditorViewMode.Preview else EditorViewMode.Text,
+        ViewModeRegistry.defaultFor(path)?.let { EditorViewMode(it.id) }
+            ?: if (previewKindOf(path) == PreviewKind.BITMAP) EditorViewMode.Preview else EditorViewMode.Text,
     )
     /** Which `@Preview` composable the Compose preview should render — set when the user taps a preview
      *  gutter icon next to a specific function. Null falls back to the file's first `@Preview`. */

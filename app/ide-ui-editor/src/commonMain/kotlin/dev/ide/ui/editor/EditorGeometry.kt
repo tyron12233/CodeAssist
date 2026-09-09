@@ -184,6 +184,20 @@ internal class EditorGeometry(private val session: EditorSession) {
         return vlayout.docLineForRow(row)
     }
 
+    /**
+     * The inclusive document-line range currently on screen, as the plugin editor layers see it.
+     *
+     * Derived from [lineAtY] at both edges of the viewport rather than from a line count and a height, so it
+     * is correct under soft wrap and collapsed folds. One extra line at each end, so a widget anchored to a
+     * line that is half-scrolled into view is placed before it is needed rather than popping in.
+     */
+    fun visibleLineRange(): IntRange {
+        val height = viewport.value.height.toFloat()
+        val first = (lineAtY(0f) - 1).coerceAtLeast(0)
+        val last = (lineAtY(height) + 1).coerceAtMost((session.doc.lineCount - 1).coerceAtLeast(0))
+        return first..last.coerceAtLeast(first)
+    }
+
     /** If [pos] lands on a pinned sticky-header row, the declaration it stands for (to jump to); else null.
      *  Mirrors the renderer's [stickyHeaderItems] so the hit-test and the drawn rows always agree. */
     fun stickyHeaderHit(pos: Offset): UiFileSymbol? {

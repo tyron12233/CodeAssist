@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +36,9 @@ import dev.ide.ui.OpenFile
 import dev.ide.ui.components.Breadcrumb
 import dev.ide.ui.editor.preview.isLayoutPreviewable
 import dev.ide.ui.ext.EditorPreviewRegistry
+import dev.ide.ui.ext.EditorViewModeContribution
+import dev.ide.ui.ext.ViewModeRegistry
+import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.editor.preview.isMarkdownPreviewable
 import dev.ide.ui.editor.preview.isPreviewable
 import dev.ide.ui.generated.resources.Res
@@ -88,7 +92,12 @@ internal fun BreadcrumbBar(
     ) {
         // Tapping the location line opens the Structure panel in the left sidebar (IntelliJ-style outline).
         Box(Modifier.weight(1f).clickable { state.selectLeftPanel(LeftPanelId.STRUCTURE) }) { Breadcrumb(crumbs) }
-        ViewModeToggle(active.viewMode, canPreview, state.blocksEnabled) { active.viewMode = it }
+        ViewModeToggle(
+            mode = active.viewMode,
+            canPreview = canPreview,
+            blocksEnabled = state.blocksEnabled,
+            contributed = ViewModeRegistry.forFile(active.path),
+        ) { active.viewMode = it }
     }
 }
 
@@ -104,7 +113,8 @@ private fun ViewModeToggle(
     mode: EditorViewMode,
     canPreview: Boolean,
     blocksEnabled: Boolean,
-    onSelect: (EditorViewMode) -> Unit
+    contributed: List<EditorViewModeContribution>,
+    onSelect: (EditorViewMode) -> Unit,
 ) {
     Row(
         Modifier.height(EditorToolbarHeight)
@@ -146,6 +156,18 @@ private fun ViewModeToggle(
                 onSelect(
                     EditorViewMode.Split
                 )
+            }
+        }
+        // Contributed surfaces, after the built-ins and only for the files their own predicate claims. Keyed
+        // by id so adding or disposing one does not re-key the segments beside it.
+        for (contribution in contributed) {
+            key(contribution.id) {
+                val contributedMode = EditorViewMode(contribution.id)
+                SegmentItem(
+                    actionIcon(contribution.iconId),
+                    contribution.label,
+                    mode == contributedMode,
+                ) { onSelect(contributedMode) }
             }
         }
     }

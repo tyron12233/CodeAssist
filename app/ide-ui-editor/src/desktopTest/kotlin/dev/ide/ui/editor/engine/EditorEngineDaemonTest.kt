@@ -13,6 +13,7 @@ import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.backend.UiEditorDecorations
 import dev.ide.ui.backend.UiFoldRegion
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiSemanticToken
@@ -57,6 +58,7 @@ class EditorEngineDaemonTest {
         override suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> { pass("INLAY"); return emptyList() }
         override suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> { pass("FOLDS"); return emptyList() }
         override suspend fun composePreviews(path: String, text: String): List<UiComposePreview> { pass("PREVIEWS"); return emptyList() }
+        override suspend fun decorations(path: String, text: String): UiEditorDecorations { pass("DECORATIONS"); return UiEditorDecorations.EMPTY }
     }
 
     private class Recorder : DaemonObserver {
@@ -76,11 +78,15 @@ class EditorEngineDaemonTest {
         daemon.restart("v1")
         advanceUntilIdle()
         assertEquals(
-            listOf("FOLDS", "SEMANTIC", "DIAGNOSTICS", "INLAY", "PREVIEWS"), fake.calls.toList(),
-            "passes must run sequentially in priority order (FOLDS leads — parse-only, paints first)",
+            listOf("FOLDS", "SEMANTIC", "DIAGNOSTICS", "INLAY", "PREVIEWS", "DECORATIONS"), fake.calls.toList(),
+            "passes must run sequentially in priority order (FOLDS leads — parse-only, paints first; the " +
+                "plugin decorations trail, being the only pass that is not the IDE's own analysis)",
         )
         assertEquals(
-            listOf(DaemonPass.FOLDS, DaemonPass.SEMANTIC, DaemonPass.DIAGNOSTICS, DaemonPass.INLAY, DaemonPass.PREVIEWS),
+            listOf(
+                DaemonPass.FOLDS, DaemonPass.SEMANTIC, DaemonPass.DIAGNOSTICS, DaemonPass.INLAY,
+                DaemonPass.PREVIEWS, DaemonPass.DECORATIONS,
+            ),
             rec.passesDone(),
         )
         daemon.close()
@@ -96,7 +102,7 @@ class EditorEngineDaemonTest {
         daemon.restart("v2") // supersedes v1
         advanceUntilIdle()
         // v1's passes never ran (it was cancelled during the debounce); only v2 produced a full run.
-        assertEquals(5, fake.calls.size, "exactly one run's worth of passes should execute")
+        assertEquals(DaemonPass.entries.size, fake.calls.size, "exactly one run's worth of passes should execute")
         assertFalse(rec.events.any { it.first == DaemonPhase.RUN_STARTED && it.third == 1 }, "v1 must not start its passes")
         assertTrue(rec.events.any { it.first == DaemonPhase.RUN_FINISHED && it.third == 2 }, "v2 must finish")
         daemon.close()
@@ -110,9 +116,12 @@ class EditorEngineDaemonTest {
         daemon.restart("v1")
         advanceUntilIdle()
         // DIAGNOSTICS ran, was preempted, then retried; every pass ultimately completed.
-        assertEquals(listOf("FOLDS", "SEMANTIC", "DIAGNOSTICS", "DIAGNOSTICS", "INLAY", "PREVIEWS"), fake.calls.toList())
+        assertEquals(
+            listOf("FOLDS", "SEMANTIC", "DIAGNOSTICS", "DIAGNOSTICS", "INLAY", "PREVIEWS", "DECORATIONS"),
+            fake.calls.toList(),
+        )
         assertTrue(rec.events.any { it.first == DaemonPhase.PASS_PREEMPTED && it.second == DaemonPass.DIAGNOSTICS })
-        assertEquals(5, rec.passesDone().size, "all five passes finished after the retry")
+        assertEquals(DaemonPass.entries.size, rec.passesDone().size, "every pass finished after the retry")
         daemon.close()
     }
 
@@ -126,8 +135,14 @@ class EditorEngineDaemonTest {
         }
         daemon.restart("v1")
         advanceUntilIdle()
-        assertEquals(listOf("DIAGNOSTICS", "INLAY"), fake.calls.toList())
+        // DECORATIONS is deliberately outside the language gate: a decorating plugin is not a language, so a
+        // file the analyzer passes give up on (a text file, a library tab) can still carry a plugin's marks.
+        assertEquals(listOf("DIAGNOSTICS", "INLAY", "DECORATIONS"), fake.calls.toList())
         assertTrue(rec.events.any { it.first == DaemonPhase.PASS_SKIPPED && it.second == DaemonPass.SEMANTIC })
+        assertFalse(
+            rec.events.any { it.first == DaemonPhase.PASS_SKIPPED && it.second == DaemonPass.DECORATIONS },
+            "the language gate must not skip the decoration pass",
+        )
         daemon.close()
     }
 

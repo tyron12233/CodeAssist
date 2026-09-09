@@ -25,8 +25,14 @@ plugins {
 dependencies {
     compileOnly(libs.compose.runtime.desktop)
 
+    // compose-ui, for the editor painter alone: a raw drawing hook IS a `DrawScope`, so that one type has to
+    // appear in this module's signature. compileOnly for the same reason the runtime is, and the only piece
+    // of compose-ui this module names.
+    compileOnly(libs.compose.ui.desktop)
+
     // The Compose compiler plugin is applied to this module, and it refuses to run without the runtime on
     // the class path. `compileOnly` does not reach the test compilation, so the tests need their own copy.
     // Test-scoped, so it stays out of the published POM the way the main one does.
     testImplementation(libs.compose.runtime.desktop)
+    testImplementation(libs.compose.ui.desktop)
 }

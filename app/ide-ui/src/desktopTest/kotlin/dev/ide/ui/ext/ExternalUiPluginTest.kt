@@ -147,6 +147,167 @@ class ExternalUiPluginTest {
         assertEquals("/stub", seen?.projectPath)
     }
 
+    // ---- the two Compose-bearing editor surfaces ----
+
+    /** An anchored-widget layer crosses with its id, order, predicate, and each widget's anchor mapped. */
+    @Test
+    fun editorLayerWidgetsAndAnchorsAreCarriedOver() {
+        val facet = facet { ui ->
+            ui.editorLayer(
+                dev.ide.plugin.ui.EditorLayer(
+                    id = "com.example.lens",
+                    order = 42,
+                    appliesTo = { it.endsWith(".kt") },
+                ) {
+                    listOf(
+                        dev.ide.plugin.ui.EditorWidget(
+                            dev.ide.plugin.ui.EditorAnchor.AboveLine(7), key = "lens-7",
+                        ) {},
+                        dev.ide.plugin.ui.EditorWidget(
+                            dev.ide.plugin.ui.EditorAnchor.AtOffset(120), key = "mark-120",
+                        ) {},
+                        dev.ide.plugin.ui.EditorWidget(
+                            dev.ide.plugin.ui.EditorAnchor.AfterLine(3), key = "note-3",
+                        ) {},
+                    )
+                },
+            )
+        }
+        val scope = RecordingScope("com.example.x")
+        facet.asUiPlugin("com.example.x").contributeUi(scope)
+
+        val layer = scope.editorLayers.single()
+        assertEquals("com.example.lens", layer.id)
+        assertEquals(42, layer.order)
+        assertTrue(layer.appliesTo("/p/App.kt"))
+        assertTrue(!layer.appliesTo("/p/App.java"))
+
+        var widgets: List<EditorWidget> = emptyList()
+        composeOnce { widgets = layer.widgets(FakeLayerContext()) }
+
+        assertEquals(listOf("lens-7", "mark-120", "note-3"), widgets.map { it.key })
+        assertEquals(7, (widgets[0].anchor as EditorAnchor.AboveLine).line)
+        assertEquals(120, (widgets[1].anchor as EditorAnchor.AtOffset).offset)
+        assertEquals(3, (widgets[2].anchor as EditorAnchor.AfterLine).line)
+    }
+
+    /** What a layer's producer sees: the live buffer, the viewport, the caret, and the file as the active one. */
+    @Test
+    fun theLayerProducerSeesTheLiveBufferAndTheViewport() {
+        var seen: dev.ide.plugin.ui.EditorLayerContext? = null
+        val facet = facet { ui ->
+            ui.editorLayer(dev.ide.plugin.ui.EditorLayer("id") { ctx -> seen = ctx; emptyList() })
+        }
+        val scope = RecordingScope("com.example.x")
+        facet.asUiPlugin("com.example.x").contributeUi(scope)
+
+        composeOnce { scope.editorLayers.single().widgets(FakeLayerContext()) }
+
+        val ctx = requireNotNull(seen)
+        assertEquals("/stub/src/App.kt", ctx.path)
+        assertEquals("/stub/src/App.kt", ctx.activeFilePath, "the decorated file is the active one")
+        assertEquals("half-typed", ctx.text)
+        assertEquals(10..20, ctx.visibleLines)
+        assertEquals(4, ctx.caretOffset)
+        assertEquals("/stub", ctx.projectPath)
+    }
+
+    /** A painter crosses with its depth mapped, and its body receives the host's geometry. */
+    @Test
+    fun editorPainterDeclarationAndGeometryAreCarriedOver() {
+        var seenTextLeft = -1f
+        var seenLineTop = -1f
+        val facet = facet { ui ->
+            ui.editorPainter(
+                dev.ide.plugin.ui.EditorPainter(
+                    id = "com.example.blame",
+                    order = 5,
+                    layer = dev.ide.plugin.ui.EditorPaintLayer.AboveText,
+                    appliesTo = { it.endsWith(".kt") },
+                ) { ctx ->
+                    seenTextLeft = ctx.textLeft
+                    seenLineTop = ctx.lineTop(2)
+                },
+            )
+        }
+        val scope = RecordingScope("com.example.x")
+        facet.asUiPlugin("com.example.x").contributeUi(scope)
+
+        val painter = scope.editorPainters.single()
+        assertEquals("com.example.blame", painter.id)
+        assertEquals(5, painter.order)
+        assertEquals(EditorPaintLayer.AboveText, painter.layer, "the published depth maps to the internal one")
+        assertTrue(painter.appliesTo("/p/App.kt"))
+
+        // The paint body runs against a DrawScope, so drive it the way the editor's draw does.
+        val bitmap = androidx.compose.ui.graphics.ImageBitmap(8, 8)
+        androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(
+            androidx.compose.ui.unit.Density(1f),
+            androidx.compose.ui.unit.LayoutDirection.Ltr,
+            androidx.compose.ui.graphics.Canvas(bitmap),
+            androidx.compose.ui.geometry.Size(8f, 8f),
+        ) {
+            painter.paint(this, FakePaintContext())
+        }
+
+        assertEquals(48f, seenTextLeft)
+        assertEquals(46f, seenLineTop, "geometry comes from the host, not recomputed by the plugin")
+    }
+
+    /** A contributed view mode crosses whole, including the claim that makes a file open into it. */
+    @Test
+    fun viewModeDeclarationAndItsClaimAreCarriedOver() {
+        val facet = facet { ui ->
+            ui.viewMode(
+                dev.ide.plugin.ui.EditorViewMode(
+                    id = "com.example.scene",
+                    label = "Scene",
+                    iconId = "layers",
+                    order = 7,
+                    appliesTo = { it.endsWith(".scene") },
+                    isDefault = { it.endsWith(".scene") },
+                ) { },
+            )
+        }
+        val scope = RecordingScope("com.example.x")
+
+        facet.asUiPlugin("com.example.x").contributeUi(scope)
+
+        val mode = scope.viewModes.single()
+        assertEquals("com.example.scene", mode.id)
+        assertEquals("Scene", mode.label)
+        assertEquals("layers", mode.iconId)
+        assertEquals(7, mode.order)
+        assertTrue(mode.appliesTo("/p/Level.scene"))
+        assertTrue(!mode.appliesTo("/p/App.kt"))
+        assertTrue(mode.isDefault("/p/Level.scene"), "the file kind claim survives the crossing")
+        assertTrue(!mode.isDefault("/p/App.kt"))
+    }
+
+    /** What a pane sees, and that its edits go back into the tab's one shared buffer. */
+    @Test
+    fun theViewModeBodySeesTheLiveBufferAndWritesThroughToIt() {
+        var seen: dev.ide.plugin.ui.EditorViewModeContext? = null
+        val facet = facet { ui ->
+            ui.viewMode(dev.ide.plugin.ui.EditorViewMode("id", "Scene") { ctx -> seen = ctx })
+        }
+        val scope = RecordingScope("com.example.x")
+        facet.asUiPlugin("com.example.x").contributeUi(scope)
+        val host = FakeViewModeContext()
+
+        composeOnce { scope.viewModes.single().content(host) }
+
+        val ctx = requireNotNull(seen)
+        assertEquals("/stub/src/Level.scene", ctx.path)
+        assertEquals("/stub/src/Level.scene", ctx.activeFilePath, "the pane's file is the active one")
+        assertEquals("{\"x\":1}", ctx.text)
+        assertEquals(3, ctx.caretOffset)
+        assertEquals("/stub", ctx.projectPath)
+
+        ctx.replaceText(1, 4, "\"y\"")
+        assertEquals(listOf(Triple(1, 4, "\"y\"")), host.edits, "an edit lands on the tab's shared buffer")
+    }
+
     /** A preview pane's declaration, including the predicate that decides which files it claims. */
     @Test
     fun editorPreviewDeclarationIsCarriedOver() {
@@ -222,6 +383,40 @@ class ExternalUiPluginTest {
 
     private class FakeOverlayContext(override val backend: IdeBackend = StubBackend()) : OverlayContext
 
+    private class FakeViewModeContext : ViewModeContext {
+        val edits = mutableListOf<Triple<Int, Int, String>>()
+        override val backend: IdeBackend = StubBackend()
+        override val filePath = "/stub/src/Level.scene"
+        override val text = "{\"x\":1}"
+        override val caretOffset = 3
+        override fun replaceText(start: Int, end: Int, newText: String) {
+            edits += Triple(start, end, newText)
+        }
+    }
+
+    private class FakeLayerContext : EditorLayerContext {
+        override val path = "/stub/src/App.kt"
+        override val text = "half-typed"
+        override val visibleLines = 10..20
+        override val caretOffset = 4
+        override val backend: IdeBackend = StubBackend()
+    }
+
+    private class FakePaintContext : EditorPaintContext {
+        override val path = "/stub/src/App.kt"
+        override val visibleLines = 0..9
+        override val lineCount = 10
+        override val lineHeight = 20f
+        override val charWidth = 8f
+        override val gutterWidth = 40f
+        override val textLeft = 48f
+        override fun lineTop(line: Int) = 6f + line * 20f
+        override fun xOf(offset: Int) = 48f + offset * 8f
+        override fun lineOf(offset: Int) = offset / 10
+        override fun lineRange(line: Int) = (line * 10)..(line * 10 + 9)
+        override fun isHidden(line: Int) = false
+    }
+
     private class FakePreviewContext(
         override val path: String,
         override val text: String,
@@ -238,6 +433,9 @@ class ExternalUiPluginTest {
         val screens = mutableListOf<ScreenContribution>()
         val overlays = mutableListOf<OverlayContribution>()
         val editorPreviews = mutableListOf<EditorPreviewContribution>()
+        val viewModes = mutableListOf<EditorViewModeContribution>()
+        val editorLayers = mutableListOf<EditorLayerContribution>()
+        val editorPainters = mutableListOf<EditorPainterContribution>()
         var disposed = 0
             private set
 
@@ -246,13 +444,19 @@ class ExternalUiPluginTest {
         override fun action(action: UiHostAction) = handle()
         override fun toolWindow(toolWindow: ToolWindowContribution) = handle().also { toolWindows += toolWindow }
         override fun screen(screen: ScreenContribution) = handle().also { screens += screen }
-        override fun viewMode(mode: EditorViewModeContribution) = handle()
+        override fun viewMode(mode: EditorViewModeContribution) = handle().also { viewModes += mode }
         override fun overlay(overlay: OverlayContribution) = handle().also { overlays += overlay }
         override fun tabDecoration(decoration: TabDecorationContribution) = handle()
         override fun treeIcon(iconId: String, icon: TreeIcon) = handle()
         override fun editorLanguage(profile: EditorLanguageProfile) = handle()
         override fun editorPreview(preview: EditorPreviewContribution) =
             handle().also { editorPreviews += preview }
+
+        override fun editorLayer(layer: EditorLayerContribution) =
+            handle().also { editorLayers += layer }
+
+        override fun editorPainter(painter: EditorPainterContribution) =
+            handle().also { editorPainters += painter }
     }
 
     // --- headless composition harness (no UI) ---

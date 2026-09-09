@@ -709,6 +709,202 @@ context.
 
 ---
 
+### Mark up the editor without owning a language
+
+`SourceAnalyzer` already exposes semantic highlighting, folding and inlay hints, but only to a plugin that
+implements a whole `LanguageBackend` for a language. A coverage tint, a version-control change bar, a
+bookmark, a "this test passed" glyph: none of those parse anything, and all of them apply to files in every
+language. They contribute to `platform.editorDecoration` instead.
+
+```kotlin
+object CoverageDecorations : EditorDecorationProvider {
+    override val id = "coverage"
+
+    override fun appliesTo(ctx: EditorDecorationContext) =
+        ctx.languageId == "kotlin" || ctx.languageId == "java"
+
+    override suspend fun decorate(ctx: EditorDecorationContext): EditorDecorations {
+        val report = coverageFor(ctx.path) ?: return EditorDecorations.EMPTY
+        return EditorDecorations(
+            ranges = report.uncovered.map {
+                TextDecoration(it.start, it.end, DecorationStyle.Background, DecorationTint.Warning,
+                    tooltip = "not covered by any test")
+            },
+            gutter = report.coveredLines.map {
+                GutterMark(it, iconId = "check", tint = DecorationTint.Success,
+                    tooltip = "covered", actionId = "coverage.openReport")
+            },
+            inlays = listOf(EditorInlay(report.classHeaderOffset, "${report.percent}%")),
+        )
+    }
+}
+```
+
+Four things about that contract are worth knowing before you rely on it.
+
+**A color is a role, not a value.** `DecorationTint` is a closed set the host resolves against the active
+theme. The IDE's themes are generated from a seed, and the user picks light or dark and an accent, so there
+is no literal a plugin could hard-code and stay legible. `Added`/`Removed`/`Modified` are there so a change
+bar matches what the rest of the IDE already uses for a diff. When you genuinely own your colors (a blame
+heatmap, a coverage gradient), that is what the UI tier's painter is for, not a color on this type.
+
+**Providers are pulled, not pushed.** Yours runs on the editor's own debounced pass run, after the
+diagnostics and folding passes, so you need no channel into the UI, you are cancelled the moment the user
+types again, and you cannot keep an editor alive. In exchange it must be cheap and it must not block: a slow
+provider delays nothing but its own marks, but a provider that blocks the thread holds the pass.
+
+**Offsets are against the text you were handed**, which may differ from disk. The editor re-anchors your
+marks in place as the user types, so they track between passes, but a mark outside the buffer is dropped
+rather than clamped: a mark on the wrong text is worse than no mark.
+
+**The gutter fits one glyph per line.** A line that already carries the IDE's `@Preview` icon keeps it, and
+several marks on one line collapse to the highest `order`. A mark with an `actionId` is tapped to invoke that
+action, dispatched over the marked line rather than the caret, since the caret is rarely where the user
+reached over to tap.
+
+A provider declares `PluginCapabilities.UI_EDITOR_DECORATION`. It is the one contribution that changes how
+the user's own code looks on every file it claims, rather than adding a surface they choose to open, so the
+consent gate names it.
+
+### Put composables and pixels in the editor
+
+The decoration tier above covers everything expressible as data. Two things are not, and each has a UI-facet
+contribution in `plugin-ui-api`. Reach for them second: a decoration provider is engine-tier, runs off the
+composition, and its failures are contained per provider, none of which is true here.
+
+**A layer places composables at document positions.** A hover card, an inline button, a code-lens row: touch
+targets, animation and Material components need real composables.
+
+```kotlin
+ui.editorLayer(
+    EditorLayer(id = "com.example.lens", appliesTo = { it.endsWith(".kt") }) { ctx ->
+        val runs = testRuns.collectAsState().value        // your own store, read in composition
+        ctx.visibleLines.mapNotNull { line ->
+            val run = runs[line] ?: return@mapNotNull null
+            EditorWidget(EditorAnchor.AboveLine(line), key = "lens-$line") {
+                TextButton(onClick = { ctx.openFile(run.reportPath) }) { Text("${run.passed} passed") }
+            }
+        }
+    },
+)
+```
+
+Anchors are `AtOffset`, `AfterLine` (the code-lens position, just past the line's text) and `AboveLine` (its
+own row above the line). Positioning happens in the layout phase off the editor's own row map, so a widget
+scrolls with its line without recomposing, and soft wrap and collapsed folds are already accounted for.
+
+Three rules the shape of Compose forces:
+
+- **Place only what is visible.** `ctx.visibleLines` is the viewport, and the producer is asked again as the
+  user scrolls. A widget for line 4000 is a composable for nothing.
+- **Read state and decide, nothing else.** The producer runs on every recomposition of the editor. Do the
+  work in your engine facet and read the result here.
+- **A throwing producer takes the editor's composition with it.** A `@Composable` call cannot be wrapped in a
+  `try`, because the slot table the composition is built from has no way to unwind half a composable. The
+  `appliesTo` predicate IS guarded and is checked before anything is composed, so be selective there.
+
+**A painter draws into the canvas.** This is the one thing a decoration deliberately cannot do: use colors of
+your own instead of the theme's named roles.
+
+```kotlin
+ui.editorPainter(
+    EditorPainter(id = "com.example.blame", layer = EditorPaintLayer.BelowText) { ctx ->
+        for (line in ctx.visibleLines) {
+            if (ctx.isHidden(line)) continue
+            val heat = blame.heatOf(line) ?: continue     // precomputed, not computed here
+            drawRect(heat, Offset(0f, ctx.lineTop(line)), Size(ctx.gutterWidth, ctx.lineHeight))
+        }
+    },
+)
+```
+
+`BelowText` sits under the text and under the selection, which is where a fill belongs; `AboveText` sits over
+every decoration and under the caret. The geometry arrives as functions (`lineTop`, `xOf`, `isHidden`) rather
+than as numbers, because `line * lineHeight` is wrong the moment a line wraps or a fold closes and both are
+normal. An offset the layout refuses answers `textLeft` instead of throwing.
+
+Two rules here are not style advice:
+
+- **Do no work and allocate nothing.** `paint` runs every frame, including every frame of a fling on a phone.
+- **Do not throw.** A painter that throws is **retired for the rest of the session**, not retried: a draw that
+  throws once throws sixty times a second, and the alternative is an editor that neither draws nor recovers.
+  Your plugin loses its drawing until the IDE restarts, and the reason is kept for the surface that reports it.
+
+### Own a surface for a file kind
+
+A view mode is a surface for a tab, beside the IDE's own Code, Blocks, Preview and Split: a scene view, a data
+grid, a form over a config file. Claiming `isDefault` for a file kind makes that kind OPEN into your pane, so
+this is how a plugin comes to own a file type.
+
+```kotlin
+ui.viewMode(
+    EditorViewMode(
+        id = "com.example.scene",
+        label = "Scene",
+        iconId = "layers",
+        appliesTo = { it.endsWith(".scene") },
+        isDefault = { it.endsWith(".scene") },   // a .scene file opens here, not in the code editor
+    ) { ctx ->
+        SceneCanvas(
+            json = ctx.text,
+            onMove = { node, x, y -> ctx.replaceText(node.start, node.end, node.moved(x, y)) },
+        )
+    },
+)
+```
+
+- **The pane is a view OF the tab's buffer, not a copy of it.** `ctx.text` is the same document the code
+  editor edits and `replaceText` writes through it, so a pane's edit is undoable, is analysed, and marks the
+  tab dirty exactly as typing does. Prefer the narrowest range that changes; replacing the whole text works
+  and costs the user their undo granularity.
+- **Code stays reachable even for a kind you claimed.** That is deliberate, not a gap in the ownership: a pane
+  can be wrong about a file, and a user who cannot see the text has no way to find out why.
+- **A claim beats the IDE's own default**, including the bitmap rule, so an image editor can take over `.png`.
+- **If you own a kind the text editor cannot represent** (a binary), read the file yourself through your engine
+  facet. The tab's buffer is a text decode of the bytes, which for a binary is garbage, and `replaceText`
+  would write that garbage back.
+- `appliesTo` decides where the toggle offers the mode at all, and `isDefault` decides where it opens. A mode
+  that claims a default for a file it does not otherwise claim is ignored, since its own segment would be
+  missing from that file's toggle.
+
+### Bind a keyboard shortcut
+
+A binding is a shortcut plus the id of an action. Contribute one and the key runs your action; the user can
+rebind it from Settings, and a shortcut two commands claim is reported rather than resolved in silence.
+
+```kotlin
+reg.register(
+    KEY_BINDING_EP,
+    KeyBinding(
+        actionId = "com.example.hello.greet",
+        shortcut = Shortcut.parse("primary+alt+H")!!,
+        context = KeyContext.Editor,   // Global fires anywhere; Editor only with a tab focused
+    ),
+)
+```
+
+- **`primary` is the modifier to reach for.** It is Command on macOS and Control everywhere else, which is
+  what every shortcut in this IDE meant when it was an `isCtrlPressed || isMetaPressed` condition. Writing
+  `ctrl` or `meta` asks for that physical key on every platform, which is occasionally right and usually not.
+- **The user outranks you.** A rebinding beats any contribution, whatever its `order`. `order` only decides
+  between contributors, so a plugin that means to replace a built-in binding raises its order and the built-in
+  is then reported as shadowed rather than silently dead.
+- **Chords work**: `Shortcut.parse("primary+K primary+D")`. The first press is held, the second completes it,
+  and anything that is not a continuation is re-matched on its own, so a mistyped chord costs one key.
+- **Shift and Alt match exactly.** `primary+shift+K` is not `primary+K` and will not fire it.
+- **Check what is taken.** A `Global` binding also fires in the editor, so an app-wide shortcut competes with
+  the editor's own; `EDITOR_KEY_DEFAULTS` in `ide-ui-api` is the list of what the editor already claims.
+- Declare `PluginCapabilities.UI_KEY_BINDING`. A shortcut is a scarce shared resource, and the user cannot
+  otherwise tell which plugin took a key.
+
+Your own settings page can offer a recorder for a shortcut of yours with `SettingControl.Shortcut`: the user
+presses the shortcut instead of typing its spec, and the spec is what gets stored, so a recorded shortcut and
+a declared one are the same thing.
+
+A key press that is not a command is not the keymap's business: caret motion, text input, and the keys a
+popup or a live template owns while it is open stay on the editor's own key path. They have no action id to
+bind to, and an IME commit is not a key press at all.
+
 ## 6. Contribute scoped services
 
 Use a service when your plugin owns an object that is expensive to build, must be shared, and must be torn
@@ -988,7 +1184,9 @@ internal object HelloSettingsPage : SettingsPage {
 | `SettingControl.IntSlider` | Slider over `[min, max]` stepped by `step`, with an optional `unit` label |
 | `SettingControl.Choice` | Segmented control / chips over `options` |
 | `SettingControl.Text` | Free-text field |
+| `SettingControl.Shortcut` | A keyboard shortcut, recorded by pressing it; stores a keymap spec |
 | `SettingControl.Action` | A button; the press routes `key` to `onAction` |
+| `SettingControl.Color` | A color, edited with a picker; stores an `0xAARRGGBB` long |
 
 Design notes:
 
@@ -2220,7 +2418,7 @@ the IDE's own runtime:
 ```kotlin
 dependencies {
     // The BOM carries the versions, including the Compose the IDE provides.
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.3.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.7.0"))
 
     compileOnly("io.github.tyron12233:plugin-ui-api")
     compileOnly("androidx.compose.runtime:runtime")
@@ -2278,7 +2476,7 @@ not part of it, so an id or an anchor that is wrong still shows up only once the
 The engine SPI is published, so the extension points in these modules are available to a plugin app:
 
 ```kotlin
-compileOnly(platform("io.github.tyron12233:plugin-bom:2.3.0")) // one version for everything below
+compileOnly(platform("io.github.tyron12233:plugin-bom:2.7.0")) // one version for everything below
 
 compileOnly("io.github.tyron12233:plugin-api")        // actions, menus, palette commands
 compileOnly("io.github.tyron12233:platform-core")     // scoped services, settings pages, logging
@@ -2312,7 +2510,7 @@ The SPI is published, so it is an ordinary dependency:
 
 ```kotlin
 dependencies {
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.3.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.7.0"))
     compileOnly("io.github.tyron12233:plugin-api")
     compileOnly("io.github.tyron12233:platform-core")
 }
@@ -2410,6 +2608,8 @@ Every published extension point, its id, the type it carries, and what contribut
 | `dev.ide.analysis.DIAGNOSTIC_PROVIDER_EP` | `platform.diagnosticProvider` | `DiagnosticProvider` | A diagnostic source |
 | `dev.ide.analysis.QUICK_FIX_PROVIDER_EP` | `platform.quickFixProvider` | `QuickFixProvider` | A fix for a diagnostic |
 | `dev.ide.analysis.ACTION_PROVIDER_EP` | `platform.actionProvider` | `ActionProvider` | A caret intention |
+| `dev.ide.plugin.editor.EDITOR_DECORATION_EP` | `platform.editorDecoration` | `EditorDecorationProvider` | Tinted ranges, gutter glyphs and inlays on any file |
+| `dev.ide.plugin.keymap.KEY_BINDING_EP` | `platform.keyBinding` | `KeyBinding` | A keyboard shortcut for an action |
 | `dev.ide.block.BLOCK_MAPPING_EP` | `platform.blockMapping` | `BlockMapping` | Block-editor projection for a language |
 | `dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP` | `platform.kotlinCompilerPlugin` | `KotlinCompilerPlugin` | A Kotlin compiler plugin |
 | `dev.ide.lang.kotlin.symbols.KOTLIN_SYNTHETIC_MEMBER_EP` | `platform.kotlinSyntheticMember` | `KotlinSyntheticMemberProvider` | Editor visibility of compiler-generated members |
@@ -2505,7 +2705,7 @@ Published, and the only UI surface an installed plugin compiles against. See
 | Type | What it is |
 | --- | --- |
 | `dev.ide.plugin.ui.UiPlugin` | The UI facet an installed plugin implements; named by `uiEntryPoints` |
-| `UiRegistration` | What it registers through: `toolWindow`, `screen`, `overlay` |
+| `UiRegistration` | What it registers through: `toolWindow`, `screen`, `overlay`, `editorPreview`, `editorLayer`, `editorPainter`, `viewMode` |
 | `UiHandle` | Removes one contribution |
 | `ToolWindow` / `Screen` / `Overlay` | The three contributions, each with a `@Composable` body |
 | `ToolWindowAnchor` | `LEFT` / `RIGHT` / `BOTTOM` |

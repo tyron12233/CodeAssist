@@ -66,6 +66,7 @@ class BuiltInParityTest {
         val moduleAnalyzers = setOf("ide.analyzers")
         val workspaceServices = setOf(
             "ide.service.signing", "ide.service.search", "ide.service.blocks", "ide.service.actions",
+            "ide.service.editorDecorations",
             "ide.service.dependencies", "ide.service.modules", "ide.service.build",
             "ide.service.projectSync", "ide.service.languageFeatures", "ide.service.androidResources",
             "ide.service.refactor", "ide.service.kotlinEditor", "ide.service.composePreview",
@@ -90,7 +91,7 @@ class BuiltInParityTest {
             moduleAnalyzers + workspaceServices + spiModuleAliases + spiWorkspaceAliases +
                 spiApplicationServices,
             byId.keys,
-            "exactly the 17 engine services plus the 6 published-SPI keys",
+            "exactly the 18 engine services plus the 6 published-SPI keys",
         )
         spiApplicationServices.forEach {
             assertEquals(ServiceScopeLevel.APPLICATION, byId.getValue(it).level, it)

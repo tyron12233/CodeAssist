@@ -35,6 +35,19 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.foundation.focusable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -205,6 +218,126 @@ fun SettingsTextRow(
             )
         }
     }
+}
+
+/**
+ * A keyboard-shortcut setting, recorded by pressing the shortcut.
+ *
+ * Tapping the chip arms the recorder; the next key press with a modifier becomes the value. Recording rather
+ * than typing a spec is the whole point: a user changing a key should press the key, not know the syntax the
+ * keymap parses. The spec is still what is stored, so what this records and what a plugin declares are one
+ * thing.
+ *
+ * Three details that make it usable rather than merely functional:
+ *
+ *  - a press with NO modifier is ignored while recording, because `L` on its own is a letter the user wants
+ *    to type, and binding it would take the letter away everywhere;
+ *  - Escape cancels, so an armed row can always be backed out of without binding Escape itself;
+ *  - Backspace clears the shortcut, which is the one destructive act a recorder needs and cannot record.
+ *
+ * [onRecord] receives a spec (`primary+alt+L`) or the empty string when the shortcut is cleared. [keyNameOf]
+ * turns a toolkit key into the keymap's canonical name, passed in so this component stays free of the keymap.
+ */
+@Composable
+fun SettingsShortcutRow(
+    title: String,
+    description: String?,
+    display: String,
+    isDefault: Boolean,
+    keyNameOf: (Key) -> String?,
+    onRecord: (String) -> Unit,
+    onReset: () -> Unit,
+) {
+    var recording by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(recording) { if (recording) runCatching { focus.requestFocus() } }
+
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        RowScopeLabel(title, description, Modifier.weight(1f))
+        if (!isDefault) {
+            Box(
+                Modifier.clickable(remember { MutableInteractionSource() }, null) {
+                    recording = false
+                    onReset()
+                }.padding(horizontal = 8.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    "Reset",
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        val label = when {
+            recording -> "Press a shortcut"
+            display.isEmpty() -> "None"
+            else -> display
+        }
+        Box(
+            Modifier
+                .focusRequester(focus)
+                .focusable()
+                .onPreviewKeyEvent { ev ->
+                    if (!recording || ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when {
+                        ev.key == Key.Escape -> {
+                            recording = false
+                            true
+                        }
+                        // The one act a recorder cannot record: clearing the binding.
+                        ev.key == Key.Backspace || ev.key == Key.Delete -> {
+                            recording = false
+                            onRecord("")
+                            true
+                        }
+                        else -> {
+                            val name = keyNameOf(ev.key)
+                            val modified = ev.isCtrlPressed || ev.isMetaPressed || ev.isAltPressed
+                            // A bare letter is text the user wants to type; taking it as a shortcut would
+                            // remove it from the keyboard. Shift alone is not enough for the same reason.
+                            if (name == null || !modified) return@onPreviewKeyEvent true
+                            recording = false
+                            onRecord(specOf(name, ev.isCtrlPressed || ev.isMetaPressed, ev.isAltPressed, ev.isShiftPressed))
+                            true
+                        }
+                    }
+                }
+                .background(
+                    if (recording) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                    else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    RoundedCornerShape(Ca.radius.control),
+                )
+                .border(
+                    1.dp,
+                    if (recording) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                    RoundedCornerShape(Ca.radius.control),
+                )
+                .clickable(remember { MutableInteractionSource() }, null) { recording = !recording }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Text(
+                label,
+                color = if (recording || display.isEmpty()) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    }
+}
+
+/**
+ * The canonical spec for a recorded press.
+ *
+ * `primary` rather than the physical modifier that was held: the shortcut should mean Command on macOS and
+ * Control elsewhere, which is what the rest of the keymap means by it, so a keymap recorded on one platform
+ * still reads correctly on the other.
+ */
+private fun specOf(key: String, primary: Boolean, alt: Boolean, shift: Boolean): String = buildString {
+    if (primary) append("primary+")
+    if (alt) append("alt+")
+    if (shift) append("shift+")
+    append(key)
 }
 
 /** An action setting: label/description on the left, a button on the right. */

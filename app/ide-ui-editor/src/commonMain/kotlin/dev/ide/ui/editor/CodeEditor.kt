@@ -57,6 +57,7 @@ import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.clipForClipboard
 import dev.ide.ui.editor.core.EditorImeHandle
 import dev.ide.ui.editor.core.EditorSession
+import dev.ide.ui.ext.KeymapHost
 import dev.ide.ui.editor.core.RangeEdit
 import dev.ide.ui.editor.core.isLarge
 import dev.ide.ui.editor.core.mapOffsetThroughEdits
@@ -272,6 +273,9 @@ private fun CodeEditorContent(
     // Active snippet/template expansion (tab-stop stepping), or null. Reset when the file changes.
     var snippet by remember(path) { mutableStateOf<SnippetSession?>(null) }
     val sig = rememberSignatureHelpController(path, backend)
+    // The plugin painters and layers for this file, resolved in composition (both registries are
+    // Compose-observable) so the draw phase and the overlay Box each read one already-filtered list.
+    val painters = rememberEditorPainters(path)
     val acts = rememberEditorActionsController(
         path, editorSession, backend, onEditorAction, onOtherFileEdits,
     ) { completion.dismiss() }
@@ -803,99 +807,105 @@ private fun CodeEditorContent(
         return false
     }
 
-    // Editor command chords, handled on the Preview pass so they win over the default key path + completion keys.
+    /**
+     * Run the editor command [id], or report that this editor does not provide it.
+     *
+     * The bodies are the ones that used to sit inside `onPreviewKey`'s chain of key conditions; only the way
+     * they are reached changed, from "these modifiers and this key" to "this command id". Which keys reach
+     * which command is now data (`EDITOR_KEY_DEFAULTS`, overridable by the user and by a plugin), and the
+     * variants that used to be branches on a modifier are separate ids.
+     */
+    fun runEditorCommand(id: String): Boolean {
+        when (id) {
+            // Reformat: the selection if any, else the whole file.
+            EditorCommands.REFORMAT -> {
+                val sel = editorSession.selection
+                scope.launch { if (!sel.collapsed) runFormat(sel.min, sel.max) else runFormat(0, 0) }
+            }
+
+            EditorCommands.OPTIMIZE_IMPORTS -> scope.launch { runOptimizeImports() }
+
+            // Reformat-on-save (Settings → Code Style) is applied by the save path itself (AppState.save), so
+            // it covers every save trigger — this command, the toolbar button, autosave — uniformly.
+            EditorCommands.SAVE -> onSave()
+
+            EditorCommands.FIND, EditorCommands.REPLACE -> {
+                val seed = editorSession.selectedText()?.takeIf { it.isNotEmpty() && '\n' !in it }
+                find.openBar(replace = id == EditorCommands.REPLACE, seed = seed)
+                completion.dismiss()
+            }
+
+            EditorCommands.GO_TO_LINE -> {
+                gotoLineOpen = true
+                completion.dismiss()
+            }
+
+            EditorCommands.QUICK_DOC -> {
+                showQuickDoc()
+                completion.dismiss()
+            }
+
+            // A single target jumps; several open a picker. Declaration also resolves an Android resource
+            // reference.
+            EditorCommands.GO_TO_DECLARATION -> runNav(UiNavKind.DECLARATION)
+            EditorCommands.GO_TO_IMPLEMENTATION -> runNav(UiNavKind.IMPLEMENTATION)
+            EditorCommands.GO_TO_TYPE_DECLARATION -> runNav(UiNavKind.TYPE_DECLARATION)
+            EditorCommands.GO_TO_SUPER -> runNav(UiNavKind.SUPER)
+
+            EditorCommands.COMPLETE_CODE -> if (!readOnly) completion.reopen(immediate = true)
+
+            // Force the signature-help panel even if it was dismissed.
+            EditorCommands.PARAMETER_INFO -> sig.triggerExplicit()
+
+            EditorCommands.RENAME, EditorCommands.RENAME_ALTERNATE -> startRename()
+
+            EditorCommands.NEXT_DIAGNOSTIC -> editorSession.goToDiagnostic(forward = true)
+            EditorCommands.PREVIOUS_DIAGNOSTIC -> editorSession.goToDiagnostic(forward = false)
+
+            EditorCommands.TOGGLE_COMMENT, EditorCommands.TOGGLE_BLOCK_COMMENT -> {
+                editorSession.toggleComment(preferBlock = id == EditorCommands.TOGGLE_BLOCK_COMMENT)
+                completion.dismiss()
+            }
+
+            EditorCommands.DUPLICATE_LINE -> editorSession.duplicateSelection()
+
+            EditorCommands.DELETE_LINE -> {
+                editorSession.deleteLines()
+                completion.dismiss()
+            }
+
+            EditorCommands.JOIN_LINES -> editorSession.joinLines()
+
+            EditorCommands.MOVE_LINE_UP -> editorSession.moveLines(-1)
+            EditorCommands.MOVE_LINE_DOWN -> editorSession.moveLines(1)
+
+            EditorCommands.CODE_ACTIONS, EditorCommands.CODE_ACTIONS_ALTERNATE ->
+                if (acts.available.isNotEmpty()) acts.openMenu()
+
+            // A command this editor does not provide: a plugin's own, bound to a key that reached us. Left
+            // unhandled so the key falls through rather than being swallowed.
+            else -> return false
+        }
+        return true
+    }
+
+    // Editor commands, handled on the Preview pass so they win over the default key path + completion keys.
     fun onPreviewKey(ev: KeyEvent): Boolean {
         if (ev.type != KeyEventType.KeyDown) return false
-        // Reformat code (⌘/Ctrl-Alt-L, IntelliJ): the selection if any, else the whole file.
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.isAltPressed && ev.key == Key.L) {
-            val sel = editorSession.selection
-            scope.launch { if (!sel.collapsed) runFormat(sel.min, sel.max) else runFormat(0, 0) }
-            return true
-        }
-        // Optimize imports (⌘/Ctrl-Alt-O, IntelliJ).
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.isAltPressed && ev.key == Key.O) {
-            scope.launch { runOptimizeImports() }
-            return true
-        }
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.S) {
-            // Reformat-on-save (Settings → Code Style) is applied by the save path itself (AppState.save), so
-            // it covers every save trigger — this key, the toolbar button, autosave — uniformly.
-            onSave()
-            return true
-        }
-        // Find (⌘/Ctrl-F) / find+replace (⌘/Ctrl-R); seed the query from the current selection.
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && (ev.key == Key.F || ev.key == Key.R)) {
-            val seed = editorSession.selectedText()?.takeIf { it.isNotEmpty() && '\n' !in it }
-            find.openBar(replace = ev.key == Key.R, seed = seed)
-            completion.dismiss()
-            return true
-        }
-        // Go to line (⌘/Ctrl-G): open the line-jump prompt.
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.G) {
-            gotoLineOpen = true; completion.dismiss(); return true
-        }
-        // Quick documentation (⌘/Ctrl-Q, IntelliJ); Esc dismisses an open doc popup first.
+        // Escape dismisses an open quick-doc popup before anything else can claim it, as it did when this was
+        // a chain of conditions: the popup is modal-ish, and its Escape is not a command.
         if (quickDoc != null && ev.key == Key.Escape) {
-            quickDoc = null; return true
-        }
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.Q) {
-            showQuickDoc(); completion.dismiss(); return true
-        }
-        // Go to: Declaration ⌘/Ctrl-B, Implementation(s) +Alt, Type declaration +Shift; Super ⌘/Ctrl-U. A
-        // single target jumps; several open a picker. Declaration also resolves an Android resource reference.
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.B) {
-            runNav(
-                when {
-                    ev.isAltPressed -> UiNavKind.IMPLEMENTATION
-                    ev.isShiftPressed -> UiNavKind.TYPE_DECLARATION
-                    else -> UiNavKind.DECLARATION
-                },
-            )
+            quickDoc = null
             return true
         }
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.U) {
-            runNav(UiNavKind.SUPER); return true
-        }
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.Spacebar) {
-            if (!readOnly) completion.reopen(immediate = true); return true
-        }
-        // Parameter info (Ctrl/Cmd-P): force the signature-help panel even if it was dismissed.
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.P) {
-            sig.triggerExplicit(); return true
-        }
-        // Rename (F2, or Shift-F6 a la IntelliJ): prompt for a new name → project-wide rename.
-        if (ev.key == Key.F2 || (ev.isShiftPressed && ev.key == Key.F6)) {
-            startRename(); return true
-        }
-        // Next / previous diagnostic (F8 / Shift-F8, a la VS Code), wrapping around the buffer.
-        if (ev.key == Key.F8) {
-            editorSession.goToDiagnostic(forward = !ev.isShiftPressed); return true
-        }
-        // Comment toggle: ⌘/Ctrl-/ (line), +Shift (block).
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && (ev.key == Key.Slash)) {
-            editorSession.toggleComment(preferBlock = ev.isShiftPressed)
-            completion.dismiss(); return true
-        }
-        // Duplicate line/selection: ⌘/Ctrl-D.
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.D && !ev.isShiftPressed && !ev.isAltPressed) {
-            editorSession.duplicateSelection(); return true
-        }
-        // Delete line(s): ⌘/Ctrl-Shift-K. Join lines: ⌘/Ctrl-Shift-J.
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.isShiftPressed && ev.key == Key.K) {
-            editorSession.deleteLines(); completion.dismiss(); return true
-        }
-        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.isShiftPressed && ev.key == Key.J) {
-            editorSession.joinLines(); return true
-        }
-        // Move line(s) up/down: Alt-Shift-Up/Down (intercepted before the default vertical move).
-        if (ev.isAltPressed && ev.isShiftPressed && (ev.key == Key.DirectionUp || ev.key == Key.DirectionDown)) {
-            editorSession.moveLines(if (ev.key == Key.DirectionUp) -1 else 1)
-            return true
-        }
-        // Code actions: Alt+Enter (or Ctrl/Cmd-.) opens the lightbulb menu.
-        if ((ev.isAltPressed && ev.key == Key.Enter) || ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.Period)) {
-            if (acts.available.isNotEmpty()) acts.openMenu()
-            return true
+        // The keymap owns the named commands. What it does not claim falls through to the modal handlers
+        // below (the code-action menu, a live template, the completion popup), which own their keys while they
+        // are open and are not rebindable for that reason.
+        when (val outcome = resolveEditorCommand(ev)) {
+            is KeymapHost.Outcome.Command -> if (runEditorCommand(outcome.actionId)) return true
+            // The first half of a chord: consume it so it does not also reach the buffer.
+            is KeymapHost.Outcome.Pending -> return true
+            KeymapHost.Outcome.None -> Unit
         }
         if (acts.menuOpen) {
             return when (ev.key) {
@@ -1042,6 +1052,9 @@ private fun CodeEditorContent(
                         currentMatch = find.currentIndex,
                         occurrences = occurrences,
                         templateFields = snippet?.fieldRanges().orEmpty(),
+                        decoByLine = renderState.decoByLine,
+                        filePath = path,
+                        painters = painters,
                         indentColsFor = renderState::indentColsFor,
                         stickyHeadersFor = { renderState.stickyHeadersFor(geometry.editorStructure.value, it) },
                         colors = drawColors,
@@ -1123,6 +1136,28 @@ private fun CodeEditorContent(
             vOffset = geometry.vOffset,
             docLength = docLength,
             onPreview = onPreview,
+        )
+
+        PluginEditorLayers(
+            session = editorSession,
+            metrics = metrics,
+            vlayout = geometry.vlayout,
+            vOffset = geometry.vOffset,
+            hOffset = geometry.hOffset,
+            gutterWidthPx = gutterWidthPx,
+            path = path,
+            backend = backend,
+            visibleLines = geometry.visibleLineRange(),
+        )
+
+        PluginGutterMarksLayer(
+            session = editorSession,
+            metrics = metrics,
+            vlayout = geometry.vlayout,
+            vOffset = geometry.vOffset,
+            docLength = docLength,
+            colors = colors,
+            onInvoke = acts::invokeGutterAction,
         )
 
         CodeActionsMenuLayer(

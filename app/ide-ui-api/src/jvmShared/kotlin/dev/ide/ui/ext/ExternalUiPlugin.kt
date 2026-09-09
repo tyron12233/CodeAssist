@@ -2,7 +2,15 @@ package dev.ide.ui.ext
 
 import androidx.compose.runtime.remember
 import dev.ide.plugin.ui.Overlay
+import dev.ide.plugin.ui.EditorAnchor as ExternalAnchorPoint
+import dev.ide.plugin.ui.EditorLayer as ExternalEditorLayer
+import dev.ide.plugin.ui.EditorLayerContext as ExternalLayerContext
+import dev.ide.plugin.ui.EditorPaintContext as ExternalPaintContext
+import dev.ide.plugin.ui.EditorPaintLayer as ExternalPaintLayer
+import dev.ide.plugin.ui.EditorPainter as ExternalEditorPainter
 import dev.ide.plugin.ui.EditorPreview as ExternalEditorPreview
+import dev.ide.plugin.ui.EditorViewMode as ExternalViewMode
+import dev.ide.plugin.ui.EditorViewModeContext as ExternalViewModeContext
 import dev.ide.plugin.ui.EditorPreviewContext as ExternalPreviewContext
 import dev.ide.plugin.ui.Screen
 import dev.ide.plugin.ui.ScreenUiContext
@@ -83,6 +91,64 @@ private class BridgedRegistration(
         return UiHandle { registration.dispose() }
     }
 
+    override fun editorLayer(layer: ExternalEditorLayer): UiHandle {
+        val registration = scope.editorLayer(
+            EditorLayerContribution(
+                id = layer.id,
+                order = layer.order,
+                appliesTo = layer.appliesTo,
+            ) { ctx ->
+                // Keyed on what a layer can observe rather than on the context instance: the context carries
+                // the buffer and the viewport, so it changes on every keystroke and every scroll, and
+                // remembering per instance would allocate a wrapper per frame.
+                val bridged = remember(ctx.path, ctx.text, ctx.visibleLines, ctx.caretOffset, ctx) {
+                    LayerUiContext(ctx)
+                }
+                layer.widgets(bridged).map { w ->
+                    EditorWidget(anchor = w.anchor.internal(), key = w.key, content = w.content)
+                }
+            },
+        )
+        return UiHandle { registration.dispose() }
+    }
+
+    override fun editorPainter(painter: ExternalEditorPainter): UiHandle {
+        val registration = scope.editorPainter(
+            EditorPainterContribution(
+                id = painter.id,
+                order = painter.order,
+                layer = painter.layer.internal(),
+                appliesTo = painter.appliesTo,
+            ) { ctx ->
+                // No wrapper allocation per frame: the paint context is passed straight through, since the
+                // published and internal interfaces have the same members. The adapter is one object, built
+                // per frame by the caller either way.
+                painter.paint(this, PaintContextView(ctx))
+            },
+        )
+        return UiHandle { registration.dispose() }
+    }
+
+    override fun viewMode(mode: ExternalViewMode): UiHandle {
+        val registration = scope.viewMode(
+            EditorViewModeContribution(
+                id = mode.id,
+                label = mode.label,
+                iconId = mode.iconId,
+                order = mode.order,
+                appliesTo = mode.appliesTo,
+                isDefault = mode.isDefault,
+            ) { ctx ->
+                // Keyed on what a pane can observe: the context carries the buffer and the caret, so it
+                // changes on every keystroke and remembering per instance would allocate per frame.
+                mode.content(
+                    remember(ctx.filePath, ctx.text, ctx.caretOffset, ctx) { ViewModeUiContext(ctx) }
+                )
+            },
+        )
+        return UiHandle { registration.dispose() }
+    }
+
     override fun editorPreview(preview: ExternalEditorPreview): UiHandle {
         val registration = scope.editorPreview(
             EditorPreviewContribution(
@@ -111,6 +177,64 @@ private fun ExternalAnchor.internal(): ToolWindowAnchor = when (this) {
 /** The open project's root, or null when none is open (the picker reports an empty path). */
 private fun projectPathOf(backend: dev.ide.ui.backend.IdeBackend): String? =
     runCatching { backend.project.rootPath }.getOrNull()?.takeIf { it.isNotEmpty() }
+
+private fun ExternalAnchorPoint.internal(): EditorAnchor = when (this) {
+    is ExternalAnchorPoint.AtOffset -> EditorAnchor.AtOffset(offset)
+    is ExternalAnchorPoint.AfterLine -> EditorAnchor.AfterLine(line)
+    is ExternalAnchorPoint.AboveLine -> EditorAnchor.AboveLine(line)
+}
+
+private fun ExternalPaintLayer.internal(): EditorPaintLayer = when (this) {
+    ExternalPaintLayer.BelowText -> EditorPaintLayer.BelowText
+    ExternalPaintLayer.AboveText -> EditorPaintLayer.AboveText
+}
+
+private class LayerUiContext(private val ctx: EditorLayerContext) : ExternalLayerContext {
+    override val projectPath: String? get() = projectPathOf(ctx.backend)
+
+    /** The decorated file IS the focused tab, so both answer the same path; [path] is the non-null form. */
+    override val activeFilePath: String get() = ctx.path
+    override val path: String get() = ctx.path
+    override val text: String get() = ctx.text
+    override val visibleLines: IntRange get() = ctx.visibleLines
+    override val caretOffset: Int get() = ctx.caretOffset
+    override fun openFile(path: String, offset: Int) = ctx.openFile(path, offset)
+    override fun openScreen(id: String) = ctx.openScreen(id)
+}
+
+/**
+ * The published [ExternalPaintContext] over the internal one.
+ *
+ * A pass-through rather than a copy: this is built inside a draw, so the members must not compute anything.
+ * The two interfaces are deliberately identical in shape, which is what lets every member be a delegation.
+ */
+private class PaintContextView(private val ctx: EditorPaintContext) : ExternalPaintContext {
+    override val path: String get() = ctx.path
+    override val visibleLines: IntRange get() = ctx.visibleLines
+    override val lineCount: Int get() = ctx.lineCount
+    override val lineHeight: Float get() = ctx.lineHeight
+    override val charWidth: Float get() = ctx.charWidth
+    override val gutterWidth: Float get() = ctx.gutterWidth
+    override val textLeft: Float get() = ctx.textLeft
+    override fun lineTop(line: Int): Float = ctx.lineTop(line)
+    override fun xOf(offset: Int): Float = ctx.xOf(offset)
+    override fun lineOf(offset: Int): Int = ctx.lineOf(offset)
+    override fun lineRange(line: Int): IntRange = ctx.lineRange(line)
+    override fun isHidden(line: Int): Boolean = ctx.isHidden(line)
+}
+
+private class ViewModeUiContext(private val ctx: ViewModeContext) : ExternalViewModeContext {
+    override val projectPath: String? get() = projectPathOf(ctx.backend)
+
+    /** The pane's file IS the focused tab, so both answer the same path; [path] is the non-null form. */
+    override val activeFilePath: String get() = ctx.filePath
+    override val path: String get() = ctx.filePath
+    override val text: String get() = ctx.text
+    override val caretOffset: Int get() = ctx.caretOffset
+    override fun replaceText(start: Int, end: Int, newText: String) = ctx.replaceText(start, end, newText)
+    override fun openFile(path: String, offset: Int) = ctx.openFile(path, offset)
+    override fun openScreen(id: String) {}
+}
 
 private class ToolWindowUiContext(private val ctx: ToolWindowContext) : UiContext {
     override val projectPath: String? get() = projectPathOf(ctx.backend)

@@ -198,29 +198,92 @@ object EditorPreviewRegistry {
 // Editor view modes (beyond Code / Blocks / Preview / Split)
 // ---------------------------------------------------------------------------
 
-/** What a contributed view mode renders against: the open file and its live buffer. */
+/**
+ * What a contributed view mode renders against: the open file, its live buffer, and the one operation a view
+ * of a buffer needs that it cannot do itself.
+ */
 interface ViewModeContext {
     val backend: IdeBackend
     val filePath: String
+
+    /** The editor's live buffer, which may differ from disk. Recomposes the pane as the user types. */
     val text: String
+
+    /** The caret offset in the shared buffer, so a pane can follow the code editor's position. */
+    val caretOffset: Int get() = 0
+
+    /**
+     * Replace `[start, end)` in the shared buffer with [newText].
+     *
+     * A view mode is a view OF the tab's buffer, not a copy of it: the code editor, the block editor and this
+     * pane all edit the one [dev.ide.ui.editor.core.EditorSession], which is why an edit made here is
+     * undoable, is picked up by analysis, and marks the tab dirty exactly as typing does. Replacing the whole
+     * text works but costs the user their undo granularity, so prefer the narrowest range that changes.
+     */
+    fun replaceText(start: Int, end: Int, newText: String) {}
+
+    /** Open [path] in the editor with the caret at [offset]. See [ToolWindowContext.openFile]. */
+    fun openFile(path: String, offset: Int = 0) {}
 }
 
-/** An editor view mode. [appliesTo] gates it per file (so a mode only offers for files it handles). */
+/**
+ * An editor view mode: a surface for a tab beside Code, Blocks, Preview and Split.
+ *
+ * [appliesTo] gates it per file, so a mode only offers itself for files it handles, and [iconId] is the glyph
+ * the toggle shows (an id in the IDE's registry: the toggle is icon-only, and [label] rides along as the
+ * accessibility description). [order] places it among the other contributed modes; the built-ins always come
+ * first.
+ */
 class EditorViewModeContribution(
     val id: String,
     val label: String,
+    val iconId: String = "layers",
+    val order: Int = 1000,
     val appliesTo: (filePath: String) -> Boolean = { true },
+
+    /**
+     * Whether a tab for [filePath] should OPEN in this mode rather than in the code editor.
+     *
+     * This is how a plugin comes to own a file kind: claim it here and the file opens into this pane, the way
+     * an image already opens into Preview. Code stays reachable from the toggle on purpose, and that is not a
+     * hole in the ownership: a pane can be wrong about a file, and a user who cannot see the text has no way
+     * to find out why.
+     *
+     * A pane that owns a kind the text editor cannot represent (a binary) must read the file itself, through
+     * its own engine facet: the tab's buffer is a text decode of the bytes, and for a binary it is garbage.
+     */
+    val isDefault: (filePath: String) -> Boolean = { false },
     val content: @Composable (ViewModeContext) -> Unit,
 )
 
+/** The process-global registry of contributed view modes. Compose-observable, like its siblings here. */
 object ViewModeRegistry {
+    private val ordering = compareBy<EditorViewModeContribution>({ it.order }, { it.id })
     private val items = mutableStateListOf<EditorViewModeContribution>()
 
     fun register(mode: EditorViewModeContribution): Registration {
-        items.add(mode)
+        val after = items.indexOfFirst { ordering.compare(it, mode) > 0 }
+        items.add(if (after < 0) items.size else after, mode)
         return Registration { items.remove(mode) }
     }
 
-    fun forFile(filePath: String): List<EditorViewModeContribution> = items.filter { it.appliesTo(filePath) }
+    /** The modes offering themselves for [filePath], in resolution order. A throwing predicate is skipped. */
+    fun forFile(filePath: String): List<EditorViewModeContribution> =
+        items.filter { runCatching { it.appliesTo(filePath) }.getOrDefault(false) }
+
     fun find(id: String): EditorViewModeContribution? = items.firstOrNull { it.id == id }
+
+    /**
+     * The mode a tab for [filePath] should open in, or null to open in the code editor.
+     *
+     * The first claimant in resolution order wins, so a plugin registered earlier (or with a lower `order`)
+     * keeps the file kind. A throwing predicate is skipped rather than allowed to break opening a file, which
+     * is the one place in this registry where a failure would be user-visible as "the file will not open".
+     */
+    fun defaultFor(filePath: String): EditorViewModeContribution? =
+        items.firstOrNull {
+            runCatching { it.isDefault(filePath) && it.appliesTo(filePath) }.getOrDefault(false)
+        }
+
+    fun all(): List<EditorViewModeContribution> = items.toList()
 }

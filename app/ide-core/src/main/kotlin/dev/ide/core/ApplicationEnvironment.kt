@@ -76,6 +76,13 @@ class ApplicationEnvironment(
      * app; null (desktop bootstraps, tests) falls back to a per-process temporary root.
      */
     val pluginDataRoot: Path? = null,
+    /**
+     * Reads an app-global preference, for the built-ins that need one at load. The keymap is the reason it
+     * exists: a user's rebinding has to be in force from the first key press, and the preference store lives
+     * on the host's [dev.ide.core.project.ProjectManager], which is built around this environment rather than
+     * before it. Defaults to nothing stored, which is correct for a test or a standalone bootstrap.
+     */
+    val preferences: (String) -> String? = { null },
 ) : AutoCloseable {
 
     /** The app substrate: app-global extension registry + message bus + model lock. */

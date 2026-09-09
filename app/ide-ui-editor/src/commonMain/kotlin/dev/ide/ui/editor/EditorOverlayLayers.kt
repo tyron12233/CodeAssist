@@ -1,12 +1,17 @@
 package dev.ide.ui.editor
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.key
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -20,10 +25,18 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.backend.UiGutterMark
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.clipForClipboard
+import dev.ide.ui.editor.core.EditorDocument
 import dev.ide.ui.editor.core.EditorSession
+import dev.ide.ui.ext.EditorAnchor
+import dev.ide.ui.ext.EditorLayerContext
+import dev.ide.ui.ext.EditorLayerRegistry
+import dev.ide.ui.icons.actionIcon
+import dev.ide.ui.theme.CodeAssistColors
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -260,5 +273,199 @@ internal fun PreviewGutterIconsLayer(
                 )
             },
         )
+    }
+}
+
+/**
+ * A plugin's gutter marks (`platform.editorDecoration`): a tinted glyph beside the line number, tappable when
+ * the mark named an action.
+ *
+ * A composable layer rather than a canvas draw, unlike the tinted ranges: a mark carries a tooltip and a tap
+ * target, and the canvas can do neither. Positioned in the layout phase off the same row map the code uses,
+ * so a mark scrolls with its line without recomposing.
+ *
+ * The gutter fits one glyph. Several marks on a line collapse to the highest
+ * [dev.ide.plugin.editor.GutterMark.order], and a line that already carries a `@Preview` icon keeps it: that
+ * icon is the IDE's own and switching surfaces is a more consequential tap than a plugin's indicator.
+ */
+@Composable
+internal fun PluginGutterMarksLayer(
+    session: EditorSession,
+    metrics: EditorMetrics,
+    vlayout: VLayout,
+    vOffset: MutableFloatState,
+    docLength: Int,
+    colors: CodeAssistColors,
+    onInvoke: (actionId: String, line: Int) -> Unit,
+) {
+    val marks = session.gutterMarks
+    if (marks.isEmpty()) return
+    val doc = session.doc
+    val previewLines = remember(session.previewMarkers, doc) {
+        session.previewMarkers.mapTo(HashSet()) { doc.lineForOffset(it.offset.coerceIn(0, docLength)) }
+    }
+    // One mark per line, the highest order winning, so the layer emits a stable set of composables rather
+    // than stacking glyphs in a 20dp box.
+    val byLine = remember(marks, previewLines) {
+        val out = HashMap<Int, UiGutterMark>(marks.size)
+        for (m in marks) {
+            if (m.line in previewLines) continue
+            val existing = out[m.line]
+            if (existing == null || m.order > existing.order) out[m.line] = m
+        }
+        out
+    }
+    for ((line, mark) in byLine) {
+        if (line >= doc.lineCount || session.foldModel.isHidden(line)) continue
+        key(line, mark.iconId, mark.tint) {
+            PluginGutterMark(
+                mark = mark,
+                colors = colors,
+                onClick = mark.actionId?.let { id -> { onInvoke(id, line) } },
+                modifier = Modifier.offset {
+                    IntOffset(
+                        1.dp.roundToPx(),
+                        (
+                            metrics.padTop + vlayout.topRow(line) * metrics.lineHeight - vOffset.floatValue +
+                                (metrics.lineHeight - 20.dp.toPx()) / 2f
+                            ).roundToInt(),
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PluginGutterMark(
+    mark: UiGutterMark,
+    colors: CodeAssistColors,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val tint = decorationColor(mark.tint, colors)
+    Box(
+        modifier
+            .size(20.dp)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            actionIcon(mark.iconId),
+            contentDescription = mark.tooltip,
+            tint = tint,
+            modifier = Modifier.size(14.dp),
+        )
+    }
+}
+
+/**
+ * The plugin-contributed anchored composables (`EditorLayerContribution`): a hover card, an inline button, a
+ * code-lens row, placed at a document position and scrolling with the text.
+ *
+ * Each widget is positioned in the LAYOUT phase off the same row map the code canvas draws against, so a
+ * scroll moves it without recomposing it, exactly like the diagnostic chips and the `@Preview` icons above.
+ * That is what makes this viable at all: a widget re-laid-out per frame of a fling would cost more than the
+ * whole editor.
+ *
+ * A layer's producer runs inside this composition, so its state reads make it reactive. It is NOT guarded,
+ * unlike a painter's draw and unlike the `appliesTo` predicate the registry checks: a `@Composable` call
+ * cannot be wrapped, because the slot table the composition is built from has no way to unwind half a
+ * composable's work. A producer that throws therefore takes the editor's composition with it. This is why a
+ * layer is documented as "read state and decide" and why the data tier exists for everything expressible as
+ * data: `platform.editorDecoration` runs off the composition entirely and per-provider failures there are
+ * contained.
+ */
+@Composable
+internal fun BoxScope.PluginEditorLayers(
+    session: EditorSession,
+    metrics: EditorMetrics,
+    vlayout: VLayout,
+    vOffset: MutableFloatState,
+    hOffset: MutableFloatState,
+    gutterWidthPx: Float,
+    path: String,
+    backend: IdeBackend,
+    visibleLines: IntRange,
+) {
+    val layers = EditorLayerRegistry.forFile(path)
+    if (layers.isEmpty()) return
+    val doc = session.doc
+    val ctx = remember(path, session.textRevision, visibleLines, session.selection, backend) {
+        object : EditorLayerContext {
+            override val path = path
+            override val text = doc.text
+            override val visibleLines = visibleLines
+            override val caretOffset = session.selection.min
+            override val backend = backend
+        }
+    }
+    for (layer in layers) {
+        key(layer.id) {
+            val widgets = layer.widgets(ctx)
+            for (widget in widgets) {
+                val anchorLine = when (val a = widget.anchor) {
+                    is EditorAnchor.AtOffset -> doc.lineForOffset(a.offset.coerceIn(0, doc.length))
+                    is EditorAnchor.AfterLine -> a.line
+                    is EditorAnchor.AboveLine -> a.line
+                }
+                if (anchorLine !in 0 until doc.lineCount || session.foldModel.isHidden(anchorLine)) continue
+                key(layer.id, widget.key) {
+                    Box(
+                        Modifier.offset {
+                            IntOffset(
+                                widgetX(widget.anchor, doc, metrics, gutterWidthPx, hOffset.floatValue),
+                                widgetY(widget.anchor, anchorLine, metrics, vlayout, vOffset.floatValue),
+                            )
+                        },
+                    ) {
+                        widget.content()
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * X of a widget, in px.
+ *
+ * Columns are measured in character advances rather than from the shaped line: this runs in the layout phase,
+ * which has no `TextLayoutResult` to ask, and the editor's font is monospace so the advance is exact for
+ * everything but a wrapped row. A wrapped row puts the widget at the row's start, which is where an
+ * end-of-line widget belongs anyway.
+ */
+private fun widgetX(
+    anchor: EditorAnchor,
+    doc: EditorDocument,
+    metrics: EditorMetrics,
+    gutterWidthPx: Float,
+    hOff: Float,
+): Int {
+    val col = when (anchor) {
+        is EditorAnchor.AtOffset -> {
+            val off = anchor.offset.coerceIn(0, doc.length)
+            off - doc.lineStart(doc.lineForOffset(off))
+        }
+        // Past the line's last character, with one space of air so it does not touch the code.
+        is EditorAnchor.AfterLine -> doc.lineLength(anchor.line.coerceIn(0, doc.lineCount - 1)) + 1
+        // A full-width band starts at the text's left edge.
+        is EditorAnchor.AboveLine -> 0
+    }
+    return (gutterWidthPx + metrics.padLeft + col * metrics.charWidth - hOff).roundToInt()
+}
+
+/** Y of a widget, in px: its anchor line's row top, or the row above it for [EditorAnchor.AboveLine]. */
+private fun widgetY(
+    anchor: EditorAnchor,
+    line: Int,
+    metrics: EditorMetrics,
+    vlayout: VLayout,
+    vOff: Float,
+): Int {
+    val top = metrics.padTop + vlayout.topRow(line) * metrics.lineHeight - vOff
+    return when (anchor) {
+        is EditorAnchor.AboveLine -> (top - metrics.lineHeight).roundToInt()
+        else -> top.roundToInt()
     }
 }

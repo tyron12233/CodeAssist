@@ -297,6 +297,20 @@ internal class EditorActionsController(
         runAction(act, d.startOffset, d.endOffset)
     }
 
+    /**
+     * Run a plugin action by registry id at [line]'s start, the path a gutter mark's tap takes.
+     *
+     * The context range is the marked line rather than the caret: a mark says something about that line, and
+     * the caret is usually somewhere else entirely when the user reaches over to tap it.
+     */
+    fun invokeGutterAction(actionId: String, line: Int) {
+        val doc = session.doc
+        val safeLine = line.coerceIn(0, doc.lineCount - 1)
+        val start = doc.lineStart(safeLine)
+        val end = doc.lineEnd(safeLine)
+        scope.launch { runCatching { onPluginAction(actionId, start, end) } }
+    }
+
     // Apply [act]: ask the backend for its edits over the buffer at the context range [ctxStart,ctxEnd), then
     // splice them in (the editor round-trip — reparse + re-analyze follow the normal text path). The caret is
     // kept on its logical spot by shifting it by the net delta of edits that land at/before it.

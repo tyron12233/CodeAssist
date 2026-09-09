@@ -462,6 +462,10 @@ class InstalledPluginsTest {
         override fun editorLanguage(profile: dev.ide.ui.ext.EditorLanguageProfile) = dev.ide.ui.ext.Registration {}
         override fun editorPreview(preview: dev.ide.ui.ext.EditorPreviewContribution) =
             dev.ide.ui.ext.Registration {}
+        override fun editorLayer(layer: dev.ide.ui.ext.EditorLayerContribution) =
+            dev.ide.ui.ext.Registration {}
+        override fun editorPainter(painter: dev.ide.ui.ext.EditorPainterContribution) =
+            dev.ide.ui.ext.Registration {}
     }
 
     @Test

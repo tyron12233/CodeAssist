@@ -173,6 +173,9 @@ class ProjectManager private constructor(
         // Under the app's own home rather than a cache dir: a plugin's data is its state, not something the
         // IDE may drop to reclaim space, and it is swept up by the same backup the projects are.
         pluginDataRoot = homeDir.resolve("plugin-data"),
+        // Read lazily: this manager's preference file is opened on demand, so handing over the reader during
+        // construction is safe and the keymap sees a rebinding the moment it is saved.
+        preferences = { key -> preference(key) },
     )
 
     /**

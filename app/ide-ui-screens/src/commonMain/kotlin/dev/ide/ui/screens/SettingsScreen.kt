@@ -59,6 +59,9 @@ import dev.ide.ui.components.SettingsCategoryItem
 import dev.ide.ui.components.SettingsChoiceRow
 import dev.ide.ui.components.SettingsColorRow
 import dev.ide.ui.components.SettingsSliderRow
+import dev.ide.ui.components.SettingsShortcutRow
+import dev.ide.ui.ext.displayShortcut
+import dev.ide.ui.ext.keymapKeyName
 import dev.ide.ui.components.SettingsTextRow
 import dev.ide.ui.components.SettingsToggleRow
 import dev.ide.ui.generated.resources.Res
@@ -347,6 +350,20 @@ private fun ControlRow(
         is UiSettingControl.Color -> SettingsColorRow(title, description, stored?.toLongOrNull() ?: c.value) {
             onSet(pageId, c.key, it.toString()); onStructuralChange()
         }
+        is UiSettingControl.Shortcut -> {
+            // A STORED blank is a shortcut the user cleared, so `stored` is used as-is rather than falling
+            // back to the value when it is empty; the value already carries the default for an unset key.
+            val current = stored ?: c.value
+            SettingsShortcutRow(
+                title = title,
+                description = description,
+                display = if (current.isEmpty()) "" else displayShortcut(current),
+                isDefault = current == c.defaultValue,
+                keyNameOf = ::keymapKeyName,
+                onRecord = { spec -> onSet(pageId, c.key, spec); onStructuralChange() },
+                onReset = { onSet(pageId, c.key, c.defaultValue); onStructuralChange() },
+            )
+        }
     }
 }
 
@@ -455,6 +472,7 @@ private fun encodeValue(c: UiSettingControl): String? = when (c) {
     is UiSettingControl.Text -> c.value
     is UiSettingControl.Action -> null
     is UiSettingControl.Color -> c.value.toString()
+    is UiSettingControl.Shortcut -> c.value
 }
 
 /** Map a page's icon id (resolved generically, so plugin icons work too) to a glyph; gear is the fallback. */

@@ -16,6 +16,9 @@ import dev.ide.lang.dom.Severity
 import dev.ide.lang.highlight.HighlightModifier
 import dev.ide.lang.hints.InlayHintKind
 import dev.ide.platform.EngineCanceledException
+import dev.ide.plugin.editor.DecorationStyle
+import dev.ide.plugin.editor.DecorationTint
+import dev.ide.plugin.editor.InlayKind as PluginInlayKind
 import dev.ide.ui.backend.AnalysisPreempted
 import dev.ide.ui.backend.EditorService
 import dev.ide.ui.backend.UiAction
@@ -28,7 +31,12 @@ import dev.ide.ui.backend.UiCaret
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiCompletionKind
 import dev.ide.ui.backend.UiCompletionResult
+import dev.ide.ui.backend.UiDecorationStyle
+import dev.ide.ui.backend.UiDecorationTint
 import dev.ide.ui.backend.UiDefinition
+import dev.ide.ui.backend.UiEditorDecorations
+import dev.ide.ui.backend.UiGutterMark
+import dev.ide.ui.backend.UiTextDecoration
 import dev.ide.ui.backend.UiLibraryContent
 import dev.ide.ui.backend.UiNavKind
 import dev.ide.ui.backend.UiNavOption
@@ -375,6 +383,56 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     // ---- code actions (quick-fixes + intentions) ----
 
+    override suspend fun decorations(path: String, text: String): UiEditorDecorations {
+        // Not wrapped in `ctx.background`, unlike the analyzer-backed passes: a provider is plugin code that
+        // suspends on its own terms, so pinning it to the serialized engine worker would let one slow plugin
+        // block analysis for every open file. It is timed like a pass so it shows up in the perf timeline.
+        val collected = try {
+            timedPass("decorations", path, { it.ranges.size + it.gutter.size + it.inlays.size }) {
+                ctx.services.editorDecorations(Paths.get(path), text)
+            }
+        } catch (_: EngineCanceledException) {
+            // A provider reached the engine and was preempted. Contribute nothing rather than asking the
+            // daemon to retry: the marks reappear on the next pass run, and a plugin's decoration is not
+            // worth a second trip through the worker while the user is typing.
+            return UiEditorDecorations.EMPTY
+        }
+        if (collected.isEmpty) return UiEditorDecorations.EMPTY
+        return UiEditorDecorations(
+            ranges = collected.ranges.map { d ->
+                UiTextDecoration(
+                    startOffset = d.startOffset,
+                    endOffset = d.endOffset,
+                    style = mapDecorationStyle(d.style),
+                    tint = mapDecorationTint(d.tint),
+                    tooltip = d.tooltip,
+                    order = d.order,
+                )
+            },
+            gutter = collected.gutter.map { m ->
+                UiGutterMark(
+                    line = m.line,
+                    iconId = m.iconId,
+                    tint = mapDecorationTint(m.tint),
+                    tooltip = m.tooltip,
+                    actionId = m.actionId,
+                    order = m.order,
+                )
+            },
+            // A plugin inlay renders through the same path as a language backend's, so it becomes the same
+            // DTO. Plugin hints are single-run and never navigable-by-parts, so one part carries it.
+            inlays = collected.inlays.map { i ->
+                UiInlayHint(
+                    offset = i.offset,
+                    parts = listOf(UiInlayPart(i.text, i.navOffset)),
+                    kind = mapPluginInlayKind(i.kind),
+                    paddingLeft = true,
+                    paddingRight = true,
+                )
+            },
+        )
+    }
+
     override suspend fun actionsAt(
         path: String, text: String, selStart: Int, selEnd: Int
     ): List<UiAction> {
@@ -472,6 +530,35 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         if (path.endsWith(".kt") || path.endsWith(".kts")) CodeStyleSettings.LANG_KOTLIN else CodeStyleSettings.LANG_JAVA
 
     // ---- mappers (editor-local) ----
+
+    private fun mapDecorationStyle(s: DecorationStyle): UiDecorationStyle = when (s) {
+        DecorationStyle.Background -> UiDecorationStyle.Background
+        DecorationStyle.Underline -> UiDecorationStyle.Underline
+        DecorationStyle.WavyUnderline -> UiDecorationStyle.WavyUnderline
+        DecorationStyle.DottedUnderline -> UiDecorationStyle.DottedUnderline
+        DecorationStyle.Strikethrough -> UiDecorationStyle.Strikethrough
+        DecorationStyle.Foreground -> UiDecorationStyle.Foreground
+        DecorationStyle.Box -> UiDecorationStyle.Box
+    }
+
+    private fun mapDecorationTint(t: DecorationTint): UiDecorationTint = when (t) {
+        DecorationTint.Accent -> UiDecorationTint.Accent
+        DecorationTint.Info -> UiDecorationTint.Info
+        DecorationTint.Success -> UiDecorationTint.Success
+        DecorationTint.Warning -> UiDecorationTint.Warning
+        DecorationTint.Error -> UiDecorationTint.Error
+        DecorationTint.Muted -> UiDecorationTint.Muted
+        DecorationTint.Added -> UiDecorationTint.Added
+        DecorationTint.Removed -> UiDecorationTint.Removed
+        DecorationTint.Modified -> UiDecorationTint.Modified
+    }
+
+    private fun mapPluginInlayKind(k: PluginInlayKind): UiInlayKind = when (k) {
+        PluginInlayKind.Type -> UiInlayKind.Type
+        PluginInlayKind.Parameter -> UiInlayKind.Parameter
+        PluginInlayKind.Chaining -> UiInlayKind.Chaining
+        PluginInlayKind.Other -> UiInlayKind.Other
+    }
 
     private fun mapHighlightModifier(m: HighlightModifier): UiHighlightModifier = when (m) {
         HighlightModifier.DECLARATION -> UiHighlightModifier.Declaration

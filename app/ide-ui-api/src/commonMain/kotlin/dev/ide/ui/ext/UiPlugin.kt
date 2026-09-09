@@ -38,6 +38,14 @@ interface UiContributionScope {
     /** Add a preview pane for a file kind ([EditorPreviewContribution]): the Preview/Split surface for
      *  something the IDE's four built-in panes do not cover. */
     fun editorPreview(preview: EditorPreviewContribution): Registration
+
+    /** Place composables at document positions in the code editor ([EditorLayerContribution]): a hover card,
+     *  an inline button, a code-lens row. For marks that are data, use `platform.editorDecoration` instead. */
+    fun editorLayer(layer: EditorLayerContribution): Registration
+
+    /** Draw straight into the editor's canvas ([EditorPainterContribution]). The escape hatch for a plugin
+     *  whose colors are its own rather than one of the theme's roles; held to a per-frame budget. */
+    fun editorPainter(painter: EditorPainterContribution): Registration
 }
 
 /**
@@ -100,5 +108,11 @@ object UiPluginHost {
 
         override fun editorPreview(preview: EditorPreviewContribution): Registration =
             EditorPreviewRegistry.register(preview)
+
+        override fun editorLayer(layer: EditorLayerContribution): Registration =
+            EditorLayerRegistry.register(layer)
+
+        override fun editorPainter(painter: EditorPainterContribution): Registration =
+            EditorPainterRegistry.register(painter)
     }
 }

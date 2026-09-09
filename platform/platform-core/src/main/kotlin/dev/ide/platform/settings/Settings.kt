@@ -101,6 +101,27 @@ sealed interface SettingControl {
         data class Option(val value: String, val label: String)
     }
 
+    /**
+     * A keyboard shortcut, recorded by pressing it.
+     *
+     * The value is a shortcut spec (`primary+alt+L`, or `primary+K primary+D` for a chord), the same syntax a
+     * plugin writes in a `dev.ide.plugin.keymap.KeyBinding` and the same one the keymap parses. A free-text
+     * field could hold that string too, and did before this control existed; it asked the user to know a
+     * syntax in order to change a key, which is the wrong way round.
+     *
+     * An empty value means the command has no shortcut, which is a real state rather than a missing one: a
+     * user who clears a binding wants the key back for something else.
+     */
+    data class Shortcut(
+        override val key: String,
+        override val title: String,
+        override val description: String? = null,
+        /** The shortcut this command ships with, so the row can offer to put it back. */
+        val default: String = "",
+        override val advanced: Boolean = false,
+        override val group: String? = null,
+    ) : SettingControl
+
     /** A free-text field. */
     data class Text(
         override val key: String,

@@ -4,6 +4,7 @@ import dev.ide.ui.backend.AnalysisPreempted
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.backend.UiEditorDecorations
 import dev.ide.ui.backend.UiFoldRegion
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiSemanticToken
@@ -19,7 +20,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 /** The editor "highlighting daemon" passes, run in priority order (IntelliJ's TextEditorHighlightingPass set). */
-enum class DaemonPass { DIAGNOSTICS, SEMANTIC, INLAY, FOLDS, PREVIEWS }
+enum class DaemonPass { DIAGNOSTICS, SEMANTIC, INLAY, FOLDS, PREVIEWS, DECORATIONS }
 
 /** Daemon lifecycle, emitted to a [DaemonObserver] — the instrument a headless harness records a timeline from. */
 enum class DaemonPhase {
@@ -72,6 +73,7 @@ data class EditorDaemonPolicy(
         DaemonPass.DIAGNOSTICS,
         DaemonPass.INLAY,
         DaemonPass.PREVIEWS,
+        DaemonPass.DECORATIONS,
     ),
 )
 
@@ -106,6 +108,7 @@ class EditorEngineDaemon(
     var onInlayHints: (List<UiInlayHint>) -> Unit = {}
     var onCodeFolds: (List<UiFoldRegion>) -> Unit = {}
     var onComposePreviews: (List<UiComposePreview>) -> Unit = {}
+    var onDecorations: (UiEditorDecorations) -> Unit = {}
 
     /** Whether [DaemonPass] should run for this file (language gate); a skipped pass clears its sink. */
     var appliesTo: (DaemonPass) -> Boolean = { true }
@@ -207,15 +210,27 @@ class EditorEngineDaemon(
                 val r = backend.preview.composePreviews(path, text)
                 ifCurrent(myRev) { onComposePreviews(r) }
             }
+
+            DaemonPass.DECORATIONS -> {
+                val r = backend.editor.decorations(path, text)
+                ifCurrent(myRev) { onDecorations(r) }
+            }
         }
     }
 
-    private fun enabled(pass: DaemonPass): Boolean = appliesTo(pass) && when (pass) {
+    private fun enabled(pass: DaemonPass): Boolean =
+        (pass == DaemonPass.DECORATIONS || appliesTo(pass)) && enabledByUser(pass)
+
+    private fun enabledByUser(pass: DaemonPass): Boolean = when (pass) {
         DaemonPass.INLAY -> inlayEnabled
         DaemonPass.DIAGNOSTICS -> analyzeEnabled
         DaemonPass.SEMANTIC -> semanticEnabled
         DaemonPass.FOLDS -> foldingEnabled
         DaemonPass.PREVIEWS -> true
+        // No user toggle and no language gate: a decorating plugin is not a language, so a file the
+        // `appliesTo` gate excludes from the analyzer passes can still carry a plugin's marks. The pass costs
+        // nothing when no provider claims the file.
+        DaemonPass.DECORATIONS -> true
     }
 
     /** SEMANTIC/FOLDS keep their last result on a transient error (it tracks the text via in-place shifting);
@@ -232,6 +247,7 @@ class EditorEngineDaemon(
             DaemonPass.INLAY -> onInlayHints(emptyList())
             DaemonPass.FOLDS -> onCodeFolds(emptyList())
             DaemonPass.PREVIEWS -> onComposePreviews(emptyList())
+            DaemonPass.DECORATIONS -> onDecorations(UiEditorDecorations.EMPTY)
         }
     }
 

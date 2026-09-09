@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.UiDecorationStyle
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiFileSymbol
 import dev.ide.ui.backend.UiSeverity
@@ -53,6 +54,11 @@ internal class EditorDrawColors(
     /** Background box for a live template (snippet) field while stepping through tab stops. */
     val templateField: Color,
 )
+
+/** Alpha a plugin's [UiDecorationStyle.Background] fill is drawn at, matching the editor's own whole-range
+ *  fills (occurrence 0.18, template field 0.16): the theme roles are opaque foreground colors, and a fill at
+ *  full strength would bury the code it is marking. */
+private const val DECORATION_FILL_ALPHA = 0.18f
 
 internal class DiagSeg(val startCol: Int, val endCol: Int, val severity: UiSeverity, val unused: Boolean)
 
@@ -114,6 +120,12 @@ internal fun DrawScope.drawEditor(
     occurrences: List<Match>,
     /** Live template (snippet) field ranges to box while stepping through tab stops; empty when not in a template. */
     templateFields: List<IntRange>,
+    /** A plugin's geometric decorations binned per document line, already resolved to theme colors. */
+    decoByLine: Map<Int, List<DecoSeg>>,
+    /** The path this canvas is drawing, for the painter contributions' own gating and diagnostics. */
+    filePath: String,
+    /** Plugin painters for this file, resolved once per frame by the caller and split by depth. */
+    painters: EditorPainters,
     /** Leading-indent columns of a line (blank ⇒ -1), cached by the caller so the guide layer never walks the rope per frame. */
     indentColsFor: (Int) -> Int,
     /** Sticky-header declarations enclosing the given top visible line — memoized by the caller across frames. */
@@ -227,6 +239,41 @@ internal fun DrawScope.drawEditor(
     }
 
     clipRect(left = gutterWidth, top = 0f, right = size.width, bottom = size.height) {
+        // Plugin background decorations, BELOW every other fill: a coverage tint or a diff band is a property
+        // of the text, so the selection, the find highlights and a template field all have to read as being
+        // on top of it. Tinted down to the alpha the editor's other whole-range fills use, because the theme
+        // roles are opaque foreground colors and a fill at full strength would bury the code.
+        if (decoByLine.isNotEmpty()) {
+            for (line in visibleLines) {
+                val segs = decoByLine[line] ?: continue
+                val maxCol = doc.lineLength(line)
+                for (seg in segs) {
+                    if (seg.style != UiDecorationStyle.Background) continue
+                    val c0 = seg.startCol.coerceIn(0, maxCol)
+                    val c1 = seg.endCol.coerceIn(c0, maxCol)
+                    // A zero-width segment is a multi-line range crossing a blank line. Filling to the row's
+                    // end (the -1 sentinel) keeps a marked block reading as one block instead of gapping.
+                    val vEnd = if (c1 > c0) rawToVisual(line, c1) else -1
+                    fillRange(line, rawToVisual(line, c0), vEnd, seg.color.copy(alpha = DECORATION_FILL_ALPHA), trailingMarker = false)
+                }
+            }
+        }
+
+        // Plugin painters. The context closes over this frame's layout closures, so it is built only when a
+        // painter is actually registered: on every other frame this is one null check.
+        val paintCtx = if (painters.isEmpty) null else CanvasPaintContext(
+            path = filePath,
+            visible = firstVisible..lastVisible,
+            doc = doc,
+            metrics = metrics,
+            gutterWidthPx = gutterWidth,
+            textLeftPx = textLeft,
+            foldModel = foldModel,
+            lineTopOf = ::lineTop,
+            xAt = { off -> xOf(doc.lineForOffset(off), off) },
+        )
+        if (paintCtx != null) runPainters(painters.belowText, paintCtx)
+
         // live template fields (lowest layer): each snippet tab stop tinted so the user sees the fields to
         // fill; the active field also carries the selection, painted on top. Single-line ranges only (a
         // template placeholder never spans a line break).
@@ -384,6 +431,55 @@ internal fun DrawScope.drawEditor(
             }
         }
 
+        // Plugin decorations that mark rather than fill, drawn AFTER the diagnostic squiggles so a plugin's
+        // line over the same text reads as the more specific claim. Same per-sub-row geometry as the squiggles.
+        if (decoByLine.isNotEmpty()) {
+            for (line in visibleLines) {
+                val segs = decoByLine[line] ?: continue
+                val layout = layoutFor(line)
+                val maxCol = doc.lineLength(line)
+                for (seg in segs) {
+                    if (seg.style == UiDecorationStyle.Background) continue
+                    val c0 = seg.startCol.coerceIn(0, maxCol)
+                    val c1 = seg.endCol.coerceIn(c0, maxCol)
+                    if (c1 <= c0) continue // nothing to underline on a line the range only crosses
+                    val v0 = rawToVisual(line, c0)
+                    val v1 = rawToVisual(line, c1)
+                    // Same one-frame-stale-offset hazard as fillRange: this is decoration that re-renders next
+                    // frame, so a layout mismatch skips the mark rather than taking the editor down.
+                    runCatching {
+                        val firstSub = if (wrap) layout.getLineForOffset(v0) else 0
+                        val lastSub = if (wrap) layout.getLineForOffset(v1) else 0
+                        for (sub in firstSub..lastSub) {
+                            val x0 = textLeft + when {
+                                sub == firstSub -> layout.getHorizontalPosition(v0, usePrimaryDirection = true)
+                                else -> layout.getLineLeft(sub)
+                            }
+                            val x1 = textLeft + when {
+                                sub == lastSub -> layout.getHorizontalPosition(v1, usePrimaryDirection = true)
+                                else -> layout.getLineRight(sub)
+                            }
+                            if (x1 <= x0) continue
+                            val top = lineTop(line) + sub * lineH
+                            when (seg.style) {
+                                UiDecorationStyle.Underline ->
+                                    drawLine(seg.color, Offset(x0, top + lineH - 2f), Offset(x1, top + lineH - 2f), strokeWidth = 1f)
+                                UiDecorationStyle.WavyUnderline ->
+                                    wavyUnderline(seg.color, x0, x1, top + lineH - 2f)
+                                UiDecorationStyle.DottedUnderline ->
+                                    dottedUnderline(seg.color, x0, x1, top + lineH - 2f, metrics.charWidth)
+                                UiDecorationStyle.Box ->
+                                    drawRect(seg.color, Offset(x0, top + 1f), Size(x1 - x0, lineH - 2f), style = Stroke(1f))
+                                // Background is filled in the layer above; Foreground/Strikethrough travel as
+                                // span styles and never reach a DecoSeg.
+                                else -> Unit
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // matching-bracket boxes
         bracketPair?.let { (open, close) ->
             for (off in intArrayOf(open, close)) {
@@ -402,6 +498,10 @@ internal fun DrawScope.drawEditor(
         }
 
         // caret — drawn at the animated content position (minus scroll), so it glides to a new spot
+        // Plugin painters, over the text and over every decoration the editor drew, but under the caret: the
+        // caret is where the user is, and no plugin gets to hide it.
+        if (paintCtx != null) runPainters(painters.aboveText, paintCtx)
+
         if (caretVisible && sel.collapsed) {
             val cx = caretContent.x - hOff
             val cy = caretContent.y - vOff
@@ -559,6 +659,20 @@ private fun DrawScope.drawFoldChevron(cx: Float, cy: Float, expanded: Boolean, c
 }
 
 /** A squiggly underline from [x1] to [x2] at baseline [y] (a tight triangle wave reads as wavy). */
+/**
+ * A dotted rule under a range, for a mark weaker than a diagnostic. Drawn as short dashes about a third of a
+ * character wide, so the dot spacing scales with the editor's font size rather than being fixed in pixels.
+ */
+private fun DrawScope.dottedUnderline(color: Color, x1: Float, x2: Float, y: Float, charWidth: Float) {
+    val step = max(2f, charWidth / 3f)
+    var x = x1
+    while (x < x2) {
+        val end = min(x + step * 0.5f, x2)
+        drawLine(color, Offset(x, y), Offset(end, y), strokeWidth = 1f)
+        x += step
+    }
+}
+
 private fun DrawScope.wavyUnderline(color: Color, x1: Float, x2: Float, y: Float) {
     if (x2 <= x1) return
     val amplitude = 1.6f

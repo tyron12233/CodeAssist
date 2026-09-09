@@ -48,6 +48,13 @@ internal class EditorRenderState(private val session: EditorSession) {
     /** Document lines that begin ANY fold region (collapsed or open) — drives the gutter chevrons. */
     var foldableStartLines: Set<Int> = emptySet()
 
+    /**
+     * A plugin's geometric decorations (background/underline/box) binned per document line, resolved to theme
+     * colors. Kept here rather than recomputed in the draw phase because a decoration set changes only when
+     * the daemon's decoration pass lands or the document shifts, while the draw runs every frame of a fling.
+     */
+    var decoByLine: Map<Int, List<DecoSeg>> = emptyMap()
+
     internal lateinit var measurer: TextMeasurer
     internal lateinit var compositeCache: HashMap<Int, TextLayoutResult>
     internal lateinit var gutterNumberCache: HashMap<Int, TextLayoutResult>
@@ -219,11 +226,14 @@ internal fun rememberEditorRenderState(
     // on the session (shifted in place between passes); the render cache re-shapes only the lines whose spans
     // actually changed (per-line stamp), so we push the current overlay maps to it each recomposition.
     val inlayStyle = remember(colors) { SpanStyle(color = colors.textTertiary, fontStyle = FontStyle.Italic) }
+    // The language backend's hints and the plugin tier's are held separately on the session (each pass
+    // replaces its own list wholesale), and are one map here because they render as one run of phantom text.
     val inlayHints = session.inlayHints
-    val perLineInlays = remember(inlayHints, session.doc) {
-        if (inlayHints.isEmpty()) emptyMap() else buildMap<Int, MutableList<InlayPiece>> {
+    val pluginInlays = session.pluginInlays
+    val perLineInlays = remember(inlayHints, pluginInlays, session.doc) {
+        if (inlayHints.isEmpty() && pluginInlays.isEmpty()) emptyMap() else buildMap<Int, MutableList<InlayPiece>> {
             val d = session.doc
-            for (h in inlayHints) {
+            for (h in inlayHints + pluginInlays) {
                 val off = h.offset.coerceIn(0, d.length)
                 val line = d.lineForOffset(off)
                 val col = off - d.lineStart(line)
@@ -236,7 +246,15 @@ internal fun rememberEditorRenderState(
     val perLineSemantic = remember(session.semanticTokens, session.doc, syntax) {
         perLineSemanticSpans(session.semanticTokens, session.doc, syntax)
     }
-    state.renderCache.setSemanticSpans(perLineSemantic)
+    // A plugin's recoloring/strikethrough decorations layer OVER the semantic tokens (see mergeSpanLayers);
+    // its geometric ones go to the canvas as `decoByLine` below.
+    val perLineDecoSpans = remember(session.textDecorations, session.doc, colors) {
+        perLineDecorationSpans(session.textDecorations, session.doc, colors)
+    }
+    state.renderCache.setSemanticSpans(mergeSpanLayers(perLineSemantic, perLineDecoSpans))
+    state.decoByLine = remember(session.textDecorations, session.doc, colors) {
+        perLineDecorationSegs(session.textDecorations, session.doc, colors)
+    }
 
     val foldPlaceholderStyle = remember(colors) {
         // A faint chip behind `...` — a low-alpha overlay (NOT hairline.copy(alpha=…), which would replace the

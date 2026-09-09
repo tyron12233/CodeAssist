@@ -7,7 +7,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.backend.UiGutterMark
 import dev.ide.ui.backend.UiInlayHint
+import dev.ide.ui.backend.UiTextDecoration
 import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.editor.CodeLanguage
 import dev.ide.ui.editor.folding.FoldModel
@@ -15,7 +17,9 @@ import dev.ide.ui.editor.folding.FoldRegion
 import dev.ide.ui.editor.shiftComposePreviews
 import dev.ide.ui.editor.shiftDiagnostics
 import dev.ide.ui.editor.shiftFoldRegions
+import dev.ide.ui.editor.shiftGutterMarks
 import dev.ide.ui.editor.shiftInlayHints
+import dev.ide.ui.editor.shiftTextDecorations
 import dev.ide.ui.editor.shiftSemanticTokens
 import kotlin.math.max
 import kotlin.math.min
@@ -116,6 +120,21 @@ class EditorSession(
      * passes; the host refills the authoritative set via [applyInlayHints].
      */
     var inlayHints by mutableStateOf<List<UiInlayHint>>(emptyList())
+        private set
+
+    /**
+     * A plugin's tinted ranges anchored to this buffer (`platform.editorDecoration`). Shifted in place on
+     * each edit like [semanticTokens], so a coverage or diff tint keeps covering its text between debounced
+     * daemon passes; the host refills the authoritative set via [applyDecorations].
+     */
+    var textDecorations by mutableStateOf<List<UiTextDecoration>>(emptyList())
+        private set
+
+    /**
+     * A plugin's gutter marks for this buffer. Anchored to a LINE rather than an offset, so these ride the
+     * line splice ([dev.ide.ui.editor.shiftGutterMarks]) rather than the offset shifts the rest use.
+     */
+    var gutterMarks by mutableStateOf<List<UiGutterMark>>(emptyList())
         private set
 
     /**
@@ -281,6 +300,9 @@ class EditorSession(
         if (previewMarkers.isNotEmpty()) previewMarkers = shiftComposePreviews(previewMarkers, edit, doc.length)
         if (foldRegions.isNotEmpty()) foldRegions = shiftFoldRegions(foldRegions, edit, doc.length)
         if (inlayHints.isNotEmpty()) inlayHints = shiftInlayHints(inlayHints, edit, doc.length)
+        if (textDecorations.isNotEmpty()) textDecorations = shiftTextDecorations(textDecorations, edit, doc.length)
+        if (pluginInlays.isNotEmpty()) pluginInlays = shiftInlayHints(pluginInlays, edit, doc.length)
+        if (gutterMarks.isNotEmpty()) gutterMarks = shiftGutterMarks(gutterMarks, edit, doc)
         if (!applyingUndo) recordEdit(s, removedText, text, selBefore)
         // Host hook for save-state only (mark dirty); no String is built. Fires per edit, including in a batch.
         onTextEdit?.invoke(edit)
@@ -307,6 +329,32 @@ class EditorSession(
     fun applyInlayHints(result: List<UiInlayHint>) {
         inlayHints = result
     }
+
+    /**
+     * Swap in a plugin tier's fresh marks for this buffer (aligned to the current text). The host calls this
+     * from the daemon's decoration pass.
+     *
+     * The plugin inlays are kept apart from [inlayHints] rather than merged into it: the language pass owns
+     * that list and replaces it wholesale, so a merge would have each pass delete the other's hints on every
+     * run. The render layer reads both.
+     */
+    fun applyDecorations(ranges: List<UiTextDecoration>, gutter: List<UiGutterMark>, inlays: List<UiInlayHint>) {
+        textDecorations = ranges
+        // Resolve each mark's line to the offset it is really anchored to, so the live shift can track it (see
+        // [UiGutterMark.anchorOffset]). A plugin supplies a line; the editor works in offsets.
+        gutterMarks = gutter.map { m ->
+            val line = m.line.coerceIn(0, doc.lineCount - 1)
+            m.copy(line = line, anchorOffset = doc.lineStart(line))
+        }
+        pluginInlays = inlays
+    }
+
+    /**
+     * A plugin's inlay hints, held separately from the language backend's [inlayHints] so the two passes
+     * cannot clobber each other. Shifted with the same helper.
+     */
+    var pluginInlays by mutableStateOf<List<UiInlayHint>>(emptyList())
+        private set
 
     /**
      * Adopt a freshly-computed set of foldable regions (host calls this debounced). The user's collapsed

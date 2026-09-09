@@ -1683,6 +1683,85 @@ data class UiInlayHint(
     val text: String get() = parts.joinToString("") { it.text }
 }
 
+// ---------------------------------------------------------------------------
+// Plugin editor decorations
+// ---------------------------------------------------------------------------
+
+/**
+ * How a [UiTextDecoration] marks its range. Mirrors `dev.ide.plugin.editor.DecorationStyle`; the editor
+ * resolves each to a draw in its own canvas.
+ */
+enum class UiDecorationStyle {
+    Background, Underline, WavyUnderline, DottedUnderline, Strikethrough, Foreground, Box,
+}
+
+/**
+ * The color role a decoration asks for, resolved against the active theme by the editor rather than sent as a
+ * literal color. A plugin has no way to know which theme is active, and a value that reads on one does not on
+ * the other. Mirrors `dev.ide.plugin.editor.DecorationTint`.
+ */
+enum class UiDecorationTint {
+    Accent, Info, Success, Warning, Error, Muted, Added, Removed, Modified,
+}
+
+/**
+ * A plugin's mark on a span of text: `[startOffset, endOffset)`, how to draw it, and which theme role colors
+ * it. [order] decides which of two marks covering the same text draws last.
+ */
+data class UiTextDecoration(
+    val startOffset: Int,
+    val endOffset: Int,
+    val style: UiDecorationStyle,
+    val tint: UiDecorationTint,
+    val tooltip: String? = null,
+    val order: Int = 0,
+)
+
+/**
+ * A plugin's glyph on one gutter line: an icon id from the IDE's registry, a theme role, and optionally the
+ * action id to invoke when it is tapped. [line] is zero-based.
+ */
+data class UiGutterMark(
+    val line: Int,
+    val iconId: String,
+    val tint: UiDecorationTint = UiDecorationTint.Muted,
+    val tooltip: String? = null,
+    val actionId: String? = null,
+    val order: Int = 0,
+
+    /**
+     * The document offset the mark is really anchored to, with [line] derived from it. Set by the editor when
+     * the mark arrives (from the line's start), which is why it defaults to unset here: a plugin thinks in
+     * lines, and nothing outside the editor needs the offset.
+     *
+     * The anchor exists because a line number does not survive an edit. Everything else the editor holds for
+     * a buffer is offset-anchored and shifts in place per keystroke; a mark that only knew its line would sit
+     * on the wrong line for the ~300ms until the next pass, which is exactly when the user is looking at it.
+     * This is the same arrangement [UiDiagnostic] has, where the offsets are authoritative and line/col are
+     * recomputed from them.
+     */
+    val anchorOffset: Int = -1,
+)
+
+/**
+ * Everything the plugin tier has to say about one file's appearance, as one pass result.
+ *
+ * The three lists travel together because they come from one collection over the same text: applying them
+ * separately would let a decoration land against one revision and a gutter mark against another.
+ * [inlays] reuses [UiInlayHint] so a plugin's hint renders through the same path as a language backend's.
+ */
+data class UiEditorDecorations(
+    val ranges: List<UiTextDecoration> = emptyList(),
+    val gutter: List<UiGutterMark> = emptyList(),
+    val inlays: List<UiInlayHint> = emptyList(),
+) {
+    val isEmpty: Boolean get() = ranges.isEmpty() && gutter.isEmpty() && inlays.isEmpty()
+
+    companion object {
+        val EMPTY = UiEditorDecorations()
+    }
+}
+
 /** One parameter within a [UiSignature]; [start]/[end] are its `[start, end)` offsets into [UiSignature.label]
  *  (for highlighting), both -1 when not located. [alreadyNamed] is true when a named argument earlier in the
  *  call has already supplied it, so the popup dims it. */
@@ -1942,6 +2021,19 @@ sealed interface UiSettingControl {
     data class Action(
         override val key: String, override val title: String, override val description: String? = null,
         val buttonLabel: String = "Run", val destructive: Boolean = false,
+        override val advanced: Boolean = false, override val group: String? = null,
+    ) : UiSettingControl
+
+    /**
+     * A keyboard shortcut, recorded by pressing it.
+     *
+     * [value] is the spec in force and [defaultValue] the one the command ships with, so the row can show
+     * what pressing "reset" would restore. [display] is [value] rendered for a human (`Ctrl/Cmd+Alt+L`),
+     * formatted by the backend because the same formatting is used in menus.
+     */
+    data class Shortcut(
+        override val key: String, override val title: String, override val description: String? = null,
+        val value: String = "", val defaultValue: String = "", val display: String = "",
         override val advanced: Boolean = false, override val group: String? = null,
     ) : UiSettingControl
 

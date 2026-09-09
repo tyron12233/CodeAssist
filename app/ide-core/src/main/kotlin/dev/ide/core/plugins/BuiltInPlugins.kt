@@ -19,6 +19,8 @@ import dev.ide.build.BUILD_CONTROL
 import dev.ide.build.KOTLIN_COMPILER_PLUGIN_EP
 import dev.ide.build.SOURCE_GENERATOR_EP
 import dev.ide.core.ACTION_MANAGER
+import dev.ide.core.keymap.EditorKeymapPlugin
+import dev.ide.core.EDITOR_DECORATIONS
 import dev.ide.core.ANDROID_RESOURCE_SERVICE
 import dev.ide.core.ActiveEngineXmlResourceHost
 import dev.ide.core.ApplicationEnvironment
@@ -154,6 +156,7 @@ import dev.ide.plugin.Plugin
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.PluginRegistration
 import dev.ide.plugin.impl.ActionManager
+import dev.ide.plugin.impl.EditorDecorationCollector
 import dev.ide.ui.ext.UiPlugin
 import dev.ide.vcs.ui.VcsUiPlugin
 import java.nio.file.Files
@@ -190,6 +193,9 @@ class BuiltInPlugin(val engine: Plugin, val ui: UiPlugin? = null)
 object BuiltInPlugins {
     fun assemble(env: ApplicationEnvironment, codecs: FacetCodecRegistry): List<BuiltInPlugin> = listOf(
         BuiltInPlugin(PlatformPlugin()),
+        // The keymap installs the resolver the editor's key handler asks, so it loads early: the editor's
+        // built-in defaults answer until it does, but a user's rebinding does not.
+        BuiltInPlugin(EditorKeymapPlugin(preference = env.preferences)),
         BuiltInPlugin(JdtLanguagePlugin()),
         BuiltInPlugin(JavaPsiLanguagePlugin()),
         BuiltInPlugin(XmlLanguagePlugin()),
@@ -800,6 +806,9 @@ private class IdeCoreServicesPlugin : Plugin {
         }
         reg.service(ACTION_MANAGER, ServiceScopeLevel.WORKSPACE) {
             ActionManager(getService(ENGINE_CONTEXT).platform.extensions)
+        }
+        reg.service(EDITOR_DECORATIONS, ServiceScopeLevel.WORKSPACE) {
+            EditorDecorationCollector(getService(ENGINE_CONTEXT).platform.extensions)
         }
         reg.service(DEPENDENCY_SERVICE, ServiceScopeLevel.WORKSPACE) {
             DependencyService(

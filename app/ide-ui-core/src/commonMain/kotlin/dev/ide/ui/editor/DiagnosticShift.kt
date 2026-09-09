@@ -2,7 +2,9 @@ package dev.ide.ui.editor
 
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.backend.UiGutterMark
 import dev.ide.ui.backend.UiInlayHint
+import dev.ide.ui.backend.UiTextDecoration
 import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.editor.core.EditSpan
 import dev.ide.ui.editor.core.EditorDocument
@@ -163,5 +165,45 @@ fun shiftInlayHints(hints: List<UiInlayHint>, edit: EditSpan, docLength: Int): L
             h.offset >= removedEnd -> h.copy(offset = (h.offset + edit.delta).coerceIn(0, docLength))
             else -> null
         }
+    }
+}
+
+/**
+ * Re-map a plugin's tinted ranges across a single [edit], the same live-shift the editor does for semantic
+ * tokens, so a coverage or diff tint keeps covering its text while the user types instead of jumping at the
+ * next debounced pass. A range the edit fully consumed is dropped.
+ */
+fun shiftTextDecorations(decorations: List<UiTextDecoration>, edit: EditSpan, docLength: Int): List<UiTextDecoration> {
+    if (decorations.isEmpty() || edit.isNoOp) return decorations
+    val out = ArrayList<UiTextDecoration>(decorations.size)
+    for (d in decorations) {
+        val start = mapStart(d.startOffset, edit).coerceIn(0, docLength)
+        val end = mapEnd(d.endOffset, edit).coerceIn(start, docLength)
+        if (end <= start) continue
+        out.add(d.copy(startOffset = start, endOffset = end))
+    }
+    return out
+}
+
+/**
+ * Re-anchor a plugin's gutter marks across a single [edit], so a mark stays on its line as the user types
+ * above it instead of sitting one line off until the next debounced pass.
+ *
+ * A mark reads as line-anchored to the plugin that made it, but it is shifted by OFFSET here, off
+ * [UiGutterMark.anchorOffset], with the line recomputed from the post-edit [doc]. Shifting the line number
+ * directly cannot work: a splice replaces a range of old lines with a range of new ones, and a mark on a line
+ * inside that range has no line number to map to, while the offset of the text it marked is exactly what the
+ * edit is expressed in. This is the same arrangement `shiftComposePreviews` uses for the `@Preview` gutter
+ * icons, which are line-anchored in the same way and offset-anchored underneath.
+ *
+ * A mark whose anchor the edit deleted clamps to the edit point rather than being dropped, so it can briefly
+ * share a line with another mark; the render layer collapses a line to one glyph, and the next pass corrects
+ * the set.
+ */
+fun shiftGutterMarks(marks: List<UiGutterMark>, edit: EditSpan, doc: EditorDocument): List<UiGutterMark> {
+    if (marks.isEmpty() || edit.isNoOp) return marks
+    return marks.map { m ->
+        val offset = mapStart(m.anchorOffset, edit).coerceIn(0, doc.length)
+        m.copy(anchorOffset = offset, line = doc.lineForOffset(offset))
     }
 }

@@ -32,7 +32,7 @@ const val PLUGIN_API_VERSION: Int = 3
  * scaffolded with a coordinate that resolves:
  *
  * ```
- * compileOnly(platform("io.github.tyron12233:plugin-bom:2.2.0"))
+ * compileOnly(platform("io.github.tyron12233:plugin-bom:2.7.0"))
  * compileOnly("io.github.tyron12233:plugin-api")
  * compileOnly("io.github.tyron12233:platform-core")
  * ```
@@ -129,8 +129,74 @@ const val PLUGIN_API_VERSION: Int = 3
  *    a value type with no representation names its own table instead of failing an unrelated save later;
  *  - a `module.toml` table two codecs claim is logged, naming both. Last registration still wins, but the
  *    loser keeps working through [dev.ide.model.FacetCodecRegistry.codecFor], so the takeover had no symptom.
+ *
+ * `2.4.0` opened the editor's appearance: [dev.ide.plugin.editor.EditorDecorationProvider] on
+ * `platform.editorDecoration` marks up the text of any open file with tinted ranges, gutter glyphs and
+ * inlays. Semantic highlighting, folding and type hints were already contributable, but only by implementing
+ * a whole `dev.ide.lang.LanguageBackend` for a language, which a coverage tint, a version-control change bar
+ * or a bookmark has no business doing: they apply to files in every language and know nothing about parsing
+ * one. Additive, so [PLUGIN_API_VERSION] stays at `3`.
+ *
+ * A decoration is data, and its color is a role ([dev.ide.plugin.editor.DecorationTint]) the host resolves
+ * against the active theme rather than a literal: the IDE's themes are generated, so a plugin has nothing
+ * fixed to have hard-coded. Providers are pulled on the editor's own debounced pass run, so a provider needs
+ * no channel into the UI and is cancelled when the user types. It also added
+ * [PluginCapabilities.UI_EDITOR_DECORATION], which is worth declaring because it is the one contribution
+ * that changes how the user's own code looks rather than adding a surface they choose to open.
+ *
+ * `2.5.0` finished the editor surface with the two things a decoration cannot be, both in `plugin-ui-api` and
+ * both registered by a UI facet ([PluginCapabilities.UI_EDITOR_LAYER],
+ * [PluginCapabilities.UI_EDITOR_PAINTER]). Additive, so [PLUGIN_API_VERSION] stays at `3`.
+ *
+ *  - `dev.ide.plugin.ui.EditorLayer` places real composables at document positions, anchored at an offset,
+ *    after a line, or on a row above one. A hover card, an inline button and a code-lens row need touch
+ *    targets and Material components, which no amount of data can express. The host positions them in the
+ *    layout phase, so they scroll with the text without recomposing.
+ *  - `dev.ide.plugin.ui.EditorPainter` draws into the editor's canvas, below the text or above it. This is
+ *    the escape hatch for the one thing the decoration tier refuses on purpose: a plugin whose colors are its
+ *    own (a blame heatmap, a coverage gradient) rather than one of the theme's named roles.
+ *
+ * The painter is also the first contribution in the SPI that runs inside a draw, which is why it is the only
+ * one with a failure policy of its own: a painter that throws is retired for the rest of the session rather
+ * than retried, because a draw that throws once throws every frame. `plugin-ui-api` gained a `compileOnly`
+ * dependency on compose-ui for that one signature, on the same terms as the runtime it already had.
+ *
+ * `2.6.0` opened the tab itself: `dev.ide.plugin.ui.EditorViewMode` adds a surface beside the IDE's own Code,
+ * Blocks, Preview and Split, and its `isDefault` claim decides which files OPEN into that surface, which is
+ * how a plugin comes to own a file kind. Additive, so [PLUGIN_API_VERSION] stays at `3`.
+ *
+ * A pane is a view of the tab's buffer rather than a second copy of it: `replaceText` writes through the one
+ * document the code editor edits, so a pane's edit is undoable, is analysed, and marks the tab dirty exactly
+ * as typing does, and the user can switch to Code and see what the pane wrote. Code stays reachable from the
+ * toggle even for a claimed kind, deliberately: a pane can be wrong about a file, and a user who cannot see
+ * the text has no way to find out why.
+ *
+ * The registry behind this existed and was never wired to anything. Wiring it also meant opening the UI's own
+ * `EditorViewMode` from an enum into a value over its persisted id, the same move the project model's
+ * vocabularies made in `2.0.0` and for the same reason. The four built-in ids are unchanged, so no session
+ * file moved.
+ *
+ * `2.7.0` added a keymap: `dev.ide.plugin.keymap` and `platform.keyBinding`, so a plugin can bind a keyboard
+ * shortcut and a user can rebind one. Additive, so [PLUGIN_API_VERSION] stays at `3`.
+ *
+ * A binding is a `Shortcut` (one press or a chord) plus an action id plus a `KeyContext`, and a shortcut's
+ * `Primary` modifier is Command on macOS and Control elsewhere, which is exactly what the IDE's shortcuts
+ * meant when they were `isCtrlPressed || isMetaPressed` conditions. Three layers resolve a press, in
+ * decreasing authority: the user's own bindings, then the contributions on the extension point, then nothing.
+ * The user always wins, or rebinding would be advisory. A shortcut two commands claim is reported rather than
+ * resolved silently, since the loser looks broken to whoever presses the key.
+ *
+ * The editor's own shortcuts moved onto it: roughly twenty `if` conditions inside the editor's key handler
+ * became `dev.ide.ui.ext.EDITOR_KEY_DEFAULTS`, a table the editor falls back to when no engine is present and
+ * the engine turns into bindings when it is. Each modifier variant that used to be a branch inside one
+ * handler (declaration vs implementation, next vs previous diagnostic, line vs block comment) is now its own
+ * command, and so independently rebindable.
+ *
+ * What deliberately did NOT move: caret motion, text input, and the keys a popup or a live template owns
+ * while it is open. Those are the text-input and modal contracts rather than commands, they have no action to
+ * bind to, and an IME commit is not a key press at all.
  */
-const val PLUGIN_SPI_VERSION: String = "2.3.0"
+const val PLUGIN_SPI_VERSION: String = "2.7.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry
