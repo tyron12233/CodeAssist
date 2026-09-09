@@ -25,7 +25,7 @@ import java.io.DataOutputStream
  */
 object ResolvedTreeCodec {
 
-    const val FORMAT = 1
+    const val FORMAT = 2
 
     class Writer(val d: DataOutputStream) {
         fun int(v: Int) = d.writeInt(v)

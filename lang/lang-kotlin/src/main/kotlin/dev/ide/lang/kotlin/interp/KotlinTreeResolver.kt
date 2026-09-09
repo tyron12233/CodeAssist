@@ -2187,13 +2187,38 @@ class KotlinTreeResolver(
         // taking the receiver first). Mirrors [infixNode]; without the extension branch a `list + x` would be
         // dispatched as a non-existent instance `plus` on the collection.
         val leftFqn = leftType.qualifiedName
+        // The operator's OVERLOAD is chosen by the right operand's type: `list + list` is `Collection<T>.plus(
+        // elements: Iterable<T>)`, `list + x` is `plus(element: T)`: taking the first single-param candidate
+        // handed JetNews's `listOf(highlightedPost) + recommendedPosts` the ELEMENT overload, nesting the second
+        // list as one element (`find { it.id == … }` then read `id` on a List).
+        val rightType = runCatching { resolver.inferType(right) }.getOrNull()
         service.membersNamed(leftFqn, leftType.typeArguments, convention)
-            .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+            .filter { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+            .let { pickOperatorOverload(it, rightType) }
             ?.let { return RNode.Call(toCallable(it), DispatchKind.OPERATOR, lower(left), listOf(RArg(lower(right))), key, span(e)) }
         service.extensionsFor(leftFqn, leftType.typeArguments, convention)
-            .firstOrNull { it.name == convention && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 && extensionInScope(it) }
+            .filter { it.name == convention && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 && extensionInScope(it) }
+            .let { pickOperatorOverload(it, rightType) }
             ?.let { return RNode.Call(toCallable(it), DispatchKind.EXTENSION, lower(left), listOf(RArg(lower(right))), key, span(e)) }
         return unsupported("no `$convention` on $leftFqn", e)
+    }
+
+    /** Among single-parameter operator [candidates], the one whose parameter accepts [argType] most
+     *  specifically: a candidate with a CONCRETE parameter type the argument is assignable to beats one whose
+     *  parameter is a bare type parameter (which accepts anything, like `plus(element: T)`), and an exact type match
+     *  beats a supertype. With no argument type (or one candidate) the first candidate stands, as before. */
+    private fun pickOperatorOverload(candidates: List<KotlinSymbol>, argType: KotlinType?): KotlinSymbol? {
+        if (candidates.size <= 1 || argType == null) return candidates.firstOrNull()
+        fun param(c: KotlinSymbol) = c.paramTypes.firstOrNull() as? KotlinType
+        val accepting = candidates.filter { c ->
+            val pt = param(c) ?: return@filter true
+            pt.isTypeParameter || runCatching { pt.isAssignableFrom(argType) }.getOrDefault(false)
+        }
+        val concrete = accepting.filter { c -> param(c)?.isTypeParameter == false }
+        return concrete.firstOrNull { param(it)?.qualifiedName == argType.qualifiedName }
+            ?: concrete.firstOrNull()
+            ?: accepting.firstOrNull()
+            ?: candidates.first()
     }
 
     /**
@@ -2705,7 +2730,20 @@ class KotlinTreeResolver(
         // The vararg index IS part of the key: `listOf(element: T)` and `listOf(vararg elements: T)` both
         // decode to params `[T]`, so without it the dedup would merge them and DROP the vararg overload —
         // leaving `listOf("a", "b")` (which only the vararg accepts) unresolvable.
-        val candidates = inScope
+        // The same source overload can surface TWICE: once from the live source model with its parameter types,
+        // once from a symbol source that carries no types (every `paramTypes` slot null). The untyped copy is
+        // unfalsifiable (`argsBindable` treats a null parameter type as "accepts"), so it survives every
+        // type-directed rung and wins ties its typed twin correctly loses: JetNews's `PostScreen(post, false, {},
+        // false, {})` ran the untyped copy of the FIVE-param overload (whose typed twin can't take `false` for a
+        // function param). Drop an all-null copy whenever a typed sibling of the same name/arity/vararg exists.
+        val typedWhereKnown = inScope.filter { c ->
+            val untyped = c.paramTypes.isNotEmpty() && c.paramTypes.all { it == null }
+            !untyped || inScope.none { o ->
+                o !== c && o.kind == c.kind && o.name == c.name && o.varargParamIndex == c.varargParamIndex &&
+                    o.paramTypes.size == c.paramTypes.size && o.paramTypes.any { it != null }
+            }
+        }
+        val candidates = typedWhereKnown
             .distinctBy { c -> c.kind.toString() + "/" + c.name + "/" + c.varargParamIndex + "/" + c.paramTypes.map { (it as? KotlinType)?.qualifiedName } }
         if (candidates.isEmpty()) return null
         if (candidates.size == 1) return candidates.single()
@@ -2982,7 +3020,17 @@ class KotlinTreeResolver(
             // whole function's lowering — degrade to "couldn't infer this arg" (null), which never disqualifies.
             val at = runCatching { valueArgs[i].getArgumentExpression()?.let(resolver::inferType) }.getOrNull()
             val pt = callee.paramTypes.getOrNull(indices[i]) as? KotlinType
-            at == null || pt == null ||
+            // A plain value of a KNOWN non-function type (`false`, a `Post`) can never bind to a function-typed
+            // parameter: `isAssignableFrom` is unreliable for `kotlin.FunctionN` classifiers and defaulted to
+            // "accepts", so JetNews's `PostScreen(post, false, {}, false, {})` stayed applicable to the exact-arity
+            // overload whose 4th parameter is `onToggleFavorite: () -> Unit` and ran its body with a `Post`.
+            if (at != null && pt != null && !exact && isFunctionType(pt) && !pt.isTypeParameter &&
+                !isFunctionType(at) && !at.isTypeParameter && !isLambdaArg(valueArgs[i].getArgumentExpression())
+            ) return@all false
+            // An argument whose inferred type is a bare TYPE PARAMETER (`(x as Result.Success).data`: the raw cast
+            // leaves `data: T`) has an unknown actual type: it must not disqualify (nor select) a candidate, exactly
+            // like an uninferred argument, else JetNews's `PostScreen(post, …)` matched NO overload and tied out.
+            at == null || at.isTypeParameter || pt == null ||
                 if (exact) pt.qualifiedName == at.qualifiedName
                 // A type-parameter parameter (`listOf(element: T)`) accepts ANY argument — but `isAssignableFrom`
                 // on a bare `T` classifier always says no (no supertype chain reaches "T"), which would

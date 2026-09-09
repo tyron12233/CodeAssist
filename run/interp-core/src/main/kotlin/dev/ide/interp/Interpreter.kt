@@ -207,11 +207,14 @@ class Interpreter(
         is ResolvedCallable.Library -> callee.paramTypes.size
     }
 
-    /** The lowered source function [callee] targets: the resolver-chosen overload (by declared arity) first, so
-     *  an omitted-defaults call finds the full declaration rather than a same-named shorter overload; the exact
-     *  call-arity key is the fallback when the declared arity isn't recorded. */
+    /** The lowered source function [callee] targets: its package-qualified `declId` first (the key the
+     *  cross-file expander registers a function under when ANOTHER package's same-named, same-arity function
+     *  already holds the bare key, see `expandPreviewModel`), then the resolver-chosen overload (by declared
+     *  arity) so an omitted-defaults call finds the full declaration rather than a same-named shorter overload;
+     *  the exact call-arity key is the fallback when the declared arity isn't recorded. */
     private fun sourceFunctionFor(callee: ResolvedCallable, argCount: Int): ResolvedFunction? =
-        declaredArity(callee)?.let { functions["${callee.displayName}/$it"] }
+        (callee as? ResolvedCallable.Source)?.let { functions[it.declId] }
+            ?: declaredArity(callee)?.let { functions["${callee.displayName}/$it"] }
             ?: functions["${callee.displayName}/$argCount"]
 
     /** The [topLevelPropertyState] key when [node] is a read of a top-level `var` backing field (a no-arg
@@ -1325,8 +1328,8 @@ class Interpreter(
         if (hasMethod) return original // a real inline method exists → the failure is something else
         return InterpreterException(
             "`${callee.displayName}` is an inline-only function (no JVM method on `$owner`) the interpreter " +
-                    "doesn't model yet — only the stdlib scope functions (repeat/let/also/run/takeIf/takeUnless) and " +
-                    "the empty/blank predicates (isNotBlank/isNotEmpty/isNullOrBlank/isNullOrEmpty) are built in",
+                    "doesn't model yet: only the stdlib scope functions (repeat/let/also/run/takeIf/takeUnless), " +
+                    "the empty/blank predicates (isNotBlank/isNotEmpty/isNullOrBlank/isNullOrEmpty), floorDiv/mod and orEmpty are built in",
         )
     }
 
@@ -1826,6 +1829,27 @@ class Interpreter(
             // so the CharSequence and Collection/Map overloads of `isNotEmpty`/`isNullOrEmpty` both resolve.
             call.dispatch == DispatchKind.EXTENSION && args.isEmpty() && name in EMPTY_BLANK_PREDICATES ->
                 evalEmptyBlankPredicate(name, receiver())
+            // `Int/Long.floorDiv(other)` and `.mod(other)` (`kotlin.NumbersKt`) are `@InlineOnly` too: JetNews's
+            // `InterestsAdaptiveContentLayout` computes `index.floorDiv(columns)` inside its measure lambda, and
+            // the failure there was sunk to a null MeasureResult ("Asking for measurement result of unmeasured
+            // layout modifier"). Compute them on the evaluated operands with Kotlin's semantics.
+            (name == "floorDiv" || name == "mod") && call.dispatch == DispatchKind.EXTENSION && args.size == 1 ->
+                evalFloorDivMod(name, receiver(), eval(args[0].value, env))
+            // `x.orEmpty()` on a nullable String / List / Set / Map / array: `@InlineOnly` (`this ?: empty…()`), no
+            // JVM method. The receiver's runtime value decides; a NULL receiver takes the empty value the callee's
+            // facade implies (arrays are modeled as Lists). JetNews `PostScreen`: `post.url.orEmpty()`-style reads.
+            name == "orEmpty" && call.dispatch == DispatchKind.EXTENSION && args.isEmpty() -> {
+                val recv = receiver()
+                val owner = (call.callee as? ResolvedCallable.Library)?.ownerFqn ?: ""
+                Handled(
+                    recv ?: when {
+                        owner.endsWith("StringsKt") -> ""
+                        owner.endsWith("MapsKt") -> emptyMap<Any?, Any?>()
+                        owner.endsWith("SetsKt") -> emptySet<Any?>()
+                        else -> emptyList<Any?>() // CollectionsKt / ArraysKt
+                    }
+                )
+            }
             // `"fmt".format(args)` (extension on a String) / `String.format(fmt, args)` (companion) + their
             // Locale overloads — @InlineOnly delegations to java.lang.String.format, so no JVM method exists to
             // reflect. Route to the real formatter here.
@@ -2043,6 +2067,28 @@ class Interpreter(
         val node = args.getOrNull(1)?.value ?: return fallback
         val lambda = eval(node, env) as? InterpretedLambda ?: return fallback
         return runCatching { lambda.invoke(emptyList())?.toString() }.getOrNull() ?: fallback
+    }
+
+    /** `floorDiv`/`mod` over the integral and floating operand pairs Kotlin declares (integral results widen to
+     *  `Long` when either side is a `Long`; `mod` on `Float`/`Double` is the floored remainder). Null when the
+     *  operands aren't a declared pair, so the honest dispatch boundary still fires. */
+    private fun evalFloorDivMod(name: String, recv: Any?, other: Any?): Handled? {
+        fun integral(v: Any?): Long? = when (v) { is Int -> v.toLong(); is Long -> v; is Short -> v.toLong(); is Byte -> v.toLong(); else -> null }
+        val a = integral(recv)
+        val b = integral(other)
+        if (a != null && b != null) {
+            val wide = recv is Long || other is Long
+            val r = if (name == "floorDiv") Math.floorDiv(a, b) else Math.floorMod(a, b)
+            return Handled(if (wide) r else r.toInt())
+        }
+        if (name == "mod") {
+            if (recv is Double && (other is Double || other is Float)) {
+                val o = (other as Number).toDouble(); return Handled(((recv % o) + o) % o)
+            }
+            if (recv is Float && other is Float) return Handled(((recv % other) + other) % other)
+            if (recv is Float && other is Double) return Handled(((recv.toDouble() % other) + other) % other)
+        }
+        return null
     }
 
     /** Compute an `@InlineOnly` empty/blank predicate (`isNotBlank`/`isNotEmpty`/`isNullOrBlank`/
@@ -3608,6 +3654,10 @@ class Interpreter(
             "kotlin.PreconditionsKt",
             // `kotlin.math.*` (sqrt/abs/pow/roundToInt/…) — @InlineOnly delegations to java.lang.Math.
             "kotlin.math.MathKt",
+            // `Int/Long.floorDiv`/`mod`: @InlineOnly delegations to java.lang.Math.floorDiv/floorMod.
+            "kotlin.NumbersKt",
+            // `Set?.orEmpty()` lives on its own facade (String/List/Map/array `orEmpty` are on facades above).
+            "kotlin.collections.SetsKt",
         )
 
         /** The `@InlineOnly` empty/blank predicates, dispatched by name in [evalEmptyBlankPredicate]. */
@@ -3683,13 +3733,22 @@ class SourceObject(val cls: ResolvedClass, val fields: MutableMap<String, Any?> 
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
-        if (!cls.isData || other !is SourceObject || other.cls.fqn != cls.fqn) return false
+        if (other !is SourceObject || other.cls.fqn != cls.fqn) return false
+        // An enum ENTRY is identified by its class + name, not by the instance: the Compose preview re-creates
+        // the interpreter across recompositions while a top-level `val` (JetNews's `post3`) keeps entries minted by
+        // an earlier one, so `when (markup.type) { MarkupType.Link -> … }` compared two instances of the same
+        // entry: by identity they differ, the `when` fell through to Unit, and the paragraph body vanished
+        // ("kotlin.Unit cannot be cast to AnnotatedString$Range").
+        if (enumName != null || other.enumName != null) return enumName != null && enumName == other.enumName
+        if (!cls.isData) return false
         return cls.componentNames.all { fields[it] == other.fields[it] }
     }
 
-    override fun hashCode(): Int =
-        if (!cls.isData) System.identityHashCode(this)
-        else cls.componentNames.fold(0) { acc, n -> acc * 31 + (fields[n]?.hashCode() ?: 0) }
+    override fun hashCode(): Int = when {
+        enumName != null -> cls.fqn.hashCode() * 31 + enumName.hashCode()
+        !cls.isData -> System.identityHashCode(this)
+        else -> cls.componentNames.fold(0) { acc, n -> acc * 31 + (fields[n]?.hashCode() ?: 0) }
+    }
 
     override fun toString(): String = when {
         enumName != null -> enumName!!

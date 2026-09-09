@@ -28,20 +28,26 @@ object SerializationSyntheticMembers : KotlinSyntheticMemberProvider {
      *  return type. */
     private const val KSERIALIZER_FQN = "kotlinx.serialization.KSerializer"
 
-    override fun staticMembers(cls: RawClass, ctx: KotlinSyntheticMemberProvider.Context): List<RawCallable> {
-        if (SERIALIZABLE_ANNOTATION !in cls.annotationNames) return emptyList()
-        if (!ctx.hasType(KSERIALIZER_FQN)) return emptyList()
-        return listOf(
-            RawCallable(
-                name = "serializer",
-                isFunction = true,
-                receiverText = null,
-                returnText = "$KSERIALIZER_FQN<${cls.fqn}>",
-                initializerText = null,
-                paramTexts = emptyList(),
-                ctx = cls.ctx,
-                node = cls.node, // navigate to the class declaration (no synthetic node exists)
-            )
-        )
-    }
+    override fun staticMembers(cls: RawClass, ctx: KotlinSyntheticMemberProvider.Context): List<RawCallable> =
+        if (targets(cls, ctx)) listOf(serializerOf(cls)) else emptyList()
+
+    /** A `@Serializable object` (JetNews's `@Serializable data object HomeKey : NavKey`) has no companion: the
+     *  plugin puts `serializer()` on the object ITSELF, so `HomeKey.serializer()` is an instance member of the
+     *  singleton. Without it the reference was a false `kt.unresolved` that refused the file's previews. */
+    override fun instanceMembers(cls: RawClass, ctx: KotlinSyntheticMemberProvider.Context): List<RawCallable> =
+        if (cls.isObject && !cls.isCompanion && targets(cls, ctx)) listOf(serializerOf(cls)) else emptyList()
+
+    private fun targets(cls: RawClass, ctx: KotlinSyntheticMemberProvider.Context): Boolean =
+        SERIALIZABLE_ANNOTATION in cls.annotationNames && ctx.hasType(KSERIALIZER_FQN)
+
+    private fun serializerOf(cls: RawClass) = RawCallable(
+        name = "serializer",
+        isFunction = true,
+        receiverText = null,
+        returnText = "$KSERIALIZER_FQN<${cls.fqn}>",
+        initializerText = null,
+        paramTexts = emptyList(),
+        ctx = cls.ctx,
+        node = cls.node, // navigate to the class declaration (no synthetic node exists)
+    )
 }

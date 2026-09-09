@@ -302,6 +302,118 @@ class KotlinCrossFilePreviewTest {
     }
 
     @Test
+    fun followsTheDeclaringPackageWhenTwoFilesDeclareTheSameFunctionName() {
+        // JetNews: `ui.utils.BookmarkButton(isBookmarked, onClick, modifier)` (Material) and
+        // `glance.ui.BookmarkButton(id, isBookmarked, onToggle)` (Glance): same simple name, same arity. The
+        // Material preview imports the former; by-name merging handed it the Glance body (whose
+        // `GlanceTheme.colors` read is null outside a widget → the card rendered blank). The expander must
+        // follow the package the call RESOLVED to, and must not drag the unrelated file in at all.
+        val entry = """
+            package com.example.ui.home
+            import com.example.ui.utils.BookmarkButton
+            fun preview(): Int = BookmarkButton(isBookmarked = false, onClick = {})
+        """.trimIndent()
+        val (service, dir) = serviceOver(
+            linkedMapOf(
+                // The wrong file sorts (and is listed) FIRST so an order-dependent "first file wins" would pick it.
+                "Glance.kt" to """
+                    package com.example.glance
+                    fun BookmarkButton(id: String, isBookmarked: Boolean, onToggle: (String) -> Unit): Int = 2
+                """.trimIndent() + "\n",
+                "Utils.kt" to """
+                    package com.example.ui.utils
+                    fun BookmarkButton(isBookmarked: Boolean, onClick: () -> Unit, modifier: Int = 0): Int = 1
+                """.trimIndent() + "\n",
+                "Use.kt" to entry,
+            ),
+        )
+        val model = lowerCrossFile(service, dir, "Use.kt", entry)
+        val preview = assertNotNull(model.program["preview/0"], "the entry should lower")
+        assertTrue(preview.isComplete, "the call must lower; diags=${preview.diagnostics}")
+        val merged = assertNotNull(model.program["BookmarkButton/3"], "the imported BookmarkButton must be merged")
+        assertEquals(
+            listOf("isBookmarked", "onClick", "modifier"), merged.params.map { it.name },
+            "the bare key must hold the IMPORTED package's function, not the same-named one from another package",
+        )
+        assertTrue(
+            model.program.values.none { fn -> fn.params.any { it.name == "id" } },
+            "the unrelated package's same-named function must not be merged; keys=${model.program.keys}",
+        )
+    }
+
+    @Test
+    fun keepsBothSameNamedFunctionsReachableWhenBothPackagesAreCalled() {
+        // Both packages' `BookmarkButton` are reached (the entry calls the imported one and a helper in the other
+        // package calls its own). The bare `name/arity` key can hold only one; the other must stay callable under
+        // its package-qualified key: the callee's `declId` shape the interpreter tries first.
+        val entry = """
+            package com.example.ui.home
+            import com.example.ui.utils.BookmarkButton
+            import com.example.glance.other
+            fun preview(): Int = BookmarkButton(isBookmarked = false, onClick = {}) * 10 + other()
+        """.trimIndent()
+        val (service, dir) = serviceOver(
+            linkedMapOf(
+                "Glance.kt" to """
+                    package com.example.glance
+                    fun BookmarkButton(id: String, isBookmarked: Boolean, onToggle: (String) -> Unit): Int = 2
+                    fun other(): Int = BookmarkButton("x", true) { }
+                """.trimIndent() + "\n",
+                "Utils.kt" to """
+                    package com.example.ui.utils
+                    fun BookmarkButton(isBookmarked: Boolean, onClick: () -> Unit, modifier: Int = 0): Int = 1
+                """.trimIndent() + "\n",
+                "Use.kt" to entry,
+            ),
+        )
+        val model = lowerCrossFile(service, dir, "Use.kt", entry)
+        assertTrue(model.program["preview/0"]?.isComplete == true, "diags=${model.program["preview/0"]?.diagnostics}")
+        val bare = assertNotNull(model.program["BookmarkButton/3"])
+        assertEquals(listOf("isBookmarked", "onClick", "modifier"), bare.params.map { it.name }, "the entry's own callee holds the bare key")
+        val qualified = assertNotNull(
+            model.program["com.example.glance.BookmarkButton/3"],
+            "the colliding package's function must be registered under its qualified key; keys=${model.program.keys}",
+        )
+        assertEquals(listOf("id", "isBookmarked", "onToggle"), qualified.params.map { it.name })
+        assertNotNull(model.program["other/0"], "the helper that reaches the other package must be merged")
+    }
+
+    @Test
+    fun mergesACrossFileExtensionPropertyReadByAMergedFunction() {
+        // JetNews: `PostScreen`'s preview calls `PostContent(...)` (another file), whose body reads the file-private
+        // `val ColorScheme.codeBlockBackground: Color get() = …`. The by-name declaring-file lookup skipped
+        // extension PROPERTIES, so the read stayed a missing source callee: "`codeBlockBackground` is called but
+        // wasn't lowered (its declaration is missing or didn't parse)".
+        val entry = """
+            package com.example.compose
+            fun preview(): Int = show(Box(21))
+        """.trimIndent()
+        val (service, dir) = serviceOver(
+            mapOf(
+                "Box.kt" to "package com.example.compose\n\nclass Box(val v: Int)\n",
+                "Content.kt" to """
+                    package com.example.compose
+                    fun show(b: Box): Int = b.doubled
+                    private val Box.doubled: Int
+                        get() = v * 2
+                """.trimIndent() + "\n",
+                "Use.kt" to entry,
+            ),
+        )
+        val model = lowerCrossFile(service, dir, "Use.kt", entry)
+        assertTrue(model.program["preview/0"]?.isComplete == true, "diags=${model.program["preview/0"]?.diagnostics}")
+        assertNotNull(model.program["show/0"] ?: model.program["show/1"], "the cross-file function must be merged; keys=${model.program.keys}")
+        assertNotNull(
+            model.program["doubled/0"],
+            "the extension property the merged function reads must be merged as its synthetic getter; keys=${model.program.keys}",
+        )
+        assertTrue(
+            missingSourceCallees(model.program.getValue("preview/0"), model.program, model.classes).isEmpty(),
+            "no source callee may be left missing; missing=${missingSourceCallees(model.program.getValue("preview/0"), model.program, model.classes)}",
+        )
+    }
+
+    @Test
     fun mergesACrossFileSuperclassOfAConstructedSubclass() {
         // Constructing `HomeCard()` (in Card.kt) whose superclass `BaseCard` lives in Base.kt: the expander must
         // pull in the SUPERCLASS's file too, or super-init never runs (inherited `title` reads null) and an

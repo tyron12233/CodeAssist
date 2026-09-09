@@ -109,7 +109,7 @@ class KotlinPreviewLowering(
     fun loweredFile(pf: KotlinSymbolService.PreviewSourceFile): PreviewFileModel? {
         val parsed = parseDependency(pf) ?: return null
         val low = loweredFor(parsed)
-        return PreviewFileModel(low.path, low.materializedProgram(), low.classes())
+        return PreviewFileModel(low.path, low.materializedProgram(), low.classes(), low.packageName)
     }
 
     /** The lazily-lowering handle for [pf]: the cross-file expander requests exactly the reached declaration
@@ -120,6 +120,7 @@ class KotlinPreviewLowering(
         val low = loweredFor(parsed)
         return object : PreviewLazyFile {
             override val path: String get() = low.path
+            override val packageName: String get() = low.packageName
             override fun functionKeys(name: String) = low.functionKeys(name)
             override fun function(key: String) = low.function(key)
             override fun anonymousClassesFor(key: String) = low.anonymousClassesFor(key)
@@ -151,7 +152,7 @@ class KotlinPreviewLowering(
      *  grows from. Used by the cross-module preview path, which supplies its own multi-module provider. */
     fun loweredEntryFile(entryParsed: KotlinParsedFile): PreviewFileModel {
         val entry = loweredFor(entryParsed)
-        return PreviewFileModel(entry.path, entry.materializedProgram(), entry.classes())
+        return PreviewFileModel(entry.path, entry.materializedProgram(), entry.classes(), entry.packageName)
     }
 
     /**
@@ -217,6 +218,10 @@ class KotlinPreviewLowering(
         private val resolver by lazy(LazyThreadSafetyMode.NONE) {
             KotlinTreeResolver(parsed.ktFile, parsed, service, cachesFor?.invoke(parsed))
         }
+
+        /** The file's `package` ("" for the default package), what the cross-file expander matches a callee's
+         *  declaring package against (see [expandPreviewModel]). */
+        val packageName: String get() = parsed.ktFile.packageFqName.asString()
 
         /** Top-level declarations by program key, in declaration order. Functions first; a valued top-level
          *  `val`/`var` (including an extension property — see [KotlinTreeResolver.lowerTopLevelProperty])

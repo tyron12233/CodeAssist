@@ -605,11 +605,15 @@ class PreviewModel(
     val classes: List<ResolvedClass>,
 )
 
-/** One source file's lowered preview model, tagged by [path] so the expander lowers/merges each file once. */
+/** One source file's lowered preview model, tagged by [path] so the expander lowers/merges each file once.
+ *  [packageName] is the file's `package` (empty for the default package; null when the producer doesn't know
+ *  it): the expander uses it to pick the declaring file a call actually resolved to when several files
+ *  declare a top-level function of the same simple name (see [expandPreviewModel]). */
 class PreviewFileModel(
     val path: String,
     val program: Map<String, ResolvedFunction>,
     val classes: List<ResolvedClass>,
+    val packageName: String? = null,
 )
 
 /** Resolves a reached cross-file/module declaration to the lowered file(s) that declare it. Implementations:
@@ -634,6 +638,10 @@ interface PreviewDeclProvider {
  */
 interface PreviewLazyFile {
     val path: String
+
+    /** The file's `package` (empty for the default package), or null when unknown: see
+     *  [PreviewFileModel.packageName]. */
+    val packageName: String? get() = null
 
     /** Program keys (`"name/arity"`) of the top-level callables named [name] declared here — including the
      *  synthetic `name/0` getter of a valued top-level property — WITHOUT lowering anything. */
@@ -664,6 +672,7 @@ interface LazyPreviewDeclProvider {
 /** Adapt an eagerly-lowered [PreviewFileModel] to the lazy contract (tests / already-materialized models). */
 fun PreviewFileModel.asLazy(): PreviewLazyFile = object : PreviewLazyFile {
     override val path: String get() = this@asLazy.path
+    override val packageName: String? get() = this@asLazy.packageName
     override fun functionKeys(name: String) = program.keys.filter { it.substringBeforeLast('/') == name }
     override fun function(key: String) = program[key]
     // An eager model can't attribute anonymous classes per function — hand over every synthesized one (they
@@ -696,6 +705,16 @@ fun PreviewDeclProvider.asLazy(): LazyPreviewDeclProvider = object : LazyPreview
  * keys must be present) but NOT the file's unrelated declarations; a requested type merges the matching class
  * plus its nested classes. The [seed]'s declarations win on a `name/arity` / FQN collision; at most [maxFiles]
  * OTHER files are followed (a runaway guard — a real preview reaches a handful).
+ *
+ * Package-aware: a top-level call's [ResolvedCallable.Source.declId] names the PACKAGE the resolver bound it
+ * to (`com.example.ui.utils.BookmarkButton/3`), so when several files declare a function of that simple name
+ * only the file(s) in that package are followed: JetNews declares a Material `BookmarkButton(isBookmarked,
+ * onClick, modifier)` in `ui.utils` AND a Glance `BookmarkButton(id, isBookmarked, onToggle)` in `glance.ui`,
+ * same arity, and by-name merging handed the Material preview the Glance body (`GlanceTheme.colors` null →
+ * blank card). When two reached functions still collide on the bare `name/arity` key (both packages really are
+ * reached), the later one is ALSO registered under its package-qualified key `pkg.name/arity` (exactly the
+ * callee's `declId`), which the interpreter tries first, so each call site runs the function it resolved to.
+ * A provider that doesn't know packages (null) keeps the old by-name behaviour.
  */
 fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: LazyPreviewDeclProvider): PreviewModel {
     val program = LinkedHashMap<String, ResolvedFunction>(seed.program)
@@ -705,6 +724,10 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: LazyPrev
     val touchedPaths = hashSetOf(seed.path)
     val requestedTypes = HashSet<String>()
     val requestedFns = HashSet<String>()
+    // The package each bare `name/arity` program key was filled from (null = unknown), so a later same-name
+    // request from ANOTHER package is recognised as a collision rather than "already merged".
+    val keyPackage = HashMap<String, String?>()
+    seed.program.keys.forEach { keyPackage[it] = seed.packageName }
     // Classes whose bodies are queued for scanning. A class can be MERGED without being enqueued (it rode in
     // as a nested sibling of a requested class); if it is later reached in its own right it must still be
     // enqueued then, or its member bodies' cross-file references are never followed.
@@ -763,22 +786,55 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: LazyPrev
         matched.forEach { classesByFqn.putIfAbsent(it.fqn, it) }
         enqueueClass(matched.first())
     }
-    fun requestFn(name: String, arity: Int) {
-        if ("$name/$arity" in program || !requestedFns.add("$name/$arity")) return
-        provider.filesDeclaringFunction(name).forEach { file ->
+    /** Merge [fn] (from [file], under program key [key]) and scan its body. */
+    fun merge(file: PreviewLazyFile, key: String, fn: ResolvedFunction) {
+        program[key] = fn
+        enqueueFn(fn)
+        // A function whose body holds an `object : Foo {}` literal synthesized a class for it:
+        // merge + scan it with the function, or its constructor call has nothing to build.
+        file.anonymousClassesFor(key).forEach { c ->
+            if (classesByFqn.putIfAbsent(c.fqn, c) == null) enqueueClass(c)
+        }
+    }
+    /** Follow a top-level function call: [pkg] is the package the callee resolved to (from its `declId`), or
+     *  null when the callee doesn't carry one. */
+    fun requestFn(name: String, arity: Int, pkg: String?) {
+        val bare = "$name/$arity"
+        // Already present from the same package (or with no package knowledge on either side) → nothing to do.
+        // Present from a DIFFERENT known package → a collision: fall through and register the qualified key.
+        if (bare in program) {
+            val have = keyPackage[bare]
+            if (pkg == null || have == null || have == pkg) return
+            if ("$pkg.$bare" in program) return
+        }
+        if (!requestedFns.add(if (pkg != null) "$pkg.$bare" else bare)) return
+        val files = provider.filesDeclaringFunction(name)
+        // Only the declaring package's file(s) when the callee names one and a file matches; otherwise every
+        // file declaring the name (a package-less provider, or a declId whose owner isn't a package).
+        val inPackage = if (pkg != null) files.filter { it.packageName == pkg } else emptyList()
+        (inPackage.ifEmpty { files }).forEach { file ->
             if (file.path == seed.path || !admit(file)) return@forEach
             file.functionKeys(name).forEach { key ->
-                if (key !in program) file.function(key)?.let { fn ->
-                    program[key] = fn
-                    enqueueFn(fn)
-                    // A function whose body holds an `object : Foo {}` literal synthesized a class for it —
-                    // merge + scan it with the function, or its constructor call has nothing to build.
-                    file.anonymousClassesFor(key).forEach { c ->
-                        if (classesByFqn.putIfAbsent(c.fqn, c) == null) enqueueClass(c)
+                when {
+                    key !in program -> file.function(key)?.let { fn ->
+                        keyPackage[key] = file.packageName
+                        merge(file, key, fn)
+                    }
+                    // The bare key is taken by a same-named function from another package: keep this one
+                    // reachable under its qualified key (the callee's `declId` shape) so its callers find it.
+                    file.packageName != null && keyPackage[key] != file.packageName -> {
+                        val qualified = "${file.packageName}.$key"
+                        if (qualified !in program) file.function(key)?.let { fn -> merge(file, qualified, fn) }
                     }
                 }
             }
         }
+    }
+    /** The package part of a top-level callee's `declId` (`pkg.name/arity` → `pkg`; "" for the default
+     *  package), or null when the owner segment is absent. */
+    fun packageOf(callee: ResolvedCallable.Source): String? {
+        val owner = callee.declId.substringBeforeLast('/')
+        return if ('.' in owner) owner.substringBeforeLast('.') else null
     }
 
     while (work.isNotEmpty() || superWork.isNotEmpty()) {
@@ -795,14 +851,14 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: LazyPrev
                             // Key by the callee's DECLARED arity so an omitted-defaults call's `already in program`
                             // short-circuit matches the registered `name/declaredArity` key.
                             node.dispatch == DispatchKind.TOP_LEVEL ->
-                                requestFn(callee.displayName, callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size)
+                                requestFn(callee.displayName, callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size, packageOf(callee))
                             // A top-level EXTENSION function declared in another file (`fun Foo.bar()`): its `declId`
                             // owner is the package/facade (a dotted name), so without this branch it fell through to
                             // `requestType` on the package and the declaring file was never merged — the interpreter
                             // then threw `no source extension \`bar/0\``. It is keyed in the program by `name/valueParams`
                             // (the receiver isn't a value parameter), the same shape as a top-level function.
                             node.dispatch == DispatchKind.EXTENSION || node.dispatch == DispatchKind.MEMBER_EXTENSION ->
-                                requestFn(callee.displayName, callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size)
+                                requestFn(callee.displayName, callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size, packageOf(callee))
                             // Strip a trailing `.Companion` so a companion member's owner requests the ENCLOSING
                             // type's file (whose simple name maps) rather than the unmappable `Companion`.
                             '.' in owner -> requestType(owner.substringBeforeLast('.').removeSuffix(".Companion"))

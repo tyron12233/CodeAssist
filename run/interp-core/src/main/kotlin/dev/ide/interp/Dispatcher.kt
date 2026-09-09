@@ -1392,11 +1392,16 @@ class ReflectiveDispatcher(
         // uncaught inside Compose's coroutine that crashes the host; the block is run best-effort, SWALLOWing a
         // failure so the preview degrades instead of taking down the IDE. A non-suspend invocation (a map/filter
         // predicate, an `onClick` handler) still propagates, so genuine errors there surface.
+        // The method that RUNS the lambda is the interface's single abstract method: `invoke` for a Kotlin
+        // function type, but a `fun interface`'s own name for a SAM parameter (`MeasurePolicy.measure`,
+        // `Comparator.compare`). Matching `invoke` alone answered null to `measure`, so a `Layout { … }` measure
+        // policy silently produced no MeasureResult ("Asking for measurement result of unmeasured layout modifier").
+        val sam = samMethod(functionalInterface)
         return java.lang.reflect.Proxy.newProxyInstance(
             functionalInterface.classLoader ?: loader, arrayOf(functionalInterface),
         ) { _, method, callArgs ->
-            when (method.name) {
-                "invoke" -> {
+            when {
+                method.name == "invoke" || (sam != null && method.name == sam.name && method.parameterCount == sam.parameterCount) -> {
                     val a = callArgs?.toList() ?: emptyList()
                     if (a.lastOrNull() is kotlin.coroutines.Continuation<*>)
                         suspendBridge?.runSuspending(lambda, a) ?: runCatching { lambda.invoke(a) }.getOrDefault(Unit)
@@ -1404,9 +1409,9 @@ class ReflectiveDispatcher(
                     // `Density.() -> IntOffset` block) so the compiled callee's cast to the value class succeeds.
                     else lambda.invoke(a).let { if (returnValueClass != null) boxValueClassIfNeeded(it, returnValueClass) else it }
                 }
-                "toString" -> "InterpretedLambda"
-                "hashCode" -> System.identityHashCode(lambda)
-                "equals" -> callArgs?.getOrNull(0) === lambda
+                method.name == "toString" -> "InterpretedLambda"
+                method.name == "hashCode" -> System.identityHashCode(lambda)
+                method.name == "equals" -> callArgs?.getOrNull(0) === lambda
                 else -> null
             }
         }
@@ -1478,7 +1483,16 @@ class ReflectiveDispatcher(
         // ACCEPTS the args; fall back to the metadata/mangled match otherwise (a value-class `toString` has only
         // `toString-impl`, no literal `toString`, and an `internal` `f` only `f$module`).
         val acceptingAll = byArity.filter { paramsAccept(it.parameterTypes, args) }
-        val accepting = acceptingAll.filter { it.name == name }.ifEmpty { acceptingAll }
+        // An ARRAY parameter accepts a List argument only through the interpreter's List→array coercion (arrays
+        // are modeled as Lists). That coercion must not compete with a direct match: `list + list` fits
+        // `plus(Collection, Iterable)` directly and `plus(Collection, Object[])` only by coercion, and the
+        // incomparable array overload knocked the Iterable one out of the most-specific ranking below: leaving
+        // `plus(Collection, Object)`, the ELEMENT overload, which nested the second list as one element (JetNews
+        // `PostsFeed.allPosts`). Keep the coercing overloads only when nothing matches directly.
+        val direct = acceptingAll.filter { m ->
+            m.parameterTypes.withIndex().none { (i, p) -> p.isArray && args.getOrNull(i) is List<*> }
+        }.ifEmpty { acceptingAll }
+        val accepting = direct.filter { it.name == name }.ifEmpty { direct }
         // Prefer the MOST SPECIFIC applicable overload (Java/Kotlin overload resolution) rather than whichever
         // getMethods() lists first — that order is JVM-dependent, so an ambiguous set would resolve differently
         // across runtimes. e.g. RangesKt.rangeTo(Float, Float) fits BOTH rangeTo(float, float) ->
@@ -1743,4 +1757,11 @@ class ReflectiveDispatcher(
             "kotlin.NoSuchElementException" to "java.util.NoSuchElementException",
         )
     }
+}
+
+/** The single abstract (non-static, non-default) method of a functional interface: `invoke` for a Kotlin
+ *  function type, the declared name for a `fun interface`/Java SAM (`MeasurePolicy.measure`, `Runnable.run`).
+ *  Null when [iface] declares no such method (not a functional interface). */
+fun samMethod(iface: Class<*>): java.lang.reflect.Method? = iface.methods.firstOrNull {
+    Modifier.isAbstract(it.modifiers) && !it.isDefault && !Modifier.isStatic(it.modifiers)
 }

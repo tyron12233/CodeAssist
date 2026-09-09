@@ -75,6 +75,27 @@ class KotlinSerializationSyntheticTest {
     }
 
     @Test
+    fun serializableObjectHasSerializerOnItself() {
+        // JetNews: `@Serializable data object HomeKey : NavKey` + `HomeKey.serializer()` (navigation3 deep links).
+        // An object has no companion (the plugin generates `serializer()` on the object itself), so it must
+        // complete on `HomeKey.` and not be flagged unresolved (it refused the whole file's @Previews).
+        val (a, srcDir) = analyzer(withRuntime = true)
+        val objectModel = """
+            package demo
+            import kotlinx.serialization.Serializable
+            @Serializable
+            data object HomeKey
+        """.trimIndent() + "\n"
+        val items = runBlocking { a.completeAtCaret(srcDir, "HomeKey.kt", objectModel + "fun use() { HomeKey.| }\n") }.items.mapNotNull { it.symbol?.name }
+        assertTrue("serializer" in items, "`HomeKey.` should offer the object's synthesized `serializer()`; got $items")
+        val code = objectModel + "val s = HomeKey.serializer()\n"
+        val doc = SnippetDoc(code, DiskFile(srcDir.resolve("HomeKey.kt")))
+        val diags: List<Diagnostic> = runBlocking { a.incrementalParser.parseFull(doc); a.analyze(doc.file).diagnostics }
+        val unresolved = diags.filter { it.code == KotlinDiagnosticCodes.UNRESOLVED }
+        assertTrue(unresolved.isEmpty(), "`HomeKey.serializer()` on a @Serializable object must not be unresolved; got ${'$'}{unresolved.map { it.message }}")
+    }
+
+    @Test
     fun notSynthesizedWithoutRuntime() {
         // No serialization runtime on the classpath ⇒ the provider's gate fails ⇒ nothing synthesized.
         val items = completionNames(withRuntime = false, body = "Foo.|")

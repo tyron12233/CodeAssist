@@ -61,6 +61,11 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
 
             is KtNamedFunction -> node.receiverTypeReference?.text
                 ?.let { service.typeFromText(it, fileContext) }?.let(out::add)
+            // An extension PROPERTY's receiver is the implicit `this` of its accessors
+            // (`val ColorScheme.codeBlockBackground get() = onSurface.copy(alpha = .15f)`): the same rule as an
+            // extension function. A local/plain property has no receiver type and adds nothing.
+            is KtProperty -> node.receiverTypeReference?.text
+                ?.let { service.typeFromText(it, fileContext) }?.let(out::add)
             // An enclosing class/object receiver. An ANONYMOUS object (`object : Foo { }`) or a LOCAL
             // class/object has no reachable `fqName`, so use the synthetic classifier the source model
             // registered it under — its own + supertype members then become the implicit `this` in the body.

@@ -16,6 +16,9 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.WindowManager
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.OnBackPressedDispatcherOwner
+import androidx.activity.setViewTreeOnBackPressedDispatcherOwner
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
@@ -164,6 +167,11 @@ class OffscreenComposeSurface(
                 setViewTreeLifecycleOwner(owner)
                 setViewTreeViewModelStoreOwner(owner)
                 setViewTreeSavedStateRegistryOwner(owner)
+                // `BackHandler`/`PredictiveBackHandler` (material3's ModalDrawerSheet, BottomSheet, SearchBar, …)
+                // require an OnBackPressedDispatcherOwner or a NavigationEventDispatcherOwner and throw without
+                // one: an Activity supplies it; this Presentation has none. Android Studio's ComposeViewAdapter
+                // provides a fake owner for exactly this reason; JetNews's AppDrawer preview blanked without it.
+                setViewTreeOnBackPressedDispatcherOwner(owner)
                 setContent(content)
             }
             p.setContentView(view)
@@ -311,14 +319,18 @@ class OffscreenComposeSurface(
         return false
     }
 
-    /** A minimal RESUMED owner so `ComposeView` finds its ViewTree lifecycle / savedstate / viewmodel owners. */
-    private class OffscreenOwner : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
+    /** A minimal RESUMED owner so `ComposeView` finds its ViewTree lifecycle / savedstate / viewmodel / back-
+     *  dispatcher owners. The back dispatcher never fires (nothing presses Back on a virtual display); it only
+     *  has to EXIST so back-handling composables compose. */
+    private class OffscreenOwner : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner, OnBackPressedDispatcherOwner {
         private val registry = LifecycleRegistry(this)
         private val store = ViewModelStore()
         private val savedState = SavedStateRegistryController.create(this)
+        private val backDispatcher = OnBackPressedDispatcher()
         override val lifecycle: Lifecycle get() = registry
         override val viewModelStore: ViewModelStore get() = store
         override val savedStateRegistry: SavedStateRegistry get() = savedState.savedStateRegistry
+        override val onBackPressedDispatcher: OnBackPressedDispatcher get() = backDispatcher
         private var restored = false
         fun resume() {
             if (!restored) { savedState.performRestore(null); restored = true }

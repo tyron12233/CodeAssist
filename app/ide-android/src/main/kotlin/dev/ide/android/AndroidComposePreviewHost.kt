@@ -67,6 +67,7 @@ import dev.ide.ui.editor.preview.PreviewIssue
 import dev.ide.ui.editor.preview.PreviewIssueLevel
 import dev.ide.ui.editor.preview.PreviewRenderError
 import dev.ide.platform.log.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -443,6 +444,8 @@ private fun InProcessComposePreview(
     // resolved jars and interpreted (bridged to the IDE's bundled runtime), so downloaded code never reaches a
     // ClassLoader. Null while the jar list resolves / on failure → the renderer falls back to bundled Compose.
     val libraryExecutor by produceState<VmLibraryExecutor?>(null, path) {
+        // `runCatching` would also swallow the coroutine's own cancellation (the composable leaving composition
+        // mid-build) and hand the state a null executor, rethrow it so the producer just stops.
         value = runCatching {
             backend.composePreviewLibs(path)?.let { libs ->
                 // Disk-backed peer-dex cache (workspace-wide): a rebuilt executor reuses previously-dexed peers
@@ -460,7 +463,7 @@ private fun InProcessComposePreview(
                     )
                 }
             }
-        }.getOrNull()
+        }.onFailure { if (it is CancellationException) throw it }.getOrNull()
     }
     // Close the executor's jar handles when it is replaced or leaves composition (produceState never disposes a
     // superseded value; the local capture closes THIS executor, not whatever the state holds later).
@@ -476,7 +479,11 @@ private fun InProcessComposePreview(
             val res = backend.composePreviewResources(path)
             if (res == null) inProcessLog.warn("no preview resources for $path — R.string/colorResource/… won't resolve")
             res?.let { withContext(Dispatchers.IO) { AndroidPreviewResources(it.repo, it.namespace, density, night) } }
-        }.onFailure { inProcessLog.warn("building preview resources for $path failed: ${it.javaClass.name}: ${it.message}", it) }.getOrNull()
+        }.onFailure {
+            // Leaving composition mid-load cancels this producer; that is not a resource failure to report.
+            if (it is CancellationException) throw it
+            inProcessLog.warn("building preview resources for $path failed: ${it.javaClass.name}: ${it.message}", it)
+        }.getOrNull()
         value = resolver to true
     }
     val resources = resLoad.first

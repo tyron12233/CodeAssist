@@ -576,10 +576,12 @@ class KotlinSymbolService(
     fun sourceFilesDeclaringFunction(name: String): List<PreviewSourceFile> {
         val m = model()
         // `topLevel` holds NON-extension callables (functions + properties); extension callables live in a
-        // separate `extensions` list, so an extension FUNCTION must be looked up there too (an extension property
-        // stays excluded — its read routes through its receiver type, not this by-name lookup).
+        // separate `extensions` list, so an extension FUNCTION must be looked up there too, and an extension
+        // PROPERTY as well: the preview lowers a valued one to a synthetic `name/0` getter, and the cross-file
+        // expander asks for it by name when a merged function reads it (JetNews's `PostScreen` → `PostContent`
+        // → `private val ColorScheme.codeBlockBackground`); excluded, it was "called but wasn't lowered".
         val candidates = m.topLevel.asSequence().filter { it.name == name } +
-                m.extensions.asSequence().filter { it.name == name && it.isFunction }
+                m.extensions.asSequence().filter { it.name == name }
         return candidates
             .mapNotNull { previewSourceFile(it.ctx.path) }
             .distinctBy { it.file.path }

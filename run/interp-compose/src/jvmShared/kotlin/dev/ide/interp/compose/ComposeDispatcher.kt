@@ -5,6 +5,7 @@ import dev.ide.interp.Dispatcher
 import dev.ide.interp.ExtensionPropertyValue
 import dev.ide.jvm.AsmPeerFactory
 import dev.ide.interp.InterpretedLambda
+import dev.ide.interp.samMethod
 import dev.ide.interp.InterpreterException
 import dev.ide.interp.LambdaProxyStrategy
 import dev.ide.interp.LibraryExecutor
@@ -242,10 +243,13 @@ class ComposeDispatcher(
      * and the call degrades to the return type's zero value. Suspend invocations (a trailing Continuation)
      * route through the coroutine bridge, exactly like the unguarded default proxy.
      */
-    private fun guardedLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>, returnValueClass: Class<*>? = null): Any =
-        Proxy.newProxyInstance(functionalInterface.classLoader ?: javaClass.classLoader, arrayOf(functionalInterface)) { _, method, callArgs ->
-            when (method.name) {
-                "invoke" -> {
+    private fun guardedLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>, returnValueClass: Class<*>? = null): Any {
+        // A `fun interface` parameter (`Layout`'s `MeasurePolicy`) runs the lambda through its OWN abstract
+        // method, not `invoke`: answering `invoke` only returned null from `measure`, i.e. no MeasureResult.
+        val sam = samMethod(functionalInterface)
+        return Proxy.newProxyInstance(functionalInterface.classLoader ?: javaClass.classLoader, arrayOf(functionalInterface)) { _, method, callArgs ->
+            when {
+                method.name == "invoke" || (sam != null && method.name == sam.name && method.parameterCount == sam.parameterCount) -> {
                     val a = callArgs?.toList() ?: emptyList()
                     if (a.lastOrNull() is kotlin.coroutines.Continuation<*>) runSuspendLambda(lambda, a)
                     else {
@@ -266,12 +270,13 @@ class ComposeDispatcher(
                         }
                     }
                 }
-                "toString" -> "InterpretedLambda"
-                "hashCode" -> System.identityHashCode(lambda)
-                "equals" -> callArgs?.getOrNull(0) === lambda
+                method.name == "toString" -> "InterpretedLambda"
+                method.name == "hashCode" -> System.identityHashCode(lambda)
+                method.name == "equals" -> callArgs?.getOrNull(0) === lambda
                 else -> null
             }
         }
+    }
 
     /** Run an interpreted SUSPEND lambda the real runtime invoked with a trailing `Continuation`. A `pointerInput
      *  { }` block MUST run as the pointer node's OWN coroutine — Compose delivers pointer events only to a gesture
@@ -499,17 +504,23 @@ class ComposeDispatcher(
         return runCatching { box.isAccessible = true; box.invoke(null, value) }.getOrDefault(value)
     }
 
-    private fun composableLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>, valueClassReturn: Class<*>? = null): Any =
-        Proxy.newProxyInstance(
+    private fun composableLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>, valueClassReturn: Class<*>? = null): Any {
+        // The lambda runs through the interface's single abstract method: `invoke` for a Kotlin function type, its
+        // own name for a `fun interface` (`Layout`'s trailing `MeasurePolicy` lambda lands here as the composable
+        // call's last lambda arg; its `measure` answered null → no MeasureResult → Compose's "Asking for
+        // measurement result of unmeasured layout modifier"). The composer-presence test below already decides
+        // whether composables are legal inside, so a non-composable SAM body is simply run with them suppressed.
+        val sam = samMethod(functionalInterface)
+        return Proxy.newProxyInstance(
             functionalInterface.classLoader ?: javaClass.classLoader, arrayOf(functionalInterface),
         ) { _, method, callArgs ->
-            when (method.name) {
+            when {
                 // Runaway-recomposition breaker (library-composable path): a library composable that keeps
                 // invalidating itself re-invokes this content lambda every pass with no frame boundary — an IDE
                 // freeze the interpreter's per-pass guards never see. On a storm, stop re-running the body and
                 // signal the renderer to drop the interpreted subtree (disposing the offending composable's
                 // effects, which stops the state writes driving the loop). Returns null (Unit content).
-                "invoke" -> {
+                method.name == "invoke" || (sam != null && method.name == sam.name && method.parameterCount == sam.parameterCount) -> {
                     val a = callArgs?.toList() ?: emptyList()
                     // A SUSPEND block that reached the composable proxy: a `LaunchedEffect { }` / `produceState { }`
                     // body is a @Composable whose lambda parameter is itself `suspend`, so [invokeComposable] proxies
@@ -565,12 +576,13 @@ class ComposeDispatcher(
                         }
                     }
                 }
-                "toString" -> "InterpretedComposableLambda"
-                "hashCode" -> System.identityHashCode(lambda)
-                "equals" -> callArgs?.getOrNull(0) === lambda
+                method.name == "toString" -> "InterpretedComposableLambda"
+                method.name == "hashCode" -> System.identityHashCode(lambda)
+                method.name == "equals" -> callArgs?.getOrNull(0) === lambda
                 else -> null
             }
         }
+    }
 
     /**
      * A windowed composable we render INLINE in the preview: its [method] on an owner in [ownerPrefix], whose
