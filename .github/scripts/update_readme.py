@@ -88,10 +88,10 @@ def count_tests():
 
 def benchmark_rows():
     """Return (markdown table rows, badge message) from the committed baselines."""
-    cq = load_json("lang-jdt/baselines/completion-quality.json") or {}
-    cl = load_json("lang-jdt/baselines/completion-latency.json") or {}
-    iq = load_json("index-impl/baselines/index-quality.json") or {}
-    ip = load_json("index-impl/baselines/index-perf.json") or {}
+    cq = load_json("lang/lang-jdt/baselines/completion-quality.json") or {}
+    cl = load_json("lang/lang-jdt/baselines/completion-latency.json") or {}
+    iq = load_json("lang/index-impl/baselines/index-quality.json") or {}
+    ip = load_json("lang/index-impl/baselines/index-perf.json") or {}
     bl = load_json("build-engine/baselines/build-largeproject.json") or {}
 
     rows = []

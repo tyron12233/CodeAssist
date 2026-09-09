@@ -154,6 +154,13 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
 val layers = mapOf(
     // The framework's foundation: services, the virtual file system, the project/module model.
     "platform" to listOf("platform-core", "vfs-api", "project-model-api", "project-model-impl"),
+    // Everything that reads source: the language SPI, indexes, analysis, the per-language backends,
+    // the compiler/PSI hosts they parse against, and the block (projectional) editor over them.
+    "lang" to listOf(
+        "language-api", "index-api", "index-impl", "analysis-api", "analysis-impl",
+        "lang-jdt", "lang-java", "lang-kotlin", "lang-kotlin-index", "lang-ksp", "lang-xml",
+        "kotlin-compiler-deps", "intellij-psi-host", "decompiler", "block-api", "block-impl",
+    ),
 )
 
 // Only remap what this build actually included — CI_CORE_ONLY leaves the shells out.
