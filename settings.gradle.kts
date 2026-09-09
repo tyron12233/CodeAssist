@@ -161,6 +161,9 @@ val layers = mapOf(
         "lang-jdt", "lang-java", "lang-kotlin", "lang-kotlin-index", "lang-ksp", "lang-xml",
         "kotlin-compiler-deps", "intellij-psi-host", "decompiler", "block-api", "block-impl",
     ),
+    // The build system. Named `build-system` rather than `build` because `build/` is the root
+    // project's own Gradle output directory.
+    "build-system" to listOf("build-api", "build-engine", "jvm-build"),
 )
 
 // Only remap what this build actually included — CI_CORE_ONLY leaves the shells out.

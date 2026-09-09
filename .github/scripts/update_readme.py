@@ -92,7 +92,7 @@ def benchmark_rows():
     cl = load_json("lang/lang-jdt/baselines/completion-latency.json") or {}
     iq = load_json("lang/index-impl/baselines/index-quality.json") or {}
     ip = load_json("lang/index-impl/baselines/index-perf.json") or {}
-    bl = load_json("build-engine/baselines/build-largeproject.json") or {}
+    bl = load_json("build-system/build-engine/baselines/build-largeproject.json") or {}
 
     rows = []
 
