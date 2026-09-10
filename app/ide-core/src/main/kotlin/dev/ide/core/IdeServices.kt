@@ -592,6 +592,10 @@ class IdeServices private constructor(
      *  so a model commit during construction can never observe it uninitialized. */
     private val configurationListeners = CopyOnWriteArrayList<() -> Unit>()
 
+    /** Callbacks fired (on the mutating thread) when a file changed under the UI rather than through it.
+     *  Declared beside [configurationListeners], and BEFORE [events], for the same reason. */
+    private val fileSystemListeners = CopyOnWriteArrayList<() -> Unit>()
+
     /**
      * The workspace change-notification spine (see [WorkspaceEventHub]). Every mutation this engine performs
      * publishes a typed event here, and the invalidation chains (analyzers/index/synthetics/overlays) run as
@@ -627,11 +631,17 @@ class IdeServices private constructor(
             override fun rekeyOverlays(from: Path, to: Path) =
                 this@IdeServices.rekeyOverlays(from, to)
 
+            override fun refreshOverlay(path: Path) = this@IdeServices.refreshOverlay(path)
+
             override fun isResourcePath(path: Path) = this@IdeServices.isResourcePath(path)
             override fun configurationChanged() {
                 // Seam for out-of-process engines: configuration-change hints hang off here (a no-op until a
                 // listener is attached).
                 configurationListeners.forEach { runCatching { it() } }
+            }
+
+            override fun fileSystemChanged() {
+                fileSystemListeners.forEach { runCatching { it() } }
             }
         })
 
@@ -640,6 +650,13 @@ class IdeServices private constructor(
     fun addConfigurationListener(listener: () -> Unit): Disposable {
         configurationListeners.add(listener)
         return Disposable { configurationListeners.remove(listener) }
+    }
+
+    /** Register a callback for a file-system change the UI did not drive (see
+     *  [WorkspaceEventHub.Reactions.fileSystemChanged]); returns a [Disposable] that unregisters it. */
+    fun addFileSystemListener(listener: () -> Unit): Disposable {
+        fileSystemListeners.add(listener)
+        return Disposable { fileSystemListeners.remove(listener) }
     }
 
     /** WORKSPACE-scoped signing service (keystore registry + per-build-type assignment). */
@@ -1185,6 +1202,50 @@ class IdeServices private constructor(
         // regenerates `R` from the now-buffer-aware resource repository (its fingerprint includes open res
         // buffers). Cheap cache-drops; the lazy repo rebuild is fingerprint-gated (only when content changed).
         if (changed && isResourcePath(norm)) invalidateSyntheticClasses()
+    }
+
+    /**
+     * Re-read [file] into the overlay after a writer changed it on disk without going through [save].
+     *
+     * The overlay WINS over disk wherever it is consulted (the buffer-aware resource repository, the name
+     * environments, the single-file re-index), so a write behind an open buffer would otherwise land on
+     * disk and nowhere else, for as long as that buffer lives. Only refreshes a path that already HAS an
+     * overlay: this must never make a file the editor never opened look open. Runs on the publishing
+     * thread, so it stays one read of one file, skipped entirely for the editor's own saves (which carry
+     * their text and are already in step).
+     *
+     * Takes disk even when the buffer had unsaved edits, unlike the UI's own re-sync, which leaves a
+     * modified tab alone and flags it as changed on disk. The two are not in conflict: a writer that
+     * bypassed the editor read DISK and wrote over it, so the unsaved edit is already gone from the file
+     * either way, and the engine agreeing with what a build would compile is the better of two wrong
+     * answers. The tab keeps showing the user's text, and their next keystroke pushes it back here.
+     */
+    fun refreshOverlay(file: Path) {
+        val norm = file.toAbsolutePath().normalize()
+        if (!openDocuments.containsKey(norm)) return
+        // A binary/oversized file's overlay is the read-only placeholder FileBackend.readFile handed the
+        // editor, not the file's bytes; re-reading it as text would put garbage where the placeholder was.
+        if (isBinaryOnDisk(norm)) return
+        val disk = runCatching { norm.readText() }.getOrNull() ?: return
+        // replace(), not put(): the tab may have been closed between the containsKey and here, and this must
+        // not resurrect an overlay for a file nothing has open.
+        if (openDocuments.replace(norm, disk) == disk) return
+        if (isResourcePath(norm)) invalidateSyntheticClasses()
+    }
+
+    /**
+     * The editor closed [file]'s tab: drop its overlay so analysis reads disk again.
+     *
+     * Without this the overlay outlives the tab for the whole session, and every later write to that file
+     * from outside the editor is invisible behind text nothing is showing any more. Closing a modified tab
+     * already discards the edit on the UI side, so keeping it here was divergence rather than a working
+     * copy.
+     */
+    fun documentClosed(file: Path) {
+        val norm = file.toAbsolutePath().normalize()
+        if (openDocuments.remove(norm) == null) return
+        // Same reason as [updateDocument]: dropping a `res/` buffer changes what the synthetic `R` resolves.
+        if (isResourcePath(norm)) invalidateSyntheticClasses()
     }
 
     /** Overlay-preferred current text: the live editor buffer if [file] is open, else its disk content. */

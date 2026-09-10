@@ -374,6 +374,12 @@ internal class ChallengeBackend(
      * Written straight to disk rather than through the editor's save path, so the main-class detection
      * that follows has to scan the live sources rather than trust an index that still names yesterday's
      * class.
+     *
+     * The engine's overlay for the same path is moved with it. [ensureSolution] points the editor at this
+     * very file, so completion and analysis leave the solver's bare snippet there as an open buffer, and a
+     * run begins by flushing every open buffer to disk. Leaving the overlay behind therefore puts the
+     * snippet back over the harness between this write and the run, and the run fails with "no runnable
+     * main() found" — the snippet is a function, the entry point lives in the harness.
      */
     private fun writeSolution(services: IdeServices, language: UiChallengeLanguage, text: String) {
         val path = solutionPath(services, language)
@@ -387,6 +393,7 @@ internal class ChallengeBackend(
         }
         Files.createDirectories(dir)
         Files.write(path, text.toByteArray(Charsets.UTF_8))
+        services.updateDocument(path, text)
     }
 
     private fun reason(t: Throwable): String = t.message?.takeIf { it.isNotBlank() } ?: t::class.simpleName.orEmpty()

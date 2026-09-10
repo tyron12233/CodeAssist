@@ -52,6 +52,7 @@ import dev.ide.core.backend.SearchBackend
 import dev.ide.core.backend.SettingsBackend
 import dev.ide.core.backend.SigningBackend
 import dev.ide.core.backend.VcsBackend
+import dev.ide.platform.Disposable
 import dev.ide.platform.EngineBreadcrumb
 import dev.ide.platform.EngineCanceledException
 import dev.ide.platform.EnginePhase
@@ -254,6 +255,25 @@ class IdeServicesBackend(
     override val fileSystemEpoch: StateFlow<Int> get() = _fsEpoch
     override fun bumpFileSystemEpoch() { _fsEpoch.value += 1 }
 
+    /**
+     * Bumps [fileSystemEpoch] from the active engine's workspace event stream, so the tree and the open
+     * tabs catch up after ANY write the UI did not drive: a plugin's resource write, a template scaffold,
+     * an icon generated into `res/`, a checkout. The explicit `bumpFileSystemEpoch()` calls the backends
+     * already make stay where they are (they also cover model-only changes that publish no file event);
+     * a double bump costs nothing, because [MutableStateFlow] conflates. Editor saves are excluded at the
+     * hub: they carry their text, and the UI already has it.
+     */
+    private var fsEpochSubscription: Disposable? = null
+
+    /** Point [fsEpochSubscription] at [engine]. Called for the constructor's engine and on every swap, so an
+     *  [IdeServicesBackend] built around an already-open project follows it too. */
+    private fun followFileSystem(engine: IdeServices?) {
+        runCatching { fsEpochSubscription?.dispose() }
+        fsEpochSubscription = engine?.let {
+            runCatching { it.addFileSystemListener { bumpFileSystemEpoch() } }.getOrNull()
+        }
+    }
+
     /** Background scope for the analytics build/index watchers (see [init]); cancelled in [close]. */
     private val analyticsScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -421,6 +441,7 @@ class IdeServicesBackend(
 
     init {
         Log.addSink(errorDialogSink)
+        followFileSystem(activeServices)
 
         // index_perf: time each index build (building → not building) and emit its duration + a per-indexer
         // breakdown, so the fleet reveals WHICH index (and which phase) dominates. Low-volume (once per
@@ -674,6 +695,7 @@ class IdeServicesBackend(
         runCatching { analytics.close() }
         // The version-control backend holds an open repository handle and its own refresh coroutine.
         runCatching { (vcs as? VcsBackend)?.close() }
+        runCatching { fsEpochSubscription?.dispose() }
         activeServices?.close()
         runCatching { engineExecutor.shutdown() } // stop the dedicated ide-engine thread on teardown
         // Clean shutdown ⇒ drop the crash breadcrumb, so a file that survives to the next launch means the
@@ -692,6 +714,7 @@ class IdeServicesBackend(
         // Point the shared application environment at the now-active engine, for app-level extension callbacks
         // (command actions, synthetic-R, the XML resource host) that resolve the open project through it.
         manager?.env?.activeEngine = next
+        followFileSystem(next)
         _projectEpoch.value += 1
         // Publish the project lifecycle for plugin subscribers, on the same app bus. Opened for the new engine;
         // Closed for the one being replaced (before it is disposed). Guarded so a subscriber can't break the swap.

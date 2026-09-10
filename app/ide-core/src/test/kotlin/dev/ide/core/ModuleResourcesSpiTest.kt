@@ -192,6 +192,31 @@ class ModuleResourcesSpiTest {
         )
     }
 
+    /**
+     * The resource repository is buffer-aware, and the overlay outlives the tab that created it, so
+     * `strings.xml` having been OPEN once was enough to hide every later write behind it: the string was on
+     * disk and nowhere the IDE looked, until a restart cleared the overlay. The write publishes, and the
+     * reaction re-reads the overlay before anything consumes it.
+     */
+    @Test
+    fun `a write behind an open strings xml buffer still resolves`() {
+        val app = module("app")
+        services.updateDocument(stringsXml(), stringsXml().readText()) // the user opened it to check
+
+        val written = assertIs<ResourceWrite.Written>(
+            resources.putValueResource(app, "string", "behind_a_buffer", "Hi"),
+        )
+        assertEquals("behind_a_buffer", written.name)
+        assertTrue(
+            resources.has(app, "string", "behind_a_buffer"),
+            "the open buffer still wins over disk in the resource repository",
+        )
+        assertTrue(
+            "behind_a_buffer" in services.readCurrentText(stringsXml()),
+            "the buffer the editor is showing has to catch up with what was written under it",
+        )
+    }
+
     @Test
     fun `putValueResource escapes the value`() {
         val app = module("app")

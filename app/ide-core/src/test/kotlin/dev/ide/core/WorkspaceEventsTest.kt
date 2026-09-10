@@ -66,6 +66,77 @@ class WorkspaceEventsTest {
         }
     }
 
+    // ---- writes that bypass the editor ---------------------------------------------------------------
+    //
+    // The overlay wins over disk wherever it is consulted, and it outlives the tab that created it, so a
+    // writer that goes straight to disk (a plugin's ModuleResources write, a template, an external tool)
+    // used to land its bytes on disk and NOWHERE else for the rest of the session.
+
+    @Test
+    fun aWriteBehindAnOpenBufferRefreshesTheOverlay() {
+        withTempDir("events-overlay") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val core = ide.modules().first { it.name == "core" }
+            val file = ide.sourceRoots(core).first().resolve("com/example/core/Scratch.java")
+            Files.writeString(file, "package com.example.core; class Scratch { int before; }")
+            ide.updateDocument(file, Files.readString(file)) // the editor opens a tab on it
+
+            // A writer that does not go through save(): bytes to disk, then publish.
+            Files.writeString(file, "package com.example.core; class Scratch { int after; }")
+            ide.events.fileChanged(file)
+
+            assertTrue(
+                "int after" in ide.readCurrentText(file),
+                "the overlay still hid the write: ${ide.readCurrentText(file)}",
+            )
+        }
+        }
+    }
+
+    @Test
+    fun onlyAWriteTheEditorDidNotDriveNotifiesFileSystemListeners() {
+        withTempDir("events-fs") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val core = ide.modules().first { it.name == "core" }
+            val file = ide.sourceRoots(core).first().resolve("com/example/core/Scratch.java")
+            var changes = 0
+            val sub = ide.addFileSystemListener { changes++ }
+
+            ide.save(file, "package com.example.core; class Scratch {}")
+            assertEquals(0, changes, "a save carries its text; the UI already has it and must not re-walk the tree")
+
+            Files.writeString(file, "package com.example.core; class Scratch { int x; }")
+            ide.events.fileChanged(file)
+            assertEquals(1, changes, "a write the UI did not drive has to reach the tree and the open tabs")
+            sub.dispose()
+
+            ide.events.fileChanged(file)
+            assertEquals(1, changes, "disposed listener stays disposed")
+        }
+        }
+    }
+
+    @Test
+    fun closingATabDropsItsOverlaySoAnalysisReadsDiskAgain() {
+        withTempDir("events-close") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val core = ide.modules().first { it.name == "core" }
+            val file = ide.sourceRoots(core).first().resolve("com/example/core/Scratch.java")
+            val onDisk = "package com.example.core; class Scratch {}"
+            Files.writeString(file, onDisk)
+
+            ide.updateDocument(file, "package com.example.core; class Scratch { int unsaved; }")
+            assertTrue("unsaved" in ide.readCurrentText(file), "the live buffer wins while the tab is open")
+
+            ide.documentClosed(file)
+            assertEquals(
+                onDisk, ide.readCurrentText(file),
+                "an overlay that outlives its tab hides every later write to that file",
+            )
+        }
+        }
+    }
+
     @Test
     fun configurationChangesBumpTheStampAndNotifyListeners() {
         withTempDir("events-config") { dir ->

@@ -52,6 +52,13 @@ import java.util.concurrent.atomic.AtomicLong
  *    ambiguously a source file / package dir / classpath jar, so the full walk is the safe catch-all).
  *  - [FileMoved]: re-key overlays, invalidate analyzers, refresh synthetics, re-sync.
  *
+ * Cutting across all of those: an event the UI did NOT drive (every create/delete/move, and a [FileChanged]
+ * published without the text that was written) re-reads that path's editor overlay from disk and reports
+ * [Reactions.fileSystemChanged], so the tree and the open tabs catch up. Without it a writer that goes
+ * straight to disk stays invisible for the rest of the session behind a buffer that outlives it: the
+ * overlay wins over disk in the resource repository and the name environments, so the file's new content
+ * exists on disk and nowhere else until a restart clears the overlay.
+ *
  * `invalidate` (analyzer/name-env teardown) is DECOUPLED from `resync` (full library+SDK re-index): a
  * source-set change needs only the former; a full re-sync is reserved for actual CLASSPATH changes.
  *  - model events (any commit): invalidate analyzers + refresh synthetics + re-sync + bump [configStamp].
@@ -85,8 +92,17 @@ internal class WorkspaceEventHub(
         /** Re-point open-document overlays from [from] to [to] (after a move/rename). */
         fun rekeyOverlays(from: Path, to: Path)
 
+        /** Re-read [path] into the open-document overlay, if it has one. A writer that changed the file
+         *  without handing over the text it wrote left the overlay ahead of (or behind) disk, and the
+         *  overlay WINS wherever it is consulted, so the stale text would otherwise outlive the write. */
+        fun refreshOverlay(path: Path)
+
         /** A path under an Android `res/` tree (a change to it can change the synthetic R). */
         fun isResourcePath(path: Path): Boolean
+
+        /** The file system changed under the UI rather than through it: the file tree and any clean open
+         *  tab must re-read from disk. The seam the host's file-system epoch hangs off. */
+        fun fileSystemChanged()
 
         /** A model/settings-level configuration change landed (dependencies, variant, SDK, …). The seam the
          *  out-of-process engines' snapshot push / hint fan-out hangs off. */
@@ -223,11 +239,20 @@ internal class WorkspaceEventHub(
             var resync = false
             var changed = 0
             var membershipChanged = false
+            var external = false
             for (e in events) {
                 val p = Paths.get(e.file.path)
                 when (e) {
                     is FileChanged -> {
                         changed++
+                        // A writer that went straight to disk left the overlay stale, and the overlay wins
+                        // over disk everywhere it is consulted (the buffer-aware resource repository, the
+                        // name-environment overlay, the re-index below). Re-read it FIRST, so everything
+                        // after this line in the batch sees what was actually written.
+                        if (!e.carriesNewText) {
+                            reactions.refreshOverlay(p)
+                            external = true
+                        }
                         if (reactions.isResourcePath(p)) {
                             synthetic = true
                             if (p.toString().endsWith(".xml")) reactions.reindexSourceAsync(p)
@@ -243,6 +268,10 @@ internal class WorkspaceEventHub(
                     }
 
                     is FileCreated -> if (!e.file.isDirectory) {
+                        // A path can be created back over an overlay that outlived it (a file deleted and
+                        // rewritten, a resource file the fix re-creates), so the same re-read applies.
+                        reactions.refreshOverlay(p)
+                        external = true
                         if (reactions.isResourcePath(p)) {
                             synthetic = true
                             if (p.toString().endsWith(".xml")) reactions.reindexSourceAsync(p)
@@ -260,6 +289,7 @@ internal class WorkspaceEventHub(
                     }
 
                     is FileDeleted -> {
+                        external = true
                         reactions.dropOverlaysUnder(p)
                         // A deleted path is ambiguous once gone — a source file, a package directory, OR a classpath
                         // jar (its extension can't be trusted) — so keep the full re-sync: its source walk drops the
@@ -268,6 +298,7 @@ internal class WorkspaceEventHub(
                     }
 
                     is FileMoved -> {
+                        external = true
                         reactions.rekeyOverlays(Paths.get(e.from), Paths.get(e.to))
                         invalidate = true; synthetic = true; membershipChanged = true; resync = true
                     }
@@ -287,8 +318,18 @@ internal class WorkspaceEventHub(
             }
             if (synthetic) reactions.invalidateSyntheticClasses()
             if (resync) reactions.resyncIndex()
+            if (external) reactions.fileSystemChanged()
             if (membershipChanged) onMembershipChanged()
         }
+
+        /**
+         * Whether the publisher handed over the text it wrote. An editor save and an applied edit do
+         * ([changedEvent] hashes the new text), so the overlay is already in step with disk and the UI
+         * drove the change itself. A write published without text (a resource write, a template scaffold,
+         * an external tool) leaves both the overlay and the UI behind, which is what [refreshOverlay] and
+         * [Reactions.fileSystemChanged] are for. "No text" is carried as the empty content hash.
+         */
+        private val FileChanged.carriesNewText: Boolean get() = newHash != ContentHash("")
 
         private fun isKotlin(p: Path): Boolean =
             p.fileName?.toString()?.let { it.endsWith(".kt") || it.endsWith(".kts") } == true

@@ -203,7 +203,15 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         runCatching { ctx.messageBus?.syncPublisher(IdeEventTopics.EDITOR)?.onEditorEvent(event) }
 
     override fun onFileOpened(path: String) { publishEditor(EditorEvent.FileOpened(path)) }
-    override fun onFileClosed(path: String) { publishEditor(EditorEvent.FileClosed(path)) }
+
+    /** Dropping the overlay is the point, not a side effect: an overlay that outlives its tab keeps winning
+     *  over disk for the rest of the session, hiding every later write to that file (see
+     *  [dev.ide.core.IdeServices.documentClosed]). */
+    override fun onFileClosed(path: String) {
+        runCatching { ctx.services.documentClosed(Paths.get(path)) }
+        publishEditor(EditorEvent.FileClosed(path))
+    }
+
     override fun onActiveEditorChanged(path: String?) { publishEditor(EditorEvent.ActiveEditorChanged(path)) }
     override fun onSelectionChanged(path: String, start: Int, end: Int) {
         publishEditor(EditorEvent.SelectionChanged(path, start, end))
