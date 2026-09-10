@@ -8,6 +8,7 @@ import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -63,6 +64,12 @@ class KotlinImplementMembersActionTest {
         val actions = s.editorActions(probe, text, caret, caret)
         val idx = actions.indexOfFirst { it.title == "Implement members" }
         assertTrue(idx >= 0, "expected an 'Implement members' action; got ${actions.map { it.title }}")
+        // ONE row: on the class name the caret intention and the diagnostic's fix both apply, and the
+        // engine's union by title keeps the fix alone.
+        assertEquals(
+            1, actions.count { it.title == "Implement members" },
+            "the menu listed 'Implement members' twice; got ${actions.map { it.title }}",
+        )
 
         val result = applyEdits(text, s.run { applyEditorAction(probe, text, caret, caret, idx).editsFor(probe) })
         assertTrue(

@@ -137,6 +137,13 @@ class AnalysisEngine(
      * (point-inclusive, so a bare caret on a squiggle still lists its fixes) + the [ActionProvider]
      * intentions for the file's language. Order is deterministic for a (target, range) so a host can
      * round-trip by index.
+     *
+     * The two halves overlap by design: an intention is offered wherever the user goes looking for it,
+     * while a fix is anchored on the diagnostic, so on the error itself the same action arrives twice
+     * (e.g. Kotlin's "Implement members", offered anywhere in the class body *and* on the
+     * `abstractNotImplemented` error). The menu shows one row per title: an intention whose title is
+     * already listed is dropped, keeping the fix, since two rows a user cannot tell apart are noise.
+     * Fixes are never dropped: a title repeated across two diagnostics in a selection is two edits.
      */
     private fun actionsFor(target: AnalysisTarget, range: TextRange): List<QuickFix> {
         val lang = environment.languageOf(target.file)
@@ -148,8 +155,10 @@ class AnalysisEngine(
         // Resolve the caret's place in the tree ONCE and share it: every provider's first move is to find
         // the node at the caret and walk up from it, and that walk is identical for all of them.
         val ctx = EditorActionContext.of(target, range, lang)
+        val titles = fixes.mapTo(HashSet()) { it.title }
         val intentions = applicable
             .flatMap { runCatching { it.actions(ctx) }.getOrDefault(emptyList()) }
+            .filter { titles.add(it.title) }
         return fixes + intentions
     }
 

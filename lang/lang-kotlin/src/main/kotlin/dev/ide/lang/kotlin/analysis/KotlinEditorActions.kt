@@ -194,7 +194,8 @@ class KotlinIntroduceVariableActionProvider : ActionProvider {
 /**
  * Generate `override` stubs for the abstract members a class has not implemented, offered anywhere inside
  * the class rather than only on the "not implemented" error. [KotlinImplementMembersFixProvider] covers the
- * diagnostic; this covers the case where the user goes looking for it.
+ * diagnostic; this covers the case where the user goes looking for it. On the error itself both apply, and
+ * the engine lists the fix alone (it unions the two halves by title).
  */
 class KotlinImplementMembersActionProvider : ActionProvider {
     override val languages = setOf(KOTLIN)

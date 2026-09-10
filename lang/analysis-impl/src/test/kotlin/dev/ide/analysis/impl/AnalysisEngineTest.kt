@@ -1,5 +1,6 @@
 package dev.ide.analysis.impl
 
+import dev.ide.analysis.ActionProvider
 import dev.ide.analysis.AnalysisListener
 import dev.ide.analysis.AnalysisProfile
 import dev.ide.analysis.AnalysisTarget
@@ -189,6 +190,45 @@ class AnalysisEngineTest {
     }
 
     @Test
+    fun editorActionsDropAnIntentionAlreadyOfferedAsAFix() = runBlocking {
+        // The overlap by design: an action offered across a whole declaration, and the same action offered
+        // by a code-keyed provider on the error inside it. On the error both apply; the menu must not show
+        // the row twice (this was two "Implement members" entries on a Kotlin class name).
+        val file = FakeFile("/src/Main.java")
+        val src = "class Main implements Service {}"
+        val onName = TextRange(src.indexOf("Main"), src.indexOf("Main") + 4)
+        val target = target(file, src, node(NodeKind.CLASS_DECL, 0, src.length))
+        val analyzer = RecordingAnalyzer(
+            AnalyzerId("inheritance"), AnalyzerTier.SYNTAX, null, "ABSTRACT_NOT_IMPLEMENTED",
+            Severity.ERROR, onName,
+        )
+        val engine = engine(
+            analyzers = listOf(analyzer),
+            quickFixProviders = listOf(
+                FakeFixProvider(setOf("ABSTRACT_NOT_IMPLEMENTED"), EditFix("Implement members", file)),
+            ),
+            env = env(target),
+            actionProviders = listOf(
+                FakeActionProvider(
+                    EditFix("Implement members", file, CodeActionKind.REFACTOR),
+                    EditFix("Convert to block body", file, CodeActionKind.REFACTOR, text = "block"),
+                ),
+            ),
+        )
+        engine.analyzeNow(file) // publish the diagnostic the fix hangs off
+
+        val caret = TextRange(onName.start, onName.start)
+        val actions = engine.editorActionsAt(file, caret)
+
+        assertEquals(listOf("Implement members", "Convert to block body"), actions.map { it.title })
+        // The row that survives is the FIX (the one anchored on the error), not the intention.
+        assertEquals(CodeActionKind.QUICK_FIX, actions.first().kind)
+        // And the index round-trip agrees with the list the host was shown: index 1 is the other intention.
+        val edits = engine.computeActionEdits(file, caret, 1).edits.getValue(file)
+        assertEquals("block", edits.single().newText.toString())
+    }
+
+    @Test
     fun applyRunsEditThroughEnvironmentAndReanalyzes() = runBlocking {
         val file = FakeFile("/src/Main.java")
         val target = target(file, "class Main {}")
@@ -314,7 +354,11 @@ class AnalysisEngineTest {
         env: FakeEnv,
         profile: AnalysisProfile = AnalysisProfile.DEFAULT,
         scope: CoroutineScope = CoroutineScope(Job()),
-    ) = AnalysisEngine(analyzers, quickFixProviders, diagnosticProviders, env, scope, profile, SchedulerConfig(0, 0, 0))
+        actionProviders: List<ActionProvider> = emptyList(),
+    ) = AnalysisEngine(
+        analyzers, quickFixProviders, diagnosticProviders, env, scope, profile, SchedulerConfig(0, 0, 0),
+        actionProviders,
+    )
 
     private fun env(vararg targets: AnalysisTarget) =
         FakeEnv(targets.associateBy { it.file.path }.toMutableMap())
@@ -368,10 +412,19 @@ private class FakeFixProvider(override val forCodes: Set<String>, private val fi
     override fun fixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix> = listOf(fix)
 }
 
-private class EditFix(override val title: String, private val file: VirtualFile) : QuickFix {
-    override val kind = CodeActionKind.QUICK_FIX
+private class EditFix(
+    override val title: String,
+    private val file: VirtualFile,
+    override val kind: CodeActionKind = CodeActionKind.QUICK_FIX,
+    private val text: String = "x",
+) : QuickFix {
     override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit =
-        WorkspaceEdit.of(file, DocumentEdit(0, 0, "x"))
+        WorkspaceEdit.of(file, DocumentEdit(0, 0, text))
+}
+
+private class FakeActionProvider(private vararg val offered: QuickFix) : ActionProvider {
+    override val languages = setOf(LanguageId("java"))
+    override fun actions(target: AnalysisTarget, range: TextRange): List<QuickFix> = offered.toList()
 }
 
 private class FakeFixContext(override val target: AnalysisTarget) : FixContext {

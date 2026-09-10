@@ -80,6 +80,11 @@ interface QuickFixProvider {
  * diagnostic quick-fixes ([AnalysisService.editorActionsAt]). The [QuickFix]es it returns are the same
  * currency a fix uses, so they apply through the same path; they should capture whatever they need from
  * `target`/`range`, since they are computed against the same buffer the action list was built from.
+ *
+ * The union is by title: an action whose title a quick-fix at the same position already offers is dropped
+ * from the menu. So a provider is free to offer an action across a whole declaration that a code-keyed
+ * [QuickFixProvider] also offers on the error inside it, without the user seeing the row twice.
+ *
  * Registered on [ACTION_PROVIDER_EP].
  */
 interface ActionProvider {
