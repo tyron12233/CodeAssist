@@ -14,4 +14,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.kotlinx.coroutines.test)
+    // Opt-in regression suites (`regressionTest`): shared benchmark harness.
+    testImplementation(project(":bench-support"))
 }

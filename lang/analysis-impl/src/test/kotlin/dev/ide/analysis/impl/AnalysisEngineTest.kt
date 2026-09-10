@@ -13,6 +13,7 @@ import dev.ide.analysis.DiagnosticSource
 import dev.ide.analysis.DiagnosticTag
 import dev.ide.analysis.FileAnalyzer
 import dev.ide.analysis.FixContext
+import dev.ide.analysis.NodeIndex
 import dev.ide.analysis.ProjectAnalysisScope
 import dev.ide.analysis.ProjectAnalyzer
 import dev.ide.analysis.ProjectDiagnosticSink
@@ -170,6 +171,56 @@ class AnalysisEngineTest {
         val engine = engine(analyzers = listOf(analyzer), env = env(target))
 
         assertTrue(engine.analyzeNow(file).none { it.code == "style.x" })
+    }
+
+    @Test
+    fun wholeFileAnalyzersNeverWalkTheDom() = runBlocking {
+        // Every ide-core analyzer is a whole-file one (`interestedIn == null`), so on a Kotlin file the
+        // gate has nothing to gate: the pass must not pay a traversal to discover that.
+        val file = FakeFile("/src/Main.java")
+        val parsed = FakeParsed(file, version = 1, src = "class Main {}", top = listOf(node(NodeKind.CLASS_DECL, 0, 13)))
+        val target = FakeTarget(file, parsed)
+        val whole = RecordingAnalyzer(AnalyzerId("whole"), AnalyzerTier.SYNTAX, interestedIn = null, code = "w")
+        val engine = engine(analyzers = listOf(whole), env = env(target))
+
+        engine.analyzeNow(file)
+
+        assertEquals(1, whole.invocations, "the whole-file analyzer should still run")
+        assertEquals(0, parsed.walks, "a pass with only whole-file analyzers must not traverse the DOM")
+    }
+
+    @Test
+    fun nodeKeyedAnalyzersShareOneTraversal() = runBlocking {
+        // Two analyzers keyed on the same kind, plus a whole-file one: ONE walk for the pass, and each
+        // node-keyed analyzer is handed its nodes rather than walking to find them.
+        val file = FakeFile("/src/Main.java")
+        val src = "class Main { void a() { f(); } void b() { g(); } }"
+        val calls = listOf(node(NodeKind.METHOD_CALL, 24, 27), node(NodeKind.METHOD_CALL, 41, 44))
+        val parsed = FakeParsed(file, version = 1, src = src, top = calls + node(NodeKind.CLASS_DECL, 0, src.length))
+        val target = FakeTarget(file, parsed)
+        val first = NodeKeyedAnalyzer(AnalyzerId("first"), NodeKind.METHOD_CALL)
+        val second = NodeKeyedAnalyzer(AnalyzerId("second"), NodeKind.METHOD_CALL)
+        val whole = RecordingAnalyzer(AnalyzerId("whole"), AnalyzerTier.SYNTAX, interestedIn = null, code = "w")
+        val engine = engine(analyzers = listOf(first, second, whole), env = env(target))
+
+        engine.analyzeNow(file)
+
+        assertEquals(1, parsed.walks, "the pass must traverse the DOM exactly once for both analyzers")
+        assertEquals(listOf(2, 2), listOf(first.seen, second.seen), "each analyzer should get both calls")
+    }
+
+    @Test
+    fun anAnalyzerWithNoNodeOfItsKindIsSkipped() = runBlocking {
+        val file = FakeFile("/src/Main.java")
+        val parsed = FakeParsed(file, version = 1, src = "class Main {}", top = listOf(node(NodeKind.CLASS_DECL, 0, 13)))
+        val target = FakeTarget(file, parsed)
+        val keyed = NodeKeyedAnalyzer(AnalyzerId("calls"), NodeKind.METHOD_CALL)
+        val engine = engine(analyzers = listOf(keyed), env = env(target))
+
+        engine.analyzeNow(file)
+
+        assertEquals(0, keyed.invocations, "no METHOD_CALL in the file -> the analyzer must not run")
+        assertEquals(1, parsed.walks, "the gate pays one walk to answer that")
     }
 
     // ---- quick-fixes ----
@@ -391,6 +442,25 @@ private class RecordingAnalyzer(
     }
 }
 
+/** An analyzer keyed on one [NodeKind], consuming the pass's shared traversal. */
+private class NodeKeyedAnalyzer(override val id: AnalyzerId, private val kind: NodeKind) : FileAnalyzer {
+    override val displayName = id.value
+    override val languages = setOf(LanguageId("java"))
+    override val defaultSeverity = Severity.WARNING
+    override val tier = AnalyzerTier.SYNTAX
+    override val interestedIn = setOf(kind)
+    var invocations = 0; private set
+    var seen = 0; private set
+
+    override fun analyze(target: AnalysisTarget, sink: dev.ide.analysis.DiagnosticSink) =
+        error("the engine must call the NodeIndex overload")
+
+    override fun analyze(target: AnalysisTarget, sink: dev.ide.analysis.DiagnosticSink, nodes: NodeIndex) {
+        invocations++
+        for (n in nodes.nodes(kind)) { seen++; sink.report(n.range, defaultSeverity, "found", code = id.value) }
+    }
+}
+
 private class FakeCompiler(
     override val id: String = "compiler",
     private val produce: (AnalysisTarget) -> List<Diagnostic>,
@@ -489,6 +559,8 @@ private class FakeParsed(
     override val documentVersion: Long = version.toLong()
     override val diagnostics: List<dev.ide.lang.dom.Diagnostic> = emptyList()
     init { top.forEach { it.parent = this } }
+    /** How many full-file traversals were asked of this parse: the engine's shared-walk guard. */
+    var walks = 0; private set
     override fun text(): CharSequence = src
     override fun nodeAt(offset: Int): DomNode {
         var best: DomNode = this
@@ -497,6 +569,7 @@ private class FakeParsed(
         return best
     }
     override fun nodesIn(range: TextRange): Sequence<DomNode> {
+        if (range == this.range) walks++
         val out = ArrayList<DomNode>()
         fun walk(n: DomNode) { if (n.range.intersects(range)) { out += n; n.children.forEach(::walk) } }
         children.forEach(::walk)

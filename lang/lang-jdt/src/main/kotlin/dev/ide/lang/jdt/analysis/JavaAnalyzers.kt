@@ -10,8 +10,10 @@ import dev.ide.analysis.DiagnosticSink
 import dev.ide.analysis.DiagnosticSource
 import dev.ide.analysis.DiagnosticTag
 import dev.ide.analysis.FileAnalyzer
+import dev.ide.analysis.NodeIndex
 import dev.ide.lang.LanguageId
 import dev.ide.lang.jdt.JdtSourceAnalyzer
+import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.NodeKind
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
@@ -32,18 +34,23 @@ class SystemOutCallAnalyzer : FileAnalyzer {
     override val tier = AnalyzerTier.SYNTAX
     override val interestedIn = setOf(NodeKind.METHOD_CALL)
 
-    override fun analyze(target: AnalysisTarget, sink: DiagnosticSink) {
-        for (call in target.parsed.nodesIn(target.parsed.range)) {
-            if (call.kind != NodeKind.METHOD_CALL) continue
-            val text = call.text().toString()
+    override fun analyze(target: AnalysisTarget, sink: DiagnosticSink) =
+        analyze(target, sink, NodeIndex.over(target.parsed))
+
+    override fun analyze(target: AnalysisTarget, sink: DiagnosticSink, nodes: NodeIndex) {
+        // The prefix is tested against the source at the call's own start, not against a copy of the
+        // call's text: an enclosing call's text includes every nested call's, so materializing it to
+        // read eleven characters re-copies the inner ones at every level of nesting.
+        val source = target.parsed.text()
+        for (call in nodes.nodes(NodeKind.METHOD_CALL)) {
+            val start = call.range.start
             // Require the member boundary (`System.out.`), so a user type's own member — `System.outLog.append(x)`
             // where `System` is the project's class — isn't mistaken for `java.lang.System.out`.
             val prefix = when {
-                text.startsWith("System.out.") -> "System.out"
-                text.startsWith("System.err.") -> "System.err"
+                call.startsWith(source, "System.out.") -> "System.out"
+                call.startsWith(source, "System.err.") -> "System.err"
                 else -> continue
             }
-            val start = call.range.start
             sink.report(
                 range = TextRange(start, start + prefix.length),
                 severity = defaultSeverity,
@@ -52,6 +59,11 @@ class SystemOutCallAnalyzer : FileAnalyzer {
             )
         }
     }
+
+    /** Whether this node's own text starts with [prefix], read off [source] in place, and never past
+     *  the node's end (a node shorter than [prefix] cannot start with it, whatever follows it). */
+    private fun DomNode.startsWith(source: CharSequence, prefix: String): Boolean =
+        range.end - range.start >= prefix.length && source.startsWith(prefix, range.start)
 }
 
 /**
@@ -69,18 +81,22 @@ class UnusedImportAnalyzer : FileAnalyzer {
     override val tier = AnalyzerTier.SYNTAX
     override val interestedIn = setOf(NodeKind.IMPORT_DECL)
 
-    override fun analyze(target: AnalysisTarget, sink: DiagnosticSink) {
-        val source = target.parsed.text().toString()
-        // The "body" is everything but the import lines, so a name that appears only in its own import
-        // declaration reads as unused. Cheap, and good enough without full reference resolution.
-        val body = source.lineSequence().filterNot { it.trimStart().startsWith("import ") }.joinToString("\n")
-        for (imp in target.parsed.nodesIn(target.parsed.range)) {
-            if (imp.kind != NodeKind.IMPORT_DECL) continue
+    override fun analyze(target: AnalysisTarget, sink: DiagnosticSink) =
+        analyze(target, sink, NodeIndex.over(target.parsed))
+
+    override fun analyze(target: AnalysisTarget, sink: DiagnosticSink, nodes: NodeIndex) {
+        val imports = nodes.nodes(NodeKind.IMPORT_DECL)
+        if (imports.isEmpty()) return
+        // The identifiers used outside the import lines, tokenized ONCE. Asking the question the other way
+        // round (a `\bname\b` scan of the body per import) is O(imports x file size) and compiles a
+        // pattern per import; a name either appears as an identifier token here or it does not.
+        val used = identifiersOutsideImports(target.parsed.text())
+        for (imp in imports) {
             val decl = imp.text().toString()
-            if (decl.contains('*') || Regex("\\bstatic\\b").containsMatchIn(decl)) continue // wildcard / static
+            if (decl.contains('*') || STATIC.containsMatchIn(decl)) continue // wildcard / static
             val name = decl.removePrefix("import").trim().removeSuffix(";").trim().substringAfterLast('.')
             if (name.isEmpty()) continue
-            if (!Regex("\\b${Regex.escape(name)}\\b").containsMatchIn(body)) {
+            if (name !in used) {
                 sink.report(
                     range = imp.range,
                     severity = defaultSeverity,
@@ -89,6 +105,41 @@ class UnusedImportAnalyzer : FileAnalyzer {
                     tags = setOf(DiagnosticTag.UNUSED),
                 )
             }
+        }
+    }
+
+    private companion object {
+        val STATIC = Regex("\\bstatic\\b")
+
+        /**
+         * Every identifier token in [source] outside the import lines, in one scan. Import lines are
+         * excluded so a name that appears only in its own declaration reads as unused; everything else
+         * counts, comments and string literals included, which is the same heuristic the `\bname\b`
+         * scan applied (this analyzer resolves nothing; see the class doc).
+         */
+        fun identifiersOutsideImports(source: CharSequence): Set<String> {
+            val used = HashSet<String>()
+            var i = 0
+            while (i < source.length) {
+                // At a line start, skip the whole line when it is an import declaration.
+                var lineStart = i
+                while (lineStart < source.length && (source[lineStart] == ' ' || source[lineStart] == '\t')) lineStart++
+                if (source.startsWith("import ", lineStart)) {
+                    while (i < source.length && source[i] != '\n') i++
+                    i++
+                    continue
+                }
+                // Otherwise tokenize the line's identifiers.
+                while (i < source.length && source[i] != '\n') {
+                    if (!source[i].isJavaIdentifierStart()) { i++; continue }
+                    val start = i
+                    i++
+                    while (i < source.length && source[i].isJavaIdentifierPart()) i++
+                    used += source.subSequence(start, i).toString()
+                }
+                i++
+            }
+            return used
         }
     }
 }

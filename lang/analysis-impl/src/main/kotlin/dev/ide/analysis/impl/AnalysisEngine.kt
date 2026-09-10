@@ -18,6 +18,7 @@ import dev.ide.analysis.FileAnalyzer
 import dev.ide.analysis.FileDiagnostics
 import dev.ide.analysis.FixContext
 import dev.ide.analysis.LintReport
+import dev.ide.analysis.NodeIndex
 import dev.ide.analysis.ProjectAnalysisScope
 import dev.ide.analysis.ProjectAnalyzer
 import dev.ide.analysis.ProjectDiagnosticSink
@@ -26,6 +27,7 @@ import dev.ide.analysis.QuickFixProvider
 import dev.ide.analysis.RelatedRange
 import dev.ide.analysis.WorkspaceEdit
 import dev.ide.lang.LanguageId
+import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 import dev.ide.platform.Disposable
@@ -89,9 +91,10 @@ class AnalysisEngine(
             if (published.clear(file)) notify(file)
             return emptyList()
         }
-        runSyntax(target)
-        runSemantic(target)
-        runCompiler(target)
+        val suppression = Suppression(target.parsed)
+        runSyntax(target, suppression)
+        runSemantic(target, suppression)
+        runCompiler(target, suppression)
         return published.merged(file)
     }
 
@@ -104,7 +107,9 @@ class AnalysisEngine(
             val raw = ArrayList<Diagnostic>()
             raw += collect(target, fileAnalyzers.filter { isEnabled(it) && matchesLanguage(it, environment.languageOf(file)) })
             for (provider in diagnosticProviders) if (providerMatches(provider.languages, target.file)) raw += provider.diagnose(target)
-            val kept = SuppressionFilter.from(target.parsed).retain(raw)
+            // As in a file pass: a file that reported nothing is not worth scanning for suppressions, and
+            // in a whole-project sweep most files report nothing.
+            val kept = if (raw.isEmpty()) raw else SuppressionFilter.from(target.parsed).retain(raw)
             if (kept.isNotEmpty()) perFile.getOrPut(file.path) { MutableEntry(file) }.diagnostics += kept
         }
 
@@ -212,8 +217,10 @@ class AnalysisEngine(
             environment.targetFor(file, needsBindings = false)?.let { runSyntax(it) } ?: return@launch
             delay((config.semanticDelayMs - config.syntaxDelayMs).coerceAtLeast(0))
             val target = environment.targetFor(file, needsBindings = fileNeedsBindings(environment.languageOf(file))) ?: return@launch
-            runSemantic(target)
-            runCompiler(target)
+            // A fresh target: its own parse, so its own suppression state (shared by the two buckets below).
+            val suppression = Suppression(target.parsed)
+            runSemantic(target, suppression)
+            runCompiler(target, suppression)
         }
         projectJob?.cancel()
         projectJob = scope.launch {
@@ -231,44 +238,64 @@ class AnalysisEngine(
 
     // ---------------------------------------------------------------------- passes
 
-    private fun runSyntax(target: AnalysisTarget) =
-        recordFileBucket(target, PublishedState.Bucket.SYNTAX, AnalyzerTier.SYNTAX)
+    private fun runSyntax(target: AnalysisTarget, suppression: Suppression = Suppression(target.parsed)) =
+        recordFileBucket(target, PublishedState.Bucket.SYNTAX, AnalyzerTier.SYNTAX, suppression)
 
-    private fun runSemantic(target: AnalysisTarget) =
-        recordFileBucket(target, PublishedState.Bucket.SEMANTIC, AnalyzerTier.SEMANTIC)
+    private fun runSemantic(target: AnalysisTarget, suppression: Suppression = Suppression(target.parsed)) =
+        recordFileBucket(target, PublishedState.Bucket.SEMANTIC, AnalyzerTier.SEMANTIC, suppression)
 
-    private suspend fun runCompiler(target: AnalysisTarget) {
+    private suspend fun runCompiler(target: AnalysisTarget, suppression: Suppression = Suppression(target.parsed)) {
         if (diagnosticProviders.isEmpty()) return
         val raw = ArrayList<Diagnostic>()
         for (provider in diagnosticProviders) if (providerMatches(provider.languages, target.file)) raw += provider.diagnose(target)
-        record(target, PublishedState.Bucket.COMPILER, raw)
+        record(target, PublishedState.Bucket.COMPILER, raw, suppression)
     }
 
-    private fun recordFileBucket(target: AnalysisTarget, bucket: PublishedState.Bucket, tier: AnalyzerTier) {
+    private fun recordFileBucket(
+        target: AnalysisTarget, bucket: PublishedState.Bucket, tier: AnalyzerTier, suppression: Suppression,
+    ) {
         val lang = environment.languageOf(target.file)
         val applicable = fileAnalyzers.filter { it.tier == tier && isEnabled(it) && matchesLanguage(it, lang) }
-        record(target, bucket, collect(target, applicable))
+        record(target, bucket, collect(target, applicable), suppression)
     }
 
-    private fun record(target: AnalysisTarget, bucket: PublishedState.Bucket, raw: List<Diagnostic>) {
-        val kept = SuppressionFilter.from(target.parsed).retain(raw)
+    private fun record(
+        target: AnalysisTarget, bucket: PublishedState.Bucket, raw: List<Diagnostic>, suppression: Suppression,
+    ) {
+        // Nothing to filter: skip the filter build entirely. Most buckets on most files are empty, and
+        // parsing the file's suppression directives to filter an empty list is the pass's purest waste.
+        val kept = if (raw.isEmpty()) raw else suppression.filter().retain(raw)
         if (published.record(target.file, target.documentVersion, bucket, kept)) notify(target.file)
     }
 
     /**
-     * Run [analyzers] over [target] in one shared DOM traversal: a single pass collects the node
-     * kinds present in the file, then each analyzer is invoked only if its [FileAnalyzer.interestedIn]
-     * is null (whole-file) or intersects those kinds — N analyzers, one walk.
+     * One pass's [SuppressionFilter], built at most once and only if some bucket actually reported.
+     * The filter is derived purely from the file's text, so the three buckets of a pass share it rather
+     * than each re-scanning the source for `@Suppress` / `// noinspection` directives.
+     */
+    private class Suppression(private val parsed: ParsedFile) {
+        private var filter: SuppressionFilter? = null
+        fun filter(): SuppressionFilter = filter ?: SuppressionFilter.from(parsed).also { filter = it }
+    }
+
+    /**
+     * Run [analyzers] over [target] in one shared DOM traversal: a single [NodeIndex] groups the file's
+     * nodes by kind, each analyzer is invoked only if its [FileAnalyzer.interestedIn] is null
+     * (whole-file) or present in the index, and a node-keyed one is handed the nodes it asked for
+     * instead of walking again: N analyzers, one walk.
+     *
+     * The index defers its traversal to the first query, so a pass whose analyzers are all whole-file
+     * ones (every ide-core analyzer, hence every Kotlin file) never walks the DOM at all.
      */
     private fun collect(target: AnalysisTarget, analyzers: List<FileAnalyzer>): List<Diagnostic> {
         if (analyzers.isEmpty()) return emptyList()
-        val present = target.parsed.nodesIn(target.parsed.range).mapTo(HashSet()) { it.kind }
+        val nodes = NodeIndex.over(target.parsed)
         val out = ArrayList<Diagnostic>()
         for (analyzer in analyzers) {
             val interested = analyzer.interestedIn
-            if (interested != null && interested.none { it in present }) continue
+            if (interested != null && interested.none { it in nodes }) continue
             target.checkCanceled()
-            analyzer.analyze(target, AnalyzerSink(analyzer, profile, out))
+            analyzer.analyze(target, AnalyzerSink(analyzer, profile, out), nodes)
         }
         return out
     }
