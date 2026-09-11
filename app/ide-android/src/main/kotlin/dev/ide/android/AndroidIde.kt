@@ -417,6 +417,12 @@ object AndroidIde {
      * grants, and a rung the device refuses aborts by design; the OS files that abort under this package, so
      * without the filter the app's own capability probe reads back as a crash on a healthy device — 12 of the
      * 13 crashes reported for 3.9.6 were that probe.
+     *
+     * Neither is a SIGKILL ([dev.ide.platform.ProcessDeath.isSystemKill]): the low-memory killer, the user
+     * swiping the task away, and this app ending its own `:build` / `:preview` child all land in this history
+     * as `REASON_SIGNALED`, and all three are the system working, not a fault. They were 74% of the crash rows
+     * reported for 3.14.0 (479 of 649, across 63 of the 89 crashing installs), which is what made the headline
+     * crash-free rate read ~8 points below the truth.
      */
     private fun reportPreviousNativeCrash(
         context: Context,
@@ -452,6 +458,14 @@ object AndroidIde {
                 val tomb = runCatching {
                     exit.traceInputStream?.use { dev.ide.platform.NativeTombstone.parse(it) }
                 }.getOrNull()
+                if (dev.ide.platform.ProcessDeath.isSystemKill(exit.reason, exit.status, tomb != null)) {
+                    Log.logger("ide.crash").info(
+                        "Ignoring a SIGKILL of '${exit.processName}' (${exit.description}). Not a crash — the " +
+                            "low-memory killer, the user swiping the task away, or this app ending its own " +
+                            "build/preview child. No tombstone, so there is nothing to report either."
+                    )
+                    continue
+                }
                 if (dev.ide.platform.ForkedToolVm.isToolVmCrash(tomb)) {
                     Log.logger("ide.crash").info(
                         "Ignoring a native death of a forked build-tool VM ('${tomb?.faultingThread}'): " +
