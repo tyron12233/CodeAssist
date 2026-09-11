@@ -30,27 +30,72 @@ object BundledKspProcessors {
     /** True when [id]'s processor bundle is on the classpath (false when this build didn't bundle it). */
     fun isBundled(id: String): Boolean = BundledKspProcessors::class.java.getResource("/processors/$id.zip") != null
 
-    /** The bundled processor [id]'s jars, extracted to a process-wide content-keyed cache; empty when not bundled. */
+    /**
+     * The bundled processor [id]'s jars, extracted to a process-wide content-keyed cache; empty when not
+     * bundled.
+     *
+     * Two resources make up a bundle. `/processors/<id>.zip` holds what only this processor needs;
+     * `/processors/shared.zip` holds the jars two or more closures resolved to the same artifact for, which
+     * ship once rather than once per processor.
+     *
+     * A bundle takes back only the shared jars IT contributed, listed by name in its own `shared.list` entry.
+     * Taking all of `shared.zip` would be wrong: these closures disagree wildly about versions (guava is
+     * 30.1.1 in moshi, 33.2.1 in room, 33.6.0 in hilt), so the shared copy would land beside a bundle's own
+     * and leave sort order to pick which one the processor loads. With the list, the extracted dir holds
+     * exactly the jars it held when every bundle was self-contained.
+     *
+     * The key covers both zips, so an app update that changes either re-extracts instead of serving a stale
+     * cache.
+     */
     fun jarsFor(id: String): List<Path> = extracted.getOrPut(id) {
-        val bytes = BundledKspProcessors::class.java.getResourceAsStream("/processors/$id.zip")
-            ?.use { it.readBytes() } ?: return@getOrPut emptyList()
-        val dir = Paths.get(System.getProperty("java.io.tmpdir"), "codeassist", "ksp-processors", "$id-${hash16(bytes)}")
-        extractZipOfJars(bytes, dir)
+        val bytes = resource("/processors/$id.zip") ?: return@getOrPut emptyList()
+        val wanted = sharedNamesIn(bytes)
+        // Absent in a build where no two closures overlapped, and in any older bundle layout.
+        val shared = if (wanted.isEmpty()) null else resource("/processors/shared.zip")
+        val key = "$id-${hash16(bytes)}" + (shared?.let { "-${hash16(it)}" } ?: "")
+        val dir = Paths.get(System.getProperty("java.io.tmpdir"), "codeassist", "ksp-processors", key)
+        val sources = listOfNotNull(
+            bytes to { name: String -> name.endsWith(".jar") },
+            shared?.let { it to { name: String -> name in wanted } },
+        )
+        extractZipsOfJars(sources, dir)
     }
 
-    /** Extract each jar entry of the zip [bytes] into [dir], reusing an already-extracted copy; return the jars. */
-    private fun extractZipOfJars(bytes: ByteArray, dir: Path): List<Path> {
+    private fun resource(path: String): ByteArray? =
+        BundledKspProcessors::class.java.getResourceAsStream(path)?.use { it.readBytes() }
+
+    /** The shared-jar names a bundle claims, from its `shared.list` entry; empty when it claims none. */
+    private fun sharedNamesIn(bundle: ByteArray): Set<String> {
+        ZipInputStream(ByteArrayInputStream(bundle)).use { zis ->
+            var entry = zis.nextEntry
+            while (entry != null) {
+                if (entry.name == "shared.list") {
+                    return zis.readBytes().decodeToString().lineSequence()
+                        .map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+                }
+                zis.closeEntry()
+                entry = zis.nextEntry
+            }
+        }
+        return emptySet()
+    }
+
+    /** Extract the entries each zip in [sources] accepts into [dir], reusing an already-extracted copy. */
+    private fun extractZipsOfJars(sources: List<Pair<ByteArray, (String) -> Boolean>>, dir: Path): List<Path> {
         Files.createDirectories(dir)
         val marker = dir.resolve(".extracted")
         if (!Files.isRegularFile(marker)) {
-            ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
-                var entry = zis.nextEntry
-                while (entry != null) {
-                    if (!entry.isDirectory && entry.name.endsWith(".jar")) {
-                        Files.copy(zis, dir.resolve(Paths.get(entry.name).fileName.toString()), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            sources.forEach { (bytes, accept) ->
+                ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
+                    var entry = zis.nextEntry
+                    while (entry != null) {
+                        val name = Paths.get(entry.name).fileName.toString()
+                        if (!entry.isDirectory && name.endsWith(".jar") && accept(name)) {
+                            Files.copy(zis, dir.resolve(name), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                        }
+                        zis.closeEntry()
+                        entry = zis.nextEntry
                     }
-                    zis.closeEntry()
-                    entry = zis.nextEntry
                 }
             }
             runCatching { Files.writeString(marker, "ok") }

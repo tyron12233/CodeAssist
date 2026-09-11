@@ -84,9 +84,42 @@ val sqliteStubJar by tasks.registering(Jar::class) {
     from(sqliteStub.output)
 }
 
+/**
+ * Every bundled closure, by id. Populated by [bundleProcessor] at configuration time and read at execution
+ * time by [sharedProcessorJars], so it is complete by the time anything asks.
+ */
+val processorBundleConfigs = linkedMapOf<String, Configuration>()
+
+/** The jars a bundle packages: its closure, minus the ones the app itself already ships. */
+fun bundledJarsOf(cfg: Configuration): List<File> =
+    cfg.files.filter { f -> f.name.endsWith(".jar") && appProvidedJarPrefixes.none { f.name.startsWith(it) } }
+
+/**
+ * The jars MORE THAN ONE closure resolves to, which ship once as `/processors/shared.zip` instead of once per
+ * bundle. The five closures overlap heavily: `guava` (2.7 MB) and `kotlin-reflect` (2.7 MB) alone were carried
+ * twice each, and self-contained bundles cost 7 MB of byte-identical duplicates in the APK.
+ *
+ * Identity is the resolved artifact FILE, not the jar's name: two closures that want different versions of the
+ * same library (room pulls `kotlin-metadata-jvm-2.2.0`, room3 pulls `2.3.20`) resolve to different files, so
+ * they are not shared and each bundle keeps its own.
+ *
+ * Which is why a bundle takes only the jars IT contributed here, named in its own `shared.list`, rather than
+ * whatever `shared.zip` happens to hold. The versions across these five closures are wildly apart - guava is
+ * 30.1.1 in moshi, 33.2.1 in room, 33.6.0 in hilt; kotlin-reflect is 1.6.10, 1.7.0, 1.8.21 and 2.0.10 - so
+ * unpacking the shared set into every bundle would put two guavas on hilt's classpath and let sort order pick
+ * the winner. With the list, each processor sees exactly the jars it saw when every bundle was self-contained.
+ */
+val sharedProcessorJars: Provider<Set<File>> = provider {
+    processorBundleConfigs.values
+        .flatMap { bundledJarsOf(it).distinct() }
+        .groupingBy { it }.eachCount()
+        .filterValues { it > 1 }.keys
+}
+
 /** A resolvable config for [id]'s processor closure + a Zip packaging its (deduped) jars as /processors/<id>.zip. */
 fun bundleProcessor(id: String, dep: Provider<*>) {
     val cfg = configurations.create("ksp_${id}_bundle")
+    processorBundleConfigs[id] = cfg
     dependencies.add(cfg.name, dep)
     // com.intellij:annotations:12.0 (an ancient transitive of some processor closures, e.g. Room) and
     // org.jetbrains:annotations both define org.intellij.lang.annotations.* — packaging both makes D8 fail
@@ -96,16 +129,38 @@ fun bundleProcessor(id: String, dep: Provider<*>) {
     // Room only (both generations — room3-compiler pulls the same sqlite-jdbc for the same verifier): drop
     // the native sqlite-jdbc and bundle the stub instead (see the note above).
     if (id in sqliteVerifierProcessors) cfg.exclude(group = "org.xerial", module = "sqlite-jdbc")
-    val zip = tasks.register<Zip>("ksp${id.replaceFirstChar { it.uppercase() }}ProcessorZip") {
-        description = "Packages the $id KSP processor closure as /processors/$id.zip (zip of jars; app-provided jars dropped)."
+    val capitalId = id.replaceFirstChar { it.uppercase() }
+    // The names this closure gave up to shared.zip, so the loader can take back exactly those and no more.
+    val sharedListFile = layout.buildDirectory.file("generated/processors/$id-shared.list")
+    val sharedList = tasks.register("ksp${capitalId}SharedList") {
+        description = "Records which shared jars the $id closure contributed, as its shared.list."
+        outputs.file(sharedListFile)
+        doLast {
+            val mine = bundledJarsOf(cfg).toSet().intersect(sharedProcessorJars.get())
+            sharedListFile.get().asFile.writeText(mine.map { it.name }.sorted().joinToString("\n"))
+        }
+    }
+    val zip = tasks.register<Zip>("ksp${capitalId}ProcessorZip") {
+        description = "Packages the $id KSP processor closure as /processors/$id.zip (zip of jars; app-provided and shared jars dropped)."
         archiveFileName.set("$id.zip")
         destinationDirectory.set(layout.buildDirectory.dir("generated/processors"))
-        from(provider { cfg.filter { f -> f.name.endsWith(".jar") && appProvidedJarPrefixes.none { f.name.startsWith(it) } } })
+        from(provider { bundledJarsOf(cfg) - sharedProcessorJars.get() })
+        from(sharedList) { rename { "shared.list" } }
         if (id in sqliteVerifierProcessors) from(sqliteStubJar)
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
     tasks.processResources { from(zip) { into("processors") } }
 }
+
+/** The jars every bundle would otherwise carry its own copy of, packaged once. See [sharedProcessorJars]. */
+val kspSharedProcessorZip = tasks.register<Zip>("kspSharedProcessorZip") {
+    description = "Packages the jars shared by two or more KSP processor closures as /processors/shared.zip."
+    archiveFileName.set("shared.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("generated/processors"))
+    from(sharedProcessorJars)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+tasks.processResources { from(kspSharedProcessorZip) { into("processors") } }
 
 bundleProcessor("room", libs.room.compiler)
 bundleProcessor("room3", libs.room3.compiler)
