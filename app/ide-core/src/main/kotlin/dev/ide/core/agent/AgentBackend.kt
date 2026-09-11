@@ -162,7 +162,11 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             gate = AllowAllGate,
         )
     } catch (e: Exception) {
-        log.error("Failed to start the MCP server on port ${CodeAssistMcpServer.DEFAULT_HTTP_PORT}: ${e.message}", e)
+        // WARN, not ERROR: an ERROR carrying a throwable is what raises the app's critical-error dialog, and
+        // this failure is both expected and harmless — the usual cause is the port already being held (the
+        // app's own previous process, or another app), and the caller simply leaves the server off. Telling
+        // the user about it with a modal on startup, which is where this runs, is the wrong trade.
+        log.warn("MCP server not started on port ${CodeAssistMcpServer.DEFAULT_HTTP_PORT}: ${e.message}")
         null
     }
 
@@ -174,7 +178,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         Files.createDirectories(assets)
         CodeAssistMcpServer.startFtpServer(assets, CodeAssistMcpServer.DEFAULT_FTP_PORT)
     } catch (e: Exception) {
-        log.error("Failed to start the FTP server on port ${CodeAssistMcpServer.DEFAULT_FTP_PORT}: ${e.message}", e)
+        // WARN for the same reason as the MCP server above: an optional server that cannot take its port is
+        // a disabled feature, not an error the user has to dismiss.
+        log.warn("FTP server not started on port ${CodeAssistMcpServer.DEFAULT_FTP_PORT}: ${e.message}")
         null
     }
 
