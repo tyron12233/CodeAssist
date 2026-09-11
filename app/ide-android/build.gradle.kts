@@ -81,6 +81,34 @@ val bundleKotlinStdlibAsset = tasks.register<Copy>("bundleKotlinStdlibAsset") {
     rename { "kotlin-stdlib.jar" }
 }
 
+// --- The bundled platform jar --------------------------------------------------------------------
+// `src/main/sdk/android.jar` is the SDK's platform jar verbatim, and it is deliberately NOT under
+// `src/main/assets`: it is stripped on the way into the APK, and a file sitting in an assets dir would be
+// packaged whole before anything could touch it.
+//
+// 17 MB of the SDK's 27.8 MB is `res/` — the framework's own drawables and binary layouts — and nothing
+// here reads them. aapt2 resolves an `@android:` reference out of `resources.arsc`, the resource TABLE,
+// never out of the framework's resource FILES, and on device the real framework supplies those anyway. The
+// two in-app readers of this jar only ever open `.class` entries (FrameworkResourceScanner scans
+// `android/R$*` for framework resource names; CorePlatformProvider filters by class package). Verified by
+// linking a project that references framework styles, colours, attrs and drawables against both jars: the
+// output APK is byte-identical.
+//
+// `resources.arsc` STAYS. Without it every `@android:` reference fails to link ("resource
+// android:color/white not found"), which is the whole reason aapt2 is given this jar as `-I`.
+val stripAndroidJarAsset = tasks.register<Zip>("stripAndroidJarAsset") {
+    description = "Stage android.jar into the APK assets without the framework resource files (see the note above)."
+    archiveFileName.set("android.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("android-jar-asset"))
+    from(provider { zipTree(layout.projectDirectory.file("src/main/sdk/android.jar")) }) {
+        // `assets/` and `NOTICES/` go with res/: the same "shipped for a real app, useless to a compiler"
+        // category, and no reader here opens either.
+        exclude("res/**", "assets/**", "NOTICES/**")
+    }
+    isReproducibleFileOrder = true
+    isPreserveFileTimestamps = false
+}
+
 // --- Compose runtime asset (on-device Compose-compile spike) -------------------------------------
 // The Compose-on-ART spike (KotlinCompilerArtSpikeTest.composeCompilesOnArt) compiles a @Composable with
 // the Compose plugin and needs the `androidx.compose.runtime.*` shapes on its compile -classpath. The app's
@@ -440,7 +468,12 @@ android {
     // Stage the generated assets (kotlin-stdlib.jar, kotlinc-resources.zip) into the merged assets so the
     // on-device compiler can load them. AGP 9 disallows a Provider here, so register the static dirs the
     // tasks write to; ordering is carried by the `preBuild.dependsOn(...)` below (same pattern as aapt2).
-    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("kotlin-stdlib-asset").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("android-jar-asset").get().asFile)
+    // DEBUG ONLY. The shipping app reads the stdlib as the `/kotlin-stdlib.jar` classpath resource that
+    // :lang-kotlin bundles (BundledKotlinStdlib), and the forked compiler puts the APK itself on its -cp for
+    // exactly that reason — so this second, byte-identical copy is only there for the androidTest spikes,
+    // which instrument the debug variant. Staging it into `main` shipped 1.8 MB of nothing to every user.
+    sourceSets.getByName("debug").assets.srcDir(layout.buildDirectory.dir("kotlin-stdlib-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("kotlinc-resources-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-runtime-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-fonts-asset").get().asFile)
@@ -570,6 +603,20 @@ android {
                 // R8 refuse the archive ("Cannot create android app from an archive containing both DEX and
                 // Java-bytecode content"). Dropping them keeps bundletool's transitives intact.
                 "com/android/tools/build/bundletool/archive/dex/**",
+                // MDN's JavaScript/CSS/WebAPI reference, carried wholesale by an IntelliJ platform jar. 2.0 MB
+                // of documentation for languages this IDE has no editor for, and nothing in the source so much
+                // as names the path.
+                "com/intellij/documentation/mdn/**",
+                // JNA's native dispatch libraries for AIX, macOS and Windows. No Android build of
+                // libjnidispatch is in the closure at all, so JNA cannot make a native call here whatever we
+                // ship; these are 2.3 MB of binaries for three other operating systems. The win32 COM code
+                // generator's templates go with them.
+                "com/sun/jna/aix-*/**", "com/sun/jna/darwin-*/**", "com/sun/jna/win32-*/**",
+                "com/sun/jna/platform/win32/COM/tlb/imp/**",
+                // BouncyCastle's post-quantum parameter tables (Picnic's lowmc matrices, 1.2 MB). It is here
+                // to create a keystore on ART - an RSA/EC keypair and a self-signed X.509 - which touches no
+                // post-quantum scheme.
+                "org/bouncycastle/pqc/**",
             )
             pickFirsts += setOf(
                 "META-INF/MANIFEST.MF",
@@ -665,7 +712,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleVcsUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
+    dependsOn(fetchAndroidBuildTools, stripAndroidJarAsset, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleVcsUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui-resources'
