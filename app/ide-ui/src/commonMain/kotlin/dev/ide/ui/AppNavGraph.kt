@@ -180,6 +180,9 @@ internal fun AppNavGraph(
             Screen.SubmitProject -> SubmitProjectScreen(
                 backend = backend,
                 initialProject = app.submitProject,
+                // Without this the screenshot picker has no host to ask, which reads on screen as an
+                // "Add a screenshot" button that does nothing.
+                fileActions = fileActions,
                 onBack = { app.navigateTo(Screen.Projects) },
                 // Back to Explore on success: the submission now shows there as "under review", which is
                 // the only place its state is visible.
