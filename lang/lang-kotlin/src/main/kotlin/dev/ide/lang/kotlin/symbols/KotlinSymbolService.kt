@@ -2321,7 +2321,19 @@ class KotlinSymbolService(
         // Classpath supertypes (@Metadata Kotlin AND plain Java bytecode) via the type-shape index, or a live
         // decode when no index is wired — null in dumb mode, so the chain is empty until the index is ready.
         typeShape(fqn)?.supertypes?.forEach { (it as? KotlinType)?.let { k -> direct += k.qualifiedName } }
-        val out = LinkedHashSet(direct)
+        // A JVM supertype and its Kotlin classifier denote the SAME type (`java.lang.Throwable` IS
+        // `kotlin.Throwable`), but bytecode only ever writes the JVM name, so a chain read from a `.class`
+        // names only that half. Every Kotlin-keyed lookup over the chain then misses: an extension's receiver
+        // in `@Metadata` is always the Kotlin name, so a caught `java.lang.Exception` never reached
+        // `Throwable.stackTraceToString`, and a `java.lang.StringBuilder` never reached `CharSequence.trim`.
+        // Record BOTH names, the JVM one first so "nearest supertype" ordering (overload specificity, common
+        // supertype) is unchanged. Only the name is added — the recursion below already walks the mapped
+        // type's own supertypes, since it maps its input the same way.
+        val out = LinkedHashSet<String>()
+        direct.forEach { d ->
+            out += d
+            Builtins.kotlinTypeFor(d)?.let { out += it }
+        }
         direct.forEach { out += kotlinSupertypes(it, visited) }
         return out.toList()
     }
