@@ -765,7 +765,17 @@ class IdeUiState(
     private fun writeToDisk(file: OpenFile) {
         if (file.readOnly || !file.modified) return
         val text = file.text // one lazy materialization, on save (not per keystroke)
-        backend.editor.saveFile(file.path, text)
+        // A save can fail on the device for reasons the app does not control: the project sits on a tree this
+        // process may not write, or the volume is full. The backend logs the reason (which raises the non-fatal
+        // error dialog) and rethrows; here the throw must stop at the save, because the alternatives are both
+        // wrong — letting it escape kills the process (it did, in the field, on every save attempt of an
+        // unwritable project), and marking the buffer saved would tell the user their work is on disk when it
+        // is not. Leaving the tab DIRTY is the honest outcome: the next save, or "save all", tries again.
+        try {
+            backend.editor.saveFile(file.path, text)
+        } catch (_: Exception) {
+            return
+        }
         file.onSaved(text)
     }
 

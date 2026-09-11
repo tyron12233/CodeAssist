@@ -72,7 +72,10 @@ suspend fun IdeUiState.applyWorkspaceEdits(edits: Map<String, List<UiTextEdit>>)
             applyEdits(fileEdits)
         } else {
             val original = runCatching { backend.files.readFile(path) }.getOrNull() ?: continue
-            backend.editor.saveFile(path, patch(original, fileEdits))
+            // Same reasoning as the read above, and as IdeUiState.writeToDisk: an unwritable file must not
+            // take the process down mid-refactor. The backend has already logged the reason for the user;
+            // the remaining files still get their edits.
+            runCatching { backend.editor.saveFile(path, patch(original, fileEdits)) }
         }
     }
     refreshTree()

@@ -1631,13 +1631,27 @@ class IdeServices private constructor(
         return AnalysisProfile(disabled, overrides)
     }
 
+    private val settingsLog by lazy { Log.logger("ide.settings") }
+
+    /** Best-effort read: a settings file this process cannot read (an unreadable project tree) or one that is
+     *  truncated/corrupt reads as EMPTY, so the caller falls back to defaults. A preference is never worth
+     *  failing an operation over, let alone taking the process down. */
     private fun loadProps(file: Path): java.util.Properties = java.util.Properties().apply {
-        if (Files.exists(file)) Files.newInputStream(file).use { load(it) }
+        runCatching { if (Files.exists(file)) Files.newInputStream(file).use { load(it) } }
+            .onFailure { settingsLog.warn("Couldn't read ${file.fileName}; using defaults: ${it.javaClass.simpleName}") }
     }
 
+    /** Best-effort write, for the same reason as [loadProps] — plus one from the field: a project on a tree
+     *  the app may not write made every preference change (toggling an inspection, picking a build variant)
+     *  throw `AccessDeniedException` out of the UI and kill the app. The setting still applies to this
+     *  session; only its persistence is lost, and the user is told once, through the ERROR log. */
     private fun storeProps(file: Path, props: java.util.Properties, comment: String) {
-        Files.createDirectories(file.parent)
-        Files.newOutputStream(file).use { props.store(it, comment) }
+        runCatching {
+            Files.createDirectories(file.parent)
+            Files.newOutputStream(file).use { props.store(it, comment) }
+        }.onFailure {
+            settingsLog.error("Couldn't save ${file.fileName}; the change applies to this session only", it)
+        }
     }
 
     /**

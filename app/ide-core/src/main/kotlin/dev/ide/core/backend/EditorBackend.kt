@@ -62,6 +62,7 @@ import dev.ide.ui.backend.UiSnippet
 import dev.ide.ui.backend.UiSnippetStop
 import dev.ide.ui.backend.UiTextEdit
 import dev.ide.ui.backend.UiTextRange
+import java.io.IOException
 import java.nio.file.Paths
 import kotlinx.coroutines.withContext
 import dev.ide.lang.incremental.DocumentEdit
@@ -74,6 +75,8 @@ import dev.ide.ui.backend.UiActionEdits
  * host to retry. Maps the framework results onto the neutral UI DTOs.
  */
 internal class EditorBackend(private val ctx: BackendContext) : EditorService {
+
+    private val log = dev.ide.platform.log.Log.logger("ide.editor")
 
     override suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> = try {
         ctx.background(op = "docBreadcrumb") { ctx.services.breadcrumbAt(Paths.get(path), text, offset) }
@@ -193,7 +196,25 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override fun updateDocument(path: String, text: String) =
         ctx.services.updateDocument(Paths.get(path), text)
 
-    override fun saveFile(path: String, text: String) = ctx.services.save(Paths.get(path), text)
+    /**
+     * Persist a buffer. A write can fail for reasons the app does not control — the project sits on a tree
+     * this process may not write (an SD card, another app's directory, a path the user granted and revoked),
+     * or the volume filled up — and that arrives here as an [java.io.IOException].
+     *
+     * It is logged at ERROR with the throwable, which is what puts the reason in front of the user (the
+     * backend turns such a record into the non-fatal error dialog), and then rethrown: the caller has to know
+     * the buffer is still unsaved, so the tab stays dirty rather than pretending the file reached disk. What
+     * must NOT happen is the throw escaping a UI coroutine and taking the process down, which is how this
+     * surfaced in the field — one install, an unwritable project, and a crash on every save attempt.
+     */
+    override fun saveFile(path: String, text: String) {
+        try {
+            ctx.services.save(Paths.get(path), text)
+        } catch (e: IOException) {
+            log.error("Couldn't save ${path.substringAfterLast('/')}: ${e.javaClass.simpleName}", e)
+            throw e
+        }
+    }
 
     // --- Editor-session lifecycle notifications (fire-and-forget from the UI) --------------------------------
     // The UI reports these; we republish them on the app bus for plugin subscribers (see IdeEventTopics.EDITOR).

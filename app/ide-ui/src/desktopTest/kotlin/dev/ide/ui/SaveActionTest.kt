@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
 /** The tab dirty-flag + save semantics in [IdeUiState] (the orange-dot logic and the save action). */
 class SaveActionTest {
 
-    private class FakeBackend(private val disk: MutableMap<String, String>) : StubBackend() {
+    private open class FakeBackend(private val disk: MutableMap<String, String>) : StubBackend() {
         val saved = ArrayList<Pair<String, String>>()
         override fun readFile(path: String) = disk[path] ?: ""
         override fun saveFile(path: String, text: String) { disk[path] = text; saved += path to text }
@@ -45,6 +45,26 @@ class SaveActionTest {
         state.saveActive()
         assertEquals(listOf("/p/A.java" to expected), backend.saved, "save persists the buffer")
         assertFalse(file.modified, "saving clears the dirty flag")
+    }
+
+    @Test
+    fun aFailedWriteKeepsTheTabDirtyAndDoesNotEscape() {
+        // An unwritable project (an SD card, a revoked grant, a full volume) makes the backend throw. That
+        // used to escape into the UI coroutine and kill the process on every save attempt. The save must be
+        // absorbed here, and the tab must stay dirty: the buffer is not on disk, so it must not read as saved.
+        val backend = object : FakeBackend(mutableMapOf("/p/A.java" to "class A {}")) {
+            override fun saveFile(path: String, text: String): Unit =
+                throw java.nio.file.AccessDeniedException(path)
+        }
+        val state = IdeUiState(backend)
+        runBlocking { state.openSuspend("/p/A.java", "A.java") }
+        val file = state.active!!
+        file.session.commitText("x")
+        assertTrue(file.modified, "an edit marks the tab modified")
+
+        state.saveActive() // must not throw
+
+        assertTrue(file.modified, "a save that failed must leave the tab dirty, not pretend it was written")
     }
 
     @Test
