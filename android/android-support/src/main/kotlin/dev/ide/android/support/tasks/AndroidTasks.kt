@@ -2070,10 +2070,11 @@ internal class MergeNativeLibsTask(
     private val jars: List<Path>,
     private val filter: PackagingRules.Filter,
     private val outDir: Path,
-    /** Advisories from unpacking the `natives`-scoped dependencies (see `NativeLibraries.unpack`). Reported
-     *  here because this is the step that would have packaged what they are about. Part of the fingerprint,
-     *  so a build that only changed a natives declaration re-runs and re-reports instead of going up-to-date
-     *  with the warning invisible. */
+    /** Packaging advisories about libraries that reach no `lib/` entry: a `natives`-scoped dependency that
+     *  unpacked to nothing (see `NativeLibraries.unpack`), or a prebuilt `.so` left somewhere that packages
+     *  nothing. Reported here because this is the step that would have packaged what they are about. Part of
+     *  the fingerprint, so a build that only changed one of those re-runs and re-reports instead of going
+     *  up-to-date with the warning invisible. */
     private val warnings: List<String> = emptyList(),
 ) : Task {
     override val inputs: TaskInputs
@@ -2096,6 +2097,9 @@ internal class MergeNativeLibsTask(
         return runCatching {
             val n = NativeLibsMerger.merge(jniDirs, jars, filter, outDir) { ctx.logger()("mergeNativeLibs: $it") }
             ctx.logger()("mergeNativeLibs -> ${outDir.fileName} ($n libraries)")
+            // Name the roots when nothing was packaged: "0 libraries" on its own leaves a missing `.so` with
+            // no thread to pull, and the answer is almost always that the file sits outside every root read.
+            if (n == 0 && jniDirs.isNotEmpty()) ctx.logger()("mergeNativeLibs: searched ${jniDirs.joinToString(", ")}")
             TaskResult.Success as TaskResult
         }.getOrElse { TaskResult.Failed("mergeNativeLibs failed: ${it.message}", it) }
     }

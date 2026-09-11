@@ -30,6 +30,11 @@ import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionPlaces
 import dev.ide.ui.components.DepsProgressBar
 import dev.ide.ui.components.EditorTopBar
+import org.jetbrains.compose.resources.stringResource
+import dev.ide.ui.generated.resources.toolchain_warning_many
+import dev.ide.ui.generated.resources.show_details
+import dev.ide.ui.generated.resources.gradle_mode_title
+import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.components.NoOpenFilesView
 import dev.ide.ui.components.TabsStrip
 import dev.ide.ui.editor.BlockEditor
@@ -201,6 +206,59 @@ internal fun EditorCenter(
                 compact = compact,
             )
             DepsProgressBar(depsState) { depsScope.launch { state.backend.deps.retryDependencyResolution() } }
+            // Hoisted so the notice strip can report the count and the banner can render the cards from the
+            // same state; two holders would disagree about which warnings had been dismissed.
+            val toolchain = rememberToolchainWarningState(state)
+            // ONE bar for every project notice.
+            //
+            // Collected here rather than each rendering its own strip: these are independent conditions that
+            // happen to co-occur, and ten of them stacked is half a phone screen of chrome above the code.
+            // The three that are a single sentence live in the strip; the three that need a card of their own
+            // contribute a summary line whose action reveals that card, so at most one card is ever open.
+            val notices = buildList {
+                if (compatInfo != null && !showCompatBanner) {
+                    add(
+                        EditorNotice(
+                            id = "gradle-compat",
+                            level = NoticeLevel.Warning,
+                            summary = stringResource(Res.string.gradle_mode_title),
+                            actionLabel = stringResource(Res.string.show_details),
+                            onAction = { showCompatBanner = true },
+                        ),
+                    )
+                }
+                if (unrecognizedInfo != null && !showUnrecognizedBanner) {
+                    add(
+                        EditorNotice(
+                            id = "unrecognized",
+                            level = NoticeLevel.Warning,
+                            summary = unrecognizedInfo.summary,
+                            actionLabel = stringResource(Res.string.show_details),
+                            onAction = { showUnrecognizedBanner = true },
+                        ),
+                    )
+                }
+                // Only a RUN of warnings becomes a count here; a lone one shows its card directly, because
+                // that card carries the fix and accept actions and a one-line summary cannot.
+                if (toolchain.shown.size > 1 && !toolchain.listOpen) {
+                    add(
+                        EditorNotice(
+                            id = "toolchain",
+                            level = NoticeLevel.Warning,
+                            summary = stringResource(Res.string.toolchain_warning_many, toolchain.shown.size),
+                            actionLabel = stringResource(Res.string.show_details),
+                            onAction = toolchain::toggleList,
+                            onDismiss = toolchain::dismissAll,
+                        ),
+                    )
+                }
+                androidSourcesNotice(state)?.let(::add)
+                active?.let { file ->
+                    readOnlyNotice(state, file)?.let(::add)
+                    largeFileNotice(file)?.let(::add)
+                }
+            }
+            EditorNoticeStrip(notices)
             if (compatInfo != null) {
                 GradleCompatBanner(
                     state = state,
@@ -234,7 +292,7 @@ internal fun EditorCenter(
             // appear as unresolved symbols in generated code after a build. Project-scoped and above the tabs,
             // so it shows on open even with no file open, and even when the offending module (typically a `di/`
             // one) is never opened at all.
-            ToolchainWarningBanner(state, compact)
+            ToolchainWarningBanner(toolchain, compact)
             TabsStrip(
                 openFiles = state.openFiles,
                 activeIndex = state.activeIndex,
@@ -249,9 +307,6 @@ internal fun EditorCenter(
             if (active != null) {
                 EditorDaemonEffect(state, active, indexStatus) { hasPreview = it }
                 BreadcrumbBar(state, active, hasPreview)
-                AndroidSourcesBanner(state)
-                ReadOnlyBanner(state, active)
-                LargeFileBanner(active)
                 // The code editor and the preview, each as a Modifier-parameterized slot, so the single-pane modes
                 // and the Split layout can place the SAME surfaces without duplicating their (long) wiring.
                 // The editor is covered when an app-level overlay sits on top of it: the command palette or a

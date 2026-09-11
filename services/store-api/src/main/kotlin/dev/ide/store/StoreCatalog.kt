@@ -72,6 +72,20 @@ data class RemoteStoreItem(
     /** ISO 8601. The client renders the relative string ("Published 3 days ago"). */
     val publishedAt: String? = null,
     val updatedAt: String? = null,
+    /**
+     * Storage paths of the published screenshots, in the order the publisher picked them.
+     *
+     * Paths inside the public `store-media` bucket, not URLs: the client already knows the project's base
+     * address, and baking it into a cached feed would break every cached copy the day the project moves.
+     */
+    val screenshots: List<String> = emptyList(),
+    /**
+     * Storage path of the project's own launcher icon in `store-media`, or null when it published none.
+     *
+     * Distinct from [icon], which is a GLYPH KEY in the client's icon registry. A listing draws this image
+     * when there is one and falls back to the glyph when there is not.
+     */
+    val iconPath: String? = null,
 )
 
 /** A filter tile on the Explore screen. */

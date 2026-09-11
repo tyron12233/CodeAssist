@@ -56,6 +56,14 @@ class MainActivity : ComponentActivity() {
      */
     private var pendingAuthRedirect: String? = null
 
+    /**
+     * A store item id from a `codeassist://store/...` link, pending the composition that can act on it.
+     *
+     * Held outside composition for the same reason [inbound] is: the link can arrive by `onNewIntent` on a
+     * warm activity, or on the launch intent before anything is composed.
+     */
+    private val storeLink = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Edge-to-edge with default (auto) bar styles; the system-bar ICON appearance is then driven reactively
         // by the app theme via `PlatformSystemBars` (light icons in dark mode, dark icons in light mode) — a fixed
@@ -64,7 +72,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Before extractStream: a sign-in redirect is an ACTION_VIEW with a URI, which would otherwise be
         // taken for a file to import.
-        if (!takeAuthRedirect(intent)) inbound.value = extractStream(intent)
+        if (!takeAuthRedirect(intent) && !takeStoreLink(intent)) inbound.value = extractStream(intent)
         // Gather UMP consent BEFORE initializing the Ads SDK (mediation + EEA/UK requirement); only initialize
         // once consent allows ad requests. Failure resolves too, so a consent hiccup never blocks the IDE.
         adConsent.gather(this) { if (adConsent.canRequestAds) initAds(applicationContext) }
@@ -241,6 +249,8 @@ class MainActivity : ComponentActivity() {
                     // instance is stable across project switches (it swaps services internally), so one host suffices.
                     composePreviewHost = (b as? IdeServicesBackend)?.let { AndroidComposePreviewHost(it) },
                     importPackagePath = importPackagePath,
+                    openStoreItemId = storeLink.value,
+                    onStoreItemIdHandled = { storeLink.value = null },
                 )
 
                 error != null -> Splash("Failed to start: $error")
@@ -253,7 +263,25 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (takeAuthRedirect(intent)) return
+        if (takeStoreLink(intent)) return
         extractStream(intent)?.let { inbound.value = it }
+    }
+
+    /**
+     * Claim [intent] if it is a store link, and return whether it was claimed.
+     *
+     * The URI is cleared off the intent for the same reason the sign-in redirect is: this activity also
+     * handles `file` and `content` VIEW intents, and a `codeassist://store/...` left sitting in
+     * `getIntent()` would be read as a file to import on the next configuration change.
+     */
+    private fun takeStoreLink(intent: Intent?): Boolean {
+        if (intent?.action != Intent.ACTION_VIEW) return false
+        val url = intent.data?.toString()
+        if (!dev.ide.store.StoreLink.isStoreLink(url)) return false
+        // A bare `codeassist://store` names no item, which the app reads as "the Store tab".
+        storeLink.value = dev.ide.store.StoreLink.itemId(url) ?: ""
+        intent.data = null
+        return true
     }
 
     /**

@@ -282,6 +282,8 @@ class AndroidBuildSystem(
         // all its source sets, so a debug-only or flavor-only resource doesn't leak into the wrong variant.
         fun depRoots(dep: Module, role: ContentRole): List<Path> =
             AndroidVariants.matchLibraryVariant(dep, variant, facet)?.let { roots(it, role) } ?: moduleRoots(dep, role)
+        fun depJniLibRoots(dep: Module): List<Path> =
+            jniLibRoots(dep, AndroidVariants.matchLibraryVariant(dep, variant, facet))
         val mergeResInputs = depAndroidLibs.flatMap { depRoots(it, ContentRole.ANDROID_RES) } +
             libs.resDirs + gmsRes + crashlyticsRes + roots(variant, ContentRole.ANDROID_RES)
         // SOURCE plus the module's declared GENERATED roots, so a generated root is compiled here exactly as
@@ -548,17 +550,19 @@ class AndroidBuildSystem(
         // come from `src/*/resources` (app + dep libs) and the non-class entries of the sub-module + external jars.
         val mergeNativeLibs = step("mergeNativeLibs")
         val mergeJavaRes = step("mergeJavaResource")
-        val jniDirs = roots(variant, ContentRole.JNI_LIBS) +
-            depAndroidLibs.flatMap { depRoots(it, ContentRole.JNI_LIBS) } + libs.jniLibDirs
+        val jniDirs = jniLibRoots(app, variant) +
+            depAndroidLibs.flatMap { depJniLibRoots(it) } + libs.jniLibDirs
         val javaResDirs = roots(variant, ContentRole.RESOURCE) +
             depAndroidLibs.flatMap { depRoots(it, ContentRole.RESOURCE) }
         val nativeLibsFilter = PackagingRules.jniLibsFilter(facet.packaging.jniLibs)
         val javaResFilter = PackagingRules.resourceFilter(facet.packaging.resources)
         // externalJars are static (resolved on disk); only the sub-module jars need building first.
+        val nativeWarnings = libs.nativeWarnings + misplacedNativeWarnings(app, variant) +
+            depAndroidLibs.flatMap { misplacedNativeWarnings(it, AndroidVariants.matchLibraryVariant(it, variant, facet)) }
         tasks.task(mergeNativeLibs) {
             MergeNativeLibsTask(
                 mergeNativeLibs, jniDirs, externalJars, nativeLibsFilter, layout.mergedNativeLibs,
-                libs.nativeWarnings,
+                nativeWarnings,
             )
         }
         tasks.task(mergeJavaRes, moduleJarProducers) {
@@ -972,7 +976,7 @@ class AndroidBuildSystem(
                 resDirs = srcRoots(ContentRole.ANDROID_RES),
                 rTxt = rRoot.resolve("R.txt"),
                 assetsDirs = srcRoots(ContentRole.ASSETS),
-                jniLibDirs = srcRoots(ContentRole.JNI_LIBS),
+                jniLibDirs = jniLibRoots(lib, libVariant),
                 aidlDirs = srcRoots(ContentRole.AIDL),
                 consumerProguardFiles = consumerProguard,
                 inlineProguardRules = inlineProguard,
@@ -1127,6 +1131,72 @@ class AndroidBuildSystem(
         variant.activeSourceSets.flatMap { it.contentRoots }
             .filter { role in it.roles }
             .map { Paths.get(it.dir.path) }
+
+    /**
+     * Every native-library root of [module] for [variant]: the `JNI_LIBS` content roots the model declares,
+     * plus the conventional `src/<set>/jniLibs` of each source set the variant selects, where that folder
+     * exists on disk. A null [variant] means "no matching Android variant", and falls back to the module's
+     * non-test source sets, as [moduleRoots] does.
+     *
+     * The convention half is not belt-and-braces. A `JNI_LIBS` root only ever reaches the model from the
+     * Android module template, which did not declare one before 3.3, and nothing re-applies a template to a
+     * module that already exists: a project written by an older release has no such root and no way to gain
+     * one, since neither the file tree nor Add-Source-Root knew the folder either. The build then had no
+     * input at all for the module's own libraries. `src/main/jniLibs/arm64-v8a/libfoo.so` was dropped
+     * without a word, the APK shipped no `lib/` at all, the merge reported "0 libraries", and the app died
+     * on its first `System.loadLibrary`. AGP derives `jniLibs.srcDirs` from the source-set NAME rather than
+     * from a declaration, so reading the convention here is what makes the two agree; where the root is
+     * declared as well, the paths collapse and nothing changes.
+     */
+    private fun jniLibRoots(module: Module, variant: AndroidVariant?): List<Path> {
+        val declared = variant?.let { roots(it, ContentRole.JNI_LIBS) } ?: moduleRoots(module, ContentRole.JNI_LIBS)
+        val src = moduleDir(module).resolve("src")
+        val conventional = sourceSetNames(module, variant)
+            .map { src.resolve(it).resolve("jniLibs") }
+            .filter { Files.isDirectory(it) }
+        return (declared + conventional).distinctBy { it.toAbsolutePath().normalize() }
+    }
+
+    /**
+     * The source-set names a variant draws from, for resolving a CONVENTIONAL folder under `src/`. Takes the
+     * variant's `configurations` (the unfiltered candidate names) rather than its `activeSourceSets`, so a
+     * folder is still found for a source set the model never declared at all (`src/debug/jniLibs` in a module
+     * whose only declared set is `main`). `main` is always a candidate.
+     */
+    private fun sourceSetNames(module: Module, variant: AndroidVariant?): Set<String> =
+        LinkedHashSet<String>().apply {
+            add("main")
+            addAll(
+                variant?.configurations
+                    ?: module.sourceSets.filter { it.scope != DependencyScope.TEST_IMPLEMENTATION }.map { it.name },
+            )
+        }
+
+    /**
+     * An advisory for a prebuilt `.so` sitting in `src/<set>/jni`, which packages nothing: that folder is
+     * where AGP expects C/C++ SOURCES, and on-device there is no NDK to build them with anyway. The mistake
+     * is a natural one for someone who built the library out of tree (the sources live in `jni/`, so the
+     * output goes beside them), and nothing about it fails the build. The only symptom is an
+     * `UnsatisfiedLinkError` on the device, with an APK whose `lib/` is empty.
+     *
+     * Deliberately narrow: it looks in that one folder per source set, never across the module.
+     */
+    private fun misplacedNativeWarnings(module: Module, variant: AndroidVariant?): List<String> {
+        val src = moduleDir(module).resolve("src")
+        return sourceSetNames(module, variant).mapNotNull { set ->
+            val jni = src.resolve(set).resolve("jni")
+            if (!Files.isDirectory(jni)) return@mapNotNull null
+            val found = runCatching {
+                Files.walk(jni).use { s ->
+                    s.filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".so", ignoreCase = true) }
+                        .findFirst().orElse(null)
+                }
+            }.getOrNull() ?: return@mapNotNull null
+            "'${jni.relativize(found)}' is under '${module.name}/src/$set/jni', which holds C/C++ sources and " +
+                "packages nothing. Move prebuilt libraries to 'src/$set/jniLibs/<abi>/' " +
+                "(e.g. src/$set/jniLibs/arm64-v8a/) so they reach the APK's lib/."
+        }
+    }
 
     /** Per-(module, variant) build paths under `<module>/build/`. */
     private inner class Layout(module: Module, variantName: String) {

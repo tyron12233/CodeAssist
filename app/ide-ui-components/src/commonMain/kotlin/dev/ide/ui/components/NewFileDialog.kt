@@ -83,6 +83,7 @@ import dev.ide.ui.generated.resources.newfile_package
 import dev.ide.ui.generated.resources.newfile_preset_aidl
 import dev.ide.ui.generated.resources.newfile_preset_custom
 import dev.ide.ui.generated.resources.newfile_preset_java
+import dev.ide.ui.generated.resources.newfile_preset_jni_libs
 import dev.ide.ui.generated.resources.newfile_preset_kotlin
 import dev.ide.ui.generated.resources.newfile_preset_resources
 import dev.ide.ui.generated.resources.newfile_resdir_name
@@ -581,6 +582,7 @@ private enum class RootPreset(val label: StringResource, val dirName: String, va
     AndroidRes(Res.string.newfile_kind_android_res, "res", UiSourceRootRole.AndroidRes),
     Assets(Res.string.newfile_kind_assets, "assets", UiSourceRootRole.Assets),
     Aidl(Res.string.newfile_preset_aidl, "aidl", UiSourceRootRole.Aidl),
+    JniLibs(Res.string.newfile_preset_jni_libs, "jniLibs", UiSourceRootRole.JniLibs),
     Custom(Res.string.newfile_preset_custom, "", UiSourceRootRole.Source),
 }
 
@@ -590,6 +592,7 @@ private fun roleLabel(role: UiSourceRootRole): StringResource = when (role) {
     UiSourceRootRole.AndroidRes -> Res.string.newfile_kind_android_res
     UiSourceRootRole.Assets -> Res.string.newfile_kind_assets
     UiSourceRootRole.Aidl -> Res.string.newfile_preset_aidl
+    UiSourceRootRole.JniLibs -> Res.string.newfile_preset_jni_libs
 }
 
 /**

@@ -687,6 +687,15 @@ class ProjectManager private constructor(
             ProjectPackaging.ModuleSpec(m.name, path, m.typeId)
         }
 
+    /**
+     * The Android launcher icon's raster bytes for the project rooted at [rootPath], or null.
+     *
+     * Public because publishing needs the same bytes the package preview uses: a store listing draws the
+     * project's own icon, and the only place that knows how to find it is here.
+     */
+    fun launcherIconBytes(rootPath: String): ByteArray? =
+        runCatching { exportIcon(Path.of(rootPath)) }.getOrNull()
+
     /** The Android launcher icon's raster bytes for the package preview, or null (non-raster icons fall back
      *  to the initial-letter tile in the importer, matching the picker). */
     private fun exportIcon(projectDir: Path): ByteArray? {

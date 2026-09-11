@@ -24,54 +24,39 @@ import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * A thin banner shown over a read-only LIBRARY tab (a `library://…` decompiled / attached-source view): it
- * states the view is read-only and, unless already showing decompiled Java, offers "Decompile to Java" (runs
- * the full-body Vineflower decompiler on the same class, opening it in a separate read-only tab). Nothing for a
+ * The read-only notice for a LIBRARY tab (a `library://…` decompiled or attached-source view), or null for a
  * normal editable file.
+ *
+ * A notice rather than a banner of its own: it is one sentence, and it used to be one of ten bars competing
+ * for the top of the screen. Not dismissible, because it describes the file currently on screen, so hiding
+ * it would leave the reader typing into something that will not save.
  */
 @Composable
-internal fun ReadOnlyBanner(state: IdeUiState, active: OpenFile) {
-    val kind = active.libraryKind ?: return
+internal fun readOnlyNotice(state: IdeUiState, active: OpenFile): EditorNotice? {
+    val kind = active.libraryKind ?: return null
     val label = if (kind == "source") stringResource(Res.string.library_readonly_source)
     else stringResource(Res.string.library_readonly_decompiled)
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.sm))
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        if (kind != "decompiled_java") {
-            Text(
-                stringResource(Res.string.library_decompile_java),
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.clickable { state.openLibrary(active.path, forceJava = true) },
-            )
-        }
-    }
+    val decompile = stringResource(Res.string.library_decompile_java)
+    return EditorNotice(
+        id = "readonly",
+        level = NoticeLevel.Info,
+        summary = label,
+        actionLabel = decompile.takeIf { kind != "decompiled_java" },
+        onAction = { state.openLibrary(active.path, forceJava = true) }.takeIf { kind != "decompiled_java" },
+    )
 }
 
 /**
- * A thin banner shown over a file past the large-file threshold ([isLarge]): the editor has suppressed the
- * memory-heavy code intelligence (analysis, semantic coloring, folds, inlays, completion, outline) so a big
- * file stays within the heap on a low-RAM device. Syntax highlighting and editing are unaffected. Nothing for
- * a normal-sized file.
+ * The large-file notice: past [isLarge] the editor suppresses the memory-heavy code intelligence (analysis,
+ * semantic colouring, folds, inlays, completion, outline) so a big file stays within the heap on a low-RAM
+ * device. Syntax highlighting and editing are unaffected. Null for a normal-sized file.
  */
 @Composable
-internal fun LargeFileBanner(active: OpenFile) {
-    if (!active.session.doc.isLarge()) return
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.sm))
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            stringResource(Res.string.editor_large_file_notice),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f),
-        )
-    }
+internal fun largeFileNotice(active: OpenFile): EditorNotice? {
+    if (!active.session.doc.isLarge()) return null
+    return EditorNotice(
+        id = "largefile",
+        level = NoticeLevel.Info,
+        summary = stringResource(Res.string.editor_large_file_notice),
+    )
 }

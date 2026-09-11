@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
@@ -21,6 +22,7 @@ import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,7 +75,6 @@ import dev.ide.ui.components.GhostShelfCard
 import dev.ide.ui.components.LiveDot
 import dev.ide.ui.components.PosterCard
 import dev.ide.ui.components.PublishPitchBand
-import dev.ide.ui.components.SparseProjectCard
 import dev.ide.ui.components.SpotlightCard
 import dev.ide.ui.components.StoreCountBadge
 import dev.ide.ui.components.TrendingTicker
@@ -81,6 +82,8 @@ import dev.ide.ui.components.chartMeta
 import dev.ide.ui.components.motifFor
 import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.theme.LocalExpressiveShapeCycling
+import dev.ide.ui.theme.LocalTonalCardFills
 import dev.ide.ui.theme.tonalPair
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.store_title
@@ -112,9 +115,6 @@ fun ExploreFeed(
     onHowItWorks: () -> Unit = {},
     bundled: List<UiStoreItem> = emptyList(),
     onUseBundled: (UiStoreItem) -> Unit = {},
-    /** Relative "Published 3 days ago" for an item, from the host which owns the clock. */
-    postedLabel: (UiStoreItem) -> String? = { null },
-    isRecent: (UiStoreItem) -> Boolean = { false },
     /**
      * In-flight installs by item id. Drives the action labels, so a download reports itself wherever the
      * item appears rather than only on the screen the tap happened on.
@@ -132,6 +132,14 @@ fun ExploreFeed(
     /** Opens the account sheet. Null hides the entry, for a host with no sign-in. */
     onAccount: (() -> Unit)? = null,
     signedIn: Boolean = false,
+    /**
+     * Where a published screenshot is fetched from, for the cards that can show one.
+     *
+     * Optional because every other thing this screen draws is already in [feed]; a host that has none
+     * (the snapshot tests) gets the abstract motifs, which is what the feed looked like before published
+     * artwork reached the client at all.
+     */
+    backend: dev.ide.ui.backend.IdeBackend? = null,
 ) {
     // Empty is a FIXED layout rather than a server-driven one: the feed carries no renderable sections
     // by definition, so the client composes the zero-data page and reads only storeState + bundled from
@@ -151,6 +159,8 @@ fun ExploreFeed(
             notifyOnLaunch = notifyOnLaunch,
             onNotifyChange = onNotifyChange,
             notifyMessage = notifyMessage,
+            onAccount = onAccount,
+            signedIn = signedIn,
             modifier = modifier,
         )
         return
@@ -185,7 +195,7 @@ fun ExploreFeed(
                     }
 
                     is UiFeedSection.Featured -> item(section.id) {
-                        FeaturedRow(section.items, onOpenItem)
+                        FeaturedRow(section.items, backend, onOpenItem)
                     }
 
                     is UiFeedSection.Charts -> item(section.id) {
@@ -199,7 +209,7 @@ fun ExploreFeed(
                     is UiFeedSection.Categories -> categoriesGrid(section, onOpenSearch)
 
                     is UiFeedSection.Personalized -> item(section.id) {
-                        PersonalizedRow(section, onOpenItem)
+                        PersonalizedRow(section, backend, onOpenItem)
                     }
 
                     is UiFeedSection.Spotlight -> item(section.id) {
@@ -215,23 +225,17 @@ fun ExploreFeed(
                     }
 
                     is UiFeedSection.Shelf ->
-                        shelfSection(section, onOpenItem, onInstallItem, installing)
+                        shelfSection(section, onOpenItem, onInstallItem, installing, backend)
 
                     is UiFeedSection.Catalogue -> {
                         item("head_${section.id}") {
                             SectionHeader(section.title, subtitle = stringResource(Res.string.store_catalogue_subtitle))
                         }
+                        // The SAME row the shelves use. The catalogue used to have a card vocabulary of
+                        // its own, three times taller and carrying eight text elements; one project is
+                        // one project wherever it appears.
                         itemsIndexed(section.items, key = { _, it -> "cat_${it.id}" }) { i, item ->
-                            Spacer(Modifier.height(12.dp))
-                            SparseProjectCard(
-                                item = item,
-                                index = i,
-                                postedLabel = postedLabel(item),
-                                isRecent = isRecent(item),
-                                actionLabel = installActionLabel(item, installing[item.id]),
-                                onOpen = { onOpenItem(item) },
-                                onAction = { if (!installing[item.id].inFlight) onInstallItem(item) },
-                            )
+                            StoreItemRow(item, i, onOpenItem, onInstallItem, installing[item.id], backend)
                         }
                     }
 
@@ -317,7 +321,9 @@ private fun ExploreHeader(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
                 stringResource(Res.string.store_title),
-                style = MaterialTheme.typography.displaySmall,
+                // headlineMedium, not displaySmall. A 36 sp page title above 16 sp rows put a third of the
+                // first screen into one word; the store's job is to show projects.
+                style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
@@ -329,6 +335,11 @@ private fun ExploreHeader(
                     contentDescription = stringResource(Res.string.store_signin_title),
                     onClick = onAccount,
                     size = 46.dp,
+                    // A circle, not the default diagonal-notch silhouette. That shape exists to MIRROR the
+                    // primary action it sits beside on Home; alone in this header it has nothing to mirror
+                    // and reads as a lopsided circle next to the pill-shaped count badge. An account
+                    // affordance is round everywhere else in the app too.
+                    shape = CircleShape,
                 )
             }
         }
@@ -337,7 +348,11 @@ private fun ExploreHeader(
 }
 
 @Composable
-private fun FeaturedRow(items: List<UiStoreItem>, onOpenItem: (UiStoreItem) -> Unit) {
+private fun FeaturedRow(
+    items: List<UiStoreItem>,
+    backend: dev.ide.ui.backend.IdeBackend?,
+    onOpenItem: (UiStoreItem) -> Unit,
+) {
     val state = rememberLazyListState()
     LazyRow(
         state = state,
@@ -354,9 +369,7 @@ private fun FeaturedRow(items: List<UiStoreItem>, onOpenItem: (UiStoreItem) -> U
                 motif = remember(item.id) { motifFor(item.id) },
                 rating = item.rating,
                 installs = item.installs,
-                preview = if (hasSamplePreview(item.previewKey)) {
-                    { m -> SamplePreview(item.previewKey!!, m) }
-                } else null,
+                preview = rememberItemPreview(backend, item),
                 onClick = { onOpenItem(item) },
             )
         }
@@ -386,7 +399,7 @@ private fun ChartsSection(
         ) {
             Text(
                 section.title ?: stringResource(Res.string.store_top_charts),
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
@@ -424,13 +437,17 @@ private fun CollectionsRow(section: UiFeedSection.Collections, onOpen: (UiStoreC
 }
 
 @Composable
-private fun PersonalizedRow(section: UiFeedSection.Personalized, onOpenItem: (UiStoreItem) -> Unit) {
+private fun PersonalizedRow(
+    section: UiFeedSection.Personalized,
+    backend: dev.ide.ui.backend.IdeBackend?,
+    onOpenItem: (UiStoreItem) -> Unit,
+) {
     val state = rememberLazyListState()
     Column {
         Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 26.dp, bottom = 10.dp)) {
             Text(
                 section.title,
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -451,7 +468,12 @@ private fun PersonalizedRow(section: UiFeedSection.Personalized, onOpenItem: (Ui
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             itemsIndexed(section.items, key = { _, it -> it.id }) { i, item ->
-                PosterCard(item = item, index = i, onOpen = { onOpenItem(item) })
+                PosterCard(
+                    item = item,
+                    index = i,
+                    onOpen = { onOpenItem(item) },
+                    preview = rememberItemIcon(backend, item),
+                )
             }
         }
     }
@@ -470,6 +492,7 @@ private fun LazyListScope.shelfSection(
     onOpenItem: (UiStoreItem) -> Unit,
     onInstallItem: (UiStoreItem) -> Unit,
     installing: Map<String, dev.ide.ui.backend.UiInstallProgress>,
+    backend: dev.ide.ui.backend.IdeBackend?,
 ) {
     item("head_${section.id}") { ShelfHeader(section) }
 
@@ -477,7 +500,7 @@ private fun LazyListScope.shelfSection(
         // One lazy item per row, so a long list is not composed all at once.
         UiShelfLayout.ROWS -> {
             itemsIndexed(section.items, key = { _, it -> "${section.id}_${it.id}" }) { i, item ->
-                StoreItemRow(item, i, onOpenItem, onInstallItem, installing[item.id])
+                StoreItemRow(item, i, onOpenItem, onInstallItem, installing[item.id], backend)
             }
             item("ad_${section.id}") {
                 AdSlot(AdPlacement.STORE, Modifier.padding(horizontal = 20.dp).padding(top = 16.dp))
@@ -493,7 +516,12 @@ private fun LazyListScope.shelfSection(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 itemsIndexed(section.items, key = { _, it -> it.id }) { i, item ->
-                    PosterCard(item = item, index = i, onOpen = { onOpenItem(item) })
+                    PosterCard(
+                        item = item,
+                        index = i,
+                        onOpen = { onOpenItem(item) },
+                        preview = rememberItemIcon(backend, item),
+                    )
                 }
             }
         }
@@ -516,6 +544,7 @@ private fun LazyListScope.shelfSection(
                         motif = remember(item.id) { motifFor(item.id) },
                         rating = item.rating,
                         installs = item.installs,
+                        preview = rememberItemPreview(backend, item),
                         onClick = { onOpenItem(item) },
                     )
                 }
@@ -537,6 +566,7 @@ private fun LazyListScope.shelfSection(
                             onOpen = { onOpenItem(item) },
                             modifier = Modifier.weight(1f),
                             fillWidth = true,
+                            preview = rememberItemIcon(backend, item),
                         )
                     }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
@@ -580,7 +610,7 @@ private fun SectionHeaderTight(title: String, subtitle: String?) {
     Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 8.dp)) {
         Text(
             title,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
         if (subtitle != null) {
@@ -694,6 +724,9 @@ private fun ExploreEmpty(
     notifyOnLaunch: Boolean,
     notifyMessage: String? = null,
     onNotifyChange: (Boolean) -> Unit,
+    /** The same account entry the populated header carries. Its absence here was the whole bug. */
+    onAccount: (() -> Unit)? = null,
+    signedIn: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val accepting = feed.state.acceptingSubmissions
@@ -706,7 +739,12 @@ private fun ExploreEmpty(
             contentPadding = PaddingValues(bottom = 28.dp),
         ) {
             item("header") {
-                ExploreHeader(count = feed.state.publishedProjectCount, onOpenSearch = { onOpenSearch(null) })
+                ExploreHeader(
+                    count = feed.state.publishedProjectCount,
+                    onOpenSearch = { onOpenSearch(null) },
+                    onAccount = onAccount,
+                    signedIn = signedIn,
+                )
             }
 
             // Above the hero: once the user has submitted, their own submission outranks the pitch.
@@ -733,6 +771,21 @@ private fun ExploreEmpty(
                 }
                 item("steps_head") { SectionHeader(stringResource(Res.string.store_how_publishing_title)) }
                 item("steps") { PublishingSteps(defaultPublishSteps()) }
+            }
+
+            // Directly under the hero, not at the foot of the page.
+            //
+            // This is the answer to the sentence the hero just made ("nobody has published yet"), and it
+            // was sitting below the publishing steps, the bundled list AND three placeholder shelves: past
+            // everything, on the one page that has the least reason to be scrolled to the end.
+            item("notify") {
+                Spacer(Modifier.height(18.dp))
+                NotifySwitchRow(
+                    checked = notifyOnLaunch,
+                    onCheckedChange = onNotifyChange,
+                    message = notifyMessage,
+                )
+                Spacer(Modifier.height(4.dp))
             }
 
             if (bundled.isNotEmpty()) {
@@ -771,14 +824,6 @@ private fun ExploreEmpty(
                 )
             }
 
-            item("notify") {
-                Spacer(Modifier.height(22.dp))
-                NotifySwitchRow(
-                    checked = notifyOnLaunch,
-                    onCheckedChange = onNotifyChange,
-                    message = notifyMessage,
-                )
-            }
         }
     }
 }

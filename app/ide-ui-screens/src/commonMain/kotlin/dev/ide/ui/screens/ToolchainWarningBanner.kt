@@ -62,44 +62,16 @@ import org.jetbrains.compose.resources.stringResource
  * project with three bad modules cannot push the editor off screen.
  */
 @Composable
-internal fun ToolchainWarningBanner(state: IdeUiState, compact: Boolean) {
-    val warningState = rememberToolchainWarningState(state)
+internal fun ToolchainWarningBanner(warningState: ToolchainWarningState, compact: Boolean) {
     val shown = warningState.shown
+    // The summary row moved OUT, into the editor's one notice strip: a count belongs beside every other
+    // project notice rather than in a bar of its own. What is left is the cards, shown for a lone warning
+    // and otherwise only once the strip's "Details" has opened them. The warning ground lives INSIDE the
+    // visibility gate, or a collapsed list would leave an empty amber bar behind.
     if (shown.isEmpty()) return
 
-    Column(Modifier.fillMaxWidth().background(Ide.colors.warning.copy(alpha = 0.10f))) {
-        // Several affected modules collapse behind one row: three full cards would fill a phone screen, and the
-        // count is the part that matters at a glance.
-        if (shown.size > 1) {
-            Row(
-                Modifier.fillMaxWidth()
-                    .clickable(onClick = warningState::toggleList)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(CaIcons.warning, null, Modifier.size(16.dp), tint = Ide.colors.warning)
-                Text(
-                    stringResource(Res.string.toolchain_warning_many, shown.size),
-                    color = Ide.colors.warning,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Icon(
-                    if (warningState.listOpen) CaIcons.caretDown else CaIcons.caretRight,
-                    if (warningState.listOpen) stringResource(Res.string.hide_details) else stringResource(Res.string.show_details),
-                    Modifier.size(14.dp), tint = Ide.colors.warning,
-                )
-                IconButtonCa(
-                    CaIcons.close, stringResource(Res.string.dismiss),
-                    warningState::dismissAll, boxSize = 24, iconSize = 14,
-                )
-            }
-        }
-        AnimatedVisibility(shown.size == 1 || warningState.listOpen) {
+    AnimatedVisibility(shown.size == 1 || warningState.listOpen) {
+        Column(Modifier.fillMaxWidth().background(Ide.colors.warning.copy(alpha = 0.10f))) {
             Column(Modifier.fillMaxWidth()) {
                 for (w in shown) {
                     WarningCard(

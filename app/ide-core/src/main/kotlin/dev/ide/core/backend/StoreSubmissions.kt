@@ -21,7 +21,16 @@ import dev.ide.ui.backend.UiSubmitResult
  * what it excluded, and only then uploads: the archive becomes public, so the user needs to see what is in
  * it before committing rather than being told afterwards.
  */
-internal class StoreSubmissions(private val submissions: StoreSubmissionService) {
+internal class StoreSubmissions(
+    private val submissions: StoreSubmissionService,
+    /**
+     * The project's launcher icon as raster bytes, or null when it has none this can render.
+     *
+     * A parameter rather than a direct call so this class keeps depending on the submission port alone,
+     * and so a test can publish an icon without an Android project on disk.
+     */
+    private val launcherIcon: (rootPath: String) -> ByteArray? = { null },
+) {
 
     fun available(): Boolean = submissions.submissionsAvailable()
 
@@ -66,6 +75,9 @@ internal class StoreSubmissions(private val submissions: StoreSubmissionService)
             version = draft.version.trim().ifEmpty { "1.0.0" },
             changelog = draft.changelog?.trim()?.takeIf { it.isNotEmpty() },
             screenshotPaths = draft.screenshotPaths,
+            // Read from the project, not asked for. The app already has an icon, and a form that made the
+            // publisher supply it again would mostly produce listings with no icon at all.
+            iconPath = iconFileFor(packaged.rootPath),
         )
         // The archive the screen showed, not a reconstruction of it: same bytes, same manifest, same hash.
         // Re-packing if it is missing keeps a submit working after the engine was rebuilt underneath the
@@ -93,6 +105,26 @@ internal class StoreSubmissions(private val submissions: StoreSubmissionService)
             is StoreResult.Unavailable -> UiSubmitResult(false, result.reason)
             is StoreResult.Failed -> UiSubmitResult(false, result.message)
         }
+    }
+
+    /**
+     * The launcher icon written to a temp file for upload, or null.
+     *
+     * A file because that is what the upload takes, and a temp one because the icon inside the project is
+     * the publisher's, not ours to hand out a path to. Failure is silent on purpose: a submission must not
+     * stop because an icon could not be read, and the listing falls back to its glyph tile.
+     *
+     * Only a raster icon travels. A vector-only or adaptive-icon project has nothing to upload without
+     * rasterizing it here, which needs a canvas the engine does not have.
+     */
+    private fun iconFileFor(rootPath: String): String? {
+        val bytes = runCatching { launcherIcon(rootPath) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return null
+        return runCatching {
+            val file = java.io.File.createTempFile("ca-store-icon-", ".png")
+            file.deleteOnExit()
+            file.writeBytes(bytes)
+            file.absolutePath
+        }.getOrNull()
     }
 
     fun mine(): List<UiStoreSubmission> =

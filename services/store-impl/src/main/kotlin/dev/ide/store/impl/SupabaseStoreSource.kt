@@ -403,6 +403,8 @@ class SupabaseStoreSource(
                 changelog = JsonReader.str(v, "changelog"),
                 publishedAt = JsonReader.str(v, "publishedAt"),
                 updatedAt = JsonReader.str(v, "updatedAt"),
+                screenshots = JsonReader.strings(v, "screenshots"),
+                iconPath = JsonReader.str(v, "iconPath"),
             )
         }
 

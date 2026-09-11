@@ -23,17 +23,20 @@ class SourceSetManagementTest {
             .firstOrNull { Paths.get(it.dir.path).fileName.toString() == dirName }?.roles
 
     @Test
-    fun addSourceRootCreatesDirAndRegistersRole() = withTempDir("ide-srcset") { dir ->
+    fun addSourceRootCreatesDirAndRegistersRole() {
+        withTempDir("ide-srcset") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val created = assertNotNull(ide.moduleService.addSourceRoot("core", "main", "kotlin", setOf(ContentRole.SOURCE)))
             assertTrue(Files.isDirectory(created), "the new source root dir is created on disk")
             assertEquals(setOf(ContentRole.SOURCE), ide.rolesOf("core", "kotlin"))
         }
-        dir.toFile().deleteRecursively()
+            dir.toFile().deleteRecursively()
+        }
     }
 
     @Test
-    fun creatingResourcesFolderUnderSourceSetBaseAutoRegisters() = withTempDir("ide-autodetect") { dir ->
+    fun creatingResourcesFolderUnderSourceSetBaseAutoRegisters() {
+        withTempDir("ide-autodetect") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val backend = IdeServicesBackend(ide)
             val moduleRoot = assertNotNull(ide.moduleRoot(ide.modules().first { it.name == "core" }))
@@ -53,6 +56,26 @@ class SourceSetManagementTest {
                 .sourceSets.flatMap { it.contentRoots }.filter { ContentRole.RESOURCE in it.roles }
             assertEquals(1, resourceRoots.size, "only the source-set-base resources folder is registered")
         }
-        dir.toFile().deleteRecursively()
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * `jniLibs` is a convention folder like the rest. It was missing from the set, so a native-library folder
+     * created in the tree stayed untyped: the packager had no root to read, and the APK shipped no `lib/`.
+     */
+    @Test
+    fun creatingJniLibsFolderUnderSourceSetBaseAutoRegisters() {
+        withTempDir("ide-jnilibs") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val backend = IdeServicesBackend(ide)
+            val moduleRoot = assertNotNull(ide.moduleRoot(ide.modules().first { it.name == "core" }))
+            val base = moduleRoot.resolve("src").resolve("main")
+
+            assertNotNull(backend.files.createDirectory(base.toString(), "jniLibs"))
+            assertEquals(setOf(ContentRole.JNI_LIBS), ide.rolesOf("core", "jniLibs"))
+        }
+            dir.toFile().deleteRecursively()
+        }
     }
 }

@@ -30,13 +30,30 @@ import androidx.compose.ui.unit.dp
 data class TonalPair(val container: Color, val onContainer: Color)
 
 /**
+ * Whether repeated surfaces take a rotating tonal fill.
+ *
+ * `true` (the default) is the expressive design, where a run of cards cycles primary, secondary and
+ * tertiary containers so the page is not one grey slab. `false` makes every position the same neutral
+ * container.
+ *
+ * Off by default. A card that frames real content (an app icon, a screenshot, a project's name and path)
+ * competes with the very thing it is framing, and three rotating hues down a scrolling page read as
+ * decoration rather than as content. Colour comes from what is IN the cards, plus one accent.
+ *
+ * This is a property of the SURFACE, not of the theme, so it is a composition local rather than a second
+ * colour scheme, and a surface that genuinely wants the tonal run can still provide `true`.
+ */
+val LocalTonalCardFills = staticCompositionLocalOf { false }
+
+/**
  * The container/on-container pair for position [index] in a repeated run. Cycles primary → secondary →
- * tertiary.
+ * tertiary, or one neutral pair where [LocalTonalCardFills] is off.
  */
 @Composable
 @ReadOnlyComposable
 fun tonalPair(index: Int): TonalPair {
     val c = MaterialTheme.colorScheme
+    if (!LocalTonalCardFills.current) return TonalPair(c.surfaceContainerHigh, c.onSurface)
     return when (index.mod(3)) {
         0 -> TonalPair(c.primaryContainer, c.onPrimaryContainer)
         1 -> TonalPair(c.secondaryContainer, c.onSecondaryContainer)
@@ -47,11 +64,14 @@ fun tonalPair(index: Int): TonalPair {
 /**
  * Whether the asymmetric shape cycling is on.
  *
- * `true` (the default) is the expressive design: repeated cards rotate which corner is clipped, so a
- * list has a visible rhythm. `false` is the uniform variant — every card a plain 20 dp radius — kept as
- * a single switch because it is the conservative fallback if the cycling ever reads as noise at scale.
+ * `true` is the expressive design: repeated cards rotate which corner is clipped, so a list has a visible
+ * rhythm. `false`, the default now, is the uniform variant: every card a plain 20 dp radius.
+ *
+ * It reads as rhythm on a short run and as a mistake on a long one, where neighbouring rows end up with
+ * visibly different corners and the icon tiles rotate square/circle/notched against each other. The app is
+ * mostly long runs. The switch stays so a short, deliberate run can opt back in.
  */
-val LocalExpressiveShapeCycling = staticCompositionLocalOf { true }
+val LocalExpressiveShapeCycling = staticCompositionLocalOf { false }
 
 private val UniformCard = RoundedCornerShape(20.dp)
 private val UniformTile = RoundedCornerShape(16.dp)

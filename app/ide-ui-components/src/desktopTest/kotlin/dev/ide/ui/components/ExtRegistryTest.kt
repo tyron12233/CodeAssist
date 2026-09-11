@@ -60,8 +60,14 @@ class ExtRegistryTest {
     fun paletteUiCommandsResolveFromRegistry() {
         UiPluginHost.ensureLoaded()
         val ids = UiActionRegistry.forPlace(UiActionPlaces.COMMAND_PALETTE, RecordingHost(FakeBackend())).map { it.id }
+        // Every built-in row, in `order`. The palette used to hold four of the eight, with Modules,
+        // Re-index, View logs and Close project reachable only from the More sheet, so typing for them
+        // found nothing and there was no way to tell missing from elsewhere.
         assertEquals(
-            listOf("ui.hub", "ui.icons", "ui.dependencies", "ui.toggleTheme"),
+            listOf(
+                "ui.hub", "ui.modules", "ui.icons", "ui.dependencies",
+                "ui.reindex", "ui.logs", "ui.toggleTheme", "ui.closeProject",
+            ),
             ids,
             "the palette's UI-navigation commands resolve from the registry, in order",
         )

@@ -16,8 +16,14 @@ object BuiltInUiPlugin : UiPlugin {
     override val id = "ide-ui"
 
     override fun contributeUi(scope: UiContributionScope) {
-        val more = setOf(UiActionPlaces.MORE_MENU)
         val palette = UiActionPlaces.COMMAND_PALETTE
+        // Every built-in row is in BOTH places.
+        //
+        // They used to be split: Modules was in the More sheet and not the palette, Manage dependencies was
+        // in the palette and not the sheet, Re-index and View logs were sheet-only. Two surfaces that each
+        // hold most of the commands is worse than either one alone, because whichever you open you cannot
+        // tell whether the thing you want is missing or somewhere else. A command that is worth a row is
+        // worth finding by typing.
         val moreAndPalette = setOf(UiActionPlaces.MORE_MENU, palette)
 
         scope.action(
@@ -36,7 +42,7 @@ object BuiltInUiPlugin : UiPlugin {
             SimpleUiAction(
                 "ui.modules",
                 "Modules",
-                more,
+                moreAndPalette,
                 "Add/remove modules · Java version · dependencies · repositories",
                 "layers",
                 20
@@ -60,7 +66,7 @@ object BuiltInUiPlugin : UiPlugin {
             SimpleUiAction(
                 "ui.dependencies",
                 "Manage dependencies",
-                setOf(palette),
+                moreAndPalette,
                 iconId = "layers",
                 order = 25
             ) {
@@ -71,7 +77,7 @@ object BuiltInUiPlugin : UiPlugin {
             SimpleUiAction(
                 "ui.reindex",
                 "Re-index project",
-                more,
+                moreAndPalette,
                 "Rebuild symbol & completion indexes",
                 "refresh",
                 40
@@ -83,7 +89,7 @@ object BuiltInUiPlugin : UiPlugin {
             SimpleUiAction(
                 "ui.logs",
                 "View logs",
-                more,
+                moreAndPalette,
                 "Editor, analysis & build logs — share when something's off",
                 "terminal",
                 50
@@ -107,7 +113,7 @@ object BuiltInUiPlugin : UiPlugin {
             SimpleUiAction(
                 "ui.closeProject",
                 "Close project",
-                more,
+                moreAndPalette,
                 "Back to all projects",
                 "close",
                 70

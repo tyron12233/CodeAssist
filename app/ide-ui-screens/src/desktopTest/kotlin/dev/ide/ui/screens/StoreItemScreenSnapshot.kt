@@ -75,9 +75,28 @@ class StoreItemScreenSnapshot {
     @Test
     fun renderBundledTemplate() = snapshot("item-bundled.png", bundled, dark = true)
 
+    /**
+     * The published-screenshot route, end to end: storage paths resolved to cached files and decoded.
+     *
+     * The other fixtures carry BUNDLED preview keys, which take a different branch entirely, so without
+     * this the gallery's real path (the one every community project uses) went unrendered in any test.
+     */
+    @Test
+    fun renderPublishedScreenshots() = snapshot(
+        "item-published-shots.png",
+        remote.copy(screenshots = listOf("ktor-exposed/1.8.2/shot-0.png", "ktor-exposed/1.8.2/shot-1.png")),
+        dark = true,
+        backend = ShotBackend(),
+    )
+
     @OptIn(ExperimentalComposeUiApi::class)
-    private fun snapshot(name: String, item: UiStoreItem, dark: Boolean, height: Int = 2400) {
-        val backend = StubBackend()
+    private fun snapshot(
+        name: String,
+        item: UiStoreItem,
+        dark: Boolean,
+        height: Int = 2400,
+        backend: StubBackend = StubBackend(),
+    ) {
         val scene = ImageComposeScene(width = WIDTH, height = height, density = Density(2f)) {
             CodeAssistTheme(dark = dark) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {

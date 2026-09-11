@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
@@ -102,7 +103,13 @@ class ToolchainWarningBannerSnapshot {
         val scene = ImageComposeScene(width = w, height = h, density = Density(2f)) {
             CodeAssistTheme(dark = true) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                    Column(Modifier.fillMaxWidth()) { ToolchainWarningBanner(state, compact) }
+                    Column(Modifier.fillMaxWidth()) {
+                        // The summary row lives in the editor's notice strip now, so the banner takes the
+                        // hoisted state and renders only the cards.
+                        val warnings = rememberToolchainWarningState(state)
+                        LaunchedEffect(warnings) { warnings.toggleList() }
+                        ToolchainWarningBanner(warnings, compact)
+                    }
                 }
             }
         }

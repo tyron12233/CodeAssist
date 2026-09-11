@@ -204,6 +204,35 @@ class ExploreFeedSnapshot {
         dark = true, height = 1800,
     )
 
+    /**
+     * A sparse feed whose projects published screenshots.
+     *
+     * This is the mode a young store is actually in, and its ONLY item surface is the catalogue card, so
+     * a published screenshot that does not reach that card does not appear on Explore at all, whatever the
+     * detail page does with it.
+     */
+    @Test
+    fun sparseWithPublishedScreenshots() = snapshot(
+        "explore-sparse-shots.png",
+        sparseFeed.copy(
+            sections = listOf(
+                UiFeedSection.Catalogue(
+                    "everything",
+                    "Everything in the store",
+                    catalogue.map {
+                        it.copy(
+                            screenshots = listOf("${it.id}/1.0.0/shot-0.png"),
+                            iconPath = "${it.id}/1.0.0/icon.png",
+                        )
+                    },
+                ),
+            ),
+        ),
+        dark = true,
+        height = 2400,
+        backend = ShotBackend(),
+    )
+
     @OptIn(ExperimentalComposeUiApi::class)
     private fun snapshot(
         name: String,
@@ -211,8 +240,8 @@ class ExploreFeedSnapshot {
         dark: Boolean,
         height: Int,
         submission: dev.ide.ui.backend.UiStoreSubmission? = null,
+        backend: StubBackend = StubBackend(),
     ) {
-        val backend = StubBackend()
         val scene = ImageComposeScene(width = WIDTH, height = height, density = Density(2f)) {
             CodeAssistTheme(dark = dark) {
                 CompositionLocalProvider(LocalAds provides fakeAdController(backend)) {
@@ -224,10 +253,14 @@ class ExploreFeedSnapshot {
                             onOpenSearch = {},
                             bundled = bundled,
                             followedPublishers = emptySet(),
-                            postedLabel = { "Published 3 days ago" },
-                            isRecent = { true },
                             submission = submission,
                             notifyOnLaunch = true,
+                            backend = backend,
+                            // The shipping app always passes these (every build has auth providers), so a
+                            // snapshot without them is not the screen anyone sees: the account button and
+                            // its place in the header went unrendered in every test until now.
+                            onAccount = {},
+                            signedIn = true,
                         )
                     }
                 }

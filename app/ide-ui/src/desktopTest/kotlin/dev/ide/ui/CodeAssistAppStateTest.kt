@@ -4,7 +4,13 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.ext.ScreenContribution
 import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.backend.ProjectInfo
+import dev.ide.ui.backend.StoreService
 import dev.ide.ui.backend.UiImportPreview
+import dev.ide.ui.backend.UiInstallProgress
+import dev.ide.ui.backend.UiInstallState
+import dev.ide.ui.backend.UiStoreInstallResult
+import dev.ide.ui.backend.UiStoreItem
+import dev.ide.ui.backend.UiStoreItemKind
 import dev.ide.ui.backend.UiPackagedModule
 import dev.ide.ui.backend.UiProjectFolderKind
 import dev.ide.ui.backend.UiProjectResult
@@ -39,7 +45,11 @@ class CodeAssistAppStateTest {
         val importResult: UiProjectResult = UiProjectResult(true, ""),
         /** What the picked folder turns out to be — drives which follow-up the import flow asks for. */
         val folderKind: UiProjectFolderKind = UiProjectFolderKind.GRADLE,
+        /** The Projects Store this backend serves. Unsupported unless a test exercises the store. */
+        private val storeService: StoreService = StoreService.Unsupported,
     ) : StubBackend() {
+        override val store: StoreService get() = storeService
+
         val prefs = HashMap(prefs)
         val epochFlow = MutableStateFlow(0)
         val deleted = ArrayList<String>()
@@ -101,6 +111,76 @@ class CodeAssistAppStateTest {
         val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
         scopes += scope
         return CodeAssistAppState(backend, fileActions, scope)
+    }
+
+    /**
+     * A store whose install can be observed, and whose progress map can be pre-loaded with an item the
+     * device already has.
+     */
+    private class StubStore(installed: Map<String, UiInstallProgress> = emptyMap()) : StoreService {
+        val installs = ArrayList<String>()
+        private val progress = MutableStateFlow(installed)
+
+        override fun installProgress(): StateFlow<Map<String, UiInstallProgress>> = progress
+        override suspend fun install(id: String, args: Map<String, String>): UiStoreInstallResult {
+            installs += id
+            return UiStoreInstallResult(true, "Added to your projects", "/ws/$id")
+        }
+    }
+
+    private fun communityItem(id: String) = UiStoreItem(
+        id = id,
+        kind = UiStoreItemKind.Community,
+        title = "Some project",
+        summary = "s",
+        category = "Kotlin",
+    )
+
+    /**
+     * An item already on the device opens; it does NOT download a second copy.
+     *
+     * The row's button reads "Open" in this state, and it used to run the install path anyway, so the one
+     * action the label promised was the one thing it did not do.
+     */
+    @Test
+    fun openingAnInstalledItemOpensItInsteadOfInstallingAgain() = runTest {
+        val item = communityItem("some.project")
+        val store = StubStore(
+            mapOf(
+                item.id to UiInstallProgress(
+                    itemId = item.id,
+                    state = UiInstallState.INSTALLED,
+                    fraction = 1f,
+                    rootPath = "/ws/some.project",
+                ),
+            ),
+        )
+        val backend = AppBackend(settledPrefs(), storeService = store)
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        app.installStoreItem(item)
+        advanceUntilIdle()
+
+        assertEquals(emptyList(), store.installs, "an installed item must not be downloaded again")
+        assertEquals(listOf("/ws/some.project"), backend.opened)
+        assertEquals(Screen.Editor, app.screen)
+    }
+
+    /** An item the device does not have still installs, and Home is told to re-list afterwards. */
+    @Test
+    fun anItemThatIsNotInstalledStillInstalls() = runTest {
+        val item = communityItem("other.project")
+        val store = StubStore()
+        val backend = AppBackend(settledPrefs(), storeService = store)
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        app.installStoreItem(item)
+        advanceUntilIdle()
+
+        assertEquals(listOf("other.project"), store.installs)
+        assertEquals(emptyList(), backend.opened, "installing must not navigate into the editor")
     }
 
     @Test

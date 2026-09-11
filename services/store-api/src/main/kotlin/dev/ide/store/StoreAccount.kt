@@ -56,6 +56,49 @@ object StoreAuth {
 }
 
 /**
+ * A link that opens the store, for a host that can receive one.
+ *
+ * The same scheme as the sign-in redirect under a different host, so the activity can tell the two apart
+ * without parsing either: `codeassist://store` opens the Store tab, `codeassist://store/<item id>` opens
+ * that item's page. Used by the moderation page to jump from a submission into the app on the same phone,
+ * and by anything else that has an item id and wants to hand it to the app.
+ *
+ * The id is the store's own item id, which for a published item is its slug.
+ */
+object StoreLink {
+    const val HOST = "store"
+
+    /** A link to the store itself. */
+    const val PREFIX = "${StoreAuth.SCHEME}://$HOST"
+
+    /** A link to one item, by the id [StoreCatalog] knows it by. */
+    fun forItem(itemId: String): String = "$PREFIX/$itemId"
+
+    /**
+     * Whether [url] is a store link.
+     *
+     * The host is matched whole rather than by prefix, so a future `codeassist://storefront` would not be
+     * swallowed by this one.
+     */
+    fun isStoreLink(url: String?): Boolean {
+        if (url == null) return false
+        if (url.equals(PREFIX, ignoreCase = true)) return true
+        val next = url.getOrNull(PREFIX.length)
+        return url.startsWith(PREFIX, ignoreCase = true) && (next == '/' || next == '?' || next == '#')
+    }
+
+    /** The item id in [url], or null if it names the store itself (or is not a store link at all). */
+    fun itemId(url: String?): String? {
+        if (!isStoreLink(url)) return null
+        return url!!.substring(PREFIX.length)
+            .substringBefore('?')
+            .substringBefore('#')
+            .trim('/')
+            .ifEmpty { null }
+    }
+}
+
+/**
  * One step of an OAuth sign-in.
  *
  * The flow cannot complete in one call: the client has to open a browser, the user consents, and the
@@ -129,6 +172,14 @@ data class StoreSubmissionRequest(
      * moderator ever sees.
      */
     val screenshotPaths: List<String> = emptyList(),
+    /**
+     * The project's own launcher icon, as a local image file. Null when it has none to publish.
+     *
+     * Travels the same private-bucket-then-approval route as the screenshots, and for the same reason.
+     * The engine resolves it from the project rather than asking the submitter for one: the app already
+     * has an icon, and a store that made you upload it again would mostly be a store of default glyphs.
+     */
+    val iconPath: String? = null,
     val version: String = "1.0.0",
     val changelog: String? = null,
 )

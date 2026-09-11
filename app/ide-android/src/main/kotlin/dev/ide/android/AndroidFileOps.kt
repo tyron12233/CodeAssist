@@ -98,10 +98,17 @@ internal class AndroidFileOps(private val activity: ComponentActivity) {
         }
     }
 
-    /** Copy a picked content:// file into the app cache and return its real path (for keystore import). */
+    /** Copy a picked content:// file into the app cache and return its real path (keystores, screenshots). */
     fun copyUriToCache(uri: Uri): String? = runCatching {
-        val name = queryDisplayName(uri) ?: "keystore-${System.currentTimeMillis()}"
-        val dest = File(activity.cacheDir, "picked-$name")
+        val name = queryDisplayName(uri) ?: "picked-${System.currentTimeMillis()}"
+        // Keyed by the document URI, not by the display name alone. Two screenshots from different folders
+        // are both called "Screenshot_2026-09-12.png", and a name-only path made the second overwrite the
+        // first and come back as a path the caller had already recorded: the publish form dropped it as a
+        // duplicate while the thumbnail already on screen silently became the new image. The key keeps
+        // distinct documents distinct, and the SAME document picked twice still maps to one path, which is
+        // what those duplicate checks are actually for.
+        val key = uri.toString().hashCode().toUInt().toString(16)
+        val dest = File(activity.cacheDir, "picked-$key-$name")
         activity.contentResolver.openInputStream(uri)
             ?.use { input -> dest.outputStream().use { input.copyTo(it) } } ?: return null
         dest.absolutePath

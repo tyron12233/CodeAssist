@@ -39,6 +39,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import dev.ide.ui.theme.LocalTonalCardFills
+import dev.ide.ui.theme.LocalExpressiveShapeCycling
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -159,6 +162,8 @@ fun StoreItemScreen(
     onOpenUrl: ((String) -> Unit)? = null,
     /** Opens the publisher's profile by handle. Null leaves the author line as plain text. */
     onOpenPublisher: ((String) -> Unit)? = null,
+    /** Opens an already-installed project by its root path. Null on a host that cannot open projects. */
+    onOpenInstalled: ((String) -> Unit)? = null,
 ) {
     if (item == null) { onBack(); return }
     val scope = rememberCoroutineScope()
@@ -170,7 +175,7 @@ fun StoreItemScreen(
         UiInstallState.DOWNLOADING -> InstallState.Downloading(progress.fraction)
         // Unpacking has no meaningful fraction of its own, and it is brief; the bar stays full.
         UiInstallState.IMPORTING -> InstallState.Downloading(1f)
-        UiInstallState.INSTALLED -> InstallState.Installed
+        UiInstallState.INSTALLED -> InstallState.Installed(progress.rootPath)
         else -> InstallState.Idle
     }
     var message by remember(item.id) { mutableStateOf<String?>(null) }
@@ -183,11 +188,10 @@ fun StoreItemScreen(
     var lightbox by remember(item.id) { mutableStateOf(-1) }
     val shots = rememberResolvedScreenshots(backend, item)
 
-    // The hero's tint is stable per item rather than per list position: this screen shows one card, so
-    // there is no run to rotate through. Hashing the id keeps a given item the same colour every visit.
-    val pair = tonalPair(item.id.hashCode())
     val tabs = remember(item) { availableTabs(item) }
 
+    // Neutral, like every other surface: the hero used to hash the item id to pick one of three tints.
+    val pair = tonalPair(item.id.hashCode())
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
             DetailTopBar(
@@ -198,7 +202,7 @@ fun StoreItemScreen(
                 onShare = onShare?.let { { it(item) } },
             )
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
-                item("hero") { DetailHero(item, pair, onOpenPublisher) }
+                item("hero") { DetailHero(backend, item, pair, onOpenPublisher) }
                 item("cta") {
                     InstallRow(
                         item = item,
@@ -207,7 +211,10 @@ fun StoreItemScreen(
                         onPrimary = {
                             when {
                                 item.templateId != null -> onCreateFromTemplate(item.templateId!!)
-                                install is InstallState.Installed -> Unit
+                                // Already on the device: open it. This branch used to be a literal no-op,
+                                // so the button that said "Open in editor" did nothing at all.
+                                install is InstallState.Installed ->
+                                    install.rootPath?.let { path -> onOpenInstalled?.invoke(path) }
                                 !item.available -> message = null
                                 else -> scope.launch {
                                     message = null
@@ -458,6 +465,7 @@ internal fun DetailTopBar(
  */
 @Composable
 private fun DetailHero(
+    backend: IdeBackend,
     item: UiStoreItem,
     pair: TonalPair,
     onOpenPublisher: ((String) -> Unit)? = null,
@@ -478,20 +486,26 @@ private fun DetailHero(
             )
             Column(Modifier.padding(20.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    val appIcon = rememberItemIcon(backend, item)
                     Box(
                         Modifier.size(64.dp)
                             .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 8.dp, bottomEnd = 22.dp, bottomStart = 8.dp))
-                            .background(pair.onContainer),
+                            // A real app icon brings its own ground; the inverted plate is for the glyph.
+                            .then(if (appIcon != null) Modifier else Modifier.background(pair.onContainer)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        // The template's OWN mark, forced to the tile's colour: the inverted tile is
-                        // already carrying the identity, and a brand-coloured glyph on it would clash.
-                        TemplateGlyph(
-                            iconId = item.iconId,
-                            size = 32.dp,
-                            fallbackTint = pair.container,
-                            forceTint = pair.container,
-                        )
+                        if (appIcon != null) {
+                            appIcon(Modifier.size(64.dp))
+                        } else {
+                            // The template's OWN mark, forced to the tile's colour: the inverted tile is
+                            // already carrying the identity, and a brand-coloured glyph on it would clash.
+                            TemplateGlyph(
+                                iconId = item.iconId,
+                                size = 32.dp,
+                                fallbackTint = pair.container,
+                                forceTint = pair.container,
+                            )
+                        }
                     }
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -606,7 +620,8 @@ private fun HeroStat(
 private sealed interface InstallState {
     data object Idle : InstallState
     data class Downloading(val progress: Float) : InstallState
-    data object Installed : InstallState
+    /** [rootPath] is where the project landed, which is what the button's "Open" opens. */
+    data class Installed(val rootPath: String?) : InstallState
 }
 
 @Composable
@@ -631,13 +646,10 @@ private fun InstallRow(
         state is InstallState.Installed -> CaSymbols.playArrow
         else -> CaSymbols.download
     }
-    // Idle → busy → done each get their own silhouette, and the transition between them animates, which
-    // is the one shape morph in the app.
-    val targetShape = when {
-        busy -> CaShapes.InstallBusy
-        state is InstallState.Installed -> CaShapes.InstallDone
-        else -> CaShapes.InstallIdle
-    }
+    // One pill in every state. The three diagonal-notch silhouettes this used to morph between were a
+    // shape animation carrying information the label and colour already carry, and a notched install
+    // button is the odd one out next to the pill actions on every row of the feed.
+    val targetShape = RoundedCornerShape(percent = 50)
     val enabled = item.available || item.templateId != null
 
     Row(
@@ -926,16 +938,12 @@ private fun Highlights(item: UiStoreItem) {
 @Composable
 private fun SpecTable(item: UiStoreItem) {
     val c = MaterialTheme.colorScheme
+    // Only what the hero has NOT already said. Rating, installs and download size are the hero's three
+    // figures, and the line under the install button repeats the version and language on top of that, so
+    // this table was the third telling of the same five numbers.
     val rows = buildList {
         add(Triple(CaSymbols.extension, stringResource(Res.string.store_item_type), kindLabel(item.kind)))
-        item.language?.let { add(Triple(CaSymbols.codeBlocks, stringResource(Res.string.store_item_language), it)) }
         item.version?.let { add(Triple(CaSymbols.update, stringResource(Res.string.store_item_version), "v$it")) }
-        if (item.downloadBytes > 0) {
-            add(Triple(CaSymbols.download, stringResource(Res.string.store_item_size), formatSize(item.downloadBytes)))
-        }
-        if (item.installs >= 0) {
-            add(Triple(CaSymbols.cloudDownload, stringResource(Res.string.store_item_downloads), installLabel(item.installs)))
-        }
     }
     Surface(
         shape = RoundedCornerShape(28.dp),
@@ -1362,7 +1370,7 @@ private fun rememberResolvedScreenshots(backend: IdeBackend, item: UiStoreItem):
  * stays the flat chrome the surrounding cards already use rather than flashing a spinner.
  */
 @Composable
-private fun ShotImage(
+internal fun ShotImage(
     backend: IdeBackend,
     path: String,
     scale: ContentScale,

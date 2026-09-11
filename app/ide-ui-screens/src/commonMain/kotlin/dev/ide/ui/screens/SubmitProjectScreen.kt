@@ -9,9 +9,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -35,6 +38,7 @@ import dev.ide.ui.backend.UiSubmissionDraft
 import dev.ide.ui.components.Eyebrow
 import dev.ide.ui.components.PillChip
 import dev.ide.ui.components.PrimaryActionButton
+import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.submit_excluded_none
 import dev.ide.ui.generated.resources.submit_excluded_title
@@ -198,7 +202,11 @@ fun SubmitProjectScreen(
                                 }
                             }
                             Spacer(Modifier.height(8.dp))
-                            TextButton(
+                            // A filled tonal button, the same affordance the export flow's picker uses. As a
+                            // bare TextButton this was a line of dull accent text in a form where every other
+                            // control has an outline or a fill, and it read as a disabled label: reported as
+                            // "the button is greyed out", on a build where it was enabled the whole time.
+                            FilledTonalButton(
                                 onClick = {
                                     picker.pickFile(SCREENSHOT_EXTENSIONS) { path ->
                                         // Re-checked on the way back in, not trusted from when the button was
@@ -214,6 +222,8 @@ fun SubmitProjectScreen(
                                 },
                                 enabled = screenshots.size < MAX_SUBMIT_SCREENSHOTS,
                             ) {
+                                Icon(CaIcons.image, null, Modifier.size(16.dp))
+                                Spacer(Modifier.size(8.dp))
                                 Text(stringResource(Res.string.submit_add_screenshot))
                             }
                         }

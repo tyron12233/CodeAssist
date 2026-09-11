@@ -54,6 +54,7 @@ import dev.ide.ui.components.PrimaryActionButton
 import dev.ide.ui.components.SquareToneButton
 import dev.ide.ui.components.SupportingOnContainer
 import dev.ide.ui.components.TonalTile
+import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.WatermarkGlyph
 import dev.ide.ui.components.pressScale
 import dev.ide.ui.generated.resources.Res
@@ -73,6 +74,11 @@ import dev.ide.ui.generated.resources.home_star_github
 import dev.ide.ui.generated.resources.join_the_community
 import dev.ide.ui.generated.resources.project_opened_days
 import dev.ide.ui.generated.resources.project_opened_hours
+import dev.ide.ui.generated.resources.project_age_just_now
+import dev.ide.ui.generated.resources.project_age_minutes
+import dev.ide.ui.generated.resources.project_age_hours
+import dev.ide.ui.generated.resources.project_age_days
+import dev.ide.ui.generated.resources.project_age_weeks
 import dev.ide.ui.generated.resources.project_opened_just_now
 import dev.ide.ui.generated.resources.project_opened_minutes
 import dev.ide.ui.generated.resources.project_opened_weeks
@@ -90,6 +96,7 @@ import dev.ide.ui.generated.resources.home_seg_updates
 import dev.ide.ui.generated.resources.home_your_projects
 import dev.ide.ui.generated.resources.import_gradle_subtitle
 import dev.ide.ui.generated.resources.import_gradle_title
+import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.platform.localHourOfDay
 import dev.ide.ui.platform.nowMillis
@@ -208,10 +215,14 @@ fun ProjectsHomeScreen(
         ) {
             item("header") { HomeHeader(onOpenAccount = { sheet = HomeSheet.Account }, bell = bell) }
             item("actions") {
-                HomeActions(onNewProject = onNewProject, onClone = onCloneRepository)
-            }
-            if (onImportProject != null) {
-                item("import") { ImportCard(onImportProject) }
+                HomeActions(
+                    onNewProject = onNewProject,
+                    onClone = onCloneRepository,
+                    // Null on a host with no picker: the overflow then offers cloning alone rather than a
+                    // row that cannot do anything.
+                    onImportProject = onImportProject ?: {},
+                    canImport = onImportProject != null,
+                )
             }
             item("segments") {
                 SegmentRow(
@@ -319,35 +330,49 @@ private fun HomeHeader(
         Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(Modifier.weight(1f)) {
-            Eyebrow(greeting())
-            Text(
-                stringResource(Res.string.home_your_projects),
-                style = MaterialTheme.typography.displaySmall,
-                color = c.onSurface,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
+        // No greeting eyebrow. "GOOD MORNING" above the largest text in the app spent the top of the
+        // first screen on something that says nothing about the user's projects.
+        Text(
+            stringResource(Res.string.home_your_projects),
+            style = MaterialTheme.typography.titleLarge,
+            color = c.onSurface,
+            modifier = Modifier.weight(1f).padding(top = 6.dp),
+        )
         bell?.invoke()
         // No account exists yet, so this is a glyph rather than a letter tile: initials would have to be
         // invented. It becomes the real avatar once store sign-in lands.
+        // A neutral circle, the same account affordance the store header carries. It used to be a purple
+        // squircle, which made it the one saturated shape on an otherwise neutral page and did not match
+        // the equivalent control one tab away.
         SquareToneButton(
             glyph = CaSymbols.accountCircle,
             contentDescription = stringResource(Res.string.home_seg_projects),
             onClick = onOpenAccount,
-            shape = RoundedCornerShape(16.dp),
-            container = c.tertiaryContainer,
-            content = c.onTertiaryContainer,
+            shape = CircleShape,
             size = 44.dp,
-            modifier = Modifier.padding(top = 4.dp),
+            modifier = Modifier.padding(top = 2.dp),
         )
     }
 }
 
+/**
+ * The one way to start.
+ *
+ * There used to be three side by side: this button, an unlabelled cloud-download square, and a separate
+ * import card carrying a two-line description. Three affordances for one intention, and two of them
+ * unreadable at a glance. Cloning and importing are now the overflow beside it, so the primary action is
+ * unambiguous and the other two are named rather than guessed at from a glyph.
+ */
 @Composable
-private fun HomeActions(onNewProject: () -> Unit, onClone: (() -> Unit)?) {
+private fun HomeActions(
+    onNewProject: () -> Unit,
+    onClone: (() -> Unit)?,
+    onImportProject: () -> Unit,
+    canImport: Boolean,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         PrimaryActionButton(
@@ -356,12 +381,26 @@ private fun HomeActions(onNewProject: () -> Unit, onClone: (() -> Unit)?) {
             onClick = onNewProject,
             modifier = Modifier.weight(1f),
         )
-        if (onClone != null) {
+        Box {
             SquareToneButton(
-                glyph = CaSymbols.cloudDownload,
-                contentDescription = stringResource(Res.string.home_clone_repository),
-                onClick = onClone,
+                glyph = CaSymbols.moreVert,
+                contentDescription = stringResource(Res.string.home_more_actions),
+                onClick = { menuOpen = true },
             )
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                if (canImport) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(Res.string.home_import_project)) },
+                        onClick = { menuOpen = false; onImportProject() },
+                    )
+                }
+                if (onClone != null) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(Res.string.home_clone_repository)) },
+                        onClick = { menuOpen = false; onClone() },
+                    )
+                }
+            }
         }
     }
 }
@@ -387,21 +426,28 @@ private fun SegmentRow(
                 onClick = { onSelect(HomeSegment.Projects) },
             )
         }
-        item("updates") {
-            CountFilterChip(
-                label = stringResource(Res.string.home_seg_updates),
-                count = updateCount,
-                selected = segment == HomeSegment.Updates,
-                onClick = { onSelect(HomeSegment.Updates) },
-            )
+        // A filter with nothing behind it is not a filter. Both used to render as chips reading "0", which
+        // is three controls where one of them works. They come back the moment they have something in them,
+        // and stay while selected so the row cannot vanish under the user's own tap.
+        if (updateCount > 0 || segment == HomeSegment.Updates) {
+            item("updates") {
+                CountFilterChip(
+                    label = stringResource(Res.string.home_seg_updates),
+                    count = updateCount,
+                    selected = segment == HomeSegment.Updates,
+                    onClick = { onSelect(HomeSegment.Updates) },
+                )
+            }
         }
-        item("saved") {
-            CountFilterChip(
-                label = stringResource(Res.string.home_seg_saved),
-                count = savedCount,
-                selected = segment == HomeSegment.Saved,
-                onClick = { onSelect(HomeSegment.Saved) },
-            )
+        if (savedCount > 0 || segment == HomeSegment.Saved) {
+            item("saved") {
+                CountFilterChip(
+                    label = stringResource(Res.string.home_seg_saved),
+                    count = savedCount,
+                    selected = segment == HomeSegment.Saved,
+                    onClick = { onSelect(HomeSegment.Saved) },
+                )
+            }
         }
     }
 }
@@ -439,132 +485,68 @@ private fun LocalProjectCard(
         color = c.surfaceContainerLow,
         contentColor = c.onSurface,
         interactionSource = interaction,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 14.dp)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 10.dp)
             .pressScale(interaction),
     ) {
-        Box(Modifier.clipToBounds()) {
-            // A surface tone, not an on-colour at 13%: this watermark sits behind the card's own text, so
-            // it has to stay a background, and it bleeds off the top-right corner rather than sitting
-            // inside the padding.
-            Symbol(
-                glyph = glyph,
-                contentDescription = null,
-                size = 112.dp,
-                tint = c.surfaceContainerHigh,
-                modifier = Modifier.align(Alignment.TopEnd).offset(x = 14.dp, y = (-18).dp),
-            )
-            Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    TonalTile(glyph, pair, tileShape(index), size = 46.dp)
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            project.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = c.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            // Paths ellipsise at the START: the tail (the project folder) is the part
-                            // that identifies it, so dropping the head is the right sacrifice.
-                            shortenPath(project.rootPath),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = dev.ide.ui.theme.Ca.type.codeFamily,
-                            ),
-                            color = c.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.StartEllipsis,
-                        )
-                    }
-                    Symbol(CaSymbols.chevronRight, contentDescription = null, size = 22.dp, tint = c.onSurfaceVariant)
-                }
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    MonoChip(
-                        text = moduleLabel(project.moduleCount),
-                        container = c.surfaceContainerLowest,
-                        glyph = CaSymbols.layers,
+        Row(
+            Modifier.padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            TonalTile(glyph, pair, tileShape(index), size = 46.dp)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    project.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = c.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // One line, not three rows. The card used to carry the path, two chips, the opened-ago
+                // text, a chevron AND two buttons; the chevron and the Open button did the same thing,
+                // which is the "which do I tap" problem users reported.
+                Text(
+                    listOfNotNull(
+                        moduleLabel(project.moduleCount),
+                        kindLabel(project),
+                        relativeAge(project.lastOpened, now),
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 1.dp),
+                )
+            }
+            // Everything that is not "open this project" lives behind one control. Tapping the row opens.
+            if (onDelete != null || onSecondary != null) {
+                Box {
+                    IconButtonCa(
+                        CaIcons.ellipsis,
+                        stringResource(Res.string.home_more_actions),
+                        onClick = { menuOpen = true },
+                        iconSize = 20,
+                        boxSize = 40,
                     )
-                    MonoChip(text = kindLabel(project), container = c.surfaceContainerLowest)
-                    Spacer(Modifier.weight(1f))
-                    val opened = relativeOpened(project.lastOpened, now)
-                    if (opened != null) {
-                        Text(
-                            opened,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = c.onSurfaceVariant,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                }
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Surface(
-                        onClick = onOpen,
-                        shape = CircleShape,
-                        color = c.primary,
-                        contentColor = c.onPrimary,
-                        modifier = Modifier.weight(1f).height(40.dp),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(stringResource(Res.string.home_open), style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
-                    if (onDelete != null) {
-                        Box {
-                            Surface(
-                                onClick = { menuOpen = true },
-                                shape = CircleShape,
-                                color = androidx.compose.ui.graphics.Color.Transparent,
-                                contentColor = c.onSurfaceVariant,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, c.outline),
-                                modifier = Modifier.height(40.dp),
-                            ) {
-                                Box(Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-                                    Symbol(
-                                        CaSymbols.moreVert,
-                                        contentDescription = stringResource(Res.string.home_more_actions),
-                                        size = 18.dp,
-                                        tint = c.onSurfaceVariant,
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        if (onSecondary != null) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            if (secondaryIsDelete) Res.string.home_delete else Res.string.home_share,
+                                        ),
+                                        color = if (secondaryIsDelete) c.error else c.onSurface,
                                     )
-                                }
-                            }
-                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            stringResource(Res.string.home_delete),
-                                            color = c.error,
-                                        )
-                                    },
-                                    onClick = { menuOpen = false; onDelete() },
-                                )
-                            }
+                                },
+                                onClick = { menuOpen = false; onSecondary() },
+                            )
                         }
-                    }
-                    if (onSecondary != null) {
-                        Surface(
-                            onClick = onSecondary,
-                            shape = CircleShape,
-                            color = androidx.compose.ui.graphics.Color.Transparent,
-                            contentColor = if (secondaryIsDelete) c.error else c.onSurface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, c.outline),
-                            modifier = Modifier.height(40.dp),
-                        ) {
-                            Box(Modifier.padding(horizontal = 18.dp), contentAlignment = Alignment.Center) {
-                                Text(
-                                    stringResource(
-                                        if (secondaryIsDelete) Res.string.home_delete else Res.string.home_share,
-                                    ),
-                                    style = MaterialTheme.typography.labelLarge,
-                                )
-                            }
+                        if (onDelete != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.home_delete), color = c.error) },
+                                onClick = { menuOpen = false; onDelete() },
+                            )
                         }
                     }
                 }
@@ -864,6 +846,23 @@ private fun shortenPath(path: String, maxSegments: Int = 2): String {
  * Moved here from the project picker this screen replaces; the lesson-track and export screens do not use
  * it, so it stays private to Home.
  */
+@Composable
+private fun relativeAge(lastOpened: Long, now: Long): String? {
+    if (lastOpened <= 0L) return null
+    val diff = (now - lastOpened).coerceAtLeast(0L)
+    val minutes = (diff / 60_000L).toInt()
+    val hours = (diff / 3_600_000L).toInt()
+    val days = (diff / 86_400_000L).toInt()
+    val weeks = (diff / 604_800_000L).toInt()
+    return when {
+        minutes < 1 -> stringResource(Res.string.project_age_just_now)
+        hours < 1 -> pluralStringResource(Res.plurals.project_age_minutes, minutes, minutes)
+        days < 1 -> pluralStringResource(Res.plurals.project_age_hours, hours, hours)
+        weeks < 1 -> pluralStringResource(Res.plurals.project_age_days, days, days)
+        else -> pluralStringResource(Res.plurals.project_age_weeks, weeks, weeks)
+    }
+}
+
 @Composable
 private fun relativeOpened(lastOpened: Long, now: Long): String? {
     if (lastOpened <= 0L) return null

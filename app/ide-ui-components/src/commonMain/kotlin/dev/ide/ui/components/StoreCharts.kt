@@ -167,7 +167,7 @@ fun ChartRow(
         ) {
             Text(
                 entry.rank.toString(),
-                style = MaterialTheme.typography.headlineSmall.copy(
+                style = MaterialTheme.typography.titleLarge.copy(
                     fontWeight = FontWeight.Light,
                     fontSize = 22.sp,
                     letterSpacing = (-1).sp,

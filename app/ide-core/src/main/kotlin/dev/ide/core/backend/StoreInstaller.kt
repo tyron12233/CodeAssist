@@ -53,8 +53,8 @@ internal class StoreInstaller(
         onProgress: (UiInstallProgress) -> Unit,
     ): UiStoreInstallResult {
         val id = payload.itemId
-        fun report(state: UiInstallState, fraction: Float, message: String? = null) =
-            onProgress(UiInstallProgress(id, state, fraction, message))
+        fun report(state: UiInstallState, fraction: Float, message: String? = null, rootPath: String? = null) =
+            onProgress(UiInstallProgress(id, state, fraction, message, rootPath))
 
         fun failed(message: String): UiStoreInstallResult {
             report(UiInstallState.FAILED, 0f, message)
@@ -90,7 +90,9 @@ internal class StoreInstaller(
                         dir.deleteRecursively()
                         return failed(rejected)
                     }
-                    report(UiInstallState.INSTALLED, 1f)
+                    // The path travels with the terminal state: the UI's next tap on this row is "Open",
+                    // and this is the only place that knows where the project went.
+                    report(UiInstallState.INSTALLED, 1f, rootPath = dir.absolutePath)
                     UiStoreInstallResult(true, "Added to your projects", dir.absolutePath)
                 }
                 is StoreResult.Unavailable -> failed(extracted.reason)

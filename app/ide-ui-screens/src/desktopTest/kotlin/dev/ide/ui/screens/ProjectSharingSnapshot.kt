@@ -17,6 +17,8 @@ import dev.ide.ui.backend.UiExportPlan
 import dev.ide.ui.backend.UiImportPreview
 import dev.ide.ui.backend.UiPackagedEntry
 import dev.ide.ui.backend.UiPackagedModule
+import dev.ide.ui.backend.UiPackagedProject
+import dev.ide.ui.backend.StoreService
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -65,7 +67,7 @@ class ProjectSharingSnapshot {
         bundledDepsBytes = 18_400_000,
     )
 
-    private inner class SharingBackend : StubBackend() {
+    private open inner class SharingBackend : StubBackend() {
         override suspend fun exportPlan(rootPath: String): UiExportPlan = plan
         override suspend fun importDestination(projectName: String): String =
             "/storage/CodeAssist/projects/${projectName.lowercase().replace(' ', '-')}"
@@ -102,6 +104,43 @@ class ProjectSharingSnapshot {
                 onReveal = {}, onSaveCopy = {}, onShare = {},
                 onDone = {},
             )
+        }
+    }
+
+    /**
+     * The publish form, whose screenshot picker is the export card's twin. It had drifted: a bare
+     * TextButton where the export flow has a filled tonal one, which in the light theme is a line of dull
+     * accent text among boxed fields and reads as disabled. It was reported as "the button is greyed out"
+     * on a build where it was enabled the whole time, so the two now capture side by side.
+     */
+    @Test
+    fun renderSubmitProject() {
+        snapshot("submit-project.png", height = 2400) {
+            SubmitProjectScreen(
+                backend = SubmitBackend(),
+                initialProject = ProjectInfo("Jetsnack", "/ws/jetsnack", 4, isAndroid = true),
+                fileActions = AllActions,
+                onBack = {},
+                onSubmitted = {},
+            )
+        }
+    }
+
+    /** [SharingBackend] plus the store side the publish form reads: a packaged project and the categories. */
+    private inner class SubmitBackend : SharingBackend() {
+        override fun projects(): List<ProjectInfo> =
+            listOf(ProjectInfo("Jetsnack", "/ws/jetsnack", 4, isAndroid = true))
+
+        override val store: StoreService = object : StoreService {
+            override fun storeAvailable(): Boolean = true
+            override fun submissionsAvailable(): Boolean = true
+            override suspend fun packProject(rootPath: String) = UiPackagedProject(
+                rootPath = rootPath, fileCount = 127, totalBytes = 6_500_000, sha256 = "abc",
+                excluded = listOf("build/", ".gradle/"), archivePath = "/tmp/jetsnack.zip",
+            )
+
+            override suspend fun submitCategories(): List<Pair<String, String>> =
+                listOf("android" to "Android", "kotlin" to "Kotlin", "tools" to "Tools")
         }
     }
 

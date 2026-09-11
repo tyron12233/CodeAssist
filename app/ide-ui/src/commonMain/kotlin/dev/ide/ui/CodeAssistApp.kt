@@ -58,6 +58,12 @@ fun CodeAssistApp(
     /** A `.caproj` path handed in from outside the app (Android "Open with"). When it changes to a
      *  non-null value, the import preview opens for it. Null on desktop / normal launch. */
     importPackagePath: String? = null,
+    /** A store item id handed in from outside the app (a `codeassist://store/<id>` link). Opened when it
+     *  changes to a non-null value. Null on desktop / normal launch. */
+    openStoreItemId: String? = null,
+    /** Called once [openStoreItemId] has been acted on, so the host can clear it. Without that the same
+     *  id arriving twice would not re-fire, a link being tapped twice being the ordinary case. */
+    onStoreItemIdHandled: () -> Unit = {},
 ) {
     // Register the UI facets of the enabled plugins, then load once. The backend reports exactly the plugins
     // whose engine half is enabled (see BuiltInPlugins' unified engine+UI declaration), so this shell code names
@@ -89,6 +95,11 @@ fun CodeAssistApp(
     // A `.caproj` handed in from outside the app ("Open with"): read its preview and open the import screen.
     // Keyed on the path (the host makes each hand-off a distinct path) so it fires once per inbound package.
     LaunchedEffect(importPackagePath) { importPackagePath?.let { app.openImportPackage(it) } }
+    // A store link handed in from outside the app. Cleared through the host once acted on, so tapping the
+    // same link again is a fresh null -> id change and opens it again.
+    LaunchedEffect(openStoreItemId) {
+        openStoreItemId?.let { app.openStoreItemById(it); onStoreItemIdHandled() }
+    }
 
     // Theme + accent + code font come from settings; the Settings screen (and the quick toggle) update them
     // live. "system" follows the OS dark-mode signal.

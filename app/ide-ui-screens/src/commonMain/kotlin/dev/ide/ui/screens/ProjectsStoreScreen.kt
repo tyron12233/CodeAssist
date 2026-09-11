@@ -57,6 +57,8 @@ import dev.ide.ui.components.ComingSoon
 import dev.ide.ui.components.FeaturedHeroCard
 import dev.ide.ui.components.PillChip
 import dev.ide.ui.components.StoreListRow
+import dev.ide.ui.components.formatRating
+import dev.ide.ui.components.formatSizeShort
 import dev.ide.ui.components.TrendingTicker
 import dev.ide.ui.components.motifFor
 import dev.ide.ui.generated.resources.Res
@@ -156,7 +158,7 @@ private fun StoreBrowse(
             Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 12.dp)) {
                 Text(
                     stringResource(Res.string.store_title),
-                    style = MaterialTheme.typography.displaySmall,
+                    style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 SearchEntry(onClick = { onOpenSearch(null) }, modifier = Modifier.padding(top = 14.dp))
@@ -269,25 +271,42 @@ internal fun StoreItemRow(
     onAction: ((UiStoreItem) -> Unit)? = null,
     /** This item's in-flight install, if any. Turns the action into live progress. */
     progress: dev.ide.ui.backend.UiInstallProgress? = null,
+    /** Where a published app icon is fetched from. Null (the bundled catalogue) keeps the glyph tile. */
+    backend: dev.ide.ui.backend.IdeBackend? = null,
 ) {
     val message = progress?.message
     StoreListRow(
         title = item.title,
-        // A failure replaces the subtitle: the row is where the tap happened, so it is where the reason belongs.
-        subtitle = message
-            ?: listOfNotNull(item.author, item.language).joinToString(" · ").ifBlank { item.summary },
+        // A failure replaces the publisher line: the row is where the tap happened, so it is where the
+        // reason belongs.
+        subtitle = message ?: item.author.orEmpty().ifBlank { item.category },
         iconId = item.iconId,
         pair = tonalPair(index),
         tileShape = tileShape(index),
         // A template routes straight into the Create-Project flow, so its action reads "Use", not "Install".
         actionLabel = installActionLabel(item, progress),
         actionFilled = item.available,
-        rating = item.rating,
-        installs = item.installs,
+        // Suppressed while a failure is showing: the row is already saying something more important.
+        meta = if (message != null) "" else storeItemMeta(item),
         onOpen = { onOpenItem(item) },
         onAction = { if (!progress.inFlight) (onAction ?: onOpenItem)(item) },
+        icon = rememberItemIcon(backend, item),
     )
 }
+
+/**
+ * The row's one stat line: `Kotlin · 4.5 ★ · 6.8 MB`.
+ *
+ * Only the parts that are actually known. An unrated project says nothing about its rating rather than
+ * claiming a zero, and a bundled template has no size to report, so the line shortens instead of showing
+ * placeholders.
+ */
+@Composable
+internal fun storeItemMeta(item: UiStoreItem): String = listOfNotNull(
+    item.language,
+    item.rating.takeIf { it >= 0f && item.ratingCount > 0 }?.let { "${formatRating(it)} ★" },
+    item.downloadBytes.takeIf { it > 0 }?.let { formatSizeShort(it) },
+).joinToString(" · ")
 
 /**
  * The non-editable search entry on the browse screen.

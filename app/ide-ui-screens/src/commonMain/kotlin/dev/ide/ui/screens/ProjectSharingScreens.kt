@@ -115,6 +115,7 @@ import dev.ide.ui.generated.resources.export_retry
 import dev.ide.ui.generated.resources.export_save_copy
 import dev.ide.ui.generated.resources.export_screenshot_add
 import dev.ide.ui.generated.resources.export_screenshot_remove
+import dev.ide.ui.generated.resources.export_screenshot_unreadable
 import dev.ide.ui.generated.resources.export_screenshots_desc
 import dev.ide.ui.generated.resources.export_screenshots_title
 import dev.ide.ui.generated.resources.export_share
@@ -734,6 +735,13 @@ private fun ScreenshotsCard(backend: IdeBackend, fileActions: FileActions, state
     }
 }
 
+/** What [ScreenshotThumb] knows about one picked image: still reading, unreadable, or decoded. */
+private sealed interface ThumbState {
+    data object Loading : ThumbState
+    data object Unreadable : ThumbState
+    class Ready(val bitmap: ImageBitmap) : ThumbState
+}
+
 /**
  * One picked screenshot: its thumbnail (decoded off the main thread) with a remove button.
  *
@@ -742,27 +750,43 @@ private fun ScreenshotsCard(backend: IdeBackend, fileActions: FileActions, state
  */
 @Composable
 internal fun ScreenshotThumb(backend: IdeBackend, path: String, onRemove: () -> Unit) {
-    val bitmap by produceState<ImageBitmap?>(null, path) {
+    // Three states, not two. A file the host refuses to read (it is over the preview size cap, or it is not
+    // a decodable image) used to land back as the same null the loading state uses, so the tile span forever
+    // and the picker looked like it had silently done nothing. An image that cannot be previewed is a fact
+    // worth showing, since the tile is still in the submission and the user has to be able to drop it.
+    val thumb by produceState<ThumbState>(ThumbState.Loading, path) {
         val bytes = backend.projects.imageBytes(path)
-        value = bytes?.let { withContext(Dispatchers.Default) { decodeImageBytes(it) } }
+        val decoded = bytes?.let { withContext(Dispatchers.Default) { decodeImageBytes(it) } }
+        value = if (decoded != null) ThumbState.Ready(decoded) else ThumbState.Unreadable
     }
     Box {
         val shape = MaterialTheme.shapes.medium
-        val bmp = bitmap
-        if (bmp != null) {
-            Image(
-                bmp,
+        when (val current = thumb) {
+            is ThumbState.Ready -> Image(
+                current.bitmap,
                 contentDescription = null,
                 modifier = Modifier.height(96.dp).widthIn(max = 160.dp).clip(shape)
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
                 contentScale = ContentScale.Fit,
             )
-        } else {
-            Box(
+
+            ThumbState.Loading -> Box(
                 Modifier.size(96.dp).clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            }
+
+            ThumbState.Unreadable -> Box(
+                Modifier.size(96.dp).clip(shape).background(MaterialTheme.colorScheme.errorContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    CaIcons.warning,
+                    stringResource(Res.string.export_screenshot_unreadable),
+                    Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                )
             }
         }
         IconButton(onClick = onRemove, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) {

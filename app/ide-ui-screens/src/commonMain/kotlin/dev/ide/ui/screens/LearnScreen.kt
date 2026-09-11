@@ -157,7 +157,7 @@ private fun LearnHeader(lessonsDone: Int) {
     ) {
         Text(
             stringResource(Res.string.learn_title),
-            style = MaterialTheme.typography.displaySmall,
+            style = MaterialTheme.typography.headlineMedium,
             color = c.onSurface,
             modifier = Modifier.weight(1f),
         )

@@ -60,8 +60,13 @@ class MoreMenuActionTest {
         UiPluginHost.ensureLoaded()
         val host = RecordingHost(FakeBackend())
         val ids = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, host).map { it.id }
+        // Manage dependencies joined the sheet: it sits next to Modules, which is the same area of the app,
+        // and used to be reachable only by typing in the palette.
         assertEquals(
-            listOf("ui.hub", "ui.modules", "ui.icons", "ui.reindex", "ui.logs", "ui.toggleTheme", "ui.closeProject"),
+            listOf(
+                "ui.hub", "ui.modules", "ui.icons", "ui.dependencies",
+                "ui.reindex", "ui.logs", "ui.toggleTheme", "ui.closeProject",
+            ),
             ids,
             "the More-menu built-ins resolve from the registry in their declared order",
         )

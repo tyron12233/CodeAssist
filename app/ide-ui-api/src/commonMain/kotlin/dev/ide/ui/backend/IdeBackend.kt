@@ -269,6 +269,13 @@ data class UiStoreItem(
     /** Explore screenshots for the detail gallery: built-in preview keys or on-disk image paths. Empty = none.
      *  Populated from a `.caproj`'s `store` section once the community catalog is wired (hosting is deferred). */
     val screenshots: List<String> = emptyList(),
+    /**
+     * The project's own launcher icon as a store media path, or null.
+     *
+     * Separate from [iconId], which names a glyph in the UI's registry. Where this is set the listing draws
+     * the real app icon; where it is not, the glyph tile is the honest fallback rather than a blank square.
+     */
+    val iconPath: String? = null,
 )
 
 /** A titled shelf of store items (e.g. "Starter templates", "Sample projects"). */
@@ -1256,7 +1263,7 @@ data class UiConvertResult(val ok: Boolean, val message: String, val canRevert: 
 enum class TreeViewMode { Project, AllFiles }
 
 /** The kind of content/source root the user can add to a module (maps to a backend `ContentRole`). */
-enum class UiSourceRootRole { Source, Resource, AndroidRes, Assets, Aidl }
+enum class UiSourceRootRole { Source, Resource, AndroidRes, Assets, Aidl, JniLibs }
 
 /**
  * A typed source-file template the file-tree "New" submenu can scaffold. The prefix names the language

@@ -1,5 +1,9 @@
 package dev.ide.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -9,8 +13,10 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.VcsService
@@ -219,6 +225,9 @@ internal fun AppNavGraph(
                     // sheet reports rather than working around.
                     onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
                     onOpenPublisher = { handle -> app.openPublisher(handle) },
+                    // What "Open in editor" opens. Without it the button was inert, which is the half of
+                    // this the user could see; the other half was the feed's own Open re-downloading.
+                    onOpenInstalled = { path -> app.openInstalledProject(path) },
                 )
             }
 
@@ -516,6 +525,13 @@ private fun ProjectPickerRoute(
     }
 }
 
+/** What [StoreRoute] knows about the server-driven Explore feed: still asking, no remote store, or a feed. */
+private sealed interface StoreFeedState {
+    data object Loading : StoreFeedState
+    data object Unavailable : StoreFeedState
+    class Loaded(val feed: dev.ide.ui.backend.UiStoreFeed) : StoreFeedState
+}
+
 @Composable
 private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
     // Publishing asks for an account at the moment it is needed, not at launch.
@@ -523,20 +539,34 @@ private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
     var notifyLaunch by remember(app.backend) { mutableStateOf(app.backend.store.launchNotificationEnabled()) }
     var notifyMessage by remember { mutableStateOf<String?>(null) }
     val storeScope = rememberCoroutineScope()
-    // Ask for the server-driven feed once per epoch. Null means there is no remote store to reach —
-    // NOT that the store is empty — so the bundled catalog screen takes over. Those are opposite
-    // claims and must not render the same page.
-    val feed by produceState<dev.ide.ui.backend.UiStoreFeed?>(null, app.backend, app.epoch) {
-        value = runCatching { app.backend.store.feed(seedItemId = null) }.getOrNull()
+    // Ask for the server-driven feed once per epoch. THREE outcomes, not two: still asking, no remote
+    // store to reach, and a feed. "No remote store" means the bundled catalog screen takes over, which is
+    // the opposite claim from "the store is empty" and must not render the same page. Folding "still
+    // asking" into it as well is what made the tab open on the bundled catalog and then yank it away on
+    // every single visit: the offline page was being used as a loading spinner, and the shelves a user had
+    // started reading vanished as soon as the request landed.
+    val feed by produceState<StoreFeedState>(StoreFeedState.Loading, app.backend, app.epoch) {
+        val loaded = runCatching { app.backend.store.feed(seedItemId = null) }.getOrNull()
+        value = if (loaded != null) StoreFeedState.Loaded(loaded) else StoreFeedState.Unavailable
     }
-    val current = feed
-    if (current == null) {
-        ProjectsStoreScreen(
-            backend = app.backend,
-            onOpenItem = app::openStoreItem,
-            onOpenHub = { app.openHub(Screen.Projects) },
-        )
-        return
+    val current = when (val state = feed) {
+        StoreFeedState.Loading -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
+            }
+            return
+        }
+
+        StoreFeedState.Unavailable -> {
+            ProjectsStoreScreen(
+                backend = app.backend,
+                onOpenItem = app::openStoreItem,
+                onOpenHub = { app.openHub(Screen.Projects) },
+            )
+            return
+        }
+
+        is StoreFeedState.Loaded -> state.feed
     }
     // The bundled scaffolds fill the "Bundled with your IDE" shelf in the empty and sparse states. They
     // come from the DEVICE, not the feed — that shelf's whole point is working with no network — so they
@@ -578,6 +608,9 @@ private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
         onAccount = if (app.backend.store.authProviders().isNotEmpty()) ({ signInVisible = true }) else null,
         signedIn = app.backend.store.authState().collectAsState().value.signedIn,
         onHowItWorks = { app.openPublishingGuide() },
+        // Where the cards fetch a published screenshot from. Without it every shelf draws the abstract
+        // code motif, including for projects that shipped six screenshots.
+        backend = app.backend,
     )
     if (signInVisible) {
         StoreSignInSheet(

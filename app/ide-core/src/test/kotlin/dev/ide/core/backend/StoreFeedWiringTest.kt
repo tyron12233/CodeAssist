@@ -145,6 +145,77 @@ class StoreFeedWiringTest {
         assertTrue(merged.available, "a locally-creatable item is available even with no payload")
     }
 
+    /**
+     * The published screenshots have to survive parse AND mapping.
+     *
+     * They had been surviving neither: `parseItem` never read the key and `toUi` never carried it, so the
+     * detail gallery of every community project drew the abstract code-panel stand-in. That failure is
+     * invisible (a placeholder is exactly what an item with no screenshots is supposed to show), which is
+     * why the whole path is asserted end to end rather than trusting the field's presence.
+     */
+    @Test
+    fun publishedScreenshotsReachTheUiModel() {
+        val json = """
+        {"version":3,"mode":"sparse","storeState":{"publishedProjectCount":1},
+         "sections":[{"type":"catalogue","id":"everything","title":"All","order":"recency","items":[
+           {"id":"shots","kind":"community","title":"Shots","summary":"s","category":"java",
+            "storagePath":"shots/1.0.0/p.zip",
+            "screenshots":["shots/1.0.0/shot-0.png","shots/1.0.0/shot-1.png"]}
+         ]}]}
+        """.trimIndent()
+        val feed = assertNotNull(StoreFeedParser.parse(json))
+        assertEquals(2, feed.allItems.single().screenshots.size, "the parser dropped them")
+        val ui = StoreFeedMapper.toUi(feed, emptyMap())
+        val item = ui.sections.filterIsInstance<UiFeedSection.Catalogue>().single().items.single()
+        assertEquals(listOf("shots/1.0.0/shot-0.png", "shots/1.0.0/shot-1.png"), item.screenshots)
+    }
+
+    /**
+     * The published app icon reaches the UI model.
+     *
+     * `iconPath` is an IMAGE path and `iconId` a glyph-registry key; they are different fields with
+     * different fallbacks, and a listing that loses the first silently draws the second, which is exactly
+     * what every community project did before icons were collected at all.
+     */
+    @Test
+    fun theAppIconReachesTheUiModel() {
+        val json = """
+        {"version":3,"mode":"sparse","storeState":{"publishedProjectCount":1},
+         "sections":[{"type":"catalogue","id":"everything","title":"All","order":"recency","items":[
+           {"id":"withicon","kind":"community","title":"With icon","summary":"s","category":"java",
+            "storagePath":"withicon/1.0.0/p.zip","iconPath":"withicon/1.0.0/icon.png"}
+         ]}]}
+        """.trimIndent()
+        val feed = assertNotNull(StoreFeedParser.parse(json))
+        assertEquals("withicon/1.0.0/icon.png", feed.allItems.single().iconPath, "the parser dropped it")
+        val ui = StoreFeedMapper.toUi(feed, emptyMap())
+        val item = ui.sections.filterIsInstance<UiFeedSection.Catalogue>().single().items.single()
+        assertEquals("withicon/1.0.0/icon.png", item.iconPath)
+        assertEquals("file", item.iconId, "no published icon must still leave a usable glyph fallback")
+    }
+
+    /** A project that published no icon says so, rather than reporting an empty path. */
+    @Test
+    fun anItemWithNoPublishedIconHasNoIconPath() {
+        val feed = assertNotNull(StoreFeedParser.parse(fixture("explore-sparse.json")))
+        val ui = StoreFeedMapper.toUi(feed, emptyMap())
+        val items = ui.sections.filterIsInstance<UiFeedSection.Catalogue>().flatMap { it.items }
+        assertTrue(items.isNotEmpty())
+        assertTrue(items.all { it.iconPath == null }, "the fixture predates icons")
+    }
+
+    /** A remote row that published no screenshots keeps the bundled artwork rather than losing it. */
+    @Test
+    fun anOverlaidItemWithNoScreenshotsOfItsOwnKeepsTheBundledOnes() {
+        val feed = assertNotNull(StoreFeedParser.parse(fixture("explore-sparse.json")))
+        val remoteSlug = feed.allItems.first { it.screenshots.isEmpty() }.id
+        val overlay = bundled(remoteSlug).mapValues { (_, item) -> item.copy(screenshots = listOf("sample-snake")) }
+        val ui = StoreFeedMapper.toUi(feed, overlay)
+        val merged = ui.sections.filterIsInstance<UiFeedSection.Catalogue>()
+            .single().items.single { it.id == remoteSlug }
+        assertEquals(listOf("sample-snake"), merged.screenshots)
+    }
+
     /** An item the device does not have and the server gave no payload for cannot be installed. */
     @Test
     fun remoteItemWithNoPayloadAndNoTemplateIsUnavailable() {

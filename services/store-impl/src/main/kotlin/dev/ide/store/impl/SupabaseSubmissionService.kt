@@ -69,6 +69,7 @@ class SupabaseSubmissionService(
 
         // 2. Upload. First, because a row without its payload is worse than an orphaned object.
         val shots = uploadScreenshots("${account.userId}/$slug/${request.version}-shots", request.screenshotPaths, token)
+        val icon = uploadIcon("${account.userId}/$slug/${request.version}-icon", request.iconPath, token)
         when (val up = upload(objectPath, archive, token)) {
             is StoreResult.Ok -> Unit
             is StoreResult.Unavailable -> return StoreResult.Unavailable(up.reason)
@@ -105,6 +106,7 @@ class SupabaseSubmissionService(
             append(""""screenshot_paths":[""")
             shots.forEachIndexed { i, path -> if (i > 0) append(','); append(q(path)) }
             append("],")
+            icon?.let { field("icon_path", it); comma() }
             append(""""file_manifest":""").append(manifestJson(packaged)).append(',')
             field("status", "pending"); comma()
             field("submitter_id", account.userId)
@@ -268,6 +270,38 @@ class SupabaseSubmissionService(
             }
             is StoreResult.Unavailable -> {
                 log.warn("Screenshot upload failed: ${result.reason}")
+                null
+            }
+        }
+    }
+
+    /**
+     * Upload the app icon, returning the path it landed at, or null.
+     *
+     * Best effort like the screenshots, and for the stronger reason: the icon is decoration on a listing,
+     * and refusing a submission because the launcher icon would not upload would block a publish over
+     * something nobody asked the submitter for.
+     */
+    private fun uploadIcon(prefix: String, path: String?, token: String): String? {
+        val file = File(path ?: return null)
+        if (!file.isFile) {
+            log.warn("App icon $path is gone; submitting without it")
+            return null
+        }
+        if (file.length() > MAX_SCREENSHOT_BYTES) {
+            log.warn("App icon $path is ${file.length()} bytes, over the $MAX_SCREENSHOT_BYTES limit")
+            return null
+        }
+        val extension = file.name.substringAfterLast('.', "png").lowercase()
+        val objectPath = "$prefix/icon.$extension"
+        return when (val result = uploadBytes(objectPath, file, mimeFor(extension), token)) {
+            is StoreResult.Ok -> objectPath
+            is StoreResult.Failed -> {
+                log.warn("App icon upload rejected (HTTP ${result.status}): ${result.message}")
+                null
+            }
+            is StoreResult.Unavailable -> {
+                log.warn("App icon upload failed: ${result.reason}")
                 null
             }
         }

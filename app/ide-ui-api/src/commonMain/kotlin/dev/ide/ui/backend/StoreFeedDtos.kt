@@ -257,6 +257,14 @@ data class UiInstallProgress(
     val fraction: Float = 0f,
     /** Why it failed, for [UiInstallState.FAILED]. */
     val message: String? = null,
+    /**
+     * Where the project landed, for [UiInstallState.INSTALLED]; null in every other state.
+     *
+     * Carried here because the button that says "Open" has to have something to open. Without it the only
+     * honest thing that tap could do was nothing, and the only thing it actually did was install a second
+     * copy of a project that was already on the device.
+     */
+    val rootPath: String? = null,
 )
 
 // ---- Store accounts ----

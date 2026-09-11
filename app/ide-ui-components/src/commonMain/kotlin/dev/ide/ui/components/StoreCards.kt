@@ -172,11 +172,13 @@ fun FeaturedHeroCard(
             }
             Text(
                 title,
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Medium),
+                // titleLarge, not headlineSmall: this is a card in a row of cards, not the page's title,
+                // and at 24 sp it wrapped to two lines for most real project names.
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Medium),
                 color = pair.onContainer,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 12.dp),
+                modifier = Modifier.padding(top = 10.dp),
             )
             SupportingOnContainer(subtitle, pair.onContainer, Modifier.padding(top = 6.dp), maxLines = 1)
             // Inset from the left, bleeding 6 dp past the card's right padding, with only a 10 dp gap to
@@ -259,7 +261,19 @@ fun CategoryTile(
     }
 }
 
-/** A store list row: tonal icon tile, title, `author · language`, the stat line, and a trailing action. */
+/**
+ * One project, as a row: icon, title, publisher, a single stat line, and the action.
+ *
+ * **Three text elements, not eight.** This is the store's one repeated item surface, and everything it
+ * does not show is one tap away on the detail page. The version it replaced carried a badge, a published
+ * date, a two-line title, the author AND language, a blurb, three tag chips and two stat figures, which
+ * made one project 480 dp tall; six projects now fit where one did.
+ *
+ * [meta] is the whole stat line, composed by the caller, because what is worth showing differs by item:
+ * `Kotlin · 4.5 ★ · 6.8 MB` for a published project, `Kotlin · offline` for a bundled scaffold. The
+ * language leads it rather than sitting in its own chip: it is the identity a code project has and an app
+ * does not, and there is no room for a row of chips here.
+ */
 @Composable
 fun StoreListRow(
     title: String,
@@ -272,8 +286,10 @@ fun StoreListRow(
     onOpen: () -> Unit,
     onAction: () -> Unit,
     modifier: Modifier = Modifier,
-    rating: Float = -1f,
-    installs: Int = -1,
+    /** The stat line under the publisher. Blank hides it, which is what a row with nothing to report does. */
+    meta: String = "",
+    /** The project's own app icon, filling the tile. Null draws the [iconId] glyph instead. */
+    icon: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
     Row(
@@ -283,42 +299,37 @@ fun StoreListRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        TemplateIcon(iconId, pair, tileShape, size = 54.dp)
+        if (icon != null) {
+            icon(Modifier.size(56.dp).clip(tileShape))
+        } else {
+            TemplateIcon(iconId, pair, tileShape, size = 56.dp)
+        }
         Column(Modifier.weight(1f)) {
             Text(
                 title,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium,
                 color = c.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = c.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (rating >= 0f || installs >= 0) {
-                Row(
-                    Modifier.padding(top = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (rating >= 0f) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Symbol(CaSymbols.star, contentDescription = null, size = 13.dp, filled = true, tint = c.primary)
-                            Text(
-                                formatRating(rating),
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = c.onSurface,
-                            )
-                        }
-                    }
-                    if (installs >= 0) {
-                        Text(installLabel(installs), style = MaterialTheme.typography.labelMedium, color = c.onSurfaceVariant)
-                    }
-                }
+            if (subtitle.isNotBlank()) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (meta.isNotBlank()) {
+                Text(
+                    meta,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = c.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
             }
         }
         Surface(
@@ -406,7 +417,7 @@ fun installLabel(installs: Int): String = when {
 private fun countLabel(count: Int): String = if (count == 1) "1 project" else "$count projects"
 
 /** One decimal place, always — "4.8", never "4.80" or "5". Shared with the chart rows. */
-internal fun formatRating(rating: Float): String {
+fun formatRating(rating: Float): String {
     val tenths = (rating.coerceIn(0f, 5f) * 10).roundToInt()
     return "${tenths / 10}.${tenths % 10}"
 }

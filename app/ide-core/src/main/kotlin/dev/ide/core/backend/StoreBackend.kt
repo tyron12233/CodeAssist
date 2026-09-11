@@ -330,7 +330,11 @@ internal class StoreBackend(
 
     // ---- submitting ----
 
-    private val submissionState = StoreSubmissions(submissions)
+    private val submissionState = StoreSubmissions(
+        submissions,
+        // The publisher is never asked for an icon: their project already has one.
+        launcherIcon = { rootPath -> ctx.manager?.launcherIconBytes(rootPath) },
+    )
 
     override fun submissionsAvailable(): Boolean = submissionState.available()
 
@@ -480,7 +484,12 @@ internal class StoreBackend(
                 },
                 onProgress = { p -> progressState.value = progressState.value + (p.itemId to p) },
             )
-            if (result.success) recordInstall(id)
+            // Remembered with the directory it landed in, so the next launch still knows this item is on
+            // the device and where. That is what turns its button into an Open that has something to open.
+            if (result.success) {
+                history.remember(id, result.rootPath)
+                recordInstall(id)
+            }
             result
         }
     }
@@ -488,8 +497,21 @@ internal class StoreBackend(
     override fun installProgress(): kotlinx.coroutines.flow.StateFlow<Map<String, UiInstallProgress>> =
         progressState
 
-    private val progressState =
-        kotlinx.coroutines.flow.MutableStateFlow<Map<String, UiInstallProgress>>(emptyMap())
+    /**
+     * Live install progress, seeded with what this device already has.
+     *
+     * Seeded, rather than starting empty, because "installed" is a fact about the workspace and not about
+     * this session: a store row for a project already on disk has to offer Open after a relaunch too. The
+     * ledger drops entries whose directory is gone, so a deleted project goes back to offering Install.
+     *
+     * Read once, lazily, off a file of at most fifty short lines: the same shape of read `isLiked` already
+     * does during composition.
+     */
+    private val progressState by lazy {
+        val installed = history.installedPaths()
+            .mapValues { (id, path) -> UiInstallProgress(id, UiInstallState.INSTALLED, 1f, rootPath = path) }
+        kotlinx.coroutines.flow.MutableStateFlow(installed)
+    }
 
     private val installer = StoreInstaller(source)
 

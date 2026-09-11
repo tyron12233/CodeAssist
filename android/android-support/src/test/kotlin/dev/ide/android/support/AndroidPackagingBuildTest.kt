@@ -139,6 +139,71 @@ class AndroidPackagingBuildTest {
         }
     }
 
+    /**
+     * A module's OWN native libraries, in a project whose stored model declares no `jniLibs` content root:
+     * every project written before that root joined the Android module template, and nothing re-applies a
+     * template to a module that exists. The reported crash: `src/main/jniLibs/arm64-v8a/libnative.so` sat where
+     * AGP puts it, the build reported no problem, the APK carried no `lib/` at all, and the app died on its
+     * first `System.loadLibrary`. The conventional `src/<set>/jniLibs` is read whether or not a root declares
+     * it, for the variant's source sets (here `main` and `debug`).
+     */
+    @Test
+    fun packagesJniLibsFoundByConvention() {
+        val sdk = assumeAndroidSdk()
+
+        testEnv("android-jnilibs-convention") { env ->
+            val dir = env.dir
+            val platform = env.platform
+
+            val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
+            ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
+            val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
+            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("app", appType).apply {
+                    languageLevel = LanguageLevel.JAVA_17
+                    putFacet(AndroidFacet(namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34))
+                    // A model written before `src/<set>/jniLibs` joined the Android module template.
+                    removeContentRoot("main", "src/main/jniLibs")
+                    removeContentRoot("debug", "src/debug/jniLibs")
+                }
+                commit()
+            }
+
+            dir.writeSource("app/src/main/AndroidManifest.xml", APP_MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", APP_STRINGS)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
+            writeBytes(dir, "app/src/main/jniLibs/arm64-v8a/libnative.so", "arm64-bytes".toByteArray())
+            writeBytes(dir, "app/src/main/jniLibs/armeabi-v7a/libnative.so", "arm32-bytes".toByteArray())
+            writeBytes(dir, "app/src/debug/jniLibs/arm64-v8a/libdebugonly.so", "debug-bytes".toByteArray())
+            // The neighbouring mistake: a prebuilt dropped beside the C/C++ sources it was built from.
+            // Nothing packages it (AGP included), so the build has to say so rather than go quietly green.
+            writeBytes(dir, "app/src/main/jni/arm64-v8a/libmisplaced.so", "misplaced".toByteArray())
+
+            val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
+            val buildSystem = AndroidBuildSystem.inProcess(sdk, signing)
+            val graph = buildSystem.createBuildGraph(
+                store.workspace.projects.single(),
+                BuildRequest(listOf(ModuleId("app")), VariantSelector("debug"), BuildGoal.PACKAGE),
+            )
+            val log = StringBuilder()
+            val outcome = runBlocking {
+                TaskExecutorImpl(BuildCache(dir.resolve(".caches/build"))).execute(graph, SimpleTaskContext(log = { log.appendLine(it) }), 2)
+            }
+            assertTrue(outcome.succeeded, "packaging APK build failed:\n$log")
+
+            val entries = readEntries(dir.resolve("app/build/outputs/apk/debug/app-debug.apk"))
+            assertEquals("arm64-bytes", entries["lib/arm64-v8a/libnative.so"], "arm64 lib missing: ${entries.keys.filter { it.startsWith("lib/") }}")
+            assertEquals("arm32-bytes", entries["lib/armeabi-v7a/libnative.so"], "armeabi-v7a lib missing: ${entries.keys.filter { it.startsWith("lib/") }}")
+            assertEquals("debug-bytes", entries["lib/arm64-v8a/libdebugonly.so"], "debug source-set lib missing: ${entries.keys.filter { it.startsWith("lib/") }}")
+
+            // `src/main/jni` still packages nothing, but the build now names the file and where it belongs.
+            assertFalse(entries.keys.any { "libmisplaced" in it }, "src/main/jni must not be packaged: ${entries.keys}")
+            assertTrue("src/main/jni" in log.toString(), "no advisory for the misplaced prebuilt:\n$log")
+            assertTrue("jniLibs/<abi>" in log.toString(), "the advisory must say where it belongs:\n$log")
+        }
+    }
+
     /** Compile one class, then repack it with raw native-lib / service / manifest entries into a runtime jar. */
     private fun buildDepJar(workDir: Path, jar: Path, androidJar: Path): Path {
         val srcDir = workDir.resolve("src")

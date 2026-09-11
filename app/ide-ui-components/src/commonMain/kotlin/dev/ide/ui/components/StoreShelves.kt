@@ -150,6 +150,10 @@ private fun IconStack(iconIds: List<String>, pair: TonalPair) {
  * [fillWidth] drops the fixed width so the same card can sit in a grid cell. The width has to be
  * conditional rather than left to the caller's modifier: `.width()` applied here would override any
  * `weight` the caller passed, and the grid cell would silently stay 146 dp wide.
+ *
+ * [preview] fills the art block. The store hands it the project's APP ICON here, not a screenshot: a grid
+ * is for recognising things at a glance, and a 146 dp screenshot is unreadable while an icon at that size
+ * is exactly what it was designed for. Screenshots lead the featured card instead.
  */
 @Composable
 fun PosterCard(
@@ -158,6 +162,8 @@ fun PosterCard(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
     fillWidth: Boolean = false,
+    /** Draws the item's artwork into the art block, sized by the modifier it is handed. Null ⇒ the glyph. */
+    preview: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
     // +1 so a poster row never starts on the same tint as the shelf above it.
@@ -176,12 +182,18 @@ fun PosterCard(
                 .background(pair.container),
             contentAlignment = Alignment.Center,
         ) {
-            Symbol(
-                CaSymbols.forIconId(item.iconId),
-                contentDescription = null,
-                size = 42.dp,
-                tint = pair.onContainer,
-            )
+            if (preview != null) {
+                // Inset, not full-bleed: an app icon is a mark on a ground, and stretching one across the
+                // whole art block would crop a square icon into a letterbox.
+                preview(Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)))
+            } else {
+                Symbol(
+                    CaSymbols.forIconId(item.iconId),
+                    contentDescription = null,
+                    size = 42.dp,
+                    tint = pair.onContainer,
+                )
+            }
             item.language?.let { lang ->
                 Surface(
                     shape = RoundedCornerShape(7.dp),
@@ -366,7 +378,7 @@ private fun publisherStats(p: UiStorePublisher): String = listOfNotNull(
 ).joinToString(" · ")
 
 /** `12.4 MB`, or `840 KB` below a megabyte. */
-internal fun formatSizeShort(bytes: Long): String {
+fun formatSizeShort(bytes: Long): String {
     val mb = bytes / 1_048_576.0
     if (mb >= 1.0) {
         val tenths = (mb * 10).toLong()

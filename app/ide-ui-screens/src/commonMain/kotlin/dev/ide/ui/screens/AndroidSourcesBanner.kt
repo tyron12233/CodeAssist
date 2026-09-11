@@ -29,43 +29,41 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * A thin one-time banner offering to download the Android platform sources (so `android.*` APIs get
- * parameter names + javadoc). Shown only when an Android SDK is present, the sources aren't installed, and an
- * `sdkmanager` is available. Dismisses itself once a download is attempted.
+ * The Android-platform-sources offer: downloading them gives `android.*` APIs their parameter names and
+ * javadoc. Null unless an Android SDK is present, the sources are not installed, and an `sdkmanager` is
+ * available to fetch them.
+ *
+ * Keeps its own busy/result state, so the strip does not have to know that its action is asynchronous.
  */
 @Composable
-internal fun AndroidSourcesBanner(state: IdeUiState) {
+internal fun androidSourcesNotice(state: IdeUiState): EditorNotice? {
     var info by remember { mutableStateOf<UiAndroidSourcesInfo?>(null) }
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var dismissed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val downloadFailedTemplate = stringResource(Res.string.sources_download_failed)
     LaunchedEffect(Unit) { info = runCatching { state.backend.sdk.androidSourcesInfo() }.getOrNull() }
 
+    if (dismissed) return null
     val show = status != null || (info?.let { !it.installed && it.downloadable } == true)
-    if (!show) return
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.sm))
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            status ?: stringResource(Res.string.sources_not_installed, info?.platform.toString()),
-            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
-        )
-        if (status == null) {
-            Text(
-                if (busy) stringResource(Res.string.sources_downloading) else stringResource(Res.string.sources_download),
-                color = if (busy) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.then(
-                    if (busy) Modifier else Modifier.clickable {
-                        busy = true
-                        scope.launch { status = runCatching { state.backend.sdk.downloadAndroidSources() }.getOrElse { downloadFailedTemplate.replace("%1\$s", it.message.toString()) } }
-                    },
-                ),
-            )
-        }
-    }
+    if (!show) return null
+    val platform = info?.platform.orEmpty()
+    val downloading = stringResource(Res.string.sources_downloading)
+    val download = stringResource(Res.string.sources_download)
+    return EditorNotice(
+        id = "androidsources",
+        level = NoticeLevel.Info,
+        summary = status ?: stringResource(Res.string.sources_not_installed, platform),
+        actionLabel = if (status != null) null else if (busy) downloading else download,
+        onAction = if (status != null || busy) null else ({
+            busy = true
+            scope.launch {
+                status = runCatching { state.backend.sdk.downloadAndroidSources() }
+                    .getOrElse { downloadFailedTemplate.replace("%1\$s", it.message.toString()) }
+                busy = false
+            }
+        }),
+        onDismiss = { dismissed = true },
+    )
 }

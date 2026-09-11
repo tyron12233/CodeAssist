@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -99,185 +100,15 @@ fun StoreCountBadge(count: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * A full-bleed tonal catalogue card — the sparse state's unit.
+/*
+ * SparseProjectCard lived here.
  *
- * Deliberately not a list row. With a handful of projects, a generous card per project reads as
- * curation; a compact row reads as a short list.
+ * It was the catalogue's own item vocabulary: a full-bleed tonal card carrying a badge, a published date, a
+ * two-line title, author and language, a blurb, a screenshot band, three tag chips and two stat figures.
+ * One project filled a screen. The catalogue now uses the same StoreListRow every other shelf uses, so
+ * there is one item surface in the store rather than two, and six projects fit where one did.
  */
-@Composable
-fun SparseProjectCard(
-    item: UiStoreItem,
-    index: Int,
-    /** "Published 3 days ago", computed by the caller which knows the clock. */
-    postedLabel: String?,
-    /** Whether this was published inside the badge's 14-day window. The caller owns the clock. */
-    isRecent: Boolean,
-    actionLabel: String,
-    onOpen: () -> Unit,
-    onAction: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val pair = tonalPair(index)
-    val interaction = remember { MutableInteractionSource() }
-    Surface(
-        onClick = onOpen,
-        shape = cardShape(index),
-        color = pair.container,
-        contentColor = pair.onContainer,
-        interactionSource = interaction,
-        modifier = modifier.fillMaxWidth().padding(horizontal = 20.dp).pressScale(interaction, pressed = 0.995f),
-    ) {
-        Box(Modifier.clipToBounds()) {
-            WatermarkGlyph(
-                glyph = CaSymbols.forIconId(item.iconId),
-                onContainer = pair.onContainer,
-                size = 130.dp,
-                modifier = Modifier.align(Alignment.TopEnd).offset(x = 22.dp, y = (-22).dp),
-            )
-            Column(Modifier.padding(18.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    // Inverted tile: the one element that must read as an app icon, against a field of
-                    // the same hue.
-                    Box(
-                        Modifier.size(52.dp).clip(tileShape(index)).background(pair.onContainer),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        TemplateGlyph(
-                            iconId = item.iconId,
-                            size = 26.dp,
-                            fallbackTint = pair.container,
-                            forceTint = pair.container,
-                        )
-                    }
-                    Column(Modifier.weight(1f)) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(7.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            sparseBadge(index, isRecent)?.let { badge ->
-                                Surface(
-                                    shape = RoundedCornerShape(7.dp),
-                                    color = pair.onContainer,
-                                    contentColor = pair.container,
-                                    modifier = Modifier.height(22.dp),
-                                ) {
-                                    Box(Modifier.padding(horizontal = 9.dp), contentAlignment = Alignment.Center) {
-                                        Text(badge, style = MaterialTheme.typography.labelSmall)
-                                    }
-                                }
-                            }
-                            if (postedLabel != null) {
-                                SupportingOnContainer(postedLabel, pair.onContainer)
-                            }
-                        }
-                        Text(
-                            item.title,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontSize = 19.sp, lineHeight = 24.sp, letterSpacing = (-0.4).sp,
-                            ),
-                            color = pair.onContainer,
-                            modifier = Modifier.padding(top = 6.dp),
-                        )
-                        SupportingOnContainer(
-                            text = listOfNotNull(item.author, item.language).joinToString(" · ")
-                                .ifBlank { item.category },
-                            onContainer = pair.onContainer,
-                            modifier = Modifier.padding(top = 3.dp),
-                        )
-                    }
-                }
-                // The first sentence only, truncated server-side so every client agrees where it ends.
-                (item.blurb ?: item.summary).takeIf { it.isNotBlank() }?.let { blurb ->
-                    Text(
-                        blurb,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = pair.onContainer.copy(alpha = 0.85f),
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
-                }
-                if (item.tags.isNotEmpty()) {
-                    FlowRow(
-                        Modifier.fillMaxWidth().padding(top = 14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        verticalArrangement = Arrangement.spacedBy(7.dp),
-                    ) {
-                        item.tags.take(3).forEach {
-                            MonoChip(
-                                it,
-                                container = Color.Black.copy(alpha = 0.10f),
-                                content = pair.onContainer,
-                            )
-                        }
-                    }
-                }
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    RatingLine(item, pair.onContainer)
-                    Spacer(Modifier.weight(1f))
-                    Surface(
-                        onClick = onAction,
-                        shape = CircleShape,
-                        color = pair.onContainer,
-                        contentColor = pair.container,
-                        modifier = Modifier.height(38.dp),
-                    ) {
-                        Box(Modifier.padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
-                            Text(actionLabel, style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
-/**
- * The rating footer.
- *
- * "Not rated yet" is an actual text node, never a visual substitution over a hidden zero — a screen
- * reader must hear the same thing the eye sees.
- */
-@Composable
-private fun RatingLine(item: UiStoreItem, onContainer: Color) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        if (item.rating >= 0f && item.ratingCount > 0) {
-            Symbol(CaSymbols.star, contentDescription = null, size = 15.dp, filled = true, tint = onContainer)
-            Text(
-                "${formatRating(item.rating)} (${item.ratingCount})",
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                color = onContainer,
-            )
-        } else {
-            Text(
-                stringResource(Res.string.store_not_rated),
-                style = MaterialTheme.typography.labelLarge,
-                color = onContainer.copy(alpha = 0.75f),
-            )
-        }
-        if (item.installs >= 0) {
-            SupportingOnContainer("· ${installsLabel(item.installs)}", onContainer)
-        }
-    }
-}
-
-/**
- * Position-derived badges, per the handoff: the server stays out of presentational decisions.
- *
- * Index 0 is the shelf's first project; index 1 gets "NEW" only when it is genuinely recent.
- */
-@Composable
-private fun sparseBadge(index: Int, isRecent: Boolean): String? = when {
-    index == 0 -> stringResource(Res.string.store_badge_first)
-    index == 1 && isRecent -> stringResource(Res.string.store_badge_new)
-    else -> null
-}
 
 /**
  * The publish argument.

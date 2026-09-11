@@ -813,6 +813,10 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
         "res" to ContentRole.ANDROID_RES,
         "assets" to ContentRole.ASSETS,
         "aidl" to ContentRole.AIDL,
+        // Prebuilt `<abi>/*.so`. Without this a `jniLibs` folder created in the tree stayed an untyped
+        // folder, so the packager never saw it and the APK shipped no `lib/` (see AndroidBuildSystem's
+        // jniLibRoots, which reads the convention on the build side for folders created outside the IDE).
+        "jniLibs" to ContentRole.JNI_LIBS,
     )
 
     /** The source-set names declared on [module], in declaration order. */

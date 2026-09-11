@@ -152,15 +152,6 @@ internal object StoreFeedMapper {
         UiChartEntry(rank = rank, previousRank = previousRank, item = project.toUi(bundled))
 
     /**
-     * One remote item, overlaid onto its bundled counterpart if there is one.
-     *
-     * Two fields are taken from the bundled side even when the remote row has its own opinion:
-     *
-     *  - `templateId`, so a bundled item still creates locally. Without this, an overlaid template would
-     *    try to download a zip that is already in the APK.
-     *  - `previewKey`, because the screenshots are bundled drawables the server knows nothing about.
-     */
-    /**
      * One remote item as the UI sees it, with no bundled overlay.
      *
      * For surfaces that show a specific publisher's catalogue rather than the merchandised feed: there is
@@ -168,6 +159,16 @@ internal object StoreFeedMapper {
      */
     internal fun itemToUi(item: RemoteStoreItem): UiStoreItem = item.toUi(emptyMap())
 
+    /**
+     * One remote item, overlaid onto its bundled counterpart if there is one.
+     *
+     * Three fields fall back to the bundled side:
+     *
+     *  - `templateId`, so a bundled item still creates locally. Without this, an overlaid template would
+     *    try to download a zip that is already in the APK.
+     *  - `previewKey`, because that artwork is a bundled drawable the server knows nothing about.
+     *  - `screenshots`, for the same reason, and only when the remote row published none.
+     */
     private fun RemoteStoreItem.toUi(bundled: Map<String, UiStoreItem>): UiStoreItem {
         val local = bundled[id]
         return UiStoreItem(
@@ -204,6 +205,11 @@ internal object StoreFeedMapper {
             highlights = highlights,
             language = language,
             previewKey = local?.previewKey,
+            // Published screenshots are storage paths the gallery fetches and caches; a bundled item's are
+            // preview keys it already has. A remote row that overlays a bundled one keeps the bundled art
+            // when it published none of its own, rather than falling back to the abstract code panel.
+            screenshots = screenshots.ifEmpty { local?.screenshots.orEmpty() },
+            iconPath = iconPath,
         )
     }
 

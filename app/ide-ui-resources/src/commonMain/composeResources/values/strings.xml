@@ -121,6 +121,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="export_screenshots_desc">Shown to whoever imports the package.</string>
     <string name="export_screenshot_add">Add image</string>
     <string name="export_screenshot_remove">Remove screenshot</string>
+    <string name="export_screenshot_unreadable">Can't preview this image</string>
     <string name="export_intro_gradle">Write this project out as a Gradle build, so you can open it in Android Studio or build it with gradle.</string>
     <string name="export_format_title">Format</string>
     <string name="export_format_package">CodeAssist package</string>
@@ -157,6 +158,27 @@ We never collect your code, file or project names, which features you use, or an
     <string name="no_project_yet">No projects yet. Create one to get started.</string>
     <string name="your_projects">Your projects</string>
     <string name="project_kind_android">Android</string>
+    <!-- Short forms for the compact project row, where "4 modules · Android · Opened 2 hours ago"
+         does not fit and the "Opened" is carried by the context. -->
+    <string name="project_age_just_now">just now</string>
+    <plurals name="project_age_minutes">
+        <item quantity="one">%1$d minute ago</item>
+        <item quantity="other">%1$d minutes ago</item>
+    </plurals>
+    <plurals name="project_age_hours">
+        <item quantity="one">%1$d hour ago</item>
+        <item quantity="other">%1$d hours ago</item>
+    </plurals>
+    <plurals name="project_age_days">
+        <item quantity="one">%1$d day ago</item>
+        <item quantity="other">%1$d days ago</item>
+    </plurals>
+    <plurals name="project_age_weeks">
+        <item quantity="one">%1$d week ago</item>
+        <item quantity="other">%1$d weeks ago</item>
+    </plurals>
+    <!-- The editor's collapsed notice strip. Never shown for a single notice, which renders in place. -->
+    <string name="editor_notices_many">%1$d things need attention</string>
     <string name="project_opened_just_now">Opened just now</string>
     <plurals name="project_opened_minutes">
         <item quantity="one">Opened %1$d minute ago</item>
@@ -938,6 +960,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="newfile_kind_android_res">Android res</string>
     <string name="newfile_kind_assets">Assets</string>
     <string name="newfile_preset_aidl">AIDL</string>
+    <string name="newfile_preset_jni_libs">JNI libraries</string>
     <string name="newfile_preset_custom">Custom</string>
     <string name="newfile_role_sources">Sources</string>
     <string name="newfile_add_source_root">Add source root</string>

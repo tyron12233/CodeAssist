@@ -36,6 +36,7 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
             UiSourceRootRole.AndroidRes -> setOf(ContentRole.ANDROID_RES)
             UiSourceRootRole.Assets -> setOf(ContentRole.ASSETS)
             UiSourceRootRole.Aidl -> setOf(ContentRole.AIDL)
+            UiSourceRootRole.JniLibs -> setOf(ContentRole.JNI_LIBS)
         }
         val created =
             ctx.services.moduleService.addSourceRoot(moduleName, sourceSetName, dirName.trim().trim('/'), roles)

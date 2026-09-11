@@ -43,9 +43,62 @@ class StoreInstallHistoryTest {
 
     @Test
     fun theListIsCapped() {
-        (1..25).forEach { history.remember("item-$it") }
-        assertEquals(10, history.read().size)
-        assertEquals("item-25", history.mostRecent())
+        (1..80).forEach { history.remember("item-$it") }
+        assertEquals(50, history.read().size)
+        assertEquals("item-80", history.mostRecent())
+    }
+
+    /**
+     * The path is what the store's "Open" button opens, so it has to survive a relaunch, and it has to be
+     * dropped again the moment the project is not there, or Open would offer to open nothing.
+     */
+    @Test
+    fun anInstallRemembersWhereItLanded() {
+        val project = File(dir, "projects/Alpha").apply { mkdirs() }
+        history.remember("alpha", project.absolutePath)
+        history.remember("beta")
+        assertEquals(mapOf("alpha" to project.absolutePath), history.installedPaths())
+        assertEquals(listOf("beta", "alpha"), history.read())
+
+        project.deleteRecursively()
+        assertEquals(emptyMap(), history.installedPaths())
+    }
+
+    /**
+     * `recordInstall` remembers the id with no path, and runs right after the unpack that does know one.
+     * If that second write cleared the path, Open would work for exactly as long as the process lived.
+     */
+    @Test
+    fun rememberingAnIdAgainWithoutAPathKeepsTheKnownOne() {
+        val project = File(dir, "projects/Alpha").apply { mkdirs() }
+        history.remember("alpha", project.absolutePath)
+        history.remember("alpha")
+        assertEquals(mapOf("alpha" to project.absolutePath), history.installedPaths())
+    }
+
+    /** Reinstalling replaces the remembered directory: the newest unpack is the one on disk. */
+    @Test
+    fun reinstallingReplacesTheRememberedPath() {
+        val first = File(dir, "projects/Alpha").apply { mkdirs() }
+        val second = File(dir, "projects/Alpha-2").apply { mkdirs() }
+        history.remember("alpha", first.absolutePath)
+        history.remember("alpha", second.absolutePath)
+        assertEquals(mapOf("alpha" to second.absolutePath), history.installedPaths())
+        assertEquals(listOf("alpha"), history.read())
+    }
+
+    /**
+     * Lines written before installs remembered their path are bare ids. They still have to read as a seed,
+     * or upgrading the app would silently reset the recommendation shelf on every existing device.
+     */
+    @Test
+    fun aFileWrittenBeforePathsWereKeptStillReads() {
+        val file = File(dir, "store/installed.txt")
+        file.parentFile.mkdirs()
+        file.writeText("beta\nalpha\n")
+        assertEquals(listOf("beta", "alpha"), history.read())
+        assertEquals("beta", history.mostRecent())
+        assertEquals(emptyMap(), history.installedPaths())
     }
 
     /** No storage root — a host with nowhere to write — must not throw on an install. */

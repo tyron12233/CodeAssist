@@ -18,6 +18,7 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.UiAccent
 import dev.ide.ui.backend.UiImportPreview
+import dev.ide.ui.backend.UiInstallState
 import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.platform.ioDispatcher
@@ -423,6 +424,14 @@ class CodeAssistAppState(
             createProject(template)
             return
         }
+        // Already on the device. The row's button says "Open" in this state, and it used to run the
+        // install again anyway, downloading a second copy of a project the user already had.
+        val installedPath = backend.store.installProgress().value[item.id]
+            ?.takeIf { it.state == UiInstallState.INSTALLED }?.rootPath
+        if (installedPath != null) {
+            openInstalledProject(installedPath)
+            return
+        }
         if (!item.available) {
             // Nothing to download and no local scaffold: the detail page is all there is to offer.
             openStoreItem(item)
@@ -432,6 +441,18 @@ class CodeAssistAppState(
             val result = runCatching { backend.store.install(item.id) }.getOrNull()
             // The unpacked project is on disk now, so Home has to be told to look again.
             if (result?.success == true) refreshProjects()
+        }
+    }
+
+    /**
+     * Open a project installed from the store, by the path the install unpacked it to.
+     *
+     * The path is refused if the project has gone (deleted since it was installed): the store's list then
+     * goes back to offering an install, which is the truth, rather than landing on an empty editor.
+     */
+    fun openInstalledProject(rootPath: String) {
+        scope.launch {
+            if (backend.projects.openProject(rootPath)) screen = Screen.Editor else refreshProjects()
         }
     }
 
@@ -660,6 +681,35 @@ class CodeAssistAppState(
         screen = Screen.StoreItem
     }
 
+    /**
+     * Open a store item named only by its id, the way a deep link or a notification names one.
+     *
+     * The catalogue has no single-item lookup, so the id is resolved against what the store is already
+     * serving: the feed first, then a search, which is the only way to reach something the feed's shelves
+     * did not place. An id that resolves to nothing lands on the Store tab rather than nowhere — a link
+     * can legitimately name something this build cannot see (a submission still awaiting approval, an
+     * item withdrawn since the link was made), and leaving the screen untouched reads as the app
+     * ignoring the tap.
+     */
+    fun openStoreItemById(id: String) {
+        if (id.isBlank()) return showStore()
+        scope.launch {
+            val item = findStoreItem(id)
+            if (item != null) openStoreItem(item) else showStore()
+        }
+    }
+
+    /** The Store tab of the home screen, from wherever the app currently is. */
+    fun showStore() {
+        selectHomeTab(HomeTab.Store)
+        screen = Screen.Projects
+    }
+
+    private suspend fun findStoreItem(id: String): UiStoreItem? = runCatching {
+        backend.store.feed()?.allItems?.firstOrNull { it.id == id }
+            ?: backend.store.search(id).firstOrNull { it.id == id }
+    }.getOrNull()
+
     /** The project the publish flow should start from, when it was reached with one already chosen. */
     var submitProject: ProjectInfo? by mutableStateOf(null)
         private set
@@ -705,11 +755,10 @@ class CodeAssistAppState(
                 if (match != null) openProject(match)
             }
             is dev.ide.ui.backend.UiNotificationTarget.StoreItem -> {
-                scope.launch {
-                    val item = runCatching { backend.store.feed()?.allItems?.firstOrNull { it.id == target.itemId } }
-                        .getOrNull()
-                    if (item != null) openStoreItem(item)
-                }
+                // A notification that resolves to nothing stays put rather than moving to the Store tab:
+                // it is read from a list the user is already looking at, so a silent no-op is the note
+                // being unactionable, not the tap being lost.
+                scope.launch { findStoreItem(target.itemId)?.let { openStoreItem(it) } }
             }
             dev.ide.ui.backend.UiNotificationTarget.Submissions -> openSubmitProject()
             is dev.ide.ui.backend.UiNotificationTarget.Screen -> {

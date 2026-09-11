@@ -128,6 +128,20 @@
                         android:host="auth-callback"
                         android:scheme="codeassist" />
             </intent-filter>
+            <!-- A link into the Projects Store: `codeassist://store` for the store itself, and
+                 `codeassist://store/{item id}` for one item's page. The moderation page uses it to jump
+                 from a submission into the app on the same phone. Same scheme as the sign-in redirect and
+                 a different host, which is how MainActivity tells the two apart; both are declared in
+                 dev.ide.store (StoreAuth / StoreLink). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                        android:host="store"
+                        android:scheme="codeassist" />
+            </intent-filter>
         </activity>
 
         <!-- Applies a plugin change by restarting the app (Settings > Plugins). It runs in its own
