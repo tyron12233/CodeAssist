@@ -56,6 +56,16 @@ internal object StoreFeedMapper {
         sections = feed.sections.mapNotNull { section -> toUiSection(section, bundledBySlug) },
     )
 
+    /**
+     * Every list a section carries is deduplicated by the identity the UI keys its rows on.
+     *
+     * The feed is DATA — rows a curator edits and queries that join — so the same project can arrive twice in
+     * one shelf, and two categories can share a title. The screens render these in `LazyColumn`/`LazyRow`s
+     * keyed by that same identity, and a repeated key does not draw twice, it THROWS out of the measure pass
+     * ("Key … was already used") and takes the screen down. Dedupe belongs here, at the boundary where remote
+     * data becomes UI data: one place, rather than every list that renders it, and a duplicate card was never
+     * something to draw anyway. See the duplicate-key crash cluster in the crash analytics.
+     */
     private fun toUiSection(
         section: StoreSection,
         bundled: Map<String, UiStoreItem>,
@@ -63,13 +73,13 @@ internal object StoreFeedMapper {
         is StoreSection.Ticker -> UiFeedSection.Ticker(section.id, section.terms)
 
         is StoreSection.Featured ->
-            UiFeedSection.Featured(section.id, section.items.map { it.toUi(bundled) })
+            UiFeedSection.Featured(section.id, section.items.map { it.toUi(bundled) }.distinctBy { it.id })
 
         is StoreSection.Charts -> UiFeedSection.Charts(
             id = section.id,
             tabs = section.tabs.map { tab ->
                 UiChartTab(tab.key, tab.label, tab.entries.map { it.toUi(bundled) }, tab.metric)
-            },
+            }.distinctBy { it.key },
             computedAt = section.computedAt,
             title = section.title,
         )
@@ -78,7 +88,7 @@ internal object StoreFeedMapper {
             id = section.id,
             title = section.title,
             subtitle = section.subtitle,
-            items = section.items.map {
+            items = section.items.distinctBy { it.id }.map {
                 UiStoreCollection(
                     id = it.id,
                     eyebrow = it.eyebrow,
@@ -93,7 +103,7 @@ internal object StoreFeedMapper {
         is StoreSection.Categories -> UiFeedSection.Categories(
             id = section.id,
             title = section.title,
-            categories = section.items.map { it.title },
+            categories = section.items.map { it.title }.distinct(),
             counts = section.items.associate { it.title to it.count },
         )
 
@@ -101,7 +111,7 @@ internal object StoreFeedMapper {
             id = section.id,
             title = section.title,
             subtitle = section.subtitle,
-            items = section.items.map { it.toUi(bundled) },
+            items = section.items.map { it.toUi(bundled) }.distinctBy { it.id },
         )
 
         is StoreSection.Spotlight -> UiFeedSection.Spotlight(
@@ -132,11 +142,14 @@ internal object StoreFeedMapper {
                 ShelfLayout.GRID -> UiShelfLayout.GRID
                 ShelfLayout.RANK -> UiShelfLayout.RANK
             },
-            items = section.items.map { it.toUi(bundled) },
+            items = section.items.map { it.toUi(bundled) }.distinctBy { it.id },
         )
 
-        is StoreSection.Catalogue ->
-            UiFeedSection.Catalogue(section.id, section.title, section.items.map { it.toUi(bundled) })
+        is StoreSection.Catalogue -> UiFeedSection.Catalogue(
+            section.id,
+            section.title,
+            section.items.map { it.toUi(bundled) }.distinctBy { it.id },
+        )
 
         is StoreSection.PublishPitch -> UiFeedSection.PublishPitch(section.id, section.projectCount)
 

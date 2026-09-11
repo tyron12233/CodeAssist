@@ -106,6 +106,29 @@ class StoreFeedWiringTest {
         assertTrue(shelves.values.all { it.items.isNotEmpty() })
     }
 
+    /**
+     * A section that carries the same project twice maps to ONE row.
+     *
+     * The feed is curated data: a shelf's rows are edited server-side and its query can join, so the same
+     * item can legitimately arrive twice. The screens draw these in lazy lists keyed by item id, where a
+     * repeated key does not render twice — it throws out of the measure pass and takes the screen down (the
+     * largest app-caused crash cluster in the analytics). The mapper is the boundary that has to guarantee it.
+     */
+    @Test
+    fun aSectionCarryingTheSameItemTwiceYieldsOneRow() {
+        val feed = assertNotNull(StoreFeedParser.parse(fixture("explore-populated.json")))
+        val shelf = feed.sections.filterIsInstance<dev.ide.store.StoreSection.Shelf>().first { it.items.size > 1 }
+        val doubled = feed.copy(
+            sections = feed.sections.map {
+                if (it === shelf) shelf.copy(items = shelf.items + shelf.items.first()) else it
+            },
+        )
+        val ui = StoreFeedMapper.toUi(doubled, emptyMap())
+        val mapped = ui.sections.filterIsInstance<UiFeedSection.Shelf>().first { it.id == shelf.id }
+        assertEquals(shelf.items.size, mapped.items.size, "the duplicate row must not reach the UI")
+        assertEquals(mapped.items.map { it.id }.distinct().size, mapped.items.size, "ids must be unique")
+    }
+
     /** The chart's meta line reads off `metric`, so it has to reach the UI model. */
     @Test
     fun chartMetricReachesTheUiModel() {

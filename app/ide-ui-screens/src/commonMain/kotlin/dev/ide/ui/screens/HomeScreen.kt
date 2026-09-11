@@ -59,7 +59,11 @@ fun HomeScreen(
                 NavDestination(HomeTab.Challenges.name, stringResource(Res.string.home_challenges), CaSymbols.bolt),
             ),
             selectedId = tab.name,
-            onSelect = { id -> onSelectTab(HomeTab.valueOf(id)) },
+            // Matched against the entries rather than `valueOf`, which THROWS on an id that is not a tab
+            // name. The bar speaks in strings, so any id that does not round-trip — a destination another
+            // build contributed, a tab this build no longer has — reaches here, and a tap on the nav bar
+            // must never be able to take the app down. An unknown id selects nothing.
+            onSelect = { id -> HomeTab.entries.firstOrNull { it.name == id }?.let(onSelectTab) },
         )
     }
 }

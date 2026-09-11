@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -98,7 +99,9 @@ fun DailyChallengeScreen(
 
         if (state.board.rows.isNotEmpty()) {
             item { ChallengeSectionHeader("Today's top", onAction = onOpenBoard, actionLabel = "Full board") }
-            items(state.board.rows, key = { it.rank }) { row -> BoardRow(row) }
+            // Keyed on the position, not the rank: a tie is a legitimate leaderboard, and two rows sharing a
+            // rank would be a duplicate lazy-list key, which throws out of the measure pass.
+            itemsIndexed(state.board.rows, key = { i, r -> "$i:${r.rank}" }) { _, row -> BoardRow(row) }
         }
 
         if (state.profile.signedIn) {
@@ -425,7 +428,9 @@ private fun StatTile(label: String, value: String, glyph: Char, index: Int, modi
 @Composable
 private fun ArchiveStrip(history: List<UiChallengeHistoryEntry>, onOpen: (String) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(history, key = { it.date }) { entry ->
+        // Position-keyed for the same reason as the board above: the dates come from the server and a repeat
+        // would take the screen down rather than draw twice.
+        itemsIndexed(history, key = { i, e -> "$i:${e.date}" }) { _, entry ->
             val pair = tonalPair(if (entry.solved) 1 else 0)
             val faded = if (entry.solved) 1f else 0.55f
             Column(

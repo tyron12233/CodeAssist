@@ -65,8 +65,12 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
 
     override val projectEpoch: StateFlow<Int> get() = ctx.projectEpoch
 
+    /** Every project the picker shows, at most one entry per root path — the screens render this in lazy
+     *  lists keyed by `rootPath`, where a repeat throws out of the measure pass instead of drawing twice. */
     override fun projects(): List<ProjectInfo> =
-        ctx.manager?.list()?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount, it.compatibility, it.isAndroid, it.lastOpened, it.unrecognized) }
+        ctx.manager?.list()
+            ?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount, it.compatibility, it.isAndroid, it.lastOpened, it.unrecognized) }
+            ?.distinctBy { it.rootPath }
             ?: ctx.servicesOrNull?.let {
                 listOf(ProjectInfo(it.projectDisplayName(), it.workspaceRoot.toString(), it.modules().size, runCatching { it.isCompatibilityMode() }.getOrDefault(false)))
             }
