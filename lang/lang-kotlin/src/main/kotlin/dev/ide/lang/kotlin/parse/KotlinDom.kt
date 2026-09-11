@@ -11,29 +11,107 @@ import dev.ide.lang.dom.TextRange
 import dev.ide.lang.kotlin.KotlinDiagnosticCodes
 import dev.ide.lang.kotlin.KotlinNodeKinds
 import dev.ide.vfs.VirtualFile
+import org.jetbrains.kotlin.kdoc.psi.impl.KDocLink
+import org.jetbrains.kotlin.kdoc.psi.impl.KDocName
+import org.jetbrains.kotlin.psi.KtAnnotatedExpression
+import org.jetbrains.kotlin.psi.KtAnnotation
+import org.jetbrains.kotlin.psi.KtAnnotationEntry
+import org.jetbrains.kotlin.psi.KtAnnotationUseSiteTarget
+import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpression
+import org.jetbrains.kotlin.psi.KtBinaryExpressionWithTypeRHS
 import org.jetbrains.kotlin.psi.KtBlockExpression
+import org.jetbrains.kotlin.psi.KtBreakExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
+import org.jetbrains.kotlin.psi.KtCatchClause
+import org.jetbrains.kotlin.psi.KtClassBody
+import org.jetbrains.kotlin.psi.KtClassInitializer
+import org.jetbrains.kotlin.psi.KtClassLiteralExpression
 import org.jetbrains.kotlin.psi.KtClassOrObject
+import org.jetbrains.kotlin.psi.KtCollectionLiteralExpression
 import org.jetbrains.kotlin.psi.KtConstantExpression
+import org.jetbrains.kotlin.psi.KtConstructorCalleeExpression
+import org.jetbrains.kotlin.psi.KtConstructorDelegationCall
+import org.jetbrains.kotlin.psi.KtConstructorDelegationReferenceExpression
+import org.jetbrains.kotlin.psi.KtContainerNode
+import org.jetbrains.kotlin.psi.KtContainerNodeForControlStructureBody
+import org.jetbrains.kotlin.psi.KtContextReceiverList
+import org.jetbrains.kotlin.psi.KtContinueExpression
+import org.jetbrains.kotlin.psi.KtDelegatedSuperTypeEntry
+import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
+import org.jetbrains.kotlin.psi.KtDestructuringDeclarationEntry
+import org.jetbrains.kotlin.psi.KtDoWhileExpression
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtElement
+import org.jetbrains.kotlin.psi.KtEnumEntrySuperclassReferenceExpression
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtFileAnnotationList
+import org.jetbrains.kotlin.psi.KtFinallySection
+import org.jetbrains.kotlin.psi.KtForExpression
+import org.jetbrains.kotlin.psi.KtFunctionLiteral
+import org.jetbrains.kotlin.psi.KtFunctionType
+import org.jetbrains.kotlin.psi.KtFunctionTypeReceiver
+import org.jetbrains.kotlin.psi.KtIfExpression
+import org.jetbrains.kotlin.psi.KtImportAlias
 import org.jetbrains.kotlin.psi.KtImportDirective
+import org.jetbrains.kotlin.psi.KtImportList
+import org.jetbrains.kotlin.psi.KtInitializerList
+import org.jetbrains.kotlin.psi.KtIsExpression
+import org.jetbrains.kotlin.psi.KtLabelReferenceExpression
+import org.jetbrains.kotlin.psi.KtLabeledExpression
+import org.jetbrains.kotlin.psi.KtLambdaArgument
 import org.jetbrains.kotlin.psi.KtLambdaExpression
+import org.jetbrains.kotlin.psi.KtModifierList
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtNullableType
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
+import org.jetbrains.kotlin.psi.KtObjectLiteralExpression
+import org.jetbrains.kotlin.psi.KtOperationReferenceExpression
 import org.jetbrains.kotlin.psi.KtPackageDirective
 import org.jetbrains.kotlin.psi.KtParameter
+import org.jetbrains.kotlin.psi.KtParameterList
+import org.jetbrains.kotlin.psi.KtParenthesizedExpression
+import org.jetbrains.kotlin.psi.KtPostfixExpression
+import org.jetbrains.kotlin.psi.KtPrefixExpression
 import org.jetbrains.kotlin.psi.KtPrimaryConstructor
 import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.KtPropertyAccessor
+import org.jetbrains.kotlin.psi.KtPropertyDelegate
+import org.jetbrains.kotlin.psi.KtReturnExpression
 import org.jetbrains.kotlin.psi.KtSafeQualifiedExpression
 import org.jetbrains.kotlin.psi.KtSecondaryConstructor
+import org.jetbrains.kotlin.psi.KtStringInterpolationPrefix
+import org.jetbrains.kotlin.psi.KtStringTemplateEntry
+import org.jetbrains.kotlin.psi.KtStringTemplateEntryWithExpression
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
+import org.jetbrains.kotlin.psi.KtSuperExpression
+import org.jetbrains.kotlin.psi.KtSuperTypeCallEntry
+import org.jetbrains.kotlin.psi.KtSuperTypeEntry
+import org.jetbrains.kotlin.psi.KtSuperTypeList
+import org.jetbrains.kotlin.psi.KtThisExpression
+import org.jetbrains.kotlin.psi.KtThrowExpression
+import org.jetbrains.kotlin.psi.KtTryExpression
 import org.jetbrains.kotlin.psi.KtTypeAlias
+import org.jetbrains.kotlin.psi.KtTypeArgumentList
+import org.jetbrains.kotlin.psi.KtTypeConstraint
+import org.jetbrains.kotlin.psi.KtTypeConstraintList
+import org.jetbrains.kotlin.psi.KtTypeParameter
+import org.jetbrains.kotlin.psi.KtTypeParameterList
+import org.jetbrains.kotlin.psi.KtTypeProjection
 import org.jetbrains.kotlin.psi.KtTypeReference
+import org.jetbrains.kotlin.psi.KtUserType
+import org.jetbrains.kotlin.psi.KtValueArgument
+import org.jetbrains.kotlin.psi.KtValueArgumentList
+import org.jetbrains.kotlin.psi.KtValueArgumentName
+import org.jetbrains.kotlin.psi.KtWhenCondition
+import org.jetbrains.kotlin.psi.KtWhenConditionInRange
+import org.jetbrains.kotlin.psi.KtWhenConditionIsPattern
+import org.jetbrains.kotlin.psi.KtWhenEntry
+import org.jetbrains.kotlin.psi.KtWhenEntryGuard
 import org.jetbrains.kotlin.psi.KtWhenExpression
+import org.jetbrains.kotlin.psi.KtWhileExpression
 import java.util.IdentityHashMap
 
 /**
@@ -68,10 +146,102 @@ private fun kindOf(psi: PsiElement): NodeKind = when {
     psi is KtTypeReference -> KotlinNodeKinds.TYPE_REF
     psi is KtConstantExpression -> KotlinNodeKinds.LITERAL
     psi is KtStringTemplateExpression -> KotlinNodeKinds.STRING_TEMPLATE
+    // Order matters: `$x`/`${…}` are entries too, and they're the ones that carry an expression.
+    psi is KtStringTemplateEntryWithExpression -> KotlinNodeKinds.STRING_TEMPLATE_INTERPOLATION
+    psi is KtStringTemplateEntry -> KotlinNodeKinds.STRING_TEMPLATE_ENTRY
     psi is KtLambdaExpression -> KotlinNodeKinds.LAMBDA
     psi is KtWhenExpression -> KotlinNodeKinds.WHEN
     psi is KtBinaryExpression -> KotlinNodeKinds.BINARY
     psi is PsiErrorElement -> KotlinNodeKinds.ERROR
+
+    // Calls and arguments. KtLambdaArgument extends KtValueArgument, so it has to be tested first.
+    psi is KtLambdaArgument -> KotlinNodeKinds.LAMBDA_ARGUMENT
+    psi is KtValueArgument -> KotlinNodeKinds.ARGUMENT
+    psi is KtValueArgumentList -> KotlinNodeKinds.ARGUMENT_LIST
+    psi is KtValueArgumentName -> KotlinNodeKinds.ARGUMENT_NAME
+    psi is KtConstructorCalleeExpression -> KotlinNodeKinds.CONSTRUCTOR_CALLEE
+    psi is KtEnumEntrySuperclassReferenceExpression -> KotlinNodeKinds.CONSTRUCTOR_CALLEE
+    psi is KtConstructorDelegationCall -> KotlinNodeKinds.CONSTRUCTOR_DELEGATION_CALL
+    psi is KtConstructorDelegationReferenceExpression -> KotlinNodeKinds.CONSTRUCTOR_DELEGATION_REF
+
+    // Types.
+    psi is KtUserType -> KotlinNodeKinds.USER_TYPE
+    psi is KtNullableType -> KotlinNodeKinds.NULLABLE_TYPE
+    psi is KtFunctionType -> KotlinNodeKinds.FUNCTION_TYPE
+    psi is KtFunctionTypeReceiver -> KotlinNodeKinds.FUNCTION_TYPE_RECEIVER
+    psi is KtTypeProjection -> KotlinNodeKinds.TYPE_PROJECTION
+    psi is KtTypeArgumentList -> KotlinNodeKinds.TYPE_ARGUMENT_LIST
+    psi is KtTypeParameter -> KotlinNodeKinds.TYPE_PARAMETER
+    psi is KtTypeParameterList -> KotlinNodeKinds.TYPE_PARAMETER_LIST
+    psi is KtTypeConstraint -> KotlinNodeKinds.TYPE_CONSTRAINT
+    psi is KtTypeConstraintList -> KotlinNodeKinds.TYPE_CONSTRAINT_LIST
+    psi is KtContextReceiverList -> KotlinNodeKinds.CONTEXT_RECEIVER_LIST
+
+    // Operators and the remaining expression shapes.
+    psi is KtOperationReferenceExpression -> KotlinNodeKinds.OPERATOR
+    psi is KtFunctionLiteral -> KotlinNodeKinds.FUNCTION_LITERAL
+    psi is KtPrefixExpression -> KotlinNodeKinds.PREFIX
+    psi is KtPostfixExpression -> KotlinNodeKinds.POSTFIX
+    psi is KtParenthesizedExpression -> KotlinNodeKinds.PARENTHESIZED
+    psi is KtArrayAccessExpression -> KotlinNodeKinds.ARRAY_ACCESS
+    psi is KtIsExpression -> KotlinNodeKinds.IS
+    psi is KtBinaryExpressionWithTypeRHS -> KotlinNodeKinds.AS
+    psi is KtThisExpression -> KotlinNodeKinds.THIS
+    psi is KtSuperExpression -> KotlinNodeKinds.SUPER
+    psi is KtLabelReferenceExpression -> KotlinNodeKinds.LABEL_REF
+    psi is KtCallableReferenceExpression -> KotlinNodeKinds.CALLABLE_REFERENCE
+    psi is KtClassLiteralExpression -> KotlinNodeKinds.CLASS_LITERAL
+    psi is KtObjectLiteralExpression -> KotlinNodeKinds.OBJECT_LITERAL
+    psi is KtDestructuringDeclaration -> KotlinNodeKinds.DESTRUCTURING
+    psi is KtDestructuringDeclarationEntry -> KotlinNodeKinds.DESTRUCTURING_ENTRY
+    psi is KtAnnotatedExpression -> KotlinNodeKinds.ANNOTATED_EXPRESSION
+    psi is KtLabeledExpression -> KotlinNodeKinds.LABELED_EXPRESSION
+    psi is KtCollectionLiteralExpression -> KotlinNodeKinds.COLLECTION_LITERAL
+    psi is KtStringInterpolationPrefix -> KotlinNodeKinds.STRING_INTERPOLATION_PREFIX
+
+    // Control flow. The body wrapper is a subclass of the generic container, so it comes first.
+    psi is KtContainerNodeForControlStructureBody -> KotlinNodeKinds.CONTROL_BODY
+    psi is KtContainerNode -> KotlinNodeKinds.CONTAINER
+    psi is KtReturnExpression -> KotlinNodeKinds.RETURN
+    psi is KtIfExpression -> KotlinNodeKinds.IF
+    psi is KtWhenEntry -> KotlinNodeKinds.WHEN_ENTRY
+    psi is KtWhenConditionIsPattern -> KotlinNodeKinds.WHEN_CONDITION_IS
+    psi is KtWhenConditionInRange -> KotlinNodeKinds.WHEN_CONDITION_IN
+    psi is KtWhenCondition -> KotlinNodeKinds.WHEN_CONDITION
+    psi is KtWhenEntryGuard -> KotlinNodeKinds.WHEN_ENTRY_GUARD
+    psi is KtForExpression -> KotlinNodeKinds.FOR
+    psi is KtWhileExpression -> KotlinNodeKinds.WHILE
+    psi is KtDoWhileExpression -> KotlinNodeKinds.DO_WHILE
+    psi is KtContinueExpression -> KotlinNodeKinds.CONTINUE
+    psi is KtBreakExpression -> KotlinNodeKinds.BREAK
+    psi is KtTryExpression -> KotlinNodeKinds.TRY
+    psi is KtCatchClause -> KotlinNodeKinds.CATCH
+    psi is KtFinallySection -> KotlinNodeKinds.FINALLY
+    psi is KtThrowExpression -> KotlinNodeKinds.THROW
+
+    // Declaration structure.
+    psi is KtParameterList -> KotlinNodeKinds.PARAMETER_LIST
+    psi is KtModifierList -> KotlinNodeKinds.MODIFIER_LIST   // covers KtDeclarationModifierList
+    psi is KtAnnotationEntry -> KotlinNodeKinds.ANNOTATION_ENTRY
+    psi is KtAnnotation -> KotlinNodeKinds.ANNOTATION_GROUP
+    psi is KtAnnotationUseSiteTarget -> KotlinNodeKinds.ANNOTATION_USE_SITE
+    psi is KtFileAnnotationList -> KotlinNodeKinds.FILE_ANNOTATION_LIST
+    psi is KtClassBody -> KotlinNodeKinds.CLASS_BODY
+    psi is KtSuperTypeList -> KotlinNodeKinds.SUPERTYPE_LIST
+    psi is KtInitializerList -> KotlinNodeKinds.SUPERTYPE_LIST   // an enum entry's `: Base(1)`
+    psi is KtSuperTypeCallEntry -> KotlinNodeKinds.SUPERTYPE_CALL
+    psi is KtDelegatedSuperTypeEntry -> KotlinNodeKinds.SUPERTYPE_DELEGATE
+    psi is KtSuperTypeEntry -> KotlinNodeKinds.SUPERTYPE_ENTRY
+    psi is KtPropertyAccessor -> KotlinNodeKinds.PROPERTY_ACCESSOR
+    psi is KtPropertyDelegate -> KotlinNodeKinds.PROPERTY_DELEGATE
+    psi is KtClassInitializer -> KotlinNodeKinds.INIT
+    psi is KtImportList -> KotlinNodeKinds.IMPORT_LIST
+    psi is KtImportAlias -> KotlinNodeKinds.IMPORT_ALIAS
+
+    // KDoc.
+    psi is KDocLink -> KotlinNodeKinds.KDOC_LINK
+    psi is KDocName -> KotlinNodeKinds.KDOC_NAME
+
     else -> KotlinNodeKinds.OTHER
 }
 

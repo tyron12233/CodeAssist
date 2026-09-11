@@ -32,9 +32,11 @@ import com.intellij.psi.PsiElement
  * diagnostic-driven half.
  *
  * These are Kotlin-specific by nature, so they read the backend's own PSI through [KotlinDomNode.psi]
- * rather than only the neutral DOM: the neutral kinds collapse `if`, `for`, `while`, `return` and the rest
- * into one `kt.element`, which is not enough to tell an `if` body from a lambda. Everything a
- * cross-language feature consumes still travels as neutral [QuickFix]es and [DocumentEdit]s.
+ * rather than only the neutral DOM. The kinds do name these shapes (`kt.if`, `kt.control_body` and the
+ * rest, see `KotlinNodeKinds`), so classifying a node no longer needs PSI; what still does
+ * is reaching *into* one — `ifExpression.then`, `loop.body`, the span of a branch the caret sits in — which
+ * the neutral DOM exposes only as an untyped child list. Everything a cross-language feature consumes still
+ * travels as neutral [QuickFix]es and [DocumentEdit]s.
  *
  * Applicability is decided on the structure alone, so listing stays off the resolver. The two intentions
  * that need a type ([KotlinIntroduceVariableActionProvider], [KotlinExplicitTypeActionProvider]) resolve it

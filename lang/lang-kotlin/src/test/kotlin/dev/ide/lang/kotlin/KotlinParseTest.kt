@@ -74,6 +74,186 @@ class KotlinParseTest {
     }
 
     @Test
+    fun interpolationIsItsOwnKindApartFromLiteralPieces() {
+        val src = """
+            fun f(x: Int) {
+                val plain = "no dollars here"
+                val simple = "has ${'$'}x inside"
+                val braced = "has ${'$'}{x + 1} inside"
+                val raw = ""${'"'}
+                    line one
+                    line two
+                ""${'"'}
+            }
+        """.trimIndent()
+
+        val pf = parse(src)
+        val templates = pf.flatten().filter { it.kind == KotlinNodeKinds.STRING_TEMPLATE }
+        assertEquals(4, templates.size, "every string literal is a kt.string_template")
+
+        fun interpolated(n: dev.ide.lang.dom.DomNode) =
+            n.children.any { it.kind == KotlinNodeKinds.STRING_TEMPLATE_INTERPOLATION }
+
+        val (plain, simple, braced, raw) = templates
+        assertTrue(!interpolated(plain), "a plain string has no interpolation entry")
+        assertTrue(interpolated(simple), "`${'$'}x` is an interpolation entry")
+        assertTrue(interpolated(braced), "`${'$'}{…}` is an interpolation entry")
+        // The multiline case: several literal pieces (one per line), none of them an interpolation.
+        assertTrue(raw.children.size > 1, "a raw string is cut into one literal entry per line")
+        assertTrue(!interpolated(raw), "a raw string without `${'$'}` must not read as interpolated")
+        assertTrue(
+            raw.children.all { it.kind == KotlinNodeKinds.STRING_TEMPLATE_ENTRY },
+            "raw-string pieces are literal entries: ${raw.children.map { it.kind.id }}",
+        )
+        // The embedded expression hangs off the interpolation entry, not off the template.
+        val simpleEntry = simple.children.first { it.kind == KotlinNodeKinds.STRING_TEMPLATE_INTERPOLATION }
+        assertTrue(simpleEntry.children.any { it.kind == NodeKind.NAME_REF }, "`${'$'}x` wraps a name_ref")
+    }
+
+    @Test
+    fun controlFlowAndDeclarationStructureAreNamedKinds() {
+        val src = """
+            /** Doc with a [List] link. */
+            class C(private val n: Int) : Runnable {
+                val lazy: String by kotlin.lazy { "x" }
+                var p: Int = 0
+                    get() = field
+                init { }
+                override fun run() { }
+            }
+
+            fun f(xs: List<Int>, flag: Boolean): Int {
+                if (flag) { return 1 } else return 2
+                xs.forEach { println(it) }
+                for (x in xs) { if (x > 0) break else continue }
+                while (flag) { }
+                do { } while (flag)
+                try { throw IllegalStateException() } catch (e: Exception) { } finally { }
+                val (a, b) = 1 to 2
+                return when (xs.size) { 0 -> a; in 1..2 -> b; is Int -> 3; else -> 4 }
+            }
+        """.trimIndent()
+
+        val pf = parse(src)
+        assertTrue(pf.diagnostics.isEmpty(), "sample should parse clean: ${pf.diagnostics}")
+        val all = pf.flatten()
+        val kinds = all.map { it.kind }.toSet()
+
+        val expected = listOf(
+            KotlinNodeKinds.IF, KotlinNodeKinds.FOR, KotlinNodeKinds.WHILE, KotlinNodeKinds.DO_WHILE,
+            KotlinNodeKinds.RETURN, KotlinNodeKinds.THROW, KotlinNodeKinds.BREAK, KotlinNodeKinds.CONTINUE,
+            KotlinNodeKinds.TRY, KotlinNodeKinds.CATCH, KotlinNodeKinds.FINALLY,
+            KotlinNodeKinds.WHEN_ENTRY, KotlinNodeKinds.WHEN_CONDITION,
+            KotlinNodeKinds.WHEN_CONDITION_IS, KotlinNodeKinds.WHEN_CONDITION_IN,
+            KotlinNodeKinds.CONTROL_BODY, KotlinNodeKinds.CONTAINER,
+            KotlinNodeKinds.CLASS_BODY, KotlinNodeKinds.MODIFIER_LIST, KotlinNodeKinds.PARAMETER_LIST,
+            KotlinNodeKinds.SUPERTYPE_LIST, KotlinNodeKinds.SUPERTYPE_ENTRY,
+            KotlinNodeKinds.PROPERTY_ACCESSOR, KotlinNodeKinds.PROPERTY_DELEGATE, KotlinNodeKinds.INIT,
+            KotlinNodeKinds.DESTRUCTURING, KotlinNodeKinds.DESTRUCTURING_ENTRY,
+            KotlinNodeKinds.USER_TYPE, KotlinNodeKinds.TYPE_ARGUMENT_LIST, KotlinNodeKinds.TYPE_PROJECTION,
+            KotlinNodeKinds.ARGUMENT_LIST, KotlinNodeKinds.ARGUMENT, KotlinNodeKinds.LAMBDA_ARGUMENT,
+            KotlinNodeKinds.FUNCTION_LITERAL, KotlinNodeKinds.OPERATOR,
+            KotlinNodeKinds.KDOC_LINK, KotlinNodeKinds.KDOC_NAME, KotlinNodeKinds.IMPORT_LIST,
+        )
+        val missing = expected.filterNot { it in kinds }
+        assertTrue(missing.isEmpty(), "these shapes fell through to another kind: ${missing.map { it.id }}")
+
+        // The motivating case: an `if` branch body is distinguishable from a lambda without reading PSI.
+        val branches = all.first { it.kind == KotlinNodeKinds.IF }
+            .children.filter { it.kind == KotlinNodeKinds.CONTROL_BODY }
+        assertEquals(2, branches.size, "`if`/`else` bodies are control bodies, the condition is a container")
+        assertTrue(
+            all.none { it.kind == KotlinNodeKinds.CONTROL_BODY && it.text().startsWith("{ println") },
+            "a lambda body must not read as a control-structure body",
+        )
+    }
+
+    @Test
+    fun theCatchAllKindStaysEmptyOnOrdinarySource() {
+        // Deliberately long-tail: the shapes that are rare in any one file but common across a project.
+        val src = """
+            @file:JvmName("X")
+            @file:[Suppress("a") Suppress("b")]
+
+            package p
+
+            import kotlin.collections.List as L
+
+            annotation class A(val xs: IntArray)
+
+            @A([1, 2])
+            open class Base(x: Int)
+
+            enum class E(val n: Int) { ONE(1), TWO(2) }
+
+            class D(y: Int, r: Runnable) : Base(y), Runnable by r {
+                constructor(r: Runnable) : this(1, r)
+                @get:JvmName("z") val z = 1
+                fun probe(o: Any): String {
+                    val cast = o as? Int
+                    if (o is Int) println(this)
+                    return super.toString() + cast
+                }
+            }
+
+            fun <T> w(x: T?): T where T : Comparable<T> = x!!
+
+            fun hof(f: Int.(String) -> Unit, g: (Int) -> Unit) { }
+
+            context(s: String)
+            fun ctx(): Any {
+                val m = ${'$'}${'$'}"multi dollar"
+                val labelled = run { outer@ for (x in 1..2) { if (x > 0) break@outer }; 0 }
+                val annotated = @Suppress("x") 1
+                val ref = ::ctx
+                val cls = D::class
+                val obj = object : Runnable { override fun run() { } }
+                return listOf(m, labelled, annotated, ref, cls, obj, -1, 1.inc()!!, (1))[0]
+            }
+
+            fun guard(x: Any) = when (x) { is Int if x > 0 -> 1; else -> 0 }
+        """.trimIndent()
+
+        val pf = parse(src)
+        assertTrue(pf.diagnostics.isEmpty(), "sample should parse clean: ${pf.diagnostics}")
+        val all = pf.flatten()
+
+        // Reachability: a branch shadowed by an earlier `is` check would not show up as a leftover, it
+        // would quietly hand back the wrong kind. Every rare shape above has to name itself.
+        val expected = listOf(
+            KotlinNodeKinds.FILE_ANNOTATION_LIST, KotlinNodeKinds.ANNOTATION_GROUP,
+            KotlinNodeKinds.ANNOTATION_ENTRY, KotlinNodeKinds.ANNOTATION_USE_SITE,
+            KotlinNodeKinds.ANNOTATED_EXPRESSION, KotlinNodeKinds.COLLECTION_LITERAL,
+            KotlinNodeKinds.IMPORT_ALIAS,
+            KotlinNodeKinds.SUPERTYPE_CALL, KotlinNodeKinds.SUPERTYPE_DELEGATE,
+            KotlinNodeKinds.CONSTRUCTOR_CALLEE, KotlinNodeKinds.CONSTRUCTOR_DELEGATION_CALL,
+            KotlinNodeKinds.CONSTRUCTOR_DELEGATION_REF,
+            KotlinNodeKinds.TYPE_PARAMETER, KotlinNodeKinds.TYPE_PARAMETER_LIST,
+            KotlinNodeKinds.TYPE_CONSTRAINT, KotlinNodeKinds.TYPE_CONSTRAINT_LIST,
+            KotlinNodeKinds.NULLABLE_TYPE, KotlinNodeKinds.FUNCTION_TYPE,
+            KotlinNodeKinds.FUNCTION_TYPE_RECEIVER, KotlinNodeKinds.CONTEXT_RECEIVER_LIST,
+            KotlinNodeKinds.STRING_INTERPOLATION_PREFIX, KotlinNodeKinds.WHEN_ENTRY_GUARD,
+            KotlinNodeKinds.LABELED_EXPRESSION, KotlinNodeKinds.LABEL_REF,
+            KotlinNodeKinds.CALLABLE_REFERENCE, KotlinNodeKinds.CLASS_LITERAL,
+            KotlinNodeKinds.OBJECT_LITERAL, KotlinNodeKinds.THIS, KotlinNodeKinds.SUPER,
+            KotlinNodeKinds.IS, KotlinNodeKinds.AS,
+            KotlinNodeKinds.PREFIX, KotlinNodeKinds.POSTFIX, KotlinNodeKinds.PARENTHESIZED,
+            KotlinNodeKinds.ARRAY_ACCESS,
+        )
+        val kinds = all.map { it.kind }.toSet()
+        val missing = expected.filterNot { it in kinds }
+        assertTrue(missing.isEmpty(), "these kinds never fired: ${missing.map { it.id }}")
+
+        val leftovers = all.filter { it.kind == KotlinNodeKinds.OTHER }
+        // A construct landing in `kt.element` cannot be told from any other, which is what forces its
+        // consumers back onto PSI. A new one showing up here wants a kind in KotlinNodeKinds.
+        assertTrue(
+            leftovers.isEmpty(),
+            "unclassified nodes: ${leftovers.map { it.text().toString().take(30) }}",
+        )
+    }
+
+    @Test
     fun spikeColdStartAndWarmParse() {
         val sample = buildString {
             append("package demo\n\n")
