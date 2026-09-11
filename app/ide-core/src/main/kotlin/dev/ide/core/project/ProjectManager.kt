@@ -694,7 +694,9 @@ class ProjectManager private constructor(
      * project's own icon, and the only place that knows how to find it is here.
      */
     fun launcherIconBytes(rootPath: String): ByteArray? =
-        runCatching { exportIcon(Path.of(rootPath)) }.getOrNull()
+        // Paths.get, never Path.of (API 34 on ART): inside runCatching the NoSuchMethodError would be
+        // swallowed, and every project would silently publish with no icon on a device below API 34.
+        runCatching { exportIcon(Paths.get(rootPath)) }.getOrNull()
 
     /** The Android launcher icon's raster bytes for the package preview, or null (non-raster icons fall back
      *  to the initial-letter tile in the importer, matching the picker). */

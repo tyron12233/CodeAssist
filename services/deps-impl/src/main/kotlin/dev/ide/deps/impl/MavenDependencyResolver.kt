@@ -22,6 +22,7 @@ import kotlinx.coroutines.sync.withPermit
 import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.readText
 import java.nio.file.StandardCopyOption
 import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
@@ -1152,7 +1153,7 @@ class MavenDependencyResolver(
         // `AndroidLibraries.isExplodedAar` with no res sibling — so a library's `res/` (its `attr`/
         // `declare-styleable`s) silently never reaches aapt2 and the app fails to link ("attribute … not found",
         // e.g. AndroidX Navigation's `navGraph`/`startDestination` from the transitive navigation-runtime/-common).
-        if (runCatching { Files.readString(marker).trim() }.getOrNull() == AAR_EXPLODE_VERSION) {
+        if (runCatching { marker.readText().trim() }.getOrNull() == AAR_EXPLODE_VERSION) {
             // Heal a classes.jar an older build left as a zero-entry zip (resource-only AAR): unusable on ART,
             // where ZipFile rejects an empty archive. Cheap (central-directory read) and only rewrites the bad ones.
             if (Files.isRegularFile(classesJar) && !isUsableJar(classesJar)) writeManifestOnlyJar(classesJar)

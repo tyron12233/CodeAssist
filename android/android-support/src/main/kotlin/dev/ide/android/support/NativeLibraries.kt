@@ -2,6 +2,7 @@ package dev.ide.android.support
 
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.readText
 import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
 import kotlin.io.path.writeText
@@ -52,7 +53,7 @@ object NativeLibraries {
             // `lib/.unpacked`, and a second ABI's jar offering that same name would be reported as a
             // duplicate native library.
             val marker = outRoot.resolve("$name.unpacked")
-            if (runCatching { Files.readString(marker).trim() }.getOrNull() == LAYOUT_VERSION) {
+            if (runCatching { marker.readText().trim() }.getOrNull() == LAYOUT_VERSION) {
                 if (hasNativeLibrary(target)) dirs.add(target) else warnings.add(noNativesWarning(name))
                 continue
             }

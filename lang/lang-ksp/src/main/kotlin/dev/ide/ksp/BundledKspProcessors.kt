@@ -3,6 +3,7 @@ package dev.ide.ksp
 import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.writeText
 import java.nio.file.Paths
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -98,9 +99,12 @@ object BundledKspProcessors {
                     }
                 }
             }
-            runCatching { Files.writeString(marker, "ok") }
+            runCatching { marker.writeText("ok") }
         }
-        return Files.list(dir).use { s -> s.filter { it.toString().endsWith(".jar") }.sorted().toList() }
+        // Collectors.toList(), not Stream.toList(): the latter is a JDK 16 method, absent from ART below API 34.
+        return Files.list(dir).use { s ->
+            s.filter { it.toString().endsWith(".jar") }.sorted().collect(java.util.stream.Collectors.toList())
+        }
     }
 
     private fun hash16(bytes: ByteArray): String =

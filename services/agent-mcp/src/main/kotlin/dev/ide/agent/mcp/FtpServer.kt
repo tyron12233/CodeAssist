@@ -395,7 +395,10 @@ class FtpServer(
         }
 
         private fun childrenOf(dir: Path): List<Path>? =
-            if (Files.isDirectory(dir)) Files.list(dir).use { stream -> stream.sorted().toList() } else null
+            // Collectors.toList(), not Stream.toList(): the latter is a JDK 16 method, absent from ART below API 34.
+            if (Files.isDirectory(dir)) {
+                Files.list(dir).use { stream -> stream.sorted().collect(java.util.stream.Collectors.toList()) }
+            } else null
 
         private fun entryLine(f: Path): String {
             val isDir = Files.isDirectory(f)

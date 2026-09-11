@@ -2,6 +2,7 @@ package dev.ide.decompiler
 
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.readText
 import java.util.zip.ZipFile
 
 /**
@@ -27,7 +28,7 @@ class LibrarySources(private val sourceJars: List<Path>, private val sourceDirs:
                 val name = segs[n - 1] + ".$ext"
                 for (dir in sourceDirs) {
                     val f = dir.resolve(rel)
-                    if (Files.isRegularFile(f)) return name to runCatching { Files.readString(f) }.getOrElse { return null }
+                    if (Files.isRegularFile(f)) return name to runCatching { f.readText() }.getOrElse { return null }
                 }
                 for (jar in sourceJars) {
                     readFromJar(jar, rel)?.let { return name to it }

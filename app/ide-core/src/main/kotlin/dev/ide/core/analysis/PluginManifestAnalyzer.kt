@@ -21,6 +21,7 @@ import dev.ide.plugin.PluginCapabilities
 import dev.ide.plugin.PluginVersions
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.readText
 import java.nio.file.Paths
 
 /**
@@ -212,7 +213,7 @@ class PluginManifestAnalyzer(
      */
     private fun checkMarkerActivity(module: Module, manifestPath: Path, ranges: KeyRanges, sink: DiagnosticSink) {
         val androidManifest = PluginProject.androidManifestBeside(module, manifestPath) ?: return
-        val xml = runCatching { Files.readString(androidManifest) }.getOrNull() ?: return
+        val xml = runCatching { androidManifest.readText() }.getOrNull() ?: return
 
         val missing = buildList {
             val action = PluginProject.PLUGIN_ACTION

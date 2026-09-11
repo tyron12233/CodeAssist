@@ -21,6 +21,9 @@ import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributes
+import java.util.stream.Collectors
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 
 /**
  * A disk-backed [AgentWorkspace] for the standalone stdio server ([Main]), used when no engine is
@@ -31,6 +34,12 @@ import java.nio.file.attribute.BasicFileAttributes
  * Paths are resolved relative to the project root unless they are absolute. The project is modelled as a
  * single `app` module whose source roots are the directories that actually exist under the root
  * (`src`, `src/main/java`, `src/main/kotlin`, `src/main/res`, `app/src/main/java`, …).
+ *
+ * This ships inside the Android app (`:ide-core` depends on `:agent-mcp`), so it is held to the app's API-26
+ * floor even though it is also the desktop stdio server's workspace: `Files.readString`/`writeString` are on
+ * no Android release at all and `Stream.toList()` arrived in API 34, so file text goes through `kotlin.io.path`
+ * and stream collection through `Collectors.toList()`. A slip here dexes cleanly and throws `NoSuchMethodError`
+ * the first time a tool touches a file on a device.
  */
 class FileSystemAgentWorkspace(
     private val root: Path,
@@ -44,7 +53,7 @@ class FileSystemAgentWorkspace(
     override fun projectRoot(): String = root.toString()
 
     override suspend fun readFile(path: String, startLine: Int?, endLine: Int?): String {
-        val text = Files.readString(resolve(path), StandardCharsets.UTF_8)
+        val text = resolve(path).readText(StandardCharsets.UTF_8)
         if (startLine == null) return text
         return sliceLines(text, startLine, endLine ?: Int.MAX_VALUE)
     }
@@ -56,7 +65,7 @@ class FileSystemAgentWorkspace(
             stream.sorted().map { entry ->
                 val name = entry.fileName.toString()
                 WorkspaceEntry(name, root.relativize(entry).toString(), Files.isDirectory(entry))
-            }.toList()
+            }.collect(Collectors.toList())
         }
     }
 
@@ -110,25 +119,25 @@ class FileSystemAgentWorkspace(
         val file = resolve(path)
         require(!Files.exists(file)) { "File already exists: $path" }
         Files.createDirectories(file.parent)
-        Files.writeString(file, content, StandardCharsets.UTF_8)
+        file.writeText(content, StandardCharsets.UTF_8)
         return path
     }
 
     override suspend fun writeFile(path: String, content: String) {
         val file = resolve(path)
         Files.createDirectories(file.parent)
-        Files.writeString(file, content, StandardCharsets.UTF_8)
+        file.writeText(content, StandardCharsets.UTF_8)
     }
 
     override suspend fun applyEdits(path: String, edits: List<TextEdit>) {
         val file = resolve(path)
-        var text = if (Files.exists(file)) Files.readString(file, StandardCharsets.UTF_8) else ""
+        var text = if (Files.exists(file)) file.readText(StandardCharsets.UTF_8) else ""
         edits.sortedByDescending { it.offset }.forEach { e ->
             require(e.offset in 0..text.length) { "Edit offset ${e.offset} out of range for $path (length ${text.length})" }
             require(e.offset + e.oldLength <= text.length) { "Edit range out of bounds for $path" }
             text = text.substring(0, e.offset) + e.newText + text.substring(e.offset + e.oldLength)
         }
-        Files.writeString(file, text, StandardCharsets.UTF_8)
+        file.writeText(text, StandardCharsets.UTF_8)
     }
 
     override suspend fun createDir(path: String): String {
@@ -186,14 +195,14 @@ class FileSystemAgentWorkspace(
         val instruction = instructionFile()
         val parts = mutableListOf<String>()
         instruction?.let {
-            if (Files.isRegularFile(it)) parts += "## Instruction file (${root.relativize(it)})\n\n${Files.readString(it, StandardCharsets.UTF_8)}"
+            if (Files.isRegularFile(it)) parts += "## Instruction file (${root.relativize(it)})\n\n${it.readText(StandardCharsets.UTF_8)}"
         }
-        if (Files.isRegularFile(notes)) parts += "## Agent notes\n\n${Files.readString(notes, StandardCharsets.UTF_8)}"
+        if (Files.isRegularFile(notes)) parts += "## Agent notes\n\n${notes.readText(StandardCharsets.UTF_8)}"
         return parts.joinToString("\n\n")
     }
 
     override suspend fun writeMemory(content: String): String {
-        Files.writeString(memoryFile(), content, StandardCharsets.UTF_8)
+        memoryFile().writeText(content, StandardCharsets.UTF_8)
         return "Saved agent notes (${memoryFile().fileName})."
     }
 

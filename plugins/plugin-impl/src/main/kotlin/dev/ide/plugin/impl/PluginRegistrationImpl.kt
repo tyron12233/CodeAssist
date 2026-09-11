@@ -18,6 +18,7 @@ import dev.ide.platform.log.Logger
 import dev.ide.plugin.PluginRegistration
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * The [PluginRegistration] a [PluginManager] hands to one plugin's `register`. It attributes every
@@ -81,4 +82,6 @@ internal class PluginRegistrationImpl(
  * written there is expected to survive the process.
  */
 internal fun defaultDataRoot(): Path =
-    Path.of(System.getProperty("java.io.tmpdir"), "codeassist-plugin-data")
+    // Paths.get, never Path.of: this ships to ART, where Path.of is API 34 and a call below that throws
+    // NoSuchMethodError (D8 outlines it, so it dexes clean and fails only when a plugin asks for its dataDir).
+    Paths.get(System.getProperty("java.io.tmpdir"), "codeassist-plugin-data")

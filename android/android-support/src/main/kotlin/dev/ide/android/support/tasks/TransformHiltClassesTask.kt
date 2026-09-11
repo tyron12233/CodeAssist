@@ -11,6 +11,8 @@ import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 import java.util.stream.Collectors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -115,9 +117,9 @@ internal class TransformHiltClassesTask(
     /** Drop the whole copy when it was produced by a different rewrite version, so the next pass re-emits it. */
     private fun invalidateOnVersionChange() {
         val stamp = outDir.resolve(STAMP)
-        if (runCatching { Files.readString(stamp) }.getOrNull() == HiltEntryPoints.VERSION) return
+        if (runCatching { stamp.readText() }.getOrNull() == HiltEntryPoints.VERSION) return
         existingFiles().forEach { runCatching { Files.deleteIfExists(it) } }
-        runCatching { Files.writeString(stamp, HiltEntryPoints.VERSION) }
+        runCatching { stamp.writeText(HiltEntryPoints.VERSION) }
     }
 
     /** Delete copies whose source class is gone (a renamed or removed type), so it can't reach the APK. */
