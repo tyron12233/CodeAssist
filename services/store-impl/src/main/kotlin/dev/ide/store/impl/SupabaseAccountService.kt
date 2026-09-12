@@ -80,9 +80,14 @@ class SupabaseAccountService(
     override fun current(): StoreAccount? {
         account?.let { return it }
         // Cold start with a stored refresh token: exchange it for a session without user interaction.
+        // This is the network call the port's doc warns about — the caller keeps it off the startup path.
         val refresh = tokens.read()?.takeIf { it.isNotBlank() } ?: return null
         return (refreshSession(refresh) as? StoreResult.Ok)?.value
     }
+
+    /** Live session, or a refresh token to trade for one. Reads the token store; never the network. */
+    override fun hasStoredSession(): Boolean =
+        account != null || !tokens.read().isNullOrBlank()
 
     override fun begin(provider: StoreProvider): StoreResult<StoreAuthChallenge> {
         if (!configured) return StoreResult.Unavailable("Sign-in is not configured in this build")

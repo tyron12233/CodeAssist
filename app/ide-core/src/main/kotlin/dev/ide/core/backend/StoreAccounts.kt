@@ -1,6 +1,7 @@
 package dev.ide.core.backend
 
 import dev.ide.ui.backend.UiSignInPhase
+import kotlinx.coroutines.launch
 import dev.ide.ui.backend.UiStoreAccount
 import dev.ide.ui.backend.UiStoreAuthState
 
@@ -18,6 +19,14 @@ internal class StoreAccounts(
     private val accounts: dev.ide.store.StoreAccountService,
     /** Asked which providers the backend currently allows. Null keeps whatever the build supports. */
     private val source: dev.ide.store.StoreCatalogSource? = null,
+    /**
+     * Where the cold-start session restore runs.
+     *
+     * Its own scope because the restore must not happen on whoever constructs this: that is app startup,
+     * and restoring a session is a network exchange with a network timeout behind it.
+     */
+    private val scope: kotlinx.coroutines.CoroutineScope =
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + storeIo),
 ) {
 
     /**
@@ -52,11 +61,18 @@ internal class StoreAccounts(
 
     fun authState(): kotlinx.coroutines.flow.StateFlow<UiStoreAuthState> = authStateFlow
 
-    private val authStateFlow = kotlinx.coroutines.flow.MutableStateFlow(
-        // A stored refresh token means the user is already signed in, so a relaunch must not present a
-        // signed-out store to someone who never signed out.
-        accounts.current()?.let { UiStoreAuthState(UiSignInPhase.SignedIn, it.toUi()) } ?: UiStoreAuthState(),
-    )
+    private val authStateFlow = kotlinx.coroutines.flow.MutableStateFlow(UiStoreAuthState())
+
+    init {
+        // A stored credential means the user is already signed in, so a relaunch must not present a
+        // signed-out store to someone who never signed out. Restoring it is a network exchange, so it is
+        // started here and lands in the flow when it answers rather than holding up construction — which
+        // runs during app startup, where a slow or unreachable network would be a visible stall.
+        // [hasStoredSession] is the cheap half: nothing is launched for a user who never signed in.
+        if (accounts.hasStoredSession()) scope.launch {
+            accounts.current()?.let { authStateFlow.value = UiStoreAuthState(UiSignInPhase.SignedIn, it.toUi()) }
+        }
+    }
 
     fun beginSignIn(provider: String): String? {
         val wanted = dev.ide.store.StoreProvider.entries.firstOrNull { it.wire == provider } ?: return null

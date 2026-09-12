@@ -130,8 +130,23 @@ interface StoreAccountService {
      */
     fun providers(): List<StoreProvider> = emptyList()
 
-    /** The signed-in account, or null. Cheap and safe to call during composition. */
+    /**
+     * The signed-in account, or null.
+     *
+     * Cheap while a session is live, but NOT on the first call after a restart: an implementation that
+     * remembers the sign-in has to exchange its stored credential for a session, which is a network round
+     * trip with a network timeout behind it. Call it off the main thread and off the startup path;
+     * [hasStoredSession] answers "is anyone signed in" without going anywhere.
+     */
     fun current(): StoreAccount? = null
+
+    /**
+     * Whether a session is live, or can be restored from a stored credential, WITHOUT a network call.
+     *
+     * The cheap half of [current]: it says a restore is worth starting, not that it will succeed (the
+     * stored credential may have been revoked, which only the exchange finds out).
+     */
+    fun hasStoredSession(): Boolean = false
 
     /** Start a sign-in with [provider]; the caller opens [StoreAuthChallenge.authorizeUrl]. */
     fun begin(provider: StoreProvider): StoreResult<StoreAuthChallenge> =
