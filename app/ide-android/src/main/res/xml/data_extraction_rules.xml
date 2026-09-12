@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ (API 31) equivalent of backup_rules.xml, for both routes off the device: a cloud backup and a
+  device-to-device transfer. Neither carries the keystore key that opens the stored sign-in, so neither
+  should carry the sealed token either. Everything else is still included; these are excludes, not a
+  whitelist.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="codeassist.store.auth.xml"/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="codeassist.store.auth.xml"/>
+    </device-transfer>
+</data-extraction-rules>

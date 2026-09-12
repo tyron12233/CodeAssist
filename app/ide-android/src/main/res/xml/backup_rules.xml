@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What Auto Backup must NOT carry off this device (Android 11 and below; see data_extraction_rules.xml
+  for 12 and above, which needs the same exclusions spelled out again in its own format).
+
+  The store's sign-in is a refresh token sealed with a key that lives in THIS device's keystore, and
+  keystore keys are not backed up: a restored copy is ciphertext nobody can open. Backing it up buys a new
+  device nothing, and costs it a failed decrypt on first launch (logged, handled, but pointless). Signing
+  in again is the only thing that can restore a session on new hardware.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="codeassist.store.auth.xml"/>
+</full-backup-content>
