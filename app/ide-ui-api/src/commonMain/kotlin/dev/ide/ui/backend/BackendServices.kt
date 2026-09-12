@@ -966,6 +966,14 @@ interface StoreService {
     /** The signed-in account's own submissions, newest first. Empty when signed out. */
     suspend fun mySubmissions(): List<UiStoreSubmission> = emptyList()
 
+    /**
+     * The listings this account publishes, so a submission can be sent as a new version of one.
+     *
+     * Empty when signed out, when the build has no store, or when nothing has been published yet — all
+     * three mean the same thing to the screen, which is that there is nothing to update.
+     */
+    suspend fun myPublishedItems(): List<UiPublishedItem> = emptyList()
+
     /** Withdraw a still-pending submission. */
     suspend fun withdrawSubmission(itemId: String, version: String): Boolean = false
 

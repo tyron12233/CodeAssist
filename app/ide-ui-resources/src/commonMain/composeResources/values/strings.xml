@@ -650,6 +650,14 @@ We never collect your code, file or project names, which features you use, or an
     <string name="submit_sending">Submitting…</string>
     <string name="submit_review_note">A moderator reviews every submission before it appears. Nothing is public until it is approved.</string>
     <string name="submit_required">Fill in the title, summary, description and category.</string>
+    <string name="submit_target">Publishing as</string>
+    <string name="submit_target_new">A new listing</string>
+    <string name="submit_target_update">Update %1$s</string>
+    <string name="submit_update_live">Live: %1$s</string>
+    <string name="submit_update_unreviewed">Not published yet</string>
+    <string name="submit_update_note">A new version of this listing, for review. Its title, summary, description and category stay as published. Screenshots you add here replace the ones on the listing; add none to keep the current ones.</string>
+    <string name="submit_field_changelog">What changed</string>
+    <string name="submit_required_version">Give the version as three numbers, like 1.2.0.</string>
     <string name="submit_mine_title">Your submissions</string>
     <string name="submit_withdraw">Withdraw</string>
     <string name="submit_unavailable">Publishing isn't available in this build.</string>

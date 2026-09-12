@@ -211,6 +211,25 @@ data class PackagedProject(
     val fileCount: Int get() = files.size
 }
 
+/**
+ * One listing the signed-in account publishes, as the submit screen needs it to offer an UPDATE.
+ *
+ * Only what that choice needs: something to recognise the listing by, where it stands with review, and the
+ * version to start from. The listing's own text (summary, description, category, tags) is deliberately
+ * absent — a new version does not rewrite it, so a form that offered those fields would be promising an
+ * edit that never happens.
+ */
+data class StorePublishedItem(
+    val slug: String,
+    val title: String,
+    /** The item's own review state: `approved`, `pending`, `rejected`, `unpublished`. */
+    val status: String,
+    /** The version people can install right now, or null while the first one is still under review. */
+    val publishedVersion: String? = null,
+    /** The highest version this account has SENT for the item, approved or not. Null when none parses. */
+    val highestVersion: String? = null,
+)
+
 /** The outcome of a submission. [reviewNote] carries a rejection reason once a moderator has answered. */
 data class StoreSubmissionStatus(
     val itemSlug: String,
@@ -240,6 +259,14 @@ interface StoreSubmissionService {
 
     /** The signed-in account's own submissions, newest first — the "under review" list. */
     fun mine(): StoreResult<List<StoreSubmissionStatus>> = StoreResult.Ok(emptyList())
+
+    /**
+     * The listings this account publishes, so a submission can be offered as an update to one of them.
+     *
+     * Separate from [mine], which answers "what is under review": an item whose only version was approved
+     * months ago has nothing in that list and is exactly what someone wants to update.
+     */
+    fun myItems(): StoreResult<List<StorePublishedItem>> = StoreResult.Ok(emptyList())
 
     /** Withdraw a still-pending submission. */
     fun withdraw(itemSlug: String, version: String): StoreResult<Unit> =

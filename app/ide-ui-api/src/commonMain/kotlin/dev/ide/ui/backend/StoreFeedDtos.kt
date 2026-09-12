@@ -342,6 +342,23 @@ data class UiSubmissionDraft(
     val changelog: String? = null,
 )
 
+/**
+ * A listing the signed-in account publishes, offered by the submit screen as something to UPDATE.
+ *
+ * [suggestedVersion] is the engine's answer to "what goes in the version field": one step above every
+ * version already sent for this item, including any still under review, because the store refuses a
+ * version code it has seen before.
+ */
+data class UiPublishedItem(
+    val slug: String,
+    val title: String,
+    /** `approved`, `pending`, `rejected` or `unpublished`, as the store has it. */
+    val status: String,
+    /** The version installable right now, or null while the first one is still under review. */
+    val publishedVersion: String? = null,
+    val suggestedVersion: String = "1.0.0",
+)
+
 /** [message] is shown verbatim on failure: the backend's quota and validation messages are user-facing. */
 data class UiSubmitResult(
     val success: Boolean,

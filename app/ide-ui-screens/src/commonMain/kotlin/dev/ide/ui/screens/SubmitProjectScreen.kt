@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.UiPackagedProject
+import dev.ide.ui.backend.UiPublishedItem
 import dev.ide.ui.backend.UiSubmissionDraft
 import dev.ide.ui.components.Eyebrow
 import dev.ide.ui.components.PillChip
@@ -44,6 +45,7 @@ import dev.ide.ui.generated.resources.submit_excluded_none
 import dev.ide.ui.generated.resources.submit_excluded_title
 import dev.ide.ui.generated.resources.submit_excluded_why
 import dev.ide.ui.generated.resources.submit_field_category
+import dev.ide.ui.generated.resources.submit_field_changelog
 import dev.ide.ui.generated.resources.submit_field_description
 import dev.ide.ui.generated.resources.submit_field_summary
 import dev.ide.ui.generated.resources.submit_field_tags
@@ -54,6 +56,13 @@ import dev.ide.ui.generated.resources.submit_no_projects
 import dev.ide.ui.generated.resources.submit_packaging
 import dev.ide.ui.generated.resources.submit_pick_project
 import dev.ide.ui.generated.resources.submit_required
+import dev.ide.ui.generated.resources.submit_required_version
+import dev.ide.ui.generated.resources.submit_target
+import dev.ide.ui.generated.resources.submit_target_new
+import dev.ide.ui.generated.resources.submit_target_update
+import dev.ide.ui.generated.resources.submit_update_live
+import dev.ide.ui.generated.resources.submit_update_note
+import dev.ide.ui.generated.resources.submit_update_unreviewed
 import dev.ide.ui.generated.resources.submit_review_note
 import dev.ide.ui.generated.resources.submit_send
 import dev.ide.ui.generated.resources.submit_sending
@@ -110,10 +119,18 @@ fun SubmitProjectScreen(
     val screenshots = remember(chosen?.rootPath) { mutableStateListOf<String>() }
     var sending by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    // The listings this account already publishes, so this submission can be sent as a new version of one
+    // instead of a second listing of the same project. Empty when signed out or nothing is published.
+    var published by remember { mutableStateOf<List<UiPublishedItem>>(emptyList()) }
     // Resolved here rather than inside the click handler: a string resource needs composition.
     val requiredText = stringResource(Res.string.submit_required)
+    val versionText = stringResource(Res.string.submit_required_version)
 
     val projects = remember { runCatching { backend.projects.projects() }.getOrDefault(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        published = runCatching { backend.store.myPublishedItems() }.getOrDefault(emptyList())
+    }
 
     LaunchedEffect(categoryAttempt) {
         categoriesLoading = true
@@ -168,19 +185,94 @@ fun SubmitProjectScreen(
                 }
 
                 if (packaged != null) {
+                    // Offered only when there is something to update. A first-time publisher sees the form
+                    // it always was.
+                    if (published.isNotEmpty()) {
+                        item("target") {
+                            Spacer(Modifier.height(22.dp))
+                            Eyebrow(stringResource(Res.string.submit_target))
+                            Spacer(Modifier.height(8.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                PillChip(
+                                    label = stringResource(Res.string.submit_target_new),
+                                    selected = draft.itemSlug == null,
+                                    onClick = {
+                                        // Back to a fresh listing: the version restarts and the title
+                                        // returns to the project's, since the item's was only borrowed.
+                                        draft = draft.copy(
+                                            itemSlug = null,
+                                            title = chosen?.name.orEmpty(),
+                                            version = "1.0.0",
+                                            changelog = null,
+                                        )
+                                    },
+                                )
+                                published.forEach { listing ->
+                                    PillChip(
+                                        label = stringResource(Res.string.submit_target_update, listing.title),
+                                        selected = draft.itemSlug == listing.slug,
+                                        onClick = {
+                                            // The suggested version steps past everything already sent for
+                                            // this listing, including a submission still in review: the
+                                            // store refuses a version code it has stored before.
+                                            draft = draft.copy(
+                                                itemSlug = listing.slug,
+                                                title = listing.title,
+                                                version = listing.suggestedVersion,
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                            published.firstOrNull { it.slug == draft.itemSlug }?.let { listing ->
+                                Spacer(Modifier.height(8.dp))
+                                Body(
+                                    listing.publishedVersion
+                                        ?.let { stringResource(Res.string.submit_update_live, it) }
+                                        ?: stringResource(Res.string.submit_update_unreviewed),
+                                )
+                            }
+                        }
+                    }
                     item("form") {
                         Spacer(Modifier.height(22.dp))
-                        Field(stringResource(Res.string.submit_field_title), draft.title) { draft = draft.copy(title = it) }
-                        Field(stringResource(Res.string.submit_field_summary), draft.summary) { draft = draft.copy(summary = it) }
-                        Field(
-                            stringResource(Res.string.submit_field_description),
-                            draft.description,
-                            lines = 4,
-                        ) { draft = draft.copy(description = it) }
-                        Field(stringResource(Res.string.submit_field_version), draft.version) { draft = draft.copy(version = it) }
-                        Field(stringResource(Res.string.submit_field_tags), tagsText) { raw ->
-                            tagsText = raw
-                            draft = draft.copy(tags = parseTags(raw))
+                        // Updating a listing does not rewrite it: the server keeps the item row and takes
+                        // only a new version, so the fields that belong to the listing are not shown rather
+                        // than shown and ignored. What a new version does carry is asked for instead.
+                        val updating = published.firstOrNull { it.slug == draft.itemSlug }
+                        if (updating != null) {
+                            Body(stringResource(Res.string.submit_update_note))
+                            Spacer(Modifier.height(16.dp))
+                            Field(stringResource(Res.string.submit_field_version), draft.version) {
+                                draft = draft.copy(version = it)
+                            }
+                            Field(
+                                stringResource(Res.string.submit_field_changelog),
+                                draft.changelog.orEmpty(),
+                                lines = 3,
+                            ) { draft = draft.copy(changelog = it) }
+                        } else {
+                            Field(stringResource(Res.string.submit_field_title), draft.title) {
+                                draft = draft.copy(title = it)
+                            }
+                            Field(stringResource(Res.string.submit_field_summary), draft.summary) {
+                                draft = draft.copy(summary = it)
+                            }
+                            Field(
+                                stringResource(Res.string.submit_field_description),
+                                draft.description,
+                                lines = 4,
+                            ) { draft = draft.copy(description = it) }
+                            Field(stringResource(Res.string.submit_field_version), draft.version) {
+                                draft = draft.copy(version = it)
+                            }
+                            Field(stringResource(Res.string.submit_field_tags), tagsText) { raw ->
+                                tagsText = raw
+                                draft = draft.copy(tags = parseTags(raw))
+                            }
                         }
                         // Hidden rather than disabled on a host that cannot pick files: there is nothing the
                         // user could do to make it work.
@@ -227,41 +319,53 @@ fun SubmitProjectScreen(
                                 Text(stringResource(Res.string.submit_add_screenshot))
                             }
                         }
-                        Spacer(Modifier.height(14.dp))
-                        Eyebrow(stringResource(Res.string.submit_field_category))
-                        Spacer(Modifier.height(8.dp))
-                        when {
-                            categoriesLoading -> Body(stringResource(Res.string.submit_category_loading))
-                            // The slug is a foreign key, so the form cannot invent one. With no list there is
-                            // nothing valid to pick and the submission is blocked either way, so it says so
-                            // and offers the retry rather than leaving a heading over empty space.
-                            categories.isEmpty() -> {
-                                Body(stringResource(Res.string.submit_category_unavailable))
-                                TextButton(onClick = { categoryAttempt++ }) {
-                                    Text(stringResource(Res.string.submit_category_retry))
+                        // The category belongs to the listing, not to a version, so an update neither
+                        // asks for it nor needs one to be loadable — which also means an update still works
+                        // when the category table cannot be reached.
+                        if (updating == null) {
+                            Spacer(Modifier.height(14.dp))
+                            Eyebrow(stringResource(Res.string.submit_field_category))
+                            Spacer(Modifier.height(8.dp))
+                            when {
+                                categoriesLoading -> Body(stringResource(Res.string.submit_category_loading))
+                                // The slug is a foreign key, so the form cannot invent one. With no list there is
+                                // nothing valid to pick and the submission is blocked either way, so it says so
+                                // and offers the retry rather than leaving a heading over empty space.
+                                categories.isEmpty() -> {
+                                    Body(stringResource(Res.string.submit_category_unavailable))
+                                    TextButton(onClick = { categoryAttempt++ }) {
+                                        Text(stringResource(Res.string.submit_category_retry))
+                                    }
                                 }
-                            }
-                            // The slug is what the backend stores, so the chip carries it and shows the title.
-                            // Flowed rather than split into fixed rows: the list is a table the backend owns
-                            // and can grow, and the titles are translated.
-                            else -> FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                categories.forEach { (slug, title) ->
-                                    PillChip(
-                                        label = title,
-                                        selected = draft.category == slug,
-                                        onClick = { draft = draft.copy(category = slug) },
-                                    )
+                                // The slug is what the backend stores, so the chip carries it and shows the title.
+                                // Flowed rather than split into fixed rows: the list is a table the backend owns
+                                // and can grow, and the titles are translated.
+                                else -> FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    categories.forEach { (slug, title) ->
+                                        PillChip(
+                                            label = title,
+                                            selected = draft.category == slug,
+                                            onClick = { draft = draft.copy(category = slug) },
+                                        )
+                                    }
                                 }
                             }
                         }
                         Spacer(Modifier.height(22.dp))
                         Body(stringResource(Res.string.submit_review_note))
                         Spacer(Modifier.height(16.dp))
-                        val complete = draft.title.isNotBlank() && draft.summary.isNotBlank() &&
-                            draft.description.isNotBlank() && draft.category.isNotBlank()
+                        // The store's own check on the column, applied here so a malformed version is
+                        // answered in the form rather than by a rejected upload.
+                        val versionOk = VERSION_FORMAT.matches(draft.version.trim())
+                        val complete = versionOk && (
+                            updating != null || (
+                                draft.title.isNotBlank() && draft.summary.isNotBlank() &&
+                                    draft.description.isNotBlank() && draft.category.isNotBlank()
+                                )
+                            )
                         PrimaryActionButton(
                             label = if (sending) {
                                 stringResource(Res.string.submit_sending)
@@ -271,7 +375,7 @@ fun SubmitProjectScreen(
                             glyph = CaSymbols.upload,
                             onClick = {
                                 if (!complete) {
-                                    message = requiredText
+                                    message = if (!versionOk) versionText else requiredText
                                 } else if (!sending) {
                                     sending = true
                                 }
@@ -389,3 +493,6 @@ private const val MAX_SUBMIT_TAGS = 10
 
 /** What the store accepts as a screenshot, and what narrows the host's picker to images. */
 private val SCREENSHOT_EXTENSIONS = listOf("png", "jpg", "jpeg", "webp")
+
+/** The store's own `version ~ '^[0-9]+.[0-9]+.[0-9]+$'` check, so the form refuses what the column would. */
+private val VERSION_FORMAT = Regex("^\\d+\\.\\d+\\.\\d+$")

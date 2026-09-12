@@ -398,6 +398,9 @@ internal class StoreBackend(
         current
     }
 
+    override suspend fun myPublishedItems(): List<dev.ide.ui.backend.UiPublishedItem> =
+        withContext(storeIo) { submissionState.myItems() }
+
     /** What the change actually means, in the words a submitter would use. */
     private fun submissionHeadline(sub: dev.ide.ui.backend.UiStoreSubmission): String = when (sub.status) {
         dev.ide.ui.backend.UiSubmissionStatus.PUBLISHED -> "${sub.projectName} is live in the store"
