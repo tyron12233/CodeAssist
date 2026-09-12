@@ -419,6 +419,16 @@ interface DependencyService {
     /** Search repositories for [query]; hits flagged compatible with [moduleName]. */
     suspend fun searchArtifacts(query: String, moduleName: String): List<UiArtifactHit> = emptyList()
 
+    /**
+     * [searchArtifacts], and whether the repository indexes could be read at all.
+     *
+     * An index that cannot be reached returns no hits, and so does a query that matches nothing. The picker
+     * has to tell them apart: reporting "no results" for a search host that never answered tells the user
+     * their artifact does not exist, which is not something the app found out.
+     */
+    suspend fun artifactSearch(query: String, moduleName: String): UiArtifactSearch =
+        UiArtifactSearch(searchArtifacts(query, moduleName))
+
     /** Resolve and add [coordinate] to [moduleName] at [scope], bundling its transitive closure.
      *  [variant] scopes the declaration to a build variant (e.g. `debug` → `debugImplementation`); null = shared. */
     suspend fun addDependency(moduleName: String, coordinate: String, scope: String, exclusions: List<String> = emptyList(), variant: String? = null): UiAddResult =

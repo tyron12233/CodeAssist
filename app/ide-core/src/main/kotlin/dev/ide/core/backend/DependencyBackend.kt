@@ -33,6 +33,9 @@ internal class DependencyBackend(private val ctx: BackendContext) : DependencySe
     override suspend fun searchArtifacts(query: String, moduleName: String): List<UiArtifactHit> =
         withContext(Dispatchers.IO) { ctx.services.dependencies.searchArtifacts(query, moduleName) }
 
+    override suspend fun artifactSearch(query: String, moduleName: String): dev.ide.ui.backend.UiArtifactSearch =
+        withContext(Dispatchers.IO) { ctx.services.dependencies.artifactSearch(query, moduleName) }
+
     override suspend fun addDependency(
         moduleName: String, coordinate: String, scope: String, exclusions: List<String>, variant: String?
     ): UiAddResult = withContext(Dispatchers.IO) {

@@ -536,6 +536,14 @@ data class UiDepModule(
 )
 
 /** A repository search hit, pre-judged for compatibility with the target module. */
+/**
+ * What one artifact search produced: the hits, and whether every index was unreachable.
+ *
+ * [indexUnavailable] is never true alongside hits — it means the search found nothing AND had nothing to
+ * search, which is the one case the picker must not report as "no results".
+ */
+data class UiArtifactSearch(val hits: List<UiArtifactHit>, val indexUnavailable: Boolean = false)
+
 data class UiArtifactHit(
     val coordinate: String,        // "group:name:version"
     val packaging: String,         // "jar" | "aar" | "pom" | …

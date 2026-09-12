@@ -1126,6 +1126,56 @@ class MavenDependencyResolverTest {
         assertTrue(hits.isEmpty(), "no group matches and Central returns nothing: $hits")
     }
 
+    // ---- search: two Central hosts, and the difference between "nothing" and "no answer" -------------
+
+    /**
+     * The picker must survive a Central search host that does not answer.
+     *
+     * This is not hypothetical: the legacy `search.maven.org` throttles ordinary picker traffic into a
+     * socket that never replies, which is how `org.mozilla:rhino` and `rhino-android` became unfindable
+     * while the androidx searches (served by Google's index) kept working.
+     */
+    @Test
+    fun searchFallsBackToTheSecondCentralHostWhenTheFirstDoesNotAnswer() {
+        val files = FakeRepo()
+        files.putCentralSearch(FALLBACK_SEARCH, "rhino", listOf(Triple("org.mozilla", "rhino", "1.9.1")))
+
+        val hits = runBlocking { searchResolver(files).search("rhino") }
+
+        assertEquals("org.mozilla:rhino:1.9.1", hits.single().coordinate.toString())
+    }
+
+    /** With every index silent there is nothing to report an absence from, and the caller is told so. */
+    @Test
+    fun searchReportsTheIndexUnavailableRatherThanAnEmptyResult() {
+        val found = runBlocking { searchResolver(FakeRepo()).searchWithStatus("rhino") }
+
+        assertTrue(found.hits.isEmpty())
+        assertTrue(found.indexUnavailable, "no host answered, so this is not evidence of an absence")
+    }
+
+    /** A host that answers with no documents HAS answered: that is a real empty result, not an outage. */
+    @Test
+    fun aHostThatAnswersWithNoDocumentsIsAnEmptyResultNotAnOutage() {
+        val files = FakeRepo()
+        files.putCentralSearch(PRIMARY_SEARCH, "nothingmatchesthis", emptyList())
+
+        val found = runBlocking { searchResolver(files).searchWithStatus("nothingmatchesthis") }
+
+        assertTrue(found.hits.isEmpty())
+        assertFalse(found.indexUnavailable, "the index answered; it just had nothing")
+    }
+
+    private fun searchResolver(files: FakeRepo): MavenDependencyResolver {
+        val tmp = createTempDirectory("deps-search-hosts")
+        val lfs = LocalFileSystem(tmp)
+        return MavenDependencyResolver(
+            ResolverCache(tmp), lfs::fileFor, files,
+            searchEndpoints = listOf(PRIMARY_SEARCH, FALLBACK_SEARCH),
+            googleMavenBase = GOOGLE,
+        )
+    }
+
     private fun googleResolver(files: FakeRepo): MavenDependencyResolver {
         val tmp = createTempDirectory("deps-search")
         val lfs = LocalFileSystem(tmp)
@@ -1213,6 +1263,15 @@ class MavenDependencyResolverTest {
     private inner class FakeRepo : ArtifactFetcher {
         private val byUrl = HashMap<String, ByteArray>()
         override fun fetch(url: String): ByteArray? = byUrl[url]
+
+        /** A Solr search answer from [endpoint] for [query]: the URL the resolver builds, verbatim. */
+        fun putCentralSearch(endpoint: String, query: String, docs: List<Triple<String, String, String>>) {
+            val json = docs.joinToString(",") { (g, a, v) ->
+                """{"g":"$g","a":"$a","latestVersion":"$v","p":"jar"}"""
+            }
+            val url = "$endpoint?q=$query&rows=25&wt=json"
+            byUrl[url] = """{"response":{"numFound":${docs.size},"docs":[$json]}}""".toByteArray()
+        }
 
         /** Publish under an arbitrary repository base, so a coordinate can exist in one repo and not another. */
         fun putAt(base: String, name: String, version: String, group: String = "g") {
@@ -1443,5 +1502,9 @@ class MavenDependencyResolverTest {
         const val BASE = "https://fixture/repo"
         const val GOOGLE = "https://fixture/google"
         const val EXTRA = "https://fixture/extra"
+
+        /** Two Central search hosts, as production has: the first one tried, and the fallback. */
+        const val PRIMARY_SEARCH = "https://fixture/search-primary/select"
+        const val FALLBACK_SEARCH = "https://fixture/search-fallback/select"
     }
 }

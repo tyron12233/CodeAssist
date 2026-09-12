@@ -144,6 +144,7 @@ import dev.ide.ui.generated.resources.dep_mode_platform
 import dev.ide.ui.generated.resources.dep_more_actions
 import dev.ide.ui.generated.resources.dep_no_local_libs
 import dev.ide.ui.generated.resources.dep_no_other_modules
+import dev.ide.ui.generated.resources.dep_index_unreachable
 import dev.ide.ui.generated.resources.dep_no_results
 import dev.ide.ui.generated.resources.dep_none_declared
 import dev.ide.ui.generated.resources.dep_not_resolved
@@ -835,7 +836,16 @@ internal fun AddDependencyContent(
                     items(state.results, key = { it.coordinate }) { hit ->
                         AddResultRow(hit, codeFont, Modifier.animateItem()) { state.add(hit.coordinate, hit.isBom) }
                     }
-                    if (typed.length >= 2 && state.results.isEmpty() && !state.searching && !looksLikeCoordinate(typed)) item { EmptyRow(stringResource(Res.string.dep_no_results)) }
+                    if (typed.length >= 2 && state.results.isEmpty() && !state.searching && !looksLikeCoordinate(typed)) item {
+                        // "Nothing matched" and "nothing answered" ask different things of the user, and
+                        // only one of them is something the app actually found out.
+                        EmptyRow(
+                            stringResource(
+                                if (state.indexUnavailable) Res.string.dep_index_unreachable
+                                else Res.string.dep_no_results,
+                            ),
+                        )
+                    }
                     if (typed.length < 2) item { EmptyRow(stringResource(Res.string.dep_type_to_search)) }
                 }
             }

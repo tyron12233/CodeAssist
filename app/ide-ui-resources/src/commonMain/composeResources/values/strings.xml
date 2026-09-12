@@ -1209,6 +1209,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="dep_resolving_transitive">Resolving transitive dependencies…</string>
     <string name="dep_no_other_modules">No other modules available to depend on.</string>
     <string name="dep_no_results">No results.</string>
+    <string name="dep_index_unreachable">No repository index answered, so there is nothing to search right now. Check the connection, or type the full group:name to add it anyway.</string>
     <string name="dep_type_to_search">Type at least 2 characters to search, or a full group:name[:version].</string>
     <string name="dep_add_named">Add %1$s</string>
     <string name="dep_import_as_platform">Import as a platform (BOM)</string>

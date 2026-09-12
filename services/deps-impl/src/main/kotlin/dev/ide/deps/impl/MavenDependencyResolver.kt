@@ -19,6 +19,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.Path
@@ -36,6 +38,14 @@ import kotlin.io.path.writeText
 data class ArtifactCandidate(val coordinate: Coordinate, val packaging: String)
 
 /**
+ * The outcome of an artifact search: what matched, and whether any index could be read.
+ *
+ * [indexUnavailable] is only true when NOTHING was reachable and there is therefore nothing to show — the
+ * caller can then say so instead of reporting an absence it has no evidence for.
+ */
+data class ArtifactSearch(val hits: List<ArtifactCandidate>, val indexUnavailable: Boolean = false)
+
+/**
  * The Maven resolver behind deps-api. Fetches/parses POMs (merging the parent chain + imported BOMs for
  * properties and dependencyManagement), walks the transitive graph with Maven scope-narrowing and
  * exclusions, resolves version conflicts per [ConflictPolicy], extracts `classes.jar` from `.aar`s, and
@@ -47,7 +57,15 @@ class MavenDependencyResolver(
     private val cache: ResolverCache,
     private val fileFor: (Path) -> VirtualFile,
     private val fetcher: ArtifactFetcher = HttpArtifactFetcher(),
-    private val searchEndpoint: String = MAVEN_CENTRAL_SEARCH,
+    /**
+     * Maven Central's search hosts, tried in order until one answers.
+     *
+     * More than one because the legacy host is not dependable: `search.maven.org` rate-limits hard and then
+     * stops answering ENTIRELY rather than returning a status, so the picker sat on a hung socket and
+     * reported "no results" for artifacts that plainly exist. `central.sonatype.com` is the current host and
+     * serves the same Solr API with the same document shape.
+     */
+    private val searchEndpoints: List<String> = MAVEN_CENTRAL_SEARCH_HOSTS,
     /**
      * Base URL of Google's Maven repo. Unlike Maven Central it has no Solr search endpoint, but it does
      * publish a crawlable `master-index.xml` (all group ids) + per-group `group-index.xml` (artifacts +
@@ -568,28 +586,54 @@ class MavenDependencyResolver(
      * The Google side is essential: `androidx.*` / `com.google.android.*` artifacts live only on Google
      * Maven, so a Central-only search returns nothing for them even though they resolve fine once added.
      */
-    suspend fun search(query: String, limit: Int = 25): List<ArtifactCandidate> {
+    suspend fun search(query: String, limit: Int = 25): List<ArtifactCandidate> =
+        searchWithStatus(query, limit).hits
+
+    /**
+     * [search], plus whether the indexes could be READ at all.
+     *
+     * The picker needs the difference. An index that cannot be reached and an index with nothing to say
+     * both arrive as an empty list, and answering "no results" for the first tells the user their artifact
+     * does not exist when what happened is that a search host did not answer.
+     */
+    suspend fun searchWithStatus(query: String, limit: Int = 25): ArtifactSearch {
         val q = query.trim()
-        if (q.isBlank()) return emptyList()
-        val central = searchCentral(q, limit)
-        val google = searchGoogle(q, limit)
+        if (q.isBlank()) return ArtifactSearch(emptyList())
+        val (central, centralRead) = searchCentral(q, limit)
+        val (google, googleRead) = searchGoogle(q, limit)
         val seen = HashSet<GA>()
-        return (central + google).filter { seen.add(it.coordinate.ga) }.take(limit)
+        val hits = (central + google).filter { seen.add(it.coordinate.ga) }.take(limit)
+        return ArtifactSearch(hits, indexUnavailable = hits.isEmpty() && !centralRead && !googleRead)
     }
 
-    /** Maven Central's Solr search endpoint (full-text over group/artifact). */
-    private fun searchCentral(query: String, limit: Int): List<ArtifactCandidate> {
-        val url = "$searchEndpoint?q=${URLEncoder.encode(query, "UTF-8")}&rows=$limit&wt=json"
-        val bytes = runCatching { fetcher.fetch(url) }.getOrNull() ?: return emptyList()
-        val root = runCatching { Json.parse(String(bytes, Charsets.UTF_8)) }.getOrNull() as? Map<*, *> ?: return emptyList()
-        val docs = (root["response"] as? Map<*, *>)?.get("docs") as? List<*> ?: return emptyList()
-        return docs.mapNotNull { doc ->
-            val d = doc as? Map<*, *> ?: return@mapNotNull null
-            val g = d["g"] as? String ?: return@mapNotNull null
-            val a = d["a"] as? String ?: return@mapNotNull null
-            val v = (d["latestVersion"] ?: d["v"]) as? String ?: return@mapNotNull null
-            ArtifactCandidate(Coordinate(g, a, v), (d["p"] as? String) ?: "jar")
+    /**
+     * Maven Central's Solr search (full-text over group/artifact), from the first host that answers.
+     *
+     * Returns the hits and whether any host was actually READ: a host that answers with zero documents is a
+     * real (empty) answer, while one that times out or refuses is not, and the two must not look alike.
+     * Each attempt is bounded by [SEARCH_TIMEOUT_MS] rather than by the fetcher's read timeout, which is
+     * sized for downloading artifacts — a hung search host would otherwise hold the picker for 30 seconds
+     * before it even tried the next one.
+     */
+    private suspend fun searchCentral(query: String, limit: Int): Pair<List<ArtifactCandidate>, Boolean> {
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        for (endpoint in searchEndpoints) {
+            val url = "$endpoint?q=$encoded&rows=$limit&wt=json"
+            val bytes = withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
+                withContext(Dispatchers.IO) { runCatching { fetcher.fetch(url) }.getOrNull() }
+            } ?: continue
+            val root = runCatching { Json.parse(String(bytes, Charsets.UTF_8)) }.getOrNull() as? Map<*, *>
+                ?: continue
+            val docs = (root["response"] as? Map<*, *>)?.get("docs") as? List<*> ?: continue
+            return docs.mapNotNull { doc ->
+                val d = doc as? Map<*, *> ?: return@mapNotNull null
+                val g = d["g"] as? String ?: return@mapNotNull null
+                val a = d["a"] as? String ?: return@mapNotNull null
+                val v = (d["latestVersion"] ?: d["v"]) as? String ?: return@mapNotNull null
+                ArtifactCandidate(Coordinate(g, a, v), (d["p"] as? String) ?: "jar")
+            } to true
         }
+        return emptyList<ArtifactCandidate>() to false
     }
 
     /**
@@ -599,14 +643,14 @@ class MavenDependencyResolver(
      * artifacts + versions, then resolve each hit's packaging from its POM. All I/O is bounded ([MAX_GROUPS]
      * groups, [limit] artifacts) and concurrent; the master + per-group indexes and POM packaging are cached.
      */
-    private suspend fun searchGoogle(query: String, limit: Int): List<ArtifactCandidate> {
-        val groups = fetchGoogleGroupIds() ?: return emptyList()
+    private suspend fun searchGoogle(query: String, limit: Int): Pair<List<ArtifactCandidate>, Boolean> {
+        val groups = fetchGoogleGroupIds() ?: return emptyList<ArtifactCandidate>() to false
         // Accept "group", "group:name", or a fully-typed "group:name:version" (the version is ignored for
         // matching — the picker defaults to the newest and lets the user change it).
         val parts = query.lowercase().split(':')
         val groupNeedle = parts[0].trim()
         val nameNeedle = parts.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() }
-        if (groupNeedle.isEmpty() && nameNeedle == null) return emptyList()
+        if (groupNeedle.isEmpty() && nameNeedle == null) return emptyList<ArtifactCandidate>() to true
 
         // Rank matching groups: exact(0) > prefix(1) > substring(2); non-matches dropped, shortest id first.
         val matched = groups.mapNotNull { gid ->
@@ -620,7 +664,7 @@ class MavenDependencyResolver(
             }
             gid to score
         }.sortedWith(compareBy({ it.second }, { it.first.length })).take(MAX_GOOGLE_GROUPS)
-        if (matched.isEmpty()) return emptyList()
+        if (matched.isEmpty()) return emptyList<ArtifactCandidate>() to true
 
         val perGroup = coroutineScope {
             matched.map { (gid, gs) -> async(Dispatchers.IO) { Triple(gid, gs, fetchGoogleGroupIndex(gid)) } }.awaitAll()
@@ -642,7 +686,7 @@ class MavenDependencyResolver(
 
         return coroutineScope {
             top.map { c -> async(Dispatchers.IO) { ArtifactCandidate(c.coord, googlePackagingOf(c.coord)) } }.awaitAll()
-        }
+        } to true
     }
 
     /** All group ids from Google Maven's `master-index.xml` (self-closing `<group.id/>` entries), or null on
@@ -1289,7 +1333,23 @@ private fun GA.excludedBy(exclusions: Set<GA>): Boolean = exclusions.any {
  *  a bump forces a one-time re-resolve that heals existing caches on the next open. */
 const val AAR_EXPLODE_VERSION = "4"
 
-const val MAVEN_CENTRAL_SEARCH = "https://search.maven.org/solrsearch/select"
+/**
+ * Maven Central's search hosts, in the order [MavenDependencyResolver] tries them.
+ *
+ * `central.sonatype.com` first: it is the current host, and the legacy `search.maven.org` throttles a normal
+ * amount of picker traffic into silence — not a 429, but a socket that never answers — which is how
+ * `org.mozilla:rhino` and `rhino-android` came to be unfindable in a project where the androidx searches
+ * (served by Google's index) kept working. The legacy host stays as a fallback: it carries the same data, and
+ * two hosts that have to fail before the picker goes quiet is better than one.
+ */
+val MAVEN_CENTRAL_SEARCH_HOSTS: List<String> = listOf(
+    "https://central.sonatype.com/solrsearch/select",
+    "https://search.maven.org/solrsearch/select",
+)
+
+/** How long ONE search host gets to answer before the next is tried. The fetcher's own read timeout is
+ *  sized for downloading artifacts, which is far too long to leave a picker waiting on a hung index. */
+private const val SEARCH_TIMEOUT_MS = 8_000L
 
 /** Base URL of Google's Maven repo — the home of every `androidx.*` / `com.google.android.*` artifact. */
 const val GOOGLE_MAVEN_BASE = "https://dl.google.com/android/maven2"
