@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -36,14 +35,13 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import dev.ide.ui.LtrContent
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiAction
@@ -158,7 +156,7 @@ fun CodeEditor(
     // Source code is intrinsically left-to-right: the gutter sits at the left edge and lines flow right. On an
     // RTL system locale Compose flips `LocalLayoutDirection`, which would mirror the text shaping + popup
     // anchoring. Pin the whole editor subtree to LTR so it renders identically regardless of device language.
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+    LtrContent {
         CodeEditorContent(
             path,
             session,

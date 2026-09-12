@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.LtrContent
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiCodeStyle
 import dev.ide.ui.components.ExpressiveScaffold
@@ -245,28 +246,34 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
 @Composable
 private fun PreviewCard(preview: String, language: String, hasProject: Boolean) {
     SettingsCard(stringResource(Res.string.codestyle_preview)) {
-        Column(
-            Modifier.fillMaxWidth().heightIn(max = 320.dp)
-                .background(Ide.colors.editorBg, RoundedCornerShape(Ca.radius.control))
-                .verticalScroll(rememberScrollState()).padding(12.dp),
-        ) {
-            if (!hasProject) {
-                Text(
-                    stringResource(Res.string.codestyle_preview_no_project),
-                    color = MaterialTheme.colorScheme.outline,
-                    style = Ide.type.codeSmall,
-                )
-            } else if (preview.isEmpty()) {
-                Text("…", color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
-            } else {
-                val codeLang = if (language == LANG_KOTLIN) CodeLanguage.Kotlin else CodeLanguage.Java
-                val syntax = Ide.colors.syntax
-                val highlighted = remember(preview, codeLang, syntax) { highlight(preview, codeLang, syntax) }
-                Text(
-                    highlighted,
-                    style = Ide.type.codeSmall,
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                )
+        // The card shows formatter output, and every option above it (indent width, continuation indent,
+        // brace placement, alignment) is judged by where a line starts and how far it is indented. The
+        // editor pins itself to LTR for the same reason, so its preview has to agree: mirrored, the sample
+        // would not match the file the formatter is about to write.
+        LtrContent {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 320.dp)
+                    .background(Ide.colors.editorBg, RoundedCornerShape(Ca.radius.control))
+                    .verticalScroll(rememberScrollState()).padding(12.dp),
+            ) {
+                if (!hasProject) {
+                    Text(
+                        stringResource(Res.string.codestyle_preview_no_project),
+                        color = MaterialTheme.colorScheme.outline,
+                        style = Ide.type.codeSmall,
+                    )
+                } else if (preview.isEmpty()) {
+                    Text("…", color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
+                } else {
+                    val codeLang = if (language == LANG_KOTLIN) CodeLanguage.Kotlin else CodeLanguage.Java
+                    val syntax = Ide.colors.syntax
+                    val highlighted = remember(preview, codeLang, syntax) { highlight(preview, codeLang, syntax) }
+                    Text(
+                        highlighted,
+                        style = Ide.type.codeSmall,
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    )
+                }
             }
         }
     }

@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.LtrContent
 import dev.ide.ui.clipForClipboard
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
@@ -210,10 +211,14 @@ fun BuildConsole(
                 }
                 plugin.content(ctx)
             } else when (tab) {
-                BuildTab.Problems -> ProblemsTab(buildState.diagnostics, onOpenDiagnostic)
-                BuildTab.Log -> LogTab(buildState.log, running)
+                // Problems / Log / Logcat show compiler and runtime output verbatim: `file:line`, timestamps,
+                // level and tag columns, indented snippets and stack traces. An RTL locale would mirror those
+                // columns and strand each line's indent on the wrong edge, so they opt out of RTL while the
+                // console's own chrome (tabs, filters, header) stays mirrored with the rest of the app.
+                BuildTab.Problems -> LtrContent { ProblemsTab(buildState.diagnostics, onOpenDiagnostic) }
+                BuildTab.Log -> LtrContent { LogTab(buildState.log, running) }
                 BuildTab.Steps -> StepsTab(buildState.steps)
-                BuildTab.Logcat -> LogcatTab(appLog) { backend?.build?.clearAppLog() }
+                BuildTab.Logcat -> LtrContent { LogcatTab(appLog) { backend?.build?.clearAppLog() } }
             }
         }
         // A compact native ad in the console footer, only while nothing is building — a natural pause, never

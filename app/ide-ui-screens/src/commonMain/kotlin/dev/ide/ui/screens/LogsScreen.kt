@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.LtrContent
 import dev.ide.ui.clipForClipboard
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
@@ -92,86 +93,92 @@ fun LogsScreen(
     val clipboard = LocalClipboardManager.current
     val shown = state.shown
 
-    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        // Header: title + actions
-        Row(
-            Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(stringResource(Res.string.logs_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text("${shown.size}", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
-            Box(Modifier.weight(1f))
-            HeaderAction(if (state.paused) CaIcons.play else CaIcons.stop, if (state.paused) stringResource(Res.string.logs_resume) else stringResource(Res.string.logs_pause), state.paused) { state.togglePaused() }
-            HeaderAction(CaIcons.refresh, stringResource(Res.string.refresh)) { state.refresh() }
-            HeaderAction(CaIcons.copy, stringResource(Res.string.logs_copy_all)) {
-                clipboard.setText(AnnotatedString(clipForClipboard(shown.joinToString("\n\n") { renderForCopy(it) })))
-            }
-            if (fileActions.canShare) {
-                HeaderAction(CaIcons.share, stringResource(Res.string.share)) { state.export(fileActions::share) }
-            }
-        }
-
-        // Search field
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
-                .padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Icon(CaIcons.search, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-            Box(Modifier.weight(1f)) {
-                if (state.query.isEmpty()) Text(stringResource(Res.string.logs_filter_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
-                BasicTextField(
-                    value = state.query,
-                    onValueChange = state::updateQuery,
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        // Severity filter chips
-        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            LogFilter.entries.forEach { f -> FilterChip(stringResource(f.labelRes), f == state.filter) { state.selectFilter(f) } }
-        }
-
-        // Per-plugin filter chips — only shown once some record carries a source (a plugin logged something).
-        if (state.sources.isNotEmpty()) {
+    // A log record is machine output read column by column: time, level, source, tag, message, then a
+    // stack trace whose indentation carries the frame depth. An RTL locale mirrors that into an order no
+    // stack trace is written in, and the peek-the-timestamp drag below parks its gutter off the left edge
+    // in raw pixels, so the viewer stays LTR while the rest of the app mirrors.
+    LtrContent {
+        Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            // Header: title + actions
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                FilterChip(stringResource(Res.string.logs_filter_all_plugins), state.activeSource == null) { state.selectSource(null) }
-                state.sources.forEach { s ->
-                    FilterChip(s, state.activeSource == s) { state.selectSource(if (state.activeSource == s) null else s) }
+                Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(Res.string.logs_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("${shown.size}", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
+                Box(Modifier.weight(1f))
+                HeaderAction(if (state.paused) CaIcons.play else CaIcons.stop, if (state.paused) stringResource(Res.string.logs_resume) else stringResource(Res.string.logs_pause), state.paused) { state.togglePaused() }
+                HeaderAction(CaIcons.refresh, stringResource(Res.string.refresh)) { state.refresh() }
+                HeaderAction(CaIcons.copy, stringResource(Res.string.logs_copy_all)) {
+                    clipboard.setText(AnnotatedString(clipForClipboard(shown.joinToString("\n\n") { renderForCopy(it) })))
+                }
+                if (fileActions.canShare) {
+                    HeaderAction(CaIcons.share, stringResource(Res.string.share)) { state.export(fileActions::share) }
                 }
             }
-        }
 
-        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-
-        // Records
-        if (shown.isEmpty()) {
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text(
-                    if (state.all.isEmpty()) stringResource(Res.string.logs_empty) else stringResource(Res.string.logs_no_match),
-                    color = MaterialTheme.colorScheme.outline,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+            // Search field
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(CaIcons.search, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                Box(Modifier.weight(1f)) {
+                    if (state.query.isEmpty()) Text(stringResource(Res.string.logs_filter_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
+                    BasicTextField(
+                        value = state.query,
+                        onValueChange = state::updateQuery,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
-        } else {
-            PeekTimestampReveal(TimeSlotWidth, Modifier.weight(1f).fillMaxWidth()) { reveal, slotPx ->
-                LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
-                    itemsIndexed(
-                        shown,
-                        key = { index, it -> "$index:${it.timestampMs}:${it.tag}:${it.message.hashCode()}" },
-                    ) { _, it -> LogRow(it, reveal, slotPx) }
+
+            // Severity filter chips
+            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                LogFilter.entries.forEach { f -> FilterChip(stringResource(f.labelRes), f == state.filter) { state.selectFilter(f) } }
+            }
+
+            // Per-plugin filter chips — only shown once some record carries a source (a plugin logged something).
+            if (state.sources.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    FilterChip(stringResource(Res.string.logs_filter_all_plugins), state.activeSource == null) { state.selectSource(null) }
+                    state.sources.forEach { s ->
+                        FilterChip(s, state.activeSource == s) { state.selectSource(if (state.activeSource == s) null else s) }
+                    }
+                }
+            }
+
+            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+
+            // Records
+            if (shown.isEmpty()) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text(
+                        if (state.all.isEmpty()) stringResource(Res.string.logs_empty) else stringResource(Res.string.logs_no_match),
+                        color = MaterialTheme.colorScheme.outline,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            } else {
+                PeekTimestampReveal(TimeSlotWidth, Modifier.weight(1f).fillMaxWidth()) { reveal, slotPx ->
+                    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
+                        itemsIndexed(
+                            shown,
+                            key = { index, it -> "$index:${it.timestampMs}:${it.tag}:${it.message.hashCode()}" },
+                        ) { _, it -> LogRow(it, reveal, slotPx) }
+                    }
                 }
             }
         }
