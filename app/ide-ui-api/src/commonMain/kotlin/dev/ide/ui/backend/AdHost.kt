@@ -25,6 +25,12 @@ enum class AdPlacement {
     /** The Settings & Tools area (the hub and the Plugins screen) — a browse surface. */
     SETTINGS,
 
+    /** The daily-challenge tab and its leaderboard: a read-and-scroll surface people return to daily. */
+    CHALLENGE,
+
+    /** A store listing's detail page, below the install call to action. */
+    STORE_ITEM,
+
     /** The footer of the editor's docked LEFT sidebar pane (below the tool-window content). */
     SIDEBAR,
 }

@@ -112,7 +112,7 @@ object AndroidIde {
         manager.applicationContainer.registerServiceIfAbsent(NOTIFICATION_PRESENTER) {
             AndroidNotificationPresenter(appContext)
         }
-        val supabaseAccounts = buildStoreAccounts()
+        val supabaseAccounts = buildStoreAccounts(appContext)
         val storeAccounts: dev.ide.store.StoreAccountService =
             supabaseAccounts ?: dev.ide.store.StoreAccountService.Unsupported
         manager.applicationContainer.registerServiceIfAbsent(STORE_ACCOUNT_SERVICE) { storeAccounts }
@@ -537,7 +537,7 @@ object AndroidIde {
         }
     }
 
-    private fun buildStoreAccounts(): dev.ide.store.impl.SupabaseAccountService? {
+    private fun buildStoreAccounts(context: Context): dev.ide.store.impl.SupabaseAccountService? {
         val url = BuildConfig.SUPABASE_URL
         val key = BuildConfig.SUPABASE_KEY
         if (url.isBlank() || key.isBlank()) return null
@@ -546,6 +546,10 @@ object AndroidIde {
             apiKey = key,
             // The deep link the manifest's intent-filter receives.
             redirectUrl = dev.ide.store.StoreAuth.ANDROID_REDIRECT,
+            // Without a store the refresh token lives in memory, so every launch presents a signed-out
+            // store and asks the user to sign in with GitHub again. The default is in-memory precisely so
+            // that a host has to CHOOSE where a credential goes; this is that choice.
+            tokens = AndroidTokenStore(context),
             enabledProviders = listOf(
                 dev.ide.store.StoreProvider.GITHUB,
                 dev.ide.store.StoreProvider.GOOGLE,

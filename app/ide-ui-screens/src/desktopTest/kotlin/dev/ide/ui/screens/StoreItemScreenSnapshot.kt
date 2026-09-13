@@ -4,11 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
 import dev.ide.ui.StubBackend
+import dev.ide.ui.ads.LocalAds
+import dev.ide.ui.fakeAdController
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreItemKind
 import dev.ide.ui.theme.CodeAssistTheme
@@ -100,15 +103,17 @@ class StoreItemScreenSnapshot {
         val scene = ImageComposeScene(width = WIDTH, height = height, density = Density(2f)) {
             CodeAssistTheme(dark = dark) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                    StoreItemScreen(
-                        backend = backend,
-                        item = item,
-                        onBack = {},
-                        onCreateFromTemplate = {},
-                        isSaved = true,
-                        onToggleSaved = {},
-                        onShare = {},
-                    )
+                    CompositionLocalProvider(LocalAds provides fakeAdController(backend)) {
+                        StoreItemScreen(
+                            backend = backend,
+                            item = item,
+                            onBack = {},
+                            onCreateFromTemplate = {},
+                            isSaved = true,
+                            onToggleSaved = {},
+                            onShare = {},
+                        )
+                    }
                 }
             }
         }

@@ -2,6 +2,7 @@ package dev.ide.core.backend
 
 import dev.ide.store.PackagedFile
 import dev.ide.store.PackagedProject
+import dev.ide.store.StorePublishedItem
 import dev.ide.store.StoreResult
 import dev.ide.store.StoreSubmissionRequest
 import dev.ide.store.StoreSubmissionService
@@ -39,6 +40,7 @@ class StoreSubmissionsTest {
             StoreResult.Ok(StoreSubmissionStatus("my-app-ab12", "1.0.0", "pending")),
         private val mineResult: StoreResult<List<StoreSubmissionStatus>> = StoreResult.Ok(emptyList()),
         private val available: Boolean = true,
+        private val itemsResult: StoreResult<List<StorePublishedItem>> = StoreResult.Ok(emptyList()),
     ) : StoreSubmissionService {
         var packCalls = 0
         var submitted: StoreSubmissionRequest? = null
@@ -56,6 +58,7 @@ class StoreSubmissionsTest {
             return submitResult
         }
         override fun mine() = mineResult
+        override fun myItems() = itemsResult
         override fun withdraw(itemSlug: String, version: String): StoreResult<Unit> {
             withdrawn = itemSlug to version
             return StoreResult.Ok(Unit)
@@ -215,5 +218,99 @@ class StoreSubmissionsTest {
         val fake = FakeSubmissions(StoreResult.Ok(archive()))
         assertTrue(StoreSubmissions(fake).withdraw("my-app-ab12", "1.0.0"))
         assertEquals("my-app-ab12" to "1.0.0", fake.withdrawn)
+    }
+
+    // ---- publishing a new version of a listing you already own ----
+
+    /**
+     * The update path is one field: a draft carrying [UiSubmissionDraft.itemSlug] reaches the service with
+     * it, which is what makes the backend add a version to that item instead of creating a second listing.
+     */
+    @Test
+    fun anUpdateDraftReachesTheServiceAsANewVersionOfThatItem() {
+        val fake = FakeSubmissions(StoreResult.Ok(archive()))
+        val subs = StoreSubmissions(fake)
+        val packed = assertNotNull(subs.pack("/projects/my-app"))
+
+        subs.submit(
+            UiSubmissionDraft(
+                itemSlug = "my-app-ab12",
+                title = "My App",
+                version = "1.2.0",
+                changelog = "  Faster search  ",
+            ),
+            packed,
+        )
+
+        assertEquals("my-app-ab12", fake.submitted?.itemSlug)
+        assertEquals("1.2.0", fake.submitted?.version)
+        assertEquals("Faster search", fake.submitted?.changelog, "the changelog is trimmed, not dropped")
+    }
+
+    /**
+     * The suggested version has to clear everything already SENT, not just what is live.
+     *
+     * `unique (item_id, version_code)` makes a repeat a database error, and a submission still in review
+     * holds its code. Offering 1.0.1 here, one past the published 1.0.0, would walk the publisher straight
+     * into that error while their 1.1.0 sits in the queue.
+     */
+    @Test
+    fun theSuggestedVersionStepsPastAPendingSubmissionNotJustThePublishedOne() {
+        val fake = FakeSubmissions(
+            StoreResult.Ok(archive()),
+            itemsResult = StoreResult.Ok(
+                listOf(
+                    StorePublishedItem(
+                        slug = "my-app-ab12",
+                        title = "My App",
+                        status = "approved",
+                        publishedVersion = "1.0.0",
+                        highestVersion = "1.1.0",
+                    ),
+                ),
+            ),
+        )
+
+        val items = StoreSubmissions(fake).myItems()
+
+        assertEquals(1, items.size)
+        assertEquals("my-app-ab12", items[0].slug)
+        assertEquals("1.0.0", items[0].publishedVersion, "the live version is what the screen shows")
+        assertEquals("1.1.1", items[0].suggestedVersion)
+    }
+
+    /** A listing whose first version is still in review is still updatable, and says so with a null. */
+    @Test
+    fun aListingWithNothingApprovedYetHasNoPublishedVersion() {
+        val fake = FakeSubmissions(
+            StoreResult.Ok(archive()),
+            itemsResult = StoreResult.Ok(
+                listOf(StorePublishedItem("my-app-ab12", "My App", "pending", null, "1.0.0")),
+            ),
+        )
+
+        val items = StoreSubmissions(fake).myItems()
+
+        assertNull(items[0].publishedVersion)
+        assertEquals("1.0.1", items[0].suggestedVersion)
+    }
+
+    /** Signed out, or nothing published: the screen has nothing to offer and must not invent a listing. */
+    @Test
+    fun noListingsMeansNoUpdateTargets() {
+        assertTrue(StoreSubmissions(FakeSubmissions(StoreResult.Ok(archive()))).myItems().isEmpty())
+    }
+
+    @Test
+    fun theVersionSuggestionRollsOverRatherThanSortingBelowWhatItFollows() {
+        // Each component is capped at 999 by the store's version code, so a full field carries.
+        assertEquals("1.0.1", StoreSubmissions.nextVersionAfter("1.0.0"))
+        assertEquals("2.3.5", StoreSubmissions.nextVersionAfter("2.3.4"))
+        assertEquals("1.3.0", StoreSubmissions.nextVersionAfter("1.2.999"))
+        assertEquals("2.0.0", StoreSubmissions.nextVersionAfter("1.999.999"))
+        // Nothing sent yet, or nothing that parses: start at the beginning rather than at a guess.
+        assertEquals("1.0.0", StoreSubmissions.nextVersionAfter(null))
+        assertEquals("1.0.0", StoreSubmissions.nextVersionAfter(""))
+        assertEquals("1.0.0", StoreSubmissions.nextVersionAfter("latest"))
     }
 }

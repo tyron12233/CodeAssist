@@ -6,6 +6,7 @@ import dev.ide.store.PackagedProject
 import dev.ide.store.StoreResult
 import dev.ide.store.StoreSubmissionRequest
 import dev.ide.store.StoreSubmissionService
+import dev.ide.store.StorePublishedItem
 import dev.ide.store.StoreSubmissionStatus
 import java.io.File
 import java.net.HttpURLConnection
@@ -118,9 +119,27 @@ class SupabaseSubmissionService(
                 StoreSubmissionStatus(itemSlug = slug, version = request.version, status = "pending"),
             )
             is StoreResult.Unavailable -> { deleteObject(objectPath, token); StoreResult.Unavailable(r.reason) }
-            is StoreResult.Failed -> { deleteObject(objectPath, token); StoreResult.Failed(r.message, r.status) }
+            is StoreResult.Failed -> {
+                deleteObject(objectPath, token)
+                StoreResult.Failed(versionInsertMessage(r.message, request.version), r.status)
+            }
         }
     }
+
+    /**
+     * The one database refusal here that a submitter can act on, said plainly.
+     *
+     * `unique (item_id, version_code)` is what an update hits when the version was already sent — a
+     * re-submission after a rejection, or a second try at a version still under review. PostgREST reports
+     * that as a constraint name, which tells the user nothing about what to do next. Every other failure is
+     * passed through untouched: the quota and validation messages are already written for a person.
+     */
+    private fun versionInsertMessage(raw: String, version: String): String =
+        if ("version_code" in raw && ("duplicate key" in raw || "23505" in raw)) {
+            "Version $version has already been submitted for this project. Use a higher version."
+        } else {
+            raw
+        }
 
     override fun mine(): StoreResult<List<StoreSubmissionStatus>> {
         if (!configured) return StoreResult.Ok(emptyList())
@@ -154,6 +173,58 @@ class SupabaseSubmissionService(
             is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
             is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
         }
+    }
+
+    /**
+     * The account's own listings, newest first.
+     *
+     * Two reads rather than one clever query. The items come first (RLS confines this to rows whose
+     * `publisher_id` is the caller, so their pending and rejected ones are included, which is exactly what
+     * someone looking for "the thing I published" expects to see). The versions follow, because the highest
+     * version the account has SENT is not the same as the published one: a pending submission holds a
+     * version code that the next one has to clear, and `unique (item_id, version_code)` turns a repeat into
+     * a database error rather than an update.
+     *
+     * The embed names its foreign key for the same reason [mine] does: there are two relationships between
+     * these tables and PostgREST answers HTTP 300 without the hint.
+     */
+    override fun myItems(): StoreResult<List<StorePublishedItem>> {
+        if (!configured) return StoreResult.Ok(emptyList())
+        val token = accounts.bearer() ?: return StoreResult.Ok(emptyList())
+        val uid = accounts.current()?.userId ?: return StoreResult.Ok(emptyList())
+        val path = "/rest/v1/store_items" +
+            "?publisher_id=eq.$uid" +
+            "&select=slug,title,status," +
+            "store_item_versions!store_items_latest_version_id_fkey(version)" +
+            "&order=updated_at.desc"
+        val rows = when (val r = rest("GET", path, null, token)) {
+            is StoreResult.Ok -> JsonReader.arr(JsonReader.parseOrNull(r.value))
+            is StoreResult.Unavailable -> return StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> return StoreResult.Failed(r.message, r.status)
+        }
+        if (rows.isEmpty()) return StoreResult.Ok(emptyList())
+        // Every version this account has sent, by slug, so "the next version" clears the pending ones too.
+        val sent: Map<String, List<String>> = when (val r = mine()) {
+            is StoreResult.Ok -> r.value.groupBy({ it.itemSlug }, { it.version })
+            else -> emptyMap()
+        }
+        return StoreResult.Ok(
+            rows.mapNotNull { row ->
+                val slug = JsonReader.str(row, "slug") ?: return@mapNotNull null
+                val published = JsonReader.obj(row)?.get("store_item_versions")
+                    ?.let { JsonReader.str(it, "version") }
+                val highest = (sent[slug].orEmpty() + listOfNotNull(published))
+                    .filter { it.isNotBlank() }
+                    .maxByOrNull { versionCodeOf(it) }
+                StorePublishedItem(
+                    slug = slug,
+                    title = JsonReader.str(row, "title").orEmpty().ifBlank { slug },
+                    status = JsonReader.str(row, "status").orEmpty(),
+                    publishedVersion = published,
+                    highestVersion = highest,
+                )
+            },
+        )
     }
 
     /**

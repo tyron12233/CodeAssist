@@ -130,8 +130,23 @@ interface StoreAccountService {
      */
     fun providers(): List<StoreProvider> = emptyList()
 
-    /** The signed-in account, or null. Cheap and safe to call during composition. */
+    /**
+     * The signed-in account, or null.
+     *
+     * Cheap while a session is live, but NOT on the first call after a restart: an implementation that
+     * remembers the sign-in has to exchange its stored credential for a session, which is a network round
+     * trip with a network timeout behind it. Call it off the main thread and off the startup path;
+     * [hasStoredSession] answers "is anyone signed in" without going anywhere.
+     */
     fun current(): StoreAccount? = null
+
+    /**
+     * Whether a session is live, or can be restored from a stored credential, WITHOUT a network call.
+     *
+     * The cheap half of [current]: it says a restore is worth starting, not that it will succeed (the
+     * stored credential may have been revoked, which only the exchange finds out).
+     */
+    fun hasStoredSession(): Boolean = false
 
     /** Start a sign-in with [provider]; the caller opens [StoreAuthChallenge.authorizeUrl]. */
     fun begin(provider: StoreProvider): StoreResult<StoreAuthChallenge> =
@@ -211,6 +226,25 @@ data class PackagedProject(
     val fileCount: Int get() = files.size
 }
 
+/**
+ * One listing the signed-in account publishes, as the submit screen needs it to offer an UPDATE.
+ *
+ * Only what that choice needs: something to recognise the listing by, where it stands with review, and the
+ * version to start from. The listing's own text (summary, description, category, tags) is deliberately
+ * absent — a new version does not rewrite it, so a form that offered those fields would be promising an
+ * edit that never happens.
+ */
+data class StorePublishedItem(
+    val slug: String,
+    val title: String,
+    /** The item's own review state: `approved`, `pending`, `rejected`, `unpublished`. */
+    val status: String,
+    /** The version people can install right now, or null while the first one is still under review. */
+    val publishedVersion: String? = null,
+    /** The highest version this account has SENT for the item, approved or not. Null when none parses. */
+    val highestVersion: String? = null,
+)
+
 /** The outcome of a submission. [reviewNote] carries a rejection reason once a moderator has answered. */
 data class StoreSubmissionStatus(
     val itemSlug: String,
@@ -240,6 +274,14 @@ interface StoreSubmissionService {
 
     /** The signed-in account's own submissions, newest first — the "under review" list. */
     fun mine(): StoreResult<List<StoreSubmissionStatus>> = StoreResult.Ok(emptyList())
+
+    /**
+     * The listings this account publishes, so a submission can be offered as an update to one of them.
+     *
+     * Separate from [mine], which answers "what is under review": an item whose only version was approved
+     * months ago has nothing in that list and is exactly what someone wants to update.
+     */
+    fun myItems(): StoreResult<List<StorePublishedItem>> = StoreResult.Ok(emptyList())
 
     /** Withdraw a still-pending submission. */
     fun withdraw(itemSlug: String, version: String): StoreResult<Unit> =

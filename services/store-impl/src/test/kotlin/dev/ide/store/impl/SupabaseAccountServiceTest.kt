@@ -4,6 +4,7 @@ import dev.ide.store.StoreProvider
 import dev.ide.store.StoreResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -115,6 +116,45 @@ class SupabaseAccountServiceTest {
         )
         svc.signOut()
         assertNull(store.read(), "a signed-out client must not keep a refresh token")
+    }
+
+    /**
+     * The cheap half of [SupabaseAccountService.current]: is anyone signed in, without a network call.
+     *
+     * The distinction is what keeps the session restore off app startup. `current()` on a cold start is a
+     * refresh-token exchange with a network timeout behind it, so the caller asks this first and only
+     * launches the exchange when there is something to exchange.
+     */
+    @Test
+    fun aStoredTokenIsReportedWithoutTouchingTheNetwork() {
+        val store = StoreTokenStore.inMemory()
+        // An unreachable host: if this consulted the network at all, the test would hang rather than answer.
+        val svc = SupabaseAccountService(
+            url = "https://example.invalid", apiKey = "k", redirectUrl = "codeassist://cb", tokens = store,
+        )
+        assertFalse(svc.hasStoredSession(), "nothing stored, nobody signed in")
+
+        store.write("r-persisted")
+        assertTrue(svc.hasStoredSession(), "a stored refresh token is a session to restore")
+
+        svc.signOut()
+        assertFalse(svc.hasStoredSession(), "signing out leaves nothing to restore")
+    }
+
+    /**
+     * The relaunch shape: a NEW service over the same store still knows there is a session.
+     *
+     * This is the bug that sent people back to the GitHub sign-in on every launch — the Android host built
+     * the service with the default in-memory store, so a fresh process always started from nothing.
+     */
+    @Test
+    fun aNewServiceOverTheSameStoreStillHasTheSession() {
+        val store = StoreTokenStore.inMemory()
+        store.write("r-persisted")
+        val relaunched = SupabaseAccountService(
+            url = "https://example.invalid", apiKey = "k", redirectUrl = "codeassist://cb", tokens = store,
+        )
+        assertTrue(relaunched.hasStoredSession())
     }
 
     /** An in-memory store is the default precisely so nothing is written to disk unasked. */

@@ -62,8 +62,10 @@ import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.IdeBackend
 import androidx.compose.runtime.collectAsState
 import dev.ide.ui.backend.UiInstallState
+import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreItemKind
+import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.CodeMotifColors
 import dev.ide.ui.components.Eyebrow
 import dev.ide.ui.components.MonoChip
@@ -245,6 +247,14 @@ fun StoreItemScreen(
                             onPage = { myReview = it.mine },
                         )
                     }
+                }
+
+                // At the foot of whichever tab is open, rather than inside the overview builder: the
+                // listing is one page with four views of it, and an ad that appears on one view and
+                // vanishes on the next reads as a glitch. Below the install CTA either way, so it never
+                // stands between a reader and the button they came for.
+                item("ad") {
+                    AdSlot(AdPlacement.STORE_ITEM, Modifier.padding(horizontal = 20.dp).padding(top = 24.dp))
                 }
             }
         }

@@ -9,6 +9,21 @@ import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.TextUnit
 
+/**
+ * Entries of shaped text the editor's [TextMeasurer] keeps, keyed by content rather than by line.
+ *
+ * [LineRenderCache] already caches a shaped line against its line number, so this second cache exists for the
+ * one thing that cannot catch: source code repeats itself. Blank lines, `}`, `    }`, `    )` — about a
+ * quarter of the lines in a real file are character-for-character identical to another line, and each one
+ * used to pay a full `Paragraph` construction on the way into the viewport.
+ *
+ * Measured on device (ART, shaping twelve distinct lines — one scroll step): **0.32 ms with no cache against
+ * 0.13 ms with one**, repeatably. Everything from 16 entries to 256 lands within run-to-run noise of that
+ * 0.13, so the number below is chosen from the middle of a flat region, not a sharp optimum — the win is in
+ * having a cache at all, and there is no evidence a bigger one buys anything more to pay memory for.
+ */
+const val MEASURER_CACHE_ENTRIES: Int = 64
+
 /** Phantom (non-document) text rendered inside a line at column [col] — an inlay hint. */
 data class InlayPiece(val col: Int, val text: String)
 
@@ -270,83 +285,182 @@ internal fun <V> shiftIntKeyed(map: HashMap<Int, V>, fromOldLine: Int, delta: In
 }
 
 /**
- * Per-line inlay revision tracking, split out of [LineRenderCache] so it's testable without a `TextMeasurer`
- * (which can't be constructed headlessly). Holds the current inlay map and a **unique-forever stamp per
- * line**, bumped ONLY for lines whose pieces actually change.
+ * A per-line overlay store: one value and one **unique-forever stamp** per document line, held in arrays
+ * indexed by the line itself.
  *
- * The point: a single global counter (the old design) invalidated EVERY cached line on any inlay edit — and
- * the host re-anchors inlay offsets on every keystroke, so that re-shaped the whole viewport on each key.
- * With a per-line stamp, a hint change re-shapes only its own line; lines after the caret stay cached.
+ * Both overlays the render cache carries — inlay pieces and semantic spans — want the same three things, and
+ * the third is what makes the shape of this class. A read is per line, several times per visible line, every
+ * frame. A stamp must be unique forever, because it is what lets a cached layout validate with one int compare
+ * and never take a stale hit. And an edit that adds or removes a line has to renumber everything below it,
+ * sixty times a second while someone holds Enter.
+ *
+ * Keyed maps get the first two right and the third badly wrong. The previous implementation held a
+ * `Map<Int, List<T>>` plus a `HashMap<Int, Int>` of stamps, and renumbered them with
+ * `mapKeys { … }.filterKeys { … }` — which rebuilds every entry in the file to move a line boundary. On a
+ * 4000-line file with semantic coloring that measured **0.31 ms and a garbage collection every eight
+ * newlines**, all of it to add one to a few thousand integers.
+ *
+ * Indexed by line, the same edit is two `copyInto` calls over a region of references: no per-entry
+ * allocation, no rehash, and no boxing on the read path either. It also costs less memory than the maps did —
+ * an array of N references against N `HashMap.Node`s with boxed `Integer` keys — and N is bounded, because
+ * the editor suppresses both overlays above [LARGE_FILE_LINE_LIMIT].
  */
-internal class InlayRevisions {
-    private var inlays: Map<Int, List<InlayPiece>> = emptyMap()
-    private val stampByLine = HashMap<Int, Int>()
+internal class LineOverlay<T> {
+    private var values: Array<Any?> = EMPTY_VALUES
+    private var stamps: IntArray = EMPTY_STAMPS
+    /** Logical length: lines `[0, length)` may hold a value. Never exceeds the arrays' capacity. */
+    private var length = 0
     private var stamp = 0
 
-    /** The unique stamp for [line]; 0 when the line has never carried an inlay. */
-    fun stampOf(line: Int): Int = stampByLine[line] ?: 0
+    /**
+     * The last map adopted by [update], kept only so re-pushing it is free. The host calls `setInlays` /
+     * `setSemanticSpans` on every recomposition with a `remember`ed map, so the overwhelmingly common case is
+     * the same instance arriving again. Null once a [splice] has moved lines, because the arrays then describe
+     * a document the map no longer does.
+     */
+    private var source: Map<Int, List<T>>? = null
 
-    fun piecesFor(line: Int): List<InlayPiece> = inlays[line]?.sortedBy { it.col } ?: emptyList()
-
-    /** Adopt [newInlays], bumping the stamp for each line whose pieces changed, were added, or were removed. */
-    fun update(newInlays: Map<Int, List<InlayPiece>>) {
-        if (newInlays == inlays) return
-        // lines present before whose pieces changed (or were removed: newInlays[line] becomes null)
-        for ((line, pieces) in inlays) if (newInlays[line] != pieces) stampByLine[line] = ++stamp
-        // lines newly present
-        for (line in newInlays.keys) if (line !in inlays) stampByLine[line] = ++stamp
-        inlays = newInlays
+    /** The value for [line], or an empty list — O(1), no boxing. */
+    @Suppress("UNCHECKED_CAST")
+    fun valueAt(line: Int): List<T> {
+        if (line < 0 || line >= length) return emptyList()
+        return (values[line] as List<T>?) ?: emptyList()
     }
 
-    /** Mirror a line splice so a moved line keeps its stamp (paired with the layout cache shift). */
-    fun shift(fromOldLine: Int, delta: Int) {
-        if (delta == 0) return
-        shiftIntKeyed(stampByLine, fromOldLine, delta)
-        // The inlay map is document-column keyed by line; the host rebuilds it post-edit, so we only need the
-        // stamps to move. Drop the stale map so a moved line's pieces aren't read from the wrong line until then.
-        if (inlays.isNotEmpty()) inlays = inlays.mapKeys { (k, _) -> if (k >= fromOldLine) k + delta else k }
-            .filterKeys { it >= 0 }
+    /** The unique stamp for [line]; 0 when the line has never carried a value. */
+    fun stampOf(line: Int): Int = if (line < 0 || line >= length) 0 else stamps[line]
+
+    /**
+     * Adopt [newSource], bumping the stamp only for lines whose value actually changed, was added, or was
+     * removed — so an analysis pass re-shapes only the lines it really recolored, not the whole viewport.
+     * [normalize] (optional) puts a line's list into the canonical order the reads expect, once here rather
+     * than on every read.
+     */
+    fun update(newSource: Map<Int, List<T>>, normalize: ((List<T>) -> List<T>)? = null) {
+        val current = source
+        if (current != null && (newSource === current || newSource == current)) return
+
+        var maxLine = -1
+        for (line in newSource.keys) if (line > maxLine) maxLine = line
+        ensureCapacity(maxOf(maxLine + 1, length))
+
+        // Lines that held a value and no longer match: bumped (a removal bumps too — its woven text vanishes).
+        var line = 0
+        while (line < length) {
+            if (values[line] != null && newSource[line] == null) {
+                values[line] = null
+                stamps[line] = ++stamp
+            }
+            line++
+        }
+        for ((ln, raw) in newSource) {
+            if (ln < 0) continue
+            val value = normalize?.invoke(raw) ?: raw
+            if (values[ln] != value) {
+                values[ln] = value
+                stamps[ln] = ++stamp
+            }
+        }
+        if (maxLine + 1 > length) length = maxLine + 1
+        source = newSource
+    }
+
+    /**
+     * Mirror a document line splice: lines at/after [fromLine] move by [delta], carrying their stamps, and any
+     * pushed below zero are dropped. Two region copies, no allocation beyond a grow.
+     */
+    fun splice(fromLine: Int, delta: Int) {
+        if (delta == 0 || length == 0) return
+        val from = fromLine.coerceAtLeast(0)
+        if (from >= length) return
+        source = null // the arrays now describe a document the adopted map does not
+
+        if (delta > 0) {
+            ensureCapacity(length + delta)
+            values.copyInto(values, from + delta, from, length)
+            stamps.copyInto(stamps, from + delta, from, length)
+            values.fill(null, from, from + delta) // the inserted lines start with no overlay
+            stamps.fill(0, from, from + delta)
+            length += delta
+        } else {
+            // Lines that would land at a negative index are dropped, so the copy starts at the first survivor.
+            val src = from + maxOf(0, -(from + delta))
+            if (src < length) {
+                values.copyInto(values, src + delta, src, length)
+                stamps.copyInto(stamps, src + delta, src, length)
+            }
+            val newLength = maxOf(0, length + delta)
+            values.fill(null, newLength, length) // the vacated tail must not keep a moved line's value alive
+            stamps.fill(0, newLength, length)
+            length = newLength
+        }
     }
 
     fun clear() {
-        inlays = emptyMap()
-        stampByLine.clear()
+        values.fill(null, 0, length)
+        stamps.fill(0, 0, length)
+        length = 0
         stamp = 0
+        source = null
+    }
+
+    private fun ensureCapacity(needed: Int) {
+        if (needed <= values.size) return
+        val grown = maxOf(needed, values.size * 2, 64)
+        values = values.copyOf(grown)
+        stamps = stamps.copyOf(grown)
+    }
+
+    private companion object {
+        val EMPTY_VALUES = arrayOfNulls<Any?>(0)
+        val EMPTY_STAMPS = IntArray(0)
     }
 }
 
 /**
- * Per-line semantic-overlay tracking, the [SemSpan] analog of [InlayRevisions]. Holds the current document-
- * line-keyed semantic spans and a unique-forever stamp per line, bumped ONLY for lines whose spans changed —
- * so an async semantic-highlight pass re-shapes only the lines it actually recolored, not the whole viewport.
+ * Per-line inlay tracking, split out of [LineRenderCache] so it's testable without a `TextMeasurer` (which
+ * can't be constructed headlessly).
+ *
+ * The point of the per-line stamp: a single global counter (the original design) invalidated EVERY cached line
+ * on any inlay edit — and the host re-anchors inlay offsets on every keystroke, so that re-shaped the whole
+ * viewport on each key. With a per-line stamp, a hint change re-shapes only its own line.
+ */
+internal class InlayRevisions {
+    private val overlay = LineOverlay<InlayPiece>()
+
+    /** The unique stamp for [line]; 0 when the line has never carried an inlay. */
+    fun stampOf(line: Int): Int = overlay.stampOf(line)
+
+    /** [line]'s pieces in column order. Sorted once when adopted, not on every read — this is called several
+     *  times per visible line per frame (it backs [LineRenderCache.rawToVisual]). */
+    fun piecesFor(line: Int): List<InlayPiece> = overlay.valueAt(line)
+
+    /** Adopt [newInlays], bumping the stamp for each line whose pieces changed, were added, or were removed. */
+    fun update(newInlays: Map<Int, List<InlayPiece>>) =
+        overlay.update(newInlays) { pieces -> if (pieces.size < 2) pieces else pieces.sortedBy { it.col } }
+
+    /** Mirror a line splice so a moved line keeps its stamp and its pieces. */
+    fun shift(fromOldLine: Int, delta: Int) = overlay.splice(fromOldLine, delta)
+
+    fun clear() = overlay.clear()
+}
+
+/**
+ * Per-line semantic-overlay tracking, the [SemSpan] analog of [InlayRevisions] — a unique-forever stamp per
+ * line, bumped ONLY for lines whose spans changed, so an async semantic-highlight pass re-shapes only the
+ * lines it actually recolored.
  */
 internal class SemanticSpansByLine {
-    private var spans: Map<Int, List<SemSpan>> = emptyMap()
-    private val stampByLine = HashMap<Int, Int>()
-    private var stamp = 0
+    private val overlay = LineOverlay<SemSpan>()
 
-    fun stampOf(line: Int): Int = stampByLine[line] ?: 0
-    fun spansFor(line: Int): List<SemSpan> = spans[line] ?: emptyList()
+    fun stampOf(line: Int): Int = overlay.stampOf(line)
+    fun spansFor(line: Int): List<SemSpan> = overlay.valueAt(line)
 
     /** Adopt [newSpans], bumping the stamp for each line whose spans changed, were added, or were removed. */
-    fun update(newSpans: Map<Int, List<SemSpan>>) {
-        if (newSpans == spans) return
-        for ((line, s) in spans) if (newSpans[line] != s) stampByLine[line] = ++stamp
-        for (line in newSpans.keys) if (line !in spans) stampByLine[line] = ++stamp
-        spans = newSpans
-    }
+    fun update(newSpans: Map<Int, List<SemSpan>>) = overlay.update(newSpans)
 
-    /** Mirror a line splice so a moved line keeps its stamp (paired with the layout cache shift). */
-    fun shift(fromOldLine: Int, delta: Int) {
-        if (delta == 0) return
-        shiftIntKeyed(stampByLine, fromOldLine, delta)
-        if (spans.isNotEmpty()) spans = spans.mapKeys { (k, _) -> if (k >= fromOldLine) k + delta else k }
-            .filterKeys { it >= 0 }
-    }
+    /** Mirror a line splice so a moved line keeps its stamp and its spans. */
+    fun shift(fromOldLine: Int, delta: Int) = overlay.splice(fromOldLine, delta)
 
-    fun clear() {
-        spans = emptyMap()
-        stampByLine.clear()
-        stamp = 0
-    }
+    fun clear() = overlay.clear()
 }

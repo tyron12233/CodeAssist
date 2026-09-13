@@ -5,6 +5,7 @@ import dev.ide.store.StoreResult
 import dev.ide.store.StoreSubmissionRequest
 import dev.ide.store.StoreSubmissionService
 import dev.ide.ui.backend.UiPackagedProject
+import dev.ide.ui.backend.UiPublishedItem
 import dev.ide.ui.backend.UiStoreSubmission
 import dev.ide.ui.backend.UiSubmissionDraft
 import dev.ide.ui.backend.UiSubmissionStatus
@@ -142,6 +143,28 @@ internal class StoreSubmissions(
             else -> emptyList()
         }
 
+    /**
+     * The account's own listings, with the version a new submission should carry.
+     *
+     * The store refuses a version code it has already stored for an item (`unique (item_id, version_code)`),
+     * and "already stored" includes a submission still waiting for review, so the suggestion steps past
+     * everything sent rather than past what is live. Getting this right is what keeps the common case —
+     * publish, get reviewed, publish again — from ending in a constraint error the publisher cannot read.
+     */
+    fun myItems(): List<UiPublishedItem> =
+        when (val result = submissions.myItems()) {
+            is StoreResult.Ok -> result.value.map {
+                UiPublishedItem(
+                    slug = it.slug,
+                    title = it.title,
+                    status = it.status,
+                    publishedVersion = it.publishedVersion,
+                    suggestedVersion = nextVersionAfter(it.highestVersion),
+                )
+            }
+            else -> emptyList()
+        }
+
     fun withdraw(itemId: String, version: String): Boolean =
         submissions.withdraw(itemId, version) is StoreResult.Ok
 
@@ -167,5 +190,28 @@ internal class StoreSubmissions(
         "changes_requested" -> UiSubmissionStatus.CHANGES_REQUESTED
         "building" -> UiSubmissionStatus.BUILDING
         else -> UiSubmissionStatus.SUBMITTED
+    }
+
+    internal companion object {
+        /**
+         * One step past [version], as the next submission for that item.
+         *
+         * A patch bump, since that is what a re-publish of the same project usually is, and the publisher
+         * can still type something else. Each component is capped at 999 by the store's version code
+         * (`major * 1_000_000 + minor * 1_000 + patch`), so a full field rolls into the next one rather
+         * than producing a version that sorts BELOW the one it follows. Nothing parseable, or nothing sent
+         * yet, starts at 1.0.0.
+         */
+        internal fun nextVersionAfter(version: String?): String {
+            val parts = version.orEmpty().split('.')
+            val major = parts.getOrNull(0)?.toIntOrNull() ?: return "1.0.0"
+            val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
+            val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+            return when {
+                patch < 999 -> "$major.$minor.${patch + 1}"
+                minor < 999 -> "$major.${minor + 1}.0"
+                else -> "${major + 1}.0.0"
+            }
+        }
     }
 }

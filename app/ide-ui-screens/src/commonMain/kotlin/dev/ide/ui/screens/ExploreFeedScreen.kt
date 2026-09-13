@@ -184,7 +184,7 @@ fun ExploreFeed(
                 )
             }
 
-            feed.sections.forEach { section ->
+            feed.sections.forEachIndexed { index, section ->
                 when (section) {
                     is UiFeedSection.Ticker -> item(section.id) {
                         TrendingTicker(
@@ -298,9 +298,40 @@ fun ExploreFeed(
                         }
                     }
                 }
+
+                // The ad cadence belongs to the PAGE, not to a shelf kind. Hung off the ROWS layout it
+                // was both too rare and too often: a feed of carousels and posters showed no ad at all,
+                // while a feed of lists showed one after every single shelf. Counted over sections
+                // instead, so any feed the server sends gets the same spacing.
+                if (adBreakAfter(index)) {
+                    item("ad_$index") {
+                        AdSlot(AdPlacement.STORE, Modifier.padding(horizontal = 20.dp).padding(top = 16.dp))
+                    }
+                }
             }
         }
     }
+}
+
+/** Sections to get through before the first ad break: enough that the store opens on projects. */
+private const val AD_FIRST_BREAK_AFTER = 2
+
+/** Sections between one ad break and the next. */
+private const val AD_BREAK_EVERY = 4
+
+/** Ad breaks one scroll of the feed may contain, however long the feed is. */
+private const val AD_BREAKS_MAX = 3
+
+/**
+ * Whether an ad break follows the section at [index].
+ *
+ * A cap as well as a cadence: a merchandised feed can carry twenty shelves, and "every fourth" alone
+ * would turn a long scroll into five ads.
+ */
+private fun adBreakAfter(index: Int): Boolean {
+    if (index < AD_FIRST_BREAK_AFTER) return false
+    val since = index - AD_FIRST_BREAK_AFTER
+    return since % AD_BREAK_EVERY == 0 && since / AD_BREAK_EVERY < AD_BREAKS_MAX
 }
 
 @Composable
@@ -501,9 +532,6 @@ private fun LazyListScope.shelfSection(
         UiShelfLayout.ROWS -> {
             itemsIndexed(section.items, key = { _, it -> "${section.id}_${it.id}" }) { i, item ->
                 StoreItemRow(item, i, onOpenItem, onInstallItem, installing[item.id], backend)
-            }
-            item("ad_${section.id}") {
-                AdSlot(AdPlacement.STORE, Modifier.padding(horizontal = 20.dp).padding(top = 16.dp))
             }
         }
 
@@ -805,6 +833,12 @@ private fun ExploreEmpty(
                         onUse = { onUseBundled(item) },
                     )
                 }
+            }
+
+            // Past the pitch, the notify switch and the bundled scaffolds: the empty store's whole job
+            // is to explain itself and offer what IS on the device, and the ad comes after all of it.
+            item("ad") {
+                AdSlot(AdPlacement.STORE, Modifier.padding(horizontal = 20.dp).padding(top = 20.dp))
             }
 
             item("ghosts_head") { SectionHeader(stringResource(Res.string.store_ghost_next_title)) }

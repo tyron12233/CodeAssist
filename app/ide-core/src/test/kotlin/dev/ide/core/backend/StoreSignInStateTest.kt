@@ -29,9 +29,17 @@ class StoreSignInStateTest {
         private val supported: List<StoreProvider> = listOf(StoreProvider.GITHUB),
     ) : StoreAccountService {
         var signedOut = false
+        /** How long the stored-session exchange takes, standing in for the network round trip it is. */
+        var restoreDelayMs = 0L
+        var currentCalls = 0
         override fun authAvailable() = supported.isNotEmpty()
         override fun providers() = supported
-        override fun current() = if (signedOut) null else existing
+        override fun hasStoredSession() = !signedOut && existing != null
+        override fun current(): StoreAccount? {
+            currentCalls++
+            if (restoreDelayMs > 0) Thread.sleep(restoreDelayMs)
+            return if (signedOut) null else existing
+        }
         override fun begin(provider: StoreProvider) = challenge
         override fun complete(redirect: String) = completion
         override fun signOut() { signedOut = true }
@@ -107,10 +115,38 @@ class StoreSignInStateTest {
 
     /** A stored session has to survive a relaunch, or every launch would present a signed-out store. */
     @Test
-    fun anExistingSessionIsSignedInFromTheStart() {
+    fun anExistingSessionIsRestoredOnRelaunch() {
         val b = backend(FakeAccounts(existing = StoreAccount("user-9", handle = "nordlys")))
-        assertEquals(UiSignInPhase.SignedIn, b.authState().value.phase)
+        awaitPhase(b, UiSignInPhase.SignedIn)
         assertEquals("nordlys", b.authState().value.account?.label)
+    }
+
+    /**
+     * Restoring it must not happen on the constructing thread.
+     *
+     * This is built during app startup, and restoring a stored session is a network exchange: doing it
+     * inline put a network timeout in front of the first frame for every signed-in user.
+     */
+    @Test
+    fun restoringAStoredSessionDoesNotBlockTheCaller() {
+        val accounts = FakeAccounts(existing = StoreAccount("user-9", handle = "nordlys"))
+            .apply { restoreDelayMs = 400 }
+
+        val startedAt = System.nanoTime()
+        val b = backend(accounts)
+        val blockedMs = (System.nanoTime() - startedAt) / 1_000_000
+
+        assertTrue(blockedMs < 200, "construction waited on the session exchange for ${blockedMs}ms")
+        awaitPhase(b, UiSignInPhase.SignedIn)
+    }
+
+    /** Nobody signed in: nothing to restore, and nothing asked of the network to find that out. */
+    @Test
+    fun aSignedOutInstallAsksTheNetworkNothingAtStartup() {
+        val accounts = FakeAccounts(existing = null)
+        backend(accounts)
+        Thread.sleep(50)
+        assertEquals(0, accounts.currentCalls, "no stored session means no exchange to attempt")
     }
 
     @Test

@@ -44,6 +44,7 @@ import dev.ide.platform.log.Log
 import dev.ide.ui.backend.DepsResolveState
 import dev.ide.ui.backend.UiAddResult
 import dev.ide.ui.backend.UiArtifactHit
+import dev.ide.ui.backend.UiArtifactSearch
 import dev.ide.ui.backend.UiDepKind
 import dev.ide.ui.backend.UiDepModule
 import dev.ide.ui.backend.UiDependencyNode
@@ -1031,18 +1032,27 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
     }
 
     /** Repository search (Maven Central), each hit pre-judged against [moduleName]'s AAR compatibility. */
-    suspend fun searchArtifacts(query: String, moduleName: String): List<UiArtifactHit> {
+    suspend fun searchArtifacts(query: String, moduleName: String): List<UiArtifactHit> =
+        artifactSearch(query, moduleName).hits
+
+    /** [searchArtifacts], carrying whether any index answered — the picker says something different when
+     *  the search found nothing because nothing could be reached. */
+    suspend fun artifactSearch(query: String, moduleName: String): UiArtifactSearch {
         val module = ctx.modules().firstOrNull { it.name == moduleName }
         val accepts = module?.let { acceptsAar(it) } ?: true
-        return depsResolver.search(query).map { hit ->
-            val isAar = hit.packaging.equals("aar", ignoreCase = true)
-            UiArtifactHit(
-                coordinate = hit.coordinate.toString(),
-                packaging = hit.packaging,
-                compatible = !isAar || accepts,
-                incompatibleReason = if (isAar && !accepts && module != null) aarReason(module) else null,
-            )
-        }
+        val found = depsResolver.searchWithStatus(query)
+        return UiArtifactSearch(
+            hits = found.hits.map { hit ->
+                val isAar = hit.packaging.equals("aar", ignoreCase = true)
+                UiArtifactHit(
+                    coordinate = hit.coordinate.toString(),
+                    packaging = hit.packaging,
+                    compatible = !isAar || accepts,
+                    incompatibleReason = if (isAar && !accepts && module != null) aarReason(module) else null,
+                )
+            },
+            indexUnavailable = found.indexUnavailable,
+        )
     }
 
     /**

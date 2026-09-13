@@ -650,6 +650,14 @@ We never collect your code, file or project names, which features you use, or an
     <string name="submit_sending">Submitting…</string>
     <string name="submit_review_note">A moderator reviews every submission before it appears. Nothing is public until it is approved.</string>
     <string name="submit_required">Fill in the title, summary, description and category.</string>
+    <string name="submit_target">Publishing as</string>
+    <string name="submit_target_new">A new listing</string>
+    <string name="submit_target_update">Update %1$s</string>
+    <string name="submit_update_live">Live: %1$s</string>
+    <string name="submit_update_unreviewed">Not published yet</string>
+    <string name="submit_update_note">A new version of this listing, for review. Its title, summary, description and category stay as published. Screenshots you add here replace the ones on the listing; add none to keep the current ones.</string>
+    <string name="submit_field_changelog">What changed</string>
+    <string name="submit_required_version">Give the version as three numbers, like 1.2.0.</string>
     <string name="submit_mine_title">Your submissions</string>
     <string name="submit_withdraw">Withdraw</string>
     <string name="submit_unavailable">Publishing isn't available in this build.</string>
@@ -1201,6 +1209,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="dep_resolving_transitive">Resolving transitive dependencies…</string>
     <string name="dep_no_other_modules">No other modules available to depend on.</string>
     <string name="dep_no_results">No results.</string>
+    <string name="dep_index_unreachable">No repository index answered, so there is nothing to search right now. Check the connection, or type the full group:name to add it anyway.</string>
     <string name="dep_type_to_search">Type at least 2 characters to search, or a full group:name[:version].</string>
     <string name="dep_add_named">Add %1$s</string>
     <string name="dep_import_as_platform">Import as a platform (BOM)</string>

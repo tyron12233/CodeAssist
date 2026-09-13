@@ -470,5 +470,77 @@ internal fun rememberEditorGeometry(
             }
         }
     }
+
+    // Warm the text just outside the viewport once the scroll settles, so the next flick finds it shaped. See
+    // the note above [prefetchOrder] for why this deliberately does not run during a fling. `collectLatest`
+    // cancels it at the first suspension point when the user moves, and the reach is a fraction of the render
+    // cache's capacity so warming can never evict what is actually on screen.
+    LaunchedEffect(session, wrapWidthPx) {
+        snapshotFlow { vOffset.floatValue }.collectLatest {
+            delay(PREFETCH_IDLE_MS)
+            if (state.viewport.value == IntSize.Zero) return@collectLatest
+            val visible = state.visibleLineRange()
+            val reach = ((state.viewport.value.height / metrics.lineHeight).toInt() + 1).coerceAtLeast(1)
+            val order = prefetchOrder(visible.first, visible.last, session.doc.lineCount, reach)
+            var i = 0
+            while (i < order.size) {
+                val end = minOf(i + PREFETCH_CHUNK, order.size)
+                while (i < end) {
+                    // Shaping a line is what warms it; the result goes straight into the render cache. A line
+                    // hidden in a collapsed fold is skipped -- it has no row to be scrolled onto.
+                    val line = order[i]
+                    if (!session.foldModel.isHidden(line)) runCatching { render.layoutFor(line) }
+                    i++
+                }
+                delay(PREFETCH_CHUNK_PAUSE_MS) // a cancellation point, and room for anything else to run
+            }
+        }
+    }
     return state
+}
+
+// ---- idle layout prefetch ----------------------------------------------------------------------------
+//
+// Shaping a line is the expensive part of putting it on screen: on device one `TextMeasurer.measure` costs
+// tens of microseconds and builds a whole `Paragraph`, and it is ~96% of what a line entering the viewport
+// pays. A viewport holds enough lines that a jump into cold text (open a file, go to a line, land on a search
+// hit) shapes them all in one frame.
+//
+// What this does NOT try to do is run ahead of an active fling. During a fling the scroll offset changes every
+// frame, and the lines a prefetch would shape are exactly the ones the next frame is about to ask for — the
+// same work, one frame earlier, for no gain. So the prefetch waits for the scroll to settle and then warms the
+// text just outside the viewport, in chunks that yield between them, cancelled the instant the user moves
+// again. It costs nothing while anything is happening and leaves the first flick with its lines already shaped.
+
+/** How long the scroll must be still before warming anything — long enough that a fling never triggers it. */
+internal const val PREFETCH_IDLE_MS = 150L
+
+/** Lines shaped per chunk before yielding the thread back. */
+internal const val PREFETCH_CHUNK = 8
+
+/** Pause between chunks, so warming never occupies more than a fraction of any one frame. */
+internal const val PREFETCH_CHUNK_PAUSE_MS = 4L
+
+/**
+ * The lines to warm around a viewport showing `[first, last]`, nearest edge first and alternating below/above,
+ * bounded to [reach] lines on each side and clamped to the document.
+ *
+ * Below leads because reading and scrolling both go down, so the line most likely to be needed next is the one
+ * just under the fold. Alternating rather than finishing one side first means a cancelled prefetch (the user
+ * moved) still leaves both edges partly warm instead of one edge warm and the other untouched.
+ *
+ * Pure, so the policy is testable without a `TextMeasurer` — which cannot be constructed headlessly.
+ */
+internal fun prefetchOrder(first: Int, last: Int, lineCount: Int, reach: Int): IntArray {
+    if (lineCount <= 0 || reach <= 0) return IntArray(0)
+    val out = ArrayList<Int>(reach * 2)
+    var below = last + 1
+    var above = first - 1
+    val belowEnd = (last + reach).coerceAtMost(lineCount - 1)
+    val aboveEnd = (first - reach).coerceAtLeast(0)
+    while (below <= belowEnd || above >= aboveEnd) {
+        if (below <= belowEnd) out.add(below++)
+        if (above >= aboveEnd) out.add(above--)
+    }
+    return out.toIntArray()
 }

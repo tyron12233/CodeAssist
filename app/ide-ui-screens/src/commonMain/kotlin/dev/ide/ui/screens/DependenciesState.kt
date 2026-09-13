@@ -13,6 +13,7 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAddResult
 import dev.ide.ui.backend.UiArtifactHit
+import dev.ide.ui.backend.UiArtifactSearch
 import dev.ide.ui.backend.UiCachedVersion
 import dev.ide.ui.backend.UiDependencyNode
 import dev.ide.ui.backend.UiModuleDeps
@@ -262,6 +263,11 @@ internal class AddDependencyState(
     var searching: Boolean by mutableStateOf(false)
         private set
 
+    /** True when the last search found nothing because no repository index answered, not because nothing
+     *  matched. The empty state says which, since the two need different things from the user. */
+    var indexUnavailable: Boolean by mutableStateOf(false)
+        private set
+
     /** The Gradle configuration the declaration goes into (`implementation`, `api`, …). */
     var configuration: String by mutableStateOf("implementation")
         private set
@@ -304,6 +310,7 @@ internal class AddDependencyState(
             snapshotFlow { sanitizeCoordinateInput(query) to mode }.collectLatest { (typed, current) ->
                 if (typed.length < 2 || current == AddMode.Module || current == AddMode.Local) {
                     results = emptyList()
+                    indexUnavailable = false
                     searching = false
                     return@collectLatest
                 }
@@ -311,8 +318,10 @@ internal class AddDependencyState(
                 delay(320)
                 // distinctBy coordinate: the same GAV can come back from more than one repo; duplicate keys
                 // crash the list.
-                results = runCatching { backend.deps.searchArtifacts(typed, moduleName) }
-                    .getOrDefault(emptyList()).distinctBy { it.coordinate }
+                val found = runCatching { backend.deps.artifactSearch(typed, moduleName) }
+                    .getOrDefault(UiArtifactSearch(emptyList()))
+                results = found.hits.distinctBy { it.coordinate }
+                indexUnavailable = found.indexUnavailable
                 searching = false
             }
         }
