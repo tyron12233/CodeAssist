@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -28,8 +28,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiChallengeBoard
+import dev.ide.ui.components.AdSlot
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Symbol
@@ -102,11 +104,22 @@ fun ChallengeBoardScreen(
                         )
                     }
                 }
-                items(loaded.rows, key = { it.rank }) { row -> BoardRow(row) }
+                // Position-keyed, not rank-keyed. A tie is a legitimate leaderboard, and two rows sharing
+                // a rank were a duplicate lazy-list key, which throws out of the measure pass.
+                val head = loaded.rows.take(ROWS_BEFORE_AD)
+                val tail = loaded.rows.drop(ROWS_BEFORE_AD)
+                itemsIndexed(head, key = { i, r -> "h$i:${r.rank}" }) { _, row -> BoardRow(row) }
+                // One break in the list, after the part of the board anyone came to read. A short board
+                // puts it at the foot instead, which is where it belongs when there is nothing to break.
+                item("ad") { AdSlot(AdPlacement.CHALLENGE, Modifier.padding(vertical = 4.dp)) }
+                itemsIndexed(tail, key = { i, r -> "t$i:${r.rank}" }) { _, row -> BoardRow(row) }
             }
         }
     }
 }
+
+/** How far down the board the single ad break sits: past the ranks the page is actually opened for. */
+private const val ROWS_BEFORE_AD = 10
 
 @Composable
 private fun EmptyBoard() {

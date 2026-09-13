@@ -9,12 +9,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.StubBackend
+import dev.ide.ui.ads.LocalAds
+import dev.ide.ui.fakeAdController
 import dev.ide.ui.backend.ChallengeService
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiChallengeBoard
@@ -137,6 +140,55 @@ class ChallengeSnapshot {
     @Test
     fun tabSignedInDark() = render("challenge-tab-dark.png", dark = true, signedIn = true)
 
+    /**
+     * The full leaderboard, with a TIE in it.
+     *
+     * Two rows sharing a rank is a legitimate board, and it used to be a duplicate lazy-list key, which
+     * throws out of the measure pass rather than drawing twice. Rendering it is the proof it does not, and
+     * it catches the ad break's alignment in the same frame.
+     */
+    @Test
+    @OptIn(ExperimentalComposeUiApi::class)
+    fun boardWithTies() {
+        val tied = UiChallengeBoard(
+            date = "2026-09-07",
+            total = 14,
+            rows = List(14) { i ->
+                // Ranks 4 and 5 both come back as 4: the same score placed twice.
+                val at = if (i >= 4) i else i + 1
+                rank(at, "player$i", "Player $i", 150 - i * 7, "O(n)", 12_400L + i * 900, isYou = i == 6)
+            },
+        )
+        val backend = object : StubBackend() {
+            override val challenges: ChallengeService = object : ChallengeService {
+                override fun challengesAvailable() = true
+                override suspend fun day(date: String?) = UiChallengeDay()
+                override suspend fun board(date: String?, limit: Int) = tied
+                override suspend fun profile() = UiChallengeProfile()
+            }
+        }
+        val scene = ImageComposeScene(width = 824, height = 2200, density = Density(2f)) {
+            CodeAssistTheme(dark = true) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    CompositionLocalProvider(LocalAds provides fakeAdController(backend)) {
+                        ChallengeBoardScreen(backend = backend, date = "2026-09-07", onBack = {})
+                    }
+                }
+            }
+        }
+        try {
+            scene.render()
+            var image = scene.render(0)
+            repeat(20) { frame -> image = scene.render(frame * 16_000_000L) }
+            val png = image.encodeToData(EncodedImageFormat.PNG)!!.bytes
+            File("$OUT_DIR/challenge-board.png").apply { parentFile?.mkdirs() }.writeBytes(png)
+            println("wrote snapshot: $OUT_DIR/challenge-board.png (${png.size} bytes)")
+            assertTrue(png.size > 5_000, "the board should render more than a blank frame")
+        } finally {
+            scene.close()
+        }
+    }
+
     @Test
     fun tabSignedOutLight() = render("challenge-tab-signed-out.png", dark = false, signedIn = false)
 
@@ -145,15 +197,20 @@ class ChallengeSnapshot {
         val scene = ImageComposeScene(width = 824, height = 1784, density = Density(2f)) {
             CodeAssistTheme(dark = dark) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                    DailyChallengeScreen(
-                        backend = backend(signedIn),
-                        epoch = 0,
-                        signedIn = signedIn,
-                        onSolve = {},
-                        onSignIn = {},
-                        onOpenBoard = {},
-                        onOpenArchive = {},
-                    )
+                    val backend = backend(signedIn)
+                    // With a host the tab's ad slot draws; without one it is invisible, and an ad that
+                    // bleeds past the 20dp gutter is exactly what a snapshot of this screen is for.
+                    CompositionLocalProvider(LocalAds provides fakeAdController(backend)) {
+                        DailyChallengeScreen(
+                            backend = backend,
+                            epoch = 0,
+                            signedIn = signedIn,
+                            onSolve = {},
+                            onSignIn = {},
+                            onOpenBoard = {},
+                            onOpenArchive = {},
+                        )
+                    }
                 }
             }
         }
