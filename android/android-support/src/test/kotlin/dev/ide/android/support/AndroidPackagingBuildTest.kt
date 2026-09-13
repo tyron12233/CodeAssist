@@ -1,6 +1,7 @@
 package dev.ide.android.support
 
 import dev.ide.android.support.tasks.ApkPackaging
+import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -16,6 +17,7 @@ import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
 import dev.ide.model.LibraryRef
 import dev.ide.model.ModuleId
+import dev.ide.model.Project
 import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
@@ -204,6 +206,141 @@ class AndroidPackagingBuildTest {
         }
     }
 
+    /**
+     * A module's own `src/<set>/assets`, with no `ASSETS` content root declared for it.
+     *
+     * The same shape as the native-library case above: the folder is where AGP puts it and where every
+     * tutorial says to put it, the build goes green, and the APK carries no `assets/` at all. The app then
+     * dies on its first `AssetManager.open`, which is the report this covers.
+     */
+    @Test
+    fun packagesAssetsFoundByConvention() {
+        val sdk = assumeAndroidSdk()
+
+        testEnv("android-assets-convention") { env ->
+            val dir = env.dir
+            val platform = env.platform
+
+            val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
+            ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
+            val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
+            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("app", appType).apply {
+                    languageLevel = LanguageLevel.JAVA_17
+                    putFacet(AndroidFacet(namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34))
+                    // A model that never declared the folder: written by another tool, imported, or created
+                    // outside the IDE's own new-folder flow.
+                    removeContentRoot("main", "src/main/assets")
+                    removeContentRoot("debug", "src/debug/assets")
+                }
+                commit()
+            }
+
+            dir.writeSource("app/src/main/AndroidManifest.xml", APP_MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", APP_STRINGS)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
+            writeBytes(dir, "app/src/main/assets/config.json", "main-asset".toByteArray())
+            writeBytes(dir, "app/src/main/assets/fonts/tiny.ttf", "font-asset".toByteArray())
+            writeBytes(dir, "app/src/debug/assets/debug.json", "debug-asset".toByteArray())
+
+            val entries = buildApk(store.workspace.projects.single(), dir, sdk, "debug")
+            val assets = entries.keys.filter { it.startsWith("assets/") }
+            assertEquals("main-asset", entries["assets/config.json"], "main asset missing: $assets")
+            assertEquals("font-asset", entries["assets/fonts/tiny.ttf"], "nested main asset missing: $assets")
+            assertEquals("debug-asset", entries["assets/debug.json"], "debug source-set asset missing: $assets")
+        }
+    }
+
+    /**
+     * A product flavor's own source-set folders.
+     *
+     * This one needs no damaged model to reproduce: a source set is only ever DECLARED for `main` and the
+     * two default build types, so `src/demo/…` could not be seen even in a project this IDE had just
+     * written. The flavor's asset, resource and class all had to arrive for the variant to be the thing it
+     * says it is, and the resource has to WIN over `main`'s, which is the half an ordering mistake breaks.
+     */
+    @Test
+    fun packagesFlavorSourceSets() {
+        val sdk = assumeAndroidSdk()
+
+        testEnv("android-flavor-sets") { env ->
+            val dir = env.dir
+            val platform = env.platform
+
+            val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
+            ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
+            val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
+            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("app", appType).apply {
+                    languageLevel = LanguageLevel.JAVA_17
+                    putFacet(
+                        AndroidFacet(
+                            namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34,
+                            productFlavors = listOf(ProductFlavor("demo", dimension = "tier")),
+                        ),
+                    )
+                }
+                commit()
+            }
+
+            dir.writeSource("app/src/main/AndroidManifest.xml", APP_MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", APP_STRINGS)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
+            writeBytes(dir, "app/src/main/assets/config.json", "main-asset".toByteArray())
+            writeBytes(dir, "app/src/demo/assets/flavor.json", "flavor-asset".toByteArray())
+            writeBytes(dir, "app/src/demo/jniLibs/arm64-v8a/libflavor.so", "flavor-native".toByteArray())
+            writeBytes(dir, "app/src/demo/resources/flavor/data.txt", "flavor-java-resource".toByteArray())
+            // The flavor's own class must compile, and its strings.xml must override main's app_name.
+            dir.writeSource("app/src/demo/java/com/example/app/Flavor.java", FLAVOR_CLASS)
+            dir.writeSource("app/src/demo/res/values/strings.xml", FLAVOR_STRINGS)
+
+            val entries = buildApk(store.workspace.projects.single(), dir, sdk, "demoDebug")
+            val assets = entries.keys.filter { it.startsWith("assets/") }
+            assertEquals("main-asset", entries["assets/config.json"], "main asset missing: $assets")
+            assertEquals("flavor-asset", entries["assets/flavor.json"], "flavor asset missing: $assets")
+            assertEquals(
+                "flavor-native", entries["lib/arm64-v8a/libflavor.so"],
+                "flavor native lib missing: ${entries.keys.filter { it.startsWith("lib/") }}",
+            )
+            assertEquals("flavor-java-resource", entries["flavor/data.txt"], "flavor java resource missing")
+            // The flavor's class reached the dex, so `src/demo/java` was compiled and not merely copied.
+            assertTrue(
+                entries.keys.any { it.startsWith("classes") && it.endsWith(".dex") },
+                "no dex in the APK: ${entries.keys}",
+            )
+            // A flavor resource OVERRIDES main's rather than colliding with it: the merge takes the later
+            // source, and the flavor has to sort after main for that to be true.
+            val arsc = entries["resources.arsc"].orEmpty()
+            assertTrue("Demo Build" in arsc, "the flavor's app_name did not win the resource merge")
+        }
+    }
+
+    /**
+     * Build one [variant] of the `app` module and return the signed APK's entries. Fails with the build log
+     * attached: a packaging question is unanswerable from "the build failed" alone.
+     */
+    private fun buildApk(
+        project: Project,
+        dir: Path,
+        sdk: AndroidSdk,
+        variant: String,
+    ): Map<String, String> {
+        val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
+        val graph = AndroidBuildSystem.inProcess(sdk, signing).createBuildGraph(
+            project,
+            BuildRequest(listOf(ModuleId("app")), VariantSelector(variant), BuildGoal.PACKAGE),
+        )
+        val log = StringBuilder()
+        val outcome = runBlocking {
+            TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
+                .execute(graph, SimpleTaskContext(log = { log.appendLine(it) }), 2)
+        }
+        assertTrue(outcome.succeeded, "packaging APK build failed:\n$log")
+        return readEntries(dir.resolve("app/build/outputs/apk/$variant/app-$variant.apk"))
+    }
+
     /** Compile one class, then repack it with raw native-lib / service / manifest entries into a runtime jar. */
     private fun buildDepJar(workDir: Path, jar: Path, androidJar: Path): Path {
         val srcDir = workDir.resolve("src")
@@ -249,6 +386,14 @@ class AndroidPackagingBuildTest {
         val DEP_UTIL = """
             package com.example.dep;
             public final class DepUtil { public static String tag() { return "dep"; } }
+        """
+        val FLAVOR_CLASS = """
+            package com.example.app;
+            public final class Flavor { public static String tier() { return "demo"; } }
+        """
+        val FLAVOR_STRINGS = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <resources><string name="app_name">Demo Build</string></resources>
         """
         val APP_MANIFEST = """
             <?xml version="1.0" encoding="utf-8"?>

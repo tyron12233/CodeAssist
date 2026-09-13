@@ -281,17 +281,16 @@ class AndroidBuildSystem(
         // A dependency lib contributes the resources/assets of ITS matching variant (build-type-first), not
         // all its source sets, so a debug-only or flavor-only resource doesn't leak into the wrong variant.
         fun depRoots(dep: Module, role: ContentRole): List<Path> =
-            AndroidVariants.matchLibraryVariant(dep, variant, facet)?.let { roots(it, role) } ?: moduleRoots(dep, role)
-        fun depJniLibRoots(dep: Module): List<Path> =
-            jniLibRoots(dep, AndroidVariants.matchLibraryVariant(dep, variant, facet))
+            contentRoots(dep, AndroidVariants.matchLibraryVariant(dep, variant, facet), role)
         val mergeResInputs = depAndroidLibs.flatMap { depRoots(it, ContentRole.ANDROID_RES) } +
-            libs.resDirs + gmsRes + crashlyticsRes + roots(variant, ContentRole.ANDROID_RES)
+            libs.resDirs + gmsRes + crashlyticsRes + contentRoots(app, variant, ContentRole.ANDROID_RES)
         // SOURCE plus the module's declared GENERATED roots, so a generated root is compiled here exactly as
         // it is on the Java pipeline. Nested roots are collapsed: a project that declares `build/generated`
         // would otherwise present the pipeline's own generated directories twice.
-        val sourceRoots = collapseNestedRoots(roots(variant, ContentRole.SOURCE) + roots(variant, ContentRole.GENERATED))
+        val sourceRoots =
+            collapseNestedRoots(contentRoots(app, variant, ContentRole.SOURCE) + roots(variant, ContentRole.GENERATED))
         val assetsDirs = depAndroidLibs.flatMap { depRoots(it, ContentRole.ASSETS) } +
-            libs.assetsDirs + roots(variant, ContentRole.ASSETS)
+            libs.assetsDirs + contentRoots(app, variant, ContentRole.ASSETS)
         val level = levelOf(app.languageLevel)
         val bt = facet.buildType(variant.buildTypeName)
         val release = bt?.debuggable == false
@@ -377,7 +376,9 @@ class AndroidBuildSystem(
         val viewBinding = if (facet.buildFeatures.viewBinding) step("generateViewBinding") else null
         if (viewBinding != null) {
             tasks.task(viewBinding) {
-                GenerateViewBindingTask(viewBinding, roots(variant, ContentRole.ANDROID_RES), facet.namespace, layout.viewBindingGen)
+                GenerateViewBindingTask(
+                    viewBinding, contentRoots(app, variant, ContentRole.ANDROID_RES), facet.namespace, layout.viewBindingGen,
+                )
             }
         }
         val vbGenDirs = listOfNotNull(viewBinding).map { layout.viewBindingGen }
@@ -389,7 +390,7 @@ class AndroidBuildSystem(
         // compiling what is there): a module with no `.aidl` registers no task and builds byte-identically.
         // Dependency modules' and AARs' aidl folders are IMPORT roots: they contribute the parcelable and
         // interface declarations this module's files may reference, without being generated a second time.
-        val aidlSourceRoots = roots(variant, ContentRole.AIDL)
+        val aidlSourceRoots = contentRoots(app, variant, ContentRole.AIDL)
         val aidlImportRoots = depAndroidLibs.flatMap { depRoots(it, ContentRole.AIDL) } + libs.aidlDirs
         val compileAidl = if (hasAidlSources(aidlSourceRoots)) step("compileAidl") else null
         if (compileAidl != null) {
@@ -550,9 +551,9 @@ class AndroidBuildSystem(
         // come from `src/*/resources` (app + dep libs) and the non-class entries of the sub-module + external jars.
         val mergeNativeLibs = step("mergeNativeLibs")
         val mergeJavaRes = step("mergeJavaResource")
-        val jniDirs = jniLibRoots(app, variant) +
-            depAndroidLibs.flatMap { depJniLibRoots(it) } + libs.jniLibDirs
-        val javaResDirs = roots(variant, ContentRole.RESOURCE) +
+        val jniDirs = contentRoots(app, variant, ContentRole.JNI_LIBS) +
+            depAndroidLibs.flatMap { depRoots(it, ContentRole.JNI_LIBS) } + libs.jniLibDirs
+        val javaResDirs = contentRoots(app, variant, ContentRole.RESOURCE) +
             depAndroidLibs.flatMap { depRoots(it, ContentRole.RESOURCE) }
         val nativeLibsFilter = PackagingRules.jniLibsFilter(facet.packaging.jniLibs)
         val javaResFilter = PackagingRules.resourceFilter(facet.packaging.resources)
@@ -794,7 +795,7 @@ class AndroidBuildSystem(
         // flavor match); its variant-scoped source sets, resources, R and library deps are used, not all sets.
         val libVariant = AndroidVariants.matchLibraryVariant(m, consumerVariant, consumerFacet)
         val configs = libVariant?.configurations
-        fun srcRoots(role: ContentRole): List<Path> = libVariant?.let { roots(it, role) } ?: moduleRoots(m, role)
+        fun srcRoots(role: ContentRole): List<Path> = contentRoots(m, libVariant, role)
         val libs = AndroidLibraries.resolve(m, buildDir.resolve("intermediates").resolve("exploded-aar"), configs)
         val moduleOutputs = m.classpath(DependencyScope.IMPLEMENTATION, variant = configs).entries
             .filter { it.kind == ClasspathEntryKind.MODULE_OUTPUT }.map { Paths.get(it.root.path) }
@@ -870,7 +871,8 @@ class AndroidBuildSystem(
         val aidlGen = buildDir.resolve("intermediates").resolve("aidl")
         val libCompileAidl = if (hasAidlSources(aidlSourceRoots)) TaskName(":${m.name}:compileAidl") else null
         if (libCompileAidl != null) {
-            val aidlImportRoots = directModuleDeps(m, byId).flatMap { moduleRoots(it, ContentRole.AIDL) } + libs.aidlDirs
+            val aidlImportRoots =
+                directModuleDeps(m, byId).flatMap { contentRoots(it, null, ContentRole.AIDL) } + libs.aidlDirs
             val aidlClasspath = compileBootclasspath + libs.compileJars
             tasks.task(libCompileAidl) {
                 CompileAidlTask(
@@ -956,7 +958,7 @@ class AndroidBuildSystem(
         val buildDir = classesOut.parent
         val moduleDir = buildDir.parent
         val libVariant = AndroidVariants.matchLibraryVariant(lib, variant, facet)
-        fun srcRoots(role: ContentRole): List<Path> = libVariant?.let { roots(it, role) } ?: moduleRoots(lib, role)
+        fun srcRoots(role: ContentRole): List<Path> = contentRoots(lib, libVariant, role)
         val rRoot = buildDir.resolve("intermediates").resolve("r")
 
         // Consumer keep rules the AAR ships (applied by a consuming app's R8): the build type's
@@ -976,7 +978,7 @@ class AndroidBuildSystem(
                 resDirs = srcRoots(ContentRole.ANDROID_RES),
                 rTxt = rRoot.resolve("R.txt"),
                 assetsDirs = srcRoots(ContentRole.ASSETS),
-                jniLibDirs = jniLibRoots(lib, libVariant),
+                jniLibDirs = srcRoots(ContentRole.JNI_LIBS),
                 aidlDirs = srcRoots(ContentRole.AIDL),
                 consumerProguardFiles = consumerProguard,
                 inlineProguardRules = inlineProguard,
@@ -1014,7 +1016,8 @@ class AndroidBuildSystem(
         .any { root -> Files.walk(root).use { s -> s.anyMatch { it.toString().endsWith(".kt") } } }
 
     /** True if module [m] carries Kotlin sources (and Kotlin compilation is wired). */
-    private fun moduleHasKotlin(m: Module): Boolean = kotlin != null && containsKotlin(moduleRoots(m, ContentRole.SOURCE))
+    private fun moduleHasKotlin(m: Module): Boolean =
+        kotlin != null && containsKotlin(contentRoots(m, null, ContentRole.SOURCE))
 
     /**
      * True when [m] **directly declares** the Hilt Android runtime, so its compiled classes need the
@@ -1038,12 +1041,6 @@ class AndroidBuildSystem(
      */
     private fun hasAidlSources(roots: List<Path>): Boolean =
         roots.any { AidlCompiler.aidlFilesUnder(it).isNotEmpty() }
-
-    private fun moduleRoots(m: Module, role: ContentRole): List<Path> =
-        m.sourceSets.filter { it.scope != DependencyScope.TEST_IMPLEMENTATION }
-            .flatMap { it.contentRoots }
-            .filter { role in it.roles }
-            .map { Paths.get(it.dir.path) }
 
     /** Every module transitively reached from [app] via module dependencies (excludes [app] itself). */
     private fun moduleClosure(app: Module, byId: Map<ModuleId, Module>): List<Module> {
@@ -1133,28 +1130,68 @@ class AndroidBuildSystem(
             .map { Paths.get(it.dir.path) }
 
     /**
-     * Every native-library root of [module] for [variant]: the `JNI_LIBS` content roots the model declares,
-     * plus the conventional `src/<set>/jniLibs` of each source set the variant selects, where that folder
-     * exists on disk. A null [variant] means "no matching Android variant", and falls back to the module's
-     * non-test source sets, as [moduleRoots] does.
-     *
-     * The convention half is not belt-and-braces. A `JNI_LIBS` root only ever reaches the model from the
-     * Android module template, which did not declare one before 3.3, and nothing re-applies a template to a
-     * module that already exists: a project written by an older release has no such root and no way to gain
-     * one, since neither the file tree nor Add-Source-Root knew the folder either. The build then had no
-     * input at all for the module's own libraries. `src/main/jniLibs/arm64-v8a/libfoo.so` was dropped
-     * without a word, the APK shipped no `lib/` at all, the merge reported "0 libraries", and the app died
-     * on its first `System.loadLibrary`. AGP derives `jniLibs.srcDirs` from the source-set NAME rather than
-     * from a declaration, so reading the convention here is what makes the two agree; where the root is
-     * declared as well, the paths collapse and nothing changes.
+     * The `src/<set>/…` folder names AGP derives for [role] from a source set's NAME alone. Empty for a role
+     * with no such convention: `GENERATED` is build output rather than a source-set folder, and a plugin's
+     * own role has no layout AGP would agree with.
      */
-    private fun jniLibRoots(module: Module, variant: AndroidVariant?): List<Path> {
-        val declared = variant?.let { roots(it, ContentRole.JNI_LIBS) } ?: moduleRoots(module, ContentRole.JNI_LIBS)
+    private fun conventionFolders(role: ContentRole): List<String> = when (role) {
+        ContentRole.SOURCE -> listOf("java", "kotlin")
+        ContentRole.ANDROID_RES -> listOf("res")
+        ContentRole.ASSETS -> listOf("assets")
+        ContentRole.RESOURCE -> listOf("resources")
+        ContentRole.AIDL -> listOf("aidl")
+        ContentRole.JNI_LIBS -> listOf("jniLibs")
+        else -> emptyList()
+    }
+
+    /**
+     * Every root of [module] carrying [role] for [variant]: the content roots the model declares, plus the
+     * conventional `src/<set>/<folder>` of each source set the variant selects, where that folder exists on
+     * disk. A null [variant] means "no matching Android variant", and falls back to the module's own non-test
+     * source sets.
+     *
+     * The convention half is not belt-and-braces, and two different projects need it.
+     *
+     * A root only ever reaches the model from the Android module template, and nothing re-applies a template
+     * to a module that already exists. A model written before the template declared that folder, or written
+     * by anything other than this IDE, has no such root and no way to gain one. The build then has no input
+     * at all: `src/main/jniLibs/arm64-v8a/libfoo.so` was dropped without a word and the app died on its
+     * first `System.loadLibrary`; `src/main/assets/config.json` was dropped the same way, the APK carried no
+     * `assets/` entry at all, and the app died on its first `AssetManager.open`.
+     *
+     * The second project is every project. A source set is only ever DECLARED for `main` and the two default
+     * build types, so a product flavor's `src/demo/assets` (or its `res`, `aidl`, `java`) could not be seen
+     * even in a model this IDE had just written, and a custom build type fared no better. AGP derives
+     * `srcDirs` from the source-set name rather than from a declaration, so reading the convention here is
+     * what makes the two agree; where the root is declared as well, the paths collapse and nothing changes.
+     *
+     * Ordering is ascending priority, by source set, exactly as [roots] already produced it: `mergeResources`
+     * lets the later source win, and that is how a flavor's drawable comes to override `main`'s.
+     */
+    private fun contentRoots(module: Module, variant: AndroidVariant?, role: ContentRole): List<Path> {
+        val sets = variant?.activeSourceSets
+            ?: module.sourceSets.filter { it.scope != DependencyScope.TEST_IMPLEMENTATION }
+        val declared = sets.associate { set ->
+            set.name to set.contentRoots.filter { role in it.roles }.map { Paths.get(it.dir.path) }
+        }
+        val folders = conventionFolders(role)
         val src = moduleDir(module).resolve("src")
-        val conventional = sourceSetNames(module, variant)
-            .map { src.resolve(it).resolve("jniLibs") }
-            .filter { Files.isDirectory(it) }
-        return (declared + conventional).distinctBy { it.toAbsolutePath().normalize() }
+        val out = ArrayList<Path>()
+        val seen = HashSet<Path>()
+        // The declared path is added first and the conventional one is then a duplicate of it, so a module
+        // with everything declared produces exactly the list it produced before. Deduplication keys on the
+        // normalized path but keeps the original, so task inputs stay byte-identical for those modules too.
+        fun add(dir: Path) { if (seen.add(dir.toAbsolutePath().normalize())) out.add(dir) }
+        // Every name in `declared` is one of these: both come from the variant's source sets, or from the
+        // module's own when there is no variant.
+        for (name in sourceSetNames(module, variant)) {
+            declared[name]?.forEach(::add)
+            folders.forEach { folder ->
+                val dir = src.resolve(name).resolve(folder)
+                if (Files.isDirectory(dir)) add(dir)
+            }
+        }
+        return out
     }
 
     /**
