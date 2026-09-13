@@ -366,6 +366,8 @@ data class UiPublishedItem(
     /** The version installable right now, or null while the first one is still under review. */
     val publishedVersion: String? = null,
     val suggestedVersion: String = "1.0.0",
+    /** The listing's icon in the media bucket, or null while nothing of it is published yet. */
+    val iconPath: String? = null,
 )
 
 /**

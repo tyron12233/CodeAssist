@@ -178,6 +178,7 @@ internal class StoreSubmissions(
                     status = it.status,
                     publishedVersion = it.publishedVersion,
                     suggestedVersion = nextVersionAfter(it.highestVersion),
+                    iconPath = it.iconPath,
                 )
             }
             else -> emptyList()

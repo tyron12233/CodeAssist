@@ -168,7 +168,7 @@ fun YouScreen(
                         }
                     }
                     items(published, key = { it.slug }) { item ->
-                        PublishedRow(item) { onOpenItem(item.slug) }
+                        PublishedRow(backend, item) { onOpenItem(item.slug) }
                     }
                     item("actions") {
                         Spacer(Modifier.height(28.dp))
@@ -406,13 +406,14 @@ private fun StatusChip(status: UiSubmissionStatus) {
 }
 
 @Composable
-private fun PublishedRow(item: UiPublishedItem, onOpen: () -> Unit) {
+private fun PublishedRow(backend: IdeBackend, item: UiPublishedItem, onOpen: () -> Unit) {
     val c = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        ListingIcon(backend, item.iconPath)
         Column(Modifier.weight(1f)) {
             Text(
                 item.title,
@@ -430,6 +431,35 @@ private fun PublishedRow(item: UiPublishedItem, onOpen: () -> Unit) {
             }
         }
         Symbol(CaSymbols.chevronRight, contentDescription = null, size = 20.dp, tint = c.onSurfaceVariant)
+    }
+}
+
+/**
+ * A listing's own app icon, falling back to a glyph tile.
+ *
+ * The same media cache the Explore cards' icons use, so an icon is fetched once per device and a listing
+ * looks the same here as it does in the store. The fallback is not a blank plate: an item whose first
+ * version is still in review has no published icon yet, and neither does one that shipped none.
+ */
+@Composable
+private fun ListingIcon(backend: IdeBackend, iconPath: String?) {
+    val c = MaterialTheme.colorScheme
+    val file by produceState<String?>(null, iconPath, backend) {
+        value = iconPath?.let { runCatching { backend.store.screenshotFile(it) }.getOrNull() }
+    }
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = c.primaryContainer,
+        modifier = Modifier.size(40.dp),
+    ) {
+        val path = file
+        if (path != null) {
+            ShotImage(backend, path, ContentScale.Crop, Modifier.fillMaxSize())
+        } else {
+            Box(contentAlignment = Alignment.Center) {
+                Symbol(CaSymbols.deployedCode, contentDescription = null, size = 20.dp, tint = c.onPrimaryContainer)
+            }
+        }
     }
 }
 

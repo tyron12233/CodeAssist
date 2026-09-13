@@ -485,7 +485,7 @@ internal class StoreBackend(
     // ---- your own profile ----
 
     override suspend fun myProfile(): dev.ide.ui.backend.UiMyProfile? = withContext(storeIo) {
-        submissionState.profile()?.let {
+        submissionState.profile()?.also(::noticeVerification)?.let {
             dev.ide.ui.backend.UiMyProfile(
                 handle = it.handle,
                 displayName = it.displayName,
@@ -502,6 +502,34 @@ internal class StoreBackend(
                 averageRating = it.averageRating,
             )
         }
+    }
+
+    /**
+     * Raise a notification the first time a profile read comes back verified.
+     *
+     * The push is the primary path and this is the same fallback [mySubmissions] is for a review decision:
+     * verification is granted days later by someone else, and a device that was unreachable when the row
+     * was claimed would otherwise never hear about it.
+     *
+     * Only a change from a state this device had already recorded counts. A first sighting is not news:
+     * an account that was verified before this install existed did not just become verified.
+     */
+    private fun noticeVerification(profile: dev.ide.store.StorePublisherProfile) {
+        // Keyed by account, matching the dedupe key the backend's own push carries, so a user who got both
+        // sees one entry rather than the same sentence twice.
+        val account = accounts.current()?.userId ?: profile.handle
+        val seenKey = "$VERIFIED_SEEN_PREF$account"
+        val previous = ctx.manager?.preference(seenKey)
+        if (previous == profile.verified.toString()) return
+        ctx.manager?.setPreference(seenKey, profile.verified.toString())
+        if (previous != "false" || !profile.verified) return
+        notifications?.post(
+            kind = dev.ide.ui.backend.UiNotificationKind.SYSTEM,
+            title = "You are verified",
+            body = "Your projects now carry the verified tick in the store.",
+            target = dev.ide.ui.backend.UiNotificationTarget.Screen("You"),
+            key = "publisher:verified:$account",
+        )
     }
 
     override suspend fun saveProfile(
@@ -715,6 +743,9 @@ internal class StoreBackend(
 
         /** The broadcast topic name, matched by `store_push_claim`'s topic join. */
         const val LAUNCH_TOPIC = "store-launch"
+
+        /** Whether this account was verified the last time its profile was read, by account id. */
+        const val VERIFIED_SEEN_PREF = "store.profile.verified."
 
         /** An avatar is a small square; a response larger than this is not one. */
         const val MAX_AVATAR_BYTES = 2L * 1024 * 1024

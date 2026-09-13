@@ -199,7 +199,7 @@ class SupabaseSubmissionService(
         val uid = accounts.current()?.userId ?: return StoreResult.Ok(emptyList())
         val path = "/rest/v1/store_items" +
             "?publisher_id=eq.$uid" +
-            "&select=slug,title,status," +
+            "&select=slug,title,status,icon_path," +
             "store_item_versions!store_items_latest_version_id_fkey(version)" +
             "&order=updated_at.desc"
         val rows = when (val r = rest("GET", path, null, token)) {
@@ -227,6 +227,7 @@ class SupabaseSubmissionService(
                     status = JsonReader.str(row, "status").orEmpty(),
                     publishedVersion = published,
                     highestVersion = highest,
+                    iconPath = JsonReader.str(row, "icon_path"),
                 )
             },
         )

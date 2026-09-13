@@ -258,6 +258,13 @@ data class StorePublishedItem(
     val publishedVersion: String? = null,
     /** The highest version this account has SENT for the item, approved or not. Null when none parses. */
     val highestVersion: String? = null,
+    /**
+     * The listing's published app icon, as a path in the public media bucket.
+     *
+     * Null for an item whose first version is still in review: the icon is copied into the public bucket
+     * by approval, so before then there is nothing a client may read.
+     */
+    val iconPath: String? = null,
 )
 
 /**
