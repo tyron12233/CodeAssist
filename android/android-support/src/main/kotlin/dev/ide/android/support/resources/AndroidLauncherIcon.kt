@@ -59,15 +59,21 @@ object AndroidLauncherIcon {
             ?.source
             ?.let { return LauncherIcon.Raster(it) }
 
-        // 2) Otherwise the first XML drawable that actually parses (skipping anything Unsupported).
+        // 2) Otherwise an XML drawable. An `<adaptive-icon>` wins over anything else that parses: it is what
+        //    a launcher draws on API 26+, and a project that has one normally also ships the pre-26
+        //    `<layer-list>` fallback under the same name, so without a preference which of the two is
+        //    resolved comes down to the order the resource folders happened to be parsed in.
+        var fallback: DrawablePreview? = null
         for (def in defs) {
             val src = def.source ?: continue
             if (src.isRaster()) continue
             val text = runCatching { src.readText() }.getOrNull() ?: continue
             val preview = DrawablePreviewParser.parse(text, resolver)
-            if (preview !is DrawablePreview.Unsupported) return LauncherIcon.Drawable(preview)
+            if (preview is DrawablePreview.Unsupported) continue
+            if (preview is DrawablePreview.Layers && preview.adaptive) return LauncherIcon.Drawable(preview)
+            if (fallback == null) fallback = preview
         }
-        return null
+        return fallback?.let { LauncherIcon.Drawable(it) }
     }
 
     /** `@mipmap/ic_launcher` → MIPMAP to `ic_launcher`; null for framework refs or non-resource strings. */

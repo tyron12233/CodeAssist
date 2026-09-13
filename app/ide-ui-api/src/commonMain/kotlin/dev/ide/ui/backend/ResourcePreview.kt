@@ -36,7 +36,7 @@ sealed interface UiDrawable {
         val nodes: List<UiVectorNode>,
     ) : UiDrawable
 
-    data class Layers(val layers: List<UiLayer>) : UiDrawable
+    data class Layers(val layers: List<UiLayer>, val adaptive: Boolean = false) : UiDrawable
     data class States(val states: List<UiStateLayer>, val defaultLayer: UiDrawable?) : UiDrawable
     data class Bitmap(val resType: String, val resName: String, val filePath: String?) : UiDrawable
     data class Unsupported(val rootTag: String, val message: String) : UiDrawable

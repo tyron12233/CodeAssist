@@ -8,6 +8,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -95,6 +96,26 @@ class AndroidLauncherIconTest {
             val preview = (icon as LauncherIcon.Drawable).preview
             assertTrue(preview is DrawablePreview.Layers, "expected layered icon, got $preview")
             assertEquals(2, (preview as DrawablePreview.Layers).layers.size)
+            // The templates ship the adaptive icon AND the pre-26 layer-list fallback under the same name.
+            // Which one is resolved decides how it is rendered, so it cannot be left to the order the
+            // resource folders happened to be read in.
+            assertTrue(preview.adaptive, "the adaptive icon is what a launcher on API 26+ draws")
+        }
+    }
+
+    @Test
+    fun aLayerListWithNoAdaptiveIconIsNotReportedAsOne() {
+        withTempDir("res") { res ->
+            for ((rel, content) in AndroidAppAssets.launcherIconResFiles) {
+                if (rel.startsWith("mipmap-anydpi-v26/")) continue
+                res.writeSource(rel, content, trim = false)
+            }
+            res.writeSource("values/colors.xml", "<resources>${AndroidAppAssets.ICON_BACKGROUND_COLOR_XML}</resources>", trim = false)
+
+            val icon = AndroidLauncherIcon.locate(listOf(res), "@mipmap/ic_launcher", null)
+            val preview = (icon as LauncherIcon.Drawable).preview
+            assertTrue(preview is DrawablePreview.Layers)
+            assertFalse((preview as DrawablePreview.Layers).adaptive, "a plain layer-list has no safe zone")
         }
     }
 }

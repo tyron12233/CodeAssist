@@ -25,7 +25,10 @@ import dev.ide.ui.backend.UiSubmitResult
 internal class StoreSubmissions(
     private val submissions: StoreSubmissionService,
     /**
-     * The project's launcher icon as raster bytes, or null when it has none this can render.
+     * The project's launcher icon as raster bytes, when one is stored as an image file.
+     *
+     * The fallback for [UiSubmissionDraft.iconBytes]: it only answers for a project that ships a raster
+     * icon, which most do not, and it cannot render the XML ones.
      *
      * A parameter rather than a direct call so this class keeps depending on the submission port alone,
      * and so a test can publish an icon without an Android project on disk.
@@ -77,8 +80,10 @@ internal class StoreSubmissions(
             changelog = draft.changelog?.trim()?.takeIf { it.isNotEmpty() },
             screenshotPaths = draft.screenshotPaths,
             // Read from the project, not asked for. The app already has an icon, and a form that made the
-            // publisher supply it again would mostly produce listings with no icon at all.
-            iconPath = iconFileFor(packaged.rootPath),
+            // publisher supply it again would mostly produce listings with no icon at all. The screen's
+            // rendering wins when it has one: most projects' launcher icons are XML, which only something
+            // with a canvas can turn into an image.
+            iconPath = iconFileFor(draft.iconBytes ?: runCatching { launcherIcon(packaged.rootPath) }.getOrNull()),
         )
         // The archive the screen showed, not a reconstruction of it: same bytes, same manifest, same hash.
         // Re-packing if it is missing keeps a submit working after the engine was rebuilt underneath the
@@ -109,23 +114,35 @@ internal class StoreSubmissions(
     }
 
     /**
-     * The launcher icon written to a temp file for upload, or null.
+     * [bytes] written to a temp file for upload, or null.
      *
      * A file because that is what the upload takes, and a temp one because the icon inside the project is
      * the publisher's, not ours to hand out a path to. Failure is silent on purpose: a submission must not
      * stop because an icon could not be read, and the listing falls back to its glyph tile.
-     *
-     * Only a raster icon travels. A vector-only or adaptive-icon project has nothing to upload without
-     * rasterizing it here, which needs a canvas the engine does not have.
      */
-    private fun iconFileFor(rootPath: String): String? {
-        val bytes = runCatching { launcherIcon(rootPath) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return null
+    private fun iconFileFor(bytes: ByteArray?): String? {
+        if (bytes == null || bytes.isEmpty()) return null
         return runCatching {
-            val file = java.io.File.createTempFile("ca-store-icon-", ".png")
+            val file = java.io.File.createTempFile("ca-store-icon-", ".${imageExtension(bytes)}")
             file.deleteOnExit()
             file.writeBytes(bytes)
             file.absolutePath
         }.getOrNull()
+    }
+
+    /**
+     * The extension for what [bytes] actually are.
+     *
+     * The upload names the published object after this file and takes its content type from the extension,
+     * so a WebP launcher icon written to a `.png` would be served under a type it is not.
+     */
+    private fun imageExtension(bytes: ByteArray): String = when {
+        bytes.size >= 4 && bytes[0] == 0x89.toByte() && bytes[1] == 'P'.code.toByte() &&
+            bytes[2] == 'N'.code.toByte() && bytes[3] == 'G'.code.toByte() -> "png"
+        bytes.size >= 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() -> "jpg"
+        bytes.size >= 12 && bytes.copyOfRange(0, 4).decodeToString() == "RIFF" &&
+            bytes.copyOfRange(8, 12).decodeToString() == "WEBP" -> "webp"
+        else -> "png"
     }
 
     fun mine(): List<UiStoreSubmission> =
@@ -133,8 +150,9 @@ internal class StoreSubmissions(
             is StoreResult.Ok -> result.value.map {
                 UiStoreSubmission(
                     itemId = it.itemSlug,
-                    // The listing has no title of its own; the slug is what the submitter recognises.
-                    projectName = it.itemSlug,
+                    // The title the submitter gave it, falling back to the slug, which is what the store
+                    // knows the listing by when its item row could not be read.
+                    projectName = it.itemTitle?.takeIf { t -> t.isNotBlank() } ?: it.itemSlug,
                     version = it.version,
                     status = statusOf(it.status),
                     note = it.reviewNote,
@@ -167,6 +185,28 @@ internal class StoreSubmissions(
 
     fun withdraw(itemId: String, version: String): Boolean =
         submissions.withdraw(itemId, version) is StoreResult.Ok
+
+    // ---- the account's own profile ----
+
+    fun profile(): dev.ide.store.StorePublisherProfile? =
+        (submissions.myProfile() as? StoreResult.Ok)?.value
+
+    /** Null when saved; otherwise the message to show, which the backend wrote for a person to read. */
+    fun saveProfile(
+        handle: String,
+        displayName: String,
+        bio: String?,
+        location: String?,
+        linkUrl: String?,
+    ): String? = when (val result = submissions.saveProfile(handle, displayName, bio, location, linkUrl)) {
+        is StoreResult.Ok -> null
+        is StoreResult.Unavailable -> result.reason
+        is StoreResult.Failed -> result.message
+    }
+
+    /** Null when the answer is not known, which the form treats as "not yet" rather than as "taken". */
+    fun handleAvailable(handle: String): Boolean? =
+        (submissions.handleAvailable(handle) as? StoreResult.Ok)?.value
 
     private fun PackagedProject.toUi(rootPath: String) = UiPackagedProject(
         rootPath = rootPath,

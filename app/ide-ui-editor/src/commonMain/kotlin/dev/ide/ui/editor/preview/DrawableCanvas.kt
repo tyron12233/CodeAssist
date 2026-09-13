@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
@@ -18,6 +19,8 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiDrawable
 import dev.ide.ui.backend.UiGradient
@@ -26,6 +29,7 @@ import dev.ide.ui.backend.UiVectorNode
 import dev.ide.ui.backend.UiVectorPath
 import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.PI
 
@@ -36,8 +40,18 @@ internal fun argbColor(v: Long): Color = Color(v.toInt())
  * Draws a [UiDrawable] into the rectangle [topLeft]+[size]. Recursive (layer-list/inset/selector default).
  * Bitmaps and unsupported nodes draw a labelled placeholder — the pane renders a *top-level* bitmap with a
  * real decoded image instead (it needs async byte loading the canvas can't do).
+ *
+ * [images] resolves a nested bitmap layer to an already decoded image, for a caller that has loaded the
+ * bytes up front. Without it a bitmap draws the placeholder, which is right for a preview pane and wrong
+ * for an icon whose foreground IS an image: an adaptive icon with a `<bitmap>` foreground would rasterise
+ * to a dashed grey box.
  */
-fun DrawScope.drawUiDrawable(d: UiDrawable, topLeft: Offset, size: Size) {
+fun DrawScope.drawUiDrawable(
+    d: UiDrawable,
+    topLeft: Offset,
+    size: Size,
+    images: ((UiDrawable.Bitmap) -> ImageBitmap?)? = null,
+) {
     when (d) {
         is UiDrawable.SolidColor -> drawRect(argbColor(d.color), topLeft, size)
         is UiDrawable.Shape -> drawShape(d, topLeft, size)
@@ -49,10 +63,14 @@ fun DrawScope.drawUiDrawable(d: UiDrawable, topLeft: Offset, size: Size) {
                 layer.drawable,
                 Offset(topLeft.x + l, topLeft.y + t),
                 Size((size.width - l - r).coerceAtLeast(0f), (size.height - t - b).coerceAtLeast(0f)),
+                images,
             )
         }
-        is UiDrawable.States -> d.defaultLayer?.let { drawUiDrawable(it, topLeft, size) }
-        is UiDrawable.Bitmap -> drawPlaceholder(topLeft, size)
+        is UiDrawable.States -> d.defaultLayer?.let { drawUiDrawable(it, topLeft, size, images) }
+        is UiDrawable.Bitmap -> {
+            val image = images?.invoke(d)
+            if (image != null) drawContained(image, topLeft, size) else drawPlaceholder(topLeft, size)
+        }
         is UiDrawable.Unsupported -> drawPlaceholder(topLeft, size)
     }
 }
@@ -215,6 +233,27 @@ fun DrawScope.drawCheckerboard(cell: Float = 10f) {
         }
         y += cell; row++
     }
+}
+
+/**
+ * Draws [image] centred in the box, scaled to fit whole rather than cropped, which is how an icon layer's
+ * art is authored: a foreground that is cut off at the edges is worse than one with room around it.
+ */
+private fun DrawScope.drawContained(image: ImageBitmap, topLeft: Offset, size: Size) {
+    if (image.width <= 0 || image.height <= 0 || size.width <= 0f || size.height <= 0f) return
+    val scale = min(size.width / image.width, size.height / image.height)
+    val w = image.width * scale
+    val h = image.height * scale
+    drawImage(
+        image = image,
+        srcOffset = IntOffset.Zero,
+        srcSize = IntSize(image.width, image.height),
+        dstOffset = IntOffset(
+            (topLeft.x + (size.width - w) / 2f).roundToInt(),
+            (topLeft.y + (size.height - h) / 2f).roundToInt(),
+        ),
+        dstSize = IntSize(w.roundToInt(), h.roundToInt()),
+    )
 }
 
 private fun DrawScope.drawPlaceholder(topLeft: Offset, size: Size) {

@@ -67,7 +67,12 @@ import dev.ide.ui.generated.resources.submit_review_note
 import dev.ide.ui.generated.resources.submit_send
 import dev.ide.ui.generated.resources.submit_sending
 import dev.ide.ui.generated.resources.submit_title
+import dev.ide.ui.editor.preview.ProjectIconRaster
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.platform.NotificationPermissionStatus
+import dev.ide.ui.platform.rememberNotificationPermissionController
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.mutableStateListOf
@@ -102,6 +107,14 @@ fun SubmitProjectScreen(
      * the user picked one screen ago is the kind of step that makes a flow feel like paperwork.
      */
     initialProject: ProjectInfo? = null,
+    /**
+     * The listing this submission updates, when the caller already decided.
+     *
+     * Set when the flow was reached from a rejected submission, where the listing to send a new version
+     * of is the one the user was just looking at. Applied once the account's listings load, because the
+     * version to suggest comes from them.
+     */
+    initialItemSlug: String? = null,
 ) {
     var chosen by remember(initialProject?.rootPath) { mutableStateOf(initialProject) }
     var packaged by remember { mutableStateOf<UiPackagedProject?>(null) }
@@ -117,6 +130,8 @@ fun SubmitProjectScreen(
     var categoryAttempt by remember { mutableStateOf(0) }
     // The images people will actually judge the project by. Same picker the export flow uses.
     val screenshots = remember(chosen?.rootPath) { mutableStateListOf<String>() }
+    // Keyed on the project: a different project's icon must not be left attached to this submission.
+    var icon by remember(chosen?.rootPath) { mutableStateOf<ByteArray?>(null) }
     var sending by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     // The listings this account already publishes, so this submission can be sent as a new version of one
@@ -127,9 +142,19 @@ fun SubmitProjectScreen(
     val versionText = stringResource(Res.string.submit_required_version)
 
     val projects = remember { runCatching { backend.projects.projects() }.getOrDefault(emptyList()) }
+    val notifications = rememberNotificationPermissionController()
 
     LaunchedEffect(Unit) {
         published = runCatching { backend.store.myPublishedItems() }.getOrDefault(emptyList())
+        // The same thing the target chip does, done for the caller. The title comes from the listing, so
+        // the packaging step below leaves it alone, and the version steps past everything already sent.
+        published.firstOrNull { it.slug == initialItemSlug }?.let { listing ->
+            draft = draft.copy(
+                itemSlug = listing.slug,
+                title = listing.title,
+                version = listing.suggestedVersion,
+            )
+        }
     }
 
     LaunchedEffect(categoryAttempt) {
@@ -149,6 +174,20 @@ fun SubmitProjectScreen(
         packing = false
         // The project's own name is the obvious starting title; the user can change it.
         if (draft.title.isBlank()) draft = draft.copy(title = chosen?.name.orEmpty())
+    }
+
+    // The listing's icon, rendered from the project's own launcher icon. Here rather than in the engine
+    // because most Android projects declare theirs as XML (the templates ship a vector adaptive icon), and
+    // turning that into an image needs a canvas. Rendered when the project is chosen, not at submit time,
+    // so it is never something the upload waits behind.
+    LaunchedEffect(chosen?.rootPath) {
+        val root = chosen?.rootPath ?: return@LaunchedEffect
+        icon = runCatching {
+            val resolved = backend.projects.projectIcon(root) ?: return@runCatching null
+            withContext(Dispatchers.Default) {
+                ProjectIconRaster.toBytes(resolved) { path -> backend.projects.imageBytes(path) }
+            }
+        }.getOrNull()
     }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -395,11 +434,20 @@ fun SubmitProjectScreen(
         val archive = packaged ?: return@LaunchedEffect
         // The picker holds the screenshots in its own list so removing one does not rebuild the draft on
         // every tap; they join it here, at the one point that matters.
-        val request = draft.copy(screenshotPaths = screenshots.toList())
+        val request = draft.copy(screenshotPaths = screenshots.toList(), iconBytes = icon)
         val result = runCatching { backend.store.submit(request, archive) }.getOrNull()
         sending = false
         message = result?.message
-        if (result?.success == true) onSubmitted()
+        if (result?.success != true) return@LaunchedEffect
+        // The decision arrives days later, with the app closed, as a notification. Until now the only
+        // thing that ever asked for the permission was the first build, so a publisher who had never
+        // built could not be told the answer to the one question they were waiting on. Asked here
+        // because this is the moment it means something, and declined is an answer: the submission is
+        // already made and the You screen shows its state either way.
+        if (notifications.status() == NotificationPermissionStatus.DENIED) {
+            notifications.request {}
+        }
+        onSubmitted()
     }
 }
 

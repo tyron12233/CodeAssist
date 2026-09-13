@@ -7,6 +7,7 @@ import dev.ide.store.StoreResult
 import dev.ide.store.StoreSubmissionRequest
 import dev.ide.store.StoreSubmissionService
 import dev.ide.store.StorePublishedItem
+import dev.ide.store.StorePublisherProfile
 import dev.ide.store.StoreSubmissionStatus
 import java.io.File
 import java.net.HttpURLConnection
@@ -64,9 +65,9 @@ class SupabaseSubmissionService(
         val slug = request.itemSlug ?: slugFor(request.title, account.userId)
         val objectPath = "${account.userId}/$slug/${request.version}.zip"
 
-        // 1. Publisher row. Created on first submit rather than at signup, so a browse-only account leaves
-        //    no public row. Conflict-tolerant: a second submission must not fail because it already exists.
-        ensurePublisher(account.userId, token)
+        // 1. Publisher row, if this account has never had one. Idempotent, so a second submission does not
+        //    fail because it already exists.
+        ensurePublisher()
 
         // 2. Upload. First, because a row without its payload is worse than an orphaned object.
         val shots = uploadScreenshots("${account.userId}/$slug/${request.version}-shots", request.screenshotPaths, token)
@@ -153,16 +154,20 @@ class SupabaseSubmissionService(
         // cannot choose, answering HTTP 300 Multiple Choices.
         val path = "/rest/v1/store_item_versions" +
             "?submitter_id=eq.$uid" +
+            // A version the submitter took back is not a submission any more, and leaving it in the list
+            // would show it as still in review with a Withdraw button that does nothing.
+            "&status=neq.withdrawn" +
             "&select=version,status,review_note,created_at," +
-            "store_items!store_item_versions_item_id_fkey(slug)" +
+            "store_items!store_item_versions_item_id_fkey(slug,title)" +
             "&order=created_at.desc"
         return when (val r = rest("GET", path, null, token)) {
             is StoreResult.Ok -> StoreResult.Ok(
                 JsonReader.arr(JsonReader.parseOrNull(r.value)).mapNotNull { row ->
-                    val slug = JsonReader.obj(row)?.get("store_items")
-                        ?.let { JsonReader.str(it, "slug") } ?: return@mapNotNull null
+                    val item = JsonReader.obj(row)?.get("store_items")
+                    val slug = item?.let { JsonReader.str(it, "slug") } ?: return@mapNotNull null
                     StoreSubmissionStatus(
                         itemSlug = slug,
+                        itemTitle = JsonReader.str(item, "title"),
                         version = JsonReader.str(row, "version").orEmpty(),
                         status = JsonReader.str(row, "status").orEmpty(),
                         reviewNote = JsonReader.str(row, "review_note"),
@@ -251,13 +256,113 @@ class SupabaseSubmissionService(
         }
     }
 
+    // ---- profile ----
+
+    /**
+     * The caller's profile, created from the provider identity when the account has none.
+     *
+     * The hints are what turns a new publisher into `@their-github-login` with their own name and avatar
+     * rather than `user-a1b2c3d4`. They are only read when the row is created; the backend will not let a
+     * later sign-in overwrite a name its owner has since changed.
+     */
+    override fun myProfile(): StoreResult<StorePublisherProfile?> {
+        if (!configured) return StoreResult.Unavailable("Submissions are not configured in this build")
+        val token = accounts.bearer() ?: return StoreResult.Failed("Sign in to see your profile")
+        val id = accounts.providerIdentity()
+        val body = buildString {
+            append('{')
+            append(""""p_handle_hint":""").append(id?.handle?.let { q(it) } ?: "null").append(',')
+            append(""""p_display_name":""").append(id?.name?.let { q(it) } ?: "null").append(',')
+            append(""""p_avatar_url":""").append(id?.avatarUrl?.let { q(it) } ?: "null")
+            append('}')
+        }
+        return when (val r = rest("POST", "/rest/v1/rpc/store_my_profile", body, token)) {
+            is StoreResult.Ok -> StoreResult.Ok(parseProfile(JsonReader.parseOrNull(r.value)))
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+    }
+
+    /**
+     * Save the editable fields.
+     *
+     * The backend answers `{ok:false, message}` for a taken handle or a field that is too long, which is
+     * returned as [StoreResult.Failed] so the form shows the sentence it was given. A transport failure
+     * and a rejected edit are different things and stay different here.
+     */
+    override fun saveProfile(
+        handle: String,
+        displayName: String,
+        bio: String?,
+        location: String?,
+        linkUrl: String?,
+    ): StoreResult<StorePublisherProfile?> {
+        if (!configured) return StoreResult.Unavailable("Submissions are not configured in this build")
+        val token = accounts.bearer() ?: return StoreResult.Failed("Sign in to edit your profile")
+        val body = buildString {
+            append('{')
+            append(""""p_handle":""").append(q(handle)).append(',')
+            append(""""p_display_name":""").append(q(displayName)).append(',')
+            append(""""p_bio":""").append(bio?.let { q(it) } ?: "null").append(',')
+            append(""""p_location":""").append(location?.let { q(it) } ?: "null").append(',')
+            append(""""p_link":""").append(linkUrl?.let { q(it) } ?: "null")
+            append('}')
+        }
+        return when (val r = rest("POST", "/rest/v1/rpc/store_save_profile", body, token)) {
+            is StoreResult.Ok -> {
+                val json = JsonReader.parseOrNull(r.value)
+                if (JsonReader.bool(json, "ok")) {
+                    StoreResult.Ok(parseProfile(JsonReader.obj(json)?.get("profile")))
+                } else {
+                    StoreResult.Failed(JsonReader.str(json, "message") ?: "That profile could not be saved")
+                }
+            }
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+    }
+
+    override fun handleAvailable(handle: String): StoreResult<Boolean> {
+        if (!configured) return StoreResult.Unavailable("Submissions are not configured in this build")
+        val token = accounts.bearer() ?: return StoreResult.Failed("Sign in first")
+        val body = """{"p_handle":${q(handle)}}"""
+        return when (val r = rest("POST", "/rest/v1/rpc/store_handle_available", body, token)) {
+            is StoreResult.Ok -> StoreResult.Ok(r.value.trim().equals("true", ignoreCase = true))
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+    }
+
+    private fun parseProfile(json: Any?): StorePublisherProfile? {
+        val handle = JsonReader.str(json, "handle") ?: return null
+        return StorePublisherProfile(
+            handle = handle,
+            displayName = JsonReader.str(json, "displayName") ?: handle,
+            bio = JsonReader.str(json, "bio"),
+            location = JsonReader.str(json, "location"),
+            linkUrl = JsonReader.str(json, "linkUrl"),
+            avatarUrl = JsonReader.str(json, "avatarUrl"),
+            verified = JsonReader.bool(json, "verified"),
+            banned = JsonReader.bool(json, "banned"),
+            followers = JsonReader.int(json, "followers"),
+            publishedCount = JsonReader.int(json, "publishedCount"),
+            pendingCount = JsonReader.int(json, "pendingCount"),
+            totalInstalls = JsonReader.int(json, "totalInstalls"),
+            totalLikes = JsonReader.int(json, "totalLikes"),
+            averageRating = JsonReader.float(json, "averageRating"),
+        )
+    }
+
     // ---- steps ----
 
-    private fun ensurePublisher(userId: String, token: String) {
-        val handle = "user-${userId.take(8)}"
-        val body = """{"id":${q(userId)},"handle":${q(handle)},"display_name":${q(handle)}}"""
-        // `resolution=ignore-duplicates` so a repeat submission is not an error.
-        runCatching { rest("POST", "/rest/v1/store_publishers", body, token, prefer = "resolution=ignore-duplicates") }
+    /**
+     * Make sure the account has a publisher row before its first item points at one.
+     *
+     * The same get-or-create the profile screen uses, so a first submission and a first visit to the
+     * profile produce the same publisher rather than two different naming schemes.
+     */
+    private fun ensurePublisher() {
+        runCatching { myProfile() }
     }
 
     private fun createItem(

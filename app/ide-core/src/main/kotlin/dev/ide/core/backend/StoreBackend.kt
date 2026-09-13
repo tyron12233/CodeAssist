@@ -176,6 +176,52 @@ internal class StoreBackend(
         }
     }
 
+    /**
+     * Cache an avatar to disk and return its local path, or null.
+     *
+     * The avatar lives wherever the identity provider serves it, so this is a plain HTTPS GET rather than
+     * a bucket download. Three limits, because the URL is not the store's: https only, a size cap, and a
+     * short timeout.
+     */
+    override suspend fun avatarFile(url: String): String? = withContext(storeIo) {
+        if (!url.startsWith("https://")) return@withContext null
+        val root = ctx.manager?.storageRoot?.toFile() ?: return@withContext null
+        val cached = java.io.File(root, "store/avatars/${url.hashCode().toUInt().toString(16)}.img")
+        // Re-fetched once a week even though the name has not changed: a provider serves a new picture from
+        // the same URL, so caching on the URL alone would pin the first face forever.
+        val fresh = System.currentTimeMillis() - cached.lastModified() < AVATAR_CACHE_MS
+        if (cached.isFile && cached.length() > 0 && fresh) return@withContext cached.absolutePath
+        runCatching {
+            val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 8_000
+                readTimeout = 8_000
+                instanceFollowRedirects = true
+            }
+            if (conn.responseCode !in 200..299) {
+                conn.errorStream?.use { it.readBytes() }
+                return@runCatching null
+            }
+            cached.parentFile?.mkdirs()
+            var written = 0L
+            conn.inputStream.use { input ->
+                cached.outputStream().buffered().use { out ->
+                    val buffer = ByteArray(16 * 1024)
+                    while (true) {
+                        val n = input.read(buffer)
+                        if (n <= 0) break
+                        written += n
+                        // An avatar is a small square. Anything past this is not one, and the file is
+                        // dropped rather than kept and decoded.
+                        if (written > MAX_AVATAR_BYTES) return@runCatching null
+                        out.write(buffer, 0, n)
+                    }
+                }
+            }
+            cached.absolutePath
+        }.getOrNull().also { if (it == null) cached.delete() }
+    }
+
     // ---- publisher profiles ----
 
     override suspend fun publisherProfile(handle: String): dev.ide.ui.backend.UiPublisherProfile? =
@@ -305,7 +351,48 @@ internal class StoreBackend(
     // Delegated: sign-in state depends on the account port and nothing else in the IDE, so it lives in a
     // class that can be built and tested without a project, an engine or a host.
 
-    private val accountState = StoreAccounts(accounts, source)
+    // Declared before [accountState] because that one restores a stored session as soon as it is built,
+    // and the restore runs [adoptAccount], which reads the profile through this.
+    private val submissionState = StoreSubmissions(
+        submissions,
+        // The publisher is never asked for an icon: their project already has one.
+        launcherIcon = { rootPath -> ctx.manager?.launcherIconBytes(rootPath) },
+    )
+
+    private val accountState = StoreAccounts(accounts, source, onSignedIn = ::adoptAccount)
+
+    /**
+     * What a known account needs doing to it, once, on the thread that learned about it.
+     *
+     * The device binding is the important half. Registration for push runs anonymously (it has to: a
+     * review decision has to reach a device whose user signed out days ago), so the device row carries no
+     * account until this binds it, and a notification addressed to an account reaches nothing until then.
+     *
+     * The profile read is what gives the account a name: the publisher row holds the handle and display
+     * name, the session does not, and asking for it creates one from the identity provider if this
+     * account has never published.
+     */
+    private fun adoptAccount(account: dev.ide.store.StoreAccount): dev.ide.store.StoreAccount {
+        bindPushDevice()
+        val profile = submissionState.profile() ?: return account
+        return account.copy(
+            handle = profile.handle,
+            displayName = profile.displayName,
+            avatarUrl = profile.avatarUrl ?: account.avatarUrl,
+            verified = profile.verified,
+        )
+    }
+
+    /**
+     * Bind this device's push token to the signed-in account.
+     *
+     * Silent and idempotent. The token is written by the host when FCM hands it over, which can be after
+     * a session is restored, so this is also called from the host once the token exists.
+     */
+    internal fun bindPushDevice() {
+        val token = ctx.manager?.preference(PUSH_TOKEN_PREF) ?: return
+        runCatching { accounts.bindPushDevice(token) }
+    }
 
     override fun authProviders(): List<String> = accountState.authProviders()
 
@@ -329,12 +416,6 @@ internal class StoreBackend(
     override fun signOut() = accountState.signOut()
 
     // ---- submitting ----
-
-    private val submissionState = StoreSubmissions(
-        submissions,
-        // The publisher is never asked for an icon: their project already has one.
-        launcherIcon = { rootPath -> ctx.manager?.launcherIconBytes(rootPath) },
-    )
 
     override fun submissionsAvailable(): Boolean = submissionState.available()
 
@@ -400,6 +481,42 @@ internal class StoreBackend(
 
     override suspend fun myPublishedItems(): List<dev.ide.ui.backend.UiPublishedItem> =
         withContext(storeIo) { submissionState.myItems() }
+
+    // ---- your own profile ----
+
+    override suspend fun myProfile(): dev.ide.ui.backend.UiMyProfile? = withContext(storeIo) {
+        submissionState.profile()?.let {
+            dev.ide.ui.backend.UiMyProfile(
+                handle = it.handle,
+                displayName = it.displayName,
+                bio = it.bio,
+                location = it.location,
+                linkUrl = it.linkUrl,
+                avatarUrl = it.avatarUrl,
+                verified = it.verified,
+                followers = it.followers,
+                publishedCount = it.publishedCount,
+                pendingCount = it.pendingCount,
+                totalInstalls = it.totalInstalls,
+                totalLikes = it.totalLikes,
+                averageRating = it.averageRating,
+            )
+        }
+    }
+
+    override suspend fun saveProfile(
+        handle: String,
+        displayName: String,
+        bio: String?,
+        location: String?,
+        linkUrl: String?,
+    ): String? = withContext(storeIo) {
+        submissionState.saveProfile(handle, displayName, bio, location, linkUrl)
+    }
+
+    override suspend fun handleAvailable(handle: String): Boolean? = withContext(storeIo) {
+        submissionState.handleAvailable(handle)
+    }
 
     /** What the change actually means, in the words a submitter would use. */
     private fun submissionHeadline(sub: dev.ide.ui.backend.UiStoreSubmission): String = when (sub.status) {
@@ -598,6 +715,12 @@ internal class StoreBackend(
 
         /** The broadcast topic name, matched by `store_push_claim`'s topic join. */
         const val LAUNCH_TOPIC = "store-launch"
+
+        /** An avatar is a small square; a response larger than this is not one. */
+        const val MAX_AVATAR_BYTES = 2L * 1024 * 1024
+
+        /** How long a cached avatar is trusted before the URL is asked again. */
+        const val AVATAR_CACHE_MS = 7L * 24 * 60 * 60 * 1000
 
         /** Shared with the UI's former local-only list, so existing saves carry over. */
         const val LIKES_PREF = "store.favorites"

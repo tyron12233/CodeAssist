@@ -158,7 +158,7 @@ object AndroidIde {
         // Register this device for push. Off the main thread and best-effort: a launch that cannot reach
         // the backend is simply not push-reachable until the next one, and nothing the user is doing should
         // wait on it or fail because of it.
-        registerForPush(appContext, manager)
+        registerForPush(appContext, manager, storeAccounts)
         // cold_start: time the whole on-device bootstrap (asset copy + project load + engine init). Emitted
         // once per launch for users who consented; no-op otherwise. Also serves as the per-launch anchor.
         if (backend.diagnostics.analyticsConsent() == true) {
@@ -505,7 +505,11 @@ object AndroidIde {
      * FirebaseApp, `getInstance()` throws, and a build with no push is a supported configuration rather
      * than an error worth reporting.
      */
-    private fun registerForPush(appContext: Context, manager: ProjectManager) {
+    private fun registerForPush(
+        appContext: Context,
+        manager: ProjectManager,
+        accounts: dev.ide.store.StoreAccountService,
+    ) {
         val source = runCatching { buildStoreSource() }.getOrNull() ?: return
         if (!source.configured()) return
         if (com.google.firebase.FirebaseApp.getApps(appContext).isEmpty()) return
@@ -520,18 +524,24 @@ object AndroidIde {
                     // topic subscription needs the token, and the engine has no access to this service's
                     // own SharedPreferences.
                     runCatching { manager.setPreference("store.push.token", token) }
-                    if (!PendingPushes.tokenNeedsRegistering(appContext, token)) return@addOnSuccessListener
                     Thread({
-                        val result = source.registerDevice(
-                            installId = installId,
-                            token = token,
-                            platform = "android",
-                            appBuild = BuildConfig.VERSION_CODE,
-                        )
-                        // Only mark it registered on success, so a failed launch retries on the next one.
-                        if (result is dev.ide.store.StoreResult.Ok) {
-                            PendingPushes.markTokenRegistered(appContext, token)
+                        if (PendingPushes.tokenNeedsRegistering(appContext, token)) {
+                            val result = source.registerDevice(
+                                installId = installId,
+                                token = token,
+                                platform = "android",
+                                appBuild = BuildConfig.VERSION_CODE,
+                            )
+                            // Only mark it registered on success, so a failed launch retries on the next one.
+                            if (result is dev.ide.store.StoreResult.Ok) {
+                                PendingPushes.markTokenRegistered(appContext, token)
+                            }
                         }
+                        // Outside that gate on purpose. Registration is anonymous, so the device row carries
+                        // no account and a review decision addressed to one reaches nothing until this binds
+                        // them. A token that was already registered still needs binding, and a session that
+                        // was restored before FCM answered had no token to bind. A signed-out launch no-ops.
+                        runCatching { accounts.bindPushDevice(token) }
                     }, "push-register").apply { isDaemon = true }.start()
                 }
         }

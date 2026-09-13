@@ -13,9 +13,9 @@ enum class StoreProvider(val wire: String) { GITHUB("github"), GOOGLE("google") 
 /**
  * A signed-in account.
  *
- * [handle] and [displayName] come from the publisher row, not the OAuth profile — a publisher can rename
- * themselves without it rewriting their provider identity. Both are null until the account has published
- * something, because the publisher row is created on first submit, not on signup.
+ * [handle] and [displayName] come from the publisher row, not the OAuth profile: a publisher can rename
+ * themselves without it rewriting their provider identity. They are filled in once the profile has been
+ * read, which happens as soon as a session is adopted, and are null until then.
  */
 data class StoreAccount(
     val userId: String,
@@ -163,6 +163,21 @@ interface StoreAccountService {
 
     fun signOut() {}
 
+    /**
+     * Tell the backend that this session owns the device holding [pushToken].
+     *
+     * Push registration is anonymous and has to be: a review decision has to reach a device whose user
+     * signed out days ago, and registration happens at launch, before any session is restored. So the
+     * device row carries no account until this binds it, and a notification addressed to an account
+     * reaches an unbound device never. Re-registering with a session would bind it too, but registration
+     * replaces the device's topic list wholesale and would silently unsubscribe it from every broadcast.
+     *
+     * Lives on this port because it is a statement about the session, and the session is what this owns.
+     * False means the backend has no device with that token, so registration has not happened yet.
+     */
+    fun bindPushDevice(pushToken: String): StoreResult<Boolean> =
+        StoreResult.Unavailable("Sign-in is not available in this build")
+
     companion object {
         val Unsupported: StoreAccountService = object : StoreAccountService {}
     }
@@ -245,6 +260,33 @@ data class StorePublishedItem(
     val highestVersion: String? = null,
 )
 
+/**
+ * The signed-in account's own publisher profile: the row a reader sees, as its owner sees it.
+ *
+ * Distinct from [StoreAccount], which is the session. This is the public identity the store shows next to
+ * a project, and the only part of it the owner can change is the first five fields.
+ */
+data class StorePublisherProfile(
+    val handle: String,
+    val displayName: String,
+    val bio: String? = null,
+    val location: String? = null,
+    val linkUrl: String? = null,
+    /** From the identity provider. Not owner-editable, which is why it is not in the group above. */
+    val avatarUrl: String? = null,
+    val verified: Boolean = false,
+    val banned: Boolean = false,
+    val followers: Int = 0,
+    /** Listings that are live. */
+    val publishedCount: Int = 0,
+    /** Versions still waiting on a moderator. */
+    val pendingCount: Int = 0,
+    val totalInstalls: Int = 0,
+    val totalLikes: Int = 0,
+    /** Weighted across the account's catalogue; null until something has been rated. */
+    val averageRating: Float? = null,
+)
+
 /** The outcome of a submission. [reviewNote] carries a rejection reason once a moderator has answered. */
 data class StoreSubmissionStatus(
     val itemSlug: String,
@@ -252,6 +294,8 @@ data class StoreSubmissionStatus(
     val status: String,
     val reviewNote: String? = null,
     val submittedAt: String? = null,
+    /** The listing's title. Null only for a row read back before the item row existed. */
+    val itemTitle: String? = null,
 )
 
 /**
@@ -285,6 +329,30 @@ interface StoreSubmissionService {
 
     /** Withdraw a still-pending submission. */
     fun withdraw(itemSlug: String, version: String): StoreResult<Unit> =
+        StoreResult.Unavailable("Submissions are not available in this build")
+
+    /**
+     * The caller's own profile, created from the identity provider if this account has none yet.
+     *
+     * Get-or-create rather than a plain read: the publisher row is what a handle and a display name live
+     * on, and until this existed it was written by the submit flow alone, named after a fragment of a
+     * user id. An account that has signed in has an identity to show whether or not it has published.
+     */
+    fun myProfile(): StoreResult<StorePublisherProfile?> =
+        StoreResult.Unavailable("Submissions are not available in this build")
+
+    /** Save the owner-editable half of the profile. [StoreResult.Failed] carries a message to show as it is. */
+    fun saveProfile(
+        handle: String,
+        displayName: String,
+        bio: String? = null,
+        location: String? = null,
+        linkUrl: String? = null,
+    ): StoreResult<StorePublisherProfile?> =
+        StoreResult.Unavailable("Submissions are not available in this build")
+
+    /** Whether [handle] is free, for the form to answer while it is being typed. Your own handle is free. */
+    fun handleAvailable(handle: String): StoreResult<Boolean> =
         StoreResult.Unavailable("Submissions are not available in this build")
 
     companion object {

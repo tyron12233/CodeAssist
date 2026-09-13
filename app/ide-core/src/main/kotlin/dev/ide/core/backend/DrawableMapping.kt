@@ -52,7 +52,7 @@ object DrawableMapping {
             )
         }
 
-        is DrawablePreview.Layers -> UiDrawable.Layers(d.layers.map(::toUiLayer))
+        is DrawablePreview.Layers -> UiDrawable.Layers(d.layers.map(::toUiLayer), d.adaptive)
         is DrawablePreview.States -> UiDrawable.States(
             states = d.states.map(::toUiStateLayer),
             defaultLayer = d.defaultLayer?.let(::toUi),

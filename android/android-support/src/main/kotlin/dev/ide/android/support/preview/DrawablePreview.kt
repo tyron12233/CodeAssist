@@ -20,8 +20,15 @@ sealed interface DrawablePreview {
     /** A `<vector>` — viewport + one or more SVG paths. */
     data class Vector(val spec: VectorSpec) : DrawablePreview
 
-    /** A `<layer-list>` — drawables painted back-to-front, each optionally inset. */
-    data class Layers(val layers: List<Layer>) : DrawablePreview
+    /**
+     * A `<layer-list>` (drawables painted back-to-front, each optionally inset), and also the shape an
+     * `<adaptive-icon>` takes.
+     *
+     * [adaptive] says which it was. The two draw the same way, but an adaptive icon's layers are authored
+     * in a 108-unit box of which a launcher only shows the central 72, so anything rendering one at the
+     * size a launcher would has to know to scale it.
+     */
+    data class Layers(val layers: List<Layer>, val adaptive: Boolean = false) : DrawablePreview
 
     /** A `<selector>` (state list) — the representative [defaultLayer] is what a static preview shows. */
     data class States(val states: List<StateLayer>, val defaultLayer: DrawablePreview?) : DrawablePreview

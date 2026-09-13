@@ -272,9 +272,9 @@ data class UiInstallProgress(
 /**
  * The signed-in store account.
  *
- * [handle] and [displayName] come from the publisher row rather than the OAuth profile, and stay null
- * until the account has published something: the publisher row is created on first submit, not at sign-up.
- * So a freshly signed-in account legitimately has nothing but an id.
+ * [handle] and [displayName] come from the publisher row rather than the OAuth profile. They arrive a
+ * moment after the session does, because reading that row is a second call, so an account that has only
+ * just signed in legitimately has nothing but an id.
  */
 data class UiStoreAccount(
     val userId: String,
@@ -340,6 +340,15 @@ data class UiSubmissionDraft(
     /** Set to publish a new version of an item you already own; null creates a new one. */
     val itemSlug: String? = null,
     val changelog: String? = null,
+    /**
+     * The project's launcher icon as image bytes, for the listing to show instead of a glyph tile.
+     *
+     * Filled in by the screen rather than typed: the project already has an icon, and a form that asked
+     * for it again would mostly collect nothing. It arrives as bytes because most projects' icons are XML
+     * that has to be rendered, and rendering needs a canvas only the UI has. Null falls back to whatever
+     * raster the engine can find on disk.
+     */
+    val iconBytes: ByteArray? = null,
 )
 
 /**
@@ -357,6 +366,29 @@ data class UiPublishedItem(
     /** The version installable right now, or null while the first one is still under review. */
     val publishedVersion: String? = null,
     val suggestedVersion: String = "1.0.0",
+)
+
+/**
+ * The signed-in account's own profile, as the You screen shows it.
+ *
+ * Distinct from [UiPublisherProfile], which is a stranger's page: this one carries the fields its owner
+ * can edit and the counts only its owner is shown, such as how many submissions are still in review.
+ */
+data class UiMyProfile(
+    val handle: String,
+    val displayName: String,
+    val bio: String? = null,
+    val location: String? = null,
+    val linkUrl: String? = null,
+    /** From the identity provider, so it is shown but not edited here. */
+    val avatarUrl: String? = null,
+    val verified: Boolean = false,
+    val followers: Int = 0,
+    val publishedCount: Int = 0,
+    val pendingCount: Int = 0,
+    val totalInstalls: Int = 0,
+    val totalLikes: Int = 0,
+    val averageRating: Float? = null,
 )
 
 /** [message] is shown verbatim on failure: the backend's quota and validation messages are user-facing. */

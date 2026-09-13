@@ -10,6 +10,7 @@ import dev.ide.store.StoreSubmissionStatus
 import dev.ide.ui.backend.UiSubmissionDraft
 import dev.ide.ui.backend.UiSubmissionStatus
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -300,6 +301,68 @@ class StoreSubmissionsTest {
     fun noListingsMeansNoUpdateTargets() {
         assertTrue(StoreSubmissions(FakeSubmissions(StoreResult.Ok(archive()))).myItems().isEmpty())
     }
+
+    /* ---- the listing's icon ---- */
+
+    private fun png(vararg tail: Int) =
+        byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte()) +
+            tail.map { it.toByte() }.toByteArray()
+
+    /**
+     * The screen renders the icon because most projects' launcher icons are XML, so what it produces has to
+     * be what travels rather than something the engine recomputes from disk.
+     */
+    @Test
+    fun theIconTheScreenRenderedIsWhatTravels() {
+        val fake = FakeSubmissions(StoreResult.Ok(archive()))
+        val subs = StoreSubmissions(fake, launcherIcon = { png(1, 2, 3) })
+        val packed = assertNotNull(subs.pack("/p"))
+
+        subs.submit(draft().copy(iconBytes = png(9, 9, 9)), packed)
+
+        val path = assertNotNull(fake.submitted?.iconPath, "an icon was rendered, so one should be uploaded")
+        assertContentEquals(png(9, 9, 9), java.io.File(path).readBytes(), "the on-disk raster won instead")
+    }
+
+    /** A project that ships a real raster icon and a screen that rendered nothing still publishes one. */
+    @Test
+    fun theProjectsOwnRasterIsTheFallback() {
+        val fake = FakeSubmissions(StoreResult.Ok(archive()))
+        val subs = StoreSubmissions(fake, launcherIcon = { png(4, 5, 6) })
+        val packed = assertNotNull(subs.pack("/p"))
+
+        subs.submit(draft(), packed)
+
+        val path = assertNotNull(fake.submitted?.iconPath)
+        assertContentEquals(png(4, 5, 6), java.io.File(path).readBytes())
+    }
+
+    /** The upload names the published object after this file and reads its content type from the extension. */
+    @Test
+    fun theUploadedFileIsNamedForWhatTheBytesActuallyAre() {
+        val fake = FakeSubmissions(StoreResult.Ok(archive()))
+        val subs = StoreSubmissions(fake)
+        val packed = assertNotNull(subs.pack("/p"))
+        val webp = "RIFF".encodeToByteArray() + byteArrayOf(0, 0, 0, 0) + "WEBP".encodeToByteArray()
+
+        subs.submit(draft().copy(iconBytes = webp), packed)
+
+        assertTrue(assertNotNull(fake.submitted?.iconPath).endsWith(".webp"), "a WebP published as a PNG")
+    }
+
+    @Test
+    fun aProjectWithNoIconPublishesWithout() {
+        val fake = FakeSubmissions(StoreResult.Ok(archive()))
+        val subs = StoreSubmissions(fake)
+        val packed = assertNotNull(subs.pack("/p"))
+
+        subs.submit(draft().copy(iconBytes = ByteArray(0)), packed)
+
+        assertNull(fake.submitted?.iconPath, "an empty rendering is not an icon")
+    }
+
+    private fun draft() =
+        UiSubmissionDraft(title = "My App", summary = "s", description = "d", category = "java")
 
     @Test
     fun theVersionSuggestionRollsOverRatherThanSortingBelowWhatItFollows() {

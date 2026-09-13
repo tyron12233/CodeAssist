@@ -254,7 +254,7 @@ object DrawablePreviewParser {
             }
         }
         return if (layers.isEmpty()) DrawablePreview.Unsupported("adaptive-icon", "Empty adaptive icon")
-        else DrawablePreview.Layers(layers)
+        else DrawablePreview.Layers(layers, adaptive = true)
     }
 
     private fun parseRipple(el: Element, r: DrawableResolver, depth: Int): DrawablePreview {

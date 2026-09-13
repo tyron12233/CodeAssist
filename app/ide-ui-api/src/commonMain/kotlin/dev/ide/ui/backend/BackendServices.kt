@@ -987,6 +987,34 @@ interface StoreService {
     /** Withdraw a still-pending submission. */
     suspend fun withdrawSubmission(itemId: String, version: String): Boolean = false
 
+    // ---- your own profile ----
+
+    /**
+     * The signed-in account's profile, created from the identity provider the first time it is asked for.
+     *
+     * Null when signed out, when the build has no store, or when the backend could not be reached, which
+     * the screen renders as "not signed in" rather than as an error: none of the three has a profile to
+     * show and only one of them is worth a message.
+     */
+    suspend fun myProfile(): UiMyProfile? = null
+
+    /**
+     * Save the editable fields. Returns null on success, or a message to show as it stands.
+     *
+     * A taken handle and a bio that is too long come back through here, because the backend is what knows
+     * both, and a form that guessed at the rules would eventually disagree with it.
+     */
+    suspend fun saveProfile(
+        handle: String,
+        displayName: String,
+        bio: String?,
+        location: String?,
+        linkUrl: String?,
+    ): String? = "Editing a profile is not available in this build"
+
+    /** Whether [handle] is free, for the edit form to answer while it is being typed. */
+    suspend fun handleAvailable(handle: String): Boolean? = null
+
     // ---- ratings and reviews ----
 
     // ---- launch notification ----
@@ -1102,6 +1130,15 @@ interface StoreService {
      * something they can render. Null when it could not be fetched, and the gallery shows what it has.
      */
     suspend fun screenshotFile(storagePath: String): String? = null
+
+    /**
+     * An avatar as a local file path, downloading and caching it on first use.
+     *
+     * Separate from [screenshotFile] because an avatar is not in the store's own bucket: it is the URL the
+     * identity provider serves, carried on the publisher row. Null when it could not be fetched, and the
+     * caller draws initials instead.
+     */
+    suspend fun avatarFile(url: String): String? = null
 
     // ---- publisher profiles ----
 

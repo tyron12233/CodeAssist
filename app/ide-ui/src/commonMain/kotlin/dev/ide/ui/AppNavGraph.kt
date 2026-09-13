@@ -29,6 +29,7 @@ import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.screens.NotificationBell
 import dev.ide.ui.screens.NotificationsSheet
 import dev.ide.ui.screens.PublisherProfileScreen
+import dev.ide.ui.screens.YouScreen
 import dev.ide.ui.screens.PublishingGuideScreen
 import dev.ide.ui.screens.ChallengeBoardScreen
 import dev.ide.ui.screens.ChallengePlayerScreen
@@ -178,6 +179,22 @@ internal fun AppNavGraph(
                 onNeedSignIn = { app.navigateTo(Screen.Projects) },
             )
 
+            Screen.You -> YouScreen(
+                backend = backend,
+                onBack = { app.navigateTo(Screen.Projects) },
+                onOpenItem = app::openStoreItemById,
+                onOpenPublicProfile = app::openPublisher,
+                onPublish = if (backend.store.submissionsAvailable()) ({ app.openSubmitProject() }) else null,
+                onUpdateListing = if (backend.store.submissionsAvailable()) {
+                    ({ slug: String -> app.openSubmitProject(itemSlug = slug) })
+                } else {
+                    null
+                },
+                // Signing out from here lands back on the store, so the only way this renders signed out is
+                // a session that expired while it was open. Offering sign-in is the whole of that case.
+                onSignIn = { app.navigateTo(Screen.Projects) },
+            )
+
             Screen.PublishingGuide -> PublishingGuideScreen(
                 onBack = { app.navigateTo(Screen.Projects) },
                 onPublish = if (backend.store.submissionsAvailable()) ({ app.openSubmitProject() }) else null,
@@ -186,13 +203,14 @@ internal fun AppNavGraph(
             Screen.SubmitProject -> SubmitProjectScreen(
                 backend = backend,
                 initialProject = app.submitProject,
+                initialItemSlug = app.submitItemSlug,
                 // Without this the screenshot picker has no host to ask, which reads on screen as an
                 // "Add a screenshot" button that does nothing.
                 fileActions = fileActions,
                 onBack = { app.navigateTo(Screen.Projects) },
-                // Back to Explore on success: the submission now shows there as "under review", which is
-                // the only place its state is visible.
-                onSubmitted = { app.navigateTo(Screen.Projects) },
+                // To the You screen on success, where the submission is now listed as in review: that is
+                // where its state lives and where its decision will arrive.
+                onSubmitted = { app.openYou() },
             )
 
             Screen.StoreItem -> {
@@ -605,7 +623,13 @@ private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
         // A publisher with no handle has no page to open — the handle IS the address — so the tap is a
         // no-op rather than opening a profile that cannot resolve.
         onOpenPublisher = { publisher -> publisher.handle?.let { app.openPublisher(it) } },
-        onAccount = if (app.backend.store.authProviders().isNotEmpty()) ({ signInVisible = true }) else null,
+        // Signed in this opens the account's own page; signed out it is the sign-in sheet, because there is
+        // no page to show until there is an account.
+        onAccount = if (app.backend.store.authProviders().isNotEmpty()) {
+            ({ if (app.backend.store.authState().value.signedIn) app.openYou() else signInVisible = true })
+        } else {
+            null
+        },
         signedIn = app.backend.store.authState().collectAsState().value.signedIn,
         onHowItWorks = { app.openPublishingGuide() },
         // Where the cards fetch a published screenshot from. Without it every shelf draws the abstract

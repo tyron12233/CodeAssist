@@ -153,17 +153,62 @@ class SupabaseAccountService(
         val user = userJson ?: fetchUser(access)
         val userId = JsonReader.str(user, "id")
             ?: return StoreResult.Failed("Signed in but the account has no id")
-        // The publisher row is created on first submit, so handle/displayName are usually absent here and
-        // get filled in by the submission flow rather than invented from the OAuth profile.
+        val metadata = JsonReader.obj(user)?.get("user_metadata")
+        // The publisher row is created on first sight of the account, from these, so the identity the
+        // provider already knows is not thrown away and asked for again.
+        hints = ProviderIdentity(
+            handle = listOf("user_name", "preferred_username", "nickname")
+                .firstNotNullOfOrNull { JsonReader.str(metadata, it) }
+                // An email local part is a reasonable handle and is all Google offers.
+                ?: JsonReader.str(user, "email")?.substringBefore('@'),
+            name = listOf("full_name", "name")
+                .firstNotNullOfOrNull { JsonReader.str(metadata, it) },
+            avatarUrl = JsonReader.str(metadata, "avatar_url")
+                ?: JsonReader.str(metadata, "picture"),
+        )
         val resolved = StoreAccount(
             userId = userId,
             email = JsonReader.str(user, "email"),
-            avatarUrl = JsonReader.obj(user)?.get("user_metadata")
-                ?.let { JsonReader.str(it, "avatar_url") },
+            avatarUrl = hints?.avatarUrl,
         )
         account = resolved
         return StoreResult.Ok(resolved)
     }
+
+    /**
+     * Bind this device's push token to the session.
+     *
+     * The definer RPC takes the account from the JWT, so the client never asserts whose device this is,
+     * and the token is unguessable, which is what makes updating a row by it safe with no select
+     * privilege on the table. Signed out there is nothing to bind to, which is not an error: this is
+     * called on every launch and most launches are anonymous.
+     */
+    override fun bindPushDevice(pushToken: String): StoreResult<Boolean> {
+        val token = bearer() ?: return StoreResult.Ok(false)
+        val body = """{"p_token":${SupabaseStoreSource.jsonStr(pushToken)}}"""
+        return when (val r = post("/rest/v1/rpc/store_bind_device", body, token)) {
+            // The RPC answers with a bare `true`/`false`: false means no device carries this token yet.
+            is StoreResult.Ok -> StoreResult.Ok(r.value.trim().equals("true", ignoreCase = true))
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+    }
+
+    /**
+     * What the identity provider says about the signed-in user.
+     *
+     * Read by the submission service to seed a publisher row. Held here because this is the only thing
+     * that sees the provider's profile: it arrives with the session and is not fetched again.
+     */
+    internal data class ProviderIdentity(
+        val handle: String? = null,
+        val name: String? = null,
+        val avatarUrl: String? = null,
+    )
+
+    private var hints: ProviderIdentity? = null
+
+    internal fun providerIdentity(): ProviderIdentity? = hints
 
     private fun fetchUser(access: String): Any? =
         (get("/auth/v1/user", access) as? StoreResult.Ok)?.value?.let { JsonReader.parseOrNull(it) }

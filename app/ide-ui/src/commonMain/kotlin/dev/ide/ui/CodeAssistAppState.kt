@@ -714,14 +714,20 @@ class CodeAssistAppState(
     var submitProject: ProjectInfo? by mutableStateOf(null)
         private set
 
+    /** The listing the publish flow should offer to update, when it was reached from one. */
+    var submitItemSlug: String? by mutableStateOf(null)
+        private set
+
     /**
      * The publish flow. Full screen, not a sheet: it is a form with a file listing above it.
      *
-     * [project] is set when the user already chose one — arriving from Share, for instance — so the flow
-     * does not ask again for something they just picked.
+     * [project] is set when the user already chose one (arriving from Share, for instance), so the flow
+     * does not ask again for something they just picked. [itemSlug] is set when the submission is a new
+     * version of a listing the user was already looking at, which is what answering a rejection is.
      */
-    fun openSubmitProject(project: ProjectInfo? = null) {
+    fun openSubmitProject(project: ProjectInfo? = null, itemSlug: String? = null) {
         submitProject = project
+        submitItemSlug = itemSlug
         screen = Screen.SubmitProject
     }
 
@@ -739,6 +745,12 @@ class CodeAssistAppState(
         publisherHandle = handle
         screen = Screen.PublisherProfile
     }
+
+    /** Your own page: your profile, your submissions and what you have published. */
+    fun openYou() {
+        screen = Screen.You
+    }
+
 
     /**
      * Act on a tapped notification.
@@ -760,7 +772,8 @@ class CodeAssistAppState(
                 // being unactionable, not the tap being lost.
                 scope.launch { findStoreItem(target.itemId)?.let { openStoreItem(it) } }
             }
-            dev.ide.ui.backend.UiNotificationTarget.Submissions -> openSubmitProject()
+            // The submissions live on the You screen, which is what a review decision is about.
+            dev.ide.ui.backend.UiNotificationTarget.Submissions -> openYou()
             is dev.ide.ui.backend.UiNotificationTarget.Screen -> {
                 Screen.entries.firstOrNull { it.name == target.route }?.let { navigateTo(it) }
             }
@@ -831,6 +844,7 @@ class CodeAssistAppState(
             screen == Screen.SubmitProject -> screen = Screen.Projects
             screen == Screen.PublishingGuide -> screen = Screen.Projects
             screen == Screen.PublisherProfile -> screen = Screen.Projects
+            screen == Screen.You -> screen = Screen.Projects
 
             screen == Screen.ChallengePlayer -> exitChallenge()
             screen == Screen.ChallengeBoard -> exitChallengeBoard()
