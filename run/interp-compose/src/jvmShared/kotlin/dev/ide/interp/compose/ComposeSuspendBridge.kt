@@ -49,7 +49,10 @@ class ComposeSuspendBridge : SuspendBridge {
         CoroutineScope(continuation.context + uncaught).launch(Dispatchers.Default) {
             try {
                 runInterruptible(Dispatchers.Default) {
-                    SuspendContext.runManaged { lambda.invoke(blockArgs) }
+                    // `invokeFromLibrary`, not `invoke`: this coroutine IS the library caller, so a
+                    // non-local `return` inside the effect body ends the body instead of unwinding into a
+                    // bare coroutine (where it was caught below and reported as a partial-render failure).
+                    SuspendContext.runManaged { lambda.invokeFromLibrary(blockArgs) }
                 }
                 // Completed normally → resume the suspended caller coroutine so the effect finishes.
                 runCatching { continuation.resume(Unit) }
@@ -75,7 +78,7 @@ class ComposeSuspendBridge : SuspendBridge {
         // HERE and runs the flow to completion — or, for an endless `StateFlow`, until the coroutine is cancelled,
         // which interrupts this thread and makes `runBlocking` throw (aborting the collect). The interpreted
         // collector runs synchronously per emission (its own `delay`/state writes work as in any bridge block).
-        runBlocking { (flow as Flow<Any?>).collect { value -> action.invoke(listOf(value)) } }
+        runBlocking { (flow as Flow<Any?>).collect { value -> action.invokeFromLibrary(listOf(value)) } }
         return Unit
     }
 }

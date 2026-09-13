@@ -242,6 +242,20 @@ object NotValueClassMember
 interface InterpretedLambda {
     val paramCount: Int
 
+    /**
+     * Run the lambda for a call that ORIGINATES IN LIBRARY CODE — a JVM proxy handed to `Canvas`/`Layout`/a
+     * `Comparator` — rather than one the interpreter drives itself.
+     *
+     * What differs is the meaning of a NON-LOCAL `return`. Inside an interpreter-driven inline lambda
+     * (`xs.forEach { return x }`) it must keep propagating: the enclosing interpreted function is still on
+     * the stack and is exactly what it returns from. Across a proxy there is no interpreted frame left to
+     * unwind to — the frames above are the library's — so propagating only escapes into the host and takes
+     * out whatever was being rendered. Ending the lambda is what the compiled, inlined code would have done.
+     *
+     * Defaults to [invoke]; only the interpreter's own closure needs to tell the two apart.
+     */
+    fun invokeFromLibrary(args: List<Any?>): Any? = invoke(args)
+
     /** The declared parameter names, when known — a lowered LOCAL FUNCTION carries them, so a call using NAMED
      *  arguments (`g(b = 1, a = 5)`) can be reordered into declared order before [invoke]. Empty means unknown
      *  (an ordinary lambda), and the call binds positionally. */
@@ -1288,19 +1302,30 @@ class ReflectiveDispatcher(
      * operator, the reflective getter for a property). A matched member's result (possibly null) otherwise.
      */
     override fun invokeUnboxedValueClassMember(ownerFqn: String?, name: String, receiver: Any, args: List<Any?>): Any? {
-        // Only the UNBOXED UNDERLYING — a primitive wrapper the interpreter holds for a value class (a `Long` for
-        // `Size`/`Color`/`Offset`, a `Float` for `Dp`). This deliberately EXCLUDES an object receiver, most
-        // importantly a value class's own COMPANION (`Color.Magenta` reads `Color$Companion.getMagenta()`, whose
-        // binding owner is the value class `Color` too): routing that to `Color.getMagenta-impl(companion)` would
-        // find nothing and throw, blanking the caller. A companion isn't a primitive, so it falls through here.
-        if (receiver !is Number && receiver !is Char && receiver !is Boolean) return NotValueClassMember
         val jvm = ownerFqn?.let { jvmName(it) } ?: return NotValueClassMember
         val cls = loadClassOrNull(jvm) ?: return NotValueClassMember
-        if (cls.isInstance(receiver)) return NotValueClassMember
         val boxImpl = cls.declaredMethods.firstOrNull {
             it.name == "box-impl" && Modifier.isStatic(it.modifiers) && it.parameterCount == 1
         } ?: return NotValueClassMember
-        val all = listOf(receiver) + args
+        // Every member of a value class compiles to a STATIC `name-impl(underlying, …)`; the box carries no
+        // instance getter at all (`Color` has `getAlpha-impl(long)` and `unbox-impl()`, and nothing else). So
+        // what this needs is the UNDERLYING value, which reaches it in either of two shapes:
+        //  - the primitive wrapper the interpreter normally holds for a value class (a `Long` for
+        //    `Size`/`Color`/`Offset`, a `Float` for `Dp`);
+        //  - a BOXED instance, which is how one arrives back from a library API returning `Object`/a generic
+        //    `T` — a `State<Color>.value` read, a CompositionLocal (`LocalContentColor.current`), a defaulted
+        //    parameter. Unbox it and take the same static path; `color.alpha` failed with "no readable
+        //    property" before, because a box receiver was refused here and the reflective read then found no
+        //    `getAlpha()` to call.
+        // An object that is NEITHER is refused, which is what keeps a value class's own COMPANION out:
+        // `Color.Magenta` reads `Color${'$'}Companion.getMagenta()` but its binding owner is `Color` too, and
+        // routing that to `Color.getMagenta-impl(companion)` would find nothing and throw, blanking the caller.
+        val underlying: Any = when {
+            cls.isInstance(receiver) -> unboxValueClass(cls, receiver) ?: return NotValueClassMember
+            receiver is Number || receiver is Char || receiver is Boolean -> receiver
+            else -> return NotValueClassMember
+        }
+        val all = listOf(underlying) + args
         // Static `name-<hash>` impl (operators, most members) — unchanged from before; keeps the defaulted-arg
         // `$default` synthetic handling that [invokeStatic] provides.
         return try {
@@ -1310,11 +1335,20 @@ class ReflectiveDispatcher(
             // getter / `compareTo`). Box the underlying and invoke the member on the box.
             val boxed = runCatching {
                 runCatching { boxImpl.isAccessible = true }
-                boxImpl.invoke(null, *bindArgs(boxImpl.parameterTypes, listOf(receiver), listOf(false), boxImpl.genericParameterTypes))
+                boxImpl.invoke(null, *bindArgs(boxImpl.parameterTypes, listOf(underlying), listOf(false), boxImpl.genericParameterTypes))
             }.getOrNull() ?: throw miss
             invokeInstance(boxed, name, args, List(args.size) { false })
         }
     }
+
+    /** The underlying value inside a BOXED inline value-class instance, via its synthetic `unbox-impl()`.
+     *  Null when [cls] carries no such method (so the caller keeps its existing path). */
+    private fun unboxValueClass(cls: Class<*>, boxed: Any): Any? = runCatching {
+        val unbox = cls.declaredMethods.firstOrNull { it.name == "unbox-impl" && it.parameterCount == 0 }
+            ?: return null
+        runCatching { unbox.isAccessible = true }
+        unbox.invoke(boxed)
+    }.getOrNull()
 
     /** Whether [paramType] is an inline value class whose underlying type accepts [value] — so an unboxed
      *  value-class value fits a boxed value-class parameter (it'll be boxed by [boxValueClassIfNeeded]). */
@@ -1371,8 +1405,8 @@ class ReflectiveDispatcher(
                 method.name == sam.name && method.parameterCount == sam.parameterCount -> {
                     val a = callArgs?.toList() ?: emptyList()
                     if (a.lastOrNull() is kotlin.coroutines.Continuation<*>)
-                        suspendBridge?.runSuspending(lambda, a) ?: lambda.invoke(a)
-                    else lambda.invoke(a)
+                        suspendBridge?.runSuspending(lambda, a) ?: lambda.invokeFromLibrary(a)
+                    else lambda.invokeFromLibrary(a)
                 }
                 method.name == "toString" -> "InterpretedSam(${funInterface.simpleName})"
                 method.name == "hashCode" -> System.identityHashCode(lambda)
@@ -1404,10 +1438,10 @@ class ReflectiveDispatcher(
                 method.name == "invoke" || (sam != null && method.name == sam.name && method.parameterCount == sam.parameterCount) -> {
                     val a = callArgs?.toList() ?: emptyList()
                     if (a.lastOrNull() is kotlin.coroutines.Continuation<*>)
-                        suspendBridge?.runSuspending(lambda, a) ?: runCatching { lambda.invoke(a) }.getOrDefault(Unit)
+                        suspendBridge?.runSuspending(lambda, a) ?: runCatching { lambda.invokeFromLibrary(a) }.getOrDefault(Unit)
                     // Box a value-class result (an interpreter-unboxed `Long` for `IntOffset`/`Dp`/… returned by a
                     // `Density.() -> IntOffset` block) so the compiled callee's cast to the value class succeeds.
-                    else lambda.invoke(a).let { if (returnValueClass != null) boxValueClassIfNeeded(it, returnValueClass) else it }
+                    else lambda.invokeFromLibrary(a).let { if (returnValueClass != null) boxValueClassIfNeeded(it, returnValueClass) else it }
                 }
                 method.name == "toString" -> "InterpretedLambda"
                 method.name == "hashCode" -> System.identityHashCode(lambda)
@@ -1704,7 +1738,20 @@ class ReflectiveDispatcher(
             ?: throw InterpreterException("cannot load class `$fqn`")
 
     /** Map a Kotlin classifier FQN to its JVM class for reflection; `…Kt` facades are already JVM names. */
-    private fun jvmName(fqn: String): String = KOTLIN_TO_JVM[fqn] ?: fqn
+    /**
+     * The JVM class name for a Kotlin type name. A mapped type (`kotlin.collections.MutableList`) becomes its
+     * `java.util` counterpart; anything else is passed through.
+     *
+     * A SIMPLE name is also resolved against the same table under the two packages Kotlin's default imports
+     * cover. The lowering can hand over a bare `MutableList` — the receiver type of `buildList { add(x) }` /
+     * `mutableListOf(1).apply { add(2) }` comes from a generic signature, where it has no package — and that
+     * reached the loader verbatim as "cannot load class `MutableList`".
+     */
+    private fun jvmName(fqn: String): String {
+        KOTLIN_TO_JVM[fqn]?.let { return it }
+        if ('.' in fqn) return fqn
+        return KOTLIN_TO_JVM["kotlin.collections.$fqn"] ?: KOTLIN_TO_JVM["kotlin.$fqn"] ?: fqn
+    }
 
     private companion object {
         /** The trailing marker parameter of every Kotlin default-args synthetic constructor — distinguishes it

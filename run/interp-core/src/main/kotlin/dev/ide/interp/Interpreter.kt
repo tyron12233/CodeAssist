@@ -437,7 +437,7 @@ class Interpreter(
             else if (otherwise != null) eval(otherwise, env) else Unit
         }
 
-        is RNode.Return -> throw ReturnSignal(node.value?.let { eval(it, env) })
+        is RNode.Return -> throw ReturnSignal(node.value?.let { eval(it, env) }, node.label)
         is RNode.While -> {
             // Each iteration runs the body in a fresh child scope, so a local (or lambda capturing one)
             // declared in the body is distinct per iteration; the condition reads the enclosing scope. A
@@ -1108,12 +1108,17 @@ class Interpreter(
         // intrinsics, running the interpreted lambda in-process. This also keeps the ambient composer intact for
         // a composable call inside the lambda (e.g. `repeat(n) { Text(...) }`) — exactly what the inlined form
         // would do — so the composables compose into the enclosing group rather than blowing up the dispatcher.
+        // The facade allowlist is the fast gate, but a few modeled names arrive on a facade that is NOT on
+        // it — `7.rem(3)` resolves on `kotlin.Int`, `"x".toCharArray()` on `java.lang.String`. Those names are
+        // admitted by NAME; each intrinsic re-checks its receiver's runtime type and yields null (falls through
+        // to normal dispatch) when it doesn't apply, so admitting one costs nothing when it isn't ours.
         if (callee is ResolvedCallable.Library &&
-            (callee.ownerFqn in INLINE_INTRINSIC_FACADES || callee.ownerFqn?.let {
-                it.startsWith("kotlinx.coroutines") || it.startsWith(
-                    "androidx.compose.runtime"
-                )
-            } == true)
+            (callee.ownerFqn in INLINE_INTRINSIC_FACADES || callee.displayName in NAME_KEYED_INTRINSICS ||
+                callee.ownerFqn?.let {
+                    it.startsWith("kotlinx.coroutines") || it.startsWith(
+                        "androidx.compose.runtime"
+                    )
+                } == true)
         ) {
             evalInlineIntrinsic(call, env)?.let { return it.value }
         }
@@ -1329,7 +1334,8 @@ class Interpreter(
         return InterpreterException(
             "`${callee.displayName}` is an inline-only function (no JVM method on `$owner`) the interpreter " +
                     "doesn't model yet: only the stdlib scope functions (repeat/let/also/run/takeIf/takeUnless), " +
-                    "the empty/blank predicates (isNotBlank/isNotEmpty/isNullOrBlank/isNullOrEmpty), floorDiv/mod and orEmpty are built in",
+                    "runCatching and the Result readers, the empty/blank predicates " +
+                    "(isNotBlank/isNotEmpty/isNullOrBlank/isNullOrEmpty), floorDiv/mod and orEmpty are built in",
         )
     }
 
@@ -1388,8 +1394,13 @@ class Interpreter(
                 Handled(ArrayList<Any?>(n).apply { repeat(n) { add(zero) } })
             }
             // xs.toTypedArray() / xs.toIntArray() / … → the elements as a List (arrays are Lists here anyway).
+            // A CharSequence receiver is `"abc".toCharArray()`, whose elements are its CHARS — not the string
+            // as one element, which is what the collection conversion made of it.
             name in TO_ARRAY_FUNCTIONS && call.dispatch == DispatchKind.EXTENSION ->
-                Handled(toElementList(call.receiver?.let { eval(it, env) }))
+                when (val r = call.receiver?.let { eval(it, env) }) {
+                    is CharSequence -> Handled(r.toList())
+                    else -> Handled(toElementList(r))
+                }
 
             else -> null
         }
@@ -1676,6 +1687,79 @@ class Interpreter(
                 val frameTime = if (name == "withFrameMillis") now / 1_000_000L else now
                 Handled(lambda(args[0].value).invoke(listOf(frameTime)))
             }
+            // `runCatching { … }` and `x.runCatching { … }`, plus the `Result` accessors that read the
+            // outcome. The whole family has to be modeled together: `runCatching` is @InlineOnly, and `Result`
+            // is a value class whose accessors are inline too, so none of them has a JVM method to dispatch to.
+            //
+            // A real `kotlin.Result` is produced (the stdlib is bridged, so `Result.success`/`failure` are the
+            // genuine article), which keeps a Result that escapes into bridged library code well-formed.
+            //
+            // What is NOT caught, unlike the real `runCatching`: the interpreter's own control-flow signals (a
+            // `return`/`break`/`continue` crossing the block is not a failure), and `VirtualMachineError` — on
+            // ART a swallowed StackOverflowError turns into a native SIGSEGV at the next log write, so it must
+            // keep unwinding. Everything else becomes a failed Result, with an interpreted `throw`'s value
+            // unwrapped so `exceptionOrNull()` hands back the object the program threw.
+            name == "runCatching" && args.size == 1 -> {
+                val block = lambda(args[0].value)
+                val blockArgs = if (call.dispatch == DispatchKind.EXTENSION) listOf(receiver()) else emptyList()
+                Handled(
+                    try {
+                        Result.success(block.invoke(blockArgs))
+                    } catch (t: Throwable) {
+                        if (t is ReturnSignal || t is LoopSignal || t is VirtualMachineError) throw t
+                        Result.failure(asFailure((t as? KotlinThrow)?.value ?: t))
+                    },
+                )
+            }
+            // The `Result` readers. `fold`/`getOrElse`/`recover`/`onSuccess`/`onFailure` are top-level
+            // EXTENSIONS on `kotlin.ResultKt`, while `getOrNull`/`isSuccess`/`exceptionOrNull`/`getOrThrow`
+            // are MEMBERS of the value class itself, so the dispatch kind cannot discriminate them.
+            //
+            // The DECLARING FACADE does, and it has to: every one of these names also exists on a collection
+            // (`list.getOrElse(5) { 9 }`, `map.getOrElse(k) { … }`, `list.fold(0) { … }`). A branch that
+            // matched on the name alone and then bailed on a non-Result receiver would swallow those — a
+            // `null` from here means "not an intrinsic at all" and abandons the whole `when`, so the
+            // collection branches further down would never be reached.
+            name in RESULT_ACCESSORS &&
+                (call.callee as? ResolvedCallable.Library)?.ownerFqn in RESULT_FACADES -> {
+                val recvNode = call.receiver ?: return null
+                val result = eval(recvNode, env) as? Result<*> ?: return null
+                val raw = result.exceptionOrNull()
+                // What the PROGRAM sees for a failure: the object it actually threw, which for an interpreted
+                // exception class is not a `Throwable` and travels wrapped (see [asFailure]).
+                val failure = unwrapFailure(raw)
+                when {
+                    name == "getOrNull" && args.isEmpty() -> Handled(result.getOrNull())
+                    name == "exceptionOrNull" && args.isEmpty() -> Handled(failure)
+                    name == "isSuccess" && args.isEmpty() -> Handled(raw == null)
+                    name == "isFailure" && args.isEmpty() -> Handled(raw != null)
+                    name == "getOrThrow" && args.isEmpty() ->
+                        if (raw == null) Handled(result.getOrNull()) else throw KotlinThrow(failure)
+                    name == "getOrDefault" && args.size == 1 ->
+                        Handled(if (raw == null) result.getOrNull() else eval(args[0].value, env))
+                    name == "getOrElse" && args.size == 1 ->
+                        Handled(if (raw == null) result.getOrNull() else lambda(args[0].value).invoke(listOf(failure)))
+                    name == "recover" && args.size == 1 ->
+                        Handled(if (raw == null) result else Result.success(lambda(args[0].value).invoke(listOf(failure))))
+                    name == "fold" && args.size == 2 -> Handled(
+                        if (raw == null) lambda(args[0].value).invoke(listOf(result.getOrNull()))
+                        else lambda(args[1].value).invoke(listOf(failure)),
+                    )
+                    name == "onSuccess" && args.size == 1 -> {
+                        if (raw == null) lambda(args[0].value).invoke(listOf(result.getOrNull()))
+                        Handled(result)
+                    }
+                    name == "onFailure" && args.size == 1 -> {
+                        if (raw != null) lambda(args[0].value).invoke(listOf(failure))
+                        Handled(result)
+                    }
+                    // A Result API this doesn't model (`mapCatching`, `recoverCatching`): fall through, so
+                    // the honest "inline-only … not modeled" boundary is what the user sees. Every arity the
+                    // names above really have IS covered, so this re-evaluates the receiver only on a path
+                    // that is about to fail anyway.
+                    else -> null
+                }
+            }
             // x.let { it -> … }
             name == "let" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 ->
                 Handled(lambda(args[0].value).invoke(listOf(receiver())))
@@ -1733,6 +1817,11 @@ class Interpreter(
                     if (orNull) return Handled(null) else throw InterpreterException("`$name` on an empty collection")
                 val sel = lambda(args[0].value)
                 Handled(reduceByComparison(elems.map { sel.invoke(listOf(it)) }, wantMax = name.startsWith("maxOf")))
+            }
+            (name == "maxOrNull" || name == "minOrNull") && args.isEmpty() && call.receiver != null -> {
+                val elems = elementListOrNull(receiver()) ?: return null
+                if (elems.isEmpty()) Handled(null)
+                else Handled(reduceByComparison(elems, wantMax = name.startsWith("max")))
             }
             // `xs.maxOfWith/minOfWith(comparator) { selector }` (+ their `OrNull` variants) — the max/min selected
             // value BY the supplied Comparator, rather than by natural ordering. @InlineOnly.
@@ -1792,10 +1881,16 @@ class Interpreter(
                 val key = eval(args[0].value, env)
                 Handled(m[key] ?: lambda(args[1].value).invoke(emptyList()).also { m[key] = it })
             }
-            // `s.uppercase()` / `s.lowercase()` — @InlineOnly one-liners over the receiver CharSequence.
+            // `s.uppercase()` / `s.lowercase()` — @InlineOnly one-liners over the receiver. BOTH receiver
+            // shapes have to be handled in the one branch: a `when` branch that matches and then yields null
+            // abandons the whole table, so a CharSequence-only test here left `c.uppercase()` on a Char with
+            // nowhere to go (it fell through to "no static uppercase(1) on kotlin.text.CharsKt").
             (name == "uppercase" || name == "lowercase") && call.dispatch == DispatchKind.EXTENSION && args.isEmpty() ->
-                (receiver() as? CharSequence)?.toString()
-                    ?.let { Handled(if (name == "uppercase") it.uppercase() else it.lowercase()) }
+                when (val r = receiver()) {
+                    is Char -> Handled(if (name == "uppercase") r.uppercase() else r.lowercase())
+                    is CharSequence -> Handled(if (name == "uppercase") r.toString().uppercase() else r.toString().lowercase())
+                    else -> null
+                }
             // `s.split(delimiter)` — the common single-String/Char delimiter form (the vararg + defaulted
             // ignoreCase/limit make the reflective overload hard to bind).
             name == "split" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
@@ -1829,6 +1924,38 @@ class Interpreter(
             // so the CharSequence and Collection/Map overloads of `isNotEmpty`/`isNullOrEmpty` both resolve.
             call.dispatch == DispatchKind.EXTENSION && args.isEmpty() && name in EMPTY_BLANK_PREDICATES ->
                 evalEmptyBlankPredicate(name, receiver())
+            // The `Char` classification/conversion family (`kotlin.text.CharsKt`) and `Char.code`
+            // (`kotlin.CharCodeKt`) are `@InlineOnly` delegations to `java.lang.Character`, so there is no JVM
+            // method to reflect into. Every text-handling preview reaches at least one of them
+            // (`text.filter { it.isDigit() }`, `name.first().uppercaseChar()`, `c.code`).
+            args.isEmpty() && name in CHAR_INTRINSICS && call.receiver != null ->
+                (receiver() as? Char)?.let { evalCharIntrinsic(name, it) }
+            // `CharSequence`/`String` members that are `@InlineOnly` (`toDouble`, `replaceFirstChar`) or whose
+            // real overload set the reflective binder cannot pick from (`substring`'s CharSequence-vs-String
+            // pair, `toCharArray`'s four-arg form). Computed on the evaluated receiver, and `toCharArray`
+            // yields the LIST the interpreter uses for every array, so `.size`/indexing/iteration work on it.
+            name in STRING_INTRINSICS && call.receiver != null -> {
+                val recv = receiver()
+                (recv as? CharSequence)?.let { evalStringIntrinsic(name, it, args, env) }
+            }
+            // `ifEmpty`/`ifBlank` are `@InlineOnly`: yield the fallback the block produces when the receiver is
+            // empty/blank, else the receiver unchanged.
+            (name == "ifEmpty" || name == "ifBlank") && args.size == 1 -> {
+                val recv = receiver()
+                val empty = when {
+                    name == "ifBlank" -> (recv as? CharSequence)?.isBlank() ?: return null
+                    recv is CharSequence -> recv.isEmpty()
+                    recv is Collection<*> -> recv.isEmpty()
+                    recv is Map<*, *> -> recv.isEmpty()
+                    else -> return null
+                }
+                Handled(if (empty) lambda(args[0].value).invoke(emptyList()) else recv)
+            }
+            // `a.rem(b)` / `a.div(b)` / `a.times(b)` / `a.plus(b)` / `a.minus(b)` — the named spellings of the
+            // arithmetic operators. A primitive carries no such JVM method (`Integer` has no `rem`), so the
+            // reflective dispatch reported "no method `rem`(1) on java.lang.Integer".
+            name in NAMED_ARITHMETIC && args.size == 1 && call.receiver != null ->
+                numericNamedOperator(name, receiver(), eval(args[0].value, env))
             // `Int/Long.floorDiv(other)` and `.mod(other)` (`kotlin.NumbersKt`) are `@InlineOnly` too: JetNews's
             // `InterestsAdaptiveContentLayout` computes `index.floorDiv(columns)` inside its measure lambda, and
             // the failure there was sunk to a null MeasureResult ("Asking for measurement result of unmeasured
@@ -2120,6 +2247,93 @@ class Interpreter(
             else -> null
         }
 
+        else -> null
+    }
+
+    /** A `CharSequence` member the reflective path can't serve. Null for an unmodeled name/arity, so the
+     *  honest boundary still fires. */
+    private fun evalStringIntrinsic(name: String, recv: CharSequence, args: List<RArg>, env: Env): Handled? {
+        fun intArg(i: Int) = (eval(args[i].value, env) as? Number)?.toInt()
+        return when {
+            name == "substring" && args.size == 1 -> intArg(0)?.let { Handled(recv.toString().substring(it)) }
+            name == "substring" && args.size == 2 ->
+                intArg(0)?.let { a -> intArg(1)?.let { b -> Handled(recv.toString().substring(a, b)) } }
+            // The interpreter models every array as a List, so a CharArray has to arrive as one too.
+            name == "toCharArray" && args.isEmpty() -> Handled(recv.toString().toList())
+            name == "toDouble" && args.isEmpty() -> Handled(recv.toString().toDouble())
+            name == "toFloat" && args.isEmpty() -> Handled(recv.toString().toFloat())
+            name == "replaceFirstChar" && args.size == 1 -> {
+                val text = recv.toString()
+                if (text.isEmpty()) Handled(text)
+                else {
+                    val head = (eval(args[0].value, env) as? InterpretedLambda)
+                        ?.invoke(listOf(text[0])) ?: return null
+                    Handled(head.toString() + text.substring(1))
+                }
+            }
+            else -> null
+        }
+    }
+
+    /** `a.plus(b)`-style named arithmetic on two numbers, in Kotlin's result type (the wider operand's).
+     *  Null when either side isn't a number, so a user-defined `plus` still dispatches normally. */
+    private fun numericNamedOperator(name: String, left: Any?, right: Any?): Handled? {
+        if (left !is Number || right !is Number) return null
+        // [arithmetic] is keyed by the operator's Kotlin NAME, which is exactly what these calls carry.
+        return Handled(arithmetic(name, left, right))
+    }
+
+    /** An `@InlineOnly` extension PROPERTY computed directly on its receiver. Null for anything not modeled,
+     *  so the reflective facade read (and then the honest boundary) still runs. Type-preserving, as Kotlin is:
+     *  `Int.sign` is an `Int`, `Double.sign` a `Double`. */
+    private fun inlineExtensionProperty(name: String, receiver: Any?): Handled? = when (name) {
+        "code" -> (receiver as? Char)?.let { Handled(it.code) }
+        "sign" -> when (receiver) {
+            is Int -> Handled(if (receiver > 0) 1 else if (receiver < 0) -1 else 0)
+            is Long -> Handled(if (receiver > 0L) 1 else if (receiver < 0L) -1 else 0)
+            is Float -> Handled(Math.signum(receiver))
+            is Double -> Handled(Math.signum(receiver))
+            else -> null
+        }
+        "absoluteValue" -> when (receiver) {
+            is Int -> Handled(Math.abs(receiver))
+            is Long -> Handled(Math.abs(receiver))
+            is Float -> Handled(Math.abs(receiver))
+            is Double -> Handled(Math.abs(receiver))
+            else -> null
+        }
+        "lastIndex" -> when (receiver) {
+            is CharSequence -> Handled(receiver.length - 1)
+            is List<*> -> Handled(receiver.size - 1)
+            else -> null
+        }
+        "indices" -> when (receiver) {
+            is CharSequence -> Handled(receiver.indices)
+            is Collection<*> -> Handled(0 until receiver.size)
+            else -> null
+        }
+        else -> null
+    }
+
+    /** An `@InlineOnly` `Char` classifier/converter on [c]. Null for a name this doesn't model, so the honest
+     *  dispatch boundary still fires. `code`/`digitToInt` return Int; the classifiers return Boolean; the
+     *  case converters return Char. */
+    private fun evalCharIntrinsic(name: String, c: Char): Handled? = when (name) {
+        "code" -> Handled(c.code)
+        "isDigit" -> Handled(c.isDigit())
+        "isLetter" -> Handled(c.isLetter())
+        "isLetterOrDigit" -> Handled(c.isLetterOrDigit())
+        "isWhitespace" -> Handled(c.isWhitespace())
+        "isUpperCase" -> Handled(c.isUpperCase())
+        "isLowerCase" -> Handled(c.isLowerCase())
+        "uppercaseChar" -> Handled(c.uppercaseChar())
+        "lowercaseChar" -> Handled(c.lowercaseChar())
+        "titlecaseChar" -> Handled(c.titlecaseChar())
+        "uppercase" -> Handled(c.uppercase())
+        "lowercase" -> Handled(c.lowercase())
+        "digitToInt" -> Handled(c.digitToInt())
+        "isDefined" -> Handled(c.isDefined())
+        "isISOControl" -> Handled(c.isISOControl())
         else -> null
     }
 
@@ -2889,6 +3103,15 @@ class Interpreter(
                 )
             }
         }
+        // `Result.isSuccess`/`isFailure`. `Result` is a value class, so its accessors compile to static
+        // `isSuccess-impl`-style methods on the boxed class that no getter lookup finds — and the intrinsic
+        // table above only sees CALLS, not property reads. Read them off the real Result instead.
+        if (receiver is Result<*>) {
+            when (name) {
+                "isSuccess" -> return receiver.exceptionOrNull() == null
+                "isFailure" -> return receiver.exceptionOrNull() != null
+            }
+        }
         // No plain (no-arg) getter — the name may be a nested `object` accessed through its enclosing
         // object/class (`Icons.AutoMirrored`, `Icons.AutoMirrored.Filled`): a nested object compiles to
         // `<Enclosing>$<name>` with its own `INSTANCE`, not a getter on the receiver instance.
@@ -2969,9 +3192,10 @@ class Interpreter(
                 ?.also { runCatching { it.isAccessible = true } }
 
     /** Read a top-level property (`LocalTextStyle`, `kotlin.math.PI`): it compiles to a STATIC getter on its
-     *  declaring `…Kt` file facade (`getLocalTextStyle()`), taking no arguments. The facade is initialized
-     *  (its `<clinit>` populates the backing field). Name matched mangling-aware (a value-class-typed top-level
-     *  property mangles its getter). */
+     *  declaring `…Kt` file facade (`getLocalTextStyle()`), taking no arguments, OR — for a `const val` — to a
+     *  static FIELD of the property's own name and no getter at all (`MathKt.PI` is a `public static final
+     *  double`). The facade is initialized (its `<clinit>` populates the backing field). Name matched
+     *  mangling-aware (a value-class-typed top-level property mangles its getter). */
     private fun readTopLevelProperty(ownerFqn: String, name: String): Any? {
         hookPropertyRead(ownerFqn, name, null)?.let { return it.value }
         val getterName =
@@ -2989,7 +3213,15 @@ class Interpreter(
                 it.name,
                 getter
             )
-        } ?: throw InterpreterException("no top-level property getter `$name` on `$ownerFqn`")
+        }
+        if (m == null) {
+            // A `const val` has no getter — it IS a static final field, read straight off the facade.
+            val field = runCatching { cls.getField(name) }.getOrNull()
+                ?: cls.declaredFields.firstOrNull { it.name == name && java.lang.reflect.Modifier.isStatic(it.modifiers) }
+                ?: throw InterpreterException("no top-level property getter `$name` on `$ownerFqn`")
+            runCatching { field.isAccessible = true }
+            return field.get(null)
+        }
         runCatching { m.isAccessible = true }
         return m.invoke(null)
     }
@@ -3000,6 +3232,10 @@ class Interpreter(
      *  (`Dp`/`TextUnit` → `getDp-<hash>`), which [KotlinJvmNames.matches] resolves from the facade's `@Metadata`. */
     private fun readExtensionProperty(receiver: Any, ownerFqn: String, name: String): Any? {
         hookPropertyRead(ownerFqn, name, receiver)?.let { return it.value }
+        // An `@InlineOnly` extension PROPERTY has no getter on its facade at all — `kotlin.CharCodeKt` carries
+        // only `getCode${'$'}annotations(char)`, never a `getCode`. Reflecting for one found that annotations stub
+        // and failed to bind, so `c.code` (and `x.sign`/`x.absoluteValue`) reported "no static getCode(1)".
+        inlineExtensionProperty(name, receiver)?.let { return it.value }
         // A preview-specific override for a getter the real facade can't serve on an interpreted receiver — a
         // `SourceObject` extending a library type (`viewModelScope` on an interpreted `ViewModel`, whose real
         // getter needs a headless-unavailable `Dispatchers.Main` scope). The Compose dispatcher supplies one;
@@ -3222,14 +3458,16 @@ class Interpreter(
             bindParams(callEnv, node.params, args)
             // A local function's `return` is LOCAL — it returns from this closure, not the enclosing function. A
             // plain lambda's bare `return` is non-local (it must propagate to the enclosing function's frame).
-            return if (node.isLocalFunction) {
-                try {
-                    eval(node.body, callEnv)
-                } catch (r: ReturnSignal) {
-                    r.value
-                }
-            } else {
+            // A local function's `return` is LOCAL — it returns from this closure, not the enclosing
+            // function. A `return@label` naming THIS lambda ends this invocation and yields its value
+            // (`LaunchedEffect { … return@LaunchedEffect }`). A plain lambda's bare `return` is non-local and
+            // keeps propagating; so does a `return@other` aimed at an enclosing lambda.
+            return try {
                 eval(node.body, callEnv)
+            } catch (r: ReturnSignal) {
+                if (node.isLocalFunction && r.label == null) r.value
+                else if (r.label != null && r.label == node.label) r.value
+                else throw r
             }
         }
 
@@ -3487,7 +3725,18 @@ class Interpreter(
     }
 
     /** Non-local control transfer for `return`; no stack trace (it's control flow, not an error). */
-    private class ReturnSignal(val value: Any?) : RuntimeException(null, null, false, false)
+    /** [label] is the lambda a `return@label` targets; null means the enclosing FUNCTION's frame, which is
+     *  what a bare `return` inside an inline lambda unwinds to (Kotlin's non-local return). */
+    private class ReturnSignal(val value: Any?, val label: String? = null) :
+        RuntimeException(null, null, false, false) {
+        // Computed only if something actually prints it, so the hot `return` path still allocates nothing
+        // beyond the signal. A leaked signal used to surface as a bare "ReturnSignal:" with no hint of where
+        // it came from; naming the label is what makes it findable.
+        override val message: String
+            get() = if (label != null)
+                "`return@$label` escaped its lambda — no enclosing lambda carries that label"
+            else "`return` escaped its function"
+    }
 
     /** Loop control transfers for `break`/`continue` — stackless singletons (no per-throw allocation in a hot
      *  loop), caught by the enclosing [RNode.While]/[RNode.ForEach]. The unlabeled jumps reuse the singletons;
@@ -3576,6 +3825,20 @@ class Interpreter(
      *  `try`/`catch` can still match and bind it. A real `Throwable` is thrown directly. */
     private class KotlinThrow(val value: Any?) : RuntimeException(null, null, false, false)
 
+    /**
+     * Carrier for a failure that is NOT a real `Throwable`: an exception whose class is declared in the
+     * interpreted program is an interpreted object, and `kotlin.Result.failure` only accepts a `Throwable`.
+     * Wrapping keeps the Result genuine (so one that escapes into bridged library code is well-formed);
+     * [unwrapFailure] takes the thrown object back out before any of it reaches the program.
+     */
+    private class InterpretedFailure(val thrown: Any?) : RuntimeException(null, null, false, false)
+
+    /** A thrown value as something `Result.failure` accepts. */
+    private fun asFailure(thrown: Any?): Throwable = thrown as? Throwable ?: InterpretedFailure(thrown)
+
+    /** The inverse of [asFailure]: what the program threw. */
+    private fun unwrapFailure(t: Throwable?): Any? = (t as? InterpretedFailure)?.thrown ?: t
+
     private companion object {
         /** Runaway-loop guard bounds (see [guardLoop]). Generous enough that a real preview's loops never trip
          *  them, tight enough that a runaway loop can't hang the app past an ANR. */
@@ -3584,6 +3847,18 @@ class Interpreter(
             3_000_000_000L // 3s wall-clock — well under Android's 5s input-dispatch ANR
         const val FRAME_MILLIS =
             16L // simulated ~60fps cadence for `withFrameNanos`/`withFrameMillis`
+
+            /** The `kotlin.Result` readers modeled beside `runCatching`. Every one is inline on a value class,
+             *  so none has a JVM method the dispatcher could reach; a Result that is produced has to be read
+             *  here too, or the call after `runCatching` fails instead of the call itself. */
+            /** Where the `Result` readers are declared — the value class itself and its extension facade.
+             *  The discriminator for [RESULT_ACCESSORS], whose names collide with collection operators. */
+            val RESULT_FACADES = setOf("kotlin.Result", "kotlin.ResultKt")
+
+            val RESULT_ACCESSORS = setOf(
+                "getOrNull", "getOrDefault", "getOrElse", "getOrThrow", "exceptionOrNull",
+                "isSuccess", "isFailure", "fold", "recover", "onSuccess", "onFailure",
+            )
 
         /** Recursion + whole-pass bounds (see [call]). [MAX_CALL_DEPTH] gives a clean early abort on a large-stack
          *  thread; the StackOverflowError catch in [call] is the backstop for smaller stacks. */
@@ -3658,18 +3933,45 @@ class Interpreter(
             "kotlin.NumbersKt",
             // `Set?.orEmpty()` lives on its own facade (String/List/Map/array `orEmpty` are on facades above).
             "kotlin.collections.SetsKt",
+            // The `Char` classifier/converter family, and `Char.code` on its own facade.
+            "kotlin.text.CharsKt", "kotlin.CharCodeKt",
+            // `runCatching` and every `Result` reader. `Result` is a value class, so its accessors are inline
+            // too and none of the family has a JVM method — see the `runCatching` intrinsic. The readers are
+            // split across the extension facade and the class itself, so both are listed.
+            "kotlin.ResultKt", "kotlin.Result",
         )
 
         /** The `@InlineOnly` empty/blank predicates, dispatched by name in [evalEmptyBlankPredicate]. */
+        /** `@InlineOnly` `Char` members modeled by [evalCharIntrinsic]. `code` is a PROPERTY at the source
+         *  level but lowers to a zero-arg extension call, so it sits in the same table. */
+        /** `CharSequence` members served by [evalStringIntrinsic]. */
+        val STRING_INTRINSICS =
+            setOf("substring", "toCharArray", "toDouble", "toFloat", "replaceFirstChar")
+
+        /** The named spellings of the arithmetic operators, which primitives carry no JVM method for. */
+        val NAMED_ARITHMETIC = setOf("plus", "minus", "times", "div", "rem")
+
+        val CHAR_INTRINSICS = setOf(
+            "code", "isDigit", "isLetter", "isLetterOrDigit", "isWhitespace", "isUpperCase", "isLowerCase",
+            "uppercaseChar", "lowercaseChar", "titlecaseChar", "uppercase", "lowercase", "digitToInt",
+            "isDefined", "isISOControl",
+        )
+
+        /** Intrinsic names admitted whatever facade they resolved on (see the gate in [call]) — they exist
+         *  on receivers whose owner is not an `…Kt` facade at all. */
+        val NAME_KEYED_INTRINSICS: Set<String> =
+            STRING_INTRINSICS + NAMED_ARITHMETIC + CHAR_INTRINSICS + setOf("minOrNull", "maxOrNull")
+
         val EMPTY_BLANK_PREDICATES =
             setOf("isBlank", "isEmpty", "isNotBlank", "isNotEmpty", "isNullOrBlank", "isNullOrEmpty")
 
         /** `kotlin.math` single-argument functions modeled over [java.lang.Math] (all compute in `Double`).
-         *  `round` is ties-to-even ([Math.rint], matching `kotlin.math.round`); `Double.roundToInt/Long` (ties
+         *  `round` rounds ties toward POSITIVE INFINITY, which is `kotlin.math.round`'s contract — NOT
+     *  [Math.rint], whose ties-to-even made `round(2.5)` answer 2.0. `Double.roundToInt/Long` (ties
          *  up) are handled separately. `abs`/`min`/`max` are type-preserving and also handled separately. */
         val MATH_UNARY: Map<String, (Double) -> Double> = mapOf(
             "sqrt" to Math::sqrt, "cbrt" to Math::cbrt,
-            "floor" to Math::floor, "ceil" to Math::ceil, "round" to Math::rint,
+            "floor" to Math::floor, "ceil" to Math::ceil, "round" to { x -> Math.floor(x + 0.5) },
             "sin" to Math::sin, "cos" to Math::cos, "tan" to Math::tan,
             "asin" to Math::asin, "acos" to Math::acos, "atan" to Math::atan,
             "sinh" to Math::sinh, "cosh" to Math::cosh, "tanh" to Math::tanh,

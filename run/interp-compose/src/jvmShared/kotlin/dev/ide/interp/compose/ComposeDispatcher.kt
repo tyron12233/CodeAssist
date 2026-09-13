@@ -261,7 +261,7 @@ class ComposeDispatcher(
                             // Box a value-class return (`Modifier.offset { IntOffset(…) }` — the block's unboxed
                             // `Long`) so the compiled callee's cast to the value class succeeds. The cast runs
                             // after this proxy returns (at measure), so it can't be caught below — box it here.
-                            boxLambdaReturn(lambda.invoke(a), returnValueClass)
+                            boxLambdaReturn(lambda.invokeFromLibrary(a), returnValueClass)
                         } catch (t: Throwable) {
                             contentLambdaError = contentLambdaError ?: t
                             safeGuardReturn(method.returnType, a)
@@ -553,7 +553,7 @@ class ComposeDispatcher(
                         val prevSuppressed = composablesSuppressed.get()
                         composablesSuppressed.set(composerArg == null)
                         try {
-                            boxLambdaReturn(lambda.invoke(real), valueClassReturn)
+                            boxLambdaReturn(lambda.invokeFromLibrary(real), valueClassReturn)
                         } catch (ce: kotlin.coroutines.cancellation.CancellationException) {
                             throw ce // recomposition cancellation is control flow — never swallow it
                         } catch (e: Throwable) {
@@ -671,7 +671,7 @@ class ComposeDispatcher(
         ops.startGroup(composer, call.callSiteKey.value)
         var completed = false
         try {
-            content.invoke(listOfNotNull(receiver))
+            content.invokeFromLibrary(listOfNotNull(receiver))
             completed = true
             return Unit
         } finally {
@@ -779,7 +779,7 @@ class ComposeDispatcher(
         val start = namedString("startDestination") ?: strings.getOrNull(0)
         val route = namedString("route") ?: strings.getOrNull(1)
         if (route != null && start != null) collector.graphStart[route] = start
-        builder.invoke(listOf(collector)) // nested composable/navigation calls register on `collector`
+        builder.invokeFromLibrary(listOf(collector)) // nested composable/navigation calls register on `collector`
         return Unit
     }
 
@@ -793,7 +793,7 @@ class ComposeDispatcher(
         val collector = NavGraphCollector()
         val prev = navCollector
         navCollector = collector
-        try { builder.invoke(listOf(collector)) } finally { navCollector = prev }
+        try { builder.invokeFromLibrary(listOf(collector)) } finally { navCollector = prev }
         if (collector.destinations.isEmpty()) return Unit
         val content = matchDestination(start, collector) ?: collector.destinations.values.first()
         val ops = opsFor(composer)
