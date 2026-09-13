@@ -1,5 +1,6 @@
 package dev.ide.ui.editor.core
 
+import androidx.compose.ui.text.SpanStyle
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -74,5 +75,78 @@ class LineRenderCacheTest {
         assertEquals(s2, revs.stampOf(3), "old line 2's stamp moved to line 3")
         assertEquals(s5, revs.stampOf(6), "old line 5's stamp moved to line 6")
         assertEquals(0, revs.stampOf(2), "line 2 now holds no stamp")
+    }
+
+    @Test
+    fun shiftMovesPiecesWithTheirLines() {
+        // The stamps moving is only half of it: a line's woven text has to move too, or the frames between the
+        // edit and the next analysis pass draw another line's hint.
+        val revs = InlayRevisions()
+        revs.update(mapOf(2 to listOf(InlayPiece(0, "a")), 5 to listOf(InlayPiece(0, "b"))))
+        revs.shift(fromOldLine = 2, delta = 1)
+        assertEquals(listOf(InlayPiece(0, "a")), revs.piecesFor(3))
+        assertEquals(listOf(InlayPiece(0, "b")), revs.piecesFor(6))
+        assertTrue(revs.piecesFor(2).isEmpty(), "the inserted line carries no inlay")
+    }
+
+    @Test
+    fun deletingLinesShiftsUpAndDropsWhatFallsOffTheTop() {
+        val revs = InlayRevisions()
+        revs.update(mapOf(0 to listOf(InlayPiece(0, "gone")), 3 to listOf(InlayPiece(0, "kept"))))
+        val kept = revs.stampOf(3)
+        revs.shift(fromOldLine = 0, delta = -1) // the first line was deleted
+        assertEquals(listOf(InlayPiece(0, "kept")), revs.piecesFor(2), "line 3 moved up to 2")
+        assertEquals(kept, revs.stampOf(2), "and kept its stamp, so it stays cached")
+        assertTrue(revs.piecesFor(3).isEmpty(), "the vacated tail must not keep the moved line's value alive")
+    }
+
+    @Test
+    fun piecesAreReturnedInColumnOrder() {
+        // rawToVisual walks the pieces assuming column order; it is sorted once on adoption, not per read.
+        val revs = InlayRevisions()
+        revs.update(mapOf(1 to listOf(InlayPiece(9, "late"), InlayPiece(2, "early"))))
+        assertEquals(listOf(2, 9), revs.piecesFor(1).map { it.col })
+    }
+
+    @Test
+    fun reorderedButEqualPiecesDoNotBump() {
+        val revs = InlayRevisions()
+        revs.update(mapOf(1 to listOf(InlayPiece(2, "a"), InlayPiece(9, "b"))))
+        val s1 = revs.stampOf(1)
+        revs.update(mapOf(1 to listOf(InlayPiece(9, "b"), InlayPiece(2, "a")))) // same pieces, other order
+        assertEquals(s1, revs.stampOf(1), "same pieces in another order must not re-shape the line")
+    }
+
+    @Test
+    fun semanticSpansShiftWithTheirLines() {
+        val sem = SemanticSpansByLine()
+        val style = SpanStyle()
+        sem.update(mapOf(4 to listOf(SemSpan(0, 3, style))))
+        val s4 = sem.stampOf(4)
+        sem.shift(fromOldLine = 4, delta = 2)
+        assertEquals(listOf(SemSpan(0, 3, style)), sem.spansFor(6))
+        assertEquals(s4, sem.stampOf(6))
+        assertTrue(sem.spansFor(4).isEmpty())
+    }
+
+    @Test
+    fun manySplicesLeaveTheStoreConsistent() {
+        // The store is arrays spliced in place, so a long run of edits is where an off-by-one would surface.
+        val revs = InlayRevisions()
+        val reference = HashMap<Int, List<InlayPiece>>()
+        for (line in 0 until 40) reference[line] = listOf(InlayPiece(0, "v$line"))
+        revs.update(reference.toMap())
+        var model = reference.toMap()
+        val edits = listOf(5 to 1, 0 to 2, 30 to -3, 12 to 4, 0 to -1, 20 to -2, 7 to 1)
+        for ((from, delta) in edits) {
+            revs.shift(from, delta)
+            model = model.entries.mapNotNull { (k, v) ->
+                val nk = if (k >= from) k + delta else k
+                if (nk >= 0) nk to v else null
+            }.toMap()
+        }
+        for (line in 0 until 60) {
+            assertEquals(model[line].orEmpty(), revs.piecesFor(line), "line $line after $edits")
+        }
     }
 }

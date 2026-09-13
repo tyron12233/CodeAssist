@@ -55,6 +55,7 @@ import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.clipForClipboard
 import dev.ide.ui.editor.core.EditorImeHandle
 import dev.ide.ui.editor.core.EditorSession
+import dev.ide.ui.editor.core.MEASURER_CACHE_ENTRIES
 import dev.ide.ui.ext.KeymapHost
 import dev.ide.ui.editor.core.RangeEdit
 import dev.ide.ui.editor.core.isLarge
@@ -224,7 +225,7 @@ private fun CodeEditorContent(
     @Suppress("DEPRECATION") val clipboard = LocalClipboardManager.current
     val density = LocalDensity.current
     val editorSession = session
-    val measurer = rememberTextMeasurer(cacheSize = 0)
+    val measurer = rememberTextMeasurer(cacheSize = MEASURER_CACHE_ENTRIES)
     val typography = Ca.type
     val zoom = clampFontScale(fontScale)
     val liveScale = rememberUpdatedState(zoom) // read inside the pinch gesture (pointerInput captures once)
