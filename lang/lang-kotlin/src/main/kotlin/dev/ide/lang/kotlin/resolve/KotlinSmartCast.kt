@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.psi.KtIfExpression
 import org.jetbrains.kotlin.psi.KtIsExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtReturnExpression
+import org.jetbrains.kotlin.psi.KtThisExpression
 import org.jetbrains.kotlin.psi.KtThrowExpression
 import org.jetbrains.kotlin.psi.KtTypeReference
 import org.jetbrains.kotlin.psi.KtWhenConditionIsPattern
@@ -39,8 +40,9 @@ internal fun KotlinResolver.narrowedType(name: String): KotlinType? {
  * scope narrows it to. Covers the `if (x is T)` then-branch (and the `else` of an `if (x !is T)`), the
  * short-circuit RHS of `x is T && …` / `x !is T || …`, a `when (x) { is T -> … }` branch, a `while (x is T)`
  * body, and the statements after an `if (x !is T) return`/`throw`/`break`/`continue` early-exit guard. Null
- * when no narrowing is in effect. Conservative like the lowerer: only a simple-name subject narrows, and only
- * to a classifier that resolves (generic args erased, made non-null, since `is T` implies non-null `T`); a
+ * when no narrowing is in effect. [name] is a declared name, or [THIS_SUBJECT] for a check written against
+ * the implicit receiver (`when (this) { is T -> … }`). Conservative like the lowerer: only a simple-name or
+ * `this` subject narrows, and only to a classifier that resolves (generic args erased, made non-null, since `is T` implies non-null `T`); a
  * parameterized/unresolved cast target degrades to null. Soundness-wise this can only ADD members a value
  * has after the user-written check (matching Kotlin), so a missed narrowing under-reports (never a false
  * "unresolved"), and a spurious one only fails to flag an error Kotlin would, never the reverse.
@@ -49,55 +51,92 @@ internal fun KotlinResolver.smartCastTypeAt(name: String, offset: Int): KotlinTy
     var child: PsiElement? = null
     var node: PsiElement? = elementAt(offset)
     while (node != null) {
-        when (node) {
-            // The then/else of an `if`, the body of a `while`, are each wrapped in a control-structure
-            // container node, so the use site is matched by RANGE, not by child identity against the
-            // (unwrapped) branch.
-            is KtIfExpression -> {
-                if (node.then?.textRange?.contains(offset) == true) conditionNarrowing(
-                    node.condition,
-                    name,
-                    whenTrue = true
-                )?.let { return it }
-                if (node.`else`?.textRange?.contains(offset) == true) conditionNarrowing(
-                    node.condition,
-                    name,
-                    whenTrue = false
-                )?.let { return it }
-            }
-
-            is KtWhileExpression ->
-                if (node.body?.textRange?.contains(offset) == true) conditionNarrowing(
-                    node.condition,
-                    name,
-                    whenTrue = true
-                )?.let { return it }
-            // The short-circuit RHS of `&&`/`||` sees the LHS's narrowing (`x is T && x.member`,
-            // `x !is T || x.member`). Only the RHS; the LHS itself runs unnarrowed (disjoint ranges).
-            is KtBinaryExpression -> if (node.right?.textRange?.contains(offset) == true) when (node.operationToken) {
-                KtTokens.ANDAND -> conditionNarrowing(
-                    node.left,
-                    name,
-                    whenTrue = true
-                )?.let { return it }
-
-                KtTokens.OROR -> conditionNarrowing(
-                    node.left,
-                    name,
-                    whenTrue = false
-                )?.let { return it }
-
-                else -> {}
-            }
-
-            is KtWhenExpression -> whenSubjectNarrowing(node, child, name)?.let { return it }
-            is KtBlockExpression -> earlyExitNarrowing(node, child, name)?.let { return it }
-        }
+        narrowingAtNode(node, child, offset, name)?.let { return it }
         child = node
         node = node.parent
     }
     return null
 }
+
+/**
+ * The narrowing [node] ALONE imposes on [name] at [offset], where [child] is the node on the path from the
+ * use site up to it (needed to tell which branch of a `when`, or which statement of a block, the use site is
+ * in). Null when this particular ancestor narrows nothing.
+ *
+ * Split out of [smartCastTypeAt]'s loop so the implicit-receiver walk can ask the same question of each
+ * ancestor as it climbs, instead of running a second traversal per receiver.
+ */
+internal fun KotlinResolver.narrowingAtNode(
+    node: PsiElement,
+    child: PsiElement?,
+    offset: Int,
+    name: String,
+): KotlinType? {
+    when (node) {
+        // The then/else of an `if`, the body of a `while`, are each wrapped in a control-structure
+        // container node, so the use site is matched by RANGE, not by child identity against the
+        // (unwrapped) branch.
+        is KtIfExpression -> {
+            if (node.then?.textRange?.contains(offset) == true) conditionNarrowing(
+                node.condition,
+                name,
+                whenTrue = true
+            )?.let { return it }
+            if (node.`else`?.textRange?.contains(offset) == true) conditionNarrowing(
+                node.condition,
+                name,
+                whenTrue = false
+            )?.let { return it }
+        }
+
+        is KtWhileExpression ->
+            if (node.body?.textRange?.contains(offset) == true) conditionNarrowing(
+                node.condition,
+                name,
+                whenTrue = true
+            )?.let { return it }
+        // The short-circuit RHS of `&&`/`||` sees the LHS's narrowing (`x is T && x.member`,
+        // `x !is T || x.member`). Only the RHS; the LHS itself runs unnarrowed (disjoint ranges).
+        is KtBinaryExpression -> if (node.right?.textRange?.contains(offset) == true) when (node.operationToken) {
+            KtTokens.ANDAND -> conditionNarrowing(
+                node.left,
+                name,
+                whenTrue = true
+            )?.let { return it }
+
+            KtTokens.OROR -> conditionNarrowing(
+                node.left,
+                name,
+                whenTrue = false
+            )?.let { return it }
+
+            else -> {}
+        }
+
+        is KtWhenExpression -> whenSubjectNarrowing(node, child, name)?.let { return it }
+        is KtBlockExpression -> earlyExitNarrowing(node, child, name)?.let { return it }
+    }
+    return null
+}
+
+/**
+ * The key an `is` check written against `this` is recorded under. `this` is a keyword, so no declaration can
+ * carry that name and the key cannot collide with a real variable's.
+ *
+ * Only an UNLABELED `this` takes it: `this@Outer is T` names one specific receiver in the chain, and the
+ * chain is matched by position rather than by label, so narrowing on a label would need the walk to know
+ * which entry the label picked. Leaving it unnarrowed only ever under-reports.
+ */
+internal const val THIS_SUBJECT = "this"
+
+/** The smart-cast key an `is` check's subject stands for: its simple name, or [THIS_SUBJECT] for a bare
+ *  `this`. Null for everything else (a call, a qualified chain, a labeled `this`), which never narrows. */
+internal fun KotlinResolver.smartCastSubjectKey(expr: KtExpression?): String? =
+    when (val e = unwrapParens(expr)) {
+        is KtNameReferenceExpression -> e.getReferencedName()
+        is KtThisExpression -> if (e.getLabelName() == null) THIS_SUBJECT else null
+        else -> null
+    }
 
 /** The narrowing a condition imposes on [name] when it evaluates to [whenTrue]: from `name is T` (true side)
  *  / `name !is T` (false side), conjoined through `&&` on the true side and `||` on the false side. Null when
@@ -110,8 +149,7 @@ internal fun KotlinResolver.conditionNarrowing(
 ): KotlinType? =
     when (val c = unwrapParens(cond)) {
         is KtIsExpression -> {
-            val lhs =
-                (unwrapParens(c.leftHandSide) as? KtNameReferenceExpression)?.getReferencedName()
+            val lhs = smartCastSubjectKey(c.leftHandSide)
             if (lhs == name && whenTrue != c.isNegated) typeFromIsTarget(c.typeReference) else null
         }
 
@@ -151,11 +189,11 @@ internal fun KotlinResolver.whenSubjectNarrowing(
     return conditionNarrowing(condExpr, name, whenTrue = true)
 }
 
-/** The simple name a `when` narrows on: its subject `val` (`when (val y = …)` → `y`) or a simple-name
- *  subject (`when (x)` → `x`); null for a computed/absent subject. */
+/** The key a `when` narrows on: its subject `val` (`when (val y = …)` → `y`), a simple-name subject
+ *  (`when (x)` → `x`), or [THIS_SUBJECT] for `when (this)`; null for a computed/absent subject. */
 internal fun KotlinResolver.whenSubjectName(whenExpr: KtWhenExpression): String? {
     whenExpr.subjectVariable?.name?.let { return it }
-    return (whenExpr.subjectExpression as? KtNameReferenceExpression)?.getReferencedName()
+    return smartCastSubjectKey(whenExpr.subjectExpression)
 }
 
 /** The narrowing in effect for [name] after a preceding early-exit guard in [block]: `if (name !is T) return`

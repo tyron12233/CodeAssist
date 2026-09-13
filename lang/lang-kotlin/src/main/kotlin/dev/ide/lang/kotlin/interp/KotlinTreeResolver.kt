@@ -829,7 +829,10 @@ class KotlinTreeResolver(
         is KtBreakExpression -> RNode.Break(span(e), e.getLabelName())
         is KtContinueExpression -> RNode.Continue(span(e), e.getLabelName())
         is KtDestructuringDeclaration -> destructuringNode(e)
-        is KtReturnExpression -> RNode.Return(e.returnedExpression?.let { lower(it) }, span(e))
+        // `return@label` belongs to the lambda that carries that label; a bare `return` belongs to the
+        // enclosing function and stays non-local through any lambda in between.
+        is KtReturnExpression ->
+            RNode.Return(e.returnedExpression?.let { lower(it) }, span(e), e.getTargetLabel()?.getReferencedName())
         is KtBinaryExpression -> binaryNode(e)
         is KtBinaryExpressionWithTypeRHS -> castNode(e)
         is KtClassLiteralExpression -> classLiteralNode(e, asJava = false)
@@ -953,12 +956,18 @@ class KotlinTreeResolver(
         // `when (x) { is T -> x.member }` smart-casts the subject `x` to `T` in that branch (when `x` is a
         // simple name; the body references it by name, not the synthetic `$subject` local the condition uses).
         val subjName = (subject as? KtNameReferenceExpression)?.getReferencedName()
+        // `when (this) { is T -> member }` smart-casts the implicit RECEIVER instead of a named local, so it
+        // narrows the receiver scope rather than the name-keyed narrowing stack.
+        val thisSubject = isBareThis(subject)
 
         var chain: RNode? = elseBody
         for (entry in branches.asReversed()) {
             val cond = whenCondition(entry, subject != null, ::subjectRef, span)
             val narrow = if (subjName != null) whenEntryNarrowing(entry, subjName) else emptyMap()
-            val body = withNarrowing(narrow) { entry.expression?.let { lower(it) } ?: emptyBlock(entry) }
+            val narrowThis = if (thisSubject) whenEntryThisNarrowing(entry) else null
+            val body = withNarrowing(narrow) {
+                withNarrowedReceiver(narrowThis) { entry.expression?.let { lower(it) } ?: emptyBlock(entry) }
+            }
             chain = RNode.If(cond, body, chain, span)
         }
         val result = chain ?: elseBody ?: unsupported("empty when", e)
@@ -974,6 +983,13 @@ class KotlinTreeResolver(
     private fun whenEntryNarrowing(entry: KtWhenEntry, subjName: String): Map<String, KotlinType> {
         val c = entry.conditions.singleOrNull() as? KtWhenConditionIsPattern ?: return emptyMap()
         return if (c.isNegated) emptyMap() else narrowingTo(subjName, c.typeReference?.text)
+    }
+
+    /** [whenEntryNarrowing] for a `when (this)`: the type the branch narrows the implicit receiver to, under
+     *  the same single-positive-`is` rule (a comma branch does not smart-cast). */
+    private fun whenEntryThisNarrowing(entry: KtWhenEntry): KotlinType? {
+        val c = entry.conditions.singleOrNull() as? KtWhenConditionIsPattern ?: return null
+        return if (c.isNegated) null else typeOfIsTarget(c.typeReference?.text)
     }
 
     /** A branch's condition as a boolean, OR-ing its comma-separated parts (`if (a) true else b`). Each part is
@@ -1319,7 +1335,11 @@ class KotlinTreeResolver(
         }
         // Inference is best-effort and can throw on a deep chain; degrade to null (→ Unsupported with a reason)
         // instead of letting the throw crash the whole function's lowering.
-        val recvType = runCatching { resolver.inferType(receiverExpr) }.getOrNull()
+        val inferred = runCatching { resolver.inferType(receiverExpr) }.getOrNull()
+        // `WindowInsets.navigationBars` — a bare class name used as a VALUE is its companion object, so the
+        // read resolves against `Foo.Companion`, not `Foo`. Only when the class itself declares nothing by
+        // that name, so a real member always wins.
+        val recvType = companionLookupType(name, receiverNode, inferred) ?: inferred
         // A SOURCE extension property (`val Boxed.doubled get() = …`) has no compiled facade getter to reflect —
         // interpret its synthetic getter via a source EXTENSION call (its receiver is [receiverNode]), mirroring
         // how a source extension FUNCTION dispatches.
@@ -1559,6 +1579,30 @@ class KotlinTreeResolver(
         // No candidate at all → best-effort plain member binding (e.g. an as-yet-unindexed member).
         return Binding.Property(name, recvType?.qualifiedName, backingField = false, isExtension = false)
     }
+
+    /**
+     * The type a qualified read resolves against when the receiver is a bare CLASS NAME: `Foo.bar` where `Foo`
+     * names a class evaluates `Foo` to its COMPANION object, so a member — or an EXTENSION — declared on
+     * `Foo.Companion` is what `bar` means. Compose declares every window-inset accessor exactly that way
+     * (`val WindowInsets.Companion.navigationBars: WindowInsets @Composable get()`), and without this the read
+     * bound as a plain member of `WindowInsets` and failed at render with "no readable property".
+     *
+     * Null (keep the inferred type) unless the receiver really is a class/object reference AND the class
+     * declares nothing by that name AND the companion does — so a genuine member never loses to a companion
+     * extension, and an INSTANCE receiver is never given access to one.
+     */
+    private fun companionLookupType(name: String, receiverNode: RNode, recvType: KotlinType?): KotlinType? {
+        val fqn = ((receiverNode as? RNode.Name)?.binding as? Binding.ObjectRef)?.fqn ?: return null
+        if (declaresProperty(name, recvType)) return null
+        return service.typeByFqn("$fqn.Companion").takeIf { declaresProperty(name, it) }
+    }
+
+    /** Whether [type] has a property named [name] (its own, inherited, or an extension in scope on it). */
+    private fun declaresProperty(name: String, type: KotlinType?): Boolean =
+        type != null && runCatching {
+            service.membersForCompletion(type.qualifiedName, type.typeArguments, name)
+                .any { it.name == name && it.kind == SymbolKind.FIELD }
+        }.getOrDefault(false)
 
     /**
      * The function VALUE a call's callee names, for Kotlin's invoke convention: `tab.content()` where
@@ -1998,9 +2042,16 @@ class KotlinTreeResolver(
         val cond = lower(condExpr)
         // Smart-cast: `if (x is T) { x.member }` resolves `x`'s members against `T` in the then-branch (and the
         // else-branch of an `if (x !is T)`). The condition is lowered first, unnarrowed.
-        val then = e.then?.let { withNarrowing(conditionNarrowings(condExpr, whenTrue = true)) { lower(it) } }
-            ?: return unsupported("if without body", e)
-        val otherwise = e.`else`?.let { withNarrowing(conditionNarrowings(condExpr, whenTrue = false)) { lower(it) } }
+        val then = e.then?.let {
+            withNarrowing(conditionNarrowings(condExpr, whenTrue = true)) {
+                withNarrowedReceiver(conditionThisNarrowing(condExpr, whenTrue = true)) { lower(it) }
+            }
+        } ?: return unsupported("if without body", e)
+        val otherwise = e.`else`?.let {
+            withNarrowing(conditionNarrowings(condExpr, whenTrue = false)) {
+                withNarrowedReceiver(conditionThisNarrowing(condExpr, whenTrue = false)) { lower(it) }
+            }
+        }
         return RNode.If(cond, then, otherwise, span(e))
     }
 
@@ -2032,9 +2083,60 @@ class KotlinTreeResolver(
 
     /** Narrow [name] to the (generic-erased, non-null) classifier named by [typeText]; empty if it won't resolve. */
     private fun narrowingTo(name: String, typeText: String?): Map<String, KotlinType> {
-        val text = typeText?.substringBefore('<')?.removeSuffix("?")?.trim()?.takeIf { it.isNotEmpty() } ?: return emptyMap()
-        val t = runCatching { service.typeFromText(text, resolver.fileContext) }.getOrNull() ?: return emptyMap()
+        val t = typeOfIsTarget(typeText) ?: return emptyMap()
         return mapOf(name to t)
+    }
+
+    /** The classifier an `is T` narrows to: generic args erased, made non-null. Null when [typeText] is absent
+     *  or won't resolve. Shared by the name-keyed [narrowingTo] and the `this`-keyed [conditionThisNarrowing]
+     *  so the two cannot disagree about what a cast target means. */
+    private fun typeOfIsTarget(typeText: String?): KotlinType? {
+        val text = typeText?.substringBefore('<')?.removeSuffix("?")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return runCatching { service.typeFromText(text, resolver.fileContext) }.getOrNull()
+    }
+
+    /** Whether [e] is a bare, unlabeled `this` — the only subject that narrows the implicit receiver. A
+     *  `this@Outer` names a specific entry in the receiver stack, which this narrowing does not track. */
+    private fun isBareThis(e: KtExpression?): Boolean {
+        val t = unwrapParens(e) as? KtThisExpression ?: return false
+        return t.getLabelName() == null
+    }
+
+    /** The type an `is` check written against `this` narrows the implicit receiver to when [cond] is
+     *  [whenTrue]. The `this`-subject mirror of [conditionNarrowings], which can only key declared names. */
+    private fun conditionThisNarrowing(cond: KtExpression?, whenTrue: Boolean): KotlinType? =
+        when (val c = unwrapParens(cond)) {
+            is KtIsExpression ->
+                if (isBareThis(c.leftHandSide) && whenTrue != c.isNegated) typeOfIsTarget(c.typeReference?.text) else null
+            is KtBinaryExpression -> when (c.operationToken) {
+                KtTokens.ANDAND -> if (whenTrue) conditionThisNarrowing(c.left, true) ?: conditionThisNarrowing(c.right, true) else null
+                KtTokens.OROR -> if (!whenTrue) conditionThisNarrowing(c.left, false) ?: conditionThisNarrowing(c.right, false) else null
+                else -> null
+            }
+            else -> null
+        }
+
+    /**
+     * Run [block] with the innermost receiver scope's TYPE replaced by [narrowed] — the lowering's half of a
+     * `this` smart cast (`when (this) { is Circle -> segments }`). The slot is untouched: the runtime value is
+     * the same object, only the type that bare members resolve against is narrower. A no-op when nothing
+     * narrows or no receiver is in scope.
+     *
+     * The editor reaches the same answer through `computeImplicitReceiversAt`; a bare member CALL already
+     * routes through that shared resolver, but a bare property READ resolves against this stack, so without
+     * this the two disagree and the preview refuses a function the editor shows as clean.
+     */
+    private inline fun <R> withNarrowedReceiver(narrowed: KotlinType?, block: () -> R): R {
+        val outer = receiverScopes.lastOrNull()
+        if (narrowed == null || outer == null) return block()
+        receiverScopes.removeLast()
+        receiverScopes.addLast(outer.copy(type = narrowed))
+        try {
+            return block()
+        } finally {
+            receiverScopes.removeLast()
+            receiverScopes.addLast(outer)
+        }
     }
 
     private fun unwrapParens(e: KtExpression?): KtExpression? =
@@ -2091,7 +2193,9 @@ class KotlinTreeResolver(
             val span = span(e)
             val lhs = lower(left)
             val and = token == KtTokens.ANDAND
-            val rhs = withNarrowing(conditionNarrowings(left, whenTrue = and)) { lower(right) }
+            val rhs = withNarrowing(conditionNarrowings(left, whenTrue = and)) {
+                withNarrowedReceiver(conditionThisNarrowing(left, whenTrue = and)) { lower(right) }
+            }
             return if (and) RNode.If(lhs, rhs, RNode.Const(false, boolType, span), span)
             else RNode.If(lhs, RNode.Const(true, boolType, span), rhs, span)
         }
@@ -2633,7 +2737,7 @@ class KotlinTreeResolver(
         }
         if (pushedReceiver) receiverScopes.removeLast()
         scopes.removeLast()
-        return RNode.Lambda(params, body, captures = emptyList(), source = span(e))
+        return RNode.Lambda(params, body, captures = emptyList(), source = span(e), label = lambdaLabel(e))
     }
 
     private fun lowerBlock(block: KtBlockExpression): RNode {

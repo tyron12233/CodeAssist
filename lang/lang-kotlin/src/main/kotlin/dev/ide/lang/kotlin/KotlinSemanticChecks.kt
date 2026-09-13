@@ -1647,7 +1647,15 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (service.typeFqnKnown(fqn)) return true
         val parent = fqn.substringBeforeLast('.', "")
         if (parent.isNotEmpty() && service.typeFqnKnown(parent)) return true
-        return service.topLevelByName(leaf).isNotEmpty()
+        if (service.topLevelByName(leaf).isNotEmpty()) return true
+        // A Capitalized top-level EXTENSION callable. Capitalization is a naming CONVENTION, not a rule the
+        // language enforces, so the first letter cannot decide what an import names: `import
+        // androidx.compose.material.icons.filled.Add` is a `val Icons.Filled.Add: ImageVector`, and every
+        // Compose Material icon has that shape. [topLevelByName] queries the `top:` key only, and an
+        // extension is indexed under `ext:`/`name:`, never `top:` — so without this the whole icon family
+        // (`Add`, `Search`, `Warning`, …) was reported unresolved on the import line, which since 3.14 also
+        // refuses every preview in the file. Same receiver-blind lookup the lowercase branch ends with.
+        return parent.isNotEmpty() && parent in service.callablePackages(leaf)
     }
 
     /** Whether a lowercase (callable-style) import [fqn] (final segment [leaf]) names something real: a lowercase

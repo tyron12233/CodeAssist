@@ -51,8 +51,20 @@ fun KotlinResolver.implicitReceiversAt(offset: Int): List<KotlinType> =
 
 internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<KotlinType> {
     val out = ArrayList<KotlinType>()
+    // An `is` check written against `this` (`when (this) { is Circle -> radius() }`) narrows the receiver it
+    // was written against — which is whichever receiver is innermost AT THE CHECK, not at the use site. The
+    // walk therefore collects the narrowing on the way up and hands it to the FIRST receiver it then finds,
+    // which is the same one: any receiver-introducing node between the check and the use site (a `with(x) {}`
+    // nested inside the branch) is reached first and takes the slot unnarrowed, as it must. A check further
+    // out than the innermost receiver is left alone, which only under-reports.
+    var thisNarrowing: KotlinType? = null
+    var child: PsiElement? = null
     var node: PsiElement? = elementAt(offset)
     while (node != null) {
+        if (out.isEmpty() && thisNarrowing == null) {
+            thisNarrowing = narrowingAtNode(node, child, offset, THIS_SUBJECT)
+        }
+        val hadReceiver = out.isNotEmpty()
         when (node) {
             // A receiver lambda's implicit `this` — both spellings of it: an extension function type
             // (`ColumnScope.() -> Unit`) and a `fun interface` whose abstract method is a member extension
@@ -85,6 +97,11 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
 
             else -> {}
         }
+        if (!hadReceiver && out.isNotEmpty()) {
+            thisNarrowing?.let { out[0] = it }
+            thisNarrowing = null
+        }
+        child = node
         node = node.parent
     }
     return out

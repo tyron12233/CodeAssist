@@ -211,7 +211,9 @@ sealed interface RNode {
      *  local function's body returns from THAT function (a local return), whereas a bare `return` in a lambda is a
      *  non-local return from the enclosing function. The interpreter's closure catches the return signal for a
      *  local function and lets it propagate for a plain lambda. */
-    data class Lambda(val params: List<RParam>, val body: RNode, val captures: List<Binding>, override val source: SourceSpan, val isLocalFunction: Boolean = false) : RNode
+    /** [label] is the name a `return@label` inside the body targets: an explicit `label@ { … }`, else the
+     *  callee the lambda is an argument to (`LaunchedEffect { … }` → "LaunchedEffect"). */
+    data class Lambda(val params: List<RParam>, val body: RNode, val captures: List<Binding>, override val source: SourceSpan, val isLocalFunction: Boolean = false, val label: String? = null) : RNode
     /** A string template: `"a${x}b"` → the concatenation of its parts (literals + interpolated expressions,
      *  each stringified at runtime). A plain string literal stays an [Const]. */
     data class StringConcat(val parts: List<RNode>, override val source: SourceSpan) : RNode
@@ -252,7 +254,10 @@ sealed interface RNode {
     data class Try(val body: RNode, val catches: List<RCatch>, val finallyBlock: RNode?, override val source: SourceSpan) : RNode
     data class LocalVar(val slot: SlotId, val name: String, val mutable: Boolean, val initializer: RNode?, override val source: SourceSpan) : RNode
     data class Assign(val target: RNode, val value: RNode, override val source: SourceSpan) : RNode
-    data class Return(val value: RNode?, override val source: SourceSpan) : RNode
+    /** `return v`, or `return@label v`. [label] names the LAMBDA the return belongs to
+     *  (`return@LaunchedEffect`, `return@forEach`, `return@myLabel`); null is a return from the enclosing
+     *  FUNCTION, which a lambda lets propagate (Kotlin's non-local return). */
+    data class Return(val value: RNode?, override val source: SourceSpan, val label: String? = null) : RNode
     data class Throw(val value: RNode, override val source: SourceSpan) : RNode
     /** `break` / `continue` — control flow handled by the enclosing [While]/[ForEach]. A non-null [label]
      *  targets a specific labeled enclosing loop (`break@outer`); null is the ordinary innermost-loop jump. */
