@@ -605,7 +605,29 @@ private class EditorInputConnection(
     private fun clipboardText(): String? {
         val cm = view.context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return null
         val item = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0) ?: return null
-        return item.coerceToText(view.context)?.toString()?.takeIf { it.isNotEmpty() }
+        // Prefer the plain-text clip. Styled / HTML clips (e.g. bold keywords from messengers or
+        // docs) used to arrive via coerceToText with markup that the line buffer rejected or
+        // mangled — paste as plain text instead (#1603).
+        val plain = item.text?.toString()?.takeIf { it.isNotEmpty() }
+        if (plain != null) return plain
+        val coerced = item.coerceToText(view.context)?.toString()?.takeIf { it.isNotEmpty() } ?: return null
+        return stripSimpleHtml(coerced)
+    }
+
+    /** Best-effort strip of simple HTML tags when the only available clip is HTML. */
+    private fun stripSimpleHtml(s: String): String {
+        if ('<' !in s) return s
+        return s
+            .replace(Regex("(?i)<br\\s*/?>"), "\n")
+            .replace(Regex("(?i)</p\\s*>"), "\n")
+            .replace(Regex("<[^>]+>"), "")
+            .replace("&nbsp;", " ")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&")
+            .replace("&quot;", "\"")
+            .trim()
+            .takeIf { it.isNotEmpty() } ?: s
     }
 
     // Hand the IME a real view of our buffer so it can mirror text + cursor continuously (and not drift after a
