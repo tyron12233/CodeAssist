@@ -53,6 +53,14 @@ class ProjectPackagerTest {
         // The project model must travel; the index caches beside it must not.
         write(".platform/workspace.json", "{\"version\":1}")
         write(".platform/caches/index/segment.seg", "INDEX-BYTES")
+        // Resolved-dependency + editor state from the submitter's device.
+        write(".platform/libraries.json", "{\"libraries\":[{\"classes\":[\"../../.platform/caches/x.jar\"]}]}")
+        write(".platform/sdks.json", "{\"sdks\":[{\"bootClasspath\":[\"/Users/someone/android.jar\"]}]}")
+        write(".platform/.deps-reconciled", "v=4\napp|androidx.compose.ui:ui:1.7.5|")
+        write(".platform/.deps-unresolved", "androidx.foo:bar=Not resolved.")
+        write(".platform/settings.properties", "tree.expanded.Project=/Users/someone/projects/x")
+        write(".platform/open-tabs.txt", "#v2\n0\n/Users/someone/projects/x/app/A.kt\t0\t0\ttext")
+        write(".platform/debug.ks", "BINARY-KEYSTORE")
         // A source folder that happens to be named `caches` is not the same thing.
         write("app/src/main/resources/caches/data.txt", "keep me")
         return root
@@ -65,6 +73,41 @@ class ProjectPackagerTest {
      * `.platform/caches` it carries the submitter's index — megabytes of it, holding absolute paths from
      * their device — against a 5 MB budget.
      */
+    /**
+     * The submitter's RESOLVED-DEPENDENCY state must never travel. `libraries.json` and `sdks.json` name
+     * jars that live under the (excluded) `.platform/caches`, so shipping them describes a classpath none
+     * of which is present — and `.deps-reconciled` is worse than useless: its contents fingerprint the
+     * declared dependency set, and a fingerprint that still matches makes the engine SKIP resolving, so the
+     * installed project reports every library resolved with nothing on disk and cannot repair itself.
+     *
+     * This is not hypothetical: the published `nimbus-weather` payload carried all six of these, and every
+     * install opened a project whose whole Compose classpath silently did not exist.
+     */
+    @Test
+    fun doesNotPackageTheSubmittersResolvedDependencyOrEditorState() {
+        val packed = pack(project())
+        for (rel in listOf(
+            ".platform/libraries.json",
+            ".platform/sdks.json",
+            ".platform/.deps-reconciled",
+            ".platform/.deps-unresolved",
+            ".platform/settings.properties",
+            ".platform/open-tabs.txt",
+        )) {
+            assertFalse(rel in packed.zipEntries, "$rel must not be packaged: ${packed.zipEntries}")
+            assertContains(packed.excluded, rel)
+        }
+        // The model itself still travels, or the install is a folder rather than a project.
+        assertTrue(".platform/workspace.json" in packed.zipEntries, "the model must travel")
+    }
+
+    /** The bundled debug keystore uses `.ks`, which sat outside the `.jks`/`.keystore` suffix list. */
+    @Test
+    fun doesNotPackageADebugKeystore() {
+        val packed = pack(project())
+        assertFalse(".platform/debug.ks" in packed.zipEntries, "signing material must never be uploaded")
+    }
+
     @Test
     fun packagesTheProjectModelButNotItsCaches() {
         val packed = pack(project())

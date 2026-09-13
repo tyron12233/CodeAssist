@@ -56,6 +56,15 @@ class PayloadExtractor(
                         target.mkdirs()
                         continue
                     }
+                    // Host state from the SUBMITTER's device, dropped on the way in as well as on the way
+                    // out. The packager excludes these now, but every archive published before it did still
+                    // carries them, and they are actively harmful: `libraries.json`/`sdks.json` name jars
+                    // under the (never-packaged) `.platform/caches`, and a `.deps-reconciled` whose
+                    // fingerprint still matches makes the engine SKIP resolving dependencies at all — so the
+                    // installed project reports every library resolved with nothing on disk, and cannot
+                    // repair itself. Stripping on extract means an old payload heals on install rather than
+                    // waiting for its author to republish.
+                    if (entryName(entry.name) in STRIPPED_ON_INSTALL) continue
                     uncompressed += entry.size.coerceAtLeast(0)
                     if (uncompressed > maxUncompressedBytes) {
                         return fail(
@@ -102,6 +111,21 @@ class PayloadExtractor(
          * Anything that is not a letter, digit, dash or underscore becomes a dash, because the name comes
          * from a catalog row a stranger wrote.
          */
+        /** Host-specific state dropped from any payload on the way in; see the extract loop. Mirrors
+         *  `ProjectPackager.EXCLUDED_PATHS`, which keeps it out of new archives. */
+        internal val STRIPPED_ON_INSTALL = setOf(
+            ".platform/libraries.json",
+            ".platform/sdks.json",
+            ".platform/.deps-reconciled",
+            ".platform/.deps-unresolved",
+            ".platform/settings.properties",
+            ".platform/open-tabs.txt",
+        )
+
+        /** A zip entry name as a `/`-separated relative path, with any leading `./` removed. */
+        internal fun entryName(raw: String): String =
+            raw.replace('\\', '/').removePrefix("./").trimStart('/')
+
         fun safeName(title: String): String = title
             // Lowercased so the on-disk name is predictable from the catalog slug (already lowercase-kebab)
             // and so two projects cannot differ only by case.

@@ -38,6 +38,52 @@ class PayloadExtractorTest {
         return f
     }
 
+    /**
+     * An archive published BEFORE the packager learned to exclude it still carries the submitter's resolved
+     * state, and it is actively harmful: `libraries.json`/`sdks.json` name jars under the never-packaged
+     * `.platform/caches`, and a `.deps-reconciled` whose fingerprint still matches makes the engine skip
+     * resolving dependencies at all — so the installed project reports its whole classpath resolved with
+     * nothing on disk, and cannot repair itself. Dropping these on the way IN heals an old payload without
+     * waiting for its author to republish.
+     */
+    @Test
+    fun stripsTheSubmittersResolvedStateFromAnAlreadyPublishedPayload() {
+        val parent = tempDir("ca-extract-parent-")
+        val zip = zipOf(
+            ".platform/workspace.json" to "{\"version\":1}",
+            ".platform/libraries.json" to "{\"libraries\":[]}",
+            ".platform/sdks.json" to "{\"sdks\":[]}",
+            ".platform/.deps-reconciled" to "v=4",
+            ".platform/.deps-unresolved" to "x=Not resolved.",
+            ".platform/settings.properties" to "tree.expanded.Project=/storage/emulated/0/x",
+            ".platform/open-tabs.txt" to "#v2",
+            "app/src/main/kotlin/Main.kt" to "fun main() {}",
+        )
+        val r = PayloadExtractor().extract(zip, parent, "nimbus")
+        assertTrue(r is StoreResult.Ok, "extract should succeed: $r")
+        val dir = (r as StoreResult.Ok).value
+        for (rel in PayloadExtractor.STRIPPED_ON_INSTALL) {
+            assertFalse(File(dir, rel).exists(), "$rel must not be installed")
+        }
+        // What the project actually needs is still there.
+        assertTrue(File(dir, ".platform/workspace.json").exists(), "the model must survive")
+        assertTrue(File(dir, "app/src/main/kotlin/Main.kt").exists(), "sources must survive")
+    }
+
+    /** A `./`-prefixed or backslash-separated entry names the same file; the strip matches on the
+     *  normalized path so an archive written by another zip tool cannot slip one through. */
+    @Test
+    fun stripMatchesNormalizedEntryNames() {
+        val parent = tempDir("ca-extract-norm-")
+        val zip = zipOf(
+            "./.platform/.deps-reconciled" to "v=4",
+            ".platform/workspace.json" to "{}",
+        )
+        val r = PayloadExtractor().extract(zip, parent, "norm")
+        assertTrue(r is StoreResult.Ok, "extract should succeed: $r")
+        assertFalse(File((r as StoreResult.Ok).value, ".platform/.deps-reconciled").exists())
+    }
+
     @Test
     fun extractsAWellFormedProject() {
         val parent = tempDir("ext-ok-")

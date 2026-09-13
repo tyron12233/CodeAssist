@@ -19,6 +19,9 @@ import java.util.zip.ZipOutputStream
  *  - **Build output.** `build/`, `.gradle/`, `.kotlin/`, `bin/`, `out/`. Large, machine-specific, and
  *    regenerated on the recipient's machine anyway.
  *  - **Local state.** `.git/`, `.idea/`, `.DS_Store`. History and editor state are not part of a template.
+ *  - **Resolved-dependency state.** `.platform/libraries.json`, `sdks.json` and the `.deps-*` markers say
+ *    what the submitter's device resolved and where it put it. The recipient must resolve for themselves;
+ *    shipping the answer without the cache it points at is worse than shipping nothing.
  *
  * The excluded paths are *reported*, not silently skipped ([PackagedProject.excluded]), so the submit
  * screen can show that a keystore was found and left out rather than merely promising it would be.
@@ -129,7 +132,26 @@ class ProjectPackager(
          * nobody else has. Matched on the relative path so a source directory that happens to be called
          * `caches` is unaffected.
          */
-        private val EXCLUDED_PATHS = setOf(".platform/caches")
+        private val EXCLUDED_PATHS = setOf(
+            ".platform/caches",
+            // RESOLVED-DEPENDENCY STATE. Every one of these describes where the SUBMITTER's device found
+            // its libraries, and the jars they name live under `.platform/caches`, which is excluded — so
+            // shipping them hands the recipient a project that believes its whole classpath is resolved
+            // while not one entry exists on disk.
+            //
+            // `.deps-reconciled` is the one that makes it unrecoverable rather than merely wrong: its
+            // CONTENTS are a fingerprint of the declared dependency set, and a fingerprint that still
+            // matches makes the engine SKIP the re-resolve. The project then cannot repair itself, and the
+            // recipient sees every Compose symbol unresolved with no way to fix it.
+            ".platform/libraries.json",
+            ".platform/sdks.json",
+            ".platform/.deps-reconciled",
+            ".platform/.deps-unresolved",
+            // Editor state, carrying absolute paths from the submitter's device: which tabs were open and
+            // which tree nodes were expanded. Useless to the recipient and leaks their directory layout.
+            ".platform/settings.properties",
+            ".platform/open-tabs.txt",
+        )
 
         private val EXCLUDED_DIRS = setOf(
             "build", ".gradle", ".kotlin", ".idea", ".git", "bin", "out", "node_modules",
@@ -146,7 +168,9 @@ class ProjectPackager(
         )
 
         private val EXCLUDED_SUFFIXES = listOf(
-            ".jks", ".keystore", ".p12", ".pem", ".apk", ".aab", ".dex", ".class", ".jar", ".iml", ".log",
+            // `.ks` is the extension the IDE's own bundled debug keystore uses (`.platform/debug.ks`), so it
+            // has to be here beside `.jks`/`.keystore` or signing material ships with the project.
+            ".jks", ".keystore", ".ks", ".p12", ".pem", ".apk", ".aab", ".dex", ".class", ".jar", ".iml", ".log",
         )
     }
 }
