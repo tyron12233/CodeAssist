@@ -148,7 +148,9 @@ fun PublisherProfileScreen(
                         }
                     }
                     itemsIndexed(current.items, key = { _, it -> it.id }) { i, item ->
-                        StoreItemRow(item, i, onOpenItem)
+                        // With no backend the row cannot fetch a listing's app icon and falls back to its
+                        // glyph tile, which is what this page used to show for every project on it.
+                        StoreItemRow(item, i, onOpenItem, backend = backend)
                     }
                     item("tail") { Spacer(Modifier.height(32.dp)) }
                 }

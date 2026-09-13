@@ -349,6 +349,14 @@ data class UiSubmissionDraft(
      * raster the engine can find on disk.
      */
     val iconBytes: ByteArray? = null,
+    /**
+     * Whether the listing fields in this draft are an EDIT to the item named by [itemSlug].
+     *
+     * Set by the form once it has the listing's current text in hand, so a submission can only propose a
+     * change to something it actually showed. Without it a draft whose listing failed to load would send
+     * empty fields that read as "remove everything".
+     */
+    val listingEdits: Boolean = false,
 )
 
 /**
@@ -368,6 +376,15 @@ data class UiPublishedItem(
     val suggestedVersion: String = "1.0.0",
     /** The listing's icon in the media bucket, or null while nothing of it is published yet. */
     val iconPath: String? = null,
+    /** The listing's one-line summary, as the store has it now. */
+    val summary: String = "",
+    /** The listing's long description, as the store has it now. */
+    val description: String = "",
+    /** The category slug the listing sits under. */
+    val category: String = "",
+    val tags: List<String> = emptyList(),
+    /** The screenshots the listing shows, as paths in the public media bucket. */
+    val screenshots: List<String> = emptyList(),
 )
 
 /**

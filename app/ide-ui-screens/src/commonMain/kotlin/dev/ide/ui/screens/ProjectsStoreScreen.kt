@@ -244,7 +244,7 @@ private fun StoreBrowse(
                     onSeeAll = { onOpenSearch(section.items.firstOrNull()?.category) },
                 )
             }
-            storeRows(section, onOpenItem)
+            storeRows(section, onOpenItem, state.backend)
             // One native ad between shelves — browse time between topics, never over the hero carousel.
             // Padded to the same 20 dp gutter as the rows so it sits in the list rather than beside it.
             if (sectionIndex == 0) {
@@ -257,9 +257,13 @@ private fun StoreBrowse(
 }
 
 /** One catalog section rendered as list rows. */
-private fun LazyListScope.storeRows(section: UiStoreSection, onOpenItem: (UiStoreItem) -> Unit) {
+private fun LazyListScope.storeRows(
+    section: UiStoreSection,
+    onOpenItem: (UiStoreItem) -> Unit,
+    backend: IdeBackend,
+) {
     itemsIndexed(section.items, key = { _, it -> "${section.id}_${it.id}" }) { i, item ->
-        StoreItemRow(item, i, onOpenItem)
+        StoreItemRow(item, i, onOpenItem, backend = backend)
     }
 }
 
@@ -435,7 +439,9 @@ private fun StoreSearch(
             }
         } else {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-                itemsIndexed(results, key = { _, it -> it.id }) { i, item -> StoreItemRow(item, i, onOpenItem) }
+                itemsIndexed(results, key = { _, it -> it.id }) { i, item ->
+                    StoreItemRow(item, i, onOpenItem, backend = state.backend)
+                }
             }
         }
     }

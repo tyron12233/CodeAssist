@@ -78,6 +78,9 @@ internal class StoreSubmissions(
             tags = draft.tags.map { it.trim() }.filter { it.isNotEmpty() },
             version = draft.version.trim().ifEmpty { "1.0.0" },
             changelog = draft.changelog?.trim()?.takeIf { it.isNotEmpty() },
+            // Only an update can edit a listing, and only a form that had the listing's own text in front
+            // of it may say so. Everything else leaves the item's words exactly as they are.
+            editsListing = draft.listingEdits && draft.itemSlug != null,
             screenshotPaths = draft.screenshotPaths,
             // Read from the project, not asked for. The app already has an icon, and a form that made the
             // publisher supply it again would mostly produce listings with no icon at all. The screen's
@@ -179,6 +182,11 @@ internal class StoreSubmissions(
                     publishedVersion = it.publishedVersion,
                     suggestedVersion = nextVersionAfter(it.highestVersion),
                     iconPath = it.iconPath,
+                    summary = it.summary,
+                    description = it.description,
+                    category = it.category,
+                    tags = it.tags,
+                    screenshots = it.screenshots,
                 )
             }
             else -> emptyList()
@@ -186,6 +194,14 @@ internal class StoreSubmissions(
 
     fun withdraw(itemId: String, version: String): Boolean =
         submissions.withdraw(itemId, version) is StoreResult.Ok
+
+    /** Null when the submission is gone; otherwise the sentence the backend wrote for the publisher. */
+    fun delete(itemId: String, version: String): String? =
+        when (val result = submissions.deleteSubmission(itemId, version)) {
+            is StoreResult.Ok -> null
+            is StoreResult.Unavailable -> result.reason
+            is StoreResult.Failed -> result.message
+        }
 
     // ---- the account's own profile ----
 
@@ -234,6 +250,33 @@ internal class StoreSubmissions(
     }
 
     internal companion object {
+        /**
+         * The newest submission per listing, by version code.
+         *
+         * What "newest" has to mean when a decision arrives late: a rejection the publisher has already
+         * answered by sending a higher version is not news, and announcing it at the moment they sent that
+         * version reads as a decision on the new one.
+         */
+        internal fun newestPerItem(subs: List<UiStoreSubmission>): Map<String, String?> =
+            subs.groupBy { it.itemId }.mapValues { (_, versions) ->
+                versions.maxByOrNull { versionCodeOf(it.version) }?.version
+            }
+
+        /**
+         * `X.Y.Z` as one sortable number, so "which of these did they send last" is a comparison rather
+         * than a three-way parse at every call site.
+         *
+         * The same shape the store computes into `version_code`, components clamped to three digits, so
+         * the answer here and the answer the database sorts by cannot disagree.
+         */
+        internal fun versionCodeOf(version: String): Int {
+            val parts = version.split('.')
+            val major = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 999) ?: 0
+            val minor = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 999) ?: 0
+            val patch = parts.getOrNull(2)?.toIntOrNull()?.coerceIn(0, 999) ?: 0
+            return major * 1_000_000 + minor * 1_000 + patch
+        }
+
         /**
          * One step past [version], as the next submission for that item.
          *

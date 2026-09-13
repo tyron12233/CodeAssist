@@ -979,13 +979,33 @@ interface StoreService {
     /**
      * The listings this account publishes, so a submission can be sent as a new version of one.
      *
-     * Empty when signed out, when the build has no store, or when nothing has been published yet — all
+     * Empty when signed out, when the build has no store, or when nothing has been published yet: all
      * three mean the same thing to the screen, which is that there is nothing to update.
      */
     suspend fun myPublishedItems(): List<UiPublishedItem> = emptyList()
 
+    /**
+     * The listing this project was last published as, by project root, or null.
+     *
+     * Recorded by [submit] and read by the publish form, so publishing a project a second time offers an
+     * update to the listing it already has instead of defaulting to a second listing of the same app.
+     * Getting that default wrong is expensive: the publisher retypes the whole listing, and what they get
+     * for it is a duplicate that has to be refused.
+     */
+    suspend fun listingSlugForProject(rootPath: String): String? = null
+
     /** Withdraw a still-pending submission. */
     suspend fun withdrawSubmission(itemId: String, version: String): Boolean = false
+
+    /**
+     * Delete a submission that was rejected or withdrawn, and the files it uploaded.
+     *
+     * Returns null when it went, or the reason it did not, which the screen shows as it was written: the
+     * refusals here are "that one is still in review" and "that one is published", and both name the next
+     * step. A project whose only submission this was goes with it, so the caller reloads both lists.
+     */
+    suspend fun deleteSubmission(itemId: String, version: String): String? =
+        "Publishing is not available in this build"
 
     // ---- your own profile ----
 

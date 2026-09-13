@@ -47,6 +47,8 @@ class StoreSubmissionsTest {
         var submitted: StoreSubmissionRequest? = null
         var uploaded: PackagedProject? = null
         var withdrawn: Pair<String, String>? = null
+        var deleted: Pair<String, String>? = null
+        var deleteResult: StoreResult<Unit> = StoreResult.Ok(Unit)
 
         override fun submissionsAvailable() = available
         override fun pack(projectRoot: String): StoreResult<PackagedProject> {
@@ -63,6 +65,10 @@ class StoreSubmissionsTest {
         override fun withdraw(itemSlug: String, version: String): StoreResult<Unit> {
             withdrawn = itemSlug to version
             return StoreResult.Ok(Unit)
+        }
+        override fun deleteSubmission(itemSlug: String, version: String): StoreResult<Unit> {
+            deleted = itemSlug to version
+            return deleteResult
         }
     }
 
@@ -376,4 +382,160 @@ class StoreSubmissionsTest {
         assertEquals("1.0.0", StoreSubmissions.nextVersionAfter(""))
         assertEquals("1.0.0", StoreSubmissions.nextVersionAfter("latest"))
     }
+
+    /* ---- editing the listing an update belongs to ---- */
+
+    /**
+     * An update carries the listing's text back as a proposed EDIT.
+     *
+     * The fields are the same ones a first submission fills in, so nothing but this flag separates
+     * "publishing a new listing" from "changing the one I have". Without it the service has no way to tell
+     * a form that showed the listing from a form that never loaded it, and a blank field would read as an
+     * instruction to empty the listing.
+     */
+    @Test
+    fun anUpdateThatShowedTheListingSendsItsFieldsAsAnEdit() {
+        val fake = FakeSubmissions(StoreResult.Ok(archive()))
+        val subs = StoreSubmissions(fake)
+        val packed = assertNotNull(subs.pack("/p"))
+
+        subs.submit(
+            UiSubmissionDraft(
+                itemSlug = "my-app-ab12",
+                title = "My App",
+                summary = "A better summary",
+                description = "A better description",
+                category = "utilities",
+                version = "1.1.0",
+                listingEdits = true,
+            ),
+            packed,
+        )
+
+        assertTrue(assertNotNull(fake.submitted).editsListing)
+        assertEquals("A better summary", fake.submitted?.summary)
+    }
+
+    /** A form that never had the listing in front of it proposes nothing, whatever is in its fields. */
+    @Test
+    fun anUpdateThatNeverLoadedTheListingProposesNoEdit() {
+        val fake = FakeSubmissions(StoreResult.Ok(archive()))
+        val subs = StoreSubmissions(fake)
+        val packed = assertNotNull(subs.pack("/p"))
+
+        subs.submit(UiSubmissionDraft(itemSlug = "my-app-ab12", title = "My App", version = "1.1.0"), packed)
+
+        assertFalse(assertNotNull(fake.submitted).editsListing)
+    }
+
+    /** A first submission writes the item row itself, so it is never an edit to one. */
+    @Test
+    fun aNewListingIsNeverAnEdit() {
+        val fake = FakeSubmissions(StoreResult.Ok(archive()))
+        val subs = StoreSubmissions(fake)
+        val packed = assertNotNull(subs.pack("/p"))
+
+        subs.submit(draft().copy(listingEdits = true), packed)
+
+        assertFalse(assertNotNull(fake.submitted).editsListing, "there is no listing to edit yet")
+    }
+
+    /**
+     * The listing's own text reaches the form.
+     *
+     * This is what stops an update from being a blank form: the summary, description, category, tags and
+     * screenshots the store has now are what the publisher edits, rather than what they retype.
+     */
+    @Test
+    fun aListingCarriesItsTextSoTheUpdateFormCanShowIt() {
+        val fake = FakeSubmissions(
+            StoreResult.Ok(archive()),
+            itemsResult = StoreResult.Ok(
+                listOf(
+                    StorePublishedItem(
+                        slug = "my-app-ab12",
+                        title = "My App",
+                        status = "approved",
+                        publishedVersion = "1.0.0",
+                        highestVersion = "1.0.0",
+                        summary = "Does one thing",
+                        description = "The long version",
+                        category = "utilities",
+                        tags = listOf("kotlin", "tools"),
+                        screenshots = listOf("my-app-ab12/1.0.0/shot-0.png"),
+                    ),
+                ),
+            ),
+        )
+
+        val item = StoreSubmissions(fake).myItems().single()
+
+        assertEquals("Does one thing", item.summary)
+        assertEquals("The long version", item.description)
+        assertEquals("utilities", item.category)
+        assertEquals(listOf("kotlin", "tools"), item.tags)
+        assertContentEquals(listOf("my-app-ab12/1.0.0/shot-0.png"), item.screenshots)
+    }
+
+    /* ---- deleting a refused submission ---- */
+
+    @Test
+    fun deletingPassesTheItemAndVersionThroughAndReportsNothingOnSuccess() {
+        val fake = FakeSubmissions(StoreResult.Ok(archive()))
+        assertNull(StoreSubmissions(fake).delete("my-app-ab12", "1.0.0"))
+        assertEquals("my-app-ab12" to "1.0.0", fake.deleted)
+    }
+
+    /** The refusals name the next step ("withdraw it first"), so they are shown as they were written. */
+    @Test
+    fun aRefusedDeleteKeepsTheBackendsOwnSentence() {
+        val fake = FakeSubmissions(StoreResult.Ok(archive()))
+        fake.deleteResult = StoreResult.Failed("That submission is still in review. Withdraw it first.")
+        assertEquals(
+            "That submission is still in review. Withdraw it first.",
+            StoreSubmissions(fake).delete("my-app-ab12", "1.0.0"),
+        )
+    }
+
+    /* ---- which decisions are still news ---- */
+
+    /**
+     * A decision the publisher already answered by sending a higher version is not announced.
+     *
+     * Reading the submission list is what happens immediately after publishing an update, and the approval
+     * of the version that update replaces is often being noticed for the first time right then. Announcing
+     * it there reads as "your app is live" one second after sending a new version for review.
+     */
+    @Test
+    fun onlyTheNewestSubmissionOfAListingIsStillNews() {
+        val subs = listOf(
+            submission("my-app", "1.0.0", UiSubmissionStatus.PUBLISHED),
+            submission("my-app", "1.0.1", UiSubmissionStatus.SUBMITTED),
+            submission("other", "2.0.0", UiSubmissionStatus.REJECTED),
+        )
+
+        val newest = StoreSubmissions.newestPerItem(subs)
+
+        assertEquals("1.0.1", newest["my-app"])
+        assertEquals("2.0.0", newest["other"])
+    }
+
+    /** Newest means the highest version, not the order the rows arrived in. */
+    @Test
+    fun newestIsByVersionCodeNotByPosition() {
+        val subs = listOf(
+            submission("my-app", "1.10.0", UiSubmissionStatus.SUBMITTED),
+            submission("my-app", "1.9.0", UiSubmissionStatus.PUBLISHED),
+        )
+        assertEquals("1.10.0", StoreSubmissions.newestPerItem(subs)["my-app"])
+        assertTrue(StoreSubmissions.versionCodeOf("1.10.0") > StoreSubmissions.versionCodeOf("1.9.0"))
+    }
+
+    private fun submission(item: String, version: String, status: UiSubmissionStatus) =
+        dev.ide.ui.backend.UiStoreSubmission(
+            itemId = item,
+            projectName = item,
+            version = version,
+            status = status,
+        )
 }

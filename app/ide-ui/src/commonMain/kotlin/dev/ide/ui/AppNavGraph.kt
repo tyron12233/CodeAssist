@@ -530,6 +530,7 @@ private fun ProjectPickerRoute(
         showLegacyRecovery = app.showLegacyRecovery,
         onDismissLegacyRecovery = app::dismissLegacyRecovery,
         loadIcon = { backend.projects.projectIcon(it.rootPath) },
+        loadIconImage = { backend.projects.imageBytes(it) },
     )
     if (notificationsVisible) {
         NotificationsSheet(

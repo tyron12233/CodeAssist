@@ -45,6 +45,22 @@ object ProjectIconRaster {
         is UiProjectIcon.Drawable -> renderPng(icon.drawable, pixels, loadImage)
     }
 
+    /**
+     * [icon] as something to draw, or null when it cannot be rendered.
+     *
+     * The half of [toBytes] that a screen wants: a list drawing a project's icon needs an image, not a PNG
+     * it would have to decode again. A raster icon is decoded from its own file bytes; a drawable is
+     * rendered at [pixels], which is a tile size here rather than the store's 512.
+     */
+    suspend fun toImage(
+        icon: UiProjectIcon,
+        pixels: Int,
+        loadImage: suspend (String) -> ByteArray?,
+    ): ImageBitmap? = when (icon) {
+        is UiProjectIcon.Raster -> icon.bytes.takeIf { it.isNotEmpty() }?.let { decodeImageBytes(it) }
+        is UiProjectIcon.Drawable -> render(icon.drawable, pixels, decodeReferencedImages(icon.drawable, loadImage))
+    }
+
     /** [drawable] rendered to a square PNG, with every image it references resolved first. */
     suspend fun renderPng(
         drawable: UiDrawable,

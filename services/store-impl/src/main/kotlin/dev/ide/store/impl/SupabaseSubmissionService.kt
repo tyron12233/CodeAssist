@@ -113,6 +113,7 @@ class SupabaseSubmissionService(
             field("status", "pending"); comma()
             field("submitter_id", account.userId)
             request.changelog?.takeIf { it.isNotBlank() }?.let { comma(); field("changelog", it) }
+            listingPatchJson(request)?.let { comma(); append(""""listing_patch":""").append(it) }
             append('}')
         }
         return when (val r = rest("POST", "/rest/v1/store_item_versions", body, token, prefer = "return=representation")) {
@@ -199,7 +200,9 @@ class SupabaseSubmissionService(
         val uid = accounts.current()?.userId ?: return StoreResult.Ok(emptyList())
         val path = "/rest/v1/store_items" +
             "?publisher_id=eq.$uid" +
-            "&select=slug,title,status,icon_path," +
+            // The listing's own text comes back too: an update form that cannot show what the listing says
+            // is a form that asks for it to be typed again.
+            "&select=slug,title,status,icon_path,summary,description,category,tags,screenshots," +
             "store_item_versions!store_items_latest_version_id_fkey(version)" +
             "&order=updated_at.desc"
         val rows = when (val r = rest("GET", path, null, token)) {
@@ -228,6 +231,11 @@ class SupabaseSubmissionService(
                     publishedVersion = published,
                     highestVersion = highest,
                     iconPath = JsonReader.str(row, "icon_path"),
+                    summary = JsonReader.str(row, "summary").orEmpty(),
+                    description = JsonReader.str(row, "description").orEmpty(),
+                    category = JsonReader.str(row, "category").orEmpty(),
+                    tags = JsonReader.strings(row, "tags"),
+                    screenshots = JsonReader.strings(row, "screenshots"),
                 )
             },
         )
@@ -251,6 +259,34 @@ class SupabaseSubmissionService(
                 val json = JsonReader.parseOrNull(r.value)
                 if (JsonReader.bool(json, "ok")) StoreResult.Ok(Unit)
                 else StoreResult.Failed(JsonReader.str(json, "message") ?: "Could not withdraw that submission")
+            }
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+    }
+
+    /**
+     * Delete a rejected or withdrawn submission, then the files it uploaded.
+     *
+     * The row goes first. The objects live in the private bucket under this account's own uuid prefix, so
+     * the client is what can delete them, but a failed delete must not leave the row behind pointing at
+     * files that may already be gone: an orphaned object is invisible and cheap, an orphaned row is on the
+     * publisher's screen. The backend returns the paths it recorded, which is how this knows what to
+     * remove without keeping a second copy of the submission's shape.
+     */
+    override fun deleteSubmission(itemSlug: String, version: String): StoreResult<Unit> {
+        if (!configured) return StoreResult.Unavailable("Submissions are not configured in this build")
+        val token = accounts.bearer() ?: return StoreResult.Failed("Sign in first")
+        val body = """{"p_slug":${q(itemSlug)},"p_version":${q(version)}}"""
+        return when (val r = rest("POST", "/rest/v1/rpc/store_delete_submission", body, token)) {
+            is StoreResult.Ok -> {
+                val json = JsonReader.parseOrNull(r.value)
+                if (!JsonReader.bool(json, "ok")) {
+                    StoreResult.Failed(JsonReader.str(json, "message") ?: "Could not delete that submission")
+                } else {
+                    JsonReader.strings(json, "paths").forEach { deleteObject(it, token) }
+                    StoreResult.Ok(Unit)
+                }
             }
             is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
             is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
@@ -626,8 +662,36 @@ class SupabaseSubmissionService(
     private val log = Log.logger("StoreSubmit")
 
     companion object {
+        /**
+         * The listing text this submission proposes, as the `listing_patch` column, or null.
+         *
+         * Only for an update, and only when the caller says the fields are an edit: a new listing writes its
+         * text into the item row itself, and a version that carried a patch as well would be describing the
+         * same thing twice. Null for everything else, which is what an unchanged listing looks like on the
+         * wire and what the column's default already means.
+         *
+         * Blank fields are left out rather than sent empty. The backend reads a blank as "unchanged" too, but
+         * a submission should not claim to propose a title it does not have.
+         */
+        internal fun listingPatchJson(r: StoreSubmissionRequest): String? {
+            if (r.itemSlug == null || !r.editsListing) return null
+            val parts = buildList {
+                r.title.trim().takeIf { it.isNotEmpty() }?.let { add(""""title":${q(it)}""") }
+                r.summary.trim().takeIf { it.isNotEmpty() }?.let { add(""""summary":${q(it)}""") }
+                r.description.trim().takeIf { it.isNotEmpty() }?.let { add(""""description":${q(it)}""") }
+                r.category.trim().takeIf { it.isNotEmpty() }?.let { add(""""category":${q(it)}""") }
+                // Sent even when empty: a publisher removing their last tag is an edit, and an absent key
+                // would be read as "leave the tags alone".
+                add(""""tags":${strArray(r.tags.map { it.trim() }.filter { it.isNotEmpty() }.take(MAX_TAGS))}""")
+            }
+            return parts.joinToString(",", "{", "}")
+        }
+
         /** Matches the CHECK on `store_item_versions.screenshot_paths`. */
         const val MAX_SCREENSHOTS = 6
+
+        /** Matches `cardinality(tags) <= 10` on `store_items`, and the patch column's own CHECK. */
+        const val MAX_TAGS = 10
 
         /** Matches the `store-media` bucket's per-file limit, so an image cannot fail only on approval. */
         const val MAX_SCREENSHOT_BYTES = 2L * 1024 * 1024

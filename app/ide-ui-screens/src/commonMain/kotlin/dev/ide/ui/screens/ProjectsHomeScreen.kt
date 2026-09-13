@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -32,19 +33,27 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.ProjectInfo
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import dev.ide.ui.backend.UiProjectIcon
+import dev.ide.ui.editor.preview.ProjectIconRaster
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.CountFilterChip
 import dev.ide.ui.components.dashedBorder
@@ -166,7 +175,18 @@ fun ProjectsHomeScreen(
      * plain data and stays renderable in a snapshot test with no backend.
      */
     bell: (@Composable () -> Unit)? = null,
+    /**
+     * The project's launcher icon, when the host can resolve one. Null keeps the glyph tiles, which is
+     * what a snapshot test with no backend renders.
+     */
     loadIcon: (suspend (ProjectInfo) -> UiProjectIcon?)? = null,
+    /**
+     * Reads an image file the icon references, by absolute path.
+     *
+     * Needed alongside [loadIcon] rather than folded into it: an adaptive icon's foreground is very often
+     * a `<bitmap>`, and without this those layers render as a placeholder instead of the artwork.
+     */
+    loadIconImage: (suspend (String) -> ByteArray?)? = null,
 ) {
     var segment by remember { mutableStateOf(HomeSegment.Projects) }
     // Deleting wipes the project from disk and nothing else in this flow asks first.
@@ -174,6 +194,9 @@ fun ProjectsHomeScreen(
     var sheet by remember { mutableStateOf<HomeSheet?>(null) }
     val now = remember(projects) { nowMillis() }
     val ordered = remember(projects) { projects.sortedByDescending { it.lastOpened } }
+    // Rendered icons by project root. Held for the screen rather than per card: a card is recomposed every
+    // time it scrolls back into view, and resolving an icon means parsing a manifest and a drawable.
+    val icons = remember { mutableStateMapOf<String, ImageBitmap?>() }
     val mostRecent = ordered.firstOrNull { it.lastOpened > 0L }
 
     // Pull-to-refresh re-reads the project list. The read is synchronous, so the spinner is held up for a
@@ -189,6 +212,8 @@ fun ProjectsHomeScreen(
             if (onRefresh != null) {
                 refreshScope.launch {
                     isRefreshing = true
+                    // A refresh is also how an icon changed in the app-icon studio gets picked up here.
+                    icons.clear()
                     onRefresh()
                     delay(600)
                     isRefreshing = false
@@ -245,6 +270,7 @@ fun ProjectsHomeScreen(
                         project = project,
                         index = i,
                         now = now,
+                        icon = projectIconImage(project, icons, loadIcon, loadIconImage),
                         onOpen = { onOpen(project) },
                         onSecondary = onExportProject?.let { export -> { export(project) } }
                             ?: onDeleteProject?.let { del -> { del(project) } },
@@ -453,6 +479,38 @@ private fun SegmentRow(
 }
 
 /**
+ * [project]'s launcher icon, rendered once and remembered in [cache].
+ *
+ * Null until it has been resolved, and null forever for a project that has no icon to show, which is the
+ * same answer the card needs: draw the glyph tile. The work is off the main thread because resolving one
+ * means reading a manifest and parsing a drawable, and this runs for every row in the list.
+ */
+@Composable
+private fun projectIconImage(
+    project: ProjectInfo,
+    cache: MutableMap<String, ImageBitmap?>,
+    loadIcon: (suspend (ProjectInfo) -> UiProjectIcon?)?,
+    loadImage: (suspend (String) -> ByteArray?)?,
+): ImageBitmap? {
+    if (loadIcon == null) return null
+    LaunchedEffect(project.rootPath, loadIcon) {
+        if (cache.containsKey(project.rootPath)) return@LaunchedEffect
+        // Recorded even when it is null, so a project with no icon is asked about once rather than on
+        // every scroll.
+        cache[project.rootPath] = runCatching {
+            val resolved = loadIcon(project) ?: return@runCatching null
+            withContext(Dispatchers.Default) {
+                ProjectIconRaster.toImage(resolved, TILE_ICON_PIXELS) { path -> loadImage?.invoke(path) }
+            }
+        }.getOrNull()
+    }
+    return cache[project.rootPath]
+}
+
+/** Comfortably above a 46 dp tile on a 3x screen, and cheap to render at. */
+private const val TILE_ICON_PIXELS = 192
+
+/**
  * One local project.
  *
  * The card's tint comes from its icon tile, not its background — the background stays a neutral container
@@ -464,6 +522,8 @@ private fun LocalProjectCard(
     project: ProjectInfo,
     index: Int,
     now: Long,
+    /** The project's own launcher icon, or null to draw the glyph tile it has always drawn. */
+    icon: ImageBitmap? = null,
     onOpen: () -> Unit,
     onSecondary: (() -> Unit)?,
     secondaryIsDelete: Boolean,
@@ -493,7 +553,18 @@ private fun LocalProjectCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            TonalTile(glyph, pair, tileShape(index), size = 46.dp)
+            if (icon != null) {
+                // On the tonal tile rather than bare: a launcher icon is very often transparent outside
+                // its shape, and the tile is what gives the row its edge either way.
+                Box(
+                    Modifier.size(46.dp).clip(tileShape(index)).background(pair.container),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Image(icon, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                }
+            } else {
+                TonalTile(glyph, pair, tileShape(index), size = 46.dp)
+            }
             Column(Modifier.weight(1f)) {
                 Text(
                     project.name,

@@ -655,7 +655,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="submit_target_update">Update %1$s</string>
     <string name="submit_update_live">Live: %1$s</string>
     <string name="submit_update_unreviewed">Not published yet</string>
-    <string name="submit_update_note">A new version of this listing, for review. Its title, summary, description and category stay as published. Screenshots you add here replace the ones on the listing; add none to keep the current ones.</string>
+    <string name="submit_update_note">A new version of this listing. The text below is what the store shows now, and anything you change here is reviewed together with the new version.</string>
+    <string name="submit_screenshots_kept">These are the screenshots on the listing now. Whatever is here when you send replaces them, so remove the ones you are changing and leave the rest.</string>
+    <string name="submit_screenshots_offline">The screenshots on this listing could not be loaded, so the store keeps the ones it has. Anything you add here would replace all of them.</string>
+    <string name="submit_category_current">Staying in %1$s. The category list could not be loaded, so it cannot be changed right now.</string>
     <string name="submit_field_changelog">What changed</string>
     <string name="submit_required_version">Give the version as three numbers, like 1.2.0.</string>
     <string name="submit_mine_title">Your submissions</string>
@@ -697,6 +700,12 @@ We never collect your code, file or project names, which features you use, or an
     <string name="you_reason_changes">What to change</string>
     <string name="you_reason_note">From the reviewer</string>
     <string name="you_update">Fix and send again</string>
+    <string name="you_delete">Delete</string>
+    <string name="you_delete_title">Delete this submission?</string>
+    <string name="you_delete_body">%1$s %2$s and the files it uploaded are removed from the store. A project whose only submission this was goes with it.</string>
+    <string name="you_status_listing_pending">Waiting on review</string>
+    <string name="you_status_listing_rejected">Not accepted</string>
+    <string name="you_status_listing_unpublished">Unpublished</string>
     <string name="notif_title">Notifications</string>
     <string name="notif_empty">Nothing to catch up on.</string>
     <string name="notif_empty_body">Reviews, updates and finished builds show up here.</string>

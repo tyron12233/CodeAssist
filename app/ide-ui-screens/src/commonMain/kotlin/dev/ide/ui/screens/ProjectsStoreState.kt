@@ -22,7 +22,8 @@ import kotlinx.coroutines.launch
  */
 @Stable
 internal class ProjectsStoreState(
-    private val backend: IdeBackend,
+    /** Also what the rows fetch a listing's app icon through, so it is readable rather than private. */
+    val backend: IdeBackend,
     private val scope: CoroutineScope,
 ) {
     var catalog: UiStoreCatalog by mutableStateOf(UiStoreCatalog())

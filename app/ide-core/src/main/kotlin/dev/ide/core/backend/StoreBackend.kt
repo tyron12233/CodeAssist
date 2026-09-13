@@ -437,12 +437,16 @@ internal class StoreBackend(
         packaged: dev.ide.ui.backend.UiPackagedProject,
     ): dev.ide.ui.backend.UiSubmitResult = withContext(storeIo) {
         val result = submissionState.submit(draft, packaged)
-        // Keyed on the item and version, so re-submitting the same version updates the entry rather than
-        // stacking a second one, and a later review decision replaces this with its outcome.
         result.submission?.let { sub ->
+            // Remember which listing this project belongs to, so the next publish of it offers an update
+            // rather than a second listing. Here because this is the only place that holds both halves:
+            // the screen knows the project, the backend knows the slug it was published under.
+            ctx.manager?.setPreference(listingKey(packaged.rootPath), sub.itemId)
+            // Keyed on the item and version, so re-submitting the same version updates the entry rather
+            // than stacking a second one, and a later review decision replaces this with its outcome.
             notifications?.post(
                 kind = dev.ide.ui.backend.UiNotificationKind.STORE_SUBMISSION,
-                title = "${draft.title} is in review",
+                title = "${draft.title} ${sub.version} is in review",
                 body = "A moderator reviews every submission. Nothing is public until it is approved.",
                 target = dev.ide.ui.backend.UiNotificationTarget.Submissions,
                 key = "submission:${sub.itemId}:${sub.version}",
@@ -457,30 +461,54 @@ internal class StoreBackend(
      * The change has to be noticed here because there is nothing to push it: a review happens on someone
      * else's schedule, days later, with the app closed. Comparing on each read is what turns that into
      * something the user finds out about at all.
+     *
+     * Only the newest submission per listing can produce one. Reading this list is what happens
+     * immediately after publishing an update, and the approval of the version that update replaces is
+     * usually being noticed for the first time right then: "your app is live" arriving one second after
+     * sending a new version for review reads as a decision on that version, which it is not. The state is
+     * still recorded, so the same decision cannot surface later either.
      */
     override suspend fun mySubmissions(): List<dev.ide.ui.backend.UiStoreSubmission> = withContext(storeIo) {
         val current = submissionState.mine()
+        val newest = StoreSubmissions.newestPerItem(current)
         current.forEach { sub ->
             val seenKey = "store.submission.seen.${sub.itemId}.${sub.version}"
-            val previous = ctx.manager?.preference(seenKey)
-            if (previous != sub.status.name) {
-                ctx.manager?.setPreference(seenKey, sub.status.name)
-                // The first sighting of a submission this device did not create is not news; only a change
-                // from a state we had already recorded is.
-                if (previous != null) notifications?.post(
-                    kind = dev.ide.ui.backend.UiNotificationKind.STORE_SUBMISSION,
-                    title = submissionHeadline(sub),
-                    body = sub.note,
-                    target = dev.ide.ui.backend.UiNotificationTarget.Submissions,
-                    key = "submission:${sub.itemId}:${sub.version}",
-                )
-            }
+            // Blank is "never seen": the preference store can only write a key, so deleting a submission
+            // blanks the one it left behind rather than removing it.
+            val previous = ctx.manager?.preference(seenKey)?.takeIf { it.isNotEmpty() }
+            if (previous == sub.status.name) return@forEach
+            ctx.manager?.setPreference(seenKey, sub.status.name)
+            // The first sighting of a submission this device did not create is not news; only a change
+            // from a state we had already recorded is.
+            if (previous == null) return@forEach
+            // A decision the publisher has already answered by sending a newer version is not news either.
+            if (newest[sub.itemId] != sub.version) return@forEach
+            notifications?.post(
+                kind = dev.ide.ui.backend.UiNotificationKind.STORE_SUBMISSION,
+                title = submissionHeadline(sub),
+                body = sub.note,
+                target = dev.ide.ui.backend.UiNotificationTarget.Submissions,
+                key = "submission:${sub.itemId}:${sub.version}",
+            )
         }
         current
     }
 
     override suspend fun myPublishedItems(): List<dev.ide.ui.backend.UiPublishedItem> =
         withContext(storeIo) { submissionState.myItems() }
+
+    override suspend fun listingSlugForProject(rootPath: String): String? = withContext(storeIo) {
+        ctx.manager?.preference(listingKey(rootPath))?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * Where a project's listing slug is remembered.
+     *
+     * The path itself is the key. `Properties` escapes what it has to on the way out and reverses it on
+     * the way in, so a path with spaces or a colon in it round-trips, and a readable preferences file is
+     * worth more here than a hash nobody can trace back to a project.
+     */
+    private fun listingKey(rootPath: String) = "store.project.listing.$rootPath"
 
     // ---- your own profile ----
 
@@ -546,17 +574,39 @@ internal class StoreBackend(
         submissionState.handleAvailable(handle)
     }
 
-    /** What the change actually means, in the words a submitter would use. */
-    private fun submissionHeadline(sub: dev.ide.ui.backend.UiStoreSubmission): String = when (sub.status) {
-        dev.ide.ui.backend.UiSubmissionStatus.PUBLISHED -> "${sub.projectName} is live in the store"
-        dev.ide.ui.backend.UiSubmissionStatus.REJECTED -> "${sub.projectName} was not accepted"
-        dev.ide.ui.backend.UiSubmissionStatus.CHANGES_REQUESTED -> "${sub.projectName} needs changes"
-        dev.ide.ui.backend.UiSubmissionStatus.BUILDING -> "${sub.projectName} is being built"
-        dev.ide.ui.backend.UiSubmissionStatus.SUBMITTED -> "${sub.projectName} is in review"
+    /**
+     * What the change actually means, in the words a submitter would use.
+     *
+     * The version is named, as it is in the backend's own push. A publisher who has sent three versions
+     * has three things this sentence could be about, and the one time it matters most is when a decision
+     * about an older one arrives late.
+     */
+    private fun submissionHeadline(sub: dev.ide.ui.backend.UiStoreSubmission): String {
+        val what = "${sub.projectName} ${sub.version}"
+        return when (sub.status) {
+            dev.ide.ui.backend.UiSubmissionStatus.PUBLISHED -> "$what is live in the store"
+            dev.ide.ui.backend.UiSubmissionStatus.REJECTED -> "$what was not accepted"
+            dev.ide.ui.backend.UiSubmissionStatus.CHANGES_REQUESTED -> "$what needs changes"
+            dev.ide.ui.backend.UiSubmissionStatus.BUILDING -> "$what is being built"
+            dev.ide.ui.backend.UiSubmissionStatus.SUBMITTED -> "$what is in review"
+        }
     }
 
     override suspend fun withdrawSubmission(itemId: String, version: String): Boolean =
         withContext(storeIo) { submissionState.withdraw(itemId, version) }
+
+    /**
+     * Delete a rejected or withdrawn submission.
+     *
+     * The remembered state goes with it, so a later submission of the same version number is judged on its
+     * own: without that, resubmitting `1.0.1` after deleting a rejected `1.0.1` would compare against the
+     * rejection and announce a decision the publisher never got.
+     */
+    override suspend fun deleteSubmission(itemId: String, version: String): String? = withContext(storeIo) {
+        submissionState.delete(itemId, version).also { error ->
+            if (error == null) ctx.manager?.setPreference("store.submission.seen.$itemId.$version", "")
+        }
+    }
 
     /**
      * The bundled catalog keyed by the id a remote row would use, for the overlay.

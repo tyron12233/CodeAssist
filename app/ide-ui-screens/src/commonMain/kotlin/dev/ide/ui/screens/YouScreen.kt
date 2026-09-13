@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -95,6 +96,13 @@ fun YouScreen(
     var submissions by remember { mutableStateOf<List<UiStoreSubmission>>(emptyList()) }
     var published by remember { mutableStateOf<List<UiPublishedItem>>(emptyList()) }
     var editing by remember { mutableStateOf(false) }
+    // The submission a Delete tap is asking about. Deleting removes the upload from the store, so it asks
+    // first, and it names the version: a listing can have several here and the wrong one is the mistake
+    // worth preventing.
+    var pendingDelete by remember { mutableStateOf<UiStoreSubmission?>(null) }
+    // Why a delete did not happen, from the backend. "That one is still in review" and "that one is
+    // published" both name the next step, so they are shown as they were written.
+    var deleteError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(epoch, signedIn) {
         if (!signedIn) {
@@ -154,7 +162,18 @@ fun YouScreen(
                                 }
                             },
                             onUpdate = onUpdateListing?.let { start -> { start(submission.itemId) } },
+                            onDelete = { deleteError = null; pendingDelete = submission },
                         )
+                    }
+                    deleteError?.let { reason ->
+                        item("delete_error") {
+                            Text(
+                                reason,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                            )
+                        }
                     }
                     item("published") {
                         Spacer(Modifier.height(24.dp))
@@ -207,6 +226,36 @@ fun YouScreen(
                 }
             }
         }
+    }
+
+    // Deleting takes the upload out of the store and can take the project row with it, so it asks. The
+    // dialog is outside the list on purpose: the row it belongs to disappears the moment it succeeds.
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(Res.string.you_delete_title)) },
+            text = {
+                Text(stringResource(Res.string.you_delete_body, target.projectName, target.version))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDelete = null
+                        scope.launch {
+                            deleteError = backend.store.deleteSubmission(target.itemId, target.version)
+                            // Both lists change: the submission is gone, and so is the listing when that
+                            // submission was the only thing behind it.
+                            if (deleteError == null) epoch++
+                        }
+                    },
+                ) {
+                    Text(stringResource(Res.string.you_delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text(stringResource(Res.string.cancel)) }
+            },
+        )
     }
 }
 
@@ -308,6 +357,8 @@ private fun SubmissionRow(
     submission: UiStoreSubmission,
     onWithdraw: () -> Unit,
     onUpdate: (() -> Unit)? = null,
+    /** Offered for a decision that is finished with: a rejection is not a thing to keep looking at. */
+    onDelete: (() -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
@@ -376,6 +427,13 @@ private fun SubmissionRow(
             ) {
                 TextButton(onUpdate) { Text(stringResource(Res.string.you_update)) }
             }
+            // Only for a refusal. A live version is the listing's history and a pending one is withdrawn
+            // first, so offering Delete on either would be offering something the store refuses.
+            if (onDelete != null && submission.status == UiSubmissionStatus.REJECTED) {
+                TextButton(onDelete) {
+                    Text(stringResource(Res.string.you_delete), color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
     }
 }
@@ -422,13 +480,15 @@ private fun PublishedRow(backend: IdeBackend, item: UiPublishedItem, onOpen: () 
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            item.publishedVersion?.let {
-                Text(
-                    stringResource(Res.string.you_version, it),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = c.onSurfaceVariant,
-                )
-            }
+            // A listing whose first version was never accepted is in this list too, and without this it
+            // read as published: no version line and nothing else to go on.
+            val state = item.publishedVersion?.let { stringResource(Res.string.you_version, it) }
+                ?: when (item.status) {
+                    "rejected" -> stringResource(Res.string.you_status_listing_rejected)
+                    "unpublished" -> stringResource(Res.string.you_status_listing_unpublished)
+                    else -> stringResource(Res.string.you_status_listing_pending)
+                }
+            Text(state, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
         }
         Symbol(CaSymbols.chevronRight, contentDescription = null, size = 20.dp, tint = c.onSurfaceVariant)
     }

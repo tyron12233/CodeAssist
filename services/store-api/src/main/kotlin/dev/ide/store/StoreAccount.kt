@@ -212,6 +212,15 @@ data class StoreSubmissionRequest(
     val iconPath: String? = null,
     val version: String = "1.0.0",
     val changelog: String? = null,
+    /**
+     * Whether the listing fields above are an EDIT to the item, rather than a repeat of what it says.
+     *
+     * Only meaningful with [itemSlug] set. A new version does not rewrite its listing by itself: the text
+     * belongs to the item row, and a submission that quietly overwrote it would publish an edit nobody
+     * reviewed. Set, the fields travel with the version as a proposed change and are applied when a
+     * moderator approves it. Left false, the item keeps every word it has.
+     */
+    val editsListing: Boolean = false,
 )
 
 /**
@@ -244,10 +253,10 @@ data class PackagedProject(
 /**
  * One listing the signed-in account publishes, as the submit screen needs it to offer an UPDATE.
  *
- * Only what that choice needs: something to recognise the listing by, where it stands with review, and the
- * version to start from. The listing's own text (summary, description, category, tags) is deliberately
- * absent — a new version does not rewrite it, so a form that offered those fields would be promising an
- * edit that never happens.
+ * Carries the listing's own text as well as its identity, because an update form that could not show what
+ * the listing already says is a form that asks for it to be typed again. Every field here is what the
+ * store has now; what the publisher changes travels with the new version as an edit for review (see
+ * [StoreSubmissionRequest.editsListing]).
  */
 data class StorePublishedItem(
     val slug: String,
@@ -265,6 +274,21 @@ data class StorePublishedItem(
      * by approval, so before then there is nothing a client may read.
      */
     val iconPath: String? = null,
+    /** The listing's one-line summary, as the store has it now. */
+    val summary: String = "",
+    /** The listing's long description, as the store has it now. */
+    val description: String = "",
+    /** The category slug the listing sits under. */
+    val category: String = "",
+    val tags: List<String> = emptyList(),
+    /**
+     * The screenshots the listing shows, as paths in the public media bucket.
+     *
+     * Offered so an update can keep them: the store records the screenshots a version was approved with,
+     * so a version that ships none leaves the gallery as it was, and a version that ships one replaces the
+     * whole gallery with it.
+     */
+    val screenshots: List<String> = emptyList(),
 )
 
 /**
@@ -336,6 +360,17 @@ interface StoreSubmissionService {
 
     /** Withdraw a still-pending submission. */
     fun withdraw(itemSlug: String, version: String): StoreResult<Unit> =
+        StoreResult.Unavailable("Submissions are not available in this build")
+
+    /**
+     * Delete a submission that was rejected or withdrawn, and the uploaded files behind it.
+     *
+     * Not offered for a pending one (withdraw it first) or an approved one (it is the listing's published
+     * history). Deleting the only submission of a project that never went live takes the project with it,
+     * which is the point: a refused first submission otherwise sits in the publisher's lists forever and
+     * counts against their item quota.
+     */
+    fun deleteSubmission(itemSlug: String, version: String): StoreResult<Unit> =
         StoreResult.Unavailable("Submissions are not available in this build")
 
     /**
