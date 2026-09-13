@@ -764,8 +764,7 @@ class ReflectiveDispatcher(
             val slot = if (trailingLambda && i == k - 1) n - 1 else i
             if (slot !in 0 until n) continue
             slots[slot] = if (a is InterpretedLambda) {
-                val rvc = lambdaReturnValueClass(realGenericParams?.getOrNull(slot))
-                (lambdaProxies?.proxyOrNull(a, params[slot], composable.getOrElse(i) { false }, rvc) ?: regularLambdaProxy(a, params[slot], rvc))
+                bindLambda(a, params[slot], composable.getOrElse(i) { false }, lambdaReturnValueClass(realGenericParams?.getOrNull(slot)))
             } else coerceArg(a, params[slot], realGenericParams?.getOrNull(slot))
             provided[slot] = true
         }
@@ -994,8 +993,7 @@ class ReflectiveDispatcher(
             if (i < realArgs.size && realArgs[i] !== OmittedArg) {
                 val a = realArgs[i]
                 slots[i] = if (a is InterpretedLambda) {
-                    val rvc = lambdaReturnValueClass(realGenericParams?.getOrNull(i))
-                    (lambdaProxies?.proxyOrNull(a, params[i], composable.getOrElse(i) { false }, rvc) ?: regularLambdaProxy(a, params[i], rvc))
+                    bindLambda(a, params[i], composable.getOrElse(i) { false }, lambdaReturnValueClass(realGenericParams?.getOrNull(i)))
                 } else coerceArg(a, params[i], realGenericParams?.getOrNull(i))
             } else {
                 slots[i] = zeroValue(params[i])
@@ -1045,7 +1043,7 @@ class ReflectiveDispatcher(
             if (a === OmittedArg) continue
             val p = params[i]
             val ok = when (a) {
-                is InterpretedLambda -> p.isInterface
+                is InterpretedLambda -> p.isInterface || p == Any::class.java
                 null -> !p.isPrimitive
                 // A boxed value-class param (`SpanStyle.fontStyle: FontStyle?`) also accepts the unboxed
                 // underlying value the interpreter produced, and (the inverse) a mangled unboxed-underlying param
@@ -1375,9 +1373,7 @@ class ReflectiveDispatcher(
     private fun bindArgs(params: Array<Class<*>>, args: List<Any?>, composable: List<Boolean>, genericParams: Array<java.lang.reflect.Type>? = null): Array<Any?> =
         Array(args.size) { i ->
             (args[i] as? InterpretedLambda)?.let { lam ->
-                val rvc = lambdaReturnValueClass(genericParams?.getOrNull(i))
-                lambdaProxies?.proxyOrNull(lam, params[i], composable.getOrElse(i) { false }, rvc)
-                    ?: regularLambdaProxy(lam, params[i], rvc)
+                bindLambda(lam, params[i], composable.getOrElse(i) { false }, lambdaReturnValueClass(genericParams?.getOrNull(i)))
             } ?: coerceArg(args[i], params[i], genericParams?.getOrNull(i))
         }
 
@@ -1415,6 +1411,18 @@ class ReflectiveDispatcher(
             }
         }
     }
+
+    /**
+     * An interpreted lambda bound to a parameter of erased type [paramType]. A functional interface gets a proxy
+     * that runs the lambda. A parameter whose erased type is NOT an interface — a generic `T` erased to `Object`
+     * (`rememberUpdatedState(onClick)`, `mutableStateOf(callback)`, `listOf({ … })`) — has no method to proxy
+     * (`Proxy` refuses it: "java.lang.Object is not an interface"), and the callee only stores or compares the
+     * value; source code reads it back and invokes it. So the lambda travels as itself, which also keeps its
+     * identity stable for `remember(key)`/`equals` (a fresh proxy per call would never equal the previous one).
+     */
+    private fun bindLambda(lam: InterpretedLambda, paramType: Class<*>, composable: Boolean, returnValueClass: Class<*>?): Any =
+        if (!paramType.isInterface) lam
+        else lambdaProxies?.proxyOrNull(lam, paramType, composable, returnValueClass) ?: regularLambdaProxy(lam, paramType, returnValueClass)
 
     private fun regularLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>, returnValueClass: Class<*>? = null): Any {
         // A SUSPEND lambda — a `pointerInput { … }` gesture block, a `LaunchedEffect { … }` body, a coroutine
@@ -1586,9 +1594,8 @@ class ReflectiveDispatcher(
         val varargArray = java.lang.reflect.Array.newInstance(componentType, args.size - fixed)
         for (j in 0 until args.size - fixed) {
             val a = args[fixed + j]
-            val v = (a as? InterpretedLambda)?.let { lam ->
-                lambdaProxies?.proxyOrNull(lam, componentType, composable.getOrElse(fixed + j) { false }, null) ?: regularLambdaProxy(lam, componentType)
-            } ?: boxValueClassIfNeeded(a, componentType)
+            val v = (a as? InterpretedLambda)?.let { lam -> bindLambda(lam, componentType, composable.getOrElse(fixed + j) { false }, null) }
+                ?: boxValueClassIfNeeded(a, componentType)
             java.lang.reflect.Array.set(varargArray, j, v)
         }
         val leading = bindArgs(m.parameterTypes.copyOfRange(0, fixed), args.subList(0, fixed), composable, m.genericParameterTypes.copyOfRange(0, fixed))
@@ -1613,7 +1620,7 @@ class ReflectiveDispatcher(
      *  receiver/parameter (`ArraysKt.map(Object[], …)`) accepts one; [coerceArg] materializes the real array. */
     private fun paramAccepts(p: Class<*>, a: Any?): Boolean = when (a) {
         null -> !p.isPrimitive
-        is InterpretedLambda -> p.isInterface
+        is InterpretedLambda -> p.isInterface || p == Any::class.java
         else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a) || acceptsBoxedValueClassUnboxed(p, a) ||
             (isIntegerValue(a) && isIntegerType(p)) ||
             (isFloatingValue(a) && isFloatingType(p)) ||

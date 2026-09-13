@@ -166,8 +166,16 @@ object ComposableAbi {
             if (a === OmittedArg) continue
             val slot = if (trailingLambda && i == k - 1) n - 1 else i
             if (slot !in 0 until n) continue
-            val raw = if (a is InterpretedLambda) lambdaProxy(a, paramTypes[slot], valueClassLambdaReturn(m.genericParameterTypes.getOrNull(slot)))
-                else boxValueClassIfNeeded(a, paramTypes[slot])
+            // A lambda bound to a slot whose erased type is NOT an interface (a generic `T` erased to `Object`:
+            // `rememberUpdatedState(onClick)`, `mutableStateOf(callback)`) has no functional interface to proxy
+            // (`Proxy` refuses it: "java.lang.Object is not an interface"). The callee only stores or compares
+            // the value and source code reads it back, so the interpreted lambda travels as itself, which also
+            // keeps its identity stable for `remember(key)`.
+            val raw = when {
+                a is InterpretedLambda && !paramTypes[slot].isInterface -> a
+                a is InterpretedLambda -> lambdaProxy(a, paramTypes[slot], valueClassLambdaReturn(m.genericParameterTypes.getOrNull(slot)))
+                else -> boxValueClassIfNeeded(a, paramTypes[slot])
+            }
             // A NON-FUNCTION value bound to an EVENT-HANDLER parameter (`onClick: () -> Unit`, `onValueChange:
             // (T) -> Unit`) — a null (unprovided/null callback) or a non-function (`onClick = onItemClick(x)`,
             // a common mistake for `onClick = { onItemClick(x) }`, evaluates to the handler's `Unit` RESULT) —
@@ -448,7 +456,8 @@ object ComposableAbi {
                 // content-less `Box(modifier: Modifier)` overload "accept" the lambda and win the fewest-params
                 // tiebreak over the real content-taking `Box(…, content)`, binding the lambda onto the `modifier`
                 // slot → `materializeModifier` calls `.all(…)` on the proxy, which returns null → NPE (`Box.kt`).
-                is InterpretedLambda -> if (!isFunctionalInterface(p)) return false
+                // A generic `T` slot (erased to `Object`) does take a lambda: the value is stored, not invoked.
+                is InterpretedLambda -> if (!isFunctionalInterface(p) && p != Any::class.java) return false
                 null -> if (p.isPrimitive) return false
                 // A boxed value-class parameter (`TextAlign?`) accepts the unboxed underlying value; and the
                 // inverse — a mangled unboxed-underlying param (`color: Color` → `long`) accepts a BOXED
