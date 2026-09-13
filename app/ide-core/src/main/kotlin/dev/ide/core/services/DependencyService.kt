@@ -204,12 +204,15 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         m.dependencies.any { it is LibraryDependency && parseCoordinate(it.library.name) != null }
     }
 
-    /** Fingerprint of the declared library-dependency set (the reconcile marker's contents). The AAR-explosion
-     *  layout version is folded in so that bumping it (a change to WHAT the resolver unpacks from an AAR, e.g.
-     *  its `res/`) invalidates every marker → a one-time reconcile re-resolves on the next open, re-extracting
-     *  any stale exploded dir that predates the change (which would otherwise be reused missing its resources). */
+    /** Fingerprint of the declared library-dependency set (the reconcile marker's contents). Two resolver
+     *  versions are folded in so that bumping either invalidates every marker → a one-time reconcile re-resolves
+     *  on the next open: the AAR-explosion layout (a change to WHAT the resolver unpacks from an AAR, e.g. its
+     *  `res/`, re-extracting any stale exploded dir that would otherwise be reused missing its resources), and
+     *  the graph semantics (a change to WHICH artifacts the same declared set resolves to, e.g. honouring a
+     *  managed `provided` scope, where a project resolved under the old rules keeps the wrong closure). */
     private fun reconcileFingerprint(mods: List<Module>): String =
         "v=${dev.ide.deps.impl.AAR_EXPLODE_VERSION}\n" +
+            "g=${dev.ide.deps.impl.RESOLVER_GRAPH_VERSION}\n" +
             // WHERE a dependency resolves from is as much a part of the resolved picture as WHAT is declared:
             // the same coordinate against a different repository set is a different resolve. Without this, a
             // project whose declared set hadn't changed kept its "already reconciled" marker after a repo was

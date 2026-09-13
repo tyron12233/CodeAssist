@@ -770,6 +770,10 @@ class MavenDependencyResolver(
         val packaging: String,
         val properties: Map<String, String>,
         val managed: Map<GA, String>,
+        /** The SCOPE half of dependencyManagement, which supplies a scope to any `<dependency>` that omits one.
+         *  Kept beside [managed] because a managed `provided`/`test` entry is exactly what holds a build-only
+         *  artifact OFF the consumer's classpath: drop it and the artifact resolves as `compile`. */
+        val managedScopes: Map<GA, String>,
         val dependencies: List<PomDependency>,
         /** Where a `<relocation>` moved this artifact to (null = not relocated). Followed as a compile edge. */
         val relocation: Coordinate? = null,
@@ -783,11 +787,13 @@ class MavenDependencyResolver(
 
             val props = LinkedHashMap<String, String>()
             val managed = LinkedHashMap<GA, String>()
+            val managedScopes = LinkedHashMap<GA, String>()
 
             raw.parent?.let { parent ->
                 loadEffective(parent, repos, visiting)?.let { p ->
                     props.putAll(p.properties)
                     managed.putAll(p.managed)
+                    managedScopes.putAll(p.managedScopes)
                 }
             }
             props.putAll(raw.properties)
@@ -797,9 +803,15 @@ class MavenDependencyResolver(
                 val a = resolveProperties(m.ga.name, props, coord) ?: continue
                 val v = selectVersion(g, a, resolveProperties(m.version, props, coord), repos)
                 if (m.scope.equals("import", ignoreCase = true) && v != null) {
-                    loadEffective(Coordinate(g, a, v), repos, visiting)?.managed?.forEach { (ga, ver) -> managed.putIfAbsent(ga, ver) }
-                } else if (v != null) {
-                    managed[GA(g, a)] = v   // local management overrides inherited
+                    loadEffective(Coordinate(g, a, v), repos, visiting)?.let { bom ->
+                        bom.managed.forEach { (ga, ver) -> managed.putIfAbsent(ga, ver) }
+                        bom.managedScopes.forEach { (ga, sc) -> managedScopes.putIfAbsent(ga, sc) }
+                    }
+                } else {
+                    // Local management overrides inherited, independently for the version and the scope, since
+                    // a managed entry may carry either alone (a scope-only override, or a version from a property).
+                    if (v != null) managed[GA(g, a)] = v
+                    m.scope?.let { managedScopes[GA(g, a)] = it }
                 }
             }
 
@@ -811,6 +823,7 @@ class MavenDependencyResolver(
                     groupId = g,
                     artifactId = a,
                     version = v,
+                    scope = d.scope ?: managedScopes[GA(g, a)],
                     type = resolveProperties(d.type, props, coord) ?: "jar",
                 )
             }
@@ -823,7 +836,7 @@ class MavenDependencyResolver(
                 val v = selectVersion(g, a, resolveProperties(r.version, props, coord), repos) ?: coord.version
                 Coordinate(g, a, v).takeIf { it != coord }
             }
-            val eff = EffPom(coord, raw.packaging, props, managed, deps, relocation)
+            val eff = EffPom(coord, raw.packaging, props, managed, managedScopes, deps, relocation)
             effCache[coord] = Optional.of(eff)
             return eff
         } finally {
@@ -1319,8 +1332,10 @@ class MavenDependencyResolver(
 
 private val Coordinate.ga: GA get() = GA(group, name)
 
-private fun PomDependency.isTransitivelyIncluded(): Boolean =
-    !optional && (scope.equals("compile", true) || scope.equals("runtime", true))
+private fun PomDependency.isTransitivelyIncluded(): Boolean {
+    val effective = scope ?: "compile"   // declared by neither the entry nor dependencyManagement
+    return !optional && (effective.equals("compile", true) || effective.equals("runtime", true))
+}
 
 private fun GA.excludedBy(exclusions: Set<GA>): Boolean = exclusions.any {
     (it.group == "*" || it.group == group) && (it.name == "*" || it.name == name)
@@ -1332,6 +1347,21 @@ private fun GA.excludedBy(exclusions: Set<GA>): Boolean = exclusions.any {
  *  and re-extracted instead of reused missing its `res/`. Folded into the dependency-reconcile fingerprint so
  *  a bump forces a one-time re-resolve that heals existing caches on the next open. */
 const val AAR_EXPLODE_VERSION = "4"
+
+/**
+ * Version of the resolved GRAPH's semantics. Bump whenever a resolver change makes the same declared set
+ * resolve to a different closure, so projects resolved by the old rules re-walk once instead of keeping a
+ * stale graph. Folded into the dependency-reconcile fingerprint beside [AAR_EXPLODE_VERSION], but separate
+ * from it on purpose: this re-runs only the walk, where bumping the explosion version also re-extracts every
+ * cached AAR.
+ *
+ * 2 (the first bump; every graph resolved before this constant existed is a 1):
+ * `<dependencyManagement>`'s `<scope>` is honoured. A `<dependency>` that declares no scope of its own
+ * takes the managed one, so a managed `provided`/`test` entry (com.google.zxing:android-core's
+ * `com.google.android:android`, a 2012 API-16 android.jar plus the seven legacy jars behind it)
+ * stops resolving as `compile` onto the classpath.
+ */
+const val RESOLVER_GRAPH_VERSION = "2"
 
 /**
  * Maven Central's search hosts, in the order [MavenDependencyResolver] tries them.

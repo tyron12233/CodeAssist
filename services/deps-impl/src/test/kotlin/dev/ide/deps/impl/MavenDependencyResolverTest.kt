@@ -62,6 +62,78 @@ class MavenDependencyResolverTest {
     }
 
     @Test
+    fun managedProvidedScopeKeepsATransitiveOffTheClasspath() {
+        // com.google.zxing:android-core declares `com.google.android:android` with NEITHER a version nor a
+        // scope. Both come from zxing-parent's <dependencyManagement>, where the scope is `provided`. Reading
+        // only the managed VERSION and defaulting the scope to `compile` put that artifact (a 2012 API-16
+        // android.jar: `android.app.Activity`, `android.content.Context`, 1698 classes) on the consumer's
+        // compile classpath, where it shadows the real framework, so every androidx supertype fails to load
+        // ("Cannot access 'androidx.core.app.ComponentActivity'"). A `provided` dependency is never transitive.
+        val files = FakeRepo()
+        files.put(
+            "zxing-parent", "3.3.0", group = "com.google.zxing", packaging = "pom",
+            managed = listOf(Dep("com.google.android", "android", "4.1.1.4", scope = "provided")),
+        )
+        files.put(
+            "android-core", "3.3.0", group = "com.google.zxing",
+            parent = Triple("com.google.zxing", "zxing-parent", "3.3.0"),
+            deps = listOf(Dep("com.google.android", "android", "")),   // no <version>, no <scope>
+        )
+        files.put("android", "4.1.1.4", group = "com.google.android")
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(Coordinate("com.google.zxing", "android-core", "3.3.0")),
+                listOf(repo), ConflictPolicy.NEWEST, noProgress,
+            )
+        }
+
+        assertEquals(
+            setOf("com.google.zxing:android-core"),
+            result.resolved.map { "${it.coordinate.group}:${it.coordinate.name}" }.toSet(),
+            "a dependency whose scope is `provided` via dependencyManagement must not reach the classpath",
+        )
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+    }
+
+    @Test
+    fun managedVersionWithoutAScopeStillYieldsACompileTransitive() {
+        // The over-correction guard: dependencyManagement that supplies only a VERSION leaves the scope at its
+        // `compile` default, so the transitive must still resolve.
+        val files = FakeRepo()
+        files.put("parent", "1.0", packaging = "pom", managed = listOf(Dep("g", "lib", "2.0")))
+        files.put("app", "1.0", parent = Triple("g", "parent", "1.0"), deps = listOf(Dep("g", "lib", "")))
+        files.put("lib", "2.0")
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("app", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        assertEquals(setOf("app", "lib"), byName.keys, "unexpected unresolved: ${result.unresolved}")
+        assertEquals("2.0", byName.getValue("lib").coordinate.version)
+    }
+
+    @Test
+    fun anEntrysOwnScopeWinsOverDependencyManagement() {
+        // Maven's precedence: dependencyManagement supplies a scope only where the <dependency> declares none.
+        val files = FakeRepo()
+        files.put("parent", "1.0", packaging = "pom", managed = listOf(Dep("g", "lib", "2.0", scope = "provided")))
+        files.put("app", "1.0", parent = Triple("g", "parent", "1.0"), deps = listOf(Dep("g", "lib", "", scope = "compile")))
+        files.put("lib", "2.0")
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("app", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+
+        assertEquals(setOf("app", "lib"), result.resolved.map { it.coordinate.name }.toSet(),
+            "an explicit <scope>compile</scope> must override the managed `provided`; unresolved=${result.unresolved}")
+    }
+
+    @Test
     fun kotlinStdlibCommonTransitiveIsPrunedNotUnresolved() {
         // A library (kotlinx.serialization, coroutines, …) pulls `kotlin-stdlib-common` transitively. It's a KMP
         // metadata-only module — no JVM bytecode, and since Kotlin 1.9.20 not published as a plain jar, so a
@@ -1280,8 +1352,12 @@ class MavenDependencyResolverTest {
             byUrl["$base/$rel.jar"] = emptyJar()
         }
 
-        fun put(name: String, version: String, packaging: String = "jar", deps: List<Dep> = emptyList(), jarBytes: ByteArray = emptyJar(), group: String = "g") {
-            byUrl[url(group, name, version, "pom")] = pom(group, name, version, packaging, deps).toByteArray()
+        fun put(
+            name: String, version: String, packaging: String = "jar", deps: List<Dep> = emptyList(),
+            jarBytes: ByteArray = emptyJar(), group: String = "g",
+            managed: List<Dep> = emptyList(), parent: Triple<String, String, String>? = null,
+        ) {
+            byUrl[url(group, name, version, "pom")] = pom(group, name, version, packaging, deps, managed, parent).toByteArray()
             val ext = if (packaging == "aar") "aar" else "jar"
             byUrl[url(group, name, version, ext)] = jarBytes
         }
@@ -1396,21 +1472,31 @@ class MavenDependencyResolverTest {
     private fun url(g: String, a: String, v: String, ext: String): String =
         "$BASE/${g.replace('.', '/')}/$a/$v/$a-$v.$ext"
 
-    private fun pom(g: String, a: String, v: String, packaging: String, deps: List<Dep>, managed: List<Dep> = emptyList()): String = buildString {
+    private fun pom(
+        g: String, a: String, v: String, packaging: String, deps: List<Dep>,
+        managed: List<Dep> = emptyList(), parent: Triple<String, String, String>? = null,
+    ): String = buildString {
         append("""<?xml version="1.0" encoding="UTF-8"?><project>""")
+        parent?.let { (pg, pa, pv) ->
+            append("<parent><groupId>$pg</groupId><artifactId>$pa</artifactId><version>$pv</version></parent>")
+        }
         append("<groupId>$g</groupId><artifactId>$a</artifactId><version>$v</version>")
         if (packaging != "jar") append("<packaging>$packaging</packaging>")
         if (managed.isNotEmpty()) {
             append("<dependencyManagement><dependencies>")
             for (d in managed) {
-                append("<dependency><groupId>${d.g}</groupId><artifactId>${d.a}</artifactId><version>${d.v}</version></dependency>")
+                append("<dependency><groupId>${d.g}</groupId><artifactId>${d.a}</artifactId><version>${d.v}</version>")
+                d.scope?.let { append("<scope>$it</scope>") }
+                append("</dependency>")
             }
             append("</dependencies></dependencyManagement>")
         }
         if (deps.isNotEmpty()) {
             append("<dependencies>")
             for (d in deps) {
-                append("<dependency><groupId>${d.g}</groupId><artifactId>${d.a}</artifactId><version>${d.v}</version>")
+                append("<dependency><groupId>${d.g}</groupId><artifactId>${d.a}</artifactId>")
+                // A blank version means the entry omits <version> entirely, so dependencyManagement supplies it.
+                if (d.v.isNotEmpty()) append("<version>${d.v}</version>")
                 d.scope?.let { append("<scope>$it</scope>") }
                 if (d.optional) append("<optional>true</optional>")
                 if (d.exclusions.isNotEmpty()) {

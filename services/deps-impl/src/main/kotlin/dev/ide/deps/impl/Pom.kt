@@ -10,12 +10,17 @@ data class GA(val group: String, val name: String) {
     override fun toString() = "$group:$name"
 }
 
-/** A `<dependency>` entry as written in a POM (version may be null → filled from dependencyManagement). */
+/** A `<dependency>` entry as written in a POM (version/scope may be null → filled from dependencyManagement). */
 data class PomDependency(
     val groupId: String,
     val artifactId: String,
     val version: String?,
-    val scope: String,            // compile | runtime | provided | test | system
+    /**
+     * `compile` | `runtime` | `provided` | `test` | `system`, or null when the POM omitted it. Null is NOT
+     * "compile": dependencyManagement supplies the scope for an entry that declares none (Maven's rule), and
+     * `compile` is only the default once nothing manages the coordinate either.
+     */
+    val scope: String?,
     val optional: Boolean,
     val type: String,             // jar | aar | pom | ...
     val classifier: String?,
@@ -126,7 +131,7 @@ object PomParser {
             groupId = text(dep, "groupId") ?: "",
             artifactId = text(dep, "artifactId") ?: "",
             version = text(dep, "version"),
-            scope = text(dep, "scope") ?: "compile",
+            scope = text(dep, "scope"),   // absent → let dependencyManagement decide (see [PomDependency.scope])
             optional = text(dep, "optional")?.equals("true", ignoreCase = true) ?: false,
             type = text(dep, "type") ?: "jar",
             classifier = text(dep, "classifier"),
