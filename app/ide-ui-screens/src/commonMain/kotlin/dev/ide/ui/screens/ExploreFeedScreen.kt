@@ -199,7 +199,7 @@ fun ExploreFeed(
                     }
 
                     is UiFeedSection.Charts -> item(section.id) {
-                        ChartsSection(section, onOpenItem, onInstallItem, installing)
+                        ChartsSection(section, onOpenItem, onInstallItem, installing, backend)
                     }
 
                     is UiFeedSection.Collections -> item(section.id) {
@@ -419,6 +419,8 @@ private fun ChartsSection(
     onOpenItem: (UiStoreItem) -> Unit,
     onInstallItem: (UiStoreItem) -> Unit,
     installing: Map<String, dev.ide.ui.backend.UiInstallProgress> = emptyMap(),
+    /** Where a published app icon is fetched from. Null (the snapshot tests) keeps the glyph tiles. */
+    backend: dev.ide.ui.backend.IdeBackend? = null,
 ) {
     var selected by remember(section.id) { mutableStateOf(section.tabs.firstOrNull()?.key.orEmpty()) }
     val tab = section.tabs.firstOrNull { it.key == selected } ?: section.tabs.firstOrNull() ?: return
@@ -445,6 +447,7 @@ private fun ChartsSection(
             actionFor = { installActionLabel(it.item, installing[it.item.id]) },
             onOpen = { onOpenItem(it.item) },
             onAction = { if (!installing[it.item.id].inFlight) onInstallItem(it.item) },
+            iconFor = { rememberItemIcon(backend, it.item) },
         )
     }
 }
@@ -615,6 +618,7 @@ private fun LazyListScope.shelfSection(
                 onOpen = { onOpenItem(it.item) },
                 onAction = { if (!installing[it.item.id].inFlight) onInstallItem(it.item) },
                 showMovement = false,
+                iconFor = { rememberItemIcon(backend, it.item) },
             )
         }
     }
