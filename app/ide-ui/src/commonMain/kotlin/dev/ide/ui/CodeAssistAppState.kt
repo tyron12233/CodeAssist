@@ -456,6 +456,36 @@ class CodeAssistAppState(
         }
     }
 
+    /**
+     * Open a review copy of a submission and start building it.
+     *
+     * The whole point of the affordance is that a moderator can watch the thing run before deciding, so
+     * this does not stop at opening: it opens the project and presses Run. A `run` task lands in the Run
+     * terminal on its own (the runConsole collector above), and an assemble task stays in the build
+     * console — either way the reviewer is looking at the result rather than at a file tree.
+     *
+     * [onFailed] receives the reason, because the reasons here are review findings in their own right:
+     * "the archive did not match its checksum" and "that is not a project CodeAssist can open" are both
+     * things to reject for, and swallowing them would leave a button that silently did nothing.
+     */
+    fun runSubmissionForReview(versionId: String, onFailed: (String) -> Unit) {
+        scope.launch {
+            val checkout = backend.store.checkOutSubmission(versionId)
+            val path = checkout.rootPath
+            if (path == null) {
+                onFailed(checkout.message ?: "That submission could not be opened")
+                return@launch
+            }
+            if (!backend.projects.openProject(path)) {
+                refreshProjects()
+                onFailed("The review copy was unpacked but would not open")
+                return@launch
+            }
+            screen = Screen.Editor
+            backend.build.runBuild()
+        }
+    }
+
     fun createProject(templateId: String? = null) {
         createTemplateId = templateId
         screen = Screen.CreateProject

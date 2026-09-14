@@ -204,6 +204,9 @@ internal fun AppNavGraph(
                 onBack = app::openYou,
                 onOpenItem = app::openStoreItemById,
                 onOpenPublisher = app::openPublisher,
+                // Unpacks the submission as a project, opens it and presses Run. Reading a manifest is not
+                // reviewing an app, and this device can build one.
+                onBuildAndRun = app::runSubmissionForReview,
             )
 
             Screen.PublishingGuide -> PublishingGuideScreen(

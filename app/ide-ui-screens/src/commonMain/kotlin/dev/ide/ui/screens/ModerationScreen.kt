@@ -84,6 +84,14 @@ fun ModerationScreen(
     onOpenItem: (String) -> Unit = {},
     /** Opens a publisher's public page by handle. */
     onOpenPublisher: (String) -> Unit = {},
+    /**
+     * Unpacks a submission into the workspace, opens it and starts a build.
+     *
+     * The callback reports its own failure, because the failures are review findings: an archive that does
+     * not match its checksum and one that is not a project CodeAssist can open are both reasons to reject,
+     * and a button that silently did nothing would hide them. Null on a host that cannot build.
+     */
+    onBuildAndRun: ((versionId: String, onFailed: (String) -> Unit) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf(ModerationTab.Queue) }
@@ -157,6 +165,15 @@ fun ModerationScreen(
                         },
                         onReject = { rejecting = it },
                         onOpenPublisher = onOpenPublisher,
+                        onBuildAndRun = onBuildAndRun?.let { start ->
+                            { submission: UiPendingSubmission ->
+                                notice = null
+                                // Leaves this screen for the editor, so the queue is reloaded on the way
+                                // back rather than held: a decision may have been taken elsewhere while the
+                                // reviewer was building.
+                                start(submission.versionId) { reason -> notice = reason }
+                            }
+                        },
                         onReload = { epoch++ },
                     )
 
@@ -302,6 +319,7 @@ private fun QueueList(
     onApprove: (UiPendingSubmission) -> Unit,
     onReject: (UiPendingSubmission) -> Unit,
     onOpenPublisher: (String) -> Unit,
+    onBuildAndRun: ((UiPendingSubmission) -> Unit)?,
     onReload: () -> Unit,
 ) {
     val c = MaterialTheme.colorScheme
@@ -341,6 +359,7 @@ private fun QueueList(
                 onApprove = { onApprove(submission) },
                 onReject = { onReject(submission) },
                 onOpenPublisher = onOpenPublisher,
+                onBuildAndRun = onBuildAndRun?.let { start -> { start(submission) } },
             )
         }
         if (queue.recent.isNotEmpty()) {
@@ -375,6 +394,7 @@ private fun SubmissionCard(
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onOpenPublisher: (String) -> Unit,
+    onBuildAndRun: (() -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
     var showFiles by remember(submission.versionId) { mutableStateOf(false) }
@@ -505,7 +525,22 @@ private fun SubmissionCard(
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
+            if (onBuildAndRun != null) {
+                Spacer(Modifier.height(12.dp))
+                // Above the decision, and full width, because it is what a reviewer does BEFORE deciding.
+                // It leaves the queue for the editor, which is why it does not sit in the same row as the
+                // two buttons that stay here.
+                OutlinedButton(
+                    onClick = onBuildAndRun,
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Symbol(CaSymbols.playArrow, contentDescription = null, size = 18.dp, tint = c.onSurface)
+                    Spacer(Modifier.size(8.dp))
+                    Text(stringResource(Res.string.moderation_build_and_run))
+                }
+            }
+            Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(onClick = onApprove, enabled = enabled, modifier = Modifier.weight(1f)) {
                     Text(stringResource(Res.string.moderation_approve))

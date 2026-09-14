@@ -499,6 +499,14 @@ data class UiModerationQueue(
     val error: String? = null,
 )
 
+/**
+ * Where a review copy of a submission landed, or why there is none.
+ *
+ * [rootPath] is a project in the workspace, named so a reviewer can tell unvetted content from their own
+ * work in the picker. Exactly one of the two fields is set.
+ */
+data class UiSubmissionCheckout(val rootPath: String? = null, val message: String? = null)
+
 /** One open report, with the content it is about. */
 data class UiReportedContent(
     val reportId: String,

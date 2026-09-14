@@ -89,6 +89,16 @@ class StoreModerationTest {
             rejected = submission to note
             return decisionResult
         }
+        var downloadedFor: PendingSubmission? = null
+        var downloadResult: StoreResult<Unit> = StoreResult.Ok(Unit)
+        /** The bytes handed back as the "archive"; a real zip is written by the test that needs one. */
+        var archiveBytes: ByteArray? = null
+
+        override fun downloadSubmission(submission: PendingSubmission, into: java.io.File): StoreResult<Unit> {
+            downloadedFor = submission
+            archiveBytes?.let { into.writeBytes(it) }
+            return downloadResult
+        }
         override fun reports(limit: Int) = reportRows
         override fun resolveReport(reportId: String, actioned: Boolean): StoreResult<Unit> {
             resolved = reportId to actioned
@@ -274,6 +284,121 @@ class StoreModerationTest {
         // A date is decoration on a queue card. A queue that will not load is not.
         assertEquals(0L, StoreModeration.parseInstantMs("not a date"))
         assertEquals(0L, StoreModeration.parseInstantMs(null))
+    }
+
+    // ---- checking a submission out to build and run it ----
+
+    /** A minimal but real zip, because [PayloadExtractor] reads the archive rather than trusting a name. */
+    private fun zipOf(entries: Map<String, String>): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        java.util.zip.ZipOutputStream(out).use { zip ->
+            entries.forEach { (path, body) ->
+                zip.putNextEntry(java.util.zip.ZipEntry(path))
+                zip.write(body.toByteArray())
+                zip.closeEntry()
+            }
+        }
+        return out.toByteArray()
+    }
+
+    private fun projectZip() = zipOf(
+        mapOf(
+            "settings.gradle.kts" to "include(\":app\")",
+            "app/src/main/kotlin/Main.kt" to "fun main() = println(\"hi\")",
+        ),
+    )
+
+    @Test
+    fun checkingOutUnpacksTheSubmissionUnderANameAReviewerCanRecognise() {
+        val row = submission()
+        val port = FakeModeration(queue = StoreResult.Ok(ReviewQueue(pending = listOf(row))))
+        port.archiveBytes = projectZip()
+        val moderation = StoreModeration(port)
+        moderation.queue()
+        val root = kotlin.io.path.createTempDirectory("ca-review-root-").toFile()
+
+        val checkout = moderation.checkOut("v1", root) { true }
+
+        assertNull(checkout.message)
+        // Named for the listing and the version: a reviewer's picker holds their own work as well, and
+        // unvetted content has to be tellable apart from it at a glance. The dots become dashes because
+        // the extractor sanitises the directory name, and this asserts the name that is actually on disk —
+        // which is the one the replace-on-second-checkout has to match.
+        assertEquals("review-my-app-ab12-1-0-1", java.io.File(assertNotNull(checkout.rootPath)).name)
+        assertTrue(java.io.File(checkout.rootPath!!, "settings.gradle.kts").isFile)
+        assertEquals(row, port.downloadedFor)
+        root.deleteRecursively()
+    }
+
+    @Test
+    fun checkingTheSameSubmissionOutTwiceReplacesTheCopyRatherThanAddingOne() {
+        val row = submission()
+        val port = FakeModeration(queue = StoreResult.Ok(ReviewQueue(pending = listOf(row))))
+        port.archiveBytes = projectZip()
+        val moderation = StoreModeration(port)
+        moderation.queue()
+        val root = kotlin.io.path.createTempDirectory("ca-review-root-").toFile()
+
+        val first = moderation.checkOut("v1", root) { true }
+        // Something the second checkout must clear: a stale file from the previous copy.
+        java.io.File(first.rootPath!!, "stale.txt").writeText("left over")
+        val second = moderation.checkOut("v1", root) { true }
+
+        assertEquals(first.rootPath, second.rootPath)
+        // Uniquifying would leave review-…-2, review-…-3 behind for a reviewer to clean up by hand.
+        assertEquals(1, root.listFiles()!!.count { it.isDirectory })
+        assertFalse(java.io.File(second.rootPath!!, "stale.txt").exists())
+        root.deleteRecursively()
+    }
+
+    @Test
+    fun anArchiveNothingCanOpenLeavesNoFolderBehindAndSaysWhy() {
+        val row = submission()
+        val port = FakeModeration(queue = StoreResult.Ok(ReviewQueue(pending = listOf(row))))
+        port.archiveBytes = projectZip()
+        val moderation = StoreModeration(port)
+        moderation.queue()
+        val root = kotlin.io.path.createTempDirectory("ca-review-root-").toFile()
+
+        val checkout = moderation.checkOut("v1", root) { false }
+
+        assertNull(checkout.rootPath)
+        // A review finding in its own right, so it is said rather than swallowed.
+        assertTrue("reject" in assertNotNull(checkout.message), checkout.message!!)
+        // And nothing is left in the picker that the picker cannot list.
+        assertTrue(root.listFiles()!!.none { it.isDirectory }, root.list()!!.joinToString())
+        root.deleteRecursively()
+    }
+
+    @Test
+    fun aFailedDownloadIsReportedAndNothingIsUnpacked() {
+        val row = submission()
+        val port = FakeModeration(queue = StoreResult.Ok(ReviewQueue(pending = listOf(row))))
+        port.downloadResult = StoreResult.Failed("The archive did not match the checksum the submission recorded")
+        val moderation = StoreModeration(port)
+        moderation.queue()
+        val root = kotlin.io.path.createTempDirectory("ca-review-root-").toFile()
+
+        val checkout = moderation.checkOut("v1", root) { true }
+
+        assertEquals("The archive did not match the checksum the submission recorded", checkout.message)
+        assertNull(checkout.rootPath)
+        assertTrue(root.listFiles()!!.isEmpty())
+        root.deleteRecursively()
+    }
+
+    @Test
+    fun checkingOutARowThisQueueNeverSawSaysReloadRatherThanReachingTheNetwork() {
+        val port = FakeModeration()
+        val moderation = StoreModeration(port)
+        moderation.queue()
+        val root = kotlin.io.path.createTempDirectory("ca-review-root-").toFile()
+
+        val checkout = moderation.checkOut("gone", root) { true }
+
+        assertTrue("Reload" in assertNotNull(checkout.message), checkout.message!!)
+        assertNull(port.downloadedFor)
+        root.deleteRecursively()
     }
 
     // ---- reports ----
