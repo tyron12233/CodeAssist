@@ -1,0 +1,20 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "layout-preview-impl"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.main]
+scope = "IMPLEMENTATION"
+java = ["src/main/kotlin"]
+
+[sourceSets.test]
+scope = "TEST_IMPLEMENTATION"
+java = ["src/test/kotlin"]
+
+[dependencies]
+api = [{ module = "layout-preview-api" }]
+implementation = [{ module = "android-support" }, { module = "lang-xml" }, { module = "project-model-api" }, "org.ow2.asm:asm:9.7", "org.ow2.asm:asm-tree:9.7", "org.ow2.asm:asm-commons:9.7", "kotlin-stdlib"]
+testImplementation = [{ platform = "org.junit:junit-bom:5.11.4" }, "org.jetbrains.kotlin:kotlin-test:2.4.0", { module = "test-support" }, "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0"]

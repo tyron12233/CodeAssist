@@ -1,0 +1,14 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "applog-runtime"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.main]
+scope = "IMPLEMENTATION"
+java = ["src/main/java"]
+
+[dependencies]
+compileOnly = ["com.google.android:android:4.1.1.4"]

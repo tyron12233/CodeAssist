@@ -1,0 +1,20 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "lang-xml"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.main]
+scope = "IMPLEMENTATION"
+java = ["src/main/kotlin"]
+
+[sourceSets.test]
+scope = "TEST_IMPLEMENTATION"
+java = ["src/test/kotlin"]
+
+[dependencies]
+api = [{ module = "language-api" }]
+implementation = [{ module = "intellij-psi-host" }, { module = "index-api" }, { module = "analysis-api" }, { module = "plugin-api" }, "kotlin-stdlib"]
+testImplementation = [{ platform = "org.junit:junit-bom:5.11.4" }, "org.jetbrains.kotlin:kotlin-test:2.4.0", { module = "test-support" }, "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0"]

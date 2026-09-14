@@ -1,0 +1,20 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "lang-jdt"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.main]
+scope = "IMPLEMENTATION"
+java = ["src/main/java", "src/main/kotlin"]
+
+[sourceSets.test]
+scope = "TEST_IMPLEMENTATION"
+java = ["src/test/kotlin"]
+
+[dependencies]
+api = [{ module = "language-api" }]
+implementation = [{ module = "index-api" }, { module = "analysis-api" }, { module = "build-engine" }, "org.eclipse.jdt:org.eclipse.jdt.core:3.40.0", "kotlin-stdlib"]
+testImplementation = [{ platform = "org.junit:junit-bom:5.11.4" }, "org.jetbrains.kotlin:kotlin-test:2.4.0", { module = "test-support" }, { module = "project-model-impl" }, { module = "lang-java" }, { module = "bench-support" }]

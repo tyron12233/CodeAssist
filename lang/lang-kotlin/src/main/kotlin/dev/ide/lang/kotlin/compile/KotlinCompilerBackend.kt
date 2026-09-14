@@ -28,6 +28,16 @@ data class KotlinCompileRequest(
     val pluginOptions: List<String> = emptyList(),
     /** Classpaths of plugins loaded and registered programmatically, one list per plugin. */
     val runtimePluginClasspaths: List<List<Path>> = emptyList(),
+    /**
+     * The subset of [kotlinSources] belonging to the module's COMMON fragments — what an imported Kotlin
+     * Multiplatform module's `commonMain` (and any intermediate source set above the platform one) holds.
+     *
+     * Non-empty compiles the module in multiplatform mode with those files placed in the common fragment,
+     * which is what makes an `expect` in one source set and its `actual` in another legal inside a single
+     * compilation. The flag alone is not enough: without naming the common files the compiler reports
+     * "'expect' and corresponding 'actual' are declared in the same module" and fails.
+     */
+    val commonSources: List<Path> = emptyList(),
 )
 
 /**

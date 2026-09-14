@@ -43,6 +43,7 @@ class GenerateSourcesTask(
     /** The module's `ContentRole.SOURCE` root directories (excludes the generated root, so a generator never
      *  sees its own output as an input and can't ping-pong the up-to-date check). */
     private fun sourceRootDirs(): List<Path> = module.sourceSets
+        .filter { it.scope.onCompile || it.scope.onRuntime }   // never a test-only set; see sourceRootDirs
         .flatMap { it.contentRoots }
         .filter { ContentRole.SOURCE in it.roles }
         .map { Paths.get(it.dir.path) }

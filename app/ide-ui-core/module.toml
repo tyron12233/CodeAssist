@@ -1,0 +1,27 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "ide-ui-core"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.commonMain]
+scope = "IMPLEMENTATION"
+java = ["src/commonMain/kotlin"]
+
+[sourceSets.desktopMain]
+scope = "IMPLEMENTATION"
+java = ["src/desktopMain/kotlin"]
+
+[sourceSets.desktopTest]
+scope = "TEST_IMPLEMENTATION"
+java = ["src/desktopTest/kotlin"]
+
+[dependencies]
+api = [{ module = "ide-ui-api" }, { module = "ide-ui-resources" }, "org.jetbrains.compose.runtime:runtime:1.11.1", "org.jetbrains.compose.foundation:foundation:1.11.1", "org.jetbrains.compose.material3:material3:1.9.0", "org.jetbrains.compose.ui:ui:1.11.1", "org.jetbrains.compose.ui:ui-tooling-preview:1.11.1"]
+implementation = ["org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0", "kotlin-stdlib"]
+testImplementation = [{ module = "ide-ui-testing" }, "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0", "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64:1.11.1"]
+
+[kotlin]
+commonSourceRoots = ["src/commonMain/kotlin"]

@@ -1,0 +1,7 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "art-compat"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"

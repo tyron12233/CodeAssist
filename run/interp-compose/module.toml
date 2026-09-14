@@ -1,0 +1,24 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "interp-compose"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.desktopTest]
+scope = "TEST_IMPLEMENTATION"
+java = ["src/desktopTest/kotlin"]
+
+[sourceSets.jvmShared]
+scope = "IMPLEMENTATION"
+java = ["src/jvmShared/kotlin"]
+
+[dependencies]
+api = [{ module = "interp-core" }, { module = "jvm-interp" }]
+implementation = ["org.jetbrains.compose.runtime:runtime:1.11.1", "kotlin-stdlib"]
+compileOnly = ["org.jetbrains.compose.ui:ui:1.11.1"]
+testImplementation = ["org.jetbrains.compose.runtime:runtime:1.11.1", "org.jetbrains.compose.material3:material3:1.9.0", "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64:1.11.1"]
+
+[kotlin]
+commonSourceRoots = ["src/jvmShared/kotlin"]

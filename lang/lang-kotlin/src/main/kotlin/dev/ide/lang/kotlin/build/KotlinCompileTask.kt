@@ -15,6 +15,7 @@ import dev.ide.build.engine.kotlinSiblings
 import dev.ide.build.engine.kotlinSourceFiles
 import dev.ide.build.engine.levelOf
 import dev.ide.build.engine.libJars
+import dev.ide.build.engine.moduleDir
 import dev.ide.build.engine.reportToolDiagnostics
 import dev.ide.build.engine.sourceFiles
 import dev.ide.build.resolveFor
@@ -45,6 +46,21 @@ class KotlinCompileTask(
      *  built-ins (Compose); the host passes the `platform.kotlinCompilerPlugin` EP contents. */
     private val plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS,
 ) : Task {
+    /**
+     * The module's COMMON-fragment sources: every `.kt` under a root the `[kotlin]` facet names. An imported
+     * KMP module compiles its common + platform sources as one compilation, and this is what tells the
+     * compiler which half is which (see [KotlinFacet.commonSourceRoots]).
+     */
+    private fun commonSources(): List<Path> {
+        val roots = module.facets.get(KotlinFacet.KEY)?.commonSourceRoots.orEmpty()
+        if (roots.isEmpty()) return emptyList()
+        val dirs = roots.map { moduleDir(module).resolve(it).toAbsolutePath().normalize() }
+        return kotlinSourceFiles(module).filter { file ->
+            val path = file.toAbsolutePath().normalize()
+            dirs.any { path.startsWith(it) }
+        }
+    }
+
     private fun upstreamKotlin(): List<Path> = kotlinSiblings(depOutputDirs(module)).filter { Files.isDirectory(it) }
     private fun classpath(): List<Path> = depOutputDirs(module) + upstreamKotlin() + libJars(module)
 
@@ -55,6 +71,8 @@ class KotlinCompileTask(
             dirPaths("deps", depOutputDirs(module) + upstreamKotlin())
             filePaths("libs", libJars(module))
             property("level", levelOf(module.languageLevel))
+            // Which sources are common changes what compiles, so it is an input like the language level.
+            filePaths("commonSources", commonSources())
         }
     override val outputs: TaskOutputs
         get() = TaskOutputsImpl().apply { dirPath("classes", kotlinOutputDir(module)) }
@@ -72,6 +90,7 @@ class KotlinCompileTask(
             bootClasspath = bootClasspath,
             compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
             runtimePluginClasspaths = resolved.runtimeClasspaths,
+            commonSources = commonSources(),
         )
         ctx.reportToolDiagnostics("kotlin", r.messages)
         ctx.logger()(":${module.name}:compileKotlin ${if (r.success) "OK" else "FAILED"}")

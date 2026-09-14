@@ -1,0 +1,22 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "ide-ui-api"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.commonMain]
+scope = "IMPLEMENTATION"
+java = ["src/commonMain/kotlin"]
+
+[sourceSets.jvmShared]
+scope = "IMPLEMENTATION"
+java = ["src/jvmShared/kotlin"]
+
+[dependencies]
+api = [{ module = "plugin-ui-api" }]
+implementation = ["org.jetbrains.compose.runtime:runtime:1.11.1", "org.jetbrains.compose.foundation:foundation:1.11.1", "org.jetbrains.compose.ui:ui:1.11.1", "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0", "kotlin-stdlib"]
+
+[kotlin]
+commonSourceRoots = ["src/commonMain/kotlin", "src/jvmShared/kotlin"]

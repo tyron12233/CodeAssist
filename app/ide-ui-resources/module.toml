@@ -1,0 +1,21 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "ide-ui-resources"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.composeResources]
+scope = "IMPLEMENTATION"
+java = ["build/compose-resources/kotlin"]
+resources = ["build/compose-resources/resources"]
+
+[dependencies]
+api = ["org.jetbrains.compose.components:components-resources:1.11.1"]
+implementation = ["org.jetbrains.compose.runtime:runtime:1.11.1", "kotlin-stdlib"]
+
+[composeResources]
+package = "dev.ide.ui.generated.resources"
+public = true
+roots = ["src/commonMain/composeResources"]

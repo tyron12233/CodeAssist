@@ -1,0 +1,22 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "android-support"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.main]
+scope = "IMPLEMENTATION"
+java = ["src/main/kotlin"]
+resources = ["src/main/resources"]
+
+[sourceSets.test]
+scope = "TEST_IMPLEMENTATION"
+java = ["src/test/kotlin"]
+
+[dependencies]
+api = [{ module = "build-api" }]
+implementation = [{ module = "build-engine" }, { module = "jvm-build" }, { module = "lang-jdt" }, { module = "lang-kotlin" }, { module = "project-model-impl" }, { module = "language-api" }, { module = "lang-xml" }, { module = "index-api" }, "org.ow2.asm:asm:9.7", "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0", "kotlin-stdlib"]
+compileOnly = ["com.android.tools:r8:8.13.19", "com.android.tools.build:apksig:8.7.3", "com.android.tools.build:bundletool:1.18.3", "com.google.guava:guava:32.0.1-jre", "org.bouncycastle:bcpkix-jdk18on:1.78.1"]
+testImplementation = [{ platform = "org.junit:junit-bom:5.11.4" }, "org.jetbrains.kotlin:kotlin-test:2.4.0", { module = "test-support" }, "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0", "com.android.tools:r8:8.13.19", "com.android.tools.build:apksig:8.7.3", "com.android.tools.build:bundletool:1.18.3", "org.bouncycastle:bcpkix-jdk18on:1.78.1"]

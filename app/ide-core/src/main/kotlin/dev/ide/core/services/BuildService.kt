@@ -23,6 +23,8 @@ import dev.ide.build.KotlinCompilerPlugin
 import dev.ide.build.RUN_TASK_PROVIDER_EP
 import dev.ide.build.RunAction
 import dev.ide.build.RunCapture
+import dev.ide.build.CLASS_TRANSFORM_EP
+import dev.ide.build.ClassTransform
 import dev.ide.build.SOURCE_GENERATOR_EP
 import dev.ide.build.SourceGenerator
 import dev.ide.build.TaskGraph
@@ -157,6 +159,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
     private val sourceGenerators: List<SourceGenerator> =
         ctx.platform.extensions.extensions(SOURCE_GENERATOR_EP)
 
+    // Bytecode rewrites contributed through `platform.classTransform`, applied to everything about to be
+    // dexed. Empty until a plugin contributes one, so the seam is wired but dormant today.
+    private val classTransforms: List<ClassTransform> =
+        ctx.platform.extensions.extensions(CLASS_TRANSFORM_EP)
+
     // The native Java/Kotlin build system (`:jvm-build`): JavaPlugin wires each module's own compile task
     // (lang-jdt's JdtCompileTask, lang-kotlin's KotlinCompileTask), which drive ecj / K2 directly. The boot
     // classpath is resolved PER MODULE ([ctx.bootClasspathFor]: the core-Java platform for a console module,
@@ -220,6 +227,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                 kotlin = incrementalKotlin,
                 plugins = kotlinCompilerPlugins,
                 generators = sourceGenerators,
+                classTransforms = classTransforms,
                 dexCacheRoot = dexCache,
                 signingResolver = signingResolver,
                 // On ART, run R8 in a forked VM with a bigger heap (self-falls-back to in-process if forking
@@ -259,6 +267,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
             kotlin = incrementalKotlin,
             plugins = kotlinCompilerPlugins,
             generators = sourceGenerators,
+            classTransforms = classTransforms,
             dexCacheRoot = dexCache,
             signingResolver = signingResolver,
         )

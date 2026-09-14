@@ -172,10 +172,18 @@ internal class ModuleBuilder(
     private var dirRelPathField: String = dirRelPath
     private var languageLevelField: LanguageLevel = initial?.languageLevel ?: LanguageLevel.JAVA_17
     private var sdkField: SdkRef? = initial?.sdk?.let { SdkRef(it) }
-    private var outputRelPath: String = initial?.outputRelPath ?: "build/classes"
+    private var outputRelPathField: String = initial?.outputRelPath ?: "build/classes"
     private val deps = ArrayList<OrderEntry>(initial?.dependencies ?: emptyList())
     private val sourceSets = ArrayList<SourceSetData>(initial?.sourceSets ?: emptyList())
     private val facets = LinkedHashMap<String, FacetData>().apply { initial?.facets?.forEach { put(it.tomlTable, it) } }
+
+    override var outputRelPath: String
+        get() = outputRelPathField
+        set(value) {
+            if (value == outputRelPathField) return
+            outputRelPathField = value
+            settingsChanged = true
+        }
 
     override var dirRelPath: String
         get() = dirRelPathField
@@ -275,7 +283,7 @@ internal class ModuleBuilder(
         dirRelPath = dirRelPathField,
         typeId = typeId,
         languageLevel = languageLevelField,
-        outputRelPath = outputRelPath,
+        outputRelPath = outputRelPathField,
         sourceSets = sourceSets.toList(),
         dependencies = deps.toList(),
         facets = facets.values.toList(),

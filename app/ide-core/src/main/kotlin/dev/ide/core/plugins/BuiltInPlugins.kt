@@ -17,6 +17,7 @@ import dev.ide.block.BLOCK_MAPPING_EP
 import dev.ide.block.impl.JavaBlockMapping
 import dev.ide.build.BUILD_CONTROL
 import dev.ide.build.KOTLIN_COMPILER_PLUGIN_EP
+import dev.ide.build.BUILD_PLUGIN_EP
 import dev.ide.build.SOURCE_GENERATOR_EP
 import dev.ide.core.ACTION_MANAGER
 import dev.ide.core.keymap.EditorKeymapPlugin
@@ -56,6 +57,7 @@ import dev.ide.core.completion.PluginManifestCompletion
 import dev.ide.core.completion.PostfixContributor
 import dev.ide.core.completion.UserLiveTemplateContributor
 import dev.ide.core.gradle.GradleBuildFileWriter
+import dev.ide.core.gradle.GradleModelImporter
 import dev.ide.core.gradle.GradleProjectImporter
 import dev.ide.core.project.JavaLibModuleType
 import dev.ide.core.services.AndroidResourceService
@@ -110,6 +112,9 @@ import dev.ide.lang.java.index.JavaSourceSymbolsIndex
 import dev.ide.lang.jdt.analysis.JdtAnalysisSupport
 import dev.ide.lang.kotlin.KotlinLanguageBackend
 import dev.ide.lang.kotlin.analysis.KotlinAnalysisSupport
+import dev.ide.build.jvm.compose.ComposeResourcesFacetCodec
+import dev.ide.build.jvm.compose.ComposeResourcesPlugin
+import dev.ide.lang.kotlin.build.KotlinFacetCodec
 import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
 import dev.ide.lang.kotlin.compile.ParcelizeCompilerPlugin
 import dev.ide.lang.kotlin.compile.SerializationCompilerPlugin
@@ -136,6 +141,7 @@ import dev.ide.lang.postfix.POSTFIX_TEMPLATE_EP
 import dev.ide.lang.synthetic.SYNTHETIC_CLASS_EP
 import dev.ide.lang.xml.XmlLanguageBackend
 import dev.ide.lang.xml.lint.XmlAnalysisSupport
+import dev.ide.model.FACET_CODEC_EP
 import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.FileIconRegistry
 import dev.ide.model.MODULE_RESOURCES
@@ -360,6 +366,11 @@ private class GradleSupportPlugin : Plugin {
 
     override fun register(reg: PluginRegistration) {
         reg.register(PROJECT_IMPORTER_EP, GradleProjectImporter())
+        // A build that exported its own configured model (`.platform/gradle-model.json`) is imported from
+        // that instead of from its script text, which is the only way a build whose structure is computed
+        // rather than declared can be read at all. It detects with a higher confidence, so it wins wherever
+        // both apply.
+        reg.register(PROJECT_IMPORTER_EP, GradleModelImporter())
         reg.register(BUILD_FILE_WRITER_EP, GradleBuildFileWriter())
     }
 }
@@ -392,6 +403,14 @@ private class KotlinSupportPlugin : Plugin {
     )
     override fun register(reg: PluginRegistration) {
         reg.register(SYNTHETIC_CLASS_EP, KotlinSyntheticClassProvider())
+        // `[kotlin]` in module.toml: today just `multiplatform`, which decides whether a module's
+        // `expect`/`actual` declarations compile at all (see KotlinFacet).
+        reg.register(FACET_CODEC_EP, KotlinFacetCodec)
+        // Compose Multiplatform resources: `[composeResources]` plus the build plugin that generates the
+        // `Res` class and stages the resource tree, which the Compose Gradle plugin would otherwise be the
+        // only producer of.
+        reg.register(FACET_CODEC_EP, ComposeResourcesFacetCodec)
+        reg.register(BUILD_PLUGIN_EP, ComposeResourcesPlugin())
         reg.register(KOTLIN_COMPILER_PLUGIN_EP, ComposeCompilerPlugin)
         reg.register(KOTLIN_COMPILER_PLUGIN_EP, SerializationCompilerPlugin)
         reg.register(KOTLIN_COMPILER_PLUGIN_EP, ParcelizeCompilerPlugin)

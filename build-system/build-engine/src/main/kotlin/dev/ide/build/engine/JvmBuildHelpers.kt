@@ -5,6 +5,7 @@ import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
 import dev.ide.model.LanguageLevel
 import dev.ide.model.Module
+import dev.ide.model.SourceSet
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -48,11 +49,29 @@ fun collapseNestedRoots(roots: List<Path>): List<Path> {
  */
 fun sourceRootDirs(module: Module): List<Path> {
     val declared = module.sourceSets
+        .filter { producesOutput(it) }
         .flatMap { it.contentRoots }
         .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
         .map { Paths.get(it.dir.path) }
     return collapseNestedRoots(declared.plusElement(generatedRoot(module))).filter { Files.isDirectory(it) }
 }
+
+/**
+ * Does [sourceSet] feed the module's output?
+ *
+ * A CodeAssist module is a single compilation, so this is what separates the sources that compile into it
+ * from a **test-only** source set (`src/test`, `commonTest`), which does not: its scope puts it on neither
+ * the compile nor the runtime classpath, and so do the dependencies written for it. Compiling it into the
+ * main output would fail every time it touches a test dependency — the assertion library it imports is
+ * declared `testImplementation`, which is precisely a scope the compile classpath does not carry — while
+ * appearing to be an ordinary unresolved reference in the user's code.
+ *
+ * This is not "tests are skipped": there is no test compilation to run them in yet (BuildGoal.TEST has no
+ * task behind it). When there is, it will ask for exactly the source sets excluded here, against the
+ * test-scoped classpath they were written for.
+ */
+private fun producesOutput(sourceSet: SourceSet): Boolean =
+    sourceSet.scope.onCompile || sourceSet.scope.onRuntime
 
 fun sourceFiles(module: Module): List<Path> = sourceRootDirs(module)
     .flatMap { root -> Files.walk(root).use { s -> s.filter { it.toString().endsWith(".java") }.collect(Collectors.toList()) } }
@@ -69,7 +88,16 @@ fun libJars(module: Module): List<Path> =
 fun moduleDir(module: Module): Path = Paths.get(module.dir.path)
 
 /** The module's build directory (`<moduleDir>/build`): generated sources, intermediates, outputs. */
-fun buildDir(module: Module): Path = moduleDir(module).resolve("build")
+/**
+ * The module's build directory: everything the build writes lives under it.
+ *
+ * Derived from the compile output rather than fixed at `<module>/build`, the same way [generatedRoot] is, so
+ * that a module which moves its output moves its whole build tree with it. That is what lets a project built
+ * by two build systems keep them apart (see [dev.ide.model.ModifiableModule.outputRelPath]); a module that
+ * leaves the output at the default `build/classes` still gets `<module>/build`, as before.
+ */
+fun buildDir(module: Module): Path =
+    module.outputDir?.let { Paths.get(it.path).parent } ?: moduleDir(module).resolve("build")
 
 /**
  * A module's compile output directory. Required rather than optional: these helpers exist for the JVM build,

@@ -84,7 +84,12 @@ class JavaPlugin(
      * its output) when [module] has Kotlin sources and a [kotlin] compiler is available.
      */
     fun registerModule(tasks: TaskContainer, module: Module, byId: Map<ModuleId, Module>, withJar: Boolean) {
-        val hasKt = kotlin != null && hasKotlinSources(module)
+        // Every module with a Kotlin compiler available gets a `compileKotlin`, whether or not it has `.kt`
+        // *right now*: source generators run later in this same graph, and a module whose Kotlin is entirely
+        // generated (the Compose `Res` class, a KSP processor's output) has none at graph-build time. The
+        // task compiles nothing and succeeds when the module really has no Kotlin, which is what Gradle's
+        // NO-SOURCE `compileKotlin` does for a Java-only module.
+        val hasKt = kotlin != null
         // generateSources: run the source generators into the module's generated root ahead of compilation.
         // The compile tasks read that root as source, so they need only an explicit edge to it: the generated
         // dir is empty at graph-build time, so output/input inference alone wouldn't catch it (the same reason
@@ -104,7 +109,9 @@ class JavaPlugin(
                 generateSources?.let { dependsOn(it) }
                 directModuleDeps(module, byId).forEach {
                     dependsOn(TaskName(":${it.name}:compileJava"))
-                    if (hasKotlinSources(it)) dependsOn(TaskName(":${it.name}:compileKotlin"))
+                    // Unconditional for the same reason `hasKt` is: an upstream module's Kotlin may not
+                    // exist yet. An edge to a task no pipeline registered is ignored.
+                    dependsOn(TaskName(":${it.name}:compileKotlin"))
                 }
             }
         }

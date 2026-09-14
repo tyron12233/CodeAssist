@@ -20,6 +20,7 @@ import dev.ide.android.support.tasks.GenerateRJarTask
 import dev.ide.android.support.tasks.GenerateViewBindingTask
 import dev.ide.android.support.tasks.InjectAppLogProviderTask
 import dev.ide.android.support.tasks.InjectCrashlyticsMappingFileIdTask
+import dev.ide.android.support.tasks.InstrumentClassesTask
 import dev.ide.android.support.tasks.L8DexTask
 import dev.ide.android.support.tasks.ManifestMergeTask
 import dev.ide.android.support.tasks.MergeJavaResourcesTask
@@ -62,6 +63,7 @@ import dev.ide.build.BuildEnv
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSystem
+import dev.ide.build.ClassTransform
 import dev.ide.build.KotlinCompilerPlugin
 import dev.ide.build.SourceGenerator
 import dev.ide.build.Task
@@ -142,6 +144,12 @@ class AndroidBuildSystem(
      *  emitting into a per-variant `generated/ksp` root added to the compile source roots. Empty (the default)
      *  ⇒ no step is added and the build is byte-identical — dormant until a generator is contributed. */
     private val generators: List<SourceGenerator> = emptyList(),
+    /**
+     * Bytecode rewrites applied to everything about to be dexed (the `platform.classTransform` EP contents).
+     * Empty (the default) ⇒ no instrumentation step is added and the dex inputs are the compile outputs
+     * themselves, byte-identical to a build without the feature. See [ClassTransform].
+     */
+    private val classTransforms: List<ClassTransform> = emptyList(),
     /** Global content-addressed library-dex cache (e.g. the host's shared caches dir); null = per-project only. */
     private val dexCacheRoot: Path? = null,
     /** Core-library-desugaring artifacts (desugar runtime + config jar); null = host ships none, so a module's
@@ -529,17 +537,47 @@ class AndroidBuildSystem(
                 TransformHiltClassesTask(transformHilt, appProjectClasses, layout.hiltClasses)
             }
         }
-        val dexProjectClasses = if (transformHilt != null) listOf(layout.hiltClasses) else appProjectClasses
+        val hiltOrRawClasses = if (transformHilt != null) listOf(layout.hiltClasses) else appProjectClasses
 
         val pkg = step("packageApk")
         val sign = step("sign")
 
         // Inputs to dex, by AGP scope: sub-module `jar` artifacts (consumed BY NAME) and external libraries.
-        val subProjectJars = closure.map { jarPath(it) }
+        val rawSubProjectJars = closure.map { jarPath(it) }
         val moduleJarProducers = closure.map { TaskName(":${it.name}:jar") }
         // The debug-only log-bridge runtime rides the external dex scope (its immutable jar is content-hashed,
         // so it's dexed once and cached like any library); null on release/non-instrumented builds.
-        val externalJars = libs.dexJars + (appLog?.let { listOf(it.runtimeJar) } ?: emptyList())
+        val rawExternalJars = libs.dexJars + (appLog?.let { listOf(it.runtimeJar) } ?: emptyList())
+
+        // Contributed bytecode rewrites (`platform.classTransform`): everything below dexes the instrumented
+        // copies instead of the compile outputs. Like the Hilt transform above, the originals are left alone
+        // so they stay the compile classpath and keep their up-to-date check.
+        val transforms = classTransforms.filter { it.appliesTo(app.name) }
+        val instrument = if (transforms.isEmpty()) null else step("instrumentClasses")
+        val dexProjectClasses: List<Path>
+        val subProjectJars: List<Path>
+        val externalJars: List<Path>
+        if (instrument != null) {
+            val staging = layout.instrumented
+            val instrumentedJars = (rawSubProjectJars + rawExternalJars)
+                .associateWith { InstrumentClassesTask.instrumentedJar(staging, it, transforms) }
+            tasks.task(
+                instrument,
+                listOf(compile) + listOfNotNull(transformHilt) + moduleJarProducers,
+            ) {
+                InstrumentClassesTask(
+                    instrument, app.name, hiltOrRawClasses, rawSubProjectJars + rawExternalJars,
+                    transforms, staging,
+                )
+            }
+            dexProjectClasses = hiltOrRawClasses.map { InstrumentClassesTask.instrumentedClassDir(staging, it) }
+            subProjectJars = rawSubProjectJars.map { instrumentedJars.getValue(it) }
+            externalJars = rawExternalJars.map { instrumentedJars.getValue(it) }
+        } else {
+            dexProjectClasses = hiltOrRawClasses
+            subProjectJars = rawSubProjectJars
+            externalJars = rawExternalJars
+        }
         // The app's R.jar (generateRFile): dexed in its OWN scope (rArchives) and merged into the PROJECT dex layer,
         // where AGP keeps R — NOT the external scope. Content-hashed, so it re-dexes only when resources change,
         // and being out of the external scope means a resource edit never re-dexes or re-merges the stable libraries.
@@ -618,7 +656,7 @@ class AndroidBuildSystem(
             val resourceShrink = if (shrinkResources) ResourceShrink(layout.protoAp, layout.shrunkProtoAp) else null
 
             val minifyTask = TaskName(":${app.name}:minify${v}WithR8")
-            tasks.task(minifyTask, listOf(aapt2Link, generateRFile, compile) + listOfNotNull(transformHilt) + moduleJarProducers) {
+            tasks.task(minifyTask, listOf(aapt2Link, generateRFile, compile) + listOfNotNull(transformHilt, instrument) + moduleJarProducers) {
                 R8MinifyTask(
                     minifyTask, dexProjectClasses + subProjectJars + externalJars + rJars, sdk.androidJar, facet.minSdk,
                     keepRuleFiles, inlineRules, facet.r8FullMode,
@@ -650,7 +688,7 @@ class AndroidBuildSystem(
             // fork helps it too. Otherwise R stays in dexBuilder + the project merge (AGP's scope for R).
             val forkedR = dexExtOnePass
             val dexBuilder = step("dexBuilder")
-            tasks.task(dexBuilder, listOf(compile, generateRFile) + listOfNotNull(transformHilt) + moduleJarProducers) {
+            tasks.task(dexBuilder, listOf(compile, generateRFile) + listOfNotNull(transformHilt, instrument) + moduleJarProducers) {
                 DexArchiveBuilderTask(dexBuilder, dexProjectClasses, subProjectJars, externalJars, sdk.androidJar,
                     facet.minSdk, release, layout.dexArchives.resolve("project.jar"),
                     layout.projectArchives, layout.subArchives, layout.extArchives, dexer, dexCacheRoot,
@@ -992,8 +1030,12 @@ class AndroidBuildSystem(
         }
     }
 
+    /** The module dependencies that must be built first. Test-only edges are not among them — see
+     *  build-engine's `directModuleDeps`, whose rule this mirrors for the Android graph. */
     private fun directModuleDeps(m: Module, byId: Map<ModuleId, Module>): List<Module> =
-        m.dependencies.filterIsInstance<ModuleDependency>().mapNotNull { byId[it.target] }
+        m.dependencies.filterIsInstance<ModuleDependency>()
+            .filter { it.scope.onCompile || it.scope.onRuntime }
+            .mapNotNull { byId[it.target] }
 
     /** Where [registerAndroidLibrary] writes an android-lib's compile-only `R.jar` (see its `rRoot`). */
     private fun rJarOf(m: Module): Path =
@@ -1265,6 +1307,9 @@ class AndroidBuildSystem(
         // transformHiltClasses output: `classes` + `kotlin-classes` copied with Hilt's `@AndroidEntryPoint`
         // superclass rewrite applied. Replaces both as the dex/R8 input when the module uses Hilt.
         val hiltClasses: Path = inter.resolve("hilt-classes")
+
+        /** Staging root for contributed [ClassTransform]s (see `InstrumentClassesTask`). */
+        val instrumented: Path = inter.resolve("instrumented")
         val dexArchives: Path = inter.resolve("dex-archives")   // dexBuilder scope roots + the project staging jar
         val projectArchives: Path = dexArchives.resolve("project")  // dexBuilder: app classes, per content hash
         val subArchives: Path = dexArchives.resolve("sub")          // dexBuilder: sub-module jars, per content hash
@@ -1394,8 +1439,8 @@ class AndroidBuildSystem(
          * Desktop wiring: every tool is a subprocess over an installed SDK (`java -cp d8.jar …`,
          * `java -jar apksigner.jar …`, native aapt2/zipalign). No statically-linked tool jars needed.
          */
-        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, generators: List<SourceGenerator> = emptyList(), dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, appLogRuntime: () -> AndroidAppLogRuntime? = { null }): AndroidBuildSystem =
-            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, plugins = plugins, generators = generators, dexCacheRoot = dexCacheRoot, desugarLib = desugarLib, signingResolver = signingResolver, appLogRuntime = appLogRuntime)
+        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, generators: List<SourceGenerator> = emptyList(), classTransforms: List<ClassTransform> = emptyList(), dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, appLogRuntime: () -> AndroidAppLogRuntime? = { null }): AndroidBuildSystem =
+            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, plugins = plugins, generators = generators, classTransforms = classTransforms, dexCacheRoot = dexCacheRoot, desugarLib = desugarLib, signingResolver = signingResolver, appLogRuntime = appLogRuntime)
 
         /**
          * On-device-shaped wiring: the native tools (aapt2, zipalign) run as subprocesses against the
@@ -1404,7 +1449,7 @@ class AndroidBuildSystem(
          * ART (where `java -jar` is impossible); the desktop test runs it too, so the on-device dex/sign
          * code path is exercised on the host.
          */
-        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, generators: List<SourceGenerator> = emptyList(), dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, shrinker: Shrinker? = null, dexer: Dexer? = null, mergeDexer: Dexer? = null, mergeChunk: () -> Int = { DexMergeTask.DEFAULT_MERGE_CHUNK }, appLogRuntime: () -> AndroidAppLogRuntime? = { null }): AndroidBuildSystem =
+        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, generators: List<SourceGenerator> = emptyList(), classTransforms: List<ClassTransform> = emptyList(), dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, shrinker: Shrinker? = null, dexer: Dexer? = null, mergeDexer: Dexer? = null, mergeChunk: () -> Int = { DexMergeTask.DEFAULT_MERGE_CHUNK }, appLogRuntime: () -> AndroidAppLogRuntime? = { null }): AndroidBuildSystem =
             AndroidBuildSystem(
                 sdk, signing, bootClasspath,
                 // The dexBuilder ARCHIVE dexer. The host can inject a forked-VM D8 (an [OffHeapArchiveDexer]) so a
@@ -1421,6 +1466,7 @@ class AndroidBuildSystem(
                 kotlin = kotlin,
                 plugins = plugins,
                 generators = generators,
+                classTransforms = classTransforms,
                 dexCacheRoot = dexCacheRoot,
                 desugarLib = desugarLib,
                 signingResolver = signingResolver,

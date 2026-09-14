@@ -75,10 +75,17 @@ fun applyBuildPlugins(
     }
 }
 
-/** A module's compiled-class output dirs — the Java output plus, when present, the Kotlin output. Packaged
- *  together (jar/dex) and tracked together (the `classes` lifecycle). */
-fun classOutputs(module: Module): List<Path> =
-    listOf(outputDir(module)) + if (hasKotlinSources(module)) listOf(kotlinOutputDir(module)) else emptyList()
+/**
+ * A module's compiled-class output dirs — the Java output and the Kotlin output. Packaged together
+ * (jar/dex) and tracked together (the `classes` lifecycle).
+ *
+ * Both are listed unconditionally rather than probing for Kotlin sources. This is called while the graph is
+ * being built, before any generator has run, so a module whose Kotlin is *generated* (a Compose resources
+ * `Res` class, a KSP processor's output) still has no `.kt` at that moment — and leaving its Kotlin output
+ * out here would silently package a jar without the generated classes. Consumers all tolerate a directory
+ * that does not exist: `writeJar` skips it, the classpath helpers filter it out.
+ */
+fun classOutputs(module: Module): List<Path> = listOf(outputDir(module), kotlinOutputDir(module))
 
 /** Targets plus their transitive module dependencies (all modules when [targets] is empty). */
 fun moduleClosure(targets: List<ModuleId>, byId: Map<ModuleId, Module>): List<Module> {
@@ -87,16 +94,41 @@ fun moduleClosure(targets: List<ModuleId>, byId: Map<ModuleId, Module>): List<Mo
         if (id in out) return
         val m = byId[id] ?: return
         out[id] = m
-        m.dependencies.filterIsInstance<ModuleDependency>().forEach { visit(it.target) }
+        m.dependencies.filterIsInstance<ModuleDependency>().filter { buildsBefore(it) }.forEach { visit(it.target) }
     }
     (if (targets.isEmpty()) byId.keys.toList() else targets).forEach { visit(it) }
     return out.values.toList()
 }
 
 fun directModuleDeps(module: Module, byId: Map<ModuleId, Module>): List<Module> =
-    module.dependencies.filterIsInstance<ModuleDependency>().mapNotNull { byId[it.target] }
+    module.dependencies.filterIsInstance<ModuleDependency>()
+        .filter { buildsBefore(it) }
+        .mapNotNull { byId[it.target] }
 
+/**
+ * Does [dependency] have to be built before the module declaring it?
+ *
+ * Only if it reaches that module's compile or runtime classpath. A **test-only** module dependency
+ * (Gradle's `testImplementation project(":fixtures")`) reaches neither: a CodeAssist module is one
+ * compilation, and the test sources that would consume it are not part of it.
+ *
+ * Keeping such an edge is not merely redundant, it makes correct projects unbuildable. `testImplementation`
+ * cycles are normal and deliberate — a shared test-fixtures module depends on the production module whose
+ * fixtures it provides, and that module's own tests depend back on the fixtures — because in Gradle the
+ * edge runs test→main and never main→main. Treated as a compile edge it closes a loop, and the build fails
+ * to configure with a cyclic-dependency error naming modules that do not actually depend on each other.
+ * (This is the shape of CodeAssist's own `:test-support`.)
+ *
+ * An off-classpath scope ([DependencyScope.NATIVES]) is excluded for the same reason: nothing in it is
+ * compiled or run against.
+ */
+private fun buildsBefore(dependency: ModuleDependency): Boolean =
+    dependency.scope.onCompile || dependency.scope.onRuntime
+
+/** The JVM resource roots packaged into the module's output. Test-only source sets contribute none, for
+ *  the same reason they contribute no sources (see `sourceRootDirs`). */
 fun resourceRoots(module: Module): List<Path> = module.sourceSets
+    .filter { it.scope.onCompile || it.scope.onRuntime }
     .flatMap { it.contentRoots }.filter { ContentRole.RESOURCE in it.roles }.map { Paths.get(it.dir.path) }
 
 fun resourcesDir(module: Module): Path = outputDir(module).resolveSibling("resources")

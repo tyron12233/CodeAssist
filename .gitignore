@@ -63,6 +63,18 @@ dist/
 # Release announcement drafts (never commit; they feed `gh release create` from the working tree only)
 discord_release_*.txt
 
+# Self-hosting workspace (.platform). The DURABLE half is committed so a fresh checkout can be built by
+# CodeAssist itself: workspace.json (the module list), gradle-model.json (what Gradle exported), and
+# repositories.txt. Everything else there is derived or machine-local and must stay out of git — the index
+# and build-fingerprint caches churn on every build, sdks.json holds absolute paths to THIS machine's
+# Android SDK, and the stdlib jar is re-extracted from the app's own assets on demand.
+.platform/caches/
+.platform/sync/
+.platform/.deps-reconciled
+.platform/*.jar
+.platform/sdks.json
+.platform/libraries.json
+
 # Supabase backend for the Projects Store (untracked: migrations, keys, admin page)
 supabase/
 

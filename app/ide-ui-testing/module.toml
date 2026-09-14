@@ -1,0 +1,18 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "ide-ui-testing"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.commonMain]
+scope = "IMPLEMENTATION"
+java = ["src/commonMain/kotlin"]
+
+[dependencies]
+api = [{ module = "ide-ui-api" }]
+implementation = ["org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0", "kotlin-stdlib"]
+
+[kotlin]
+commonSourceRoots = ["src/commonMain/kotlin"]

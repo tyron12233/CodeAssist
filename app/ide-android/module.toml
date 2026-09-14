@@ -1,0 +1,51 @@
+version = 2
+
+[module]
+type = "android-app"
+name = "ide-android"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.debug]
+scope = "IMPLEMENTATION"
+aidl = ["src/debug/aidl"]
+assets = ["src/debug/assets"]
+java = ["src/debug/java", "src/debug/kotlin"]
+jniLibs = ["src/debug/jniLibs"]
+res = ["src/debug/res"]
+resources = ["src/debug/resources"]
+
+[sourceSets.main]
+scope = "IMPLEMENTATION"
+aidl = ["src/main/aidl"]
+assets = ["src/main/assets"]
+java = ["src/main/java", "src/main/kotlin"]
+jniLibs = ["src/main/jniLibs"]
+res = ["src/main/res"]
+resources = ["src/main/resources"]
+
+[sourceSets.release]
+scope = "IMPLEMENTATION"
+aidl = ["src/release/aidl"]
+assets = ["src/release/assets"]
+java = ["src/release/java", "src/release/kotlin"]
+jniLibs = ["src/release/jniLibs"]
+res = ["src/release/res"]
+resources = ["src/release/resources"]
+
+[dependencies]
+api = ["org.jetbrains.kotlin:kotlin-stdlib:2.4.0"]
+implementation = [{ module = "ide-ui" }, { module = "ide-core" }, "org.eclipse.platform:org.eclipse.core.contenttype:3.9.600", "org.eclipse.platform:org.eclipse.core.jobs:3.15.400", { module = "layout-preview-api" }, { module = "layout-preview-impl" }, { module = "android-support" }, { module = "analytics-impl" }, { module = "store-impl" }, { module = "platform-core" }, { module = "plugin-api" }, { module = "art-compat" }, "org.jetbrains.kotlin:compose-compiler-plugin-for-ide:2.4.20-dev-6138", "org.jetbrains.kotlin:kotlinx-serialization-compiler-plugin-for-ide:2.4.20-dev-6138", "org.jetbrains.kotlin:parcelize-compiler-plugin-for-ide:2.4.20-dev-6138", { module = "build-engine" }, { module = "jvm-build" }, "com.android.tools:r8:8.13.19", "com.android.tools.build:apksig:8.7.3", "org.bouncycastle:bcpkix-jdk18on:1.78.1", "com.android.tools.build:bundletool:1.18.3", "com.google.guava:guava:32.0.1-jre", "org.jetbrains.compose.runtime:runtime:1.11.1", "org.jetbrains.compose.foundation:foundation:1.11.1", "org.jetbrains.compose.material3:material3:1.9.0", "org.jetbrains.compose.ui:ui:1.11.1", "androidx.activity:activity-compose:1.13.0", { platform = "com.google.firebase:firebase-bom:34.1.0" }, "com.google.android.gms:play-services-ads:25.4.0", "com.google.android.ump:user-messaging-platform:4.0.0", "com.google.ads.mediation:facebook:6.22.0.0", "com.google.ads.mediation:pangle:8.2.0.4.0", "com.google.ads.mediation:mintegral:17.1.71.0", "androidx.core:core:1.13.1", "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0", { module = "interp-core" }, { module = "interp-compose" }, { module = "jvm-interp" }, { module = "interp-impl" }, { module = "awt-toolkit" }, "kotlin-stdlib"]
+
+[android]
+namespace = "dev.ide.android"
+compileSdk = 36
+minSdk = 26
+targetSdk = 36
+manifest = "src/main/AndroidManifest.xml"
+versionCode = 93
+versionName = "3.18.2"
+isApplication = true
+manifestPlaceholders = []
+buildTypes = [{ name = "debug", debuggable = true, minifyEnabled = false, shrinkResources = false }, { name = "release", debuggable = false, minifyEnabled = false, shrinkResources = false, proguardFiles = ["proguard-android-optimize.txt", "proguard-rules.pro"] }]
+compose = true

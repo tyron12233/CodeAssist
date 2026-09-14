@@ -204,6 +204,18 @@ class HeadlessEngine private constructor(private val ide: IdeServices) : AutoClo
             )
         )
 
+        /**
+         * Import the foreign-build-system project at [root] into a CodeAssist workspace written there, so
+         * the other commands can build it. Returns false, writing nothing, when no importer claims [root].
+         *
+         * This is what makes a Gradle repository buildable headlessly: run its `generateNativeModel` task
+         * (which writes `.platform/gradle-model.json`), import once, and every later `assemble` opens the
+         * workspace that produced. A project already carrying a workspace is re-imported in place: modules
+         * are added and refreshed, never removed.
+         */
+        fun importProject(root: Path): Boolean =
+            IdeServices.importExternalProjectAt(root, IdeServices.defaultDesktopSdk(), LanguageLevel.JAVA_17)
+
         /** The ids [create] accepts, with their display names, as contributed by the template registry. */
         fun templates(): List<Pair<String, String>> =
             ApplicationEnvironment().use { env ->

@@ -1,0 +1,20 @@
+version = 2
+
+[module]
+type = "java-lib"
+name = "plugin-ui-api"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.main]
+scope = "IMPLEMENTATION"
+java = ["src/main/kotlin"]
+
+[sourceSets.test]
+scope = "TEST_IMPLEMENTATION"
+java = ["src/test/kotlin"]
+
+[dependencies]
+implementation = ["kotlin-stdlib"]
+compileOnly = ["org.jetbrains.compose.runtime:runtime-desktop:1.11.1", "org.jetbrains.compose.ui:ui-desktop:1.11.1"]
+testImplementation = [{ platform = "org.junit:junit-bom:5.11.4" }, "org.jetbrains.kotlin:kotlin-test:2.4.0", { module = "test-support" }, "org.jetbrains.compose.runtime:runtime-desktop:1.11.1", "org.jetbrains.compose.ui:ui-desktop:1.11.1"]

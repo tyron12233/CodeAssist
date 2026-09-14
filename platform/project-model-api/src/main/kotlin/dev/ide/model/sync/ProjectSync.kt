@@ -160,6 +160,9 @@ data class ExternalModule(
     val languageLevel: LanguageLevel? = null,
     /** Explicit platform-SDK override; null resolves by module type. */
     val sdk: SdkRef? = null,
+    /** Compile-output directory relative to the module dir; null keeps the default (`build/classes`).
+     *  See [dev.ide.model.ModifiableModule.outputRelPath] for when an importer should set it. */
+    val outputRelPath: String? = null,
     /** Source sets to declare. Empty leaves the module type's defaults in place. */
     val sourceSets: List<ExternalSourceSet> = emptyList(),
     val dependencies: List<ExternalDependency> = emptyList(),

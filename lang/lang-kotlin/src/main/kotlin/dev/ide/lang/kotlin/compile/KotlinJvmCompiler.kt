@@ -62,6 +62,7 @@ class KotlinJvmCompiler(
         compilerPlugins = request.compilerPlugins,
         pluginOptions = request.pluginOptions,
         runtimePluginClasspaths = request.runtimePluginClasspaths,
+        commonSources = request.commonSources,
     )
 
     /** True on Android's runtime (ART/Dalvik), where there is no host JDK for the compiler to borrow. */
@@ -105,6 +106,12 @@ class KotlinJvmCompiler(
          * registrars) so a mixed compile still applies them.
          */
         runtimePluginClasspaths: List<List<Path>> = emptyList(),
+        /**
+         * The subset of [kotlinSources] that belongs to the module's COMMON fragments (`commonMain` and any
+         * intermediate source set above the platform one). Non-empty turns on multiplatform mode; see
+         * [KotlinCompileRequest.commonSources].
+         */
+        commonSources: List<Path> = emptyList(),
     ): KotlinCompileResult {
         if (kotlinSources.isEmpty()) return KotlinCompileResult(true, emptyList())
         // Keep the compiler's application environment (and its warm jar FS) alive across builds. Must be set
@@ -128,10 +135,11 @@ class KotlinJvmCompiler(
                 kotlinSources, javaSources, fullClasspath, outputDir, jvmTarget, onArt, friendPaths,
                 pluginRegistrarClasspaths = (if (compilerPlugins.isNotEmpty()) listOf(compilerPlugins) else emptyList()) + runtimePluginClasspaths,
                 pluginOptions = pluginOptions,
+                commonSources = commonSources,
             )
         }
 
-        val args = buildArguments(sourcePaths, fullClasspath, outputDir, jvmTarget, onArt, friendPaths).apply {
+        val args = buildArguments(sourcePaths, fullClasspath, outputDir, jvmTarget, onArt, friendPaths, commonSources).apply {
             // Compiler plugins (e.g. Compose). pluginClasspaths is the `-Xplugin` set; pluginOptions the `-P`
             // `plugin:<id>:<k>=<v>` strings. The plugin jars must exist on disk for kotlinc to read their
             // service descriptors; the host supplies them (bundled assets on ART, resolved jars on desktop).
@@ -172,6 +180,7 @@ class KotlinJvmCompiler(
         friendPaths: List<Path>,
         pluginRegistrarClasspaths: List<List<Path>>,
         pluginOptions: List<String>,
+        commonSources: List<Path> = emptyList(),
     ): KotlinCompileResult {
         val registrars = pluginRegistrarClasspaths.flatMap { loadCompilerPluginRegistrars(it, pluginLoader) }
         val collector = RecordingMessageCollector()
@@ -181,7 +190,8 @@ class KotlinJvmCompiler(
             collector.report(CompilerMessageSeverity.WARNING, "plugin options ignored on the registrar path: $pluginOptions", null)
         }
         val args = buildArguments(
-            (kotlinSources + javaSources).map { it.toString() }, fullClasspath, outputDir, jvmTarget, onArt, friendPaths,
+            (kotlinSources + javaSources).map { it.toString() }, fullClasspath, outputDir, jvmTarget, onArt,
+            friendPaths, commonSources,
         )
         // GroupingMessageCollector is what the real pipeline wraps the collector in (it defers messages so
         // related diagnostics group up). CRITICAL: unlike `K2JVMCompiler.exec`, driving the phases by hand
@@ -237,6 +247,7 @@ class KotlinJvmCompiler(
         jvmTarget: String,
         onArt: Boolean,
         friendPaths: List<Path>,
+        commonSources: List<Path> = emptyList(),
     ): K2JVMCompilerArguments = K2JVMCompilerArguments().apply {
         freeArgs = sourcePaths
         destination = outputDir.toString()
@@ -254,6 +265,17 @@ class KotlinJvmCompiler(
             noJdk = true    // ART has no JDK; the platform is android.jar, folded into the classpath
         } else {
             jdkHome = System.getProperty("java.home")
+        }
+        if (commonSources.isNotEmpty()) {
+            // A collapsed KMP module. Multiplatform mode alone is NOT enough: the compiler rejects an
+            // `expect` and its `actual` "declared in the same module" unless it also knows which of the
+            // sources form the COMMON fragment, which is what `-Xcommon-sources` says. The common files are
+            // passed twice on purpose — once as sources to compile (they are), and once here to place them
+            // in the common fragment. `expectActualClasses` silences the "expect/actual classes are in
+            // Beta" warning, which would otherwise be reported once per expected class.
+            multiPlatform = true
+            expectActualClasses = true
+            this.commonSources = commonSources.map { it.toString() }.toTypedArray()
         }
     }
 

@@ -57,6 +57,7 @@ private fun dispatch(args: Array<String>): Int {
     return when (command) {
         "assemble", "build" -> assemble(options)
         "tasks" -> listTasks(options)
+        "import" -> importProject(options)
         "create" -> create(options)
         "templates" -> listTemplates()
         else -> throw UsageError("unknown command '$command'")
@@ -82,6 +83,37 @@ private fun assemble(options: Options): Int {
         return if (result.succeeded) EXIT_OK else EXIT_BUILD_FAILED
     }
 }
+
+/**
+ * Import a foreign build system's project into a CodeAssist workspace, then report what it can build.
+ *
+ * The case this exists for is a Gradle repository: run its `generateNativeModel` task (which writes
+ * `.platform/gradle-model.json` from the model Gradle actually configured), then `codeassist import`, and
+ * the directory is a CodeAssist project every other command accepts. Like `create`, it does not require a
+ * workspace to exist; unlike `create`, it is safe to re-run, which is how a dependency change in the Gradle
+ * build reaches the workspace.
+ */
+private fun importProject(options: Options): Int {
+    if (!Files.isDirectory(options.project)) throw UsageError("no such directory: ${options.project}")
+    val existed = HeadlessEngine.isWorkspace(options.project)
+    if (!HeadlessEngine.importProject(options.project)) {
+        throw UsageError(
+            "nothing in ${options.project} could be imported. A Gradle project needs its exported model " +
+                "first: ./gradlew generateNativeModel"
+        )
+    }
+    println(if (existed) "Refreshed the workspace in ${options.project}" else "Imported ${options.project}")
+    openEngine(options).use { engine ->
+        println("Modules: ${engine.moduleNames().size}")
+        engine.tasks().take(TASK_PREVIEW).forEach { println("  ${it.id}") }
+        val more = engine.tasks().size - TASK_PREVIEW
+        if (more > 0) println("  ... and $more more (codeassist tasks)")
+    }
+    return EXIT_OK
+}
+
+/** How many task ids `import` echoes before pointing at `codeassist tasks` for the rest. */
+private const val TASK_PREVIEW = 10
 
 /**
  * Scaffold a project from a template into `--project`, then report what it can build. Creation writes the
@@ -328,6 +360,7 @@ private val USAGE = """
     Usage:
       codeassist [assemble] [options]   Build a variant and report its artifact (the default command)
       codeassist tasks [options]        List what this project can build
+      codeassist import [options]       Import a Gradle project that exported its model, or refresh it
       codeassist create [options]       Scaffold a new project from a template
       codeassist templates              List the templates `create` accepts
 

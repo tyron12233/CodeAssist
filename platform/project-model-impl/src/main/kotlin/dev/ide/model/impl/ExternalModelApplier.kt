@@ -133,6 +133,7 @@ class ExternalModelApplier(private val store: ProjectModelStore) {
         module.dirRelPath = external.dirRelPath.ifBlank { external.name }
         module.languageLevel = external.languageLevel ?: defaultLanguageLevel
         external.sdk?.let { module.sdk = it }
+        external.outputRelPath?.let { module.outputRelPath = it }
 
         for (set in external.sourceSets) {
             module.addSourceSet(SourceSetTemplate(set.name, set.scope, LinkedHashMap(set.roots)))

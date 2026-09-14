@@ -1,0 +1,7 @@
+MavenRepo	https://repo.maven.apache.org/maven2/
+Google	https://dl.google.com/dl/android/maven2/
+maven	https://redirector.kotlinlang.org/maven/kotlin-ide-plugin-dependencies
+maven2	https://packages.jetbrains.team/maven/p/ij/intellij-dependencies
+maven3	https://cache-redirector.jetbrains.com/intellij-repository/releases
+maven4	https://artifact.bytedance.com/repository/pangle
+maven5	https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea

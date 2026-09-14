@@ -1,0 +1,4508 @@
+{
+  "version": 1,
+  "name": "codeassist",
+  "target": "desktop",
+  "repositories": [
+    {
+      "name": "MavenRepo",
+      "url": "https://repo.maven.apache.org/maven2/"
+    },
+    {
+      "name": "Google",
+      "url": "https://dl.google.com/dl/android/maven2/"
+    },
+    {
+      "name": "maven",
+      "url": "https://redirector.kotlinlang.org/maven/kotlin-ide-plugin-dependencies"
+    },
+    {
+      "name": "maven2",
+      "url": "https://packages.jetbrains.team/maven/p/ij/intellij-dependencies"
+    },
+    {
+      "name": "maven3",
+      "url": "https://cache-redirector.jetbrains.com/intellij-repository/releases"
+    },
+    {
+      "name": "maven4",
+      "url": "https://artifact.bytedance.com/repository/pangle"
+    },
+    {
+      "name": "maven5",
+      "url": "https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea"
+    }
+  ],
+  "modules": [
+    {
+      "name": "agent-api",
+      "dir": "services/agent-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "agent-impl",
+      "dir": "services/agent-impl",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "agent-api",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.squareup.okhttp3:okhttp:4.12.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.squareup.okhttp3:okhttp-sse:4.12.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "agent-mcp",
+      "dir": "services/agent-mcp",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "agent-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "agent-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "io.modelcontextprotocol.sdk:mcp:2.0.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "agent-ui",
+      "dir": "services/agent-ui",
+      "type": "java-lib",
+      "multiplatform": true,
+      "sourceSets": [
+        {
+          "name": "commonMain",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/commonMain/kotlin": [
+              "source"
+            ]
+          },
+          "common": true
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "ide-ui",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.runtime:runtime:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.foundation:foundation:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.material3:material3:1.9.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.ui:ui:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.components:components-resources:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        }
+      ],
+      "composeResources": {
+        "dirs": [
+          "src/commonMain/composeResources"
+        ],
+        "package": "dev.ide.agent.ui.generated.resources",
+        "public": false
+      }
+    },
+    {
+      "name": "analysis-api",
+      "dir": "lang/analysis-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "language-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "index-api",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "analysis-impl",
+      "dir": "lang/analysis-impl",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "analysis-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "bench-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "analytics-api",
+      "dir": "services/analytics-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "analytics-impl",
+      "dir": "services/analytics-impl",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "analytics-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "android-sdk-metadata",
+      "dir": "android/android-sdk-metadata",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "android-support",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "android-support",
+      "dir": "android/android-support",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ],
+            "src/main/resources": [
+              "resource"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "build-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "build-engine",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "jvm-build",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "lang-jdt",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "lang-kotlin",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "project-model-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "language-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "lang-xml",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "index-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.android.tools:r8:8.13.19",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.android.tools.build:apksig:8.7.3",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.android.tools.build:bundletool:1.18.3",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.google.guava:guava:32.0.1-jre",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.bouncycastle:bcpkix-jdk18on:1.78.1",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.android.tools:r8:8.13.19",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.android.tools.build:apksig:8.7.3",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.android.tools.build:bundletool:1.18.3",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.bouncycastle:bcpkix-jdk18on:1.78.1",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "applog-runtime",
+      "dir": "android/applog-runtime",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/java": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "library",
+          "coordinate": "com.google.android:android:4.1.1.4",
+          "scope": "COMPILE_ONLY"
+        }
+      ]
+    },
+    {
+      "name": "art-compat",
+      "dir": "android/art-compat",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [],
+      "dependencies": []
+    },
+    {
+      "name": "awt-toolkit",
+      "dir": "run/awt-toolkit",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/java": [
+              "source"
+            ],
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "layout-preview-api",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm-commons:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "jvm-interp",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "bench-support",
+      "dir": "tools/bench-support",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "block-api",
+      "dir": "lang/block-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "language-api",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "block-impl",
+      "dir": "lang/block-impl",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "block-api",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "lang-jdt",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "build-api",
+      "dir": "build-system/build-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "project-model-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "vfs-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "build-cli",
+      "dir": "app/build-cli",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "ide-core",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.android.tools.build:bundletool:1.18.3",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.bouncycastle:bcpkix-jdk18on:1.78.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "build-engine",
+      "dir": "build-system/build-engine",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "build-api",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "project-model-impl",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "decompiler",
+      "dir": "lang/decompiler",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "language-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "lang-kotlin-index",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.benf:cfr:0.152",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "deps-api",
+      "dir": "services/deps-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "project-model-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "deps-impl",
+      "dir": "services/deps-impl",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "deps-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "project-model-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "vfs-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "project-model-impl",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "hello-plugin",
+      "dir": "samples/hello-plugin",
+      "type": "android-app",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ],
+            "src/main/res": [
+              "android-res"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-stdlib:2.4.0",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "plugin-api",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "module",
+          "name": "plugin-ui-api",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "module",
+          "name": "build-api",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "module",
+          "name": "interp-api",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "library",
+          "coordinate": "androidx.compose.runtime:runtime:1.11.2",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "library",
+          "coordinate": "androidx.compose.foundation:foundation:1.11.2",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "library",
+          "coordinate": "androidx.compose.ui:ui:1.11.2",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "library",
+          "coordinate": "androidx.compose.material3:material3:1.4.0",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "library",
+          "coordinate": "androidx.compose.ui:ui-tooling-preview:1.11.2",
+          "scope": "COMPILE_ONLY"
+        }
+      ],
+      "android": {
+        "namespace": "com.example.hello",
+        "compileSdk": 36,
+        "minSdk": 26,
+        "targetSdk": 36,
+        "isApplication": true,
+        "buildFeatures": {
+          "compose": true,
+          "parcelize": false,
+          "serialization": false
+        },
+        "versionCode": 1,
+        "versionName": "1.0.0",
+        "applicationId": "com.example.hello"
+      }
+    },
+    {
+      "name": "ide-android",
+      "dir": "app/ide-android",
+      "type": "android-app",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ],
+            "src/main/res": [
+              "android-res"
+            ],
+            "src/main/assets": [
+              "assets"
+            ],
+            "src/main/aidl": [
+              "aidl"
+            ],
+            "src/main/jniLibs": [
+              "jni-libs"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-stdlib:2.4.0",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "ide-core",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.eclipse.platform:org.eclipse.core.contenttype:3.9.600",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.eclipse.platform:org.eclipse.core.jobs:3.15.400",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "layout-preview-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "layout-preview-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "android-support",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "analytics-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "store-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "plugin-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "art-compat",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:compose-compiler-plugin-for-ide:2.4.20-dev-6138",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlinx-serialization-compiler-plugin-for-ide:2.4.20-dev-6138",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:parcelize-compiler-plugin-for-ide:2.4.20-dev-6138",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "build-engine",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "jvm-build",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.android.tools:r8:8.13.19",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.android.tools.build:apksig:8.7.3",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.bouncycastle:bcpkix-jdk18on:1.78.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.android.tools.build:bundletool:1.18.3",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.google.guava:guava:32.0.1-jre",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.runtime:runtime:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.foundation:foundation:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.material3:material3:1.9.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.ui:ui:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "androidx.activity:activity-compose:1.13.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "com.google.firebase:firebase-bom:34.1.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.google.android.gms:play-services-ads:25.4.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.google.android.ump:user-messaging-platform:4.0.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.google.ads.mediation:facebook:6.22.0.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.google.ads.mediation:pangle:8.2.0.4.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.google.ads.mediation:mintegral:17.1.71.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "androidx.core:core:1.13.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "interp-core",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "interp-compose",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "jvm-interp",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "interp-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "awt-toolkit",
+          "scope": "IMPLEMENTATION"
+        }
+      ],
+      "android": {
+        "namespace": "dev.ide.android",
+        "compileSdk": 36,
+        "minSdk": 26,
+        "targetSdk": 36,
+        "isApplication": true,
+        "buildFeatures": {
+          "compose": true,
+          "parcelize": false,
+          "serialization": false
+        },
+        "versionCode": 93,
+        "versionName": "3.18.2",
+        "applicationId": "com.tyron.code"
+      }
+    },
+    {
+      "name": "ide-core",
+      "dir": "app/ide-core",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ],
+            "src/main/resources": [
+              "resource"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "ide-ui",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "interp-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "layout-preview-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "analytics-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "store-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "project-model-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "project-model-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "language-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "lang-jdt",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "lang-java",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "lang-xml",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "lang-kotlin",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "lang-ksp",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "interp-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "decompiler",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "index-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "index-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "analysis-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "analysis-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "block-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "block-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "plugin-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "plugin-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "build-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "build-engine",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "jvm-build",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "android-support",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "layout-preview-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "deps-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "deps-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "agent-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "agent-mcp",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "agent-ui",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "vcs-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "vcs-ui",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "store-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "vfs-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "store-impl",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "bench-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.bouncycastle:bcpkix-jdk18on:1.78.1",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "ide-desktop",
+      "dir": "app/ide-desktop",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "ide-core",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "interp-compose",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "android-support",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "layout-preview-impl",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.material3:material3:1.9.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.android.tools.build:bundletool:1.18.3",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.bouncycastle:bcpkix-jdk18on:1.78.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "ide-ui",
+      "dir": "app/ide-ui",
+      "type": "java-lib",
+      "multiplatform": true,
+      "sourceSets": [
+        {
+          "name": "commonMain",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/commonMain/kotlin": [
+              "source"
+            ]
+          },
+          "common": true
+        },
+        {
+          "name": "jvmShared",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/jvmShared/kotlin": [
+              "source"
+            ]
+          },
+          "common": true
+        },
+        {
+          "name": "desktopMain",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/desktopMain/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "desktopTest",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/desktopTest/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "ide-ui-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-resources",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-core",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-components",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-editor",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-screens",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-testing",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64:1.11.1",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "ide-ui-api",
+      "dir": "app/ide-ui-api",
+      "type": "java-lib",
+      "multiplatform": true,
+      "sourceSets": [
+        {
+          "name": "commonMain",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/commonMain/kotlin": [
+              "source"
+            ]
+          },
+          "common": true
+        },
+        {
+          "name": "jvmShared",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/jvmShared/kotlin": [
+              "source"
+            ]
+          },
+          "common": true
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.runtime:runtime:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.foundation:foundation:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.ui:ui:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "plugin-ui-api",
+          "scope": "API"
+        }
+      ]
+    },
+    {
+      "name": "ide-ui-components",
+      "dir": "app/ide-ui-components",
+      "type": "java-lib",
+      "multiplatform": true,
+      "sourceSets": [
+        {
+          "name": "commonMain",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/commonMain/kotlin": [
+              "source"
+            ]
+          },
+          "common": true
+        },
+        {
+          "name": "desktopTest",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/desktopTest/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "ide-ui-core",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-testing",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64:1.11.1",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "ide-ui-core",
+      "dir": "app/ide-ui-core",
+      "type": "java-lib",
+      "multiplatform": true,
+      "sourceSets": [
+        {
+          "name": "commonMain",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/commonMain/kotlin": [
+              "source"
+            ]
+          },
+          "common": true
+        },
+        {
+          "name": "desktopMain",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/desktopMain/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "desktopTest",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/desktopTest/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "ide-ui-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-resources",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.runtime:runtime:1.11.1",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.foundation:foundation:1.11.1",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.material3:material3:1.9.0",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.ui:ui:1.11.1",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.ui:ui-tooling-preview:1.11.1",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-testing",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64:1.11.1",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "ide-ui-editor",
+      "dir": "app/ide-ui-editor",
+      "type": "java-lib",
+      "multiplatform": true,
+      "sourceSets": [
+        {
+          "name": "commonMain",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/commonMain/kotlin": [
+              "source"
+            ]
+          },
+          "common": true
+        },
+        {
+          "name": "jvmShared",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/jvmShared/kotlin": [
+              "source"
+            ]
+          },
+          "common": true
+        },
+        {
+          "name": "desktopMain",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/desktopMain/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "desktopTest",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/desktopTest/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "ide-ui-core",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-components",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "layout-preview-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.ui:ui-tooling:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-testing",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64:1.11.1",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "ide-ui-resources",
+      "dir": "app/ide-ui-resources",
+      "type": "java-lib",
+      "multiplatform": true,
+      "sourceSets": [],
+      "dependencies": [
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.components:components-resources:1.11.1",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.runtime:runtime:1.11.1",
+          "scope": "IMPLEMENTATION"
+        }
+      ],
+      "composeResources": {
+        "dirs": [
+          "src/commonMain/composeResources"
+        ],
+        "package": "dev.ide.ui.generated.resources",
+        "public": true
+      }
+    },
+    {
+      "name": "ide-ui-screens",
+      "dir": "app/ide-ui-screens",
+      "type": "java-lib",
+      "multiplatform": true,
+      "sourceSets": [
+        {
+          "name": "commonMain",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/commonMain/kotlin": [
+              "source"
+            ]
+          },
+          "common": true
+        },
+        {
+          "name": "desktopTest",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/desktopTest/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "ide-ui-core",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-components",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-editor",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "ide-ui-testing",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64:1.11.1",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "ide-ui-testing",
+      "dir": "app/ide-ui-testing",
+      "type": "java-lib",
+      "multiplatform": true,
+      "sourceSets": [
+        {
+          "name": "commonMain",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/commonMain/kotlin": [
+              "source"
+            ]
+          },
+          "common": true
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "ide-ui-api",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "index-api",
+      "dir": "lang/index-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "language-api",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "index-impl",
+      "dir": "lang/index-impl",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "index-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "language-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "bench-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "intellij-psi-host",
+      "dir": "lang/intellij-psi-host",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/java": [
+              "source"
+            ],
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "kotlin-compiler-deps",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "interp-api",
+      "dir": "run/interp-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "interp-compose",
+      "dir": "run/interp-compose",
+      "type": "java-lib",
+      "multiplatform": true,
+      "sourceSets": [
+        {
+          "name": "jvmShared",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/jvmShared/kotlin": [
+              "source"
+            ]
+          },
+          "common": true
+        },
+        {
+          "name": "desktopTest",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/desktopTest/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.runtime:runtime:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "interp-core",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "jvm-interp",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.ui:ui:1.11.1",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.runtime:runtime:1.11.1",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.material3:material3:1.9.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64:1.11.1",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "interp-core",
+      "dir": "run/interp-core",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ],
+            "src/test/resources": [
+              "resource"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "lang-kotlin",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "kotlin-compiler-deps",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "interp-impl",
+      "dir": "run/interp-impl",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/java": [
+              "source"
+            ],
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "interp-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "interp-core",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "jvm-interp",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "kotlin-compiler-deps",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "jvm-build",
+      "dir": "build-system/jvm-build",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/java": [
+              "source"
+            ],
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "build-engine",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "lang-kotlin",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "jvm-interp",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "lang-jdt",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "project-model-impl",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "bench-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "jvm-interp",
+      "dir": "run/jvm-interp",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/java": [
+              "source"
+            ],
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm-tree:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm-commons:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "kotlin-compiler-deps",
+      "dir": "lang/kotlin-compiler-deps",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [],
+      "dependencies": [
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-collections-immutable-jvm:0.3.4",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.google.guava:guava:33.2.0-jre",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.intellij.deps:asm-all:9.6.1",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.codehaus.woodstox:stax2-api:4.2.1",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.fasterxml:aalto-xml:1.3.0",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.github.ben-manes.caffeine:caffeine:2.9.3",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.intellij.deps.jna:jna:5.9.0.26",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.intellij.deps.jna:jna-platform:5.9.0.26",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.intellij.deps:trove4j:1.0.20200330",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.intellij.deps:log4j:1.2.17.2",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.intellij.deps:jdom:2.0.6",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "io.javaslang:javaslang:2.0.6",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "io.vavr:vavr:0.10.4",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "javax.inject:javax.inject:1",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-reflect:1.6.10",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.lz4:lz4-java:1.7.1",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.intellij.deps.fastutil:intellij-deps-fastutil:8.5.14-jb1",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains:annotations:24.1.0",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "io.opentelemetry:opentelemetry-api:1.34.1",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "lang-java",
+      "dir": "lang/lang-java",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "language-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "index-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "analysis-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "kotlin-compiler-deps",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "intellij-psi-host",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "project-model-impl",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "index-impl",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "lang-jdt",
+      "dir": "lang/lang-jdt",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/java": [
+              "source"
+            ],
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "language-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "index-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "analysis-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "build-engine",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.eclipse.jdt:org.eclipse.jdt.core:3.40.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "project-model-impl",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "lang-java",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "bench-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "lang-kotlin",
+      "dir": "lang/lang-kotlin",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/java": [
+              "source"
+            ],
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "language-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "lang-kotlin-index",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "index-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "analysis-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "build-engine",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "kotlin-compiler-deps",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "intellij-psi-host",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "project-model-impl",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "index-impl",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "bench-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.runtime:runtime-desktop:1.11.1",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-parcelize-runtime:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "lang-kotlin-index",
+      "dir": "lang/lang-kotlin-index",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "language-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "index-api",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "lang-ksp",
+      "dir": "lang/lang-ksp",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "build-api",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.google.devtools.ksp:symbol-processing-api:2.3.10",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.google.devtools.ksp:symbol-processing-common-deps:2.3.10",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.google.devtools.ksp:symbol-processing-aa-embeddable:2.3.10",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "lang-xml",
+      "dir": "lang/lang-xml",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "language-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "intellij-psi-host",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "index-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "analysis-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "plugin-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "language-api",
+      "dir": "lang/language-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "project-model-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "vfs-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "project-model-impl",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "layout-preview-api",
+      "dir": "android/layout-preview-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "layout-preview-impl",
+      "dir": "android/layout-preview-impl",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "layout-preview-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "android-support",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "lang-xml",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "project-model-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm-tree:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm-commons:9.7",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "platform-core",
+      "dir": "platform/platform-core",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "plugin-api",
+      "dir": "plugins/plugin-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "plugin-impl",
+      "dir": "plugins/plugin-impl",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "plugin-api",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "plugin-ui-api",
+      "dir": "plugins/plugin-ui-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.runtime:runtime-desktop:1.11.1",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.ui:ui-desktop:1.11.1",
+          "scope": "COMPILE_ONLY"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.runtime:runtime-desktop:1.11.1",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.ui:ui-desktop:1.11.1",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "project-model-api",
+      "dir": "platform/project-model-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "vfs-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "project-model-impl",
+      "dir": "platform/project-model-impl",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "project-model-api",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "store-api",
+      "dir": "services/store-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "store-impl",
+      "dir": "services/store-impl",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ],
+            "src/test/resources": [
+              "resource"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "store-api",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "test-support",
+      "dir": "tools/test-support",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "project-model-impl",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "language-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "index-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "bench-support",
+          "scope": "API"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.ow2.asm:asm:9.7",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "vcs-api",
+      "dir": "services/vcs-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "vcs-impl",
+      "dir": "services/vcs-impl",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        },
+        {
+          "name": "test",
+          "scope": "TEST_IMPLEMENTATION",
+          "roots": {
+            "src/test/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "vcs-api",
+          "scope": "API"
+        },
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.eclipse.jgit:org.eclipse.jgit:6.10.1.202505221210-r",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "com.squareup.okhttp3:okhttp:4.12.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    },
+    {
+      "name": "vcs-ui",
+      "dir": "services/vcs-ui",
+      "type": "java-lib",
+      "multiplatform": true,
+      "sourceSets": [
+        {
+          "name": "commonMain",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/commonMain/kotlin": [
+              "source"
+            ]
+          },
+          "common": true
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "ide-ui",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.runtime:runtime:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.foundation:foundation:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.material3:material3:1.9.0",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.ui:ui:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.compose.components:components-resources:1.11.1",
+          "scope": "IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+          "scope": "IMPLEMENTATION"
+        }
+      ],
+      "composeResources": {
+        "dirs": [
+          "src/commonMain/composeResources"
+        ],
+        "package": "dev.ide.vcs.ui.generated.resources",
+        "public": false
+      }
+    },
+    {
+      "name": "vfs-api",
+      "dir": "platform/vfs-api",
+      "type": "java-lib",
+      "multiplatform": false,
+      "sourceSets": [
+        {
+          "name": "main",
+          "scope": "IMPLEMENTATION",
+          "roots": {
+            "src/main/kotlin": [
+              "source"
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "module",
+          "name": "platform-core",
+          "scope": "API"
+        },
+        {
+          "kind": "platform",
+          "coordinate": "org.junit:junit-bom:5.11.4",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "library",
+          "coordinate": "org.jetbrains.kotlin:kotlin-test:2.4.0",
+          "scope": "TEST_IMPLEMENTATION"
+        },
+        {
+          "kind": "module",
+          "name": "test-support",
+          "scope": "TEST_IMPLEMENTATION"
+        }
+      ]
+    }
+  ]
+}

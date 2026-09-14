@@ -1,0 +1,345 @@
+{
+  "version": 1,
+  "projects": [
+    {
+      "id": "codeassist",
+      "name": "codeassist",
+      "root": "",
+      "buildSystem": "native",
+      "settings": {},
+      "modules": [
+        {
+          "id": "agent-api",
+          "name": "agent-api",
+          "dir": "services/agent-api"
+        },
+        {
+          "id": "agent-impl",
+          "name": "agent-impl",
+          "dir": "services/agent-impl"
+        },
+        {
+          "id": "agent-mcp",
+          "name": "agent-mcp",
+          "dir": "services/agent-mcp"
+        },
+        {
+          "id": "agent-ui",
+          "name": "agent-ui",
+          "dir": "services/agent-ui"
+        },
+        {
+          "id": "analysis-api",
+          "name": "analysis-api",
+          "dir": "lang/analysis-api"
+        },
+        {
+          "id": "analysis-impl",
+          "name": "analysis-impl",
+          "dir": "lang/analysis-impl"
+        },
+        {
+          "id": "analytics-api",
+          "name": "analytics-api",
+          "dir": "services/analytics-api"
+        },
+        {
+          "id": "analytics-impl",
+          "name": "analytics-impl",
+          "dir": "services/analytics-impl"
+        },
+        {
+          "id": "android-sdk-metadata",
+          "name": "android-sdk-metadata",
+          "dir": "android/android-sdk-metadata"
+        },
+        {
+          "id": "android-support",
+          "name": "android-support",
+          "dir": "android/android-support"
+        },
+        {
+          "id": "applog-runtime",
+          "name": "applog-runtime",
+          "dir": "android/applog-runtime"
+        },
+        {
+          "id": "art-compat",
+          "name": "art-compat",
+          "dir": "android/art-compat"
+        },
+        {
+          "id": "awt-toolkit",
+          "name": "awt-toolkit",
+          "dir": "run/awt-toolkit"
+        },
+        {
+          "id": "bench-support",
+          "name": "bench-support",
+          "dir": "tools/bench-support"
+        },
+        {
+          "id": "block-api",
+          "name": "block-api",
+          "dir": "lang/block-api"
+        },
+        {
+          "id": "block-impl",
+          "name": "block-impl",
+          "dir": "lang/block-impl"
+        },
+        {
+          "id": "build-api",
+          "name": "build-api",
+          "dir": "build-system/build-api"
+        },
+        {
+          "id": "build-cli",
+          "name": "build-cli",
+          "dir": "app/build-cli"
+        },
+        {
+          "id": "build-engine",
+          "name": "build-engine",
+          "dir": "build-system/build-engine"
+        },
+        {
+          "id": "decompiler",
+          "name": "decompiler",
+          "dir": "lang/decompiler"
+        },
+        {
+          "id": "deps-api",
+          "name": "deps-api",
+          "dir": "services/deps-api"
+        },
+        {
+          "id": "deps-impl",
+          "name": "deps-impl",
+          "dir": "services/deps-impl"
+        },
+        {
+          "id": "hello-plugin",
+          "name": "hello-plugin",
+          "dir": "samples/hello-plugin"
+        },
+        {
+          "id": "ide-android",
+          "name": "ide-android",
+          "dir": "app/ide-android"
+        },
+        {
+          "id": "ide-core",
+          "name": "ide-core",
+          "dir": "app/ide-core"
+        },
+        {
+          "id": "ide-desktop",
+          "name": "ide-desktop",
+          "dir": "app/ide-desktop"
+        },
+        {
+          "id": "ide-ui",
+          "name": "ide-ui",
+          "dir": "app/ide-ui"
+        },
+        {
+          "id": "ide-ui-api",
+          "name": "ide-ui-api",
+          "dir": "app/ide-ui-api"
+        },
+        {
+          "id": "ide-ui-components",
+          "name": "ide-ui-components",
+          "dir": "app/ide-ui-components"
+        },
+        {
+          "id": "ide-ui-core",
+          "name": "ide-ui-core",
+          "dir": "app/ide-ui-core"
+        },
+        {
+          "id": "ide-ui-editor",
+          "name": "ide-ui-editor",
+          "dir": "app/ide-ui-editor"
+        },
+        {
+          "id": "ide-ui-resources",
+          "name": "ide-ui-resources",
+          "dir": "app/ide-ui-resources"
+        },
+        {
+          "id": "ide-ui-screens",
+          "name": "ide-ui-screens",
+          "dir": "app/ide-ui-screens"
+        },
+        {
+          "id": "ide-ui-testing",
+          "name": "ide-ui-testing",
+          "dir": "app/ide-ui-testing"
+        },
+        {
+          "id": "index-api",
+          "name": "index-api",
+          "dir": "lang/index-api"
+        },
+        {
+          "id": "index-impl",
+          "name": "index-impl",
+          "dir": "lang/index-impl"
+        },
+        {
+          "id": "intellij-psi-host",
+          "name": "intellij-psi-host",
+          "dir": "lang/intellij-psi-host"
+        },
+        {
+          "id": "interp-api",
+          "name": "interp-api",
+          "dir": "run/interp-api"
+        },
+        {
+          "id": "interp-compose",
+          "name": "interp-compose",
+          "dir": "run/interp-compose"
+        },
+        {
+          "id": "interp-core",
+          "name": "interp-core",
+          "dir": "run/interp-core"
+        },
+        {
+          "id": "interp-impl",
+          "name": "interp-impl",
+          "dir": "run/interp-impl"
+        },
+        {
+          "id": "jvm-build",
+          "name": "jvm-build",
+          "dir": "build-system/jvm-build"
+        },
+        {
+          "id": "jvm-interp",
+          "name": "jvm-interp",
+          "dir": "run/jvm-interp"
+        },
+        {
+          "id": "kotlin-compiler-deps",
+          "name": "kotlin-compiler-deps",
+          "dir": "lang/kotlin-compiler-deps"
+        },
+        {
+          "id": "lang-java",
+          "name": "lang-java",
+          "dir": "lang/lang-java"
+        },
+        {
+          "id": "lang-jdt",
+          "name": "lang-jdt",
+          "dir": "lang/lang-jdt"
+        },
+        {
+          "id": "lang-kotlin",
+          "name": "lang-kotlin",
+          "dir": "lang/lang-kotlin"
+        },
+        {
+          "id": "lang-kotlin-index",
+          "name": "lang-kotlin-index",
+          "dir": "lang/lang-kotlin-index"
+        },
+        {
+          "id": "lang-ksp",
+          "name": "lang-ksp",
+          "dir": "lang/lang-ksp"
+        },
+        {
+          "id": "lang-xml",
+          "name": "lang-xml",
+          "dir": "lang/lang-xml"
+        },
+        {
+          "id": "language-api",
+          "name": "language-api",
+          "dir": "lang/language-api"
+        },
+        {
+          "id": "layout-preview-api",
+          "name": "layout-preview-api",
+          "dir": "android/layout-preview-api"
+        },
+        {
+          "id": "layout-preview-impl",
+          "name": "layout-preview-impl",
+          "dir": "android/layout-preview-impl"
+        },
+        {
+          "id": "platform-core",
+          "name": "platform-core",
+          "dir": "platform/platform-core"
+        },
+        {
+          "id": "plugin-api",
+          "name": "plugin-api",
+          "dir": "plugins/plugin-api"
+        },
+        {
+          "id": "plugin-impl",
+          "name": "plugin-impl",
+          "dir": "plugins/plugin-impl"
+        },
+        {
+          "id": "plugin-ui-api",
+          "name": "plugin-ui-api",
+          "dir": "plugins/plugin-ui-api"
+        },
+        {
+          "id": "project-model-api",
+          "name": "project-model-api",
+          "dir": "platform/project-model-api"
+        },
+        {
+          "id": "project-model-impl",
+          "name": "project-model-impl",
+          "dir": "platform/project-model-impl"
+        },
+        {
+          "id": "store-api",
+          "name": "store-api",
+          "dir": "services/store-api"
+        },
+        {
+          "id": "store-impl",
+          "name": "store-impl",
+          "dir": "services/store-impl"
+        },
+        {
+          "id": "test-support",
+          "name": "test-support",
+          "dir": "tools/test-support"
+        },
+        {
+          "id": "vcs-api",
+          "name": "vcs-api",
+          "dir": "services/vcs-api"
+        },
+        {
+          "id": "vcs-impl",
+          "name": "vcs-impl",
+          "dir": "services/vcs-impl"
+        },
+        {
+          "id": "vcs-ui",
+          "name": "vcs-ui",
+          "dir": "services/vcs-ui"
+        },
+        {
+          "id": "vfs-api",
+          "name": "vfs-api",
+          "dir": "platform/vfs-api"
+        }
+      ],
+      "libraries": []
+    }
+  ]
+}

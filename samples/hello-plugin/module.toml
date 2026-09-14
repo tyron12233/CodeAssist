@@ -1,0 +1,52 @@
+version = 2
+
+[module]
+type = "android-app"
+name = "hello-plugin"
+languageLevel = "JAVA_17"
+output = "build/codeassist/classes"
+
+[sourceSets.debug]
+scope = "IMPLEMENTATION"
+aidl = ["src/debug/aidl"]
+assets = ["src/debug/assets"]
+java = ["src/debug/java", "src/debug/kotlin"]
+jniLibs = ["src/debug/jniLibs"]
+res = ["src/debug/res"]
+resources = ["src/debug/resources"]
+
+[sourceSets.main]
+scope = "IMPLEMENTATION"
+aidl = ["src/main/aidl"]
+assets = ["src/main/assets"]
+java = ["src/main/java", "src/main/kotlin"]
+jniLibs = ["src/main/jniLibs"]
+res = ["src/main/res"]
+resources = ["src/main/resources"]
+
+[sourceSets.release]
+scope = "IMPLEMENTATION"
+aidl = ["src/release/aidl"]
+assets = ["src/release/assets"]
+java = ["src/release/java", "src/release/kotlin"]
+jniLibs = ["src/release/jniLibs"]
+res = ["src/release/res"]
+resources = ["src/release/resources"]
+
+[dependencies]
+api = ["org.jetbrains.kotlin:kotlin-stdlib:2.4.0"]
+implementation = ["kotlin-stdlib"]
+compileOnly = [{ module = "plugin-api" }, { module = "plugin-ui-api" }, { module = "build-api" }, { module = "interp-api" }, "androidx.compose.runtime:runtime:1.11.2", "androidx.compose.foundation:foundation:1.11.2", "androidx.compose.ui:ui:1.11.2", "androidx.compose.material3:material3:1.4.0", "androidx.compose.ui:ui-tooling-preview:1.11.2"]
+
+[android]
+namespace = "com.example.hello"
+compileSdk = 36
+minSdk = 26
+targetSdk = 36
+manifest = "src/main/AndroidManifest.xml"
+versionCode = 1
+versionName = "1.0.0"
+isApplication = true
+manifestPlaceholders = []
+buildTypes = [{ name = "debug", debuggable = true, minifyEnabled = false, shrinkResources = false }, { name = "release", debuggable = false, minifyEnabled = false, shrinkResources = false, proguardFiles = ["proguard-android-optimize.txt", "proguard-rules.pro"] }]
+compose = true

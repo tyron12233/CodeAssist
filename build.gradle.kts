@@ -105,3 +105,15 @@ subprojects {
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------------
+// Self-hosting: export this build for CodeAssist's own build system.
+//
+// Gradle is the only thing that can evaluate these scripts, so it exports what it configured and the IDE
+// imports the result (`.platform/gradle-model.json` -> `GradleModelImporter`). Run it after a change to any
+// module's dependencies or source layout; see docs/self-hosting.md.
+// ---------------------------------------------------------------------------------------------------
+tasks.register<dev.ide.build.nativemodel.GenerateNativeModel>("generateNativeModel") {
+    target.set(providers.gradleProperty("nativeModel.target").orElse("android"))
+    outputFile.set(layout.projectDirectory.file(".platform/gradle-model.json"))
+}

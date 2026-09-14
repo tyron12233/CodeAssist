@@ -51,6 +51,16 @@ dependencyResolutionManagement {
     }
 }
 
+// Self-hosting: `generateNativeModel` exports this build for CodeAssist's own build system, and the
+// repositories it must record live here rather than on any project (`FAIL_ON_PROJECT_REPOS`), where a
+// project-level task cannot read them. Hand them to the root project as `name|url` pairs.
+gradle.rootProject {
+    extra["nativeModelRepositories"] = dependencyResolutionManagement.repositories
+        .filterIsInstance<MavenArtifactRepository>()
+        .map { "${it.name}|${it.url}" }
+}
+
+
 // Dependency direction points downward only (acyclic) — see README.md / docs.
 //   platform-core  <- vfs-api <- project-model-api <- { build-api, language-api }
 //   project-model-api <- deps-api

@@ -775,6 +775,18 @@ interface ModifiableModule {
 
     /** The explicit platform-SDK override (see [Module.sdk]); `null` clears it (back to the type default). */
     var sdk: SdkRef?
+
+    /**
+     * Where compiled classes land, relative to the module dir (default `build/classes`). Its PARENT is the
+     * module's build directory, so moving this moves everything the build writes — generated sources,
+     * intermediates, the jar.
+     *
+     * Worth setting when the module dir already holds another build system's output. Importing a Gradle
+     * project is the case that needs it: Gradle owns `build/`, and a CodeAssist build writing its own
+     * `build/classes` and `build/generated` beside Gradle's would read Gradle's stale generated sources as
+     * its own and package Gradle's classes into its jar.
+     */
+    var outputRelPath: String
     fun addDependency(entry: OrderEntry)
     fun removeDependency(entry: OrderEntry)
     fun addSourceSet(template: SourceSetTemplate)
