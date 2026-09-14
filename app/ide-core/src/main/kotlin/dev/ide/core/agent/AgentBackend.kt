@@ -14,6 +14,7 @@ import dev.ide.agent.ToolSpec
 import dev.ide.agent.WriteRequest
 import dev.ide.agent.impl.AgentLoop
 import dev.ide.agent.impl.AgentProviders
+import dev.ide.agent.impl.HistoryCompactor
 import dev.ide.agent.impl.OkHttpLlmTransport
 import dev.ide.agent.impl.SystemPrompt
 import dev.ide.agent.impl.builtinTools
@@ -28,6 +29,7 @@ import dev.ide.ui.backend.AgentService
 import dev.ide.ui.backend.UiAgentChatState
 import dev.ide.ui.backend.UiAgentConfig
 import dev.ide.ui.backend.UiAgentMessage
+import dev.ide.ui.backend.UiAgentUsage
 import dev.ide.ui.backend.UiAgentModel
 import dev.ide.ui.backend.UiAgentPermissionDecision
 import dev.ide.ui.backend.UiAgentPermissionMode
@@ -143,6 +145,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private var job: Job? = null
     private var loop: AgentLoop? = null
     private var loopSignature: String? = null
+
+    /** The provider/model half of [loopSignature]; a change to it means replayed reasoning must be dropped. */
+    private var loopClientSignature: String? = null
 
     // --- configuration (read from the AI settings page's prefs) ---
 
@@ -393,22 +398,34 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         val maxTokens = prefInt("maxTokens") ?: DEFAULT_MAX_TOKENS
         val thinkingBudget = prefInt("thinkingBudget")
         val webSearch = prefBool("webSearch", default = true)
-        // "default" (or unset) leaves the field off the request so non-reasoning models and non-OpenAI
-        // providers are unaffected; any other value is forwarded as reasoning_effort by the OpenAI dialect.
-        val reasoningEffort = pref("reasoningEffort")?.takeIf { it != REASONING_EFFORT_DEFAULT }
-        val signature =
-            "${cfg.selectedId}|$model|${cfg.baseUrl}|${cfg.apiKey.hashCode()}|${cfg.caCertificatePem.hashCode()}|$maxIterations|$maxTokens|$thinkingBudget|$webSearch|$reasoningEffort"
+        // "default" (or unset) leaves the field off the request, so each provider keeps its own default.
+        val effort = pref("reasoningEffort")?.takeIf { it != REASONING_EFFORT_DEFAULT }
+        // Two signatures, because they mean different things. The client half decides whether we are talking to
+        // a different model at all; the tuning half is just request parameters. Either rebuilds the loop, but
+        // the conversation is carried across the rebuild — without that, nudging a setting mid-task used to
+        // silently hand the model an empty history while the transcript on screen still showed the whole thread.
+        val clientSignature =
+            "${cfg.selectedId}|$model|${cfg.baseUrl}|${cfg.apiKey.hashCode()}|${cfg.caCertificatePem.hashCode()}"
+        val signature = "$clientSignature|$maxIterations|$maxTokens|$thinkingBudget|$webSearch|$effort"
         if (loop == null || loopSignature != signature) {
+            // A reasoning block's signature is bound to the model that produced it, so a different model must
+            // not be replayed one.
+            val carried = loop?.snapshot()
+            val modelChanged = loopClientSignature != null && loopClientSignature != clientSignature
             val client = provider.client(ProviderConfig(cfg.apiKey, cfg.baseUrl, cfg.caCertificatePem))
             loop = AgentLoop(
                 client, model, tools, gate, ::systemPrompt,
+                sessionContext = ::sessionContext,
                 maxTokens = maxTokens,
                 maxIterations = maxIterations,
                 thinkingBudget = thinkingBudget,
                 webSearch = webSearch,
-                reasoningEffort = reasoningEffort,
+                effort = effort,
+                compactor = if (provider.managesContext) HistoryCompactor.serverManaged() else HistoryCompactor(),
             )
+            if (!carried.isNullOrEmpty()) loop?.restore(carried, dropThinking = modelChanged)
             loopSignature = signature
+            loopClientSignature = clientSignature
         }
         val activeLoop = loop ?: return
 
@@ -484,7 +501,14 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
                     if (it.id == event.id) it.copy(status = UiAgentToolStatus.DENIED, detail = event.reason) else it
                 })
             }
-            is AgentEvent.TurnCompleted -> finishStreaming()
+            is AgentEvent.TurnCompleted -> {
+                event.usage?.let { u ->
+                    mutateAssistant(assistantId) { m ->
+                        m.copy(usage = UiAgentUsage(u.inputTokens, u.outputTokens, u.cacheReadTokens, u.cacheWriteTokens))
+                    }
+                }
+                finishStreaming()
+            }
             is AgentEvent.Error -> {
                 appendError(event.message, canRetry = true)
                 finishStreaming()
@@ -517,8 +541,11 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         }
     }
 
-    private fun systemPrompt(): String =
-        SystemPrompt.build(modePref(), tools.tools.map { it.spec.name }, projectContext())
+    /** The stable half of the prompt: the top-level system prefix, identical for the life of a conversation. */
+    private fun systemPrompt(): String = SystemPrompt.grounding(tools.tools.map { it.spec.name })
+
+    /** The volatile half: rides after the history each turn, so refreshing it costs no cached tokens. */
+    private fun sessionContext(): String = SystemPrompt.sessionContext(modePref(), projectContext())
 
     private fun projectContext(): String? {
         val engine = ctx.servicesOrNull ?: return null

@@ -72,11 +72,15 @@ import dev.ide.ui.backend.UiAgentPermissionMode
 import dev.ide.ui.backend.UiAgentRole
 import dev.ide.ui.backend.UiAgentToolCall
 import dev.ide.ui.backend.UiAgentToolStatus
+import dev.ide.ui.backend.UiAgentUsage
 import dev.ide.agent.ui.generated.resources.Res
 import dev.ide.agent.ui.generated.resources.chat_add_key
 import dev.ide.agent.ui.generated.resources.chat_close
 import dev.ide.agent.ui.generated.resources.chat_copied
 import dev.ide.agent.ui.generated.resources.chat_copy
+import dev.ide.agent.ui.generated.resources.chat_usage_cached
+import dev.ide.agent.ui.generated.resources.chat_usage_input
+import dev.ide.agent.ui.generated.resources.chat_usage_output
 import dev.ide.agent.ui.generated.resources.chat_manage_keys
 import dev.ide.agent.ui.generated.resources.chat_empty_body
 import dev.ide.agent.ui.generated.resources.chat_empty_title
@@ -324,7 +328,39 @@ private fun AssistantMessage(msg: UiAgentMessage) {
         }
         // Copy the finished answer.
         if (!msg.streaming && msg.text.isNotBlank()) CopyButton(msg.text)
+        if (!msg.streaming) msg.usage?.let { UsageFooter(it) }
     }
+}
+
+/**
+ * What the finished turn cost, as a quiet footer. The cached figure is the point of it: a loop that is caching
+ * properly shows it climbing turn over turn while the billed input stays small, so a run where it never appears
+ * is the visible symptom of a prompt prefix that changed and threw the cache away.
+ */
+@Composable
+private fun UsageFooter(usage: UiAgentUsage) {
+    val parts = buildList {
+        if (usage.input > 0) add(compactTokens(usage.input) + " " + stringResource(Res.string.chat_usage_input))
+        if (usage.output > 0) add(compactTokens(usage.output) + " " + stringResource(Res.string.chat_usage_output))
+        if (usage.cacheRead > 0) {
+            add(compactTokens(usage.cacheRead) + " " + stringResource(Res.string.chat_usage_cached))
+        }
+    }
+    if (parts.isEmpty()) return
+    Text(
+        parts.joinToString(" · "),
+        color = Ca.colors.textTertiary,
+        style = Ca.type.caption2,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/** Token counts as "940" / "8.4k" / "1.2M" — enough to read a trend, short enough for a one-line footer. */
+private fun compactTokens(count: Int): String = when {
+    count < 1_000 -> count.toString()
+    count < 1_000_000 -> "${count / 1000}.${(count % 1000) / 100}k"
+    else -> "${count / 1_000_000}.${(count % 1_000_000) / 100_000}M"
 }
 
 /**

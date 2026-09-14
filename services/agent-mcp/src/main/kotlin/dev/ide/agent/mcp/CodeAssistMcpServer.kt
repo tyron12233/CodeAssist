@@ -225,11 +225,11 @@ object CodeAssistMcpServer {
             .description("The CodeAssist agent grounding: what this IDE is and how to work in it.")
             .build()
         return McpServerFeatures.SyncPromptSpecification(prompt) { _, _ ->
-            val grounding = SystemPrompt.build(
-                mode = PermissionMode.ASK_EACH,
-                toolNames = tools.specs().map { it.name },
-                projectContext = runBlocking { workspace.projectRoot()?.let { "Project root: $it" } },
-            )
+            // An MCP client gets both halves in one blob: this is a one-shot prompt resource, not a running
+            // conversation, so there is no cached prefix for the volatile half to protect.
+            val projectContext = runBlocking { workspace.projectRoot()?.let { "Project root: $it" } }
+            val grounding = SystemPrompt.grounding(tools.specs().map { it.name }) + "\n\n" +
+                SystemPrompt.sessionContext(PermissionMode.ASK_EACH, projectContext)
             val messages = listOf(
                 McpSchema.PromptMessage.builder(
                     McpSchema.Role.USER,

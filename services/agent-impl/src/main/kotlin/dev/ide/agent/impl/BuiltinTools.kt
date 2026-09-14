@@ -26,7 +26,10 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
             integer("end_line", "Last line to read (1-based, inclusive).", required = false)
         },
         summary = { "read ${it.optString("path") ?: "file"}" },
-    ) { args -> ToolExecutionResult.ok(ws.readFile(args.string("path"), args.optInt("start_line"), args.optInt("end_line"))) },
+    ) { args ->
+        val text = ws.readFile(args.string("path"), args.optInt("start_line"), args.optInt("end_line"))
+        ToolExecutionResult.ok(cappedText(text, "Re-read a narrower start_line/end_line range for the rest."))
+    },
 
     tool(
         name = "list_dir",
@@ -36,7 +39,7 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
     ) { args ->
         val entries = ws.listDir(args.string("path"))
         if (entries.isEmpty()) ToolExecutionResult.ok("(empty)")
-        else ToolExecutionResult.ok(entries.joinToString("\n") { (if (it.isDirectory) "[dir] " else "      ") + it.name })
+        else ToolExecutionResult.ok(capped(entries, "entries") { (if (it.isDirectory) "[dir] " else "      ") + it.name })
     },
 
     tool(
@@ -55,7 +58,7 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
             caseSensitive = args.optBoolean("case_sensitive") ?: false,
         )
         if (matches.isEmpty()) ToolExecutionResult.ok("No matches.")
-        else ToolExecutionResult.ok(matches.joinToString("\n") { "${it.path}:${it.line}:${it.column}: ${it.lineText.trim()}" })
+        else ToolExecutionResult.ok(capped(matches, "matches") { "${it.path}:${it.line}:${it.column}: ${it.lineText.trim()}" })
     },
 
     tool(
@@ -66,7 +69,7 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
     ) { args ->
         val hits = ws.findSymbol(args.string("query"))
         if (hits.isEmpty()) ToolExecutionResult.ok("No symbols found.")
-        else ToolExecutionResult.ok(hits.joinToString("\n") { hit ->
+        else ToolExecutionResult.ok(capped(hits, "symbols") { hit ->
             "${hit.kind} ${hit.name}" + (hit.path?.let { "  $it:${hit.line}" } ?: "")
         })
     },
@@ -79,7 +82,7 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
     ) { args ->
         val diagnostics = ws.diagnostics(args.string("path"))
         if (diagnostics.isEmpty()) ToolExecutionResult.ok("No diagnostics.")
-        else ToolExecutionResult.ok(diagnostics.joinToString("\n") { "${it.line}:${it.column} ${it.severity}: ${it.message}" })
+        else ToolExecutionResult.ok(capped(diagnostics, "diagnostics") { "${it.line}:${it.column} ${it.severity}: ${it.message}" })
     },
 
     tool(
@@ -237,7 +240,7 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
     ) { args ->
         val refs = ws.findReferences(args.string("path"), resolveOffset(ws, args.string("path"), args.int("line"), args.optString("symbol")))
         if (refs.isEmpty()) ToolExecutionResult.ok("No references found.")
-        else ToolExecutionResult.ok("${refs.size} reference(s):\n" + refs.joinToString("\n") { formatLocation(it) })
+        else ToolExecutionResult.ok("${refs.size} reference(s):\n" + capped(refs, "references") { formatLocation(it) })
     },
 
     tool(
@@ -249,7 +252,9 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
     ) { args ->
         val diags = ws.projectDiagnostics(args.optBoolean("errors_only") ?: false)
         if (diags.isEmpty()) ToolExecutionResult.ok("No diagnostics.")
-        else ToolExecutionResult.ok(diags.joinToString("\n") { "${it.path}:${it.line}:${it.column} ${it.severity}: ${it.message}" })
+        else ToolExecutionResult.ok(
+            capped(diags, "diagnostics") { "${it.path}:${it.line}:${it.column} ${it.severity}: ${it.message}" },
+        )
     },
 
     tool(
@@ -389,7 +394,10 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
             integer("max_chars", "Maximum characters to return (default 20000).", required = false)
         },
         summary = { "fetch ${it.optString("url").orEmpty()}" },
-    ) { args -> ToolExecutionResult.ok(ws.fetchUrl(args.string("url"), args.optInt("max_chars") ?: 20_000)) },
+    ) { args ->
+        val url = args.string("url")
+        ToolExecutionResult.ok(untrusted(url, ws.fetchUrl(url, args.optInt("max_chars") ?: 20_000)))
+    },
 
     tool(
         name = "http_request",
@@ -408,13 +416,17 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
         mutating = true,
         summary = { "${it.optString("method")?.ifBlank { null } ?: "GET"} ${it.optString("url").orEmpty()}" },
     ) { args ->
+        val url = args.string("url")
         ToolExecutionResult.ok(
-            ws.httpRequest(
-                method = args.optString("method")?.ifBlank { null } ?: "GET",
-                url = args.string("url"),
-                headers = args.stringList("headers"),
-                body = args.optString("body"),
-                maxChars = args.optInt("max_chars") ?: 20_000,
+            untrusted(
+                url,
+                ws.httpRequest(
+                    method = args.optString("method")?.ifBlank { null } ?: "GET",
+                    url = url,
+                    headers = args.stringList("headers"),
+                    body = args.optString("body"),
+                    maxChars = args.optInt("max_chars") ?: 20_000,
+                ),
             ),
         )
     },
@@ -425,6 +437,54 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
  * text. The symbol places the caret precisely on the identifier; without it the caret lands at the line
  * start. Out-of-range lines clamp to the end of the file.
  */
+/**
+ * Fences content fetched from the network, which is the one tool channel an outsider can write directly. The
+ * marker pairs with the grounding rule that tool output is data: it gives the model an unambiguous boundary
+ * around text that a page author, not the user, controls. It is a mitigation and not a guarantee — the
+ * permission gate on mutating tools is what actually contains a successful injection.
+ */
+private fun untrusted(source: String, body: String): String =
+    "<untrusted-content source=\"$source\">\n$body\n</untrusted-content>"
+
+/**
+ * Renders at most [MAX_RESULT_ROWS] rows and says plainly how many were dropped.
+ *
+ * Bounding a listing here, rather than trimming the transcript later, is what keeps the conversation both small
+ * and cacheable: a result that arrives bounded is sent once, cached, and re-read at a fraction of the input
+ * rate for the rest of the task, whereas rewriting an oversized one after the fact changes the prompt bytes
+ * that every later turn sits behind and drops them all out of cache. The dropped count is reported so the model
+ * narrows its query instead of assuming it has seen everything.
+ */
+private fun <T> capped(items: List<T>, noun: String, render: (T) -> String): String {
+    val shown = items.take(MAX_RESULT_ROWS).joinToString("\n", transform = render)
+    val dropped = items.size - MAX_RESULT_ROWS
+    if (dropped <= 0) return shown
+    return "$shown\n… and $dropped more $noun not shown. Narrow the query to see them."
+}
+
+/**
+ * The same bound, but keeping the END of the text. For a run or build log the interesting part — the failure,
+ * the stack trace, the exit — is at the bottom, so truncating the head is what preserves the answer.
+ */
+private fun cappedTail(text: String, hint: String): String {
+    if (text.length <= MAX_RESULT_CHARS) return text
+    val dropped = text.length - MAX_RESULT_CHARS
+    return "… $dropped earlier characters not shown. $hint\n" + text.takeLast(MAX_RESULT_CHARS)
+}
+
+/** The same bound for a single blob of text, such as a whole-file read. */
+private fun cappedText(text: String, hint: String): String {
+    if (text.length <= MAX_RESULT_CHARS) return text
+    val dropped = text.length - MAX_RESULT_CHARS
+    return text.take(MAX_RESULT_CHARS) + "\n… and $dropped more characters not shown. $hint"
+}
+
+/** Rows a listing tool returns before it starts reporting a remainder instead. */
+private const val MAX_RESULT_ROWS = 200
+
+/** Characters a single-blob tool result returns before it starts reporting a remainder instead. */
+private const val MAX_RESULT_CHARS = 60_000
+
 private suspend fun resolveOffset(ws: AgentWorkspace, path: String, line: Int, symbol: String?): Int {
     val text = ws.readFile(path)
     var offset = 0
@@ -449,14 +509,20 @@ private fun formatLocation(loc: Location): String {
 private fun formatTaskRun(r: TaskRunResult): ToolExecutionResult {
     val sb = StringBuilder()
     sb.append(if (r.success) "Task succeeded" else "Task ${r.status}").append('.')
-    if (r.diagnostics.isNotEmpty()) sb.append("\n\n--- diagnostics ---\n").append(r.diagnostics.joinToString("\n"))
-    if (r.log.isNotBlank()) sb.append("\n\n--- log ---\n").append(r.log.trimEnd())
+    // A build log is the largest thing any tool returns — a failing build can produce thousands of lines — so
+    // it is bounded here rather than left to be trimmed out of the transcript later.
+    if (r.diagnostics.isNotEmpty()) {
+        sb.append("\n\n--- diagnostics ---\n").append(capped(r.diagnostics, "diagnostics") { it })
+    }
+    if (r.log.isNotBlank()) {
+        sb.append("\n\n--- log ---\n").append(cappedTail(r.log.trimEnd(), "Re-run the task to see the whole log."))
+    }
     return ToolExecutionResult(sb.toString(), isError = !r.success)
 }
 
 private fun formatRun(r: RunResult): ToolExecutionResult {
     if (!r.compiled) {
-        val detail = if (r.diagnostics.isEmpty()) "" else "\n" + r.diagnostics.joinToString("\n")
+        val detail = if (r.diagnostics.isEmpty()) "" else "\n" + capped(r.diagnostics, "diagnostics") { it }
         return ToolExecutionResult.error("Compilation failed; the program did not start.$detail")
     }
     val sb = StringBuilder()
@@ -464,8 +530,13 @@ private fun formatRun(r: RunResult): ToolExecutionResult {
         if (r.finished) "Program finished with exit code ${r.exitCode ?: "unknown"}."
         else "Program did not finish (it timed out or is still waiting).",
     )
-    if (r.output.isNotBlank()) sb.append("\n\n--- output ---\n").append(r.output.trimEnd())
-    if (r.diagnostics.isNotEmpty()) sb.append("\n\n--- notes ---\n").append(r.diagnostics.joinToString("\n"))
+    // Program output is unbounded by nature — a chatty loop can print megabytes — and the tail is the part
+    // that explains how the run ended, so that is the end that is kept.
+    if (r.output.isNotBlank()) {
+        sb.append("\n\n--- output ---\n")
+            .append(cappedTail(r.output.trimEnd(), "Have the program print less, or narrow what it runs."))
+    }
+    if (r.diagnostics.isNotEmpty()) sb.append("\n\n--- notes ---\n").append(capped(r.diagnostics, "notes") { it })
     val failed = !r.finished || (r.exitCode != null && r.exitCode != 0)
     return ToolExecutionResult(sb.toString(), isError = failed)
 }

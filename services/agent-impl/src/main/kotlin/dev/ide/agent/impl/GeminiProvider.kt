@@ -1,6 +1,7 @@
 package dev.ide.agent.impl
 
 import dev.ide.agent.LlmClient
+import dev.ide.agent.LlmEffort
 import dev.ide.agent.LlmModelInfo
 import dev.ide.agent.LlmProvider
 import dev.ide.agent.LlmRequest
@@ -122,11 +123,11 @@ class GeminiProvider(private val transport: LlmTransport) : LlmProvider {
         })
     }.toString()
 
-    /** Resolves the Gemini thinking budget: 0 to disable when reasoning is off, the requested cap when one is
-     *  set, or null to leave the model's default. 2.5 Pro cannot disable thinking, so a 0 there is clamped up
-     *  to the minimum rather than rejected by the API. */
+    /** Resolves the Gemini thinking budget: 0 to disable when reasoning is off, the explicitly requested cap,
+     *  otherwise the budget implied by the request's effort level, or null to leave the model's default. 2.5
+     *  Pro cannot disable thinking, so a 0 there is clamped up to the minimum rather than rejected. */
     private fun thinkingBudget(request: LlmRequest): Int? {
-        val requested = request.thinkingBudget
+        val requested = request.thinkingBudget ?: effortBudget(request.effort)
         val budget = when {
             !request.thinking -> 0
             requested != null -> requested
@@ -134,6 +135,16 @@ class GeminiProvider(private val transport: LlmTransport) : LlmProvider {
         }
         val isPro = request.model.contains("pro", ignoreCase = true)
         return if (isPro) budget.coerceAtLeast(PRO_MIN_THINKING_BUDGET) else budget.coerceAtLeast(0)
+    }
+
+    /** Gemini has no effort parameter, so the neutral level becomes a reasoning-token budget. */
+    private fun effortBudget(effort: String?): Int? = when (effort) {
+        LlmEffort.NONE, LlmEffort.MINIMAL -> 0
+        LlmEffort.LOW -> 2_048
+        LlmEffort.MEDIUM -> 8_192
+        LlmEffort.HIGH -> 16_384
+        LlmEffort.XHIGH, LlmEffort.MAX -> 24_576
+        else -> null
     }
 
     companion object {
@@ -200,6 +211,7 @@ internal class GeminiContextCache {
 internal class GeminiStreamDecoder {
     private var inputTokens = 0
     private var outputTokens = 0
+    private var cacheReadTokens = 0
     private var stopReason: StopReason = StopReason.END_TURN
     private var sawCompletion = false
     private val usedIds = HashMap<String, Int>()
@@ -213,6 +225,9 @@ internal class GeminiStreamDecoder {
         json["usageMetadata"].asObj()?.let { usage ->
             usage["promptTokenCount"].asInt()?.let { inputTokens = it }
             usage["candidatesTokenCount"].asInt()?.let { outputTokens = it }
+            // promptTokenCount INCLUDES whatever the context cache served; the neutral model keeps the
+            // uncached remainder in inputTokens, so the cached share is subtracted below rather than added.
+            usage["cachedContentTokenCount"].asInt()?.let { cacheReadTokens = it }
         }
 
         val candidate = json["candidates"].asArr()?.firstOrNull().asObj()
@@ -243,7 +258,9 @@ internal class GeminiStreamDecoder {
         if (completed) return emptyList()
         completed = true
         return listOf(
-            LlmStreamEvent.Usage(TokenUsage(inputTokens, outputTokens)),
+            LlmStreamEvent.Usage(
+                TokenUsage((inputTokens - cacheReadTokens).coerceAtLeast(0), outputTokens, cacheReadTokens),
+            ),
             LlmStreamEvent.Completed(if (sawCompletion) stopReason else StopReason.END_TURN),
         )
     }

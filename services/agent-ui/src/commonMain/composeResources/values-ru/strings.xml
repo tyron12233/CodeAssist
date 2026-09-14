@@ -33,6 +33,9 @@
     <string name="chat_deny">Запретить</string>
     <string name="chat_copy">Копировать</string>
     <string name="chat_copied">Скопировано</string>
+    <string name="chat_usage_input">вход</string>
+    <string name="chat_usage_output">выход</string>
+    <string name="chat_usage_cached">из кэша</string>
     <string name="chat_antigravity_warning">Экспериментально. Использует аккаунт Google через эндпоинт Antigravity, что нарушает Условия использования Google и приводило к блокировке аккаунтов. Вставьте OAuth-токен обновления или доступа (при необходимости в виде token|projectId).</string>
     <string name="chat_antigravity_signin">Войти через Google</string>
     <string name="chat_antigravity_waiting">Ожидание браузера — разрешите доступ и вернитесь в CodeAssist</string>
