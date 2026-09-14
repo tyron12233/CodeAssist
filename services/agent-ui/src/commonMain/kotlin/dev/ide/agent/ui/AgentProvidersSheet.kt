@@ -61,7 +61,7 @@ import dev.ide.ui.theme.Ide
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The AI provider / key manager. A glass dialog listing each provider (plus a first-class "Custom gateway"
+ * The AI provider / key manager. An opaque dialog listing each provider (plus a first-class "Custom gateway"
  * for OpenAI-compatible endpoints) as a selectable card; the active card expands to a masked, show/hide API
  * key field (and, for the gateway, a base URL + model). Everything auto-saves through [dev.ide.ui.backend.AgentService].
  * Reached from the chat header's key button and the empty-state call to action. See docs/agentic-coding.md.
@@ -75,8 +75,9 @@ internal fun AgentProvidersSheet(backend: IdeBackend, onClose: () -> Unit) {
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
                 .clip(RoundedCornerShape(Ca.radius.xl))
-                .background(Ide.colors.glassThick)
-                .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+                // Opaque: a key field is the last thing that should be legible-depending-on-what-is-behind-it.
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.xl))
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -153,10 +154,12 @@ private fun ProviderCard(
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
             if (hasKey) {
+                // A solid tonal pair rather than a tinted wash of the status green: Material has no success
+                // container, and tertiary is the role that reads as a positive state at full opacity.
                 Chip(
                     stringResource(Res.string.chat_connected),
-                    fill = Ide.colors.success.copy(alpha = 0.16f),
-                    textColor = Ide.colors.success,
+                    fill = scheme.tertiaryContainer,
+                    textColor = scheme.onTertiaryContainer,
                 )
             }
         }
