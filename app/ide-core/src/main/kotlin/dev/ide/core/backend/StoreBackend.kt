@@ -647,25 +647,6 @@ internal class StoreBackend(
     override suspend fun rejectSubmission(versionId: String, note: String): String? =
         withContext(storeIo) { moderationState.reject(versionId, note) }
 
-    /**
-     * Put a submission on disk as a project, so a reviewer can build and run it.
-     *
-     * The adoption is the install path's: `adoptProjectInPlace` builds the model without opening, because
-     * what opens it is the caller — this runs on the IO context and opening is the UI's move.
-     */
-    override suspend fun checkOutSubmission(versionId: String): dev.ide.ui.backend.UiSubmissionCheckout =
-        withContext(storeIo) {
-            val projectsRoot = ctx.manager?.projectsRoot?.toFile()
-                ?: return@withContext dev.ide.ui.backend.UiSubmissionCheckout(
-                    message = "There is no projects folder to unpack into",
-                )
-            val manager = ctx.manager
-            val result = moderationState.checkOut(versionId, projectsRoot) { dir ->
-                manager?.adoptProjectInPlace(dir.toPath()) ?: false
-            }
-            dev.ide.ui.backend.UiSubmissionCheckout(result.rootPath, result.message)
-        }
-
     override suspend fun openReports(): List<dev.ide.ui.backend.UiReportedContent> =
         withContext(storeIo) { moderationState.reports() }
 
