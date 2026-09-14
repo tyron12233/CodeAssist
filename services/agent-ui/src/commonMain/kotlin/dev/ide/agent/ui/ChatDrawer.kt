@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,7 +37,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,7 +56,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -99,6 +104,8 @@ import dev.ide.ui.components.CodeSample
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.markdown.Markdown
 import dev.ide.ui.theme.Ca
+import dev.ide.ui.theme.CaMotion
+import dev.ide.ui.theme.Ide
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -119,7 +126,8 @@ fun ChatDrawer(backend: IdeBackend, onClose: (() -> Unit)? = null, modifier: Mod
 
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            ChatHeader(
+            ChatChrome {
+                ChatHeader(
                 cfg = cfg,
                 models = models.ifEmpty { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.models ?: emptyList() },
                 onPickModel = { backend.agent.setModel(it); cfg = backend.agent.config() },
@@ -130,8 +138,8 @@ fun ChatDrawer(backend: IdeBackend, onClose: (() -> Unit)? = null, modifier: Mod
                 },
                 onNew = { backend.agent.newSession() },
                 onClose = onClose,
-            )
-            Hairline()
+                )
+            }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (chat.messages.isEmpty()) {
                     EmptyState(configured = cfg.configured, onManage = { showProviders = true })
@@ -139,8 +147,8 @@ fun ChatDrawer(backend: IdeBackend, onClose: (() -> Unit)? = null, modifier: Mod
                     Transcript(chat.messages, onRetry = { backend.agent.retry() })
                 }
             }
-            Hairline()
-            Composer(
+            ChatChrome {
+                Composer(
                 value = input,
                 configured = cfg.configured,
                 busy = chat.busy,
@@ -152,7 +160,8 @@ fun ChatDrawer(backend: IdeBackend, onClose: (() -> Unit)? = null, modifier: Mod
                     }
                 },
                 onStop = { backend.agent.stop() },
-            )
+                )
+            }
         }
         if (showProviders) {
             AgentProvidersSheet(backend) {
@@ -182,17 +191,32 @@ private fun ChatHeader(
         Column(Modifier.weight(1f)) {
             Text(
                 stringResource(Res.string.chat_title),
-                color = Ca.colors.textPrimary,
-                style = Ca.type.subhead,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
             ModelPicker(cfg = cfg, models = models, onPick = onPickModel)
         }
+        // The permission mode cycles on tap, and is tinted by how much it lets the agent do: a session left
+        // on auto-accept applies edits without asking, which should be visible in the header rather than
+        // something you have to open settings to discover. The dense house chip keeps the 52dp bar intact
+        // where an M3 chip's own padding would crowd out the title.
+        val scheme = MaterialTheme.colorScheme
+        val modeFill = when (cfg.mode) {
+            UiAgentPermissionMode.AUTO_ACCEPT -> scheme.tertiaryContainer
+            UiAgentPermissionMode.PLAN_ONLY -> scheme.secondaryContainer
+            UiAgentPermissionMode.ASK_EACH -> scheme.surfaceContainerHighest
+        }
+        val modeText = when (cfg.mode) {
+            UiAgentPermissionMode.AUTO_ACCEPT -> scheme.onTertiaryContainer
+            UiAgentPermissionMode.PLAN_ONLY -> scheme.onSecondaryContainer
+            UiAgentPermissionMode.ASK_EACH -> scheme.onSurfaceVariant
+        }
         Chip(
             text = modeLabel(cfg.mode),
             modifier = Modifier.clip(RoundedCornerShape(Ca.radius.pill)).clickable(onClick = onCycleMode),
-            fill = Ca.colors.accentSoft,
-            textColor = Ca.colors.accent,
+            fill = modeFill,
+            textColor = modeText,
         )
         IconButtonCa(CaIcons.key, stringResource(Res.string.chat_manage_keys), onManage, iconSize = 16, boxSize = 30)
         IconButtonCa(CaIcons.refresh, stringResource(Res.string.chat_new), onNew, iconSize = 16, boxSize = 30)
@@ -215,14 +239,14 @@ private fun ModelPicker(cfg: UiAgentConfig, models: List<UiAgentModel>, onPick: 
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(label, color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val chevron by animateFloatAsState(if (open) 180f else 0f, label = "chevron")
-            Icon(CaIcons.chevronDown, null, Modifier.size(12.dp).rotate(chevron), tint = Ca.colors.textTertiary)
+            Icon(CaIcons.chevronDown, null, Modifier.size(12.dp).rotate(chevron), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             models.forEach { model ->
                 DropdownMenuItem(
-                    text = { Text(model.displayName, style = Ca.type.footnote, color = Ca.colors.textPrimary) },
+                    text = { Text(model.displayName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface) },
                     onClick = { onPick(model.id); open = false },
                 )
             }
@@ -267,10 +291,16 @@ private fun MessageItem(msg: UiAgentMessage, onRetry: (() -> Unit)? = null) {
                 Box(
                     Modifier.widthIn(max = 320.dp)
                         // Chat-bubble rounding: a small corner on the tail side (bottom-end for the user).
-                        .background(Ca.colors.accentSoft, RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp))
+                        .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp))
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
-                    Text(msg.text, color = Ca.colors.textPrimary, style = Ca.type.footnote)
+                    // onSecondaryContainer, not onSurface: a tonal container carries its own content colour,
+                    // and borrowing the surface's is exactly how a bubble ends up unreadable in one theme.
+                    Text(
+                        msg.text,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
                 CopyButton(msg.text)
             }
@@ -281,34 +311,29 @@ private fun MessageItem(msg: UiAgentMessage, onRetry: (() -> Unit)? = null) {
 
 @Composable
 private fun ErrorMessage(text: String, onRetry: (() -> Unit)?) {
+    // The errorContainer pair rather than a translucent error tint: it stays legible in both themes and
+    // against any Material You palette, which an alpha-over-surface fill does not.
+    val scheme = MaterialTheme.colorScheme
     Column(
         Modifier.fillMaxWidth()
-            .background(Ca.colors.error.copy(alpha = 0.10f), RoundedCornerShape(16.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .background(scheme.errorContainer, MaterialTheme.shapes.medium)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-            Icon(CaIcons.warning, null, Modifier.size(15.dp), tint = Ca.colors.error)
-            Text(text, color = Ca.colors.error, style = Ca.type.footnote)
+            Icon(CaIcons.warning, null, Modifier.size(16.dp), tint = scheme.onErrorContainer)
+            Text(text, color = scheme.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            CopyButton(text, tint = Ca.colors.error)
+            CopyButton(text, tint = scheme.onErrorContainer)
             if (onRetry != null) {
-                val interaction = remember { MutableInteractionSource() }
-                Row(
-                    Modifier.clip(RoundedCornerShape(Ca.radius.pill))
-                        .background(Ca.colors.error.copy(alpha = 0.16f))
-                        .pressScale(interaction)
-                        .clickable(interactionSource = interaction, indication = null, onClick = onRetry)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                TextButton(
+                    onClick = onRetry,
+                    colors = ButtonDefaults.textButtonColors(contentColor = scheme.onErrorContainer),
                 ) {
-                    Icon(CaIcons.refresh, null, Modifier.size(13.dp), tint = Ca.colors.error)
-                    Text(
-                        stringResource(Res.string.chat_retry),
-                        color = Ca.colors.error, style = Ca.type.caption, fontWeight = FontWeight.SemiBold,
-                    )
+                    Icon(CaIcons.refresh, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(Res.string.chat_retry), style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -349,8 +374,8 @@ private fun UsageFooter(usage: UiAgentUsage) {
     if (parts.isEmpty()) return
     Text(
         parts.joinToString(" · "),
-        color = Ca.colors.textTertiary,
-        style = Ca.type.caption2,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.labelSmall,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
@@ -394,14 +419,14 @@ private fun ToolGroupHeader(calls: List<UiAgentToolCall>, expanded: Boolean, onT
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         val rotation by animateFloatAsState(if (expanded) 0f else -90f, label = "toolChevron")
-        Icon(CaIcons.chevronDown, null, Modifier.size(14.dp).rotate(rotation), tint = Ca.colors.textTertiary)
+        Icon(CaIcons.chevronDown, null, Modifier.size(14.dp).rotate(rotation), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         ToolStatusIcon(aggregateStatus(calls))
         // A bare count is locale-safe (no pluralized label needed).
-        Text("${calls.size}", style = Ca.type.caption, color = Ca.colors.textSecondary, fontWeight = FontWeight.SemiBold)
+        Text("${calls.size}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
         if (!expanded) {
             Text(
                 calls.last().title,
-                style = Ca.type.caption2, color = Ca.colors.textTertiary,
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
@@ -418,7 +443,7 @@ private fun aggregateStatus(calls: List<UiAgentToolCall>): UiAgentToolStatus = w
 
 /** One-tap copy of a message's text, flipping to a check for ~1.5s as confirmation. */
 @Composable
-private fun CopyButton(text: String, tint: androidx.compose.ui.graphics.Color = Ca.colors.textTertiary) {
+private fun CopyButton(text: String, tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant) {
     val clipboard = LocalClipboardManager.current
     var copied by remember { mutableStateOf(false) }
     LaunchedEffect(copied) { if (copied) { delay(1500); copied = false } }
@@ -431,7 +456,7 @@ private fun CopyButton(text: String, tint: androidx.compose.ui.graphics.Color = 
         },
         iconSize = 14,
         boxSize = 26,
-        tint = if (copied) Ca.colors.success else tint,
+        tint = if (copied) Ide.colors.success else tint,
     )
 }
 
@@ -440,25 +465,25 @@ private fun TypingCaret() {
     val alpha = pulseAlpha(true)
     Box(
         Modifier.size(width = 7.dp, height = 14.dp)
-            .background(Ca.colors.accent.copy(alpha = alpha), RoundedCornerShape(2.dp)),
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = alpha), RoundedCornerShape(2.dp)),
     )
 }
 
 @Composable
 private fun ThinkingBlock(thinking: String, streaming: Boolean) {
     Column(
-        Modifier.fillMaxWidth().entranceSlideUp().background(Ca.colors.surface2, RoundedCornerShape(14.dp)).padding(10.dp),
+        Modifier.fillMaxWidth().entranceSlideUp().background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.medium).padding(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Icon(
                 CaIcons.sparkle, null, Modifier.size(12.dp),
-                tint = Ca.colors.accent.copy(alpha = pulseAlpha(streaming)),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = pulseAlpha(streaming)),
             )
-            Text(stringResource(Res.string.chat_thinking), style = Ca.type.caption2, color = Ca.colors.textTertiary)
+            Text(stringResource(Res.string.chat_thinking), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (thinking.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
-            Text(thinking, style = Ca.type.caption, color = Ca.colors.textTertiary)
+            Text(thinking, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -466,16 +491,16 @@ private fun ThinkingBlock(thinking: String, streaming: Boolean) {
 @Composable
 private fun ToolCallRow(call: UiAgentToolCall) {
     Row(
-        Modifier.fillMaxWidth().entranceSlideUp().background(Ca.colors.surface2, RoundedCornerShape(14.dp))
-            .padding(horizontal = 10.dp, vertical = 7.dp),
+        Modifier.fillMaxWidth().entranceSlideUp().background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.medium)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         ToolStatusIcon(call.status)
         Column(Modifier.weight(1f)) {
-            Text(call.title, style = Ca.type.caption, color = Ca.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(call.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (call.detail.isNotBlank()) {
-                Text(call.detail, style = Ca.type.caption2, color = Ca.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(call.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -487,11 +512,11 @@ private fun ToolStatusIcon(status: UiAgentToolStatus) {
     Crossfade(targetState = status, label = "toolStatus") { s ->
         when (s) {
             UiAgentToolStatus.RUNNING -> CircularProgressIndicator(
-                Modifier.size(14.dp), color = Ca.colors.accent, strokeWidth = 1.5.dp,
+                Modifier.size(14.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 1.5.dp,
             )
-            UiAgentToolStatus.OK -> Icon(CaIcons.check, null, Modifier.size(14.dp), tint = Ca.colors.success)
-            UiAgentToolStatus.ERROR -> Icon(CaIcons.error, null, Modifier.size(14.dp), tint = Ca.colors.error)
-            UiAgentToolStatus.DENIED -> Icon(CaIcons.close, null, Modifier.size(14.dp), tint = Ca.colors.warning)
+            UiAgentToolStatus.OK -> Icon(CaIcons.check, null, Modifier.size(14.dp), tint = Ide.colors.success)
+            UiAgentToolStatus.ERROR -> Icon(CaIcons.error, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
+            UiAgentToolStatus.DENIED -> Icon(CaIcons.close, null, Modifier.size(14.dp), tint = Ide.colors.warning)
         }
     }
 }
@@ -502,8 +527,8 @@ private fun AssistantMarkdown(text: String) {
     // footnote style; fenced code uses the syntax-highlighted CodeSample card.
     Markdown(
         text,
-        paragraphStyle = Ca.type.footnote,
-        color = Ca.colors.textPrimary,
+        paragraphStyle = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurface,
         spacing = 8.dp,
         codeBlock = { code, lang -> CodeSample(code, lang) },
     )
@@ -521,13 +546,13 @@ private fun EmptyState(configured: Boolean, onManage: () -> Unit) {
         Text(
             stringResource(Res.string.chat_empty_title),
             modifier = Modifier.entranceSlideUp(90),
-            color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             if (configured) stringResource(Res.string.chat_empty_body) else stringResource(Res.string.chat_need_key),
             modifier = Modifier.entranceSlideUp(150),
-            color = Ca.colors.textTertiary, style = Ca.type.footnote,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
         )
         if (!configured) {
             Spacer(Modifier.height(16.dp))
@@ -545,10 +570,10 @@ private fun EmptyState(configured: Boolean, onManage: () -> Unit) {
 private fun ErrorBar(message: String) {
     Text(
         message,
-        color = Ca.colors.error,
-        style = Ca.type.caption,
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodySmall,
         modifier = Modifier.fillMaxWidth()
-            .background(Ca.colors.error.copy(alpha = 0.12f))
+            .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f))
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )
 }
@@ -567,29 +592,40 @@ private fun Composer(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // Focus glow: the pill's border animates to the accent and thickens while the field is focused.
+        // The focus outline follows M3's own treatment: the field sits on a container fill and gains a primary
+        // outline while focused. Motion uses the app's expressive springs rather than a linear tween.
+        val scheme = MaterialTheme.colorScheme
         val fieldInteraction = remember { MutableInteractionSource() }
         val focused by fieldInteraction.collectIsFocusedAsState()
-        val borderColor by animateColorAsState(if (focused) Ca.colors.accent else Ca.colors.hairline, label = "composerBorder")
-        val borderWidth by animateDpAsState(if (focused) 1.5.dp else 1.dp, label = "composerBorderWidth")
+        val borderColor by animateColorAsState(
+            if (focused) scheme.primary else scheme.outlineVariant,
+            animationSpec = CaMotion.defaultEffects(),
+            label = "composerBorder",
+        )
+        val borderWidth by animateDpAsState(
+            if (focused) 2.dp else 1.dp,
+            animationSpec = CaMotion.defaultEffects(),
+            label = "composerBorderWidth",
+        )
+        val fieldShape = RoundedCornerShape(Ca.radius.xl)
         Box(
             Modifier.weight(1f)
-                .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.xl))
-                .border(borderWidth, borderColor, RoundedCornerShape(Ca.radius.xl))
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .background(scheme.surfaceContainerHighest, fieldShape)
+                .border(borderWidth, borderColor, fieldShape)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             if (value.isEmpty()) {
                 Text(
                     stringResource(if (configured) Res.string.chat_placeholder else Res.string.chat_need_key),
-                    color = Ca.colors.textTertiary, style = Ca.type.footnote,
+                    color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                 )
             }
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
                 enabled = configured && !busy,
-                textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = scheme.onSurface),
+                cursorBrush = SolidColor(scheme.primary),
                 maxLines = 5,
                 interactionSource = fieldInteraction,
                 modifier = Modifier.fillMaxWidth().onPreviewKeyEvent { event ->
@@ -602,36 +638,31 @@ private fun Composer(
                 },
             )
         }
+        // A native filled icon button, so the disabled state, ripple and tonal roles all come from the theme.
+        // While a turn is running it becomes the stop control rather than a second button appearing beside it.
         val canSend = configured && value.isNotBlank() && !busy
-        val sendInteraction = remember { MutableInteractionSource() }
-        Box(
-            Modifier.size(38.dp)
-                .pressScale(sendInteraction)
-                .background(
-                    if (busy || canSend) {
-                        Brush.linearGradient(listOf(Ca.colors.accent, Ca.colors.accentStrong))
-                    } else {
-                        SolidColor(Ca.colors.surface3)
-                    },
-                    CircleShape,
-                )
-                .clickable(interactionSource = sendInteraction, indication = null, enabled = busy || canSend) {
-                    if (busy) onStop() else onSend()
-                },
-            contentAlignment = Alignment.Center,
+        FilledIconButton(
+            onClick = { if (busy) onStop() else onSend() },
+            enabled = busy || canSend,
+            modifier = Modifier.size(48.dp),
+            shape = CircleShape,
         ) {
             Crossfade(targetState = busy, label = "sendIcon") { b ->
                 Icon(
                     if (b) CaIcons.stop else CaIcons.arrowRight,
                     stringResource(if (b) Res.string.chat_stop else Res.string.chat_send),
-                    Modifier.size(18.dp),
-                    tint = if (b || canSend) Ca.colors.textOnAccent else Ca.colors.textTertiary,
+                    Modifier.size(20.dp),
                 )
             }
         }
     }
 }
 
+/**
+ * The agent's mark: a tonal container rather than the gradient slab it used to be. Material You supplies the
+ * hue, so on Android 12+ it is the wallpaper's own primary — the chat reads as part of the system, not as a
+ * separately-branded panel bolted into the IDE.
+ */
 @Composable
 private fun SparkleBadge(size: Int, animated: Boolean = false) {
     val breathe = rememberInfiniteTransition(label = "sparkle")
@@ -644,19 +675,24 @@ private fun SparkleBadge(size: Int, animated: Boolean = false) {
     val scale = if (animated) pulse else 1f
     Box(
         Modifier.size(size.dp)
-            .background(
-                Brush.linearGradient(listOf(Ca.colors.accent, Ca.colors.accentStrong)),
-                RoundedCornerShape((size / 3).dp),
-            ),
+            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape((size / 2.6f).dp)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(CaIcons.sparkle, null, Modifier.size((size * 0.6f).dp).scale(scale), tint = Ca.colors.textOnAccent)
+        Icon(
+            CaIcons.sparkle, null, Modifier.size((size * 0.58f).dp).scale(scale),
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
     }
 }
 
+/**
+ * The header and composer sit on a tonal container so the transcript is the only thing on the base surface —
+ * the same separation the editor chrome uses, and what makes a long scroll read as content moving under
+ * fixed furniture rather than one flat sheet.
+ */
 @Composable
-private fun Hairline() {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.hairline))
+private fun ChatChrome(content: @Composable () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer) { content() }
 }
 
 @Composable

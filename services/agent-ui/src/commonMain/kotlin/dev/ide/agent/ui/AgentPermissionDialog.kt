@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -36,6 +37,7 @@ import dev.ide.agent.ui.generated.resources.chat_allow_session
 import dev.ide.agent.ui.generated.resources.chat_deny
 import dev.ide.agent.ui.generated.resources.chat_perm_title
 import dev.ide.ui.theme.Ca
+import dev.ide.ui.theme.Ide
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -64,15 +66,15 @@ private fun AgentPermissionCard(req: UiAgentPermissionRequest, answer: (UiAgentP
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
-        Text(stringResource(Res.string.chat_perm_title), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.chat_perm_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
-        Text(req.summary, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+        Text(req.summary, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         req.path?.let {
             Spacer(Modifier.height(2.dp))
-            Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption)
+            Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         Spacer(Modifier.height(16.dp))
 
@@ -90,14 +92,14 @@ private enum class AgentPermKind { Accent, Neutral, Danger }
 private fun AgentPermButton(label: String, kind: AgentPermKind, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val fill = when (kind) {
-        AgentPermKind.Accent -> Ca.colors.accent
-        AgentPermKind.Danger -> Ca.colors.error.copy(alpha = 0.16f)
-        AgentPermKind.Neutral -> Ca.colors.surface3
+        AgentPermKind.Accent -> MaterialTheme.colorScheme.primary
+        AgentPermKind.Danger -> MaterialTheme.colorScheme.error.copy(alpha = 0.16f)
+        AgentPermKind.Neutral -> MaterialTheme.colorScheme.surfaceContainerHighest
     }
     val fg = when (kind) {
-        AgentPermKind.Accent -> Ca.colors.textOnAccent
-        AgentPermKind.Danger -> Ca.colors.error
-        AgentPermKind.Neutral -> Ca.colors.textPrimary
+        AgentPermKind.Accent -> MaterialTheme.colorScheme.onPrimary
+        AgentPermKind.Danger -> MaterialTheme.colorScheme.error
+        AgentPermKind.Neutral -> MaterialTheme.colorScheme.onSurface
     }
     val shape = RoundedCornerShape(Ca.radius.control)
     Box(
@@ -110,6 +112,6 @@ private fun AgentPermButton(label: String, kind: AgentPermKind, onClick: () -> U
             .padding(vertical = 13.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = fg, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+        Text(label, color = fg, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
     }
 }
