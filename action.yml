@@ -1,0 +1,193 @@
+name: Build a CodeAssist project
+description: >-
+  Assemble an Android APK from a CodeAssist project using CodeAssist's own build system, the same one that
+  runs on the phone. No Gradle, no AGP.
+author: CodeAssist
+branding:
+  icon: smartphone
+  color: green
+
+inputs:
+  project:
+    description: Project directory, relative to the workspace. Must hold a `.platform/workspace.json`.
+    required: false
+    default: "."
+  variant:
+    description: Build variant to assemble (`debug`, `release`, or a flavored one).
+    required: false
+    default: debug
+  module:
+    description: Module to assemble. Defaults to the first Android application module in the project.
+    required: false
+    default: ""
+  task:
+    description: >-
+      Exact task id to run instead of an assemble (e.g. `bundle:app:release`). Overrides `variant`/`module`.
+    required: false
+    default: ""
+  cli-version:
+    description: >-
+      Which CodeAssist CLI release to run — a release tag (`3.18.2`), or `latest` for the newest release.
+    required: false
+    default: latest
+  java-version:
+    description: JDK to install for the build. Set `setup-java` to false to use the runner's own.
+    required: false
+    default: "25"
+  android-api:
+    description: Android platform to install (the `android.jar` the project compiles against).
+    required: false
+    default: "36"
+  build-tools:
+    description: Build-tools version to install — this is where `aapt2`, `d8` and `apksigner` come from.
+    required: false
+    default: 36.0.0
+  setup-java:
+    description: Install a JDK. Set to `false` if the job already set one up.
+    required: false
+    default: "true"
+  setup-android:
+    description: Install the Android SDK. Set to `false` if the job already provisioned one.
+    required: false
+    default: "true"
+  cache:
+    description: Cache the CLI and the project's resolved dependencies between runs.
+    required: false
+    default: "true"
+  artifact-name:
+    description: When set, upload the built APK/AAB as a workflow artifact under this name.
+    required: false
+    default: ""
+  args:
+    description: Extra arguments appended to the `codeassist` invocation (e.g. `--quiet`).
+    required: false
+    default: ""
+
+outputs:
+  apk:
+    description: Absolute path to the signed APK, when the task produced one.
+    value: ${{ steps.build.outputs.apk }}
+  aab:
+    description: Absolute path to the signed app bundle, when the task produced one.
+    value: ${{ steps.build.outputs.aab }}
+  outputs:
+    description: Every artifact the task produced, one path per line.
+    value: ${{ steps.build.outputs.outputs }}
+  status:
+    description: "`success`, `failed`, or `unresolved` (dependencies never resolved)."
+    value: ${{ steps.build.outputs.status }}
+  task:
+    description: The task id that ran.
+    value: ${{ steps.build.outputs.task }}
+  module:
+    description: The module that was built.
+    value: ${{ steps.build.outputs.module }}
+  elapsed-ms:
+    description: How long the build itself took, in milliseconds.
+    value: ${{ steps.build.outputs.elapsed-ms }}
+  errors:
+    description: Number of error diagnostics the build reported.
+    value: ${{ steps.build.outputs.errors }}
+  report:
+    description: Path to the JSON report of the build.
+    value: ${{ steps.build.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up JDK ${{ inputs.java-version }}
+      if: inputs.setup-java == 'true'
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+
+    # aapt2, d8 and apksigner come from build-tools; android.jar from the platform. The CLI finds them
+    # through ANDROID_HOME, which this action sets.
+    - name: Set up Android SDK
+      if: inputs.setup-android == 'true'
+      uses: android-actions/setup-android@v3
+      with:
+        packages: platforms;android-${{ inputs.android-api }} build-tools;${{ inputs.build-tools }}
+
+    # Resolve `latest` to a concrete tag so the cache can be keyed on it (a moving key would never hit).
+    - name: Resolve CodeAssist CLI version
+      id: version
+      shell: bash
+      env:
+        # The releases API is rate-limited per IP when unauthenticated, and runners share addresses.
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        requested='${{ inputs.cli-version }}'
+        if [ "$requested" = "latest" ]; then
+          tag=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            https://api.github.com/repos/tyron12233/CodeAssist/releases/latest | jq -r .tag_name)
+          if [ -z "$tag" ] || [ "$tag" = "null" ]; then
+            echo "::error::Could not resolve the latest CodeAssist release. Pin cli-version to a tag."
+            exit 1
+          fi
+        else
+          tag="$requested"
+        fi
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+        echo "dir=$HOME/.codeassist-cli/$tag" >> "$GITHUB_OUTPUT"
+
+    - name: Restore CodeAssist CLI
+      if: inputs.cache == 'true'
+      id: cli-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.version.outputs.dir }}
+        key: codeassist-cli-${{ runner.os }}-${{ steps.version.outputs.tag }}
+
+    - name: Download CodeAssist CLI
+      if: steps.cli-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        dir='${{ steps.version.outputs.dir }}'
+        tag='${{ steps.version.outputs.tag }}'
+        rm -rf "$dir" && mkdir -p "$dir"
+        url="https://github.com/tyron12233/CodeAssist/releases/download/$tag/codeassist-cli.zip"
+        echo "Downloading $url"
+        curl -fsSL "$url" -o "$RUNNER_TEMP/codeassist-cli.zip"
+        unzip -q "$RUNNER_TEMP/codeassist-cli.zip" -d "$dir"
+        chmod +x "$dir"/codeassist/bin/codeassist
+
+    # The resolved-dependency cache is the expensive half of a cold build: it holds every jar and AAR the
+    # project's coordinates pull. Keyed on the declarations, so it only misses when a dependency changes.
+    - name: Cache resolved dependencies
+      if: inputs.cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.codeassist-cache
+        key: codeassist-deps-${{ runner.os }}-${{ hashFiles('**/module.toml', '**/libraries.json') }}
+        restore-keys: codeassist-deps-${{ runner.os }}-
+
+    - name: Build
+      id: build
+      shell: bash
+      run: |
+        set -euo pipefail
+        report="$RUNNER_TEMP/codeassist-build-report.json"
+        echo "report=$report" >> "$GITHUB_OUTPUT"
+        args=(assemble --project '${{ inputs.project }}' --cache "$HOME/.codeassist-cache" --report "$report")
+        if [ -n '${{ inputs.task }}' ]; then
+          args+=(--task '${{ inputs.task }}')
+        else
+          args+=(--variant '${{ inputs.variant }}')
+          if [ -n '${{ inputs.module }}' ]; then args+=(--module '${{ inputs.module }}'); fi
+        fi
+        # Word-split on purpose: `args` is a free-form string of extra flags.
+        # shellcheck disable=SC2206
+        extra=(${{ inputs.args }})
+        '${{ steps.version.outputs.dir }}'/codeassist/bin/codeassist "${args[@]}" ${extra[@]+"${extra[@]}"}
+
+    - name: Upload artifact
+      if: inputs.artifact-name != '' && steps.build.outputs.outputs != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.build.outputs.outputs }}
+        if-no-files-found: error

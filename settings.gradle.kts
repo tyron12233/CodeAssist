@@ -134,6 +134,10 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":vcs-ui", // the version-control Compose UI as a self-contained plugin module (Git panel, branches, history, sign-in, clone)
         ":ide-core",
         ":ide-desktop",
+        // The headless launcher: `codeassist assemble` over :ide-core's HeadlessEngine. A shell like the
+        // other two (it depends on :ide-core, which api-exposes the Compose UI port), so it lives here
+        // rather than in the framework.
+        ":build-cli",
         // JDK/ART compatibility jars the APK dexes but nothing compiles against (relocated ecj + Eclipse
         // runtime, javax.xml.stream / javax.swing / javax.management / javax.lang.model surface, jdk.jfr
         // shims). Consumed only by :ide-android, and it needs the Android SDK to compile the shims against
@@ -191,6 +195,7 @@ val layers = mapOf(
     "app" to listOf(
         "ide-ui-api", "ide-ui-resources", "ide-ui-core", "ide-ui-components", "ide-ui-editor",
         "ide-ui-screens", "ide-ui-testing", "ide-ui", "ide-core", "ide-desktop", "ide-android",
+        "build-cli",
     ),
     // Test-only harnesses, consumed via testImplementation.
     "tools" to listOf("test-support", "bench-support"),

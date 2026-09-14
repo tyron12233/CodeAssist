@@ -128,6 +128,7 @@ The badges and the numbers in this section are regenerated automatically on each
 | [docs/kotlin-completion.md](docs/kotlin-completion.md) | How on-device Kotlin completion works. |
 | [docs/block-editing.md](docs/block-editing.md) | How the projectional (block) editor works. |
 | [docs/build-system.md](docs/build-system.md) | The task engine, the native pipelines, Gradle compat. |
+| [docs/github-action.md](docs/github-action.md) | Building CodeAssist projects in CI: the headless `codeassist` launcher and the GitHub Action. |
 | [docs/version-control.md](docs/version-control.md) | Git on device: the model, running JGit on ART, accounts, and the UI. |
 
 ## Module layout
@@ -142,7 +143,7 @@ run/           executing project code on device: source interpreter, bytecode VM
 android/       Android as a target: facets, variants, SDK metadata, layout preview, ART shims
 services/      cross-cutting api/impl pairs: deps, version control, store, analytics, agent
 plugins/       the SPI a third-party plugin compiles against, and the host that resolves it
-app/           the IDE itself: the Compose UI and the desktop/Android shells
+app/           the IDE itself: the Compose UI and the desktop/Android/headless-CLI shells
 tools/         test-only harnesses
 ```
 

@@ -1,0 +1,119 @@
+name: Build CLI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# Build the headless launcher (:build-cli) and prove it end to end: scaffold a project from a template and
+# assemble a signed APK out of it, on a stock runner, with CodeAssist's own build system. That smoke test is
+# the contract the `codeassist-build` action depends on — if it goes red, the action is broken for everyone.
+#
+# On a published release the distribution is attached to it as `codeassist-cli.zip`, which is the asset the
+# action downloads (`.../releases/download/<tag>/codeassist-cli.zip`, or `/releases/latest/download/...`).
+env:
+  # Match ci.yml: the framework's pinned JDK.
+  JAVA_VERSION: "25"
+
+concurrency:
+  group: cli-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dist:
+    name: Distribution + smoke build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # only used by the release-upload step
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # The CLI needs the Android SDK twice over: at configure time (the Compose/AGP shells :ide-core pulls
+      # in) and at run time (aapt2, d8 and apksigner come out of build-tools).
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 platforms;android-36.1 build-tools;36.0.0"
+
+      # Same as ci.yml: a one-shot CI build gains nothing from incremental compilation, and a restored
+      # incremental cache can produce phantom "unresolved reference" errors after the classpath changes.
+      - name: Disable Kotlin incremental compilation (CI)
+        run: |
+          mkdir -p ~/.gradle
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+
+      - name: Version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "value=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=0.0.0-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the CLI distribution
+        run: ./gradlew :build-cli:installDist -PcliVersion=${{ steps.version.outputs.value }} --console=plain --stacktrace
+
+      # The end-to-end proof: scaffold the dependency-free `android-app` template and assemble it. No Maven
+      # resolution, so this measures the build pipeline (aapt2 → javac/K2 → D8 → apksigner) and nothing else.
+      - name: Smoke test — scaffold and assemble an APK
+        run: |
+          set -euo pipefail
+          bin=app/build-cli/build/install/codeassist/bin/codeassist
+          "$bin" --version
+          "$bin" templates
+          "$bin" create --project "$RUNNER_TEMP/smoke" --template android-app --name SmokeApp --package dev.ide.smoke
+          "$bin" assemble --project "$RUNNER_TEMP/smoke" --report "$RUNNER_TEMP/smoke-report.json"
+          apk="$RUNNER_TEMP/smoke/app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$apk" || { echo "::error::the smoke build reported success but produced no APK"; exit 1; }
+          echo "APK: $(du -h "$apk" | cut -f1)"
+          cat "$RUNNER_TEMP/smoke-report.json"
+
+      # A failing build must stay readable: assert the exit code and the annotation, not just the happy path.
+      - name: Smoke test — a broken build fails with an annotation
+        run: |
+          set -uo pipefail
+          bin=app/build-cli/build/install/codeassist/bin/codeassist
+          # Scoped to src/: build/ holds a MainActivity.class and .dex of the same stem.
+          src=$(find "$RUNNER_TEMP/smoke/app/src" -name 'MainActivity.*' | head -1)
+          case "$src" in
+            *.kt) printf '\nprivate val broken: Int = "not an int"\n' >> "$src" ;;
+            *)    printf '\nclass Broken { int x = "not an int"; }\n' >> "$src" ;;
+          esac
+          out=$("$bin" assemble --project "$RUNNER_TEMP/smoke" --annotations --quiet 2>&1) && status=0 || status=$?
+          echo "$out" | tail -30
+          test "$status" = "1" || { echo "::error::a broken build exited $status, expected 1"; exit 1; }
+          echo "$out" | grep -q '^::error file=' || { echo "::error::no file annotation for a compile error"; exit 1; }
+
+      - name: Package the distribution
+        run: |
+          cd app/build-cli/build/install
+          zip -qr "$GITHUB_WORKSPACE/codeassist-cli.zip" codeassist
+          ls -lh "$GITHUB_WORKSPACE/codeassist-cli.zip"
+
+      - name: Upload the distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeassist-cli
+          path: codeassist-cli.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      # The asset the action downloads. `--clobber` so re-running the workflow on a release replaces it.
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" codeassist-cli.zip --clobber
