@@ -101,6 +101,20 @@ class ChatDrawerSnapshot {
         }
     }
 
+    /** The key manager and the write-permission guard, both of which used to be translucent glass. */
+    @Composable
+    private fun Sheet() {
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+            AgentProvidersSheet(backend()) {}
+        }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun renderProvidersSheetDark() {
+        snapshot("providers-dark.png", dark = true) { Sheet() }
+    }
+
     @OptIn(ExperimentalComposeUiApi::class)
     @Test
     fun renderChatDark() {
@@ -114,10 +128,10 @@ class ChatDrawerSnapshot {
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
-    private fun snapshot(name: String, dark: Boolean) {
+    private fun snapshot(name: String, dark: Boolean, content: @Composable () -> Unit = { Chat() }) {
         // A real phone viewport (411 x 890 dp), so what falls below the fold is what a user would see.
         val scene = ImageComposeScene(width = 822, height = 1780, density = Density(2f)) {
-            CodeAssistTheme(dark = dark) { Chat() }
+            CodeAssistTheme(dark = dark) { content() }
         }
         try {
             var img = scene.render()

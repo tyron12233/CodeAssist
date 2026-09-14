@@ -56,6 +56,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -109,9 +111,14 @@ import dev.ide.ui.theme.Ide
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The AI agent chat drawer: a streamed transcript over the tool-using agent. Surface-agnostic (the caller
- * wraps it in a glass pane), mirroring the build console. Renders user/assistant messages, streaming
- * reasoning, per-tool-call status, and a composer; a right-edge drawer on desktop. See docs/agentic-coding.md.
+ * The AI agent chat drawer: a streamed transcript over the tool-using agent. Renders user/assistant messages,
+ * streaming reasoning, per-tool-call status, and a composer; a right-edge drawer on desktop. See
+ * docs/agentic-coding.md.
+ *
+ * The panel is opaque: it paints its own `surface` rather than letting whatever hosts it show through, and
+ * nothing inside composites with alpha. Text over a half-transparent fill has no predictable contrast — what
+ * is behind it decides — and that is not a property you can check once, because the thing behind is the
+ * editor, whatever file happens to be open.
  */
 @Composable
 fun ChatDrawer(backend: IdeBackend, onClose: (() -> Unit)? = null, modifier: Modifier = Modifier) {
@@ -124,7 +131,7 @@ fun ChatDrawer(backend: IdeBackend, onClose: (() -> Unit)? = null, modifier: Mod
     // Fetch the provider's live model list when the drawer opens or the provider changes.
     LaunchedEffect(cfg.selectedProvider) { backend.agent.refreshModels() }
 
-    Box(modifier.fillMaxSize()) {
+    Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxSize()) {
             ChatChrome {
                 ChatHeader(
@@ -462,10 +469,9 @@ private fun CopyButton(text: String, tint: androidx.compose.ui.graphics.Color = 
 
 @Composable
 private fun TypingCaret() {
-    val alpha = pulseAlpha(true)
     Box(
         Modifier.size(width = 7.dp, height = 14.dp)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = alpha), RoundedCornerShape(2.dp)),
+            .background(pulseColor(true), RoundedCornerShape(2.dp)),
     )
 }
 
@@ -475,10 +481,7 @@ private fun ThinkingBlock(thinking: String, streaming: Boolean) {
         Modifier.fillMaxWidth().entranceSlideUp().background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.medium).padding(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(
-                CaIcons.sparkle, null, Modifier.size(12.dp),
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = pulseAlpha(streaming)),
-            )
+            Icon(CaIcons.sparkle, null, Modifier.size(12.dp), tint = pulseColor(streaming))
             Text(stringResource(Res.string.chat_thinking), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (thinking.isNotBlank()) {
@@ -564,18 +567,6 @@ private fun EmptyState(configured: Boolean, onManage: () -> Unit) {
             )
         }
     }
-}
-
-@Composable
-private fun ErrorBar(message: String) {
-    Text(
-        message,
-        color = MaterialTheme.colorScheme.error,
-        style = MaterialTheme.typography.bodySmall,
-        modifier = Modifier.fillMaxWidth()
-            .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f))
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    )
 }
 
 @Composable
@@ -695,17 +686,23 @@ private fun ChatChrome(content: @Composable () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainer) { content() }
 }
 
+/**
+ * The "still working" pulse, as a colour animation between two solid theme roles rather than a fading alpha.
+ * A pulsing alpha dims the glyph toward whatever sits behind it; lerping between two opaque colours keeps the
+ * same sense of motion with contrast that holds at every point in the cycle.
+ */
 @Composable
-private fun pulseAlpha(active: Boolean): Float {
-    if (!active) return 1f
+private fun pulseColor(active: Boolean): Color {
+    val scheme = MaterialTheme.colorScheme
+    if (!active) return scheme.primary
     val transition = rememberInfiniteTransition(label = "pulse")
-    val alpha by transition.animateFloat(
-        initialValue = 0.35f,
+    val progress by transition.animateFloat(
+        initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-        label = "alpha",
+        label = "pulse",
     )
-    return alpha
+    return lerp(scheme.onSurfaceVariant, scheme.primary, progress)
 }
 
 @Composable

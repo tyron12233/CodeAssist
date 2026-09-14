@@ -37,7 +37,6 @@ import dev.ide.agent.ui.generated.resources.chat_allow_session
 import dev.ide.agent.ui.generated.resources.chat_deny
 import dev.ide.agent.ui.generated.resources.chat_perm_title
 import dev.ide.ui.theme.Ca
-import dev.ide.ui.theme.Ide
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -65,8 +64,9 @@ private fun AgentPermissionCard(req: UiAgentPermissionRequest, answer: (UiAgentP
             .widthIn(max = 420.dp)
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+            // Opaque: this card is the guard on every file write, so it must not depend on what is behind it.
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
         Text(stringResource(Res.string.chat_perm_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -93,12 +93,12 @@ private fun AgentPermButton(label: String, kind: AgentPermKind, onClick: () -> U
     val interaction = remember { MutableInteractionSource() }
     val fill = when (kind) {
         AgentPermKind.Accent -> MaterialTheme.colorScheme.primary
-        AgentPermKind.Danger -> MaterialTheme.colorScheme.error.copy(alpha = 0.16f)
+        AgentPermKind.Danger -> MaterialTheme.colorScheme.errorContainer
         AgentPermKind.Neutral -> MaterialTheme.colorScheme.surfaceContainerHighest
     }
     val fg = when (kind) {
         AgentPermKind.Accent -> MaterialTheme.colorScheme.onPrimary
-        AgentPermKind.Danger -> MaterialTheme.colorScheme.error
+        AgentPermKind.Danger -> MaterialTheme.colorScheme.onErrorContainer
         AgentPermKind.Neutral -> MaterialTheme.colorScheme.onSurface
     }
     val shape = RoundedCornerShape(Ca.radius.control)
