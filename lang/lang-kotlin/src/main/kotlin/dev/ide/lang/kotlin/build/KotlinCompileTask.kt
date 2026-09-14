@@ -16,7 +16,6 @@ import dev.ide.build.engine.kotlinSourceFiles
 import dev.ide.build.engine.levelOf
 import dev.ide.build.engine.libJars
 import dev.ide.build.engine.moduleDir
-import dev.ide.build.engine.reportToolDiagnostics
 import dev.ide.build.engine.sourceFiles
 import dev.ide.build.resolveFor
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
@@ -92,9 +91,7 @@ class KotlinCompileTask(
             runtimePluginClasspaths = resolved.runtimeClasspaths,
             commonSources = commonSources(),
         )
-        ctx.reportToolDiagnostics("kotlin", r.messages)
-        ctx.logger()(":${module.name}:compileKotlin ${if (r.success) "OK" else "FAILED"}")
-        return if (r.success) TaskResult.Success
-        else TaskResult.Failed(r.messages.joinToString("\n").ifBlank { "kotlin compilation failed" })
+        ctx.reportKotlinProblems(r)
+        return if (r.success) TaskResult.Success else TaskResult.Failed(kotlinFailureSummary(r))
     }
 }

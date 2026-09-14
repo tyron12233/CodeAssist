@@ -151,9 +151,15 @@ class KotlinJvmCompiler(
         val collector = RecordingMessageCollector()
         val exit = runCatching { K2JVMCompiler().exec(collector, Services.EMPTY, args) }
             .getOrElse {
-                return KotlinCompileResult(false, collector.messages + "error: kotlinc threw: ${it.javaClass.name}: ${it.message}")
+                val threw = "error: kotlinc threw: ${it.javaClass.name}: ${it.message}"
+                return KotlinCompileResult(
+                    false, collector.messages + threw, emptyMap(), collector.diagnostics + internalError(threw),
+                )
             }
-        return KotlinCompileResult(exit == ExitCode.OK && !collector.hasErrors(), collector.messages, collector.outputs())
+        return KotlinCompileResult(
+            exit == ExitCode.OK && !collector.hasErrors(),
+            collector.messages, collector.outputs(), collector.diagnostics,
+        )
     }
 
     /**
@@ -212,7 +218,10 @@ class KotlinJvmCompiler(
                 FirDiagnosticsCompilerResultsReporter.reportToMessageCollector(it.diagnosticsCollector, collector, false)
             }
             runCatching { grouping.flush() }
-            return KotlinCompileResult(!collector.hasErrors(), collector.messages + extra, collector.outputs())
+            return KotlinCompileResult(
+                !collector.hasErrors(), collector.messages + extra, collector.outputs(),
+                collector.diagnostics + extra.map { internalError(it) },
+            )
         }
 
         try {
@@ -316,6 +325,10 @@ class KotlinJvmCompiler(
     /** The bundled kotlin-stdlib jar, passed to kotlinc explicitly (host-independent; see [BundledKotlinStdlib]). */
     private fun stdlibJar(): Path? = BundledKotlinStdlib.jar()
 
+    /** An internal compiler failure (kotlinc threw, or rejected our arguments) is a problem, not just a log line. */
+    private fun internalError(message: String) =
+        KotlinDiagnostic(KotlinDiagnosticSeverity.ERROR, message.removePrefix("error: ").trim())
+
     private fun jvmTargetOf(level: String): String = when (level) {
         "8" -> "1.8"
         else -> level
@@ -323,9 +336,10 @@ class KotlinJvmCompiler(
 
     private class RecordingMessageCollector : MessageCollector {
         val messages = ArrayList<String>()
+        val diagnostics = ArrayList<KotlinDiagnostic>()
         private val sourceToOut = LinkedHashMap<Path, MutableList<Path>>()
         private var errors = false
-        override fun clear() { messages.clear(); sourceToOut.clear(); errors = false }
+        override fun clear() { messages.clear(); diagnostics.clear(); sourceToOut.clear(); errors = false }
         override fun hasErrors(): Boolean = errors
         override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageSourceLocation?) {
             // -Xreport-output-files arrives as OUTPUT messages mapping an output .class to its sources.
@@ -342,18 +356,28 @@ class KotlinJvmCompiler(
             // (we ship no scripting jars), "Using Kotlin home directory", "Configuring the compilation
             // environment", etc. They are diagnostics, not build output; warnings and errors are kept.
             if (severity == CompilerMessageSeverity.LOGGING || severity == CompilerMessageSeverity.INFO) return
-            // Emit the GNU/javac shape `path:line:col: severity: message` so `CompilerOutputParser`
-            // (build-engine) lifts each one into a located, navigable BuildDiagnostic — the same rich
-            // treatment ecj output already gets. A message can span lines (overload-ambiguity candidate
-            // lists, type mismatches); flatten it so the whole diagnostic stays one parseable line.
-            val sev = if (severity.isError) "error" else "warning"
+            // A message can span lines (overload-ambiguity candidate lists, type mismatches); flatten it so
+            // the diagnostic reads as one thing whichever channel it travels on.
+            val flat = message.lineSequence().joinToString(" ") { it.trim() }.trim()
             val loc = location
+            // The problem as the compiler knows it: severity, location and the offending source line, with
+            // nothing left to be recovered by parsing. This is what the build console presents.
+            diagnostics += KotlinDiagnostic(
+                severity = if (severity.isError) KotlinDiagnosticSeverity.ERROR else KotlinDiagnosticSeverity.WARNING,
+                message = flat,
+                path = loc?.path,
+                line = loc?.line ?: -1,
+                column = loc?.column ?: -1,
+                snippet = loc?.lineContent?.trim()?.ifEmpty { null },
+            )
+            // The same problem in the GNU/javac shape, for the raw transcript and for the forked-VM wire's
+            // back-compat path (a worker from an older build still speaks only this).
+            val sev = if (severity.isError) "error" else "warning"
             val prefix = when {
                 loc != null && loc.line >= 0 && loc.column >= 0 -> "${loc.path}:${loc.line}:${loc.column}: "
                 loc != null && loc.line >= 0 -> "${loc.path}:${loc.line}: "
                 else -> ""
             }
-            val flat = message.lineSequence().joinToString(" ") { it.trim() }.trim()
             messages += "$prefix$sev: $flat"
         }
 

@@ -84,21 +84,10 @@ class D8InProcessDexer : Dexer {
             return ToolResult.fail("no class inputs to dex")
         }
 
-        val diagnostics = ArrayList<String>()
-
-        val handler = object : DiagnosticsHandler {
-            override fun info(d: Diagnostic) {
-                diagnostics.add("info: ${d.diagnosticMessage}")
-            }
-
-            override fun warning(d: Diagnostic) {
-                diagnostics.add("warning: ${d.diagnosticMessage}")
-            }
-
-            override fun error(d: Diagnostic) {
-                diagnostics.add("error: ${d.diagnosticMessage}")
-            }
-        }
+        // D8 reports through this handler rather than printing: each problem arrives with the origin (the jar
+        // or class at fault) and position intact, which a printed line would drop. See [DexDiagnosticsCollector].
+        val collected = DexDiagnosticsCollector()
+        val handler: DiagnosticsHandler = collected
         val compile: () -> ToolResult = compile@{ try {
             val builder =
                 D8Command.builder(handler)
@@ -157,13 +146,17 @@ class D8InProcessDexer : Dexer {
             val role = if (mode == OutputMode.DexFilePerClassFile) "archived" else "dexed"
             val summary = buildList {
                 add("D8 (in-process) $role ${programs.size} input(s) -> ${outDir.fileName}")
-                addAll(diagnostics)
+                addAll(collected.log)
             }
-            ToolResult.ok(DexDiagnostics.humanize(summary))
+            ToolResult.ok(DexDiagnostics.humanize(summary), collected.diagnostics)
         } catch (t: Throwable) {
             // The captured handler diagnostics carry the real cause (e.g. a duplicate-class error); humanize them
             // into an actionable Problem instead of the generic CompilationFailedException message.
-            ToolResult(false, DexDiagnostics.humanize(diagnostics + "D8 dexing failed: ${t.message}"))
+            ToolResult(
+                false,
+                DexDiagnostics.humanize(collected.log + "D8 dexing failed: ${t.message}"),
+                collected.diagnostics + ToolDiagnostic(ToolSeverity.ERROR, "D8 dexing failed: ${t.message}"),
+            )
         } }
         // Draw from the process-wide in-process heap budget so concurrent dex tasks (the three scope merges run
         // as one DAG level) don't each plan against the full app heap and over-commit on a phone — see

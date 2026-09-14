@@ -3,6 +3,8 @@ package dev.ide.android.support.tasks
 import dev.ide.android.support.AarMetadataRef
 import dev.ide.android.support.tools.AarMetadata
 import dev.ide.android.support.tools.AndroidSdk
+import dev.ide.build.BuildDiagnostic
+import dev.ide.build.BuildSeverity
 import dev.ide.build.DiagnosticKind
 import dev.ide.build.Task
 import dev.ide.build.TaskContext
@@ -12,7 +14,9 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
-import dev.ide.build.engine.reportToolDiagnostics
+import dev.ide.build.engine.debug
+import dev.ide.build.engine.reportAll
+import dev.ide.build.engine.warn
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -53,8 +57,8 @@ internal class CheckAarMetadataTask(
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         resolvedLevel()?.takeIf { it < compileSdk }?.let { level ->
-            ctx.logger()(
-                "WARNING: compileSdk $compileSdk is not installed; compiling against API $level instead. " +
+            ctx.warn(
+                "compileSdk $compileSdk is not installed; compiling against API $level instead. " +
                     "Install the android-$compileSdk platform, or lower compileSdk in Module Settings.",
             )
         }
@@ -66,13 +70,18 @@ internal class CheckAarMetadataTask(
             errors += AarMetadata.check(compileSdk, ref.name, info)
         }
         if (errors.isNotEmpty()) {
-            errors.forEach { ctx.logger()("ERROR: $it") }
-            ctx.reportToolDiagnostics("aar-metadata", errors, DiagnosticKind.GENERIC)
-            return TaskResult.Failed("AAR metadata check failed: ${errors.size} incompatible dependency(ies) (see diagnostics)")
+            // Reported once, as problems; the log line is rendered from the diagnostic, not printed alongside it.
+            ctx.reportAll(errors.map {
+                BuildDiagnostic(BuildSeverity.ERROR, it, DiagnosticKind.GENERIC, source = "aar-metadata")
+            })
+            return TaskResult.Failed(
+                if (errors.size == 1) errors.first()
+                else "${errors.size} dependencies are incompatible with this module"
+            )
         }
         stamp.parent?.let { Files.createDirectories(it) }
         Files.write(stamp, "ok".toByteArray(Charsets.UTF_8))
-        ctx.logger()("checkAarMetadata -> ${aarMetadata.size} library metadata file(s) OK (compileSdk $compileSdk)")
+        ctx.debug("checkAarMetadata -> ${aarMetadata.size} library metadata file(s) OK (compileSdk $compileSdk)")
         return TaskResult.Success
     }
 

@@ -52,7 +52,29 @@ data class KotlinCompileResult(
     val success: Boolean,
     val messages: List<String>,
     val outputs: Map<Path, List<Path>> = emptyMap(),
+    /** The problems themselves, straight off kotlinc's `MessageCollector`; see [KotlinDiagnostic]. */
+    val diagnostics: List<KotlinDiagnostic> = emptyList(),
 )
+
+/**
+ * One kotlinc problem as the compiler reported it.
+ *
+ * kotlinc hands a `MessageCollector` a severity and a `CompilerMessageSourceLocation` carrying the path,
+ * line, column and the offending source line. Flattening that to `path:line:col: error: message` and
+ * regex-parsing it back is lossy (the snippet goes, the severity becomes a substring match) and fragile,
+ * so the structure travels as structure and the flat line is kept only as the transcript's copy.
+ */
+data class KotlinDiagnostic(
+    val severity: KotlinDiagnosticSeverity,
+    val message: String,
+    val path: String? = null,
+    val line: Int = -1,
+    val column: Int = -1,
+    /** The offending source line, from `CompilerMessageSourceLocation.lineContent`. */
+    val snippet: String? = null,
+)
+
+enum class KotlinDiagnosticSeverity { ERROR, WARNING }
 
 /**
  * Where Kotlin-to-`.class` codegen actually runs.

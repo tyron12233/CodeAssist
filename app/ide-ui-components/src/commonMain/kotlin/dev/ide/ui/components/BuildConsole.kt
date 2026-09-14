@@ -118,6 +118,9 @@ import dev.ide.ui.generated.resources.buildc_filter_warnings
 import dev.ide.ui.generated.resources.buildc_no_problems
 import dev.ide.ui.generated.resources.buildc_no_problems_match
 import dev.ide.ui.generated.resources.buildc_ungroup
+import dev.ide.ui.generated.resources.buildc_verbose_hidden
+import dev.ide.ui.generated.resources.buildc_verbose_off
+import dev.ide.ui.generated.resources.buildc_verbose_on
 import dev.ide.ui.generated.resources.buildc_group_by_task
 import dev.ide.ui.generated.resources.buildc_empty_log
 import dev.ide.ui.generated.resources.buildc_no_log_match
@@ -760,12 +763,20 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
     var level by remember { mutableStateOf(LogLevelFilter.All) }
     var query by remember { mutableStateOf("") }
     var grouped by remember { mutableStateOf(true) }
+    // Off by default: the build's own bookkeeping (cache hits, per-class dex accounting, a crashed tool's
+    // stack frames) is logged at DEBUG and stays out of the way until someone is actually diagnosing the
+    // build rather than their code. The header's Copy always takes the whole log, verbose or not, so a bug
+    // report carries the detail without the user having to find this switch first.
+    var verbose by remember { mutableStateOf(false) }
     val collapsed = remember { mutableStateMapOf<String, Boolean>() }
 
     val q = query.trim()
-    val filtered = remember(log, level, q) {
+    val hiddenByVerbose = remember(log, verbose) {
+        if (verbose) 0 else log.count { it.level == UiLogLevel.Debug }
+    }
+    val filtered = remember(log, level, q, verbose) {
         log.filter {
-            level.keep(it.level) && (q.isEmpty() || it.message.contains(
+            (verbose || it.level != UiLogLevel.Debug) && level.keep(it.level) && (q.isEmpty() || it.message.contains(
                 q,
                 true
             ) || (it.task?.contains(q, true) == true))
@@ -784,12 +795,28 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
                 onClick = { grouped = !grouped }, boxSize = 30, iconSize = 16,
                 tint = if (grouped) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            IconButtonCa(
+                CaIcons.eye,
+                if (verbose) stringResource(Res.string.buildc_verbose_off) else stringResource(Res.string.buildc_verbose_on),
+                onClick = { verbose = !verbose }, boxSize = 30, iconSize = 16,
+                tint = if (verbose) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Row(
             Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             LogLevelFilter.entries.forEach { f -> ConsoleChip(stringResource(f.label), f == level) { level = f } }
+            // Says the quiet log is a choice, not the whole story, and where the rest went.
+            if (hiddenByVerbose > 0) {
+                Text(
+                    stringResource(Res.string.buildc_verbose_hidden, hiddenByVerbose),
+                    color = MaterialTheme.colorScheme.outline,
+                    style = Ide.type.codeSmall,
+                    modifier = Modifier.padding(start = 2.dp),
+                )
+            }
         }
         Box(
             Modifier.weight(1f).fillMaxWidth()

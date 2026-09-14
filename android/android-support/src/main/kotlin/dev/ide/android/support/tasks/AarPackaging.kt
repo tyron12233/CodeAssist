@@ -9,6 +9,7 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
+import dev.ide.build.engine.debug
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.stream.Collectors
@@ -158,7 +159,7 @@ internal class PackageAarTask(
         val entries = AarPackaging.assembleAar(
             classesJar, manifest, packageName, resDirs, rTxt, assetsDirs, jniLibDirs, aidlDirs, proguard, compileSdk, outAar,
         )
-        ctx.logger()("Packaged ${entries.size} entries into ${outAar.fileName}")
+        ctx.debug("Packaged ${entries.size} entries into ${outAar.fileName}")
         return TaskResult.Success
     }
 }

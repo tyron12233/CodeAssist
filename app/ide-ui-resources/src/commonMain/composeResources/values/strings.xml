@@ -343,6 +343,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="buildc_no_problems_match">No problems match this filter.</string>
     <string name="buildc_ungroup">Ungroup</string>
     <string name="buildc_group_by_task">Group by task</string>
+    <string name="buildc_verbose_on">Show build details</string>
+    <string name="buildc_verbose_off">Hide build details</string>
+    <string name="buildc_verbose_hidden">%1$d detail lines hidden</string>
     <string name="buildc_empty_log">Press Run to build &amp; run this module.</string>
     <string name="buildc_no_log_match">No log lines match.</string>
     <string name="buildc_logcat_empty">Run a debug app to see its logs here.</string>

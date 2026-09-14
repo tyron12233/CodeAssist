@@ -9,6 +9,8 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
+import dev.ide.build.engine.debug
+import dev.ide.build.engine.warn
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.readText
@@ -98,12 +100,12 @@ internal class TransformHiltClassesTask(
             }
             prune(byRel.keys)
 
-            ctx.logger()(
+            ctx.debug(
                 "${name.value}: ${byRel.size} class file(s), $copied written, " +
                     "$rewritten @AndroidEntryPoint superclass rewrite(s)"
             )
             if (ungenerated.isNotEmpty()) {
-                ctx.logger()(
+                ctx.warn(
                     "${name.value}: left ${ungenerated.size} Hilt entry point(s) unrewritten: the processor " +
                         "generated no ${ungenerated.take(3).joinToString { it.substringAfterLast('/') }}" +
                         (if (ungenerated.size > 3) ", …" else "") +

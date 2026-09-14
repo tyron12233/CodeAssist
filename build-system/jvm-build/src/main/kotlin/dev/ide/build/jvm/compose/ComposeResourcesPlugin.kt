@@ -11,8 +11,10 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
+import dev.ide.build.engine.debug
 import dev.ide.build.engine.moduleClosure
 import dev.ide.build.engine.moduleDir
+import dev.ide.build.engine.warn
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
@@ -100,8 +102,8 @@ class GenerateComposeResourcesTask(
             clear(resourcesDir())
             val result = ComposeResourcesGenerator(facet.packageName, facet.publicResClass)
                 .generate(roots, kotlinDir(), resourcesDir())
-            result.warnings.forEach { ctx.logger()(it) }
-            ctx.logger()(
+            result.warnings.forEach { ctx.warn(it) }
+            ctx.debug(
                 "${name.value}: ${result.resourceCount} resource(s), " +
                     "${result.generatedFiles} generated file(s), ${result.stagedFiles} staged"
             )

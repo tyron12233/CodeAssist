@@ -27,9 +27,15 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
-import dev.ide.build.engine.reportToolDiagnostics
+import dev.ide.build.engine.debug
+import dev.ide.build.engine.toolOutput
+import dev.ide.build.engine.warn
 import dev.ide.build.resolveFor
+import dev.ide.lang.jdt.build.javaFailureSummary
+import dev.ide.lang.jdt.build.reportJavaProblems
 import dev.ide.lang.jdt.compile.JdtBatchCompiler
+import dev.ide.lang.kotlin.build.kotlinFailureSummary
+import dev.ide.lang.kotlin.build.reportKotlinProblems
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.model.Module
@@ -87,7 +93,7 @@ internal class MergeResourcesTask(
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         mergeResourceDirs(resDirs, outDir)
-        ctx.logger()("mergeResources -> ${outDir.fileName}")
+        ctx.debug("mergeResources -> ${outDir.fileName}")
         return TaskResult.Success
     }
 }
@@ -310,8 +316,7 @@ internal class GenerateLibraryRTask(
         ctx.checkCanceled()
         val m = if (Files.isRegularFile(manifest)) manifest else synthesizeManifest()
         val compile = aapt2.compile(resDirs, compiledResDir)
-        compile.result.log.forEach(ctx.logger())
-        ctx.reportToolDiagnostics("aapt2", compile.result.log, DiagnosticKind.RESOURCE)
+        ctx.reportTool("aapt2", compile.result, DiagnosticKind.RESOURCE)
         if (!compile.result.success) return TaskResult.Failed("aapt2 compile (library R) failed")
         val r = aapt2.link(
             compile.archives,
@@ -326,8 +331,7 @@ internal class GenerateLibraryRTask(
             nonFinalIds = true,
             rTxt = rTxt,
         )
-        r.log.forEach(ctx.logger())
-        ctx.reportToolDiagnostics("aapt2", r.log, DiagnosticKind.RESOURCE)
+        ctx.reportTool("aapt2", r, DiagnosticKind.RESOURCE)
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 link (library R) failed")
     }
 
@@ -359,8 +363,7 @@ internal class Aapt2CompileTask(
         ctx.checkCanceled()
         Files.createDirectories(outDir)
         val r = aapt2.compile(resDirs, outDir)
-        r.result.log.forEach(ctx.logger())
-        ctx.reportToolDiagnostics("aapt2", r.result.log, DiagnosticKind.RESOURCE)
+        ctx.reportTool("aapt2", r.result, DiagnosticKind.RESOURCE)
         return if (r.result.success) TaskResult.Success else TaskResult.Failed("aapt2 compile failed")
     }
 }
@@ -429,8 +432,7 @@ internal class Aapt2LinkTask(
             proguardRules = proguardRules,
             protoFormat = protoFormat,
         )
-        r.log.forEach(ctx.logger())
-        ctx.reportToolDiagnostics("aapt2", r.log, DiagnosticKind.RESOURCE)
+        ctx.reportTool("aapt2", r, DiagnosticKind.RESOURCE)
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 link failed")
     }
 }
@@ -484,7 +486,7 @@ internal class GenerateViewBindingTask(
                 dir.resolve("${b.simpleName}.java").writeText(ViewBindingJavaSource.emit(b, namespace))
             }
         }
-        ctx.logger()("Generated ${bindings.size} ViewBinding class(es)")
+        ctx.debug("Generated ${bindings.size} ViewBinding class(es)")
         return TaskResult.Success
     }
 }
@@ -545,7 +547,7 @@ internal class GenerateAarRJarTask(
         ctx.checkCanceled()
         val res = withContext(Dispatchers.IO) { runCatching { RBytecodeGenerator.writeSymbolJar(symbolTables, outJar) } }
         return res.fold(
-            onSuccess = { ctx.logger()("generateAarR -> $it class(es) for ${symbolTables.size} AAR package(s)"); TaskResult.Success },
+            onSuccess = { ctx.debug("generateAarR -> $it class(es) for ${symbolTables.size} AAR package(s)"); TaskResult.Success },
             onFailure = { TaskResult.Failed("AAR R.jar generation failed: ${it.message}") },
         )
     }
@@ -605,10 +607,8 @@ internal class AndroidCompileTask(
         if (srcs.isEmpty()) return TaskResult.Success
 
         val r = JdtBatchCompiler.compile(srcs, classpath, outClasses, level, bootClasspath = bootClasspath)
-        r.messages.forEach(ctx.logger())
-        ctx.reportToolDiagnostics("java", r.messages)
-        return if (r.success) TaskResult.Success
-        else TaskResult.Failed(r.messages.joinToString("\n").ifBlank { "compilation failed" })
+        ctx.reportJavaProblems(r)
+        return if (r.success) TaskResult.Success else TaskResult.Failed(javaFailureSummary(r))
     }
 }
 
@@ -672,14 +672,8 @@ internal class AndroidKotlinCompileTask(
             compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
             runtimePluginClasspaths = resolved.runtimeClasspaths,
         )
-        // Stream the compiler output as structured (located, navigable) diagnostics only — NOT also as raw
-        // logger() lines. Logging both made every Kotlin error appear twice: once as an INFO transcript line
-        // here and again as the ERROR summary the engine logs for the failed task. (Mirrors JdtCompileTask
-        // and the desktop KotlinCompileTask, which report diagnostics without echoing them to the log.)
-        ctx.reportToolDiagnostics("kotlin", r.messages)
-        return if (r.success) TaskResult.Success
-        else TaskResult.Failed(
-            r.messages.joinToString("\n").ifBlank { "kotlin compilation failed" })
+        ctx.reportKotlinProblems(r)
+        return if (r.success) TaskResult.Success else TaskResult.Failed(kotlinFailureSummary(r))
     }
 }
 
@@ -765,9 +759,9 @@ internal class DexArchiveBuilderTask(
         // or a sub-module. The dexing + shared cache is shared with the layout preview via [SharedLibraryDexer].
         val libDexer = SharedLibraryDexer(
             dexer, androidJar, minApi, release, dexCacheRoot, desugaredLibConfig,
-            log = ctx.logger(),
+            log = { ctx.debug(it) },
             checkCanceled = { ctx.checkCanceled() },
-            reportDiagnostics = { ctx.reportToolDiagnostics("d8", it, DiagnosticKind.DEX) },
+            reportDiagnostics = { ctx.reportTool("d8", it, DiagnosticKind.DEX) },
             onFailure = { firstFailure.compareAndSet(null, it) },
         )
         val hashCacheDir = subDexRoot.parent ?: subDexRoot
@@ -869,7 +863,7 @@ internal class DexArchiveBuilderTask(
         val rootSummary =
             projectClasses.joinToString(", ") { "${it.fileName}=${perRoot[it.fileName.toString()] ?: 0}" }
         if (byRel.isEmpty()) {
-            ctx.logger()("dexBuilder project scope: no class files to dex ($rootSummary) — app code will be absent from the APK")
+            ctx.warn("dexBuilder project scope: no class files to dex ($rootSummary) — app code will be absent from the APK")
             DexArchives.clearClassDex(projectDexRoot); return true
         }
         // relpath -> content hash, suffixed with the desugaring-config key so enabling/disabling it re-dexes
@@ -881,7 +875,7 @@ internal class DexArchiveBuilderTask(
         val changed = current.keys.filter { previous[it] != current[it] }      // new or modified
         val removed = previous.keys - current.keys
         (changed + removed).forEach { DexArchives.deleteClassDex(projectDexRoot, it) }
-        ctx.logger()("dexBuilder project scope: ${byRel.size} class file(s) [$rootSummary]; ${changed.size} to (re)dex")
+        ctx.debug("dexBuilder project scope: ${byRel.size} class file(s) [$rootSummary]; ${changed.size} to (re)dex")
 
         var ok = true
         if (changed.isNotEmpty()) {
@@ -919,9 +913,9 @@ internal class DexArchiveBuilderTask(
                 threads = DexConcurrency.plan(1).threadsPerInvocation,
                 desugaredLibConfig = desugaredLibConfig,
             )
-            r.log.forEach(ctx.logger()); ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
+            ctx.reportTool("d8", r, DiagnosticKind.DEX)
             if (!r.success) {
-                ok = false; recordFailure(r.log); ctx.logger()("dex archive failed for project classes")
+                ok = false; recordFailure(r.log); ctx.debug("dex archive failed for project classes")
             }
         }
         // Verify every (re)dexed class actually produced a `.dex`. A dexer can report success yet silently drop
@@ -937,7 +931,7 @@ internal class DexArchiveBuilderTask(
             current.keys.filter { DexArchives.dexable(it) && it !in produced }   // changed this run or a stale prior drop
         if (dropped.isNotEmpty()) {
             ok = false
-            ctx.logger()(
+            ctx.warn(
                 "dexBuilder project scope: ${dropped.size} class(es) produced no .dex and will be ABSENT from the APK " + "(e.g. ${
                     dropped.take(5).joinToString { it.removeSuffix(".class").replace('/', '.') }
                 }) — the dexer dropped them, often Kotlin metadata it can't parse")
@@ -1475,7 +1469,7 @@ internal class DexExternalLibsTask(
         val cached = cacheRoot?.resolve(cacheKey(jars, stateDir))
         if (cached != null && DexArchives.hasDex(cached)) {
             DexArchives.clearDir(outDexDir); DexArchives.copyDir(cached, outDexDir)
-            ctx.logger()("${name.value}: reused indexed external dex from shared cache (${jars.size} libs)")
+            ctx.debug("${name.value}: reused indexed external dex from shared cache (${jars.size} libs)")
             return TaskResult.Success
         }
         DexArchives.clearDir(outDexDir); Files.createDirectories(outDexDir)
@@ -1505,11 +1499,11 @@ internal class DexExternalLibsTask(
         } finally {
             DexArchives.clearDir(stripTmp)   // per-build scratch; the reusable stripped jars live in stripCache
         }
-        r.log.forEach(ctx.logger()); ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
+        ctx.reportTool("d8", r, DiagnosticKind.DEX)
         if (!r.success) return TaskResult.Failed(DexDiagnostics.firstError(r.log) ?: "external dex failed")
         if (!DexArchives.hasDex(outDexDir)) return TaskResult.Failed("external dex produced no output for ${jars.size} libs")
         if (cached != null) runCatching { DexArchives.clearDir(cached); DexArchives.publishToCache(outDexDir, cached) }
-        ctx.logger()("${name.value}: dexed ${jars.size} external libraries -> indexed dex")
+        ctx.debug("${name.value}: dexed ${jars.size} external libraries -> indexed dex")
         return TaskResult.Success
     }
 
@@ -1616,7 +1610,7 @@ internal class DexMergeTask(
         val cached = mergeCacheRoot?.takeIf { buckets.isNotEmpty() }?.resolve(mergeCacheKey(buckets))
         if (cached != null && DexArchives.hasDex(cached)) {
             DexArchives.clearDir(outDexDir); DexArchives.copyDir(cached, outDexDir)
-            ctx.logger()("${name.value}: reused merged dex from shared cache (${buckets.size} input(s))")
+            ctx.debug("${name.value}: reused merged dex from shared cache (${buckets.size} input(s))")
             return TaskResult.Success
         }
         val result = runMerge(ctx, buckets, perBucketDexes)
@@ -1657,7 +1651,7 @@ internal class DexMergeTask(
                     seen.add(bucket.relativize(dex).toString().replace('\\', '/')).also { if (!it) dropped++ }
                 }
             }
-            if (dropped > 0) ctx.logger()("${name.value}: $dropped duplicate class dex collapsed across libraries (first-wins)")
+            if (dropped > 0) ctx.debug("${name.value}: $dropped duplicate class dex collapsed across libraries (first-wins)")
             val groups = coalesce(deduped, plan.maxInvocations).filter { it.isNotEmpty() }
             return mergeGroups(ctx, groups, plan)
         }
@@ -1681,11 +1675,10 @@ internal class DexMergeTask(
         DexArchives.clearDir(outDexDir); Files.createDirectories(outDexDir)
         val dexes = entries.map { it.second }
         val r = dexer.dex(dexes, androidJar, minApi, release, outDexDir, resolveMergePlan(1).threadsPerInvocation)
-        r.log.forEach(ctx.logger())
-        ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
+        ctx.reportTool("d8", r, DiagnosticKind.DEX)
         if (!r.success) return TaskResult.Failed(DexDiagnostics.firstError(r.log) ?: "dex merge failed")
         val produced = dexesIn(outDexDir).size
-        ctx.logger()("${name.value}: merged ${dexes.size} class dex -> $produced output dex")
+        ctx.debug("${name.value}: merged ${dexes.size} class dex -> $produced output dex")
         return TaskResult.Success
     }
 
@@ -1726,10 +1719,10 @@ internal class DexMergeTask(
         (0 until n).filter { byBucket[it].isEmpty() }.forEach { DexArchives.clearDir(groupDir(it)) }
         val reused = (0 until n).count { byBucket[it].isNotEmpty() } - toMerge.size
         if (toMerge.isEmpty()) {
-            ctx.logger()("${name.value}: ${entries.size} class dex in $n bucket(s); all up-to-date (reused $reused)")
+            ctx.debug("${name.value}: ${entries.size} class dex in $n bucket(s); all up-to-date (reused $reused)")
             writeMergeManifest(stateDir, n, sig); return TaskResult.Success
         }
-        ctx.logger()("${name.value}: ${entries.size} class dex in $n bucket(s); re-merging ${toMerge.size}, reusing $reused")
+        ctx.debug("${name.value}: ${entries.size} class dex in $n bucket(s); re-merging ${toMerge.size}, reusing $reused")
         val plan = resolveMergePlan(toMerge.size)
         val sem = Semaphore(plan.concurrency.coerceAtLeast(1))
         val ok = AtomicBoolean(true)
@@ -1741,7 +1734,7 @@ internal class DexMergeTask(
                         ctx.checkCanceled()
                         val g = groupDir(b); DexArchives.clearDir(g); Files.createDirectories(g)
                         val r = dexer.dex(byBucket[b], androidJar, minApi, release, g, plan.threadsPerInvocation)
-                        r.log.forEach(ctx.logger()); ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
+                        ctx.reportTool("d8", r, DiagnosticKind.DEX)
                         if (!r.success) { ok.set(false); DexDiagnostics.firstError(r.log)?.let { failMsg.compareAndSet(null, it) } }
                     }
                 }
@@ -1843,8 +1836,7 @@ internal class DexMergeTask(
                         if (dexes.isNotEmpty()) {
                             val group = outDexDir.resolve("g$i"); Files.createDirectories(group)
                             val r = dexer.dex(dexes, androidJar, minApi, release, group, plan.threadsPerInvocation)
-                            r.log.forEach(ctx.logger())
-                            ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
+                            ctx.reportTool("d8", r, DiagnosticKind.DEX)
                             if (!r.success) { ok.set(false); DexDiagnostics.firstError(r.log)?.let { failMsg.compareAndSet(null, it) } }
                         }
                     }
@@ -1932,7 +1924,7 @@ internal class R8MinifyTask(
         // scales with this total. Log the input scale + tuning up front so an OOM profile (pair with the
         // `ide.mem` heap heartbeat) can size the whole-program working set against the device heap ceiling.
         val inputMb = inputs.sumOf { runCatching { Files.size(it) }.getOrDefault(0L) } / (1024L * 1024L)
-        ctx.logger()(
+        ctx.debug(
             "${name.value}: R8 whole-program shrink+dex via ${shrinker::class.simpleName} — " +
                 "${inputs.size} input jar(s), ~${inputMb}MB classes, threads=$threads, " +
                 "fullMode=$fullMode, minApi=$minApi" +
@@ -1955,8 +1947,7 @@ internal class R8MinifyTask(
                 threads = threads,
             )
         )
-        r.log.forEach(ctx.logger())
-        ctx.reportToolDiagnostics("r8", r.log, DiagnosticKind.DEX)
+        ctx.reportTool("r8", r, DiagnosticKind.DEX)
         return if (r.success) TaskResult.Success else TaskResult.Failed(DexDiagnostics.firstError(r.log) ?: "R8 minify failed")
     }
 }
@@ -1983,10 +1974,9 @@ internal class ConvertResourcesTask(
         ctx.checkCanceled()
         val src = source()
         if (!Files.isRegularFile(src)) return TaskResult.Failed("no proto resources to convert: $src")
-        if (src == protoApFallback) ctx.logger()("resource shrinking produced no output; packaging un-shrunk resources")
+        if (src == protoApFallback) ctx.warn("resource shrinking produced no output; packaging un-shrunk resources")
         val r = aapt2.convert(src, outBinaryAp, toProto = false)
-        r.log.forEach(ctx.logger())
-        ctx.reportToolDiagnostics("aapt2", r.log, DiagnosticKind.RESOURCE)
+        ctx.reportTool("aapt2", r, DiagnosticKind.RESOURCE)
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 convert (proto->binary) failed")
     }
 }
@@ -2021,8 +2011,7 @@ internal class L8DexTask(
         ctx.checkCanceled()
         Files.createDirectories(outDexDir)
         val r = shrinker.l8(L8Request(desugarJdkLibs, configJson, keepRules, androidJar, minApi, release, outDexDir))
-        r.log.forEach(ctx.logger())
-        ctx.reportToolDiagnostics("l8", r.log, DiagnosticKind.DEX)
+        ctx.reportTool("l8", r, DiagnosticKind.DEX)
         return if (r.success) TaskResult.Success else TaskResult.Failed(DexDiagnostics.firstError(r.log) ?: "L8 desugared-library dexing failed")
     }
 }
@@ -2051,8 +2040,8 @@ internal class MergeJavaResourcesTask(
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         return runCatching {
-            val n = JavaResMerger.merge(resourceDirs, jars, filter, outJar) { ctx.logger()("mergeJavaResource: $it") }
-            ctx.logger()("mergeJavaResource -> ${outJar.fileName} ($n entries)")
+            val n = JavaResMerger.merge(resourceDirs, jars, filter, outJar) { ctx.debug("mergeJavaResource: $it") }
+            ctx.debug("mergeJavaResource -> ${outJar.fileName} ($n entries)")
             TaskResult.Success as TaskResult
         }.getOrElse { TaskResult.Failed("mergeJavaResource failed: ${it.message}", it) }
     }
@@ -2089,17 +2078,17 @@ internal class MergeNativeLibsTask(
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         for (w in warnings) {
-            ctx.logger()("mergeNativeLibs: $w")
+            ctx.warn("mergeNativeLibs: $w")
             ctx.diagnostics.report(
                 BuildDiagnostic(BuildSeverity.WARNING, w, DiagnosticKind.PACKAGING, source = "natives"),
             )
         }
         return runCatching {
-            val n = NativeLibsMerger.merge(jniDirs, jars, filter, outDir) { ctx.logger()("mergeNativeLibs: $it") }
-            ctx.logger()("mergeNativeLibs -> ${outDir.fileName} ($n libraries)")
+            val n = NativeLibsMerger.merge(jniDirs, jars, filter, outDir) { ctx.debug("mergeNativeLibs: $it") }
+            ctx.debug("mergeNativeLibs -> ${outDir.fileName} ($n libraries)")
             // Name the roots when nothing was packaged: "0 libraries" on its own leaves a missing `.so` with
             // no thread to pull, and the answer is almost always that the file sits outside every root read.
-            if (n == 0 && jniDirs.isNotEmpty()) ctx.logger()("mergeNativeLibs: searched ${jniDirs.joinToString(", ")}")
+            if (n == 0 && jniDirs.isNotEmpty()) ctx.debug("mergeNativeLibs: searched ${jniDirs.joinToString(", ")}")
             TaskResult.Success as TaskResult
         }.getOrElse { TaskResult.Failed("mergeNativeLibs failed: ${it.message}", it) }
     }
@@ -2133,7 +2122,7 @@ internal class PackageApkTask(
         return runCatching {
             val names =
                 ApkPackaging.assembleApk(resourcesAp, dexDirs, assetsDirs, jniLibDirs, outApk, javaResJars)
-            ctx.logger()("packageApk -> ${outApk.fileName} (${names.size} entries)")
+            ctx.debug("packageApk -> ${outApk.fileName} (${names.size} entries)")
             TaskResult.Success as TaskResult
         }.getOrElse { TaskResult.Failed("packageApk failed: ${it.message}", it) }
     }
@@ -2158,8 +2147,7 @@ internal class SignApkTask(
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         val r = signer.sign(unsignedApk, signedApk, config)
-        r.log.forEach(ctx.logger())
-        ctx.reportToolDiagnostics("apksigner", r.log, DiagnosticKind.PACKAGING)
+        ctx.reportTool("apksigner", r, DiagnosticKind.PACKAGING)
         return if (r.success) TaskResult.Success else TaskResult.Failed("apk signing failed")
     }
 }

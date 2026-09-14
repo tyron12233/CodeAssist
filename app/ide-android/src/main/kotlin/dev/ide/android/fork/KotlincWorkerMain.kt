@@ -2,6 +2,8 @@ package dev.ide.android.fork
 
 import dev.ide.android.ArtKotlinPluginLoader
 import dev.ide.lang.kotlin.compile.KotlinCompileResult
+import dev.ide.lang.kotlin.compile.KotlinDiagnostic
+import dev.ide.lang.kotlin.compile.KotlinDiagnosticSeverity
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import java.io.FileOutputStream
 import java.io.PrintStream
@@ -120,9 +122,13 @@ object KotlincWorkerMain {
     private fun compile(compiler: KotlinJvmCompiler, requestFile: java.nio.file.Path): KotlinCompileResult =
         runCatching { compiler.compile(KotlincWire.readRequest(requestFile)) }
             .getOrElse {
+                val threw = "kotlinc threw: ${it.javaClass.name}: ${flatten(it.message)}"
                 KotlinCompileResult(
                     success = false,
-                    messages = listOf("error: kotlinc threw: ${it.javaClass.name}: ${flatten(it.message)}"),
+                    messages = listOf("error: $threw"),
+                    // Also as a problem, so it reaches the console's Problems list across the wire rather
+                    // than only as a line the reader would have to recognize as an error.
+                    diagnostics = listOf(KotlinDiagnostic(KotlinDiagnosticSeverity.ERROR, threw)),
                 )
             }
 

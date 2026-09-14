@@ -2,6 +2,8 @@ package dev.ide.android.fork
 
 import dev.ide.lang.kotlin.compile.KotlinCompileRequest
 import dev.ide.lang.kotlin.compile.KotlinCompileResult
+import dev.ide.lang.kotlin.compile.KotlinDiagnostic
+import dev.ide.lang.kotlin.compile.KotlinDiagnosticSeverity
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -28,7 +30,7 @@ internal object KotlincWire {
      * on the worker command line and the worker refuses to start on a mismatch, so an app update cannot leave
      * a running worker silently ignoring a new field.
      */
-    const val PROTOCOL_VERSION = 1
+    const val PROTOCOL_VERSION = 2
 
     // Request keys.
     private const val K_SRC = "src"
@@ -41,11 +43,16 @@ internal object KotlincWire {
     private const val K_PLUGIN = "plugin"
     private const val K_PLUGIN_OPT = "pluginOpt"
     private const val K_RUNTIME_PLUGIN = "rtPlugin"
+    private const val K_COMMON_SRC = "commonSrc"
 
     // Result keys.
     private const val K_SUCCESS = "success"
     private const val K_MESSAGE = "msg"
     private const val K_OUTPUT = "output"
+    /** One structured problem: severity, path, line, column, snippet, message — UNIT-separated, message last
+     *  (it is the only field that may itself contain anything). A worker that predates this key sends none,
+     *  and the reader falls back to parsing K_MESSAGE, so old and new halves interoperate. */
+    private const val K_DIAGNOSTIC = "diag"
 
     /** Separates the entries of a single list-of-paths value (a runtime plugin classpath, an output group). */
     private const val UNIT = "\u0001"
@@ -62,6 +69,9 @@ internal object KotlincWire {
         request.compilerPlugins.forEach { sb.line(K_PLUGIN, it) }
         request.pluginOptions.forEach { sb.line(K_PLUGIN_OPT, it) }
         request.runtimePluginClasspaths.forEach { cp -> sb.line(K_RUNTIME_PLUGIN, cp.joinToString(UNIT)) }
+        // A multiplatform module's common fragment. Dropping it here would not fail the fork: the compile
+        // would simply run without multiplatform mode and reject the module's own `expect` declarations.
+        request.commonSources.forEach { sb.line(K_COMMON_SRC, it) }
         file.parent?.let { Files.createDirectories(it) }
         Files.write(file, sb.toString().toByteArray(Charsets.UTF_8))
     }
@@ -82,6 +92,7 @@ internal object KotlincWire {
             pluginOptions = fields.all(K_PLUGIN_OPT),
             runtimePluginClasspaths = fields.all(K_RUNTIME_PLUGIN)
                 .map { cp -> cp.split(UNIT).filter { it.isNotEmpty() }.map(Paths::get) },
+            commonSources = fields.paths(K_COMMON_SRC),
         )
     }
 
@@ -89,6 +100,12 @@ internal object KotlincWire {
         val sb = StringBuilder()
         sb.line(K_SUCCESS, result.success.toString())
         result.messages.forEach { sb.line(K_MESSAGE, it) }
+        result.diagnostics.forEach { d ->
+            sb.line(K_DIAGNOSTIC, listOf(
+                d.severity.name, d.path.orEmpty(), d.line.toString(), d.column.toString(),
+                d.snippet.orEmpty(), d.message,
+            ).joinToString(UNIT))
+        }
         result.outputs.forEach { (src, classes) ->
             sb.line(K_OUTPUT, (listOf(src.toString()) + classes.map { it.toString() }).joinToString(UNIT))
         }
@@ -108,6 +125,22 @@ internal object KotlincWire {
             success = fields.one(K_SUCCESS) == "true",
             messages = fields.all(K_MESSAGE),
             outputs = outputs,
+            diagnostics = fields.all(K_DIAGNOSTIC).mapNotNull(::readDiagnostic),
+        )
+    }
+
+    /** One `K_DIAGNOSTIC` line back into a [KotlinDiagnostic]; a malformed line is dropped, never thrown on. */
+    private fun readDiagnostic(line: String): KotlinDiagnostic? {
+        val parts = line.split(UNIT)
+        if (parts.size < 6) return null
+        val severity = runCatching { KotlinDiagnosticSeverity.valueOf(parts[0]) }.getOrNull() ?: return null
+        return KotlinDiagnostic(
+            severity = severity,
+            message = parts.drop(5).joinToString(UNIT),
+            path = parts[1].ifEmpty { null },
+            line = parts[2].toIntOrNull() ?: -1,
+            column = parts[3].toIntOrNull() ?: -1,
+            snippet = parts[4].ifEmpty { null },
         )
     }
 

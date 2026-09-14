@@ -13,7 +13,7 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
-import dev.ide.build.engine.reportToolDiagnostics
+import dev.ide.build.engine.debug
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -48,10 +48,9 @@ internal class BundleTask(
             return TaskResult.Failed("proto resources missing (aapt2 --proto-format link did not run): $protoAp")
         return runCatching {
             val entries = BundlePackaging.buildBaseModuleZip(protoAp, dexDirs, assetsDirs, jniLibDirs, baseModuleZip, javaResJars)
-            ctx.logger()("bundle module -> base.zip (${entries.size} entries)")
+            ctx.debug("bundle module -> base.zip (${entries.size} entries)")
             val r = bundler.bundle(BundleRequest(listOf(baseModuleZip), outAab))
-            r.log.forEach(ctx.logger())
-            ctx.reportToolDiagnostics("bundletool", r.log, DiagnosticKind.PACKAGING)
+            ctx.reportTool("bundletool", r, DiagnosticKind.PACKAGING)
             if (r.success) TaskResult.Success as TaskResult
             else TaskResult.Failed("bundletool build-bundle failed")
         }.getOrElse { TaskResult.Failed("bundle failed: ${it.message}", it) }
@@ -79,8 +78,7 @@ internal class SignBundleTask(
         ctx.checkCanceled()
         if (!Files.isRegularFile(unsignedAab)) return TaskResult.Failed("unsigned .aab missing: $unsignedAab")
         val r = signer.sign(unsignedAab, signedAab, config, minApi)
-        r.log.forEach(ctx.logger())
-        ctx.reportToolDiagnostics("bundle-signer", r.log, DiagnosticKind.PACKAGING)
+        ctx.reportTool("bundle-signer", r, DiagnosticKind.PACKAGING)
         return if (r.success) TaskResult.Success else TaskResult.Failed("bundle signing failed")
     }
 }

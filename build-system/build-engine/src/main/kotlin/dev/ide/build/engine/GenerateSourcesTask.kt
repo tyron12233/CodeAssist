@@ -108,12 +108,12 @@ class GenerateSourcesTask(
         for (g in applicable) {
             ctx.checkCanceled()
             val r = g.generate(req)
-            r.messages.forEach(ctx.logger())
+            ctx.toolOutput(g.id, r.messages)
             if (!r.success) {
-                return TaskResult.Failed(r.messages.joinToString("\n").ifBlank { "source generation (${g.id}) failed" })
+                return TaskResult.Failed(ToolLog.failureSummary("Source generation (${g.id})", r.messages))
             }
         }
-        ctx.logger()(":${module.name}:generateSources OK (${applicable.joinToString(",") { it.id }})")
+        ctx.debug(":${module.name}:generateSources OK (${applicable.joinToString(",") { it.id }})")
         return TaskResult.Success
     }
 }

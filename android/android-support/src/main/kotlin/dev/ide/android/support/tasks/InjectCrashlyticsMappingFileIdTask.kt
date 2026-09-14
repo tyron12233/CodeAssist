@@ -9,6 +9,7 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
+import dev.ide.build.engine.debug
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -33,7 +34,7 @@ internal class InjectCrashlyticsMappingFileIdTask(
         val values = outResDir.resolve("values").resolve(Crashlytics.RESOURCE_FILE_NAME)
         Files.createDirectories(values.parent)
         Files.write(values, Crashlytics.mappingFileIdXml().toByteArray(Charsets.UTF_8))
-        ctx.logger()("injectCrashlyticsMappingFileId -> ${Crashlytics.MAPPING_FILE_ID_RESOURCE}")
+        ctx.debug("injectCrashlyticsMappingFileId -> ${Crashlytics.MAPPING_FILE_ID_RESOURCE}")
         return TaskResult.Success
     }
 }

@@ -3,6 +3,7 @@ package dev.ide.android.support.tasks
 import dev.ide.android.support.tools.DexDiagnostics
 import dev.ide.android.support.tools.Dexer
 import dev.ide.android.support.tools.OffHeapArchiveDexer
+import dev.ide.android.support.tools.ToolResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -34,7 +35,7 @@ class SharedLibraryDexer(
     private val desugaredLibConfig: Path? = null,
     private val log: (String) -> Unit = {},
     private val checkCanceled: () -> Unit = {},
-    private val reportDiagnostics: (List<String>) -> Unit = {},
+    private val reportDiagnostics: (ToolResult) -> Unit = {},
     private val onFailure: (String) -> Unit = {},
 ) {
     /** The library desugaring universe (content-hash-deduped, class-indexed) + the shared-cache digest keyed to
@@ -194,8 +195,9 @@ class SharedLibraryDexer(
         } finally {
             if (program != jar) runCatching { Files.deleteIfExists(program) }
         }
-        r.log.forEach(log)
-        reportDiagnostics(r.log)
+        // One call: the dexer's own structured diagnostics when it has them, its text when it doesn't. The
+        // caller decides how that reaches a console; nothing here echoes the log a second time.
+        reportDiagnostics(r)
         if (!r.success) {
             DexDiagnostics.firstError(r.log)?.let(onFailure)
             log("dex archive failed for ${jar.fileName}")

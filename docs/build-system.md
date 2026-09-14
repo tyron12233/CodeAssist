@@ -73,13 +73,23 @@ data class BuildDiagnostic(
 
 - **Tagging.** The engine wraps the `TaskContext` per task so every reported diagnostic is stamped with
   the running `TaskName` automatically — producers never need to know their own name.
-- **Producing them.** Tool output is text, so `TaskContext.reportToolDiagnostics(source, messages, kind)`
-  (build-engine) feeds it through `CompilerOutputParser`, which understands the GNU/javac/kotlinc/aapt2
-  single-line form (`path:line[:col]: error|warning: message`) and the ecj batch block form
-  (`N. ERROR in <file> (at line L)` … `----------`), streaming one structured diagnostic per problem.
-  Un-classifiable but clearly-problematic lines are surfaced location-less so nothing is silently
-  dropped; pure chatter is ignored (it still rides the text log). The native compile tasks, and the
-  Android `aapt2`/`d8`/`r8`/`apksigner` tasks, all report through this path.
+- **Producing them: ask the tool, don't read its output.** Every in-process tool in the pipeline has a
+  diagnostic API, and that is the channel a task uses — kotlinc's `MessageCollector` (severity, path,
+  line, column, and the offending source line), ecj's `ICompilerRequestor` (`CategorizedProblem`, whose
+  problem id becomes the `code` a keyed quick fix matches on), D8/R8's `DiagnosticsHandler` (`Origin` +
+  `Position`), the manifest merger's typed records. Each tool adapter carries those through in its own
+  result type (`KotlinCompileResult.diagnostics`, `JdtBatchCompiler.Result.diagnostics`,
+  `ToolResult.diagnostics`) and the task maps them to `BuildDiagnostic` and calls
+  `TaskContext.report(…)`/`reportAll(…)` (build-engine `BuildLogging.kt`), which puts the problem in the
+  Problems list *and* renders its one-line copy into the log at the matching level.
+
+  Printing structure to text and parsing it back loses the column, the code and the snippet, and lets any
+  line containing the word "error" masquerade as a problem — so the text path is the fallback, not the
+  rule. `TaskContext.toolOutput(source, lines, kind)` is that fallback, for the tools that genuinely only
+  print: aapt2, apksigner, bundletool, the AIDL compiler, and anything running in a forked VM that reaches
+  us as merged stderr. It humanizes the text (`ToolLog`), levels each line by its own prefix, and feeds
+  `CompilerOutputParser`, which understands the GNU/javac/kotlinc/aapt2 single-line form
+  (`path:line[:col]: error|warning: message`) and the ecj batch block form.
 - **To the UI.** The host wires `SimpleTaskContext(onDiagnostic = …)` to append each diagnostic (mapped
   to `BuildDiagnosticUi`) to `BuildState.diagnostics` live. The build console is tabbed — **Problems**,
   **Log**, **Steps** — over a persistent header (live status pill, error/warning counts, elapsed, Run/
@@ -91,12 +101,31 @@ data class BuildDiagnostic(
 
 The raw transcript is itself structured. `ctx.logger()` routes through `ctx.buildLog: BuildLogSink`,
 which carries a `BuildLogEntry(message, level: BuildLogLevel, task: TaskName?, timestampMs)` — the engine
-stamps each entry with the running task (same per-task wrapping as diagnostics), so a plain
-`ctx.logger()("…")` call still produces a task-attributed `INFO` line while a task can log `WARN`/`ERROR`
-directly. The host wires `SimpleTaskContext(onLog = …)` to map them to `BuildLogLine`s (level mapped, a
-host-formatted local time, untyped tool lines best-effort level-inferred from the usual `e:`/`w:`/
-`error:`/`warning:` prefixes) on `BuildState.log`. The console's **Log** tab groups lines by the task that
-produced them (collapsible), colors them by level, and offers a level filter + text search.
+stamps each entry with the running task (same per-task wrapping as diagnostics). The host wires
+`SimpleTaskContext(onLog = …)` to map them to `BuildLogLine`s on `BuildState.log`.
+
+**What the default view is.** The transcript is a product, not a dump, and the level is what shapes it:
+
+| Level | What belongs there | Seen by default |
+| --- | --- | --- |
+| `INFO` | The build's shape: the engine's `> Task :app:compileKotlin` banners (with Gradle's `UP-TO-DATE` / `SKIPPED` suffixes) and the closing `BUILD SUCCESSFUL in 12.4s`. | yes |
+| `WARN` / `ERROR` | Problems, rendered from the structured diagnostic that produced them. | yes |
+| `DEBUG` | Everything else a task knows: cache hits, per-class dex accounting, a tool's own progress chatter, and the stack trace of a task that threw. | only under **Verbose** |
+
+Tasks say which is which through the `ctx.debug/info/warn/error(…)` helpers in build-engine's
+`BuildLogging.kt`; `ctx.logger()` remains the legacy INFO-only channel for build plugins. The host still
+level-infers an untyped INFO line from an `e:`/`w:`/`error:`/`warning:` *prefix*, but only that — it used
+to flag any line merely containing "error:" or "exception", which painted stack frames and file paths red.
+
+**A task that throws** is a defect in the build machinery, not in the user's code, so the console gets one
+plain line naming the cause (`Unexpected internal error: Java heap space`) under the task's `FAILED`
+banner. The trace is filed on the `DEBUG` channel and on the platform log — so Verbose, a copied build
+report and logcat all carry it, and a normal build never shows a stack frame.
+
+The console's **Log** tab groups lines by the task that produced them (collapsible), colors them by level,
+and offers a level filter, a text search, a group-by-task toggle and a **Verbose** toggle (the eye icon)
+that brings the `DEBUG` lines back. The header's Copy always takes the whole log, Verbose or not, so a bug
+report carries the detail without the reader having to find the switch first.
 
 ## Extending the build
 

@@ -1,6 +1,8 @@
 package dev.ide.android.support.tasks
 
 import dev.ide.android.support.gms.GoogleServices
+import dev.ide.build.BuildDiagnostic
+import dev.ide.build.BuildSeverity
 import dev.ide.build.DiagnosticKind
 import dev.ide.build.Task
 import dev.ide.build.TaskContext
@@ -10,7 +12,8 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
-import dev.ide.build.engine.reportToolDiagnostics
+import dev.ide.build.engine.debug
+import dev.ide.build.engine.report
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -43,14 +46,19 @@ internal class ProcessGoogleServicesTask(
         val valuesFile = outResDir.resolve("values").resolve("values.xml")
         return when (val outcome = GoogleServices.process(text, applicationId, fallbackPackage)) {
             is GoogleServices.Outcome.Failure -> {
-                ctx.reportToolDiagnostics("google-services", listOf(outcome.message), DiagnosticKind.RESOURCE)
+                // Our own check, so the problem is stated directly rather than printed and parsed back.
+                ctx.report(
+                    BuildDiagnostic(
+                        BuildSeverity.ERROR, outcome.message, DiagnosticKind.RESOURCE, source = "google-services",
+                    )
+                )
                 TaskResult.Failed(outcome.message)
             }
             is GoogleServices.Outcome.Success -> {
-                outcome.messages.forEach(ctx.logger())
+                outcome.messages.forEach { ctx.debug(it) }
                 Files.createDirectories(valuesFile.parent)
                 Files.write(valuesFile, GoogleServices.valuesXml(outcome.resources).toByteArray(Charsets.UTF_8))
-                ctx.logger()("processGoogleServices -> ${outcome.resources.size} resource(s) for ${outcome.matchedPackage}")
+                ctx.debug("processGoogleServices -> ${outcome.resources.size} resource(s) for ${outcome.matchedPackage}")
                 TaskResult.Success
             }
         }

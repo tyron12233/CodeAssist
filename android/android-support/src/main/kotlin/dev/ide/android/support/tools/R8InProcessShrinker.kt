@@ -29,15 +29,10 @@ class R8InProcessShrinker : Shrinker {
             return ToolResult.fail("no inputs to shrink")
         }
         // Without a handler R8 routes its diagnostics to a default sink (stderr) and they're lost — a failed
-        // shrink would surface only a generic CompilationFailedException message. Capture them as "level:
-        // message" lines (mirrors D8InProcessDexer and l8 below) so the r8 task's reportToolDiagnostics turns
-        // them into structured Problems entries (a missing-class warning, a proguard-rule parse error, …).
-        val diagnostics = ArrayList<String>()
-        val handler = object : DiagnosticsHandler {
-            override fun info(d: Diagnostic) { diagnostics.add("info: ${d.diagnosticMessage}") }
-            override fun warning(d: Diagnostic) { diagnostics.add("warning: ${d.diagnosticMessage}") }
-            override fun error(d: Diagnostic) { diagnostics.add("error: ${d.diagnosticMessage}") }
-        }
+        // shrink would surface only a generic CompilationFailedException message. The collector keeps each
+        // problem structurally (origin + position, for a navigable Problems entry) as well as textually.
+        val collected = DexDiagnosticsCollector()
+        val handler: DiagnosticsHandler = collected
         return try {
             val builder = R8Command.builder(handler)
                 .addProgramFiles(programs)
@@ -89,13 +84,20 @@ class R8InProcessShrinker : Shrinker {
             } else {
                 R8.run(command)
             }
-            ToolResult.ok(DexDiagnostics.humanize(buildList {
-                add("R8 (in-process) processed ${programs.size} input(s) -> ${request.outDir.fileName}")
-                addAll(diagnostics) // R8 can emit warnings (unused rules, missing classes) on a successful run
-            }))
+            ToolResult.ok(
+                DexDiagnostics.humanize(buildList {
+                    add("R8 (in-process) processed ${programs.size} input(s) -> ${request.outDir.fileName}")
+                    addAll(collected.log) // R8 can emit warnings (unused rules, missing classes) on a successful run
+                }),
+                collected.diagnostics,
+            )
         } catch (t: Throwable) {
             // The captured handler diagnostics carry the real cause; humanize them into an actionable Problem.
-            ToolResult(false, DexDiagnostics.humanize(diagnostics + "R8 shrinking failed: ${t.message}"))
+            ToolResult(
+                false,
+                DexDiagnostics.humanize(collected.log + "R8 shrinking failed: ${t.message}"),
+                collected.diagnostics + ToolDiagnostic(ToolSeverity.ERROR, "R8 shrinking failed: ${t.message}"),
+            )
         }
     }
 
@@ -104,11 +106,8 @@ class R8InProcessShrinker : Shrinker {
             return ToolResult.fail("desugar runtime jar missing")
         }
         Files.createDirectories(request.outDir)
-        val diagnostics = ArrayList<String>()
-        val handler = object : DiagnosticsHandler {
-            override fun warning(d: Diagnostic) { diagnostics.add("warning: ${d.diagnosticMessage}") }
-            override fun error(d: Diagnostic) { diagnostics.add("error: ${d.diagnosticMessage}") }
-        }
+        val collected = DexDiagnosticsCollector()
+        val handler: DiagnosticsHandler = collected
         // Release mode shrinks the runtime to what the app uses, but only with R8's emitted keep rules; without
         // them (or in a debug build) keep the whole runtime, which is correct and only larger.
         val shrink = request.release && Files.exists(request.keepRules)
@@ -128,7 +127,11 @@ class R8InProcessShrinker : Shrinker {
             L8.run(builder.build())
             ToolResult.ok(listOf("L8 (in-process) dexed the core-library desugaring runtime -> ${request.outDir.fileName}"))
         } catch (t: Throwable) {
-            ToolResult(false, DexDiagnostics.humanize(diagnostics + "L8 (core-library desugaring) failed: ${t.message}"))
+            ToolResult(
+                false,
+                DexDiagnostics.humanize(collected.log + "L8 (core-library desugaring) failed: ${t.message}"),
+                collected.diagnostics + ToolDiagnostic(ToolSeverity.ERROR, "L8 (core-library desugaring) failed: ${t.message}"),
+            )
         }
     }
 }

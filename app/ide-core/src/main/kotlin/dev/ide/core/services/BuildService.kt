@@ -1242,10 +1242,16 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                 }
             }
             val succeeded = outcome?.succeeded == true
+            val elapsed = System.currentTimeMillis() - start
+            // The line that tells the user how it went, in the shape every build tool closes with. Without
+            // it a finished build just stops producing output and the verdict lives only in the header pill.
+            _buildState.update { st ->
+                st.copy(log = st.log + buildVerdict(succeeded, elapsed, st.diagnostics))
+            }
             _buildState.update {
                 it.copy(
                     status = if (succeeded) RunStatus.Succeeded else RunStatus.Failed,
-                    elapsedMs = System.currentTimeMillis() - start,
+                    elapsedMs = elapsed,
                 )
             }
             val finalState = _buildState.value
@@ -1331,22 +1337,48 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
     }
 
     /**
-     * Best-effort level for an untyped tool line (most arrive as INFO) so the Log tab's level filter is
-     * useful — recognizes the common compiler/tool prefixes (kotlinc `e:`/`w:`, GNU/aapt2 `error:`/
-     * `warning:`). Only ever *upgrades* an INFO line; an explicit level from the engine is left untouched.
+     * Last-resort level for an untyped INFO line, for output that reaches the console without having been
+     * levelled at the source — a build plugin that only calls `ctx.logger()`, or a program's own stdout.
+     *
+     * Deliberately narrow: it matches only the prefixes a tool uses to *declare* a severity (kotlinc's
+     * `e:`/`w:`, the GNU/aapt2 `error:`/`warning:`). It used to also flag any line merely *containing*
+     * "error:" or "exception", or starting with "failed" — which painted stack frames, file paths with the
+     * word "error" in them, and a task's own "…Exception handler…" chatter red. The build's own tools now
+     * report their severity through `BuildLogEntry.level`, so guessing is the exception, not the rule.
      */
     private fun inferLevel(message: String, declared: UiLogLevel): UiLogLevel {
         if (declared != UiLogLevel.Info) return declared
-        val l = message.lowercase()
+        val l = message.trimStart().lowercase()
         return when {
-            l.startsWith("e:") || l.startsWith("error:") || "error:" in l || "exception" in l || l.startsWith(
-                "failed"
-            ) -> UiLogLevel.Error
-
-            l.startsWith("w:") || l.startsWith("warning") || "warning:" in l -> UiLogLevel.Warn
+            l.startsWith("e:") || l.startsWith("error:") -> UiLogLevel.Error
+            l.startsWith("w:") || l.startsWith("warning:") -> UiLogLevel.Warn
             else -> UiLogLevel.Info
         }
     }
+
+    /**
+     * The build's closing line: `BUILD SUCCESSFUL in 12.4s`, or the failure with what it cost the user.
+     * Counts come from the structured diagnostics, so they match the Problems tab exactly.
+     */
+    private fun buildVerdict(
+        succeeded: Boolean,
+        elapsedMs: Long,
+        diagnostics: List<BuildDiagnosticUi>,
+    ): BuildLogLine {
+        val errors = diagnostics.count { it.severity == UiSeverity.Error }
+        val warnings = diagnostics.count { it.severity == UiSeverity.Warning }
+        val counts = listOfNotNull(
+            errors.takeIf { it > 0 }?.let { "$it error${if (it == 1) "" else "s"}" },
+            warnings.takeIf { it > 0 }?.let { "$it warning${if (it == 1) "" else "s"}" },
+        ).joinToString(", ")
+        val verdict = if (succeeded) "BUILD SUCCESSFUL" else "BUILD FAILED"
+        val text = "$verdict in ${formatElapsed(elapsedMs)}" + if (counts.isEmpty()) "" else " — $counts"
+        return logLine(text, if (succeeded) UiLogLevel.Info else UiLogLevel.Error)
+    }
+
+    /** `12.4s` / `2m 05s` — the same shape the `codeassist` CLI closes with. */
+    private fun formatElapsed(ms: Long): String =
+        if (ms < 60_000) "%.1fs".format(ms / 1000.0) else "%dm %02ds".format(ms / 60_000, ms % 60_000 / 1000)
 
     private fun AppLogSnapshot.toUi(): AppLogUi = AppLogUi(
         lines = entries.map { it.toUi() }, connected = connected, packageName = packageName

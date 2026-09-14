@@ -1,6 +1,8 @@
 package dev.ide.android.support.tasks
 
 import dev.ide.android.support.manifest.ManifestMerger
+import dev.ide.build.BuildDiagnostic
+import dev.ide.build.BuildSeverity
 import dev.ide.build.DiagnosticKind
 import dev.ide.build.Task
 import dev.ide.build.TaskContext
@@ -10,7 +12,8 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
-import dev.ide.build.engine.reportToolDiagnostics
+import dev.ide.build.engine.debug
+import dev.ide.build.engine.reportAll
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -73,18 +76,27 @@ internal class ManifestMergeTask(
             return TaskResult.Failed("manifest merge crashed: ${cause::class.simpleName}: ${cause.message}", t)
         }
 
-        val logs = result.messages.map { "${it.severity}: ${it.text}" }.toMutableList()
-        edgeToEdgeAdvisory(targetSdk, result.xml)?.let { logs += "WARNING: $it" }
-        logs.forEach(ctx.logger())
-        ctx.reportToolDiagnostics("manifest-merger", logs, DiagnosticKind.GENERIC)
-        if (result.hasErrors) return TaskResult.Failed("manifest merge failed (see diagnostics)")
+        // The merger reports typed messages, so they travel as diagnostics rather than as "SEVERITY: text"
+        // strings a regex has to classify back. Same for the advisory this task adds of its own.
+        val messages = result.messages + listOfNotNull(
+            edgeToEdgeAdvisory(targetSdk, result.xml)
+                ?.let { ManifestMerger.Message(ManifestMerger.Severity.WARNING, it) }
+        )
+        ctx.reportAll(messages.map { it.toBuildDiagnostic() })
+        if (result.hasErrors) {
+            val errors = result.messages.filter { it.severity == ManifestMerger.Severity.ERROR }
+            return TaskResult.Failed(
+                if (errors.size == 1) errors.first().text.trim()
+                else "Manifest merge failed with ${errors.size} errors"
+            )
+        }
 
         // Modern AGP apps declare `namespace` in Gradle and omit `package` from the manifest; AGP injects it
         // into the merged manifest before aapt2 (which still requires a `package` on `<manifest>`). Same here.
         val merged = ensurePackage(result.xml, packageName)
         outManifest.parent?.let { Files.createDirectories(it) }
         Files.write(outManifest, merged.toByteArray(Charsets.UTF_8))
-        ctx.logger()("processManifest -> ${outManifest.fileName} (merged ${libs.size} library manifest(s))")
+        ctx.debug("processManifest -> ${outManifest.fileName} (merged ${libs.size} library manifest(s))")
         return TaskResult.Success
     }
 
@@ -124,3 +136,16 @@ internal class ManifestMergeTask(
             else null
     }
 }
+
+/** A merger message as a build diagnostic: its own severity, no text round-trip. */
+private fun ManifestMerger.Message.toBuildDiagnostic(): BuildDiagnostic =
+    BuildDiagnostic(
+        severity = when (severity) {
+            ManifestMerger.Severity.ERROR -> BuildSeverity.ERROR
+            ManifestMerger.Severity.WARNING -> BuildSeverity.WARNING
+            ManifestMerger.Severity.INFO -> BuildSeverity.INFO
+        },
+        message = text.trim(),
+        kind = DiagnosticKind.GENERIC,
+        source = "manifest-merger",
+    )

@@ -18,6 +18,7 @@ import dev.ide.build.TaskProvider
 import dev.ide.build.TaskResult
 import dev.ide.build.TaskSpec
 import dev.ide.platform.ProgressReporter
+import dev.ide.platform.log.Log
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -246,6 +247,8 @@ class TaskExecutorImpl(
     private val onEvent: (TaskName, TaskStatus) -> Unit = { _, _ -> },
 ) : TaskExecutor {
 
+    private val log = Log.logger("build")
+
     override suspend fun execute(graph: TaskGraph, ctx: TaskContext, maxParallel: Int): BuildOutcome = coroutineScope {
         val ran = Collections.synchronizedList(ArrayList<TaskName>())
         val skipped = Collections.synchronizedList(ArrayList<TaskName>())
@@ -257,7 +260,8 @@ class TaskExecutorImpl(
                 async {
                     ctx.checkCanceled()
                     if (graph.dependencies(t).any { it.name in failed }) {
-                        failed.add(t.name); onEvent(t.name, TaskStatus.Blocked); return@async
+                        failed.add(t.name); banner(ctx, t.name, "SKIPPED")
+                        onEvent(t.name, TaskStatus.Blocked); return@async
                     }
                     sem.withPermit { runTask(t, ctx, ran, skipped, failed) }
                 }
@@ -271,17 +275,21 @@ class TaskExecutorImpl(
         ran: MutableList<TaskName>, skipped: MutableList<TaskName>, failed: MutableSet<TaskName>,
     ) {
         // No declared inputs ⇒ nothing to act on (Gradle's NO-SOURCE): skip without running or caching.
+        // A non-event (a Java-only module has no Kotlin to compile, every build), so it stays DEBUG.
         if (t !is AlwaysRun && t.inputs.isEmpty()) {
-            skipped.add(t.name); onEvent(t.name, TaskStatus.NoSource); return
+            skipped.add(t.name); banner(ctx, t.name, "NO-SOURCE", BuildLogLevel.DEBUG)
+            onEvent(t.name, TaskStatus.NoSource); return
         }
         val inFp = t.inputs.fingerprint().value
         if (t !is AlwaysRun) {
             val cached = cache.get(t.name)
             if (cached != null && cached.inputFp == inFp && cached.outputFp == t.outputs.fingerprint().value) {
-                skipped.add(t.name); onEvent(t.name, TaskStatus.UpToDate); return
+                skipped.add(t.name); banner(ctx, t.name, "UP-TO-DATE")
+                onEvent(t.name, TaskStatus.UpToDate); return
             }
         }
         onEvent(t.name, TaskStatus.Running)
+        banner(ctx, t.name)
         // A task is expected to signal failure by returning TaskResult.Failed. An *unexpected* throwable
         // (e.g. a tool that blows up instead of reporting) would otherwise escape this coroutine, cancel the
         // whole scope, and be discarded by the caller — the build would look stuck or fail with no message.
@@ -293,15 +301,20 @@ class TaskExecutorImpl(
             throw c
         } catch (e: Throwable) {
             failed.add(t.name)
-            ctx.buildLog.log(BuildLogEntry("FAILED ${t.name.value}: ${e.message ?: e.toString()}", BuildLogLevel.ERROR, t.name))
-            e.stackTrace.take(20).forEach { ctx.buildLog.log(BuildLogEntry("\tat $it", BuildLogLevel.ERROR, t.name)) }
+            reportCrash(ctx, t.name, e)
             onEvent(t.name, TaskStatus.Failed)
             return
         }
         when (r) {
             is TaskResult.Failed -> {
                 failed.add(t.name)
-                ctx.buildLog.log(BuildLogEntry("FAILED ${t.name.value}: ${r.message}", BuildLogLevel.ERROR, t.name))
+                banner(ctx, t.name, "FAILED", BuildLogLevel.ERROR)
+                // The message is a summary (see ToolLog.failureSummary); the detail is already in the
+                // Problems list. A task that also carried the throwable gets its trace filed as DEBUG.
+                for (line in r.message.lineSequence()) {
+                    if (line.isNotBlank()) ctx.buildLog.log(BuildLogEntry(line.trim(), BuildLogLevel.ERROR, t.name))
+                }
+                r.cause?.let { fileTrace(ctx, t.name, it) }
                 onEvent(t.name, TaskStatus.Failed)
             }
             TaskResult.UpToDate -> {
@@ -312,6 +325,56 @@ class TaskExecutorImpl(
                 ran.add(t.name); if (t !is AlwaysRun) cache.put(t.name, inFp, t.outputs.fingerprint().value)
                 onEvent(t.name, TaskStatus.Succeeded)
             }
+        }
+    }
+
+    /**
+     * The one line that says a task happened: `> Task :app:compileKotlin`, optionally with the outcome
+     * Gradle-style (`UP-TO-DATE`, `NO-SOURCE`, `SKIPPED`, `FAILED`). These banners are the *shape* of the
+     * build — with every task's own bookkeeping demoted to DEBUG, they plus the problems are the whole
+     * default transcript.
+     */
+    private fun banner(
+        ctx: TaskContext,
+        name: TaskName,
+        outcome: String? = null,
+        level: BuildLogLevel = BuildLogLevel.INFO,
+    ) {
+        val text = if (outcome == null) "> Task ${name.value}" else "> Task ${name.value} $outcome"
+        ctx.buildLog.log(BuildLogEntry(text, level, name))
+    }
+
+    /**
+     * A task threw instead of reporting: that is a defect in the build machinery, not in the user's code,
+     * so it reads as one plain line saying what went wrong — never as a stack trace.
+     *
+     * The trace is not discarded, it is *filed*: [fileTrace] puts it on the DEBUG channel (so Verbose and a
+     * copied build report carry it verbatim) and on the platform log (so it reaches logcat and the Logs
+     * viewer). Logged at WARN, not ERROR, because an `error` with a throwable is what raises the host's
+     * critical-error dialog — a build failure belongs in the build console, not in a modal.
+     */
+    private fun reportCrash(ctx: TaskContext, name: TaskName, e: Throwable) {
+        banner(ctx, name, "FAILED", BuildLogLevel.ERROR)
+        // The innermost cause is the one that says something useful ("Java heap space", not
+        // "CompilationFailedException"). Bounded: a cause chain that loops back on itself would not
+        // terminate, and a wrapper stack that deep has nothing left to add anyway.
+        val cause = generateSequence(e) { it.cause }.take(MAX_CAUSE_DEPTH).last()
+        val what = cause.message?.lineSequence()?.firstOrNull { it.isNotBlank() }?.trim()
+            ?: cause::class.simpleName ?: "unknown error"
+        ctx.buildLog.log(
+            BuildLogEntry(
+                "Unexpected internal error: $what (use Copy to include the full details in a bug report)",
+                BuildLogLevel.ERROR, name,
+            )
+        )
+        fileTrace(ctx, name, e)
+        log.warn("task ${name.value} threw", e)
+    }
+
+    /** Park a throwable's trace where a bug report can find it and a normal build never shows it. */
+    private fun fileTrace(ctx: TaskContext, name: TaskName, e: Throwable) {
+        e.stackTraceToString().lineSequence().take(MAX_TRACE_LINES).forEach {
+            ctx.buildLog.log(BuildLogEntry(it.trimEnd(), BuildLogLevel.DEBUG, name))
         }
     }
 
@@ -358,3 +421,9 @@ class SimpleTaskContext(
     override val buildLog = BuildLogSink { e -> log(e.message); onLog(e) }
     override val diagnostics = DiagnosticSink { onDiagnostic(it) }
 }
+
+/** How much of a crashed task's trace is kept on the DEBUG channel for a bug report. */
+private const val MAX_TRACE_LINES = 80
+
+/** How deep the crash reporter follows a `cause` chain looking for the message that means something. */
+private const val MAX_CAUSE_DEPTH = 16

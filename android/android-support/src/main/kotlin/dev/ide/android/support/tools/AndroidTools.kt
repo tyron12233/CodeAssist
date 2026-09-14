@@ -1,5 +1,10 @@
 package dev.ide.android.support.tools
 
+import com.android.tools.r8.Diagnostic
+import com.android.tools.r8.DiagnosticsHandler
+import com.android.tools.r8.origin.Origin
+import com.android.tools.r8.origin.PathOrigin
+import com.android.tools.r8.position.TextPosition
 import java.nio.file.Path
 
 /**
@@ -10,13 +15,43 @@ import java.nio.file.Path
  * invoke them on an IO dispatcher.
  */
 
-/** Result of running a tool: success plus the captured (merged stdout/stderr) log lines for the console. */
-data class ToolResult(val success: Boolean, val log: List<String> = emptyList()) {
+/**
+ * Result of running a tool: success, the captured (merged stdout/stderr) log lines, and — for a tool that
+ * has a diagnostic API to ask — the problems it reported, structurally.
+ *
+ * [diagnostics] is the channel a task presents; [log] is the transcript behind it. A subprocess tool
+ * (aapt2, apksigner, bundletool, a forked dexer) reaches us as text and leaves [diagnostics] empty, so its
+ * caller falls back to parsing [log]; an in-process D8/R8 fills it from its `DiagnosticsHandler` and loses
+ * neither the origin nor the position the way a printed line does.
+ */
+data class ToolResult(
+    val success: Boolean,
+    val log: List<String> = emptyList(),
+    val diagnostics: List<ToolDiagnostic> = emptyList(),
+) {
     companion object {
-        fun ok(log: List<String> = emptyList()) = ToolResult(true, log)
-        fun fail(message: String, log: List<String> = emptyList()) = ToolResult(false, log + message)
+        fun ok(log: List<String> = emptyList(), diagnostics: List<ToolDiagnostic> = emptyList()) =
+            ToolResult(true, log, diagnostics)
+
+        fun fail(
+            message: String,
+            log: List<String> = emptyList(),
+            diagnostics: List<ToolDiagnostic> = emptyList(),
+        ) = ToolResult(false, log + message, diagnostics)
     }
 }
+
+/** One problem a build tool reported through its own API: severity, message, and where it came from. */
+data class ToolDiagnostic(
+    val severity: ToolSeverity,
+    val message: String,
+    /** The file/jar the tool blamed (D8/R8's `Origin`), when it named one. */
+    val path: String? = null,
+    val line: Int = -1,
+    val column: Int = -1,
+)
+
+enum class ToolSeverity { ERROR, WARNING, INFO }
 
 /**
  * D8 emits a per-method desugaring warning when *library* code uses an API above the build's min-api —
@@ -44,6 +79,48 @@ internal fun suppressBenignDexWarnings(lines: List<String>): List<String> {
     }
     if (suppressed > 0) out.add("($suppressed D8 desugaring warning(s) suppressed — library APIs needing a higher min-api; benign)")
     return out
+}
+
+/**
+ * Collects what D8/R8 report through their `DiagnosticsHandler` — the API both tools expose *instead of*
+ * printing: install one on the `*Command.builder(handler)` and every problem arrives as a
+ * [com.android.tools.r8.Diagnostic] carrying its origin (the jar or class file at fault) and its position.
+ * With no handler installed the same problems go to stderr and are lost (a failed shrink then surfaces only
+ * a generic `CompilationFailedException`).
+ *
+ * Records each problem twice on purpose: as a [ToolDiagnostic] (what a task reports to the console) and as
+ * a prefixed `error:`/`warning:`/`info:` line in [log] (the transcript, and the input [DexDiagnostics] and
+ * the subprocess dexers' text path both already understand).
+ */
+internal class DexDiagnosticsCollector : DiagnosticsHandler {
+    val log = ArrayList<String>()
+    val diagnostics = ArrayList<ToolDiagnostic>()
+
+    override fun info(d: Diagnostic) = record(ToolSeverity.INFO, "info", d)
+    override fun warning(d: Diagnostic) = record(ToolSeverity.WARNING, "warning", d)
+    override fun error(d: Diagnostic) = record(ToolSeverity.ERROR, "error", d)
+
+    private fun record(severity: ToolSeverity, prefix: String, d: Diagnostic) {
+        val message = d.diagnosticMessage.orEmpty()
+        log.add("$prefix: $message")
+        val position = d.position as? TextPosition
+        diagnostics.add(
+            ToolDiagnostic(
+                severity = severity,
+                message = message,
+                path = originPath(d.origin),
+                line = position?.line ?: -1,
+                column = position?.column?.takeIf { it != TextPosition.UNKNOWN_COLUMN } ?: -1,
+            )
+        )
+    }
+
+    /** The file a problem came from: a real path when D8 knew one, else its `Origin`'s own description. */
+    private fun originPath(origin: Origin?): String? = when {
+        origin == null || origin == Origin.unknown() -> null
+        origin is PathOrigin -> origin.path.toString()
+        else -> origin.toString().ifEmpty { null }
+    }
 }
 
 /**

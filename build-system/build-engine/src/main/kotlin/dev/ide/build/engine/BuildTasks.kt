@@ -179,7 +179,9 @@ class LifecycleTask(
         property("lifecycle", name.value)
     }
     override val outputs: TaskOutputs get() = TaskOutputsImpl()
-    override suspend fun execute(ctx: TaskContext): TaskResult { ctx.logger()(name.value); return TaskResult.Success }
+    // A lifecycle task does nothing but gather its dependencies; the engine's own "> Task :x" banner is
+    // already the whole story, so it adds no line of its own.
+    override suspend fun execute(ctx: TaskContext): TaskResult = TaskResult.Success
 }
 
 /** `jar`: package one or more classes directories (Java + Kotlin output) into [outJar] — a module's
@@ -207,7 +209,7 @@ class JarTask(
         ctx.checkCanceled()
         return runCatching {
             writeJar(classesDirs, outJar, mainClass())
-            ctx.logger()("${name.value} -> ${outJar.fileName}")
+            ctx.debug("${name.value} -> ${outJar.fileName}")
             TaskResult.Success as TaskResult
         }.getOrElse { TaskResult.Failed("jar failed: ${it.message}", it) }
     }

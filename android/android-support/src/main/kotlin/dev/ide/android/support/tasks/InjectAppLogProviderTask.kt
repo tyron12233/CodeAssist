@@ -8,6 +8,8 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
+import dev.ide.build.engine.debug
+import dev.ide.build.engine.warn
 import java.nio.file.Files
 import java.nio.file.Path
 import javax.xml.parsers.DocumentBuilderFactory
@@ -61,7 +63,7 @@ internal class InjectAppLogProviderTask(
             // No <application> — nothing to instrument; pass the manifest through untouched.
             outManifest.parent?.let { Files.createDirectories(it) }
             Files.copy(mergedManifest, outManifest, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-            ctx.logger()("injectAppLogProvider: no <application> element — skipped")
+            ctx.warn("injectAppLogProvider: no <application> element — skipped")
             return TaskResult.Success
         }
 
@@ -100,7 +102,7 @@ internal class InjectAppLogProviderTask(
         // Serialize by hand (NOT javax.xml.transform): the identity Transformer is an ART hazard — on device
         // it reaches for a SAX driver that isn't on the platform and fails/corrupts the manifest.
         Files.write(outManifest, XmlDomWriter.toXml(doc).toByteArray(Charsets.UTF_8))
-        ctx.logger()("injectAppLogProvider -> ${outManifest.fileName} (provider $providerClass, authority $authority)")
+        ctx.debug("injectAppLogProvider -> ${outManifest.fileName} (provider $providerClass, authority $authority)")
         return TaskResult.Success
     }
 

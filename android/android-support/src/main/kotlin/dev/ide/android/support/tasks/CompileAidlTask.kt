@@ -16,6 +16,7 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
+import dev.ide.build.engine.debug
 import java.nio.file.Path
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -72,7 +73,7 @@ internal class CompileAidlTask(
             val first = result.diagnostics.first { it.severity == AidlSeverity.ERROR }
             return TaskResult.Failed("AIDL compilation failed: $first")
         }
-        if (result.generated.isNotEmpty()) ctx.logger()("Generated ${result.generated.size} Java file(s) from AIDL")
+        if (result.generated.isNotEmpty()) ctx.debug("Generated ${result.generated.size} Java file(s) from AIDL")
         return TaskResult.Success
     }
 

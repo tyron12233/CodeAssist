@@ -118,13 +118,14 @@ internal object ImageFreeJavaCompiler {
             var hadError = false
             val requestor = ICompilerRequestor { result ->
                 result.allProblems?.forEach { p ->
-                    // Errors only, to match the batch path's `-nowarn`. GNU/javac shape "file:line: error: message"
-                    // so the build engine's parser can locate it (sourceLineNumber is 1-based).
+                    // Errors only, to match the batch path's `-nowarn`. The problem itself is what a caller
+                    // presents (location, ecj problem id, snippet); the GNU-shaped message line is only the
+                    // transcript's copy of it.
                     if (p.isError) {
                         hadError = true
-                        val file = String(p.originatingFileName)
-                        messages.add("$file:${p.sourceLineNumber}: error: ${p.message}")
-                        diagnostics.add(JdtBatchCompiler.Diagnostic(file, p.sourceLineNumber, p.message, isError = true))
+                        val d = JdtBatchCompiler.diagnosticOf(p, result)
+                        messages.add("${d.file}:${p.sourceLineNumber}: error: ${p.message}")
+                        diagnostics.add(d)
                     }
                 }
                 // ecj skips class files for units with errors; only write a clean unit's output.

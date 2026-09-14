@@ -37,6 +37,8 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         val mode: Mode,
         /** The `.kt` files actually recompiled (all of them on [Mode.FULL]). */
         val recompiledSources: List<Path> = emptyList(),
+        /** The underlying compile's problems, carried through unchanged; see [KotlinDiagnostic]. */
+        val diagnostics: List<KotlinDiagnostic> = emptyList(),
     )
 
     fun compile(
@@ -110,12 +112,12 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
             // against this broken output and mis-resolve cross-file references (the reported spurious
             // "unresolved reference"). With no manifest the next build is a clean full rebuild — correct recovery.
             state(outputDir).delete()
-            return Result(false, r.messages, Mode.FULL, kt)
+            return Result(false, r.messages, Mode.FULL, kt, r.diagnostics)
         }
         val srcToOut = relativizeMapping(r.outputs, outputDir, srcHash.keys)
         val abi = snapshotAll(outputDir)
         state(outputDir).write(State(context, srcHash, srcToOut, abi))
-        return Result(true, r.messages, Mode.FULL, kt)
+        return Result(true, r.messages, Mode.FULL, kt, r.diagnostics)
     }
 
     /**
@@ -203,7 +205,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         val abi = HashMap(prev.abi).apply { putAll(newAbi) }
         state(outputDir).write(State(context, HashMap(prev.srcHash).apply { putAll(srcHash) }, srcToOut, abi))
         clearDir(cleanDir); clearDir(stagingDir)
-        return Result(true, r.messages, Mode.INCREMENTAL, dirty)
+        return Result(true, r.messages, Mode.INCREMENTAL, dirty, r.diagnostics)
     }
 
     // ---- helpers -----------------------------------------------------------------------------------------

@@ -14,7 +14,6 @@ import dev.ide.build.engine.kotlinSiblings
 import dev.ide.build.engine.levelOf
 import dev.ide.build.engine.libJars
 import dev.ide.build.engine.outputDir
-import dev.ide.build.engine.reportToolDiagnostics
 import dev.ide.build.engine.sourceFiles
 import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.model.Module
@@ -64,9 +63,7 @@ class JdtCompileTask(
         val r = JdtBatchCompiler.compile(
             sources, classpath(), outputDir(module), levelOf(module.languageLevel), bootClasspath = bootClasspath,
         )
-        ctx.reportToolDiagnostics("java", r.messages)
-        ctx.logger()(":${module.name}:compileJava ${if (r.success) "OK" else "FAILED"}")
-        return if (r.success) TaskResult.Success
-        else TaskResult.Failed(r.messages.joinToString("\n").ifBlank { "compilation failed" })
+        ctx.reportJavaProblems(r)
+        return if (r.success) TaskResult.Success else TaskResult.Failed(javaFailureSummary(r))
     }
 }
