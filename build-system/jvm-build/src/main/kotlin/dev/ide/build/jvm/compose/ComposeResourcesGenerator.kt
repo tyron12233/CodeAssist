@@ -3,8 +3,11 @@ package dev.ide.build.jvm.compose
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Base64
+import java.util.stream.Collectors
 import kotlin.io.path.extension
 import kotlin.io.path.name
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 
 /**
  * Reproduces what the Compose Multiplatform Gradle plugin's resource generator produces, so a module whose
@@ -74,7 +77,7 @@ class ComposeResourcesGenerator(
         val stageRoot = resourcesDir.resolve(ComposeResourcesFacet.RESOURCE_DIR).resolve(packageName)
         for (root in roots.filter { Files.isDirectory(it) }) {
             val sourceSet = sourceSetNameOf(root)
-            for (dir in Files.list(root).use { it.sorted().toList() }.filter { Files.isDirectory(it) }) {
+            for (dir in Files.list(root).use { it.sorted().collect(Collectors.toList()) }.filter { Files.isDirectory(it) }) {
                 val (type, qualifiers) = parseQualifiedDir(dir.name)
                 val outDir = stageRoot.resolve(dir.name)
                 if (type == VALUES) {
@@ -103,7 +106,7 @@ class ComposeResourcesGenerator(
     ): Int {
         var count = 0
         Files.createDirectories(outDir)
-        for (file in Files.list(dir).use { it.sorted().toList() }.filter { Files.isRegularFile(it) }) {
+        for (file in Files.list(dir).use { it.sorted().collect(Collectors.toList()) }.filter { Files.isRegularFile(it) }) {
             Files.copy(file, outDir.resolve(file.name), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
             count++
             // `files/` is the untyped bucket: reachable through Res.readBytes(path), with no accessor.
@@ -124,8 +127,8 @@ class ComposeResourcesGenerator(
         resources: MutableMap<ResourceId, MutableList<Item>>,
     ): Int {
         val records = ArrayList<Record>()
-        for (xml in Files.list(dir).use { it.sorted().toList() }.filter { it.extension == "xml" }) {
-            records += ValuesXml.parse(Files.readString(xml), xml.name) { warnings += it }
+        for (xml in Files.list(dir).use { it.sorted().collect(Collectors.toList()) }.filter { it.extension == "xml" }) {
+            records += ValuesXml.parse(xml.readText(), xml.name) { warnings += it }
         }
         if (records.isEmpty()) return 0
 
@@ -146,7 +149,7 @@ class ComposeResourcesGenerator(
             offset += size + 1
         }
         Files.createDirectories(outDir)
-        Files.writeString(outDir.resolve(fileName), bytes.toString())
+        outDir.resolve(fileName).writeText(bytes.toString())
         return 1
     }
 
@@ -181,11 +184,11 @@ class ComposeResourcesGenerator(
         val dir = kotlinDir.resolve(packageName.replace('.', '/'))
         Files.createDirectories(dir)
         val byType = resources.entries.groupBy({ it.key.type }, { it.key.key to it.value })
-        Files.writeString(dir.resolve("Res.kt"), resClass(byType.keys))
+        dir.resolve("Res.kt").writeText(resClass(byType.keys))
         var files = 1
         for ((type, entries) in byType) {
             if (type !in ACCESSOR_TYPES) continue
-            Files.writeString(dir.resolve("${accessorOf(type)}Resources.kt"), accessors(type, entries))
+            dir.resolve("${accessorOf(type)}Resources.kt").writeText(accessors(type, entries))
             files++
         }
         return files

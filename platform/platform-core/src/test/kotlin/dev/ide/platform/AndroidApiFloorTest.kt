@@ -31,6 +31,7 @@ class AndroidApiFloorTest {
     /** Modules that never reach a device: desktop-only, build-time generators, and test/bench support. */
     private val notOnDevice = setOf(
         "ide-desktop",          // the desktop IDE shell
+        "build-cli",            // the headless launcher: a desktop/CI shell, like ide-desktop
         "android-sdk-metadata", // a build-time generator; its output ships, it does not
         "bench-support",        // testImplementation only
         "test-support",         // testImplementation only

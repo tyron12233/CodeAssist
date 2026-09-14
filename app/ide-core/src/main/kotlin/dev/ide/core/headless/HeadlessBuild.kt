@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.stream.Collectors
 
 /**
  * Drives a build with no UI attached: open a workspace, resolve its dependencies, run one assemble task,
@@ -140,7 +141,9 @@ class HeadlessEngine private constructor(private val ide: IdeServices) : AutoClo
     private fun jarsOf(module: Module): List<Path> {
         val libs = buildDir(module).resolve("libs")
         if (!Files.isDirectory(libs)) return emptyList()
-        return Files.list(libs).use { s -> s.filter { it.toString().endsWith(".jar") }.sorted().toList() }
+        return Files.list(libs).use { s ->
+            s.filter { it.toString().endsWith(".jar") }.sorted().collect(Collectors.toList())
+        }
     }
 
     override fun close() = ide.close()
