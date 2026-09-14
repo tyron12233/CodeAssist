@@ -120,6 +120,10 @@ implement both with a **single class**: name it in `entryPoints` and in `uiEntry
 instantiates it once. Its UI facet implements a different, narrower interface (`dev.ide.plugin.ui.UiPlugin`),
 for the reason given in [section 10.11](#1011-an-installed-plugins-ui-facet).
 
+How the two halves then talk to each other (the channels, the shared-holder shape, threading, teardown, and
+why a built-in's channel has to be different) is its own guide:
+[plugin-facet-communication.md](plugin-facet-communication.md).
+
 ### 2.3 Lifetimes
 
 | Object | Lifetime | Notes |
@@ -1679,6 +1683,10 @@ The host adapts one model onto the other in
 contributed panel lands in the same registries a built-in's does and the shell renders both the same way. Ids
 are not namespaced on the way through, which is what lets an engine-side action return
 `ActionEffect.Navigate("com.example.screen")` and open the UI facet's own screen.
+
+Working against that narrow context in practice (what to call instead of reaching for the host, where to put
+the state the panel shows, and what runs on which thread) is
+[plugin-facet-communication.md](plugin-facet-communication.md).
 
 Loading and gating: the facets are instantiated off the classloader the engine facet was loaded from, only
 for a plugin that is enabled, consented to, and whose engine facet loaded cleanly. Each class the manifest

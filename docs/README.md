@@ -11,6 +11,10 @@ and follow the links into each subsystem.
   SPI, extension points, scoped services, events and logging, settings pages, actions, Compose UI
   contributions (tool windows, screens, overlays), shipping a plugin as its own installable app, and the
   Git and AI-agent plugins as worked examples.
+- [plugin-facet-communication.md](plugin-facet-communication.md): how a plugin's engine facet and its UI
+  facet talk to each other. The four channels and when each is right, where shared state goes and what a
+  static holder commits you to, which way state flows, threading, teardown, why a built-in's channel has to
+  be different, and the anti-patterns.
 - [custom-project-templates.md](custom-project-templates.md) — the step-by-step guide to adding an entry
   to the Create-Project gallery: declaring a template's inputs so the screen renders itself, authoring the
   project model, configuring a facet whose class is out of reach, writing generated files, and declaring the

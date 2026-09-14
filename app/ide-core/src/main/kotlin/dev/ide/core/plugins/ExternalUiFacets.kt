@@ -1,5 +1,6 @@
 package dev.ide.core.plugins
 
+import dev.ide.platform.ServiceLookup
 import dev.ide.platform.log.Log
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.impl.EntryPointInstances
@@ -34,6 +35,7 @@ internal object ExternalUiFacets {
     fun load(
         manifest: PluginManifest,
         instances: EntryPointInstances,
+        services: ServiceLookup,
         onError: (reason: String) -> Unit,
     ): UiPlugin? {
         val declared = manifest.uiEntryPoints.distinct()
@@ -52,7 +54,7 @@ internal object ExternalUiFacets {
                             "the packaged manifest's id is used",
                     )
                 }
-                facets += facet.asUiPlugin(manifest.id)
+                facets += facet.asUiPlugin(manifest.id, services)
             } catch (t: Throwable) {
                 val reason = "UI facet '$fqcn' could not be loaded: ${PluginLoadFailure.describe(t)}"
                 log.warn("plugin '${manifest.id}': $reason", t)
