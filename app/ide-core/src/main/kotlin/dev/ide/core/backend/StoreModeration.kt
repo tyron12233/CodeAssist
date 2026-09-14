@@ -24,10 +24,7 @@ import dev.ide.ui.backend.UiSubmissionSubmitter
  * UI hands back an id; resolving that id to the row it came from is this class's job, and a stale id is a
  * "reload the queue" message rather than a null nobody can interpret.
  */
-internal class StoreModeration(
-    private val moderation: StoreModerationService,
-    private val extractor: dev.ide.store.impl.PayloadExtractor = dev.ide.store.impl.PayloadExtractor(),
-) {
+internal class StoreModeration(private val moderation: StoreModerationService) {
 
     fun available(): Boolean = moderation.moderationAvailable()
 
@@ -100,66 +97,6 @@ internal class StoreModeration(
     /** Fetch a private submission image into [into]. The caller owns the cache path and its naming. */
     fun downloadSubmissionImage(storagePath: String, into: java.io.File): Boolean =
         moderation.downloadObject("store-uploads", storagePath, into) is StoreResult.Ok
-
-    /**
-     * Unpack a submission into [projectsRoot] as a project the reviewer can build and run.
-     *
-     * The point is that reading a manifest is not reviewing an app. A moderator deciding whether to publish
-     * something ought to be able to open it, build it and watch it run, and on this IDE that is possible on
-     * the same device the queue is on.
-     *
-     * It reuses the install path's extractor deliberately: the same zip-slip and shape checks gate an
-     * archive nobody has vetted, and [PayloadExtractor] also strips the submitter's resolved-dependency
-     * state on the way in — so a reviewer sees what an installer would get rather than what the author's
-     * device happened to have.
-     *
-     * The directory is named `review-{slug}-{version}` and replaced on a second checkout, for two reasons:
-     * a reviewer must be able to tell unvetted content apart from their own projects at a glance in the
-     * picker, and opening the same submission twice should not leave two of them.
-     *
-     * Nothing here counts an install. The install counter is what the trending chart ranks on, and a
-     * moderator opening every submission in the queue would rank the queue.
-     */
-    fun checkOut(versionId: String, projectsRoot: java.io.File, adopt: (java.io.File) -> Boolean): Checkout {
-        val submission = known[versionId] ?: return Checkout(message = STALE)
-        val archive = java.io.File.createTempFile("ca-review-", ".zip")
-        try {
-            when (val downloaded = moderation.downloadSubmission(submission, archive)) {
-                is StoreResult.Ok -> Unit
-                is StoreResult.Unavailable -> return Checkout(message = downloaded.reason)
-                is StoreResult.Failed -> return Checkout(message = downloaded.message)
-            }
-            val name = "review-${submission.listing.slug}-${submission.version}"
-            // Replaced, not uniquified: `uniqueDirectory` would give review-x-2, review-x-3 … and a
-            // reviewer who opened the same submission three times would have three copies to clean up.
-            //
-            // Deleted through the extractor's OWN name function, because that is what decides the directory:
-            // `safeName` folds a version's dots to dashes, so deleting the unsanitised `review-x-1.0.1`
-            // matches nothing and the second checkout quietly becomes review-x-1-0-1-2.
-            java.io.File(projectsRoot, dev.ide.store.impl.PayloadExtractor.safeName(name))
-                .takeIf { it.exists() }
-                ?.deleteRecursively()
-            val extracted = when (val result = extractor.extract(archive, projectsRoot, name)) {
-                is StoreResult.Ok -> result.value
-                is StoreResult.Unavailable -> return Checkout(message = result.reason)
-                is StoreResult.Failed -> return Checkout(message = result.message)
-            }
-            if (!adopt(extracted)) {
-                // Unpacked, but nothing can open it — which is itself a review finding, and a folder the
-                // picker cannot list is not something to leave behind.
-                extracted.deleteRecursively()
-                return Checkout(
-                    message = "That archive is not a project CodeAssist can open, which is worth rejecting for.",
-                )
-            }
-            return Checkout(rootPath = extracted.absolutePath)
-        } finally {
-            archive.delete()
-        }
-    }
-
-    /** Where a review copy landed, or why there is none. Exactly one of the two is set. */
-    data class Checkout(val rootPath: String? = null, val message: String? = null)
 
     private fun <T> message(result: StoreResult<T>): String? = when (result) {
         is StoreResult.Ok -> null

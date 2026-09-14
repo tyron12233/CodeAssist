@@ -730,7 +730,6 @@ We never collect your code, file or project names, which features you use, or an
     <string name="moderation_changelog">What changed</string>
     <string name="moderation_listing_edit">Proposed listing change</string>
     <string name="moderation_edit_nothing">nothing</string>
-    <string name="moderation_build_and_run">Build and run it</string>
     <string name="moderation_approve">Approve</string>
     <string name="moderation_reject">Reject</string>
     <string name="moderation_reject_title">Reject %1$s?</string>

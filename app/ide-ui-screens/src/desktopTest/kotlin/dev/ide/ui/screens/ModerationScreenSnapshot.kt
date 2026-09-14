@@ -187,14 +187,7 @@ class ModerationScreenSnapshot {
         val scene = ImageComposeScene(width = WIDTH, height = height, density = Density(2f)) {
             CodeAssistTheme(dark = dark) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                    // onBuildAndRun is always supplied by the real call site, so a snapshot without it
-                    // would be a picture of a screen nobody sees — the same miss as the Explore snapshots
-                    // that omitted onAccount and never once drew the account button.
-                    ModerationScreen(
-                        backend = backend,
-                        onBack = {},
-                        onBuildAndRun = { _, _ -> },
-                    )
+                    ModerationScreen(backend = backend, onBack = {})
                 }
             }
         }

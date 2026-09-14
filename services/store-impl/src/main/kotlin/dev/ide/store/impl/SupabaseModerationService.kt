@@ -209,41 +209,6 @@ class SupabaseModerationService(
         return "$base/storage/v1/object/$bucket/${submission.storagePath}"
     }
 
-    /**
-     * The submission's archive, hashed as it streams.
-     *
-     * The bucket follows the status for the same reason [payloadUrl] does: pending lives in the private
-     * one, approved in the public one, and a reviewer opening a recently-approved row should still get the
-     * bytes rather than a 404.
-     *
-     * The sha256 is checked because this is about to be unpacked into the reviewer's workspace and nobody
-     * has vetted it — which is the whole reason they are opening it. Verifying while the bytes stream costs
-     * no second pass and no second copy.
-     */
-    override fun downloadSubmission(submission: PendingSubmission, into: File): StoreResult<Unit> {
-        val bucket = if (submission.status == "approved") PAYLOADS else UPLOADS
-        val downloaded = downloadObject(bucket, submission.storagePath, into)
-        if (downloaded !is StoreResult.Ok) return downloaded
-        val expected = submission.sha256 ?: return downloaded
-        val actual = runCatching {
-            val digest = java.security.MessageDigest.getInstance("SHA-256")
-            into.inputStream().buffered().use { input ->
-                val buffer = ByteArray(64 * 1024)
-                while (true) {
-                    val read = input.read(buffer)
-                    if (read <= 0) break
-                    digest.update(buffer, 0, read)
-                }
-            }
-            digest.digest().joinToString("") { "%02x".format(it) }
-        }.getOrNull()
-        if (!expected.equals(actual, ignoreCase = true)) {
-            into.delete()
-            return StoreResult.Failed("The archive did not match the checksum the submission recorded")
-        }
-        return StoreResult.Ok(Unit)
-    }
-
     override fun downloadObject(bucket: String, storagePath: String, into: File): StoreResult<Unit> {
         if (!configured) return StoreResult.Unavailable("No store endpoint configured")
         val token = accounts.bearer() ?: return StoreResult.Failed("Sign in first")

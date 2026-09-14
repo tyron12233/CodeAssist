@@ -196,17 +196,6 @@ interface StoreModerationService {
     fun payloadUrl(submission: PendingSubmission): String? = null
 
     /**
-     * Download [submission]'s archive into [into], verifying it against the sha256 the row promised.
-     *
-     * The catalog source's own download cannot serve this: that one is anonymous and reads the PUBLIC
-     * bucket, and a submission under review is in the private one. The hash is still checked, for the same
-     * reason it is on an install — the bytes are about to be unpacked into the reviewer's workspace, and a
-     * reviewer is exactly the person being handed something nobody has vetted yet.
-     */
-    fun downloadSubmission(submission: PendingSubmission, into: java.io.File): StoreResult<Unit> =
-        StoreResult.Unavailable("Moderation is not available in this build")
-
-    /**
      * Download one object the moderator may read, into [into].
      *
      * Serves both buckets: a pending submission's screenshots are private, and its archive is too. The

@@ -1230,20 +1230,6 @@ interface StoreService {
         "Moderation is not available in this build"
 
     /**
-     * Unpack a submission into the workspace so it can be built and run before a decision.
-     *
-     * Reading a file manifest is not reviewing an app. This puts the submitted archive on disk as a real
-     * project — through the same extractor an install uses, so the same checks gate an archive nobody has
-     * vetted — and hands back where it landed. The caller opens it and starts a build.
-     *
-     * It is named `review-{slug}-{version}` and replaced on a second checkout, and it deliberately does
-     * **not** count an install: the counter is what the trending chart ranks on, and a moderator working
-     * the queue would otherwise rank it.
-     */
-    suspend fun checkOutSubmission(versionId: String): UiSubmissionCheckout =
-        UiSubmissionCheckout(message = "Moderation is not available in this build")
-
-    /**
      * A file from a submission under review, as a local path, or null.
      *
      * The twin of [screenshotFile] for content that is NOT public yet: a pending submission's screenshots
