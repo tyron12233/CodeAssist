@@ -1,6 +1,8 @@
 package dev.ide.ui.ext
 
 import androidx.compose.runtime.remember
+import dev.ide.platform.ServiceKey
+import dev.ide.platform.ServiceLookup
 import dev.ide.plugin.ui.Overlay
 import dev.ide.plugin.ui.EditorAnchor as ExternalAnchorPoint
 import dev.ide.plugin.ui.EditorLayer as ExternalEditorLayer
@@ -39,21 +41,26 @@ import dev.ide.plugin.ui.UiRegistration
  * Lives in `jvmShared` (the desktop + android targets, not `commonMain`) because `plugin-ui-api` is a plain
  * JVM artifact: a plugin ships as a JVM/Android APK, so there is nothing for the other targets to load.
  */
-fun ExternalUiPlugin.asUiPlugin(pluginId: String): UiPlugin = BridgedUiPlugin(pluginId, this)
+fun ExternalUiPlugin.asUiPlugin(
+    pluginId: String,
+    services: ServiceLookup = ServiceLookup.Empty,
+): UiPlugin = BridgedUiPlugin(pluginId, this, services)
 
 private class BridgedUiPlugin(
     override val id: String,
     private val delegate: ExternalUiPlugin,
+    private val services: ServiceLookup,
 ) : UiPlugin {
 
     override fun contributeUi(scope: UiContributionScope) {
-        delegate.contribute(BridgedRegistration(id, scope))
+        delegate.contribute(BridgedRegistration(id, scope, services))
     }
 }
 
 private class BridgedRegistration(
     override val pluginId: String,
     private val scope: UiContributionScope,
+    private val services: ServiceLookup,
 ) : UiRegistration {
 
     override fun toolWindow(toolWindow: ToolWindow): UiHandle {
@@ -67,7 +74,7 @@ private class BridgedRegistration(
             ) { ctx ->
                 // Remembered per context instance: the host re-creates one when the file or the navigation
                 // handles change, and the body should not see a new object on every recomposition.
-                toolWindow.content(remember(ctx) { ToolWindowUiContext(ctx) })
+                toolWindow.content(remember(ctx) { ToolWindowUiContext(ctx, services) })
             },
         )
         return UiHandle { registration.dispose() }
@@ -76,7 +83,7 @@ private class BridgedRegistration(
     override fun screen(screen: Screen): UiHandle {
         val registration = scope.screen(
             ScreenContribution(id = screen.id, title = screen.title) { ctx ->
-                screen.content(remember(ctx) { HostScreenUiContext(ctx) })
+                screen.content(remember(ctx) { HostScreenUiContext(ctx, services) })
             },
         )
         return UiHandle { registration.dispose() }
@@ -85,7 +92,7 @@ private class BridgedRegistration(
     override fun overlay(overlay: Overlay): UiHandle {
         val registration = scope.overlay(
             OverlayContribution(id = overlay.id) { ctx ->
-                overlay.content(remember(ctx) { OverlayUiContext(ctx) })
+                overlay.content(remember(ctx) { OverlayUiContext(ctx, services) })
             },
         )
         return UiHandle { registration.dispose() }
@@ -102,7 +109,7 @@ private class BridgedRegistration(
                 // the buffer and the viewport, so it changes on every keystroke and every scroll, and
                 // remembering per instance would allocate a wrapper per frame.
                 val bridged = remember(ctx.path, ctx.text, ctx.visibleLines, ctx.caretOffset, ctx) {
-                    LayerUiContext(ctx)
+                    LayerUiContext(ctx, services)
                 }
                 layer.widgets(bridged).map { w ->
                     EditorWidget(anchor = w.anchor.internal(), key = w.key, content = w.content)
@@ -142,7 +149,7 @@ private class BridgedRegistration(
                 // Keyed on what a pane can observe: the context carries the buffer and the caret, so it
                 // changes on every keystroke and remembering per instance would allocate per frame.
                 mode.content(
-                    remember(ctx.filePath, ctx.text, ctx.caretOffset, ctx) { ViewModeUiContext(ctx) }
+                    remember(ctx.filePath, ctx.text, ctx.caretOffset, ctx) { ViewModeUiContext(ctx, services) }
                 )
             },
         )
@@ -160,7 +167,7 @@ private class BridgedRegistration(
                 // every keystroke (it carries the buffer), so remembering it per instance would allocate a
                 // wrapper per frame for nothing. Keyed on what a body can actually observe instead.
                 preview.content(
-                    remember(ctx.path, ctx.text, ctx.dark, ctx) { PreviewUiContext(ctx) }
+                    remember(ctx.path, ctx.text, ctx.dark, ctx) { PreviewUiContext(ctx, services) }
                 )
             },
         )
@@ -189,7 +196,7 @@ private fun ExternalPaintLayer.internal(): EditorPaintLayer = when (this) {
     ExternalPaintLayer.AboveText -> EditorPaintLayer.AboveText
 }
 
-private class LayerUiContext(private val ctx: EditorLayerContext) : ExternalLayerContext {
+private class LayerUiContext(private val ctx: EditorLayerContext, private val services: ServiceLookup) : ExternalLayerContext {
     override val projectPath: String? get() = projectPathOf(ctx.backend)
 
     /** The decorated file IS the focused tab, so both answer the same path; [path] is the non-null form. */
@@ -200,6 +207,8 @@ private class LayerUiContext(private val ctx: EditorLayerContext) : ExternalLaye
     override val caretOffset: Int get() = ctx.caretOffset
     override fun openFile(path: String, offset: Int) = ctx.openFile(path, offset)
     override fun openScreen(id: String) = ctx.openScreen(id)
+
+    override fun <T : Any> service(key: ServiceKey<T>): T? = services.getServiceOrNull(key)
 }
 
 /**
@@ -223,7 +232,7 @@ private class PaintContextView(private val ctx: EditorPaintContext) : ExternalPa
     override fun isHidden(line: Int): Boolean = ctx.isHidden(line)
 }
 
-private class ViewModeUiContext(private val ctx: ViewModeContext) : ExternalViewModeContext {
+private class ViewModeUiContext(private val ctx: ViewModeContext, private val services: ServiceLookup) : ExternalViewModeContext {
     override val projectPath: String? get() = projectPathOf(ctx.backend)
 
     /** The pane's file IS the focused tab, so both answer the same path; [path] is the non-null form. */
@@ -234,25 +243,31 @@ private class ViewModeUiContext(private val ctx: ViewModeContext) : ExternalView
     override fun replaceText(start: Int, end: Int, newText: String) = ctx.replaceText(start, end, newText)
     override fun openFile(path: String, offset: Int) = ctx.openFile(path, offset)
     override fun openScreen(id: String) {}
+
+    override fun <T : Any> service(key: ServiceKey<T>): T? = services.getServiceOrNull(key)
 }
 
-private class ToolWindowUiContext(private val ctx: ToolWindowContext) : UiContext {
+private class ToolWindowUiContext(private val ctx: ToolWindowContext, private val services: ServiceLookup) : UiContext {
     override val projectPath: String? get() = projectPathOf(ctx.backend)
     override val activeFilePath: String? get() = ctx.activeFilePath
     override fun openFile(path: String, offset: Int) = ctx.openFile(path, offset)
     override fun openScreen(id: String) = ctx.openScreen(id)
+
+    override fun <T : Any> service(key: ServiceKey<T>): T? = services.getServiceOrNull(key)
 }
 
-private class OverlayUiContext(private val ctx: OverlayContext) : UiContext {
+private class OverlayUiContext(private val ctx: OverlayContext, private val services: ServiceLookup) : UiContext {
     override val projectPath: String? get() = projectPathOf(ctx.backend)
 
     /** An overlay is app-wide, not tied to a tab; the host hands it no file. */
     override val activeFilePath: String? get() = null
     override fun openFile(path: String, offset: Int) = ctx.openFile(path, offset)
     override fun openScreen(id: String) = ctx.openScreen(id)
+
+    override fun <T : Any> service(key: ServiceKey<T>): T? = services.getServiceOrNull(key)
 }
 
-private class PreviewUiContext(private val ctx: EditorPreviewContext) : ExternalPreviewContext {
+private class PreviewUiContext(private val ctx: EditorPreviewContext, private val services: ServiceLookup) : ExternalPreviewContext {
     override val projectPath: String? get() = projectPathOf(ctx.backend)
 
     /** The previewed file IS the active one, so both answer the same path; [path] is the non-null form a
@@ -264,9 +279,11 @@ private class PreviewUiContext(private val ctx: EditorPreviewContext) : External
     override fun reportProblems(problems: List<String>) = ctx.reportProblems(problems)
     override fun openFile(path: String, offset: Int) = ctx.openFile(path, offset)
     override fun openScreen(id: String) = ctx.openScreen(id)
+
+    override fun <T : Any> service(key: ServiceKey<T>): T? = services.getServiceOrNull(key)
 }
 
-private class HostScreenUiContext(private val ctx: ScreenContext) : ScreenUiContext {
+private class HostScreenUiContext(private val ctx: ScreenContext, private val services: ServiceLookup) : ScreenUiContext {
     override val projectPath: String? get() = projectPathOf(ctx.backend)
 
     /** A contributed screen replaces the editor rather than sitting beside it, so there is no active tab
@@ -275,4 +292,6 @@ private class HostScreenUiContext(private val ctx: ScreenContext) : ScreenUiCont
     override fun openFile(path: String, offset: Int) = ctx.openFile(path, offset)
     override fun openScreen(id: String) = ctx.openScreen(id)
     override fun back() = ctx.back()
+
+    override fun <T : Any> service(key: ServiceKey<T>): T? = services.getServiceOrNull(key)
 }

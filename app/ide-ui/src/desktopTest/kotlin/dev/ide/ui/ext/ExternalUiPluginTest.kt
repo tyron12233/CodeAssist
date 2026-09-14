@@ -11,6 +11,8 @@ import dev.ide.plugin.ui.ToolWindow
 import dev.ide.plugin.ui.UiContext
 import dev.ide.plugin.ui.UiHandle
 import dev.ide.plugin.ui.UiRegistration
+import dev.ide.platform.ServiceKey
+import dev.ide.platform.ServiceLookup
 import dev.ide.ui.StubBackend
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.icons.TreeIcon
@@ -19,6 +21,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import dev.ide.plugin.ui.UiPlugin as ExternalUiPlugin
 
@@ -131,6 +134,52 @@ class ExternalUiPluginTest {
         ctx.openScreen("com.example.screen")
         assertEquals("/stub/src/Other.kt" to 42, host.opened)
         assertEquals("com.example.screen", host.navigatedTo)
+    }
+
+    /**
+     * A panel resolves the service its own engine facet registered, through the key both halves share.
+     *
+     * This is the alternative to the two facets meeting in a shared `object`: the container holds the
+     * instance, so it is scoped and disposed rather than living as a static for as long as the plugin's
+     * classloader does. The host never names the service's type, so nothing about it becomes part of the SPI.
+     */
+    @Test
+    fun theBodyResolvesItsOwnPluginsServiceThroughTheNarrowContext() {
+        var seen: UiContext? = null
+        val facet = facet { ui ->
+            ui.toolWindow(ToolWindow("id", "Title", "sparkle", dev.ide.plugin.ui.ToolWindowAnchor.LEFT) { ctx ->
+                seen = ctx
+            })
+        }
+        val scope = RecordingScope("com.example.x")
+        val chat = Chat()
+        facet.asUiPlugin("com.example.x", lookupOf(CHAT to chat)).contributeUi(scope)
+
+        composeOnce { scope.toolWindows.single().content(FakeToolWindowContext(activeFilePath = null)) }
+
+        val ctx = requireNotNull(seen)
+        assertSame(chat, ctx.service(CHAT), "the panel gets the instance its engine facet registered")
+        assertNull(ctx.service(ABSENT), "a key nothing registered answers null rather than throwing")
+    }
+
+    /**
+     * A host that wired no container answers nothing, which is the preview and test case. Null is the normal
+     * answer rather than a failure, so a panel handles it by rendering its empty state.
+     */
+    @Test
+    fun aFacetBridgedWithNoLookupResolvesNothing() {
+        var seen: UiContext? = null
+        val facet = facet { ui ->
+            ui.toolWindow(ToolWindow("id", "Title", "sparkle", dev.ide.plugin.ui.ToolWindowAnchor.LEFT) { ctx ->
+                seen = ctx
+            })
+        }
+        val scope = RecordingScope("com.example.x")
+        facet.asUiPlugin("com.example.x").contributeUi(scope)
+
+        composeOnce { scope.toolWindows.single().content(FakeToolWindowContext(activeFilePath = null)) }
+
+        assertNull(requireNotNull(seen).service(CHAT))
     }
 
     /** An overlay is app-wide, so it is told about no file rather than about the wrong one. */
@@ -371,6 +420,15 @@ class ExternalUiPluginTest {
         override fun contribute(ui: UiRegistration) = contribute(ui)
     }
 
+    private fun lookupOf(vararg entries: Pair<ServiceKey<*>, Any>): ServiceLookup = object : ServiceLookup {
+        private val byId = entries.associate { (key, value) -> key.id to value }
+        override fun <T : Any> getService(key: ServiceKey<T>): T =
+            getServiceOrNull(key) ?: error("no service is registered for '${key.id}'")
+
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : Any> getServiceOrNull(key: ServiceKey<T>): T? = byId[key.id] as T?
+    }
+
     private class FakeToolWindowContext(
         override val activeFilePath: String?,
         override val backend: IdeBackend = StubBackend(),
@@ -486,3 +544,9 @@ class ExternalUiPluginTest {
         override fun clear() {}
     }
 }
+
+/** Stands in for whatever a plugin registers: the host never names this type, it only hands it back. */
+private class Chat
+
+private val CHAT = ServiceKey<Chat>("com.example.chat")
+private val ABSENT = ServiceKey<Chat>("com.example.absent")

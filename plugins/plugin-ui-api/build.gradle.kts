@@ -23,6 +23,14 @@ plugins {
 // an Android plugin would otherwise resolve a desktop artifact. A plugin declares the Compose it compiles
 // against itself (the template does this), and the host provides it at runtime.
 dependencies {
+    // `ServiceKey`, for `UiContext.service`. This is the one CodeAssist module this artifact depends on, and
+    // it is deliberate: a plugin's UI facet resolves the plugin's OWN service, and the key it resolves by has
+    // to be the same type the engine facet registered with. Declaring a second key type here instead would
+    // mean a plugin holding two keys for one service. `platform-core` is published, is already on every
+    // plugin's compile path (settings pages, logging), and depends on nothing itself, so this adds no
+    // resolution a plugin author does not already have.
+    api(project(":platform-core"))
+
     compileOnly(libs.compose.runtime.desktop)
 
     // compose-ui, for the editor painter alone: a raw drawing hook IS a `DrawScope`, so that one type has to

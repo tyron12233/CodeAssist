@@ -3,9 +3,11 @@ package dev.ide.core
 import dev.ide.core.plugins.BuiltInPlugins
 import dev.ide.core.plugins.ExternalUiFacets
 import dev.ide.core.plugins.PluginManifestToml
+import dev.ide.core.plugins.PluginUiServiceLookup
 import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.ProjectTemplateRegistry
 import dev.ide.platform.ServiceKey
+import dev.ide.platform.ServiceLookup
 import dev.ide.platform.impl.ApplicationContainer
 import dev.ide.platform.impl.PlatformCore
 import dev.ide.platform.log.Log
@@ -90,6 +92,11 @@ class ApplicationEnvironment(
 
     /** Process-global application service container over [platform]'s registry; parents every project's. */
     val container: ApplicationContainer = ApplicationContainer(platform.extensions)
+
+    /** What an installed plugin's UI facet resolves services against: the open project's container, falling
+     *  back to [container]. Not [container] itself, because a UI facet is loaded once at startup and the
+     *  project it should resolve against changes under it. See [PluginUiServiceLookup]. */
+    val uiServices: ServiceLookup = PluginUiServiceLookup(this)
 
     /** Facet codecs, now [FACET_CODEC_EP]-backed over the app registry (like the module-type / file-icon /
      *  template registries). The android built-in plugin registers the AndroidFacet codec through it; every
@@ -213,7 +220,7 @@ class ApplicationEnvironment(
         // contributes no UI: its panels would be reading services that never registered.
         val externalUi = external.keys.filter { it !in failures }.mapNotNull { id ->
             val plugin = loaded.getValue(id)
-            ExternalUiFacets.load(plugin.manifest, plugin.instances) { reason ->
+            ExternalUiFacets.load(plugin.manifest, plugin.instances, uiServices) { reason ->
                 // A UI facet that failed is reported without failing the plugin: its engine facet is loaded
                 // and working, so the row should say what is missing rather than claim nothing loaded.
                 failures.merge(id, reason) { existing, new -> "$existing; $new" }

@@ -3,6 +3,8 @@
 // See LICENSE-EXCEPTION: a plugin linking against this file may use any license.
 package dev.ide.plugin.ui
 
+import dev.ide.platform.ServiceKey
+
 /**
  * What the IDE hands a contributed body when it renders: where the user is, and the few host operations a
  * panel cannot perform for itself.
@@ -30,6 +32,37 @@ interface UiContext {
 
     /** Show the [Screen] registered under [id] (this plugin's, or any other's). Unknown ids are ignored. */
     fun openScreen(id: String)
+
+    /**
+     * The service registered under [key], or null when nothing registered one.
+     *
+     * This is how a panel reaches state its **own** engine facet owns, and it is the shape to prefer over a
+     * shared `object`: the container holds the instance, so it is scoped and disposed rather than living as a
+     * static for as long as the plugin's classloader does. Declare the key and the service type in your own
+     * module, register it from [dev.ide.plugin.Plugin.register], and resolve it here:
+     *
+     * ```kotlin
+     * val MY_CHAT = ServiceKey<MyChatState>("com.example.chat")
+     *
+     * @Composable
+     * fun Panel(ctx: UiContext) {
+     *     val chat = ctx.service(MY_CHAT) ?: return
+     *     val state by chat.state.collectAsState()
+     * }
+     * ```
+     *
+     * The host never names your service's type: it resolves the key and hands the instance back, so nothing
+     * about your service becomes part of this SPI. Resolution runs against the same container the engine tier
+     * uses, so a key registered at a narrower scope answers for the open project and is disposed with it.
+     *
+     * Null is the normal answer, not an error: the plugin that registers the key may be disabled, or may be
+     * an older version that predates it. A panel that cannot proceed without one should render its empty
+     * state rather than throw.
+     *
+     * Defaulted so a host that wires no container (a preview, a test) needs nothing, and so adding a lookup
+     * to an existing host is not a breaking change.
+     */
+    fun <T : Any> service(key: ServiceKey<T>): T? = null
 
     companion object {
 
