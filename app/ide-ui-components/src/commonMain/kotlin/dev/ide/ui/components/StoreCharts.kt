@@ -152,6 +152,8 @@ fun ChartRow(
      * been ranked before.
      */
     showMovement: Boolean = true,
+    /** The project's own app icon, filling the tile. Null draws the glyph tile instead. */
+    icon: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
     Row(
@@ -176,12 +178,17 @@ fun ChartRow(
             )
             if (showMovement) Movement(entry)
         }
-        TemplateIcon(
-            iconId = entry.item.iconId,
-            pair = tonalPair(index),
-            shape = tileShape(index),
-            size = 44.dp,
-        )
+        val shape = tileShape(index)
+        if (icon != null) {
+            icon(Modifier.size(44.dp).clip(shape))
+        } else {
+            TemplateIcon(
+                iconId = entry.item.iconId,
+                pair = tonalPair(index),
+                shape = shape,
+                size = 44.dp,
+            )
+        }
         Column(Modifier.weight(1f)) {
             Text(
                 entry.item.title,
@@ -254,6 +261,14 @@ fun ChartCard(
     onAction: (UiChartEntry) -> Unit,
     modifier: Modifier = Modifier,
     showMovement: Boolean = true,
+    /**
+     * The project's own app icon for one row, or null to keep its glyph tile.
+     *
+     * A slot rather than a path, for the same reason [StoreListRow] takes one: this module draws the
+     * store, it does not fetch from it. @Composable because resolving an icon means a lookup that
+     * suspends, and only the composed rows should start one.
+     */
+    iconFor: @Composable (UiChartEntry) -> (@Composable (Modifier) -> Unit)? = { null },
 ) {
     Surface(
         shape = RoundedCornerShape(28.dp),
@@ -270,6 +285,7 @@ fun ChartCard(
                     onOpen = { onOpen(e) },
                     onAction = { onAction(e) },
                     showMovement = showMovement,
+                    icon = iconFor(e),
                 )
             }
         }

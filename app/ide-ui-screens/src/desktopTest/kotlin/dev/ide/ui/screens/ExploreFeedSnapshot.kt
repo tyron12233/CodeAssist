@@ -205,6 +205,42 @@ class ExploreFeedSnapshot {
     )
 
     /**
+     * The populated feed with published artwork on every project.
+     *
+     * The mode where Top charts exists at all, so it is the only frame in which the chart rows' app
+     * icons can be looked at. They were glyph tiles until the row gained an icon slot, while every
+     * shelf around them drew the real thing.
+     */
+    @Test
+    fun populatedWithPublishedArtwork() = snapshot(
+        "explore-pop-artwork.png",
+        populatedFeed.copy(sections = populatedFeed.sections.map(::withArtwork)),
+        dark = false,
+        height = 7200,
+        backend = ShotBackend(),
+    )
+
+    /** The same sections, with every item carrying the paths a published listing would. */
+    private fun withArtwork(section: UiFeedSection): UiFeedSection {
+        fun dressed(it: UiStoreItem) = it.copy(
+            screenshots = listOf("${it.id}/1.0.0/shot-0.png"),
+            iconPath = "${it.id}/1.0.0/icon.png",
+        )
+        return when (section) {
+            is UiFeedSection.Featured -> section.copy(items = section.items.map(::dressed))
+            is UiFeedSection.Shelf -> section.copy(items = section.items.map(::dressed))
+            is UiFeedSection.Personalized -> section.copy(items = section.items.map(::dressed))
+            is UiFeedSection.Catalogue -> section.copy(items = section.items.map(::dressed))
+            is UiFeedSection.Charts -> section.copy(
+                tabs = section.tabs.map { tab ->
+                    tab.copy(entries = tab.entries.map { it.copy(item = dressed(it.item)) })
+                },
+            )
+            else -> section
+        }
+    }
+
+    /**
      * A sparse feed whose projects published screenshots.
      *
      * This is the mode a young store is actually in, and its ONLY item surface is the catalogue card, so
