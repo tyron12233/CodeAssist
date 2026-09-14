@@ -89,7 +89,7 @@ internal fun AppNavGraph(
 ) {
     val backend = app.backend
     val scope = rememberCoroutineScope()
-    ScreenHost(app.screen, modifier) { s ->
+    ScreenHost(app.screen, back = app.navigatingBack, modifier = modifier) { s ->
         when (s) {
             Screen.Projects -> HomeRoute(app, fileActions)
 
@@ -173,7 +173,7 @@ internal fun AppNavGraph(
             Screen.PublisherProfile -> PublisherProfileScreen(
                 backend = backend,
                 handle = app.publisherHandle.orEmpty(),
-                onBack = { app.navigateTo(Screen.Projects) },
+                onBack = app::navigateBack,
                 onOpenItem = app::openStoreItem,
                 // Following needs an account; null would hide the button, which is not the same as it
                 // being unavailable, so it asks instead.
@@ -182,7 +182,7 @@ internal fun AppNavGraph(
 
             Screen.You -> YouScreen(
                 backend = backend,
-                onBack = { app.navigateTo(Screen.Projects) },
+                onBack = app::navigateBack,
                 onOpenItem = app::openStoreItemById,
                 onOpenPublicProfile = app::openPublisher,
                 onPublish = if (backend.store.submissionsAvailable()) ({ app.openSubmitProject() }) else null,
@@ -201,13 +201,13 @@ internal fun AppNavGraph(
 
             Screen.Moderation -> ModerationScreen(
                 backend = backend,
-                onBack = app::openYou,
+                onBack = app::navigateBack,
                 onOpenItem = app::openStoreItemById,
                 onOpenPublisher = app::openPublisher,
             )
 
             Screen.PublishingGuide -> PublishingGuideScreen(
-                onBack = { app.navigateTo(Screen.Projects) },
+                onBack = app::navigateBack,
                 onPublish = if (backend.store.submissionsAvailable()) ({ app.openSubmitProject() }) else null,
             )
 
@@ -218,10 +218,10 @@ internal fun AppNavGraph(
                 // Without this the screenshot picker has no host to ask, which reads on screen as an
                 // "Add a screenshot" button that does nothing.
                 fileActions = fileActions,
-                onBack = { app.navigateTo(Screen.Projects) },
+                onBack = app::navigateBack,
                 // To the You screen on success, where the submission is now listed as in review: that is
                 // where its state lives and where its decision will arrive.
-                onSubmitted = { app.openYou() },
+                onSubmitted = app::finishSubmission,
             )
 
             Screen.StoreItem -> {
@@ -236,7 +236,7 @@ internal fun AppNavGraph(
                 StoreItemScreen(
                     backend = backend,
                     item = app.storeItem,
-                    onBack = { app.navigateTo(Screen.Projects) },
+                    onBack = app::navigateBack,
                     onCreateFromTemplate = { id -> app.createProject(id) },
                     isSaved = saved,
                     onToggleSaved = app.storeItem?.let { current ->

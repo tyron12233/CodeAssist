@@ -1,6 +1,7 @@
 package dev.ide.ui
 
 import dev.ide.ui.backend.FileActions
+import dev.ide.ui.ext.ScreenBackRegistry
 import dev.ide.ui.ext.ScreenContribution
 import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.backend.ProjectInfo
@@ -266,8 +267,15 @@ class CodeAssistAppStateTest {
         }
     }
 
+    /**
+     * A contributed screen opening another is a push, not a replacement.
+     *
+     * They share one route, so this used to swap the id underneath and Back left the whole run at once: a
+     * panel that opened a detail view of its own could not be returned to. Only the bottom of the run steps
+     * out to the screen that opened the first one.
+     */
     @Test
-    fun steppingBetweenPluginScreensStillReturnsToTheOpener() = runTest {
+    fun steppingBetweenPluginScreensUnwindsOneAtATime() = runTest {
         val backend = settled()
         val app = appState(backend)
         advanceUntilIdle()
@@ -276,11 +284,95 @@ class CodeAssistAppStateTest {
 
         withScreens("vcs.diff", "vcs.history") {
             app.openPluginScreen("vcs.diff")
-            // A diff opening that file's history stays on the same destination; the return target is unchanged.
+            // A diff opening that file's history stays on the same destination, over the diff rather than
+            // instead of it.
             app.openPluginScreen("vcs.history")
             assertEquals("vcs.history", app.pluginScreenId)
+
+            app.navigateBack()
+            assertEquals(Screen.PluginScreen, app.screen)
+            assertEquals("vcs.diff", app.pluginScreenId, "Back returns to the screen that opened this one")
+
             app.navigateBack()
             assertEquals(Screen.Editor, app.screen)
+            assertNull(app.pluginScreenId)
+        }
+    }
+
+    /** A contributed screen opened from a listing returns to that listing, not to the tab underneath it. */
+    @Test
+    fun aPluginScreenOpenedFromAStoreScreenReturnsToIt() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        val item = communityItem("some.project")
+        app.openStoreItem(item)
+        withScreens("vcs.history") {
+            app.openPluginScreen("vcs.history")
+            assertEquals(Screen.PluginScreen, app.screen)
+
+            app.navigateBack()
+            assertEquals(Screen.StoreItem, app.screen)
+            assertEquals(item, app.storeItem)
+            assertNull(app.pluginScreenId, "the contributed screen's id does not outlive it")
+        }
+    }
+
+    /**
+     * A contributed screen with somewhere of its own to go answers Back itself.
+     *
+     * Without this a plugin's wizard, detail pane or unsaved form was torn down whole on the first press,
+     * and the plugin had no way to say otherwise.
+     */
+    @Test
+    fun aPluginScreenCanClaimBackForItsOwnState() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+        backend.epochFlow.value++
+        advanceUntilIdle()
+
+        withScreens("vcs.wizard") {
+            app.openPluginScreen("vcs.wizard")
+            var step = 2
+            val claim = ScreenBackRegistry.register(enabled = { step > 0 }) { step-- }
+            try {
+                app.navigateBack()
+                assertEquals(1, step)
+                assertEquals(Screen.PluginScreen, app.screen, "a claimed press never reaches the host")
+
+                app.navigateBack()
+                assertEquals(0, step)
+                assertEquals(Screen.PluginScreen, app.screen)
+
+                // The claim is off at step 0, so the next press is the host's and pops the screen.
+                app.navigateBack()
+                assertEquals(Screen.Editor, app.screen)
+            } finally {
+                claim.dispose()
+            }
+        }
+    }
+
+    /** A claim registered by a screen that is no longer showing cannot swallow the host's Back. */
+    @Test
+    fun aClaimOnlyHoldsBackWhileItsScreenIsShowing() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+        backend.epochFlow.value++
+        advanceUntilIdle()
+
+        var handled = 0
+        val claim = ScreenBackRegistry.register { handled++ }
+        try {
+            // The editor is not a contributed screen, so the claim is not consulted.
+            app.navigateBack()
+            assertEquals(0, handled)
+            assertEquals(Screen.Projects, app.screen)
+        } finally {
+            claim.dispose()
         }
     }
 
@@ -610,6 +702,133 @@ class CodeAssistAppStateTest {
         assertEquals("android-basics", app.currentTrackId)
         assertEquals("first-app", app.currentLessonId)
         assertEquals(4, app.lessonInitialStep)
+    }
+
+    // ---- the store back stack ----
+
+    /**
+     * The reported bug: a listing opened from Explore, then its publisher's page, then Back landed on
+     * Explore rather than on the listing. Every store screen returned to a fixed parent, so the one in
+     * between was skipped.
+     */
+    @Test
+    fun backFromAPublisherReturnsToTheListingItWasOpenedFrom() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        app.selectHomeTab(HomeTab.Store)
+        val item = communityItem("some.project")
+        app.openStoreItem(item)
+        assertEquals(Screen.StoreItem, app.screen)
+
+        app.openPublisher("tyron")
+        assertEquals(Screen.PublisherProfile, app.screen)
+
+        app.navigateBack()
+        assertEquals(Screen.StoreItem, app.screen)
+        assertEquals(item, app.storeItem, "the listing comes back with its own item, not an empty page")
+        assertTrue(app.navigatingBack, "a pop animates the way the user came in")
+
+        // One more step leaves the family for the Explore tab it was entered from.
+        app.navigateBack()
+        assertEquals(Screen.Projects, app.screen)
+        assertEquals(HomeTab.Store, app.homeTab)
+    }
+
+    /** A chain deeper than one step unwinds one screen at a time, each with the arguments it was showing. */
+    @Test
+    fun theStoreStackUnwindsOneScreenAtATime() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        val first = communityItem("first.project")
+        val second = communityItem("second.project")
+        app.openStoreItem(first)
+        app.openPublisher("tyron")
+        app.openStoreItem(second)
+        assertEquals(second, app.storeItem)
+
+        app.navigateBack()
+        assertEquals(Screen.PublisherProfile, app.screen)
+        assertEquals("tyron", app.publisherHandle)
+
+        app.navigateBack()
+        assertEquals(Screen.StoreItem, app.screen)
+        assertEquals(first, app.storeItem, "the first listing is restored, not the one opened after it")
+
+        app.navigateBack()
+        assertEquals(Screen.Projects, app.screen)
+    }
+
+    /** Reached straight from Explore, Back still leaves for Explore: there is nothing under it. */
+    @Test
+    fun aStoreScreenEnteredFromExploreStillStepsBackToExplore() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        app.selectHomeTab(HomeTab.Store)
+        app.openYou()
+        app.navigateBack()
+        assertEquals(Screen.Projects, app.screen)
+        assertEquals(HomeTab.Store, app.homeTab)
+    }
+
+    /** The review queue steps back to the profile that opened it, and that profile still steps out. */
+    @Test
+    fun moderationStepsBackThroughTheProfileThatOpenedIt() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        app.openYou()
+        app.openModeration()
+        app.navigateBack()
+        assertEquals(Screen.You, app.screen)
+        app.navigateBack()
+        assertEquals(Screen.Projects, app.screen)
+    }
+
+    /**
+     * A sent submission replaces the form rather than stacking on it: Back from the You screen must not
+     * walk into a page offering to send the same project again.
+     */
+    @Test
+    fun aSentSubmissionDoesNotLeaveTheFormOnTheStack() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        app.openYou()
+        app.openSubmitProject(ProjectInfo("app", "/ws/app", 1))
+        assertEquals(Screen.SubmitProject, app.screen)
+
+        app.finishSubmission()
+        assertEquals(Screen.You, app.screen)
+        app.navigateBack()
+        assertEquals(Screen.Projects, app.screen)
+    }
+
+    /**
+     * Leaving the family for anywhere else drops the stack. Without this, opening a project from a listing
+     * left the listing underneath, and Back out of the editor reopened the store instead of the picker.
+     */
+    @Test
+    fun leavingTheStoreDropsWhatWasUnderIt() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+
+        app.openStoreItem(communityItem("some.project"))
+        app.openPublisher("tyron")
+        app.openInstalledProject("/ws/app")
+        advanceUntilIdle()
+        assertEquals(Screen.Editor, app.screen)
+
+        app.navigateBack()
+        assertEquals(Screen.Projects, app.screen)
     }
 
     @Test

@@ -1117,7 +1117,7 @@ An **installed** plugin declares only `plugin-api` and `platform-core` by defaul
 `EditorTopics`. Subscribing to any of the others means adding that artifact, which the BOM already versions:
 
 ```kotlin
-compileOnly(platform("io.github.tyron12233:plugin-bom:2.8.0"))
+compileOnly(platform("io.github.tyron12233:plugin-bom:2.9.0"))
 compileOnly("io.github.tyron12233:build-api")     // BuildTopics
 ```
 
@@ -1480,6 +1480,37 @@ adding a screen needs no navigation-graph edit.
 
 Reach a screen from: a tool window's `ctx.openScreen(id)`, a `UiHostAction` navigating to it, or an engine
 action returning `ActionEffect.Navigate(id)`.
+
+#### Back
+
+`openScreen(id)` **pushes**: your history opens on top of the screen that called it, Back returns there with
+that screen's own id restored, and only the bottom of the run steps out to whatever opened the first one. A
+branch list opening a diff, and the diff opening that file's history, is three entries and three presses back.
+(Before SPI 2.9.0 this replaced the screen and one press left the whole run, so a panel's own detail view
+could not be returned to.)
+
+Claim the gesture when your screen has somewhere of its own to go, so a press undoes a step inside it instead
+of tearing it down whole:
+
+```kotlin
+@Composable
+fun CloneScreen(ctx: ScreenContext) {
+    var step by remember { mutableStateOf(0) }
+    // Back walks the wizard backwards while there are steps left, and leaves the screen at step 0.
+    ScreenBackHandler(enabled = step > 0) { step-- }
+    ...
+}
+```
+
+`enabled` is read on every press, so hold one handler and let its condition follow your state rather than
+registering and unregistering. Nested handlers resolve innermost-first, and the claim lives exactly as long as
+the composable does. `ScreenBackRegistry.register(enabled, onBack)` is the same thing for a controller or a
+test that is not holding it from a composition.
+
+What the host restores on the way back is **which screen** you were on, not what it was showing: arguments
+your screen reads from a holder of your own (the VCS plugin's `VcsNav.diff`, say) are yours to key by screen
+id if returning to the same screen twice in a run has to show two different things. The stack is capped at 32
+entries, which no hand-driven flow reaches.
 
 ### 10.5 Overlays
 
@@ -2442,7 +2473,7 @@ the IDE's own runtime:
 ```kotlin
 dependencies {
     // The BOM carries the versions, including the Compose the IDE provides.
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.8.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.9.0"))
 
     compileOnly("io.github.tyron12233:plugin-ui-api")
     compileOnly("androidx.compose.runtime:runtime")
@@ -2500,7 +2531,7 @@ not part of it, so an id or an anchor that is wrong still shows up only once the
 The engine SPI is published, so the extension points in these modules are available to a plugin app:
 
 ```kotlin
-compileOnly(platform("io.github.tyron12233:plugin-bom:2.8.0")) // one version for everything below
+compileOnly(platform("io.github.tyron12233:plugin-bom:2.9.0")) // one version for everything below
 
 compileOnly("io.github.tyron12233:plugin-api")        // actions, menus, palette commands, editor events
 compileOnly("io.github.tyron12233:platform-core")     // scoped services, settings pages, logging
@@ -2534,7 +2565,7 @@ The SPI is published, so it is an ordinary dependency:
 
 ```kotlin
 dependencies {
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.8.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.9.0"))
     compileOnly("io.github.tyron12233:plugin-api")
     compileOnly("io.github.tyron12233:platform-core")
 }
@@ -2741,7 +2772,7 @@ Published, and the only UI surface an installed plugin compiles against. See
 | --- | --- |
 | `dev.ide.ui.ext.UiPlugin` / `UiContributionScope` / `UiPluginHost` | [UiPlugin.kt](../ide-ui-api/src/commonMain/kotlin/dev/ide/ui/ext/UiPlugin.kt) |
 | `dev.ide.ui.ext.ToolWindowContribution` / `ToolWindowAnchor` / `ToolWindowContext` | [ToolWindows.kt](../ide-ui-api/src/commonMain/kotlin/dev/ide/ui/ext/ToolWindows.kt) |
-| `dev.ide.ui.ext.ScreenContribution` / `ScreenContext` / `ScreenRegistry` | [ToolWindows.kt](../ide-ui-api/src/commonMain/kotlin/dev/ide/ui/ext/ToolWindows.kt) |
+| `dev.ide.ui.ext.ScreenContribution` / `ScreenContext` / `ScreenRegistry` / `ScreenBackHandler` | [ToolWindows.kt](../ide-ui-api/src/commonMain/kotlin/dev/ide/ui/ext/ToolWindows.kt) |
 | `dev.ide.ui.ext.OverlayContribution` / `OverlayContext` | [ToolWindows.kt](../ide-ui-api/src/commonMain/kotlin/dev/ide/ui/ext/ToolWindows.kt) |
 | `dev.ide.ui.ext.EditorViewModeContribution` / `ViewModeContext` | [ToolWindows.kt](../ide-ui-api/src/commonMain/kotlin/dev/ide/ui/ext/ToolWindows.kt) |
 | `dev.ide.ui.ext.UiHostAction` / `SimpleUiAction` / `UiActionHost` / `UiDestinations` / `Registration` | [UiActions.kt](../ide-ui-api/src/commonMain/kotlin/dev/ide/ui/ext/UiActions.kt) |
