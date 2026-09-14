@@ -66,15 +66,29 @@ interface PluginRegistration {
     /** Tie an arbitrary [Disposable] to this plugin's unload (LIFO with the rest of its contributions). */
     fun onDispose(d: Disposable)
 
-    /** The application-wide [MessageBus]. Use it to PUBLISH — the IDE's lifecycle topics (editor/build/run/
-     *  analysis/project/indexing events) or a topic this plugin defines itself for plugin-to-plugin messaging
-     *  (`messageBus.syncPublisher(myTopic)`). To subscribe, prefer [busConnection]: a raw `messageBus.connect()`
-     *  is NOT tracked, so its subscriptions outlive an unload unless the plugin disposes it via [onDispose]. */
+    /** The application-wide [MessageBus]. Use it to PUBLISH: a topic this plugin defines itself, for
+     *  plugin-to-plugin messaging (`messageBus.syncPublisher(myTopic)`). To subscribe, prefer
+     *  [busConnection]: a raw `messageBus.connect()` is NOT tracked, so its subscriptions outlive an unload
+     *  unless the plugin disposes it via [onDispose]. */
     val messageBus: MessageBus
 
-    /** A [MessageBusConnection] already tracked for unload (disposed LIFO with the plugin's other
-     *  contributions), so its subscriptions are removed automatically when the plugin unloads. The normal
-     *  way for a plugin to listen: `busConnection().subscribe(SomeTopics.CHANGES, listener)`. */
+    /**
+     * A [MessageBusConnection] already tracked for unload (disposed LIFO with the plugin's other
+     * contributions), so its subscriptions are removed automatically when the plugin unloads. The normal
+     * way for a plugin to listen: `busConnection().subscribe(SomeTopics.CHANGES, listener)`.
+     *
+     * The IDE's own lifecycle topics live in the api module that owns each payload:
+     * [dev.ide.plugin.editor.EditorTopics] (files opening, closing and moving focus, and the caret),
+     * `dev.ide.build.BuildTopics` (builds and runs), `dev.ide.analysis.AnalysisTopics` (a file's merged
+     * diagnostics), `dev.ide.index.IndexTopics` (index build progress) and
+     * `dev.ide.model.event.ProjectTopics` (the open project changing). The lower-level spines are on the
+     * same bus: `dev.ide.vfs.VfsTopics` for raw file changes and `dev.ide.model.event.ProjectModelTopics`
+     * for model commits.
+     *
+     * [MessageBusConnection.subscribe] is generic, and Kotlin does not SAM-convert a type-variable
+     * parameter, so the listener has to be written as an explicit constructor
+     * (`BuildEventListener { ... }`) rather than as a bare lambda.
+     */
     fun busConnection(): MessageBusConnection
 
     /**
