@@ -41,6 +41,15 @@ kotlin {
             implementation(compose.components.resources) // the chat_* strings live in this module's composeResources/
             implementation(libs.kotlinx.coroutines.core)
         }
+
+        // Off-screen rendering, for eyeballing the chat without launching the app (see the snapshot test).
+        val desktopTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(project(":ide-ui-testing"))
+                implementation(compose.desktop.currentOs) // skiko, for the off-screen render
+            }
+        }
     }
 }
 
