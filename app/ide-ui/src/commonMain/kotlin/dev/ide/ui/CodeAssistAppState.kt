@@ -9,6 +9,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
+import dev.ide.ui.ext.ScreenBackRegistry
 import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.ads.AdController
 import dev.ide.ui.backend.UiProjectFolderKind
@@ -54,6 +55,26 @@ sealed interface ImportError {
 }
 
 /**
+ * One entry on the back stack: a screen, and the arguments it was showing.
+ *
+ * The arguments have to travel with the entry because they live in single fields that the next screen
+ * overwrites (opening a second listing from a publisher's page replaces the first, and so does one
+ * contributed screen opening another), so returning to a screen means putting its own arguments back, not
+ * just its route.
+ */
+private class NavEntry(val screen: Screen, val restore: () -> Unit)
+
+/**
+ * How deep the back stack is allowed to get before the oldest entry is dropped.
+ *
+ * Nothing a user does by hand reaches this. It is there because a contributed screen decides its own
+ * navigation, and a plugin that opens a screen on every recomposition would otherwise grow the stack until
+ * the process died. Dropping from the bottom costs the run its oldest step and nothing else: the exit below
+ * it is the per-screen fallback, which is where Back was going anyway.
+ */
+private const val MAX_BACK_STACK = 32
+
+/**
  * The app shell's state and the intents that change it: which screen is showing, where each sub-screen
  * returns to, the first-launch sheets, and the project create/open/import/export flows.
  *
@@ -80,7 +101,32 @@ class CodeAssistAppState(
 
     // ---- navigation ----
 
-    var screen: Screen by mutableStateOf(Screen.Projects)
+    private var currentScreen: Screen by mutableStateOf(Screen.Projects)
+
+    /**
+     * The destination on screen.
+     *
+     * Assigning is how every intent below navigates; the setter is where the back stack is dropped, so
+     * leaving the stacked screens for anywhere else can never leave a stale entry behind to pop into later.
+     */
+    var screen: Screen
+        get() = currentScreen
+        private set(value) {
+            if (value != currentScreen && !navigatesAsStack(value)) backStack.clear()
+            navigatingBack = false
+            currentScreen = value
+        }
+
+    /**
+     * The screens that open each other freely rather than in a fixed order: a listing links to its
+     * publisher, a publisher's page links back to listings, your own page links to both, and a contributed
+     * screen opens whichever other one its plugin decides. Back through that has to be a stack, not a
+     * per-screen parent.
+     */
+    private val backStack = mutableListOf<NavEntry>()
+
+    /** True while the last move was a Back, so the transition slides the way the user came in. */
+    var navigatingBack: Boolean by mutableStateOf(false)
         private set
 
     /** Which plugin-contributed screen [Screen.PluginScreen] is showing, and where Back returns to. */
@@ -328,6 +374,11 @@ class CodeAssistAppState(
      * navigates here for a detail view that needs the whole window, and any action's `Navigate` effect
      * resolves to the same route.
      *
+     * One contributed screen opening another is a push, not a replacement: they all share this one route, so
+     * the id rides the stack with everything else and Back restores the screen that was showing rather than
+     * leaving the whole run at once. [pluginScreenReturn] is the bottom of that run, the screen the first
+     * one was opened from, which is where Back goes once the stack is spent.
+     *
      * An id nothing has registered (a disabled plugin, a stale action) is ignored rather than navigated to:
      * the destination would render nothing, and recovering from it in the route would have to re-enter
      * navigation from inside a screen that is already animating away.
@@ -335,6 +386,7 @@ class CodeAssistAppState(
     fun openPluginScreen(id: String) {
         if (ScreenRegistry.find(id) == null) return
         if (screen != Screen.PluginScreen) pluginScreenReturn = screen
+        pushEntry()
         pluginScreenId = id
         screen = Screen.PluginScreen
     }
@@ -676,7 +728,62 @@ class CodeAssistAppState(
         screen = Screen.Projects
     }
 
+    // ---- the back stack ----
+
+    /**
+     * Whether [s] navigates as part of the stack.
+     *
+     * Everything else in the app reaches its sub-screens down a fixed path (the hub's tools, a lesson's
+     * track, a keystore's manager) and returns up that same path. These do not: the store screens
+     * cross-link, and a contributed screen goes wherever its plugin sends it, so more than one of them can
+     * be on the way to any other.
+     */
+    private fun navigatesAsStack(s: Screen): Boolean = when (s) {
+        Screen.StoreItem, Screen.PublisherProfile, Screen.You,
+        Screen.SubmitProject, Screen.PublishingGuide, Screen.Moderation,
+        Screen.PluginScreen -> true
+
+        else -> false
+    }
+
+    /**
+     * Remember the screen being left, so Back comes back to it.
+     *
+     * Only from a screen that is itself on the stack: arriving from anywhere else (the Explore tab, the
+     * editor, a notification, a deep link) leaves the stack empty, and Back then falls through to the
+     * per-screen exits below, which is where those entries came from.
+     */
+    private fun pushEntry() {
+        if (!navigatesAsStack(screen)) return
+        val item = storeItem
+        val handle = publisherHandle
+        val project = submitProject
+        val slug = submitItemSlug
+        val plugin = pluginScreenId
+        backStack += NavEntry(screen) {
+            storeItem = item
+            publisherHandle = handle
+            submitProject = project
+            submitItemSlug = slug
+            pluginScreenId = plugin
+        }
+        while (backStack.size > MAX_BACK_STACK) backStack.removeAt(0)
+    }
+
+    /** Take the entry off the top, or null when the stack is empty. */
+    private fun popEntry(): NavEntry? =
+        if (backStack.isEmpty()) null else backStack.removeAt(backStack.lastIndex)
+
+    /** Return to the entry below, arguments and all. */
+    private fun popBack() {
+        val entry = popEntry() ?: return
+        entry.restore()
+        screen = entry.screen
+        navigatingBack = true
+    }
+
     fun openStoreItem(item: UiStoreItem) {
+        pushEntry()
         storeItem = item
         screen = Screen.StoreItem
     }
@@ -726,6 +833,7 @@ class CodeAssistAppState(
      * version of a listing the user was already looking at, which is what answering a rejection is.
      */
     fun openSubmitProject(project: ProjectInfo? = null, itemSlug: String? = null) {
+        pushEntry()
         submitProject = project
         submitItemSlug = itemSlug
         screen = Screen.SubmitProject
@@ -733,6 +841,7 @@ class CodeAssistAppState(
 
     /** What publishing does, before committing to it. Previously this link opened Settings and explained nothing. */
     fun openPublishingGuide() {
+        pushEntry()
         screen = Screen.PublishingGuide
     }
 
@@ -742,12 +851,25 @@ class CodeAssistAppState(
 
     /** A publisher's page: everything they have published, and what it adds up to. */
     fun openPublisher(handle: String) {
+        pushEntry()
         publisherHandle = handle
         screen = Screen.PublisherProfile
     }
 
     /** Your own page: your profile, your submissions and what you have published. */
     fun openYou() {
+        pushEntry()
+        screen = Screen.You
+    }
+
+    /**
+     * A submission landed: show it on the You screen, in the review queue it is now in.
+     *
+     * The publish flow is finished rather than stacked under this, so Back does not walk into the form the
+     * submission was just sent from: a second look at a page that would offer to send it again.
+     */
+    fun finishSubmission() {
+        popEntry()?.restore()
         screen = Screen.You
     }
 
@@ -759,6 +881,7 @@ class CodeAssistAppState(
      * arriving here without being a moderator produces refusals rather than a page of someone else's work.
      */
     fun openModeration() {
+        pushEntry()
         screen = Screen.Moderation
     }
 
@@ -827,6 +950,17 @@ class CodeAssistAppState(
             showMigration -> dismissMigration()
             showAnalytics -> setAnalyticsConsent(false)
 
+            // A contributed screen holding its own claim on Back answers first: it is the deeper handler,
+            // the same way an open sheet is, and popping the whole screen would throw away state it has
+            // somewhere to go inside. Scoped to the route those screens render on, so a claim still
+            // registered through a screen's exit animation cannot swallow a press meant for the host.
+            screen == Screen.PluginScreen && ScreenBackRegistry.consumeBack() -> Unit
+
+            // On the stacked screens, Back is a pop: whatever screen opened this one, with the arguments it
+            // was showing. Empty below the entry point, which falls through to the per-screen exits in the
+            // rest of this chain.
+            backStack.isNotEmpty() -> popBack()
+
             // The keystore Create/Import sub-screens step back to their manager, not all the way out.
             screen == Screen.KeystoreCreate || screen == Screen.KeystoreImport -> screen = Screen.KeystoreManager
             // The hub's sub-screens step back to the hub; the keystore manager honours its entry origin.
@@ -850,14 +984,10 @@ class CodeAssistAppState(
             // The lesson player steps back to its track; the track steps back to the Learn tab (picker).
             screen == Screen.LessonPlayer -> exitLessonPlayer()
             screen == Screen.LessonTrack -> exitLessonTrack()
-            // The store item detail returns to the Explore tab (still selected on Projects).
-            screen == Screen.StoreItem -> screen = Screen.Projects
-            screen == Screen.SubmitProject -> screen = Screen.Projects
-            screen == Screen.PublishingGuide -> screen = Screen.Projects
-            screen == Screen.PublisherProfile -> screen = Screen.Projects
-            screen == Screen.You -> screen = Screen.Projects
-            // Back out to the profile it was opened from, not to the project list.
-            screen == Screen.Moderation -> screen = Screen.You
+            // Nothing left on the stack, and contributed screens took their own exit above: what is left is
+            // a store screen the user entered the run on, so Back leaves for the Explore tab (still the
+            // selected home tab).
+            navigatesAsStack(screen) -> screen = Screen.Projects
 
             screen == Screen.ChallengePlayer -> exitChallenge()
             screen == Screen.ChallengeBoard -> exitChallengeBoard()

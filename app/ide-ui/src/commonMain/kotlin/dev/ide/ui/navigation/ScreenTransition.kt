@@ -20,8 +20,8 @@ import dev.ide.ui.theme.Motion
  * Animates between top-level [Screen]s with a **platform-differentiated** feel:
  *
  * - **Mobile** — a Material *shared-axis X*: the incoming screen slides in from the side and fades while
- *   the outgoing one slides out and fades, the direction following [Screen] ordinal (deeper = from the
- *   right, back = from the left). Spatial and directional, the native phone-navigation feel.
+ *   the outgoing one slides out and fades (deeper = from the right, back = from the left). Spatial and
+ *   directional, the native phone-navigation feel.
  * - **Desktop** — a subtler *fade-through + slight scale*, faster and non-directional, matching how
  *   desktop windows swap content without big spatial motion.
  *
@@ -31,19 +31,28 @@ import dev.ide.ui.theme.Motion
 fun ScreenHost(
     screen: Screen,
     modifier: Modifier = Modifier,
+    /**
+     * Whether this move is a Back, which is the caller's to say: screens that open each other in both
+     * directions (a listing and its publisher) make the enum's own order the wrong answer, and reading a
+     * pop as "deeper" slides the user the way they did not come.
+     */
+    back: Boolean = false,
     content: @Composable (Screen) -> Unit,
 ) {
     AnimatedContent(
         targetState = screen,
         modifier = modifier,
-        transitionSpec = { if (isMobilePlatform) mobileSharedAxis() else desktopFade() },
+        transitionSpec = { if (isMobilePlatform) mobileSharedAxis(back) else desktopFade() },
         label = "screen",
     ) { target -> content(target) }
 }
 
 /** Mobile shared-axis X — directional slide + fade. `targetState`/`initialState` come from the scope. */
-private fun androidx.compose.animation.AnimatedContentTransitionScope<Screen>.mobileSharedAxis(): ContentTransform {
-    val forward = targetState.ordinal >= initialState.ordinal
+private fun androidx.compose.animation.AnimatedContentTransitionScope<Screen>.mobileSharedAxis(
+    back: Boolean,
+): ContentTransform {
+    // The enum's order is the fallback for every screen pair that only ever moves one way.
+    val forward = !back && targetState.ordinal >= initialState.ordinal
     val dir = if (forward) 1 else -1
     val enter = slideInHorizontally(
         tween(

@@ -1,7 +1,9 @@
 package dev.ide.ui.ext
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.rememberUpdatedState
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 
@@ -111,9 +113,16 @@ interface ScreenContext {
     /** Platform bridges a screen may need: opening an external link, sharing or picking a file. */
     val fileActions: FileActions get() = FileActions.None
 
+    /** Go back one step: the screen this one was opened from, or out of the contributed screen entirely. */
     fun back()
 
-    /** Navigate to another contributed screen, replacing this one. */
+    /**
+     * Navigate to another contributed screen, which is pushed on top of this one.
+     *
+     * Back then returns here, with this screen's own id restored, and only the bottom of that run steps out
+     * to whatever opened the first one. Before SPI 2.9.0 this replaced the screen and Back left the run
+     * whole, so a panel that opened a detail view of its own could not be returned to.
+     */
     fun openScreen(id: String) {}
 
     /** Open [path] in the editor with the caret at [offset]. See [ToolWindowContext.openFile]. */
@@ -137,6 +146,74 @@ object ScreenRegistry {
 
     fun find(id: String): ScreenContribution? = items.firstOrNull { it.id == id }
     fun all(): List<ScreenContribution> = items.toList()
+}
+
+/**
+ * A contributed screen's claim on Back, held for as long as the screen has somewhere of its own to go.
+ *
+ * A screen rendered by Compose holds one through [ScreenBackHandler], which keeps the claim alive exactly
+ * as long as the screen is composed. [ScreenBackRegistry.register] is the direct path for anything else.
+ */
+class ScreenBackClaim(
+    /** Read live on every press, so a screen can hold one claim and turn it on and off as its state moves. */
+    val enabled: () -> Boolean,
+    val onBack: () -> Unit,
+)
+
+/**
+ * The claims contributed screens have on Back, innermost last.
+ *
+ * The host consults this before its own navigation, so a screen with internal state of its own (a wizard on
+ * step three, an open detail pane, an unsaved form) answers the gesture itself instead of being torn down
+ * whole on the first press.
+ */
+object ScreenBackRegistry {
+    private val claims = mutableStateListOf<ScreenBackClaim>()
+
+    fun register(claim: ScreenBackClaim): Registration {
+        claims.add(claim)
+        return Registration { claims.remove(claim) }
+    }
+
+    /** [register] for a screen that is not holding its claim from a composition (a controller, a test). */
+    fun register(enabled: () -> Boolean = { true }, onBack: () -> Unit): Registration =
+        register(ScreenBackClaim(enabled, onBack))
+
+    /**
+     * Let the innermost enabled claim handle Back, reporting whether one did.
+     *
+     * Innermost wins: claims register in composition order, so a nested surface registers after the screen
+     * that contains it and is the one holding the gesture. A claim that throws is treated as not having
+     * handled it, since the alternative is a Back button that takes the app down.
+     */
+    fun consumeBack(): Boolean {
+        val claim = claims.lastOrNull { runCatching { it.enabled() }.getOrDefault(false) } ?: return false
+        return runCatching { claim.onBack(); true }.getOrDefault(false)
+    }
+
+    /** Whether any claim would handle Back right now, for a host deciding if it has anywhere to go. */
+    fun hasClaim(): Boolean = claims.any { runCatching { it.enabled() }.getOrDefault(false) }
+}
+
+/**
+ * Claim the Back gesture for as long as this is composed and [enabled].
+ *
+ * The contributed-screen counterpart of the platform's own back handler: call it from a screen body and
+ * [onBack] runs instead of the host popping the screen. [enabled] is read live, so a screen turns its claim
+ * off the moment it has nothing left of its own to undo, and Back goes back to meaning "leave this screen".
+ *
+ * ```
+ * ScreenBackHandler(enabled = step > 0) { step-- }
+ * ```
+ */
+@Composable
+fun ScreenBackHandler(enabled: Boolean = true, onBack: () -> Unit) {
+    val enabledNow = rememberUpdatedState(enabled)
+    val handler = rememberUpdatedState(onBack)
+    DisposableEffect(Unit) {
+        val registration = ScreenBackRegistry.register({ enabledNow.value }) { handler.value() }
+        onDispose { registration.dispose() }
+    }
 }
 
 // ---------------------------------------------------------------------------

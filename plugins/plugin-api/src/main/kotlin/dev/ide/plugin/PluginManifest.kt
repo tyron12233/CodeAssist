@@ -220,8 +220,24 @@ const val PLUGIN_API_VERSION: Int = 3
  * The bus keys a subscription by [dev.ide.platform.Topic.name] rather than by the constant, so those six
  * names are themselves the published contract: renaming one unsubscribes every plugin built against an
  * earlier artifact, and nothing fails to compile on either side.
+ *
+ * `2.9.0` let a contributed screen take part in Back. Every contributed screen renders on one host route, so
+ * `ScreenContext.openScreen` swapped the id underneath and a single press left the whole run: a panel that
+ * opened a detail view of its own, and the detail view a third screen, could not be returned to either one.
+ * The host now carries a real stack, and a contributed screen's id rides it with the rest, so `openScreen`
+ * pushes and Back restores the screen that was showing. Only the bottom of a run steps out to whatever opened
+ * the first screen, which is what the single return target used to mean for all of them. Additive in
+ * behaviour a plugin can observe rather than in signature, so nothing fails to compile against `2.8.0`.
+ *
+ * Beside it, `dev.ide.ui.ext.ScreenBackHandler` is the claim a screen holds on the gesture while it has
+ * somewhere of its own to go. There was no way to say that at all: a wizard on step three, an open detail
+ * pane or an unsaved form was torn down whole on the first press, and a plugin's only recourse was to draw a
+ * Back button and hope the user used it. `enabled` is read on every press so one handler follows a screen's
+ * state, nested claims resolve innermost-first, and the claim lives exactly as long as the composable that
+ * holds it. `ScreenBackRegistry` is the same seam for a controller or a test outside a composition.
+ * [PLUGIN_API_VERSION] stays at `3`.
  */
-const val PLUGIN_SPI_VERSION: String = "2.8.0"
+const val PLUGIN_SPI_VERSION: String = "2.9.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry
