@@ -299,7 +299,7 @@ class IdeUiState(
     }
 
     // Editor-lifecycle events for plugins: the engine republishes these on the message bus
-    // (IdeEventTopics.EDITOR) and they are no-ops when nothing subscribes. The focused file, whenever it
+    // (EditorTopics.EDITOR) and they are no-ops when nothing subscribes. The focused file, whenever it
     // changes (null once the last tab closes):
     private suspend fun publishActiveEditor() {
         snapshotFlow { active?.path }

@@ -384,7 +384,8 @@ a plugin marketplace/install-from-URL flow.
 *Delivered:* the **`MessageBus` plugin-facing events + a plugin logger**. `PluginRegistration` now exposes
 `messageBus` (publish), `busConnection()` (subscribe, tracked for unload), and `logger(tag)` (attributed to the
 plugin id, filterable in the Logs viewer). The IDE publishes a lifecycle event set in `ide-core`'s
-`dev.ide.core.event.IdeEventTopics` — editor (open/close/active/selection), build, run, analysis diagnostics,
+The lifecycle topics, one per owning api module (`EditorTopics`, `BuildTopics`, `AnalysisTopics`,
+`IndexTopics`, `ProjectTopics`): editor (open/close/active/selection), build, run, analysis diagnostics,
 project open/close, indexing — so plugins react to what the IDE is doing. See `docs/plugin-system.md` (Events and
 logging). Consumed by the built-ins today; promoting the topic payloads to their owning `*-api` modules is the
 follow-up for plugins built outside the app, which should not have to depend on `ide-core` to subscribe.

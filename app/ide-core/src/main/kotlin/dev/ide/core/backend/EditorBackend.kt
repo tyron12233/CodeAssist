@@ -5,8 +5,6 @@ import dev.ide.analysis.CodeActionKind
 import dev.ide.analysis.DiagnosticTag
 import dev.ide.analytics.Events
 import dev.ide.core.BackendContext
-import dev.ide.core.event.EditorEvent
-import dev.ide.core.event.IdeEventTopics
 import dev.ide.core.settings.CodeStyleSettings
 import dev.ide.core.settings.SettingsStore
 import dev.ide.lang.completion.CaretAction
@@ -18,6 +16,8 @@ import dev.ide.lang.hints.InlayHintKind
 import dev.ide.platform.EngineCanceledException
 import dev.ide.plugin.editor.DecorationStyle
 import dev.ide.plugin.editor.DecorationTint
+import dev.ide.plugin.editor.EditorEvent
+import dev.ide.plugin.editor.EditorTopics
 import dev.ide.plugin.editor.InlayKind as PluginInlayKind
 import dev.ide.ui.backend.AnalysisPreempted
 import dev.ide.ui.backend.EditorService
@@ -217,11 +217,11 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     // --- Editor-session lifecycle notifications (fire-and-forget from the UI) --------------------------------
-    // The UI reports these; we republish them on the app bus for plugin subscribers (see IdeEventTopics.EDITOR).
+    // The UI reports these; we republish them on the app bus for plugin subscribers (see EditorTopics.EDITOR).
     // Guarded so a throwing subscriber can never disturb the editor; a null bus (no project/manager) is a no-op.
 
     private fun publishEditor(event: EditorEvent) =
-        runCatching { ctx.messageBus?.syncPublisher(IdeEventTopics.EDITOR)?.onEditorEvent(event) }
+        runCatching { ctx.messageBus?.syncPublisher(EditorTopics.EDITOR)?.onEditorEvent(event) }
 
     override fun onFileOpened(path: String) { publishEditor(EditorEvent.FileOpened(path)) }
 

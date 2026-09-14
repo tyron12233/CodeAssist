@@ -1085,7 +1085,7 @@ raw `messageBus.connect()` leaks past unload.
 override fun register(reg: PluginRegistration) {
     val log = reg.logger("hello")
     reg.busConnection().subscribe(
-        IdeEventTopics.BUILD,
+        BuildTopics.BUILD,
         BuildEventListener { event ->            // explicit listener constructor; see the note below
             if (event is BuildEvent.Finished && !event.succeeded) {
                 log.warn("build of ${event.module} failed: ${event.failureKind}")
@@ -1101,22 +1101,36 @@ override fun register(reg: PluginRegistration) {
 
 ### 7.2 The lifecycle topics
 
-[`dev.ide.core.event.IdeEventTopics`](../ide-core/src/main/kotlin/dev/ide/core/event/IdeEventTopics.kt)
+Each topic lives in the published api module that owns its payload, so both tiers can name it. The IDE is the
+only publisher.
 
-| Topic | Payload | Fires when |
-| --- | --- | --- |
-| `EDITOR` | `EditorEvent.FileOpened / FileClosed / ActiveEditorChanged / SelectionChanged` | An editor session transitions. Selection events are debounced to settle, not per keystroke |
-| `BUILD` | `BuildEvent.Started / Finished` | A compile or assemble, including the compile half of a run |
-| `RUN` | `RunEvent.Started / Finished` | A program run or Android app launch |
-| `ANALYSIS` | `AnalysisEvent(path, diagnostics)` | A file's merged diagnostics were published |
-| `PROJECT` | `ProjectEvent.Opened / Closed` | A project became, or stopped being, the active engine |
-| `INDEXING` | `IndexEvent.Started / Finished(status)` | Index build progress |
+| Topic | Artifact | Payload | Fires when |
+| --- | --- | --- | --- |
+| [`EditorTopics.EDITOR`](../plugin-api/src/main/kotlin/dev/ide/plugin/editor/EditorEvents.kt) | `plugin-api` | `EditorEvent.FileOpened / FileClosed / ActiveEditorChanged / SelectionChanged` | An editor session transitions. Selection events are debounced to settle, not per keystroke |
+| [`BuildTopics.BUILD`](../build-api/src/main/kotlin/dev/ide/build/BuildEvents.kt) | `build-api` | `BuildEvent.Started / Finished` | A compile or assemble, including the compile half of a run |
+| [`BuildTopics.RUN`](../build-api/src/main/kotlin/dev/ide/build/BuildEvents.kt) | `build-api` | `RunEvent.Started / Finished` | A program run or Android app launch |
+| [`AnalysisTopics.ANALYSIS`](../analysis-api/src/main/kotlin/dev/ide/analysis/AnalysisEvents.kt) | `analysis-api` | `AnalysisEvent(path, diagnostics)` | A file's merged diagnostics were published |
+| [`ProjectTopics.LIFECYCLE`](../project-model-api/src/main/kotlin/dev/ide/model/event/ProjectLifecycleEvents.kt) | `project-model-api` | `ProjectEvent.Opened / Closed` | A project became, or stopped being, the active engine |
+| [`IndexTopics.INDEXING`](../index-api/src/main/kotlin/dev/ide/index/IndexEvents.kt) | `index-api` | `IndexEvent.Started / Finished(status)` | Index build progress |
+
+An **installed** plugin declares only `plugin-api` and `platform-core` by default, which covers
+`EditorTopics`. Subscribing to any of the others means adding that artifact, which the BOM already versions:
+
+```kotlin
+compileOnly(platform("io.github.tyron12233:plugin-bom:2.8.0"))
+compileOnly("io.github.tyron12233:build-api")     // BuildTopics
+```
+
+Switching projects publishes `Opened` for the incoming project and then `Closed` for the outgoing one, in
+that order: `Closed` arrives while the outgoing engine is still alive, before it is disposed.
 
 Lower-level spines are also on the same bus and available to you: `dev.ide.vfs.VfsTopics` (raw file changes),
-`dev.ide.model.event.ProjectModelTopics` (model commits), and `dev.ide.core.settings.SettingsTopics`.
+`dev.ide.model.event.ProjectModelTopics` (model commits), and `dev.ide.core.settings.SettingsTopics` (which
+is in `ide-core`, so it is nameable only from the internal tier).
 
 **Delivery contract.** Synchronous, in subscription order, on whatever thread performed the transition. A
-build or analysis pass runs on a background dispatcher, not the UI thread. Therefore:
+build, an analysis pass and an index build run on background dispatchers; the editor events come from the UI
+side. Therefore:
 
 - a listener that touches UI state must marshal to the UI thread itself;
 - a slow listener slows the transition it is observing; do real work off the callback;
@@ -1605,7 +1619,7 @@ Three constraints come with the slot:
   that changed underneath you); `Outlined` is a standing property of the file (warnings, differing from
   HEAD). A filled amber dot already means unsaved edits, so do not spend it on anything else.
 - **Decide, do not work.** `decorate` runs once per open tab on every recomposition of the strip. Subscribe
-  where the state is produced (`IdeEventTopics.ANALYSIS` carries a file's merged diagnostics to the engine
+  where the state is produced (`AnalysisTopics.ANALYSIS` carries a file's merged diagnostics to the engine
   facet), keep the answer in an observable store, and read that store here.
 
 `diagnostics` is the tab's last analysis result. Every open tab is analyzed, not just the focused one
@@ -2428,7 +2442,7 @@ the IDE's own runtime:
 ```kotlin
 dependencies {
     // The BOM carries the versions, including the Compose the IDE provides.
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.7.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.8.0"))
 
     compileOnly("io.github.tyron12233:plugin-ui-api")
     compileOnly("androidx.compose.runtime:runtime")
@@ -2486,15 +2500,15 @@ not part of it, so an id or an anchor that is wrong still shows up only once the
 The engine SPI is published, so the extension points in these modules are available to a plugin app:
 
 ```kotlin
-compileOnly(platform("io.github.tyron12233:plugin-bom:2.7.0")) // one version for everything below
+compileOnly(platform("io.github.tyron12233:plugin-bom:2.8.0")) // one version for everything below
 
-compileOnly("io.github.tyron12233:plugin-api")        // actions, menus, palette commands
+compileOnly("io.github.tyron12233:plugin-api")        // actions, menus, palette commands, editor events
 compileOnly("io.github.tyron12233:platform-core")     // scoped services, settings pages, logging
-compileOnly("io.github.tyron12233:project-model-api") // module types, templates, facets + codecs, file icons
+compileOnly("io.github.tyron12233:project-model-api") // module types, templates, facets + codecs, file icons, project events
 compileOnly("io.github.tyron12233:language-api")      // file types, completion, postfix, compilation contexts
-compileOnly("io.github.tyron12233:analysis-api")      // analyzers, diagnostics, quick fixes, intentions
-compileOnly("io.github.tyron12233:index-api")         // persisted indexes
-compileOnly("io.github.tyron12233:build-api")         // build systems, build plugins, tasks, source generators
+compileOnly("io.github.tyron12233:analysis-api")      // analyzers, diagnostics, quick fixes, intentions, analysis events
+compileOnly("io.github.tyron12233:index-api")         // persisted indexes, indexing events
+compileOnly("io.github.tyron12233:build-api")         // build systems, build plugins, tasks, source generators, build/run events
 compileOnly("io.github.tyron12233:plugin-ui-api")     // tool windows, screens, overlays (see part 4)
 compileOnly("io.github.tyron12233:vcs-api")           // version-control providers
 compileOnly("io.github.tyron12233:agent-api")         // agent tools, workspace, LLM providers
@@ -2520,7 +2534,7 @@ The SPI is published, so it is an ordinary dependency:
 
 ```kotlin
 dependencies {
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.7.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.8.0"))
     compileOnly("io.github.tyron12233:plugin-api")
     compileOnly("io.github.tyron12233:platform-core")
 }
@@ -2736,6 +2750,19 @@ Published, and the only UI surface an installed plugin compiles against. See
 | `dev.ide.ui.backend.UiActionPlaces` and the `Ui*` action DTOs | [IdeBackend.kt](../ide-ui-api/src/commonMain/kotlin/dev/ide/ui/backend/IdeBackend.kt) |
 | `dev.ide.ui.icons.actionIcon` | [ActionIcons.kt](../ide-ui-api/src/commonMain/kotlin/dev/ide/ui/icons/ActionIcons.kt) |
 
+### Lifecycle topics
+
+Published, one per owning api module. `ide-core` is their only publisher. See
+[section 7.2](#72-the-lifecycle-topics).
+
+| FQN | File |
+| --- | --- |
+| `dev.ide.plugin.editor.EditorTopics` / `EditorEvent` / `EditorEventListener` | [EditorEvents.kt](../plugin-api/src/main/kotlin/dev/ide/plugin/editor/EditorEvents.kt) |
+| `dev.ide.build.BuildTopics` / `BuildEvent` / `RunEvent` (+ listeners) | [BuildEvents.kt](../build-api/src/main/kotlin/dev/ide/build/BuildEvents.kt) |
+| `dev.ide.analysis.AnalysisTopics` / `AnalysisEvent` / `AnalysisEventListener` | [AnalysisEvents.kt](../analysis-api/src/main/kotlin/dev/ide/analysis/AnalysisEvents.kt) |
+| `dev.ide.index.IndexTopics` / `IndexEvent` / `IndexEventListener` | [IndexEvents.kt](../index-api/src/main/kotlin/dev/ide/index/IndexEvents.kt) |
+| `dev.ide.model.event.ProjectTopics` / `ProjectEvent` / `ProjectEventListener` | [ProjectLifecycleEvents.kt](../project-model-api/src/main/kotlin/dev/ide/model/event/ProjectLifecycleEvents.kt) |
+
 ### Host wiring: [`:ide-core`](../ide-core)
 
 | FQN | File |
@@ -2744,7 +2771,6 @@ Published, and the only UI surface an installed plugin compiles against. See
 | `dev.ide.core.BuiltInPlugin` / `BuiltInPlugins` | [BuiltInPlugins.kt](../ide-core/src/main/kotlin/dev/ide/core/BuiltInPlugins.kt) |
 | `dev.ide.core.VcsPlugin` / `VcsSettingsPage` | [VcsPlugin.kt](../ide-core/src/main/kotlin/dev/ide/core/VcsPlugin.kt) |
 | `dev.ide.core.AgentPlugin` | [AgentPlugin.kt](../ide-core/src/main/kotlin/dev/ide/core/AgentPlugin.kt) |
-| `dev.ide.core.event.IdeEventTopics` | [IdeEventTopics.kt](../ide-core/src/main/kotlin/dev/ide/core/event/IdeEventTopics.kt) |
 | `dev.ide.core.IdeServicesBackend` | [IdeServicesBackend.kt](../ide-core/src/main/kotlin/dev/ide/core/IdeServicesBackend.kt) |
 | `dev.ide.core.ANALYTICS_SERVICE` and the platform-port `ServiceKey`s | [PlatformPorts.kt](../ide-core/src/main/kotlin/dev/ide/core/PlatformPorts.kt) |
 

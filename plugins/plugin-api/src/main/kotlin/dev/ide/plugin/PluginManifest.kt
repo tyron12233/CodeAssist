@@ -195,8 +195,33 @@ const val PLUGIN_API_VERSION: Int = 3
  * What deliberately did NOT move: caret motion, text input, and the keys a popup or a live template owns
  * while it is open. Those are the text-input and modal contracts rather than commands, they have no action to
  * bind to, and an IME commit is not a key press at all.
+ *
+ * `2.8.0` opened the IDE's lifecycle events. Editor sessions, builds, runs, analysis results, the open
+ * project and indexing were already published on the application message bus, but the topics naming them sat
+ * in the unpublished `ide-core`, so only a plugin compiled into the IDE could subscribe: an installed plugin
+ * had [PluginRegistration.busConnection] and nothing it was able to name to pass it. Each topic moved to the
+ * api module that already owns its payload, so this is additive in artifacts that were already published.
+ * [PLUGIN_API_VERSION] stays at `3` and no coordinate is added to `plugin-bom`.
+ *
+ *  - `dev.ide.build.BuildTopics`, `BUILD` and `RUN`, carrying the module, a build's task ids and its coarse
+ *    failure bucket, and a run's exit code;
+ *  - `dev.ide.analysis.AnalysisTopics.ANALYSIS`, carrying a file's merged [dev.ide.analysis.Diagnostic]s,
+ *    which is the same stream the editor underlines and the Problems view shows;
+ *  - `dev.ide.index.IndexTopics.INDEXING`, carrying the terminal [dev.ide.index.IndexStatus]. This is the
+ *    coarse form of the readiness gate index-backed features already honour, for a plugin that queries the
+ *    index off a trigger of its own and would otherwise read "not built yet" as "no such symbol";
+ *  - `dev.ide.model.event.ProjectTopics.LIFECYCLE`, the open project itself changing, beside the
+ *    model-commit topic that was already in that module. A plugin's `register` runs before any project is
+ *    open, so this is also how one learns it has a project at all;
+ *  - `dev.ide.plugin.editor.EditorTopics.EDITOR`, which files are open and where the caret is, beside the
+ *    decoration provider `2.4.0` added. A provider is pulled per file on the highlighting pass and is the
+ *    right layer for anything drawn on the text; these are for a plugin keeping its own view of the session.
+ *
+ * The bus keys a subscription by [dev.ide.platform.Topic.name] rather than by the constant, so those six
+ * names are themselves the published contract: renaming one unsubscribes every plugin built against an
+ * earlier artifact, and nothing fails to compile on either side.
  */
-const val PLUGIN_SPI_VERSION: String = "2.7.0"
+const val PLUGIN_SPI_VERSION: String = "2.8.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry

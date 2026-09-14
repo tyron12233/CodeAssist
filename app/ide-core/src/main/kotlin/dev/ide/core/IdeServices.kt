@@ -2,8 +2,10 @@ package dev.ide.core
 
 import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ANALYZER_EP
+import dev.ide.analysis.AnalysisEvent
 import dev.ide.analysis.AnalysisProfile
 import dev.ide.analysis.AnalysisTarget
+import dev.ide.analysis.AnalysisTopics
 import dev.ide.analysis.Analyzer
 import dev.ide.analysis.AnalyzerId
 import dev.ide.analysis.CaretSnapshot
@@ -74,9 +76,6 @@ import dev.ide.core.completion.CompletionEngine
 import dev.ide.core.completion.CompletionOptions
 import dev.ide.core.completion.CompletionStats
 import dev.ide.core.completion.PostfixContributor
-import dev.ide.core.event.AnalysisEvent
-import dev.ide.core.event.IdeEventTopics
-import dev.ide.core.event.IndexEvent
 import dev.ide.core.gradle.GradleImport
 import dev.ide.core.perf.MB_BYTES
 import dev.ide.core.perf.MEM_SAMPLE_INTERVAL_MS
@@ -120,9 +119,11 @@ import dev.ide.deps.ConflictPolicy
 import dev.ide.index.ClassNameIndex
 import dev.ide.index.ClassNameValue
 import dev.ide.index.INDEX_EP
+import dev.ide.index.IndexEvent
 import dev.ide.index.IndexItemState
 import dev.ide.index.IndexScope
 import dev.ide.index.IndexService
+import dev.ide.index.IndexTopics
 import dev.ide.index.MemberValue
 import dev.ide.index.exactAll
 import dev.ide.index.impl.IndexServiceImpl
@@ -736,16 +737,16 @@ class IdeServices private constructor(
 
     // Tracks the index's building flag so the plugin-facing INDEXING topic fires one Started/Finished per
     // build rather than on every progress tick. Declared before the init block that registers the observer
-    // (observeStatus replays the current status synchronously). See [IdeEventTopics].
+    // (observeStatus replays the current status synchronously). See [dev.ide.index.IndexTopics].
     private var lastIndexBuilding = false
 
     /** Publish an [IndexEvent]/[AnalysisEvent] on the app bus for plugin subscribers; guarded so a throwing
-     *  subscriber can never break indexing/analysis. See [IdeEventTopics]. */
+     *  subscriber can never break indexing/analysis. See [IndexTopics] and [AnalysisTopics]. */
     private fun publishIndex(event: IndexEvent) =
-        runCatching { platform.messageBus.syncPublisher(IdeEventTopics.INDEXING).onIndexEvent(event) }
+        runCatching { platform.messageBus.syncPublisher(IndexTopics.INDEXING).onIndexEvent(event) }
 
     private fun publishAnalysis(event: AnalysisEvent) =
-        runCatching { platform.messageBus.syncPublisher(IdeEventTopics.ANALYSIS).onAnalysisEvent(event) }
+        runCatching { platform.messageBus.syncPublisher(AnalysisTopics.ANALYSIS).onAnalysisEvent(event) }
 
     /** The application-wide message bus this engine publishes on (the per-project platform shares the app
      *  bus). The backend reaches it through here to publish editor/project lifecycle events. */
@@ -2310,7 +2311,7 @@ class IdeServices private constructor(
             )
             // Republish each file's freshly-merged diagnostics on the app bus for plugin subscribers. This is
             // the engine's single final-publish point (AnalysisEngine.notify → its listeners); the bus is a
-            // pass-through, so a plugin sees exactly what the editor does. See [IdeEventTopics.ANALYSIS].
+            // pass-through, so a plugin sees exactly what the editor does. See [AnalysisTopics.ANALYSIS].
             engine.addListener { file, diagnostics -> publishAnalysis(AnalysisEvent(file.path, diagnostics)) }
         }
     }

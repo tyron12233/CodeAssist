@@ -82,7 +82,7 @@ class TabDecoration(
  *
  * It runs inside the tab strip's composition, once per open tab, on every recomposition the strip performs,
  * so it must only read state and decide. Work belongs where the state is produced: subscribe on the engine
- * side (`IdeEventTopics.ANALYSIS` carries a file's merged diagnostics), keep the result in an observable
+ * side (`AnalysisTopics.ANALYSIS` carries a file's merged diagnostics), keep the result in an observable
  * store, and read that store here.
  *
  * [order] sorts producers, low first; [id] breaks ties and identifies the producer in composition. The

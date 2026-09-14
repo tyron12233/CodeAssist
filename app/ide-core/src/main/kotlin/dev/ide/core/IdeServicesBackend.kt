@@ -30,8 +30,6 @@ import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.UiError
 import dev.ide.analytics.AnalyticsService
 import dev.ide.core.backend.ActionBackend
-import dev.ide.core.event.IdeEventTopics
-import dev.ide.core.event.ProjectEvent
 import dev.ide.core.backend.BlockBackend
 import dev.ide.core.backend.BuildBackend
 import dev.ide.core.backend.CustomizationBackend
@@ -52,6 +50,8 @@ import dev.ide.core.backend.SearchBackend
 import dev.ide.core.backend.SettingsBackend
 import dev.ide.core.backend.SigningBackend
 import dev.ide.core.backend.VcsBackend
+import dev.ide.model.event.ProjectEvent
+import dev.ide.model.event.ProjectTopics
 import dev.ide.platform.Disposable
 import dev.ide.platform.EngineBreadcrumb
 import dev.ide.platform.EngineCanceledException
@@ -725,9 +725,9 @@ class IdeServicesBackend(
         // Closed for the one being replaced (before it is disposed). Guarded so a subscriber can't break the swap.
         val bus = messageBus
         if (bus != null) {
-            runCatching { bus.syncPublisher(IdeEventTopics.PROJECT).onProjectEvent(ProjectEvent.Opened(next.workspaceRoot.toString())) }
+            runCatching { bus.syncPublisher(ProjectTopics.LIFECYCLE).onProjectEvent(ProjectEvent.Opened(next.workspaceRoot.toString())) }
             if (prev != null && prev !== next) {
-                runCatching { bus.syncPublisher(IdeEventTopics.PROJECT).onProjectEvent(ProjectEvent.Closed(prev.workspaceRoot.toString())) }
+                runCatching { bus.syncPublisher(ProjectTopics.LIFECYCLE).onProjectEvent(ProjectEvent.Closed(prev.workspaceRoot.toString())) }
             }
         }
         if (prev !== next) runCatching { prev?.close() }

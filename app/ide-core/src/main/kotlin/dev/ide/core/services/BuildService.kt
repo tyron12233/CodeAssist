@@ -12,17 +12,20 @@ import dev.ide.build.BUILD_SYSTEM_EP
 import dev.ide.build.BuildContext
 import dev.ide.build.BuildControl
 import dev.ide.build.BuildDiagnostic
+import dev.ide.build.BuildEvent
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildLogEntry
 import dev.ide.build.BuildLogLevel
 import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSeverity
+import dev.ide.build.BuildTopics
 import dev.ide.build.CyclicTaskDependencyException
 import dev.ide.build.KOTLIN_COMPILER_PLUGIN_EP
 import dev.ide.build.KotlinCompilerPlugin
 import dev.ide.build.RUN_TASK_PROVIDER_EP
 import dev.ide.build.RunAction
 import dev.ide.build.RunCapture
+import dev.ide.build.RunEvent
 import dev.ide.build.CLASS_TRANSFORM_EP
 import dev.ide.build.ClassTransform
 import dev.ide.build.SOURCE_GENERATOR_EP
@@ -51,9 +54,6 @@ import dev.ide.core.perf.MEM_SAMPLE_INTERVAL_MS
 import dev.ide.core.perf.MemSample
 import dev.ide.core.perf.PeakHeap
 import dev.ide.core.PermissionPolicy
-import dev.ide.core.event.BuildEvent
-import dev.ide.core.event.IdeEventTopics
-import dev.ide.core.event.RunEvent
 import dev.ide.core.plugins.PluginProject
 import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
@@ -130,14 +130,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
     /** Background scope the build/run coroutine launches on; cancelled with the service (workspace close). */
     private val buildScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    // Plugin-facing build/run lifecycle events on the app bus (docs: IdeEventTopics). Guarded so a throwing
+    // Plugin-facing build/run lifecycle events on the app bus (see BuildTopics). Guarded so a throwing
     // subscriber can never break a build/run; these fire on the build coroutine or the interpreter thread.
     private fun publishBuild(event: BuildEvent) = runCatching {
-        ctx.platform.messageBus.syncPublisher(IdeEventTopics.BUILD).onBuildEvent(event)
+        ctx.platform.messageBus.syncPublisher(BuildTopics.BUILD).onBuildEvent(event)
     }
 
     private fun publishRun(event: RunEvent) =
-        runCatching { ctx.platform.messageBus.syncPublisher(IdeEventTopics.RUN).onRunEvent(event) }
+        runCatching { ctx.platform.messageBus.syncPublisher(BuildTopics.RUN).onRunEvent(event) }
 
     // ---- build & run ----
 
