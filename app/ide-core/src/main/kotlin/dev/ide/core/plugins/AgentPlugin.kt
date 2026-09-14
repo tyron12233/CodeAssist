@@ -1,5 +1,6 @@
 package dev.ide.core.plugins
 
+import dev.ide.agent.LlmEffort
 import dev.ide.core.agent.AgentBackend
 import dev.ide.platform.settings.SETTINGS_PAGE_EP
 import dev.ide.platform.settings.SettingControl
@@ -86,17 +87,21 @@ internal object AgentSettingsPage : SettingsPage {
         SettingControl.Choice(
             key = "reasoningEffort",
             title = "Reasoning effort",
-            description = "For OpenAI (and OpenAI-compatible gateway/OpenRouter) reasoning models. Newer models " +
-                "(e.g. GPT-5.x) reject function tools combined with reasoning on the chat-completions API, so " +
-                "pick None to let the agent's tools work. Default sends nothing (correct for other providers).",
+            description = "How hard the model thinks, and the main cost lever after caching: routine work is " +
+                "much cheaper at Low or Medium and rarely worse, while High and above earn their cost on real " +
+                "coding tasks. Every provider honours it. Pick None for a newer OpenAI reasoning model, which " +
+                "rejects function tools combined with reasoning and so cannot use the agent's tools otherwise. " +
+                "Default sends nothing and leaves each provider's own default in place.",
             default = AgentBackend.REASONING_EFFORT_DEFAULT,
             options = listOf(
                 SettingControl.Choice.Option(AgentBackend.REASONING_EFFORT_DEFAULT, "Default"),
-                SettingControl.Choice.Option("none", "None"),
-                SettingControl.Choice.Option("minimal", "Minimal"),
-                SettingControl.Choice.Option("low", "Low"),
-                SettingControl.Choice.Option("medium", "Medium"),
-                SettingControl.Choice.Option("high", "High"),
+                SettingControl.Choice.Option(LlmEffort.NONE, "None"),
+                SettingControl.Choice.Option(LlmEffort.MINIMAL, "Minimal"),
+                SettingControl.Choice.Option(LlmEffort.LOW, "Low"),
+                SettingControl.Choice.Option(LlmEffort.MEDIUM, "Medium"),
+                SettingControl.Choice.Option(LlmEffort.HIGH, "High"),
+                SettingControl.Choice.Option(LlmEffort.XHIGH, "Very high"),
+                SettingControl.Choice.Option(LlmEffort.MAX, "Maximum"),
             ),
         ),
         SettingControl.Toggle(

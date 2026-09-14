@@ -8,6 +8,7 @@ import dev.ide.agent.ContentPart
 import dev.ide.agent.LlmClient
 import dev.ide.agent.LlmMessage
 import dev.ide.agent.LlmRequest
+import dev.ide.agent.LlmRole
 import dev.ide.agent.LlmStreamEvent
 import dev.ide.agent.PermissionMode
 import dev.ide.agent.StopReason
@@ -24,8 +25,11 @@ import kotlinx.coroutines.launch
  * the iteration cap is hit. History is retained across user turns; [reset] starts a fresh conversation.
  *
  * The loop runs in the caller's coroutine, so cancelling that coroutine stops generation and tool work.
- * [systemPrompt] is a supplier so the host can refresh live project context each turn while keeping the
- * grounding prefix stable.
+ *
+ * The prompt is split by volatility so the provider's cache survives the turn: [systemPrompt] supplies the
+ * stable grounding that becomes the request's top-level system prefix, while [sessionContext] supplies the
+ * per-turn operator state (permission mode, live project context) as a trailing system message after the
+ * history — refreshed every iteration without disturbing a single cached byte ahead of it.
  */
 class AgentLoop(
     private val client: LlmClient,
@@ -33,22 +37,50 @@ class AgentLoop(
     private val tools: AgentToolRegistry,
     private val gate: AgentPermissionGate,
     private val systemPrompt: () -> String,
+    /** Per-turn operator state, appended after the history as a system message. Null or blank sends nothing. */
+    private val sessionContext: () -> String? = { null },
     private val maxTokens: Int = 8192,
     private val maxIterations: Int = 24,
     /** Provider reasoning-token cap forwarded to each request; null leaves the model default. */
     private val thinkingBudget: Int? = null,
     /** Offer the provider's native web search each request (providers without one ignore it). */
     private val webSearch: Boolean = false,
-    /** OpenAI-dialect reasoning effort forwarded to each request; null leaves the provider default. Only the
-     *  OpenAI-compatible providers honor it. */
-    private val reasoningEffort: String? = null,
+    /** How hard the model should think ([dev.ide.agent.LlmEffort]); null leaves the provider default. */
+    private val effort: String? = null,
     /** Trims re-sent tool output so a long task does not re-bill the whole transcript each step. */
     private val compactor: HistoryCompactor = HistoryCompactor(),
 ) {
+    private companion object {
+        /** Sent on the final turn once the iteration cap is hit; no tools are offered alongside it. */
+        const val WRAP_UP = "You have reached this task's tool-call limit, so this is your last turn and no " +
+            "tools are available. Do not start new work. Report what you changed, what you verified, and " +
+            "exactly what is left to do, so the user can pick it up from here."
+    }
+
     private val history = mutableListOf<LlmMessage>()
 
     fun reset() {
         history.clear()
+        compactor.reset()
+    }
+
+    /** The conversation so far, so a rebuilt loop can carry it over (see [restore]). */
+    fun snapshot(): List<LlmMessage> = history.toList()
+
+    /**
+     * Adopts a conversation captured by [snapshot]. Changing a setting rebuilds the loop, and without this the
+     * model would silently start from nothing while the on-screen transcript still showed the whole thread.
+     *
+     * [dropThinking] drops reasoning blocks, which must be set when the model or provider changed: a thinking
+     * block's signature is bound to the model that produced it, so replaying one to a different model is at
+     * best ignored and at worst rejected.
+     */
+    fun restore(messages: List<LlmMessage>, dropThinking: Boolean) {
+        history.clear()
+        compactor.reset()
+        messages.mapTo(history) { m ->
+            if (!dropThinking) m else m.copy(content = m.content.filter { it !is ContentPart.Thinking })
+        }
     }
 
     suspend fun send(userText: String, sink: AgentEventSink) {
@@ -70,33 +102,78 @@ class AgentLoop(
 
     private suspend fun runTurns(sink: AgentEventSink) {
         var iteration = 0
+        // A user-visible "turn" is the whole loop, which is several requests; report what all of them cost.
+        var total = TokenUsage()
         while (iteration++ < maxIterations) {
             val request = LlmRequest(
                 model = model,
                 system = systemPrompt(),
-                messages = compactor.compact(history),
+                messages = withSessionContext(compactor.compact(history)),
                 tools = tools.specs(),
                 maxTokens = maxTokens,
                 thinking = true,
                 thinkingBudget = thinkingBudget,
                 webSearch = webSearch,
-                reasoningEffort = reasoningEffort,
+                effort = effort,
             )
             val turn = Turn()
             client.chat(request).collect { event -> turn.consume(event, sink) }
 
             turn.failure?.let { sink.emit(AgentEvent.Error(it)); return }
+            turn.usage?.let { total += it }
 
             history += LlmMessage.assistant(turn.assistantParts())
             val calls = turn.toolCalls()
             if (calls.isEmpty()) {
-                sink.emit(AgentEvent.TurnCompleted(turn.stopReason, turn.usage))
+                sink.emit(AgentEvent.TurnCompleted(turn.stopReason, total))
                 return
             }
 
             history += executeCalls(calls, sink)
         }
-        sink.emit(AgentEvent.Error("Stopped after $maxIterations tool iterations without finishing."))
+        wrapUp(sink, total)
+    }
+
+    /**
+     * The iteration cap has been reached. Rather than throwing the run away with an error — which bills the
+     * whole task and returns nothing — spend one more turn, with no tools offered so it cannot start more work,
+     * asking the model to report what it did and what is left. The user gets a usable hand-off.
+     */
+    private suspend fun wrapUp(sink: AgentEventSink, usageSoFar: TokenUsage) {
+        val request = LlmRequest(
+            model = model,
+            system = systemPrompt(),
+            messages = compactor.compact(history) + LlmMessage(LlmRole.SYSTEM, listOf(ContentPart.Text(WRAP_UP))),
+            tools = emptyList(),
+            maxTokens = maxTokens,
+            thinking = true,
+            thinkingBudget = thinkingBudget,
+            webSearch = false,
+            effort = effort,
+        )
+        val turn = Turn()
+        client.chat(request).collect { event -> turn.consume(event, sink) }
+        turn.failure?.let {
+            sink.emit(AgentEvent.Error("Stopped after $maxIterations tool iterations without finishing."))
+            return
+        }
+        history += LlmMessage.assistant(turn.assistantParts())
+        val total = turn.usage?.let { usageSoFar + it } ?: usageSoFar
+        sink.emit(AgentEvent.TurnCompleted(turn.stopReason, total))
+    }
+
+    /**
+     * Appends the per-turn operator state as a trailing system message. It is built fresh each iteration and
+     * never stored in [history], so it stays exactly one message long and always sits after everything the
+     * provider has already cached.
+     */
+    private fun withSessionContext(messages: List<LlmMessage>): List<LlmMessage> {
+        val context = sessionContext()?.takeIf { it.isNotBlank() } ?: return messages
+        // An operator instruction has to follow a user turn (a tool-result run counts as one), so a history
+        // left mid-turn by a cancelled run gets no session context rather than a rejected request.
+        val last = messages.lastOrNull()?.role ?: return messages
+        if (last != LlmRole.USER && last != LlmRole.TOOL) return messages
+        return messages + LlmMessage(LlmRole.SYSTEM, listOf(ContentPart.Text(context)))
     }
 
     /**

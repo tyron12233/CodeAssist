@@ -9,7 +9,13 @@ import kotlinx.coroutines.flow.Flow
  * so the agent loop and the chat UI never see a provider-specific shape.
  */
 
-/** The author of a message in the conversation. Tool results carry [LlmRole.TOOL]. */
+/**
+ * The author of a message in the conversation. Tool results carry [LlmRole.TOOL]. A [LlmRole.SYSTEM] message
+ * inside [LlmRequest.messages] is an operator instruction that applies from that point on — it belongs AFTER
+ * the history, not in [LlmRequest.system], so that refreshing it leaves the cached prompt prefix intact.
+ * Providers whose wire has no mid-conversation system role render it as a `<system-reminder>` block folded
+ * into the preceding user turn, which caches the same way.
+ */
 enum class LlmRole { SYSTEM, USER, ASSISTANT, TOOL }
 
 /** A piece of message content. A single message may interleave several parts. */
@@ -39,10 +45,30 @@ data class LlmMessage(val role: LlmRole, val content: List<ContentPart>) {
     }
 }
 
-/** Token accounting reported by the provider. */
-data class TokenUsage(val inputTokens: Int = 0, val outputTokens: Int = 0) {
-    operator fun plus(other: TokenUsage): TokenUsage =
-        TokenUsage(inputTokens + other.inputTokens, outputTokens + other.outputTokens)
+/**
+ * Token accounting reported by the provider. [inputTokens] is normalized across providers to the *uncached*
+ * prompt remainder: providers that report a total prompt count including cache hits (OpenAI, Gemini) have the
+ * cached share subtracted, so [promptTokens] is always the whole prompt and the three input figures never
+ * double-count. A prompt-cache read bills at a fraction of the input rate and a write at a small premium, so
+ * the split is the only way to tell whether caching is actually working.
+ */
+data class TokenUsage(
+    val inputTokens: Int = 0,
+    val outputTokens: Int = 0,
+    /** Prompt tokens served from the provider's cache this request. */
+    val cacheReadTokens: Int = 0,
+    /** Prompt tokens written to the provider's cache this request. */
+    val cacheWriteTokens: Int = 0,
+) {
+    /** The whole prompt: the uncached remainder plus whatever was read from and written to the cache. */
+    val promptTokens: Int get() = inputTokens + cacheReadTokens + cacheWriteTokens
+
+    operator fun plus(other: TokenUsage): TokenUsage = TokenUsage(
+        inputTokens + other.inputTokens,
+        outputTokens + other.outputTokens,
+        cacheReadTokens + other.cacheReadTokens,
+        cacheWriteTokens + other.cacheWriteTokens,
+    )
 }
 
 /** Why the model stopped generating a turn. */
@@ -51,6 +77,9 @@ enum class StopReason { END_TURN, TOOL_USE, MAX_TOKENS, STOP_SEQUENCE, REFUSAL, 
 /** A single request to the model. The loop sets [tools] and [thinking]; the UI picks [model]. */
 data class LlmRequest(
     val model: String,
+    /** The STABLE system prefix. Anything that changes during a conversation (permission mode, live project
+     *  context) belongs in a trailing [LlmRole.SYSTEM] message instead — editing this field re-renders the
+     *  prompt ahead of the whole conversation and throws away every cached turn. */
     val system: String?,
     val messages: List<LlmMessage>,
     val tools: List<ToolSpec> = emptyList(),
@@ -65,13 +94,35 @@ data class LlmRequest(
      *  Gemini's `google_search` grounding). The provider runs the search itself and folds the results into the
      *  turn — it is not a client-executed [ToolSpec]. Providers without native search ignore the flag. */
     val webSearch: Boolean = false,
-    /** OpenAI-dialect reasoning effort (`"none"`/`"minimal"`/`"low"`/`"medium"`/`"high"`); null leaves the
-     *  provider default. Newer OpenAI reasoning models reject function tools combined with a non-`"none"`
-     *  reasoning effort on `/v1/chat/completions`, so sending `"none"` lets a tool-using agent run against
-     *  them. Only the OpenAI-compatible providers (OpenAI, OpenRouter, custom gateways) honor it; others
-     *  ignore it. */
-    val reasoningEffort: String? = null,
+    /**
+     * How hard the model should think, as one of [LlmEffort]; null leaves the provider default. This is the
+     * main cost/quality lever after prompt caching: routine work is much cheaper at `low`/`medium` and rarely
+     * worse, while `high` and above earn their cost on real coding tasks. Every provider honors it, each
+     * mapping it onto its own control.
+     *
+     * Pin it for a whole conversation rather than varying it per request — an effort change invalidates the
+     * messages cache on every provider.
+     */
+    val effort: String? = null,
 )
+
+/**
+ * The neutral effort levels. [NONE] and [MINIMAL] exist for the OpenAI dialect, where newer reasoning models
+ * reject function tools combined with reasoning on `/v1/chat/completions`, so `none` is what lets a tool-using
+ * agent run against them at all; providers without that constraint treat them as the lowest real effort.
+ */
+object LlmEffort {
+    const val NONE = "none"
+    const val MINIMAL = "minimal"
+    const val LOW = "low"
+    const val MEDIUM = "medium"
+    const val HIGH = "high"
+    const val XHIGH = "xhigh"
+    const val MAX = "max"
+
+    /** The levels in increasing order of spend, for a settings menu. */
+    val ALL = listOf(NONE, MINIMAL, LOW, MEDIUM, HIGH, XHIGH, MAX)
+}
 
 /** A normalized streaming event. Providers emit these; the agent loop assembles them into a turn. */
 sealed interface LlmStreamEvent {
@@ -114,6 +165,14 @@ interface LlmProvider {
     val displayName: String
     val models: List<LlmModelInfo>
     val defaultModel: String
+
+    /**
+     * True when the provider trims a long conversation itself, server-side. It does so against real token
+     * counts rather than a client-side character estimate, so where this is true the host stands its own
+     * compaction down instead of running two trimmers that would fight over the same prompt prefix.
+     */
+    val managesContext: Boolean get() = false
+
     fun client(config: ProviderConfig): LlmClient
 
     /** Query the provider's available models with the user's credentials. Defaults to the static [models]

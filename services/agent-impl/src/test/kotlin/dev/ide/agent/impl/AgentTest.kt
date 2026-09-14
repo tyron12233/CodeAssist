@@ -31,12 +31,12 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /** Replays recorded SSE `data:` payloads, so provider decoding is exercised offline. */
-private class FakeTransport(private val payloads: List<String>) : LlmTransport {
+internal class FakeTransport(private val payloads: List<String>) : LlmTransport {
     override fun sse(request: SseRequest): Flow<String> = payloads.asFlow()
 }
 
 /** Records the request body a provider builds, then replays a minimal completion so the flow terminates. */
-private class CapturingTransport(
+internal class CapturingTransport(
     private val payloads: List<String> =
         listOf("""{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":"STOP"}]}"""),
 ) : LlmTransport {
@@ -50,13 +50,13 @@ private class CapturingTransport(
 }
 
 /** Returns a scripted turn per chat() call, driving the agent loop deterministically. */
-private class ScriptedClient(private val turns: List<List<LlmStreamEvent>>) : LlmClient {
+internal class ScriptedClient(private val turns: List<List<LlmStreamEvent>>) : LlmClient {
     private var index = 0
     override fun chat(request: LlmRequest): Flow<LlmStreamEvent> = turns[index++].asFlow()
 }
 
 /** An in-memory [AgentWorkspace] backed by a path -> content map. */
-private class FakeWorkspace(private val files: MutableMap<String, String> = mutableMapOf()) : AgentWorkspace {
+internal class FakeWorkspace(private val files: MutableMap<String, String> = mutableMapOf()) : AgentWorkspace {
     fun content(path: String): String? = files[path]
 
     override fun projectRoot(): String = "/project"
@@ -88,7 +88,7 @@ private class FakeWorkspace(private val files: MutableMap<String, String> = muta
     override suspend fun fetchUrl(url: String, maxChars: Int): String = "content of $url"
 }
 
-private fun request(): LlmRequest = LlmRequest("model", null, listOf(LlmMessage.user("hi")))
+internal fun request(): LlmRequest = LlmRequest("model", null, listOf(LlmMessage.user("hi")))
 
 class AgentTest {
     @Test
@@ -189,7 +189,7 @@ class AgentTest {
         val client = OpenAiProvider(transport).client(ProviderConfig("k"))
 
         runBlocking {
-            client.chat(LlmRequest("gpt-5.6-luna", null, listOf(LlmMessage.user("hi")), reasoningEffort = "none")).toList()
+            client.chat(LlmRequest("gpt-5.6-luna", null, listOf(LlmMessage.user("hi")), effort = "none")).toList()
         }
         assertTrue(transport.lastBody!!.contains("\"reasoning_effort\":\"none\""), transport.lastBody)
 
@@ -250,12 +250,12 @@ class AgentTest {
             tools = SimpleToolRegistry(builtinTools(FakeWorkspace())),
             gate = AllowAllGate,
             systemPrompt = { "system" },
-            reasoningEffort = "none",
+            effort = "none",
         )
 
         runBlocking { loop.send("hi", AgentEventSink { }) }
 
-        assertEquals("none", captured?.reasoningEffort)
+        assertEquals("none", captured?.effort)
     }
 
     @Test
@@ -328,26 +328,163 @@ class AgentTest {
         assertEquals(12000L, rateLimited.retryAfterMs)
     }
 
-    @Test
-    fun compactorElidesStaleToolResultsButKeepsRecentAndText() {
-        val big = "x".repeat(10_000)
+    /** Builds [rounds] tool-call rounds, each with a [size]-character tool result. */
+    private fun toolHistory(rounds: Int, size: Int): List<LlmMessage> {
+        val big = "x".repeat(size)
         val history = mutableListOf<LlmMessage>()
-        // Six tool-call rounds; with keepRecentToolMessages = 4 the two oldest tool results are stale.
-        repeat(6) { i ->
+        repeat(rounds) { i ->
             history += LlmMessage.user("question $i")
             history += LlmMessage.assistant(listOf(ContentPart.ToolUse("c$i", "read_file", "{}")))
             history += LlmMessage.toolResult("c$i", big)
         }
+        return history
+    }
 
-        val compacted = HistoryCompactor().compact(history)
+    @Test
+    fun compactorElidesStaleToolResultsButKeepsRecentAndText() {
+        val big = "x".repeat(10_000)
+        // Twelve rounds of 10K puts the transcript well past the trigger; with keepRecentToolMessages = 4 the
+        // eight oldest results are the candidates, and the pass stops as soon as it is back under target.
+        val history = toolHistory(rounds = 12, size = 10_000)
+
+        val compacted = HistoryCompactor(triggerChars = 100_000, targetChars = 50_000).compact(history)
         val toolResults = compacted.flatMap { it.content }.filterIsInstance<ContentPart.ToolResultPart>()
 
-        assertEquals(6, toolResults.size)
-        assertEquals(2, toolResults.count { it.content.contains("characters elided to save context") })
-        assertEquals(4, toolResults.count { it.content == big }, "the four most recent results stay verbatim")
+        assertEquals(12, toolResults.size)
+        assertTrue(toolResults.any { it.content.contains("characters elided to save context") })
+        assertEquals(4, toolResults.takeLast(4).count { it.content == big }, "the four most recent stay verbatim")
         // User text is never elided.
-        assertEquals(6, compacted.count { it.role == dev.ide.agent.LlmRole.USER })
+        assertEquals(12, compacted.count { it.role == dev.ide.agent.LlmRole.USER })
         assertTrue(compacted.any { m -> m.content.any { it is ContentPart.Text && it.text == "question 0" } })
+    }
+
+    @Test
+    fun compactorLeavesHistoryAloneBelowTheTrigger() {
+        // Below the trigger nothing is rewritten, so the prefix the provider caches is byte-identical from one
+        // step of a turn to the next. Eliding here would save a few tokens and invalidate the whole cache.
+        val history = toolHistory(rounds = 6, size = 10_000)
+        val compacted = HistoryCompactor(triggerChars = 200_000, targetChars = 100_000).compact(history)
+
+        assertEquals(history, compacted, "nothing is elided until the transcript crosses the trigger")
+    }
+
+    @Test
+    fun compactorDecisionsAreStickyAsTheConversationGrows() {
+        // The invariant that makes compaction cache-safe: once the transcript is back under target, growing it
+        // by another round must not elide anything new, so the already-sent prefix stays byte-for-byte stable.
+        val compactor = HistoryCompactor(triggerChars = 100_000, targetChars = 50_000)
+        val history = toolHistory(rounds = 12, size = 10_000).toMutableList()
+
+        val first = compactor.compact(history)
+        val elidedFirst = first.flatMap { it.content }
+            .filterIsInstance<ContentPart.ToolResultPart>()
+            .filter { it.content.contains("characters elided") }
+            .map { it.toolCallId }
+        assertTrue(elidedFirst.isNotEmpty(), "the first pass elides something")
+
+        history += LlmMessage.user("question 12")
+        history += LlmMessage.assistant(listOf(ContentPart.ToolUse("c12", "read_file", "{}")))
+        history += LlmMessage.toolResult("c12", "x".repeat(10_000))
+        val second = compactor.compact(history)
+        val elidedSecond = second.flatMap { it.content }
+            .filterIsInstance<ContentPart.ToolResultPart>()
+            .filter { it.content.contains("characters elided") }
+            .map { it.toolCallId }
+
+        assertEquals(elidedFirst, elidedSecond, "the elision set does not drift as the conversation grows")
+        assertEquals(first, second.dropLast(3), "the previously-sent prefix is unchanged")
+
+        // Resetting forgets the elisions, so a fresh conversation starts fully verbatim again.
+        compactor.reset()
+        val fresh = toolHistory(rounds = 6, size = 100)
+        assertEquals(fresh, compactor.compact(fresh))
+    }
+
+    @Test
+    fun anthropicCachesSystemAndToolsOnTheLongTtlAndTheTailOnTheShort() {
+        val transport = CapturingTransport(listOf("""{"type":"message_stop"}"""))
+        val client = AnthropicProvider(transport).client(ProviderConfig("k"))
+        val request = LlmRequest(
+            "claude-opus-5",
+            "grounding",
+            listOf(LlmMessage.user("hi")),
+            tools = listOf(ToolSpec("read_file", "read", """{"type":"object"}""")),
+        )
+        runBlocking { client.chat(request).toList() }
+        val body = assertNotNull(transport.lastBody)
+
+        // The shared prefix survives the gaps between one user message and the next; the tail does not need to.
+        assertTrue(body.contains(""""cache_control":{"type":"ephemeral","ttl":"1h"}"""), body)
+        assertTrue(body.contains(""""cache_control":{"type":"ephemeral"}"""), body)
+    }
+
+    @Test
+    fun anthropicSendsPerTurnStateAsASystemMessageOnlyWhereSupported() {
+        fun bodyFor(model: String): String {
+            val transport = CapturingTransport(listOf("""{"type":"message_stop"}"""))
+            val client = AnthropicProvider(transport).client(ProviderConfig("k"))
+            val messages = listOf(
+                LlmMessage.user("hi"),
+                LlmMessage(dev.ide.agent.LlmRole.SYSTEM, listOf(ContentPart.Text("Permission mode: plan only"))),
+            )
+            runBlocking { client.chat(LlmRequest(model, "grounding", messages)).toList() }
+            return assertNotNull(transport.lastBody)
+        }
+
+        // Where the operator channel exists the per-turn state is its own message, after the cached history.
+        val supported = bodyFor("claude-opus-5")
+        assertTrue(supported.contains(""""role":"system","content":"Permission mode: plan only""""), supported)
+
+        // Elsewhere it folds into the user turn it follows, which occupies the same position in the prompt.
+        val fallback = bodyFor("claude-haiku-4-5")
+        assertTrue(!fallback.contains(""""role":"system""""), fallback)
+        assertTrue(fallback.contains("<system-reminder>"), fallback)
+
+        // Either way the cache breakpoint sits on the user turn, never on the state that changes every turn.
+        assertTrue(supported.indexOf("cache_control") < supported.indexOf("Permission mode"), supported)
+    }
+
+    @Test
+    fun anthropicReportsCacheReadsAndWritesSeparately() {
+        val decoder = AnthropicStreamDecoder()
+        decoder.decode(
+            """{"type":"message_start","message":{"usage":{"input_tokens":12,""" +
+                """"cache_read_input_tokens":8000,"cache_creation_input_tokens":300}}}""",
+        )
+        decoder.decode("""{"type":"message_delta","usage":{"output_tokens":40}}""")
+
+        val usage = decoder.usage()
+        assertEquals(12, usage.inputTokens)
+        assertEquals(8000, usage.cacheReadTokens)
+        assertEquals(300, usage.cacheWriteTokens)
+        assertEquals(8312, usage.promptTokens, "the three input figures are disjoint parts of one prompt")
+    }
+
+    @Test
+    fun openAiDialectSubtractsCachedTokensFromTheBilledInput() {
+        val decoder = OpenAiStreamDecoder()
+        // This dialect counts cached tokens inside prompt_tokens, unlike Anthropic's.
+        decoder.decode("""{"usage":{"prompt_tokens":9000,"completion_tokens":40,"prompt_tokens_details":{"cached_tokens":8000}}}""")
+        val usage = decoder.finish().filterIsInstance<LlmStreamEvent.Usage>().single().usage
+
+        assertEquals(1000, usage.inputTokens)
+        assertEquals(8000, usage.cacheReadTokens)
+        assertEquals(9000, usage.promptTokens)
+    }
+
+    @Test
+    fun openRouterMarksAnthropicModelsForCachingAndLeavesOthersAlone() {
+        fun bodyFor(model: String): String {
+            val transport = CapturingTransport(listOf("[DONE]"))
+            val client = OpenRouterProvider(transport).client(ProviderConfig("k"))
+            runBlocking { client.chat(LlmRequest(model, "grounding", listOf(LlmMessage.user("hi")))).toList() }
+            return assertNotNull(transport.lastBody)
+        }
+
+        // A Claude model behind the gateway caches nothing without explicit markers.
+        assertTrue(bodyFor("anthropic/claude-opus-5").contains(""""cache_control":{"type":"ephemeral"}"""))
+        // Everything else keeps the plain string content the dialect expects.
+        assertTrue(!bodyFor("openai/gpt-5").contains("cache_control"))
     }
 
     @Test

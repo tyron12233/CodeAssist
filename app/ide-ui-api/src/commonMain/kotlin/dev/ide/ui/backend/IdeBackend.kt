@@ -748,6 +748,19 @@ data class UiAgentToolCall(
     val detail: String = "",
 )
 
+/**
+ * What one turn cost. [input] is the prompt tokens the provider billed at full rate; [cacheRead] is the part it
+ * served from its prompt cache (a fraction of that rate) and [cacheWrite] the part it wrote into the cache this
+ * turn. A healthy agentic loop shows cacheRead growing turn over turn with input staying small — a run where
+ * cacheRead stays at zero means something upstream is changing the prompt prefix and caching is doing nothing.
+ */
+data class UiAgentUsage(
+    val input: Int = 0,
+    val output: Int = 0,
+    val cacheRead: Int = 0,
+    val cacheWrite: Int = 0,
+)
+
 /** One chat message. Assistant messages stream: [text], [thinking], and [toolCalls] fill in as events arrive. */
 data class UiAgentMessage(
     val id: Long,
@@ -760,6 +773,8 @@ data class UiAgentMessage(
     val isError: Boolean = false,
     /** When [isError], whether re-running the last turn is worth offering (a transient failure). */
     val canRetry: Boolean = false,
+    /** Token and prompt-cache accounting for a finished assistant turn; null while streaming or unreported. */
+    val usage: UiAgentUsage? = null,
 )
 
 /** The observable chat transcript. */

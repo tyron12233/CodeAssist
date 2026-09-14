@@ -41,18 +41,25 @@ internal object GeminiWire {
         if (webSearch) add(buildJsonObject { put("google_search", buildJsonObject { }) })
     }
 
-    fun contents(messages: List<LlmMessage>): JsonArray = buildJsonArray {
+    fun contents(messages: List<LlmMessage>): JsonArray {
+        val out = ArrayList<JsonObject>(messages.size)
         var i = 0
         while (i < messages.size) {
             val m = messages[i]
             when (m.role) {
-                LlmRole.SYSTEM -> i++ // carried in the system instruction
+                // Gemini has no mid-conversation system role, so per-turn operator state rides as a
+                // <system-reminder> part on the user turn it follows. That keeps it behind the cached
+                // system instruction and tool declarations, which is the point of sending it here at all.
+                LlmRole.SYSTEM -> {
+                    addReminder(out, m.content)
+                    i++
+                }
                 LlmRole.USER -> {
-                    add(buildJsonObject { put("role", "user"); put("parts", userParts(m.content)) })
+                    out += buildJsonObject { put("role", "user"); put("parts", userParts(m.content)) }
                     i++
                 }
                 LlmRole.ASSISTANT -> {
-                    add(buildJsonObject { put("role", "model"); put("parts", modelParts(m.content)) })
+                    out += buildJsonObject { put("role", "model"); put("parts", modelParts(m.content)) }
                     i++
                 }
                 LlmRole.TOOL -> {
@@ -61,7 +68,7 @@ internal object GeminiWire {
                         messages[i].content.forEach { if (it is ContentPart.ToolResultPart) results += it }
                         i++
                     }
-                    add(buildJsonObject {
+                    out += buildJsonObject {
                         put("role", "user")
                         put("parts", buildJsonArray {
                             results.forEach { r ->
@@ -73,9 +80,24 @@ internal object GeminiWire {
                                 })
                             }
                         })
-                    })
+                    }
                 }
             }
+        }
+        return JsonArray(out)
+    }
+
+    /** Folds an operator instruction into the preceding user turn, or starts one when there is none. */
+    private fun addReminder(out: MutableList<JsonObject>, content: List<ContentPart>) {
+        val text = content.filterIsInstance<ContentPart.Text>().joinToString("\n") { it.text }
+        if (text.isBlank()) return
+        val part = buildJsonObject { put("text", "<system-reminder>\n$text\n</system-reminder>") }
+        val last = out.lastOrNull()
+        val lastParts = last?.get("parts") as? JsonArray
+        if (last != null && last["role"].asStr() == "user" && lastParts != null) {
+            out[out.size - 1] = JsonObject(last + ("parts" to JsonArray(lastParts + part)))
+        } else {
+            out += buildJsonObject { put("role", "user"); put("parts", JsonArray(listOf(part))) }
         }
     }
 
