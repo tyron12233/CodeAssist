@@ -408,6 +408,111 @@ data class UiMyProfile(
     val totalInstalls: Int = 0,
     val totalLikes: Int = 0,
     val averageRating: Float? = null,
+    /**
+     * Whether this account moderates the store.
+     *
+     * Drives whether a moderation entry point is drawn at all. It is not what permits anything: every
+     * moderator call is re-checked against `store_admins` by the backend, so a client that set this to
+     * true would gain a screen whose every button answers "you are not a moderator".
+     */
+    val isModerator: Boolean = false,
+    /** Submissions waiting for a decision, store-wide. Zero for everyone who is not a moderator. */
+    val moderationQueue: Int = 0,
+)
+
+// ---- moderation ----
+
+/**
+ * The moderation surface's DTOs.
+ *
+ * They mirror the engine's `dev.ide.store.*` moderation types for the same reason every other `Ui*` type
+ * does: the UI must not depend on the store transport, so a build with no store still compiles.
+ */
+
+/** Who sent a submission. */
+data class UiSubmissionSubmitter(
+    val userId: String,
+    val handle: String? = null,
+    val displayName: String? = null,
+    val verified: Boolean = false,
+    /** Their published work is already down; what is still in the queue is what a moderator must refuse. */
+    val banned: Boolean = false,
+) {
+    val label: String get() = displayName ?: handle?.let { "@" + it } ?: userId.take(8)
+}
+
+/** One file in a submitted archive, from the manifest the submitter's IDE recorded. */
+data class UiSubmissionFile(val path: String, val sizeBytes: Long)
+
+/** The listing a submission belongs to, as the store has it now. */
+data class UiSubmissionListing(
+    val slug: String,
+    val title: String,
+    val summary: String = "",
+    val description: String = "",
+    val category: String = "",
+    val language: String? = null,
+    val tags: List<String> = emptyList(),
+    val status: String = "",
+    val iconPath: String? = null,
+    val screenshots: List<String> = emptyList(),
+    val installs: Int = 0,
+)
+
+/** One field a submission proposes to change, with what the listing says now beside it. */
+data class UiListingEdit(val field: String, val current: String, val proposed: String)
+
+/**
+ * One submission in the review queue.
+ *
+ * [edits] is already reduced to the fields that actually differ from the live listing, because the only
+ * question a reviewer has about a proposed edit is what changes.
+ */
+data class UiPendingSubmission(
+    val versionId: String,
+    val version: String,
+    /** `pending`, `approved`, `rejected` or `withdrawn`. */
+    val status: String,
+    val sizeBytes: Long = 0,
+    val sha256: String? = null,
+    val fileCount: Int = 0,
+    val files: List<UiSubmissionFile> = emptyList(),
+    val changelog: String? = null,
+    val submittedAtMs: Long = 0L,
+    val reviewNote: String? = null,
+    /** Screenshots submitted with this version. Private until it is approved, so they need the session. */
+    val screenshotPaths: List<String> = emptyList(),
+    val iconPath: String? = null,
+    val edits: List<UiListingEdit> = emptyList(),
+    val submitter: UiSubmissionSubmitter? = null,
+    val listing: UiSubmissionListing,
+)
+
+/** What is waiting, and the last few decisions. */
+data class UiModerationQueue(
+    val pending: List<UiPendingSubmission> = emptyList(),
+    val recent: List<UiPendingSubmission> = emptyList(),
+    /** The whole queue, which is not `pending.size` when the read was limited. */
+    val pendingCount: Int = 0,
+    val loading: Boolean = false,
+    /** Set when the queue could not be read; shown verbatim. */
+    val error: String? = null,
+)
+
+/** One open report, with the content it is about. */
+data class UiReportedContent(
+    val reportId: String,
+    val reason: String,
+    val detail: String? = null,
+    val itemSlug: String? = null,
+    val itemTitle: String? = null,
+    /** True when a whole project was flagged, false when one review was. */
+    val isItemReport: Boolean = false,
+    val reviewAuthorId: String? = null,
+    val reviewStars: Int = 0,
+    val reviewText: String? = null,
+    /** True when the review has already been hidden, so the action reads Restore rather than Hide. */
+    val reviewHidden: Boolean = false,
 )
 
 /** [message] is shown verbatim on failure: the backend's quota and validation messages are user-facing. */

@@ -25,6 +25,7 @@ import dev.ide.core.NOTIFICATION_PRESENTER
 import dev.ide.core.DAILY_CHALLENGE_SERVICE
 import dev.ide.core.STORE_ACCOUNT_SERVICE
 import dev.ide.core.STORE_CATALOG_SOURCE
+import dev.ide.core.STORE_MODERATION_SERVICE
 import dev.ide.core.STORE_REVIEW_SERVICE
 import dev.ide.core.STORE_SUBMISSION_SERVICE
 import dev.ide.core.IdeServicesBackend
@@ -123,6 +124,11 @@ object AndroidIde {
         // one and still works without.
         manager.applicationContainer.registerServiceIfAbsent(STORE_REVIEW_SERVICE) {
             buildStoreReviews(supabaseAccounts)
+        }
+        // Moderation. Registered on every install, because whether this account may use it is the
+        // database's answer and not the build's: the service is here, and `store_admins` decides.
+        manager.applicationContainer.registerServiceIfAbsent(STORE_MODERATION_SERVICE) {
+            buildStoreModeration(supabaseAccounts)
         }
         // Daily challenges. Reads go to the same Supabase project; submissions go to the judge, which is a
         // different service and can be absent without taking the tab down with it.
@@ -602,6 +608,25 @@ object AndroidIde {
     ): dev.ide.store.StoreSubmissionService {
         if (accounts == null) return dev.ide.store.StoreSubmissionService.Unsupported
         return dev.ide.store.impl.SupabaseSubmissionService(
+            BuildConfig.SUPABASE_URL,
+            BuildConfig.SUPABASE_KEY,
+            accounts,
+        )
+    }
+
+    /**
+     * Moderating needs the live session, so this takes the concrete account service like submissions do.
+     *
+     * There is no separate credential and no build flag: what makes a moderator is a row in `store_admins`
+     * that no client can read, every function it calls re-checks it, and an account that is not listed gets
+     * a 403 from the database. The app hides the surface for everyone else because a screen of buttons that
+     * all fail is worse than no screen, not because hiding it is what protects anything.
+     */
+    private fun buildStoreModeration(
+        accounts: dev.ide.store.impl.SupabaseAccountService?,
+    ): dev.ide.store.StoreModerationService {
+        if (accounts == null) return dev.ide.store.StoreModerationService.Unsupported
+        return dev.ide.store.impl.SupabaseModerationService(
             BuildConfig.SUPABASE_URL,
             BuildConfig.SUPABASE_KEY,
             accounts,

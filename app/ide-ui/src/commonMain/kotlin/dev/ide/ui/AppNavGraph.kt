@@ -26,6 +26,7 @@ import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.ext.ScreenContext
 import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.navigation.ScreenHost
+import dev.ide.ui.screens.ModerationScreen
 import dev.ide.ui.screens.NotificationBell
 import dev.ide.ui.screens.NotificationsSheet
 import dev.ide.ui.screens.PublisherProfileScreen
@@ -193,6 +194,16 @@ internal fun AppNavGraph(
                 // Signing out from here lands back on the store, so the only way this renders signed out is
                 // a session that expired while it was open. Offering sign-in is the whole of that case.
                 onSignIn = { app.navigateTo(Screen.Projects) },
+                // Null in a build with no moderation transport; the screen additionally draws it only for
+                // an account the profile says moderates.
+                onModerate = if (backend.store.moderationAvailable()) ({ app.openModeration() }) else null,
+            )
+
+            Screen.Moderation -> ModerationScreen(
+                backend = backend,
+                onBack = app::openYou,
+                onOpenItem = app::openStoreItemById,
+                onOpenPublisher = app::openPublisher,
             )
 
             Screen.PublishingGuide -> PublishingGuideScreen(

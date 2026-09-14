@@ -316,6 +316,16 @@ data class StorePublisherProfile(
     val totalLikes: Int = 0,
     /** Weighted across the account's catalogue; null until something has been rated. */
     val averageRating: Float? = null,
+    /**
+     * Whether this account is a store moderator.
+     *
+     * Carried on the profile because the profile is already read the moment a session is adopted, so the
+     * app learns it without a second call. It is not a permission: every moderator function re-checks
+     * `store_is_admin()` in its own body. It is what decides whether a moderation surface is drawn at all.
+     */
+    val isModerator: Boolean = false,
+    /** How many submissions are waiting for a decision, store-wide. Zero for a non-moderator. */
+    val moderationQueue: Int = 0,
 )
 
 /** The outcome of a submission. [reviewNote] carries a rejection reason once a moderator has answered. */

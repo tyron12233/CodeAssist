@@ -398,9 +398,14 @@ class IdeServicesBackend(
         manager?.applicationContainer?.getServiceOrNull(STORE_REVIEW_SERVICE)
             ?: dev.ide.store.StoreReviewService.Unsupported
 
+    /** Moderation, resolved like the rest. Absent means this build shows no moderation surface at all. */
+    private val storeModerationService: dev.ide.store.StoreModerationService =
+        manager?.applicationContainer?.getServiceOrNull(STORE_MODERATION_SERVICE)
+            ?: dev.ide.store.StoreModerationService.Unsupported
+
     override val store: StoreService = StoreBackend(
         this, storeCatalogSource, storeAccountService, storeSubmissionService, notificationCenter,
-        storeReviewService,
+        storeModerationService, storeReviewService,
     )
 
     /** Daily challenges, resolved like the rest of the online ports. */

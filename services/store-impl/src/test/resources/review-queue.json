@@ -1,0 +1,100 @@
+{
+    "recent": [
+        {
+            "id": "9840ad0c-62cc-40a0-aa86-ad161b6d1df5",
+            "item": {
+                "slug": "valtest-two",
+                "tags": [],
+                "title": "Val Two",
+                "status": "pending",
+                "summary": "s",
+                "category": "kotlin",
+                "iconPath": "keep/icon.png",
+                "installs": 0,
+                "description": "d",
+                "publisherId": "3b76b920-22f3-49a3-99ec-85c9828f8831",
+                "screenshots": []
+            },
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "rejected",
+            "version": "1.0.0",
+            "createdAt": "2026-09-14T00:12:26.922646+00:00",
+            "fileCount": 1,
+            "sizeBytes": 1234,
+            "submitter": {
+                "id": "3b76b920-22f3-49a3-99ec-85c9828f8831",
+                "banned": false,
+                "handle": "fixture-a",
+                "verified": true,
+                "displayName": "Fixture A"
+            },
+            "reviewNote": "Please add a README.",
+            "reviewedAt": "2026-09-14T00:12:26.922646+00:00",
+            "storagePath": "3b76b920-22f3-49a3-99ec-85c9828f8831/valtest-two/1.0.0.zip",
+            "versionCode": 1000000,
+            "fileManifest": [],
+            "screenshotPaths": []
+        }
+    ],
+    "pending": [
+        {
+            "id": "08ac8ae9-5d6a-466e-bd7c-4c8574e7c80f",
+            "item": {
+                "slug": "valtest-app",
+                "tags": [
+                    "cli",
+                    "tools"
+                ],
+                "title": "Val Test",
+                "status": "pending",
+                "summary": "A summary",
+                "category": "kotlin",
+                "iconPath": "old/icon.png",
+                "installs": 0,
+                "language": "Kotlin",
+                "description": "A description",
+                "publisherId": "3b76b920-22f3-49a3-99ec-85c9828f8831",
+                "screenshots": []
+            },
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "status": "pending",
+            "version": "1.0.0",
+            "iconPath": "3b76b920-22f3-49a3-99ec-85c9828f8831/valtest-app/1.0.0-icon/icon.png",
+            "changelog": "First release",
+            "createdAt": "2026-09-14T00:12:26.804304+00:00",
+            "fileCount": 2,
+            "sizeBytes": 1234,
+            "submitter": {
+                "id": "3b76b920-22f3-49a3-99ec-85c9828f8831",
+                "banned": false,
+                "handle": "fixture-a",
+                "verified": true,
+                "displayName": "Fixture A"
+            },
+            "storagePath": "3b76b920-22f3-49a3-99ec-85c9828f8831/valtest-app/1.0.0.zip",
+            "versionCode": 1000000,
+            "fileManifest": [
+                {
+                    "path": "a.kt",
+                    "size": 10
+                },
+                {
+                    "path": "README.md",
+                    "size": 40
+                }
+            ],
+            "listingPatch": {
+                "tags": [
+                    "cli",
+                    "tools",
+                    "kotlin"
+                ],
+                "summary": "A better summary"
+            },
+            "screenshotPaths": [
+                "3b76b920-22f3-49a3-99ec-85c9828f8831/valtest-app/1.0.0-shots/shot-0.png"
+            ]
+        }
+    ],
+    "pendingCount": 1
+}

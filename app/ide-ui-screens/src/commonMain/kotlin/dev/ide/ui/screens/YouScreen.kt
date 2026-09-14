@@ -87,6 +87,14 @@ fun YouScreen(
     onUpdateListing: ((String) -> Unit)? = null,
     /** Offers sign-in, for the case where the session ended while this screen was open. */
     onSignIn: () -> Unit = {},
+    /**
+     * Opens the review queue. Null in a build with no moderation transport.
+     *
+     * Drawn only when the profile says this account moderates, which almost none do. It is not what
+     * permits anything: the queue and every decision on it are re-checked against `store_admins` by the
+     * backend, so a build that passed this unconditionally would gain a screen full of refusals.
+     */
+    onModerate: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val signedIn = backend.store.authState().collectAsState().value.signedIn
@@ -140,6 +148,12 @@ fun YouScreen(
                 else -> LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
                     item("head") {
                         ProfileHead(backend, current) { editing = true }
+                    }
+                    if (onModerate != null && current.isModerator) {
+                        item("moderation") {
+                            Spacer(Modifier.height(20.dp))
+                            ModerationEntry(current.moderationQueue, onModerate)
+                        }
                     }
                     item("submissions") {
                         Spacer(Modifier.height(24.dp))
@@ -256,6 +270,49 @@ fun YouScreen(
                 TextButton(onClick = { pendingDelete = null }) { Text(stringResource(Res.string.cancel)) }
             },
         )
+    }
+}
+
+/**
+ * The way in to the review queue.
+ *
+ * A row rather than a button in the action stack at the foot: moderating is not something the owner of
+ * this profile does to their own account, and burying it under Publish / View public profile / Sign out
+ * would read as one of those. The count is on it because whether anything is waiting is the only reason
+ * to tap it.
+ */
+@Composable
+private fun ModerationEntry(waiting: Int, onOpen: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = c.secondaryContainer,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).clickable(onClick = onOpen),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Symbol(CaSymbols.gavel, contentDescription = null, size = 22.dp, tint = c.onSecondaryContainer)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(Res.string.you_moderation),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = c.onSecondaryContainer,
+                )
+                Text(
+                    if (waiting > 0) {
+                        stringResource(Res.string.you_moderation_waiting, waiting)
+                    } else {
+                        stringResource(Res.string.you_moderation_clear)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.onSecondaryContainer,
+                )
+            }
+            Symbol(CaSymbols.chevronRight, contentDescription = null, size = 20.dp, tint = c.onSecondaryContainer)
+        }
     }
 }
 

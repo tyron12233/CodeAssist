@@ -42,6 +42,8 @@ internal class StoreBackend(
         dev.ide.store.StoreSubmissionService.Unsupported,
     /** Told when a submission's review state changes. Null in tests and on hosts with no storage. */
     private val notifications: NotificationCenter? = null,
+    private val moderationService: dev.ide.store.StoreModerationService =
+        dev.ide.store.StoreModerationService.Unsupported,
     private val reviewService: dev.ide.store.StoreReviewService =
         dev.ide.store.StoreReviewService.Unsupported,
 ) : StoreService {
@@ -380,6 +382,9 @@ internal class StoreBackend(
             displayName = profile.displayName,
             avatarUrl = profile.avatarUrl ?: account.avatarUrl,
             verified = profile.verified,
+            // The profile read is the only round trip that already happens on sign-in, and it now answers
+            // this too, so the app knows whether to offer moderation without a second call.
+            isAdmin = profile.isModerator,
         )
     }
 
@@ -528,6 +533,8 @@ internal class StoreBackend(
                 totalInstalls = it.totalInstalls,
                 totalLikes = it.totalLikes,
                 averageRating = it.averageRating,
+                isModerator = it.isModerator,
+                moderationQueue = it.moderationQueue,
             )
         }
     }
@@ -606,6 +613,59 @@ internal class StoreBackend(
         submissionState.delete(itemId, version).also { error ->
             if (error == null) ctx.manager?.setPreference("store.submission.seen.$itemId.$version", "")
         }
+    }
+
+    // ---- moderation ----
+    //
+    // Delegated like the rest: [StoreModeration] depends on the moderation port alone, so which proposed
+    // edits count as changes is testable without a project, an engine or a host.
+
+    private val moderationState = StoreModeration(moderationService)
+
+    override fun moderationAvailable(): Boolean = moderationState.available()
+
+    /**
+     * Whether the signed-in account moderates.
+     *
+     * Read during composition, so it answers from the session the sign-in already adopted rather than
+     * asking anything: [adoptAccount] put the profile's answer on the account. That also means it is false
+     * for the moment between a session being restored and its profile landing, which is correct — an entry
+     * point that appeared before the app knew who was signed in would be a guess.
+     */
+    override fun isModerator(): Boolean =
+        moderationState.available() && accountState.authState().value.account?.isAdmin == true
+
+    override suspend fun reviewQueue(): dev.ide.ui.backend.UiModerationQueue =
+        withContext(storeIo) { moderationState.queue() }
+
+    override suspend fun approveSubmission(
+        versionId: String,
+        note: String?,
+        clearIconIfMissing: Boolean,
+    ): String? = withContext(storeIo) { moderationState.approve(versionId, note, clearIconIfMissing) }
+
+    override suspend fun rejectSubmission(versionId: String, note: String): String? =
+        withContext(storeIo) { moderationState.reject(versionId, note) }
+
+    override suspend fun openReports(): List<dev.ide.ui.backend.UiReportedContent> =
+        withContext(storeIo) { moderationState.reports() }
+
+    override suspend fun resolveReport(reportId: String, actioned: Boolean): String? =
+        withContext(storeIo) { moderationState.resolveReport(reportId, actioned) }
+
+    /**
+     * A submission's screenshot as a local file, cached like a published one.
+     *
+     * Kept apart from [screenshotFile] because the bucket is different and so is the authority: this one
+     * is in the PRIVATE uploads bucket and needs the moderator's session, which the anonymous media
+     * download has no way to present. The cache directory is separate too, so an image from a submission
+     * that is later refused is not sitting under the same prefix as published art.
+     */
+    override suspend fun submissionImageFile(storagePath: String): String? = withContext(storeIo) {
+        val root = ctx.manager?.storageRoot?.toFile() ?: return@withContext null
+        val cached = java.io.File(root, "store/review/${storagePath.replace('/', '_')}")
+        if (cached.isFile && cached.length() > 0) return@withContext cached.absolutePath
+        if (moderationState.downloadSubmissionImage(storagePath, cached)) cached.absolutePath else null
     }
 
     /**

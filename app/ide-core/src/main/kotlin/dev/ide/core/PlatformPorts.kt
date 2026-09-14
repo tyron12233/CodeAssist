@@ -58,6 +58,11 @@ val STORE_SUBMISSION_SERVICE = ServiceKey<dev.ide.store.StoreSubmissionService>(
 /** Ratings and reviews. Reads are anonymous; writes need the account service, so the launcher builds both. */
 val STORE_REVIEW_SERVICE = ServiceKey<dev.ide.store.StoreReviewService>("platform.storeReviews")
 
+/** Moderation: the review queue and the decisions on it. Needs a signed-in session, and the database only
+ *  answers an account listed in `store_admins`, so on almost every install this resolves to a service whose
+ *  every surface is hidden. Absent (desktop / tests) is the same as not being a moderator. */
+val STORE_MODERATION_SERVICE = ServiceKey<dev.ide.store.StoreModerationService>("platform.storeModeration")
+
 /** Daily coding challenges. Registered by the launcher, which is the only place that knows both the
  *  Supabase config and where the judge is deployed. Absent (desktop / tests) resolves to a service that
  *  reports challenges unavailable, and the tab explains itself rather than failing. */

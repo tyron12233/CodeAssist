@@ -1169,6 +1169,75 @@ interface StoreService {
     suspend fun setFollowing(handle: String, following: Boolean): String? =
         "Following is not available in this build"
 
+    // ---- moderation ----
+
+    /**
+     * Whether this build has a moderation transport. False hides every moderation surface outright.
+     *
+     * Separate from [isModerator] because they fail differently: a build with no moderation service can
+     * never show the screen, while one that has it shows it only to the accounts allowed to use it.
+     */
+    fun moderationAvailable(): Boolean = false
+
+    /**
+     * Whether the signed-in account moderates the store. Safe to read during composition.
+     *
+     * Answers from what the profile read already learned, so it costs nothing; false while signed out,
+     * for a build with no store, and for every account that is not a moderator. It decides what to DRAW —
+     * the backend re-checks every moderator call against `store_admins` regardless of what this says.
+     */
+    fun isModerator(): Boolean = false
+
+    /** What is waiting for a decision, and the last few decisions. */
+    suspend fun reviewQueue(): UiModerationQueue =
+        UiModerationQueue(error = "Moderation is not available in this build")
+
+    /**
+     * Approve a submission and publish it.
+     *
+     * Returns null on success, or the reason it did not go, which is shown as it was written: "was already
+     * approved" is what a second moderator sees, and it is the useful thing to say.
+     *
+     * [clearIconIfMissing] answers the one question the engine cannot: a version that ships no app icon
+     * usually means the publisher took theirs off, but a client too old to upload one, or an icon a
+     * moderator set by hand, would be lost without anyone deciding that. The screen asks.
+     */
+    suspend fun approveSubmission(
+        versionId: String,
+        note: String? = null,
+        clearIconIfMissing: Boolean = false,
+    ): String? = "Moderation is not available in this build"
+
+    /**
+     * Refuse a submission, with the reason its publisher is sent.
+     *
+     * The note is required. It is the whole of what a rejection tells the person who receives it, and the
+     * backend refuses one without it too.
+     */
+    suspend fun rejectSubmission(versionId: String, note: String): String? =
+        "Moderation is not available in this build"
+
+    /** Open reports, oldest first. */
+    suspend fun openReports(): List<UiReportedContent> = emptyList()
+
+    /**
+     * Close a report. [actioned] when something was done about it.
+     *
+     * Separate from hiding the review it flagged: a moderator may hide one and still want the flag in the
+     * queue while they decide about the account behind it.
+     */
+    suspend fun resolveReport(reportId: String, actioned: Boolean): String? =
+        "Moderation is not available in this build"
+
+    /**
+     * A file from a submission under review, as a local path, or null.
+     *
+     * The twin of [screenshotFile] for content that is NOT public yet: a pending submission's screenshots
+     * live in the private bucket and need the moderator's session, so the anonymous media cache cannot
+     * reach them.
+     */
+    suspend fun submissionImageFile(storagePath: String): String? = null
+
     companion object {
         /** A store that advertises nothing — the default for backends that wire no catalog. */
         val Unsupported: StoreService = object : StoreService {}

@@ -751,6 +751,17 @@ class CodeAssistAppState(
         screen = Screen.You
     }
 
+    /**
+     * The review queue, for an account that moderates the store.
+     *
+     * Reached from the You screen and nowhere else: it is not a tab, because on all but a handful of
+     * installs the account cannot use it. The screen still asks the backend for everything it shows, so
+     * arriving here without being a moderator produces refusals rather than a page of someone else's work.
+     */
+    fun openModeration() {
+        screen = Screen.Moderation
+    }
+
 
     /**
      * Act on a tapped notification.
@@ -845,6 +856,8 @@ class CodeAssistAppState(
             screen == Screen.PublishingGuide -> screen = Screen.Projects
             screen == Screen.PublisherProfile -> screen = Screen.Projects
             screen == Screen.You -> screen = Screen.Projects
+            // Back out to the profile it was opened from, not to the project list.
+            screen == Screen.Moderation -> screen = Screen.You
 
             screen == Screen.ChallengePlayer -> exitChallenge()
             screen == Screen.ChallengeBoard -> exitChallengeBoard()

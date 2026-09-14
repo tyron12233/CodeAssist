@@ -387,6 +387,8 @@ class SupabaseSubmissionService(
             totalInstalls = JsonReader.int(json, "totalInstalls"),
             totalLikes = JsonReader.int(json, "totalLikes"),
             averageRating = JsonReader.float(json, "averageRating"),
+            isModerator = JsonReader.bool(json, "isModerator"),
+            moderationQueue = JsonReader.int(json, "moderationQueue"),
         )
     }
 
