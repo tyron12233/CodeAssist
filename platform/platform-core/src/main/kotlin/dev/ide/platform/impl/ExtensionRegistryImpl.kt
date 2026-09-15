@@ -3,6 +3,7 @@
 // See LICENSE-EXCEPTION: a plugin linking against this file may use any license.
 package dev.ide.platform.impl
 
+import dev.ide.platform.Contribution
 import dev.ide.platform.Disposable
 import dev.ide.platform.ExtensionPoint
 import dev.ide.platform.ExtensionRegistry
@@ -44,6 +45,13 @@ class ExtensionRegistryImpl(private val parent: ExtensionRegistry? = null) : Ext
         // (un)registration. Most EPs are order-insensitive; the few that aren't (e.g. the JDT language
         // backend as fallback) are registered app-global, so they correctly precede any project-local ones.
         return if (parent == null) own else parent.extensions(ep) + own
+    }
+
+    /** The same snapshot as [extensions], each contribution carrying the plugin that registered it. */
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : Any> contributions(ep: ExtensionPoint<T>): List<Contribution<T>> {
+        val own = byPoint[ep.id]?.map { Contribution(it.impl as T, it.plugin) } ?: emptyList()
+        return if (parent == null) own else parent.contributions(ep) + own
     }
 
     /** Remove every contribution made by [plugin] (bulk unregister on plugin unload). */

@@ -30,6 +30,7 @@ import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.model.Module
+import dev.ide.platform.PluginId
 import dev.ide.testkit.InMemoryVirtualFile
 import dev.ide.vfs.VirtualFile
 import kotlinx.coroutines.CoroutineScope
@@ -396,6 +397,185 @@ class AnalysisEngineTest {
         assertNull(engine.diagnostics(file).firstOrNull())
     }
 
+    // ---- installed-plugin analyzers (ordering, isolation, the time budget) ----
+
+    @Test
+    fun builtInFindingsPublishBeforeASlowPluginAnalyzerRuns() {
+        runBlocking {
+            val file = FakeFile("/src/Main.java")
+            val target = target(file, "class Main {}")
+            var engine: AnalysisEngine? = null
+            var seenMidPass: List<String> = emptyList()
+            val builtIn = RecordingAnalyzer(AnalyzerId("host"), AnalyzerTier.SYNTAX, null, "host")
+            // Reads what the editor would already be showing at the moment the plugin's analyzer runs.
+            val plugin = PluginAnalyzer(AnalyzerId("slow")) { sink ->
+                seenMidPass = engine!!.diagnostics(file).mapNotNull { it.code }
+                sink.report(TextRange(0, 1), Severity.WARNING, "plugin finding", code = "slow")
+            }
+            engine = engine(
+                analyzers = listOf(builtIn, plugin), env = env(target),
+                externalAnalyzers = mapOf(plugin.id to PluginId("acme")),
+            )
+
+            val merged = engine.analyzeNow(file).mapNotNull { it.code }
+
+            assertEquals(listOf("host"), seenMidPass, "the host's half of the pass is published before the plugin's runs")
+            assertEquals(setOf("host", "slow"), merged.toSet(), "both halves end up in the merged set")
+        }
+    }
+
+    @Test
+    fun aThrowingPluginAnalyzerCostsOnlyItsOwnFindings() {
+        runBlocking {
+            val file = FakeFile("/src/Main.java")
+            val target = target(file, "class Main {}")
+            val builtIn = RecordingAnalyzer(AnalyzerId("host"), AnalyzerTier.SYNTAX, null, "host")
+            val plugin = PluginAnalyzer(AnalyzerId("boom")) { sink ->
+                sink.report(TextRange(0, 1), Severity.WARNING, "half a result", code = "boom")
+                error("plugin analyzer blew up")
+            }
+            val compiler = FakeCompiler { listOf(compilerDiag(it, "MISSING_SEMICOLON")) }
+            val engine = engine(
+                analyzers = listOf(builtIn, plugin), diagnosticProviders = listOf(compiler), env = env(target),
+                externalAnalyzers = mapOf(plugin.id to PluginId("acme")),
+            )
+
+            val merged = engine.analyzeNow(file).mapNotNull { it.code }
+
+            assertEquals(
+                setOf("host", "MISSING_SEMICOLON"), merged.toSet(),
+                "the throw costs the user that check; the host's analyzers and the compiler still publish",
+            )
+        }
+    }
+
+    @Test
+    fun aPluginAnalyzerOverItsBudgetIsQuarantinedAfterRepeatedPasses() {
+        runBlocking {
+            val file = FakeFile("/src/Main.java")
+            val target = target(file, "class Main {}")
+            val clock = FakeClock()
+            val plugin = PluginAnalyzer(AnalyzerId("slow")) { sink ->
+                clock.advanceMs(200) // way over the 25ms SYNTAX budget
+                sink.report(TextRange(0, 1), Severity.WARNING, "finding", code = "slow")
+            }
+            val engine = engine(
+                analyzers = listOf(plugin), env = env(target),
+                externalAnalyzers = mapOf(plugin.id to PluginId("acme")), nanoTime = clock::read,
+            )
+
+            repeat(3) { engine.analyzeNow(file) }
+            assertEquals(3, plugin.invocations, "three strikes are spent before it is dropped")
+            assertTrue(engine.analyzeNow(file).isEmpty(), "quarantined: its findings are gone too")
+            assertEquals(3, plugin.invocations, "a quarantined analyzer is not invoked again")
+
+            val report = engine.quarantinedAnalyzers.single()
+            assertEquals(PluginId("acme"), report.plugin, "the report names the plugin, not just the check")
+            assertEquals(QuarantinedAnalyzer.Cause.SLOW, report.cause)
+            assertEquals(200L, report.tookMs)
+        }
+    }
+
+    @Test
+    fun aPassInsideBudgetClearsTheStrikes() {
+        runBlocking {
+            val file = FakeFile("/src/Main.java")
+            val target = target(file, "class Main {}")
+            val clock = FakeClock()
+            var slow = true
+            val plugin = PluginAnalyzer(AnalyzerId("spiky")) { sink ->
+                clock.advanceMs(if (slow) 200 else 1)
+                sink.report(TextRange(0, 1), Severity.WARNING, "finding", code = "spiky")
+            }
+            val engine = engine(
+                analyzers = listOf(plugin), env = env(target),
+                externalAnalyzers = mapOf(plugin.id to PluginId("acme")), nanoTime = clock::read,
+            )
+
+            // Two bad passes, one good one, then two more bad ones: strikes must be consecutive, so an
+            // analyzer that is merely slow on the occasional pathological file is never dropped.
+            repeat(2) { engine.analyzeNow(file) }
+            slow = false; engine.analyzeNow(file)
+            slow = true; repeat(2) { engine.analyzeNow(file) }
+
+            assertEquals(5, plugin.invocations)
+            assertTrue(engine.quarantinedAnalyzers.isEmpty(), "the in-budget pass reset the count")
+        }
+    }
+
+    @Test
+    fun configureReleasesTheQuarantine() {
+        runBlocking {
+            val file = FakeFile("/src/Main.java")
+            val target = target(file, "class Main {}")
+            val clock = FakeClock()
+            val plugin = PluginAnalyzer(AnalyzerId("slow")) { sink ->
+                clock.advanceMs(200)
+                sink.report(TextRange(0, 1), Severity.WARNING, "finding", code = "slow")
+            }
+            val engine = engine(
+                analyzers = listOf(plugin), env = env(target),
+                externalAnalyzers = mapOf(plugin.id to PluginId("acme")), nanoTime = clock::read,
+            )
+            repeat(4) { engine.analyzeNow(file) }
+            assertEquals(3, plugin.invocations)
+
+            engine.configure(AnalysisProfile.DEFAULT)
+
+            assertTrue(engine.quarantinedAnalyzers.isEmpty(), "the user revisiting the profile is the way back")
+            engine.analyzeNow(file)
+            assertEquals(4, plugin.invocations, "released: it runs again (and can earn the quarantine back)")
+        }
+    }
+
+    @Test
+    fun aQuarantinedSemanticAnalyzerStopsForcingBindings() {
+        runBlocking {
+            val file = FakeFile("/src/Main.java")
+            val fakeEnv = env(target(file, "class Main {}"))
+            val clock = FakeClock()
+            val plugin = PluginAnalyzer(AnalyzerId("slow"), AnalyzerTier.SEMANTIC) { sink ->
+                clock.advanceMs(500) // over the 120ms SEMANTIC budget
+                sink.report(TextRange(0, 1), Severity.WARNING, "finding", code = "slow")
+            }
+            val engine = engine(
+                analyzers = listOf(plugin), env = fakeEnv,
+                externalAnalyzers = mapOf(plugin.id to PluginId("acme")), nanoTime = clock::read,
+            )
+
+            repeat(3) { engine.analyzeNow(file) }
+            assertTrue(fakeEnv.bindingRequests.isNotEmpty(), "while it ran, the file paid for a binding tree")
+            fakeEnv.bindingRequests.clear()
+            engine.analyzeNow(file)
+
+            assertTrue(
+                fakeEnv.bindingRequests.isEmpty(),
+                "the only SEMANTIC analyzer is gone, so the file drops back to the cheap syntax-only tree",
+            )
+        }
+    }
+
+    @Test
+    fun theHostsOwnAnalyzersAreNeverQuarantined() {
+        runBlocking {
+            val file = FakeFile("/src/Main.java")
+            val target = target(file, "class Main {}")
+            val clock = FakeClock()
+            // Same behaviour as the quarantined plugin above, but contributed by the IDE itself: a slow
+            // built-in is our bug to fix, never something the watchdog may switch off behind the user.
+            val builtIn = PluginAnalyzer(AnalyzerId("host")) { sink ->
+                clock.advanceMs(5_000)
+                sink.report(TextRange(0, 1), Severity.WARNING, "finding", code = "host")
+            }
+            val engine = engine(analyzers = listOf(builtIn), env = env(target), nanoTime = clock::read)
+
+            repeat(5) { engine.analyzeNow(file) }
+
+            assertEquals(5, builtIn.invocations)
+            assertTrue(engine.quarantinedAnalyzers.isEmpty())
+        }
+    }
+
     // ---- factories ----
 
     private fun engine(
@@ -406,9 +586,12 @@ class AnalysisEngineTest {
         profile: AnalysisProfile = AnalysisProfile.DEFAULT,
         scope: CoroutineScope = CoroutineScope(Job()),
         actionProviders: List<ActionProvider> = emptyList(),
+        externalAnalyzers: Map<AnalyzerId, PluginId> = emptyMap(),
+        budget: AnalyzerBudget = AnalyzerBudget.DEFAULT,
+        nanoTime: () -> Long = System::nanoTime,
     ) = AnalysisEngine(
         analyzers, quickFixProviders, diagnosticProviders, env, scope, profile, SchedulerConfig(0, 0, 0),
-        actionProviders,
+        actionProviders, externalAnalyzers, budget, nanoTime,
     )
 
     private fun env(vararg targets: AnalysisTarget) =
@@ -459,6 +642,30 @@ private class NodeKeyedAnalyzer(override val id: AnalyzerId, private val kind: N
         invocations++
         for (n in nodes.nodes(kind)) { seen++; sink.report(n.range, defaultSeverity, "found", code = id.value) }
     }
+}
+
+/** An analyzer whose body a test supplies — the shape an installed plugin's check has here. */
+private class PluginAnalyzer(
+    override val id: AnalyzerId,
+    override val tier: AnalyzerTier = AnalyzerTier.SYNTAX,
+    private val body: (dev.ide.analysis.DiagnosticSink) -> Unit,
+) : FileAnalyzer {
+    override val displayName = id.value
+    override val languages = setOf(LanguageId("java"))
+    override val defaultSeverity = Severity.WARNING
+    override val interestedIn: Set<NodeKind>? = null
+    var invocations = 0; private set
+    override fun analyze(target: AnalysisTarget, sink: dev.ide.analysis.DiagnosticSink) {
+        invocations++
+        body(sink)
+    }
+}
+
+/** The watchdog's clock, advanced by the analyzer under test so no real time has to pass. */
+private class FakeClock {
+    private var nanos = 0L
+    fun advanceMs(ms: Long) { nanos += ms * 1_000_000 }
+    fun read(): Long = nanos
 }
 
 private class FakeCompiler(
