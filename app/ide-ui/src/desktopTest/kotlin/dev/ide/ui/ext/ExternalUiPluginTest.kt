@@ -96,6 +96,37 @@ class ExternalUiPluginTest {
         assertTrue(contributed.matches("main.cpp"), "the crossed profile must claim its own suffixes")
     }
 
+    /**
+     * A file icon crosses as art plus the names that claim it, and the color arrives unchanged.
+     *
+     * The color is the part worth asserting: the SPI carries `0xAARRGGBB` as a `Long` (a published API
+     * cannot name Compose's `Color`), and the naive `Color(long)` conversion silently reads it as an sRGB
+     * pixel-format value rather than as those four bytes.
+     */
+    @Test
+    fun fileIconDeclarationIsCarriedOver() {
+        val facet = facet { ui ->
+            ui.fileIcon(
+                dev.ide.plugin.ui.FileIcon(
+                    id = "ndk.cpp",
+                    suffixes = listOf(".cpp", ".cc"),
+                    badge = "C++",
+                    color = 0xFF7C9CE8,
+                ),
+            )
+        }
+        val scope = RecordingScope("com.example.ndk")
+
+        facet.asUiPlugin("com.example.ndk").contributeUi(scope)
+
+        val (iconId, suffixes, icon) = scope.fileIcons.single()
+        assertEquals("ndk.cpp", iconId)
+        assertEquals(listOf(".cpp", ".cc"), suffixes)
+        val badge = icon as TreeIcon.Badge
+        assertEquals("C++", badge.text)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF7C9CE8), badge.color)
+    }
+
     /** The host's manifest decides the attribution id, not what the facet says about itself. */
     @Test
     fun theHostsIdIsWhatTheFacetIsRegisteredUnder() {
@@ -530,6 +561,7 @@ class ExternalUiPluginTest {
         val editorLayers = mutableListOf<EditorLayerContribution>()
         val editorPainters = mutableListOf<EditorPainterContribution>()
         val editorLanguages = mutableListOf<EditorLanguageProfile>()
+        val fileIcons = mutableListOf<Triple<String, List<String>, TreeIcon>>()
         var disposed = 0
             private set
 
@@ -544,6 +576,9 @@ class ExternalUiPluginTest {
         override fun treeIcon(iconId: String, icon: TreeIcon) = handle()
         override fun editorLanguage(profile: EditorLanguageProfile) =
             handle().also { editorLanguages += profile }
+
+        override fun fileIcon(iconId: String, suffixes: List<String>, icon: TreeIcon) =
+            handle().also { fileIcons += Triple(iconId, suffixes, icon) }
         override fun editorPreview(preview: EditorPreviewContribution) =
             handle().also { editorPreviews += preview }
 

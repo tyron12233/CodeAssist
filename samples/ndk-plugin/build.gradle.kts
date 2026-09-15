@@ -4,6 +4,10 @@
 // this repository: `tools/ndk-toolchain/build-llvm-android.sh` produces them, and this module packages
 // whatever that build left behind. Building the plugin without them produces an APK that installs and
 // reports "no toolchain for this device's ABI", which is the same thing a user on an unsupported ABI sees.
+// Imported rather than fully qualified: the Java plugin's `java` project extension shadows the `java.*`
+// package inside a build script, so `java.util.Properties` would parse as `(java extension).util`.
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     // No Compose compiler plugin: this plugin's UI facet registers editor languages and contributes no
@@ -58,10 +62,37 @@ android {
         versionName = "1.0.0"
     }
 
+    // Signed with the same upload key the IDE is, when one is configured, so the published plugin APK is a
+    // release build rather than a debuggable one. Resolution order and file are the IDE's (a gitignored
+    // keystore.properties at the repo root); with no keystore the release variant is simply left unsigned,
+    // which is what a contributor building this sample gets.
+    signingConfigs {
+        val keystoreProps = Properties().apply {
+            val f = rootProject.file("keystore.properties")
+            if (f.exists()) f.inputStream().use { load(it) }
+        }
+        fun signingValue(key: String, prop: String, env: String): String? =
+            keystoreProps.getProperty(key) ?: (findProperty(prop) as String?) ?: System.getenv(env)
+
+        val storeFileResolved = signingValue("storeFile", "RELEASE_STORE_FILE", "RELEASE_STORE_FILE")
+            ?.let { rootProject.file(it) }
+        if (storeFileResolved != null && storeFileResolved.exists()) {
+            create("release") {
+                storeFile = storeFileResolved
+                storePassword = signingValue("storePassword", "RELEASE_STORE_PASSWORD", "RELEASE_STORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "RELEASE_KEY_ALIAS", "RELEASE_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "RELEASE_KEY_PASSWORD", "RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         // Never minify a plugin: the IDE loads the entry points by the names in the packaged manifest.
         getByName("debug") { isMinifyEnabled = false }
-        getByName("release") { isMinifyEnabled = false }
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
+        }
     }
 
     compileOptions {
