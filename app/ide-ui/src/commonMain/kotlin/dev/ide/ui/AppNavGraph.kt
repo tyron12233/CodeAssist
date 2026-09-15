@@ -66,6 +66,7 @@ import dev.ide.ui.screens.SettingsScreen
 import dev.ide.ui.screens.SettingsView
 import dev.ide.ui.screens.StorageScreen
 import dev.ide.ui.screens.StoreItemScreen
+import dev.ide.ui.screens.StoreSearchScreen
 import dev.ide.ui.screens.SymbolMacroEditorScreen
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.launch
@@ -566,6 +567,11 @@ private sealed interface StoreFeedState {
 private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
     // Publishing asks for an account at the moment it is needed, not at launch.
     var signInVisible by remember { mutableStateOf(false) }
+    // The search is a mode of this tab rather than a route of its own, so returning from it keeps the
+    // feed's scroll position. Its entry used to re-select the tab it was already on, which is to say the
+    // store had a search box that did nothing.
+    var searching by remember { mutableStateOf(false) }
+    var searchCategory by remember { mutableStateOf<String?>(null) }
     var notifyLaunch by remember(app.backend) { mutableStateOf(app.backend.store.launchNotificationEnabled()) }
     var notifyMessage by remember { mutableStateOf<String?>(null) }
     val storeScope = rememberCoroutineScope()
@@ -588,6 +594,7 @@ private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
         }
 
         StoreFeedState.Unavailable -> {
+            // The bundled catalogue, which owns its own search entry.
             ProjectsStoreScreen(
                 backend = app.backend,
                 onOpenItem = app::openStoreItem,
@@ -610,44 +617,59 @@ private fun StoreRoute(app: CodeAssistAppState, fileActions: FileActions) {
                 .orEmpty()
         }.getOrDefault(emptyList())
     }
-    ExploreFeed(
-        feed = current,
-        onOpenItem = app::openStoreItem,
-        installing = app.backend.store.installProgress().collectAsState().value,
-        onInstallItem = { item -> app.installStoreItem(item) },
-        onOpenSearch = { app.selectHomeTab(dev.ide.ui.HomeTab.Store) },
-        bundled = bundledItems,
-        onUseBundled = { item -> item.templateId?.let(app::createProject) },
-        onPublish = { signInVisible = true },
-        // The switch was inert: nothing was passed, so it defaulted to false and a no-op handler. It now
-        // reflects and writes a real broadcast subscription on the device row.
-        notifyOnLaunch = notifyLaunch,
-        notifyMessage = notifyMessage,
-        onNotifyChange = { wanted ->
-            storeScope.launch {
-                val error = app.backend.store.setLaunchNotification(wanted)
-                // Only follow the server: a switch that flips on its own would claim a subscription the
-                // backend never accepted.
-                if (error == null) notifyLaunch = wanted
-                notifyMessage = error
-            }
-        },
-        // A publisher with no handle has no page to open — the handle IS the address — so the tap is a
-        // no-op rather than opening a profile that cannot resolve.
-        onOpenPublisher = { publisher -> publisher.handle?.let { app.openPublisher(it) } },
-        // Signed in this opens the account's own page; signed out it is the sign-in sheet, because there is
-        // no page to show until there is an account.
-        onAccount = if (app.backend.store.authProviders().isNotEmpty()) {
-            ({ if (app.backend.store.authState().value.signedIn) app.openYou() else signInVisible = true })
-        } else {
-            null
-        },
-        signedIn = app.backend.store.authState().collectAsState().value.signedIn,
-        onHowItWorks = { app.openPublishingGuide() },
-        // Where the cards fetch a published screenshot from. Without it every shelf draws the abstract
-        // code motif, including for projects that shipped six screenshots.
-        backend = app.backend,
-    )
+    // The search draws OVER the feed rather than replacing it: the feed stays composed, so coming back
+    // from a search lands where the reader left off instead of at the top of the store.
+    Box(Modifier.fillMaxSize()) {
+        ExploreFeed(
+            feed = current,
+            onOpenItem = app::openStoreItem,
+            installing = app.backend.store.installProgress().collectAsState().value,
+            onInstallItem = { item -> app.installStoreItem(item) },
+            onOpenSearch = { category ->
+                searchCategory = category
+                searching = true
+            },
+            bundled = bundledItems,
+            onUseBundled = { item -> item.templateId?.let(app::createProject) },
+            onPublish = { signInVisible = true },
+            // The switch was inert: nothing was passed, so it defaulted to false and a no-op handler. It now
+            // reflects and writes a real broadcast subscription on the device row.
+            notifyOnLaunch = notifyLaunch,
+            notifyMessage = notifyMessage,
+            onNotifyChange = { wanted ->
+                storeScope.launch {
+                    val error = app.backend.store.setLaunchNotification(wanted)
+                    // Only follow the server: a switch that flips on its own would claim a subscription the
+                    // backend never accepted.
+                    if (error == null) notifyLaunch = wanted
+                    notifyMessage = error
+                }
+            },
+            // A publisher with no handle has no page to open — the handle IS the address — so the tap is a
+            // no-op rather than opening a profile that cannot resolve.
+            onOpenPublisher = { publisher -> publisher.handle?.let { app.openPublisher(it) } },
+            // Signed in this opens the account's own page; signed out it is the sign-in sheet, because there is
+            // no page to show until there is an account.
+            onAccount = if (app.backend.store.authProviders().isNotEmpty()) {
+                ({ if (app.backend.store.authState().value.signedIn) app.openYou() else signInVisible = true })
+            } else {
+                null
+            },
+            signedIn = app.backend.store.authState().collectAsState().value.signedIn,
+            onHowItWorks = { app.openPublishingGuide() },
+            // Where the cards fetch a published screenshot from. Without it every shelf draws the abstract
+            // code motif, including for projects that shipped six screenshots.
+            backend = app.backend,
+        )
+        if (searching) {
+            StoreSearchScreen(
+                backend = app.backend,
+                onOpenItem = app::openStoreItem,
+                onClose = { searching = false },
+                initialCategory = searchCategory,
+            )
+        }
+    }
     if (signInVisible) {
         StoreSignInSheet(
             backend = app.backend,

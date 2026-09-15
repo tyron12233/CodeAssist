@@ -75,6 +75,9 @@ import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.platform.NotificationPermissionStatus
 import dev.ide.ui.platform.rememberNotificationPermissionController
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -221,8 +224,12 @@ fun SubmitProjectScreen(
         val listing = published.firstOrNull { it.slug == draft.itemSlug } ?: return@LaunchedEffect
         if (listing.screenshots.isEmpty() || shotsCarriedFor == listing.slug) return@LaunchedEffect
         if (screenshots.isNotEmpty()) return@LaunchedEffect
-        val files = listing.screenshots.map { path ->
-            runCatching { backend.store.screenshotFile(path) }.getOrNull()
+        // Concurrently: the form waits on all of them before it can show any, so fetching six one after
+        // another is six round trips the publisher sits through.
+        val files = coroutineScope {
+            listing.screenshots
+                .map { path -> async { runCatching { backend.store.screenshotFile(path) }.getOrNull() } }
+                .awaitAll()
         }
         shotsCarriedFor = listing.slug
         if (files.any { it == null }) {

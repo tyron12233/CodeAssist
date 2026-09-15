@@ -38,11 +38,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import dev.ide.ui.theme.LocalTonalCardFills
 import dev.ide.ui.theme.LocalExpressiveShapeCycling
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -108,6 +110,9 @@ import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.TonalPair
 import dev.ide.ui.theme.cardShape
 import dev.ide.ui.theme.tonalPair
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.Image
@@ -131,6 +136,8 @@ import dev.ide.ui.generated.resources.reviews_sort_helpful
 import dev.ide.ui.generated.resources.reviews_sort_recent
 import dev.ide.ui.generated.resources.reviews_title
 import dev.ide.ui.generated.resources.reviews_unavailable
+import dev.ide.ui.generated.resources.reviews_loading_more
+import dev.ide.ui.generated.resources.reviews_show_more
 import dev.ide.ui.generated.resources.reviews_write
 import dev.ide.ui.generated.resources.review_hidden_done
 import dev.ide.ui.generated.resources.review_reported
@@ -1179,14 +1186,17 @@ private fun ReviewsPanel(
         return
     }
 
-    val page by produceState(
-        dev.ide.ui.backend.UiReviewPage(loading = true),
-        item.id, sort, refresh, voteEpoch, backend,
-    ) {
-        value = dev.ide.ui.backend.UiReviewPage(loading = true)
+    // Held rather than produced, because the panel appends to it: a second page keeps the reviews already
+    // read and replaces everything that describes the item as a whole (the average, the distribution).
+    var page by remember(item.id, sort, refresh, voteEpoch) {
+        mutableStateOf(dev.ide.ui.backend.UiReviewPage(loading = true))
+    }
+    var loadingMore by remember(item.id, sort, refresh, voteEpoch) { mutableStateOf(false) }
+    LaunchedEffect(item.id, sort, refresh, voteEpoch, backend) {
+        page = dev.ide.ui.backend.UiReviewPage(loading = true)
         val fetched = runCatching { backend.store.reviews(item.id, sort) }.getOrNull()
             ?: dev.ide.ui.backend.UiReviewPage(error = "Could not load reviews")
-        value = fetched
+        page = fetched
         onPage(fetched)
     }
     val current = page
@@ -1306,6 +1316,37 @@ private fun ReviewsPanel(
                 },
             )
         }
+        // A tap rather than an endless scroll: this panel is the foot of a page the reader came to for
+        // the project, and a list that grows as they try to leave it is the wrong shape here.
+        if (current.hasMore || loadingMore) {
+            Spacer(Modifier.height(12.dp))
+            TextButton(
+                enabled = !loadingMore,
+                onClick = {
+                    scope.launch {
+                        loadingMore = true
+                        val next = runCatching {
+                            backend.store.reviews(item.id, sort, offset = current.reviews.size)
+                        }.getOrNull()
+                        if (next != null) {
+                            page = next.copy(
+                                // Deduplicated by author, who may review a project only once: a review
+                                // posted between the two requests would otherwise shift the page and
+                                // arrive twice.
+                                reviews = (current.reviews + next.reviews).distinctBy { it.authorId },
+                            )
+                        }
+                        loadingMore = false
+                    }
+                },
+            ) {
+                Text(
+                    stringResource(
+                        if (loadingMore) Res.string.reviews_loading_more else Res.string.reviews_show_more,
+                    ),
+                )
+            }
+        }
         actionNote?.let {
             Spacer(Modifier.height(12.dp))
             Text(it, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
@@ -1353,6 +1394,10 @@ private fun relativeAge(postedAtMs: Long, now: Long): String? {
  * A published project's screenshots arrive as storage paths, and both galleries decode files rather than
  * URLs, so each remote path is fetched once and cached (see `StoreService.screenshotFile`). Anything that
  * fails to fetch is dropped rather than left as a gap: the strip shows what it has.
+ *
+ * Fetched **concurrently**, and in their published order: a listing may carry six, and one after another
+ * meant six round trips end to end before the strip had anything in it. The engine caps how many media
+ * downloads actually run at once, so asking for all of them here cannot flood the connection.
  */
 @Composable
 private fun rememberResolvedScreenshots(backend: IdeBackend, item: UiStoreItem): List<String> {
@@ -1362,7 +1407,11 @@ private fun rememberResolvedScreenshots(backend: IdeBackend, item: UiStoreItem):
         val remote = item.screenshots.filterNot { hasSamplePreview(it) }
         value = builtIn
         if (remote.isEmpty()) return@produceState
-        val cached = remote.mapNotNull { runCatching { backend.store.screenshotFile(it) }.getOrNull() }
+        val cached = coroutineScope {
+            remote.map { path -> async { runCatching { backend.store.screenshotFile(path) }.getOrNull() } }
+                .awaitAll()
+                .filterNotNull()
+        }
         value = builtIn + cached
     }
     return resolved

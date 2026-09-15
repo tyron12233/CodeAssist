@@ -580,6 +580,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="store_use">Use</string>
     <string name="store_open">Open</string>
     <string name="store_no_results">No projects match "%1$s"</string>
+    <string name="store_search_all">Nothing has been published to the store yet.</string>
     <string name="store_all">All</string>
     <string name="store_unavailable">Explore unavailable</string>
     <string name="store_unavailable_content">Explore isn't available in this build.</string>
@@ -771,6 +772,8 @@ We never collect your code, file or project names, which features you use, or an
     <string name="reviews_yours">Your review</string>
     <string name="reviews_sort_helpful">Most helpful</string>
     <string name="reviews_sort_recent">Newest</string>
+    <string name="reviews_show_more">Show more reviews</string>
+    <string name="reviews_loading_more">Loading…</string>
     <string name="reviews_helpful">Helpful</string>
     <string name="reviews_helpful_count">Helpful (%1$d)</string>
     <string name="reviews_count">%1$d reviews</string>

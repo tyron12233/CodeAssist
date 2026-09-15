@@ -15,6 +15,7 @@ import dev.ide.ui.backend.UiStoreAuthState
 import dev.ide.ui.backend.UiStoreFeed
 import dev.ide.ui.backend.UiStoreSection
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -72,26 +73,103 @@ internal class StoreBackend(
         UiStoreCatalog(featured = featured, categories = categories, sections = sections)
     }
 
-    override suspend fun search(query: String, category: String?): List<UiStoreItem> = withContext(Dispatchers.Default) {
+    /**
+     * One page of search, over the remote catalogue and the bundled templates together.
+     *
+     * The two sources page differently, so they are combined rather than interleaved: the bundled
+     * templates are a fixed local list and ride on the first page only, ahead of the remote hits,
+     * while [offset] counts purely within the remote result set. Anything else would need a cursor that
+     * means two things at once.
+     *
+     * A bundled template the store also publishes is dropped from the bundled half when the same page
+     * carries its remote row, because the remote row IS that template with the store's metadata over it
+     * ([StoreFeedMapper] overlays them by id) and the two would otherwise read as two projects.
+     *
+     * With no remote store the bundled list is the whole result and is paged locally, so the caller's
+     * scroll behaves the same either way.
+     */
+    override suspend fun searchPage(
+        query: String,
+        category: String?,
+        offset: Int,
+        limit: Int,
+    ): dev.ide.ui.backend.UiStoreSearchPage {
+        val local = withContext(Dispatchers.Default) { bundledMatches(query, category) }
+        if (!source.configured()) return StoreSearchPaging.local(local, offset, limit)
+        val result = withContext(storeIo) {
+            source.search(
+                dev.ide.store.StoreQuery(
+                    text = query.trim(),
+                    // Lowercased because the store's categories are slugs and the column is matched
+                    // exactly: a caller that had only the bundled catalog to go on passes a display name
+                    // ("Kotlin"), and an unnormalised one matches nothing at all rather than narrowing.
+                    category = category?.lowercase(),
+                    limit = limit,
+                    offset = offset,
+                ),
+                source.appBuild ?: 0,
+            )
+        }
+        return StoreSearchPaging.page(local, result, bundledBySlug(), offset, limit)
+    }
+
+    /**
+     * The categories a search filters by: the store's own list, or the bundled catalog's.
+     *
+     * The store's slugs are what [searchPage] sends, so a tile that says "Android apps" has to carry
+     * `android-apps` to filter anything. With no remote store the bundled categories are their own ids,
+     * which is what the local filter matches on.
+     */
+    override suspend fun searchCategories(): List<dev.ide.ui.backend.UiStoreCategory> {
+        if (source.configured()) {
+            val remote = withContext(storeIo) { source.categories() }
+            if (remote is dev.ide.store.StoreResult.Ok && remote.value.isNotEmpty()) {
+                return remote.value.map { (slug, title) -> dev.ide.ui.backend.UiStoreCategory(slug, title) }
+            }
+        }
+        return withContext(Dispatchers.Default) {
+            catalog().categories.map { dev.ide.ui.backend.UiStoreCategory(it, it) }
+        }
+    }
+
+    /** The bundled templates matching a query, in the order the catalog lists them. */
+    private fun bundledMatches(query: String, category: String?): List<UiStoreItem> {
         val all = templates().map { toItem(it, if (isSample(it)) UiStoreItemKind.Sample else UiStoreItemKind.Template) }
         val q = query.trim().lowercase()
-        all.filter { item -> matchesCategory(item, category) && matchesQuery(item, q) }
+        return all.filter { item -> matchesCategory(item, category) && matchesQuery(item, q) }
     }
 
     /**
      * The server-driven Explore feed, or null when there is no remote store to ask.
      *
-     * Order of attempts: network, then the on-disk cache. A cached feed is marked [UiStoreFeed.fromCache]
-     * so the UI can say so rather than presenting stale ranks as live.
+     * Order of attempts: memo, network, then the on-disk cache. A cached feed is marked
+     * [UiStoreFeed.fromCache] so the UI can say so rather than presenting stale ranks as live.
+     *
+     * Memoized, and the memo is the point: the Store tab is a tab, so the screen leaves composition every
+     * time the reader looks at their projects, so "fetch when the screen appears" was a full request per
+     * visit, and the deep-link lookup made a second one of its own. The window is short, because the feed
+     * is ranked content that moves; a feed that came off the disk cache is held for much less than that,
+     * since the only reason it is being shown is that the network was down a moment ago.
+     *
+     * The lock is held across the fetch on purpose: two screens asking at once make one request and share
+     * the answer, rather than racing to write the same cache file.
      */
-    override suspend fun feed(seedItemId: String?): UiStoreFeed? {
+    override suspend fun feed(seedItemId: String?, refresh: Boolean): UiStoreFeed? {
+        // The caller rarely knows a seed (the Explore route has none to give), so fall back to the
+        // device's own most recent install. Without this the personalized shelf is unreachable in the
+        // shipping app however well the server computes it, which is what it was. Read on the store's own
+        // dispatcher: it comes off disk.
         if (!source.configured()) return null
+        val seed = seedItemId ?: withContext(dev.ide.core.backend.storeIo) { history.mostRecent() }
+        return feedLock.withLock {
+            if (!refresh) feedMemo.get(seed)?.let { return@withLock it }
+            fetchFeed(seed).also { loaded -> if (loaded != null) feedMemo.put(seed, loaded) }
+        }
+    }
+
+    private suspend fun fetchFeed(seed: String?): UiStoreFeed? {
         return withContext(dev.ide.core.backend.storeIo) {
             val bundled = bundledBySlug()
-            // The caller rarely knows a seed — the Explore route has none to give — so fall back to the
-            // device's own most recent install. Without this the personalized shelf is unreachable in the
-            // shipping app however well the server computes it, which is what it was.
-            val seed = seedItemId ?: history.mostRecent()
             when (val result = source.feedDocument(seed)) {
                 is dev.ide.store.StoreResult.Ok -> {
                     val parsed = dev.ide.store.impl.StoreFeedParser.parse(result.value)
@@ -123,10 +201,17 @@ internal class StoreBackend(
         // Remembered before the network call and regardless of it: the seed is about this device, and a
         // store that cannot be reached is exactly when the cached feed still needs one.
         history.remember(id)
+        // The install count on the card just changed, and so did the seed the personalized shelf is built
+        // from, so the memoized feed is now describing the store as it was before this install.
+        feedMemo.clear()
         if (!source.configured()) return
         val installId = ctx.manager?.preference(INSTALL_ID_PREF) ?: return
         runCatching { source.recordInstall(id, installId) }
     }
+
+    /** Guarded by [feedLock], which also coalesces concurrent readers into one request. */
+    private val feedLock = kotlinx.coroutines.sync.Mutex()
+    private val feedMemo = FeedMemo(FEED_MEMO_MS, CACHED_FEED_MEMO_MS)
 
     /** Beside the feed cache it is read with, because the two are read on the same request. */
     private val history = StoreInstallHistory {
@@ -159,6 +244,15 @@ internal class StoreBackend(
     override suspend fun likedItems(): Set<String> = withContext(storeIo) { likeStore.reconcile() }
 
     /**
+     * One lock per media lane.
+     *
+     * Two jobs at once. It deduplicates: a path always takes the same lane, so two cards asking for the
+     * same screenshot download it once and the second finds the file already there. And it caps
+     * concurrency: a flung list used to open a socket per visible card, and now opens at most one per lane.
+     */
+    private val mediaLanes = List(MEDIA_LANES) { kotlinx.coroutines.sync.Mutex() }
+
+    /**
      * Cache a remote screenshot to disk and return its local path, or null.
      *
      * The gallery decodes files, so remote images have to become files. Caching them under the store's own
@@ -170,13 +264,21 @@ internal class StoreBackend(
         val root = ctx.manager?.storageRoot?.toFile() ?: return@withContext null
         val cached = java.io.File(root, "store/media/${storagePath.replace('/', '_')}")
         if (cached.isFile && cached.length() > 0) return@withContext cached.absolutePath
-        when (source.downloadMedia(storagePath, cached)) {
-            is dev.ide.store.StoreResult.Ok -> cached.absolutePath
-            // A screenshot that will not load is not worth an error surface: the gallery simply shows the
-            // ones that did.
-            else -> null
+        laneFor(storagePath).withLock {
+            // Re-checked inside the lane: whoever held it may have been fetching this very path.
+            if (cached.isFile && cached.length() > 0) return@withLock cached.absolutePath
+            when (source.downloadMedia(storagePath, cached)) {
+                is dev.ide.store.StoreResult.Ok -> cached.absolutePath
+                // A screenshot that will not load is not worth an error surface: the gallery simply shows
+                // the ones that did.
+                else -> null
+            }
         }
     }
+
+    /** The lane a media path downloads in. Same path, same lane, which is what makes it deduplicate. */
+    private fun laneFor(storagePath: String): kotlinx.coroutines.sync.Mutex =
+        mediaLanes[(storagePath.hashCode().toLong() and 0x7fffffffL).toInt() % mediaLanes.size]
 
     /**
      * Cache an avatar to disk and return its local path, or null.
@@ -303,7 +405,9 @@ internal class StoreBackend(
         itemId: String,
         sort: dev.ide.ui.backend.UiReviewSort,
         limit: Int,
-    ): dev.ide.ui.backend.UiReviewPage = withContext(storeIo) { reviewState.page(itemId, sort, limit) }
+        offset: Int,
+    ): dev.ide.ui.backend.UiReviewPage =
+        withContext(storeIo) { reviewState.page(itemId, sort, limit, offset) }
 
     override suspend fun rate(itemId: String, stars: Int, review: String?): String? = withContext(storeIo) {
         // The versions are context the reader never types but a publisher wants: which build of the IDE and
@@ -867,6 +971,25 @@ internal class StoreBackend(
 
         /** How long a cached avatar is trusted before the URL is asked again. */
         const val AVATAR_CACHE_MS = 7L * 24 * 60 * 60 * 1000
+
+        /**
+         * How long a feed is reused before the store is asked again.
+         *
+         * Long enough that moving between tabs is free, short enough that a reader who leaves the app and
+         * comes back to it later sees a store that has moved.
+         */
+        const val FEED_MEMO_MS = 5L * 60 * 1000
+
+        /**
+         * How long a feed that came off the disk cache is reused.
+         *
+         * Much shorter: it is on screen because the network was unreachable, and the moment that stops
+         * being true the reader should get the live one rather than yesterday's ranking.
+         */
+        const val CACHED_FEED_MEMO_MS = 30L * 1000
+
+        /** How many media downloads may be in flight at once. */
+        const val MEDIA_LANES = 4
 
         /** Shared with the UI's former local-only list, so existing saves carry over. */
         const val LIKES_PREF = "store.favorites"

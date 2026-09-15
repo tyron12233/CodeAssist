@@ -837,6 +837,14 @@ data class UiStorageProject(
  * contract is what a remote (submission-backed) catalog later implements, so the UI never changes. A backend
  * that wires no store inherits [StoreService.Unsupported] (the store tab then shows an unavailable state).
  */
+/**
+ * How many results a search asks for at a time.
+ *
+ * Large enough that the first page fills a phone screen and most searches never ask for a second, small
+ * enough that scrolling pays for what it reads. The backend caps the request at 100 whatever is sent.
+ */
+const val STORE_SEARCH_PAGE: Int = 30
+
 interface StoreService {
     /** Whether a catalog source is configured. False ⇒ the Store tab renders an unavailable placeholder. */
     fun storeAvailable(): Boolean = false
@@ -844,8 +852,35 @@ interface StoreService {
     /** The store landing payload: featured carousel + filter categories + section shelves. */
     suspend fun catalog(): UiStoreCatalog = UiStoreCatalog()
 
-    /** Items matching [query] (blank = all), optionally narrowed to [category] (null = every category). */
-    suspend fun search(query: String, category: String? = null): List<UiStoreItem> = emptyList()
+    /** The first page of [searchPage], for a caller that wants one answer and not a scroll. */
+    suspend fun search(query: String, category: String? = null): List<UiStoreItem> =
+        searchPage(query, category).items
+
+    /**
+     * One page of the store's search, blank [query] meaning "everything".
+     *
+     * A blank query is the store's browse-all route, not a special case: the backend orders an unranked
+     * search by quality, so scrolling an empty query is how a reader reaches a project no shelf happens to
+     * carry. Which is why this pages at all. The curated feed is bounded by design, and before this the
+     * catalogue behind it had no route in the app that could reach past the shelves.
+     *
+     * [offset] counts within the remote result set. Bundled templates, which have no offset of their own,
+     * ride on the first page only.
+     */
+    suspend fun searchPage(
+        query: String,
+        category: String? = null,
+        offset: Int = 0,
+        limit: Int = STORE_SEARCH_PAGE,
+    ): UiStoreSearchPage = UiStoreSearchPage()
+
+    /**
+     * The categories a search may filter by, as the store defines them.
+     *
+     * The store's own list when there is one, so a tile filters on the slug the backend stores rather than
+     * on the title a reader sees; the bundled catalog's own categories otherwise.
+     */
+    suspend fun searchCategories(): List<UiStoreCategory> = emptyList()
 
     /**
      * Install the store item [id] into the workspace. A [UiStoreItemKind.Template] item is created through the
@@ -868,8 +903,12 @@ interface StoreService {
      *
      * The app's build number is NOT a parameter: it belongs to the backend's store source, which knows
      * the installation it is part of. The UI has no way to know it and should not have to pass it.
+     *
+     * The answer is memoized for a short while, because the Store tab is a tab: leaving it and coming back
+     * is a composition away and used to be a full request every time. [refresh] is what a deliberate
+     * reload passes to go past that.
      */
-    suspend fun feed(seedItemId: String? = null): UiStoreFeed? = null
+    suspend fun feed(seedItemId: String? = null, refresh: Boolean = false): UiStoreFeed? = null
 
     /**
      * Live install progress, keyed by item id.
@@ -1069,6 +1108,7 @@ interface StoreService {
         itemId: String,
         sort: UiReviewSort = UiReviewSort.HELPFUL,
         limit: Int = 20,
+        offset: Int = 0,
     ): UiReviewPage = UiReviewPage()
 
     /**

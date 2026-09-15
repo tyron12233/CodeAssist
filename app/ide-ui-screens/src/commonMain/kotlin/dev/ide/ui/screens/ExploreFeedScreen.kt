@@ -673,12 +673,13 @@ private fun LazyListScope.categoriesGrid(
             row.forEachIndexed { colIndex, cat ->
                 val i = rowIndex * 2 + colIndex
                 dev.ide.ui.components.CategoryTile(
-                    name = cat,
-                    count = section.counts[cat] ?: 0,
-                    glyph = CaSymbols.forIconId(cat.lowercase()),
+                    name = cat.title,
+                    count = cat.count,
+                    glyph = CaSymbols.forIconId(cat.id),
                     pair = tonalPair(i),
                     shape = dev.ide.ui.theme.cardShape(i),
-                    onClick = { onOpenSearch(cat) },
+                    // The slug, not the title: it is what a search filters on.
+                    onClick = { onOpenSearch(cat.id) },
                     modifier = Modifier.weight(1f),
                 )
             }

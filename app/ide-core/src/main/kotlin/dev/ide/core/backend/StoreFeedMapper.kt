@@ -103,8 +103,10 @@ internal object StoreFeedMapper {
         is StoreSection.Categories -> UiFeedSection.Categories(
             id = section.id,
             title = section.title,
-            categories = section.items.map { it.title }.distinct(),
-            counts = section.items.associate { it.title to it.count },
+            // Slug and title both: the tile shows one and searches by the other.
+            categories = section.items.map {
+                dev.ide.ui.backend.UiStoreCategory(it.id, it.title, it.count)
+            }.distinctBy { it.id },
         )
 
         is StoreSection.Personalized -> UiFeedSection.Personalized(
@@ -171,6 +173,16 @@ internal object StoreFeedMapper {
      * nothing to overlay there, because a publisher's own list is exactly what they published.
      */
     internal fun itemToUi(item: RemoteStoreItem): UiStoreItem = item.toUi(emptyMap())
+
+    /**
+     * One remote item, overlaid onto the bundled item of the same id if there is one.
+     *
+     * What search results go through, so a searched row and a shelf row of the same project are the same
+     * card: without the overlay, a bundled template the store also publishes would come back from a search
+     * as a downloadable copy of a project the device already ships.
+     */
+    internal fun itemToUi(item: RemoteStoreItem, bundled: Map<String, UiStoreItem>): UiStoreItem =
+        item.toUi(bundled)
 
     /**
      * One remote item, overlaid onto its bundled counterpart if there is one.

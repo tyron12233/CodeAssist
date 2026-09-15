@@ -28,12 +28,16 @@ class StoreReviewsTest {
         private val available: Boolean = true,
     ) : StoreReviewService {
         var lastSort: ReviewSort? = null
+        var lastOffset: Int? = null
+        var lastLimit: Int? = null
         var lastRate: List<Any?>? = null
         var lastVote: Triple<String, String, Boolean>? = null
 
         override fun reviewsAvailable() = available
         override fun reviews(itemSlug: String, sort: ReviewSort, limit: Int, offset: Int): StoreResult<RemoteReviewPage> {
             lastSort = sort
+            lastLimit = limit
+            lastOffset = offset
             return page
         }
         override fun rate(itemSlug: String, stars: Int, review: String?, appVersion: String?, itemVersion: String?): StoreResult<Unit> {
@@ -161,6 +165,29 @@ class StoreReviewsTest {
         val fake = FakeReviews()
         StoreReviews(fake).vote("my-app", "author-7", helpful = true)
         assertEquals(Triple("my-app", "author-7", true), fake.lastVote)
+    }
+
+    /**
+     * A full page may have more behind it; a short one is the end.
+     *
+     * The backend sends no "more" flag, so this is the only thing the panel can offer "show more" from,
+     * and getting it wrong either hides reviews or offers a button that returns nothing.
+     */
+    @Test
+    fun aFullPageOffersAnotherAndAShortOneDoesNot() {
+        val full = FakeReviews(StoreResult.Ok(RemoteReviewPage(reviews = (1..3).map { review("u$it") })))
+        assertTrue(StoreReviews(full).page("s", UiReviewSort.HELPFUL, limit = 3).hasMore)
+
+        val short = FakeReviews(StoreResult.Ok(RemoteReviewPage(reviews = (1..2).map { review("u$it") })))
+        assertFalse(StoreReviews(short).page("s", UiReviewSort.HELPFUL, limit = 3).hasMore)
+    }
+
+    @Test
+    fun aLaterPageIsAskedForFromWhereTheLastOneEnded() {
+        val fake = FakeReviews()
+        StoreReviews(fake).page("s", UiReviewSort.RECENT, limit = 20, offset = 40)
+        assertEquals(20, fake.lastLimit)
+        assertEquals(40, fake.lastOffset, "without the offset every page would be the first one again")
     }
 
     @Test

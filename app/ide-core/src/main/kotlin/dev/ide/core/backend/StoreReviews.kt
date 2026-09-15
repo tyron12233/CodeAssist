@@ -23,14 +23,23 @@ internal class StoreReviews(private val reviews: StoreReviewService) {
 
     fun available(): Boolean = reviews.reviewsAvailable()
 
-    fun page(itemId: String, sort: UiReviewSort, limit: Int): UiReviewPage =
-        when (val result = reviews.reviews(itemId, sort.toWire(), limit)) {
+    /**
+     * One page of an item's reviews, [offset] rows in.
+     *
+     * The aggregate (average, count, distribution) and the reader's own review come back with every page,
+     * because they describe the item rather than the page; the panel keeps appending [UiReviewPage.reviews]
+     * and re-reading the rest. [UiReviewPage.hasMore] is a full page having come back: the backend has no
+     * "more" flag of its own, and a short page is the last one.
+     */
+    fun page(itemId: String, sort: UiReviewSort, limit: Int, offset: Int = 0): UiReviewPage =
+        when (val result = reviews.reviews(itemId, sort.toWire(), limit, offset)) {
             is StoreResult.Ok -> UiReviewPage(
                 average = result.value.average,
                 count = result.value.count,
                 distribution = result.value.distribution,
                 mine = result.value.mine?.toUi(),
                 reviews = result.value.reviews.map { it.toUi() },
+                hasMore = result.value.reviews.size >= limit,
                 canReply = result.value.canReply,
                 canModerate = result.value.canModerate,
             )

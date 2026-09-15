@@ -22,26 +22,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.AdPlacement
@@ -55,7 +45,6 @@ import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.CategoryTile
 import dev.ide.ui.components.ComingSoon
 import dev.ide.ui.components.FeaturedHeroCard
-import dev.ide.ui.components.PillChip
 import dev.ide.ui.components.StoreListRow
 import dev.ide.ui.components.formatRating
 import dev.ide.ui.components.formatSizeShort
@@ -63,16 +52,11 @@ import dev.ide.ui.components.TrendingTicker
 import dev.ide.ui.components.motifFor
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.store_browse_by_kind
-import dev.ide.ui.generated.resources.store_install
-import dev.ide.ui.generated.resources.store_no_results
-import dev.ide.ui.generated.resources.store_open
-import dev.ide.ui.generated.resources.store_search_hint
 import dev.ide.ui.generated.resources.store_search_placeholder
 import dev.ide.ui.generated.resources.store_see_all
 import dev.ide.ui.generated.resources.store_title
 import dev.ide.ui.generated.resources.store_unavailable
 import dev.ide.ui.generated.resources.store_unavailable_content
-import dev.ide.ui.generated.resources.store_use
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.Symbol
@@ -113,25 +97,24 @@ fun ProjectsStoreScreen(
 
     val state = rememberProjectsStoreState(backend)
     var searching by remember { mutableStateOf(false) }
+    var searchCategory by remember { mutableStateOf<String?>(null) }
 
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         Box(Modifier.widthIn(max = 820.dp).fillMaxSize()) {
             if (searching) {
-                StoreSearch(
-                    state = state,
+                // The same search the Explore feed opens, over the same catalogue, paged the same way.
+                StoreSearchScreen(
+                    backend = backend,
                     onOpenItem = onOpenItem,
-                    onClose = {
-                        searching = false
-                        state.updateQuery("")
-                        state.selectCategory(null)
-                    },
+                    onClose = { searching = false },
+                    initialCategory = searchCategory,
                 )
             } else {
                 StoreBrowse(
                     state = state,
                     onOpenItem = onOpenItem,
                     onOpenSearch = { category ->
-                        state.selectCategory(category)
+                        searchCategory = category
                         searching = true
                     },
                 )
@@ -339,110 +322,6 @@ internal fun SearchEntry(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodyLarge,
                 color = c.onSurfaceVariant,
             )
-        }
-    }
-}
-
-/**
- * Search mode: the pill-shaped app bar with the live field, the category pills, and the results.
- *
- * Results re-query as the user types (the state holder debounces by 180 ms). The design's full filter
- * sheet — sort order, multi-select language, minimum rating — is not here: [dev.ide.ui.backend.StoreService]
- * can filter by query and category only, and a sheet whose sort and rating controls silently did nothing
- * would be worse than not offering them. The category pills are the part that actually works today.
- */
-@Composable
-private fun StoreSearch(
-    state: ProjectsStoreState,
-    onOpenItem: (UiStoreItem) -> Unit,
-    onClose: () -> Unit,
-) {
-    val c = MaterialTheme.colorScheme
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = c.surfaceContainer,
-                contentColor = c.onSurfaceVariant,
-                modifier = Modifier.weight(1f).height(56.dp),
-            ) {
-                Row(
-                    Modifier.padding(start = 4.dp, end = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onClose),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Symbol(CaSymbols.arrowBack, contentDescription = stringResource(Res.string.store_title), size = 24.dp)
-                    }
-                    BasicTextField(
-                        value = state.query,
-                        onValueChange = state::updateQuery,
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = c.onSurface),
-                        cursorBrush = SolidColor(c.primary),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {}),
-                        modifier = Modifier.weight(1f).focusRequester(focus),
-                        decorationBox = { field ->
-                            if (state.query.isEmpty()) {
-                                Text(
-                                    stringResource(Res.string.store_search_hint),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = c.onSurfaceVariant,
-                                )
-                            }
-                            field()
-                        },
-                    )
-                }
-            }
-        }
-
-        if (state.catalog.categories.isNotEmpty()) {
-            LazyRow(
-                Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(state.catalog.categories, key = { it }) { cat ->
-                    PillChip(
-                        label = cat,
-                        selected = state.category == cat,
-                        leadingGlyph = CaSymbols.check,
-                        onClick = { state.selectCategory(if (state.category == cat) null else cat) },
-                    )
-                }
-            }
-        }
-
-        val results = state.results
-        if (state.filtering && results.isEmpty()) {
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 56.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Symbol(CaSymbols.searchOff, contentDescription = null, size = 44.dp, tint = c.outlineVariant)
-                Text(
-                    stringResource(Res.string.store_no_results, state.query),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = c.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 10.dp),
-                )
-            }
-        } else {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-                itemsIndexed(results, key = { _, it -> it.id }) { i, item ->
-                    StoreItemRow(item, i, onOpenItem, backend = state.backend)
-                }
-            }
         }
     }
 }

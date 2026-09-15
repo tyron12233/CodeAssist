@@ -17,6 +17,7 @@ import dev.ide.ui.backend.UiFeedSection
 import dev.ide.ui.backend.UiGhostShelf
 import dev.ide.ui.backend.UiShelfLayout
 import dev.ide.ui.backend.UiStoreCollection
+import dev.ide.ui.backend.UiStoreCategory
 import dev.ide.ui.backend.UiStoreFeed
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreItemKind
@@ -124,7 +125,16 @@ class ExploreFeedSnapshot {
                     UiStoreCollection("learn-by-reading", "Coursework", "Read a real codebase end to end", "school", 4, listOf("dns", "coffee")),
                 ),
             ),
-            UiFeedSection.Categories("kinds", "Browse by kind", listOf("Kotlin", "Java", "Android", "Compose"), mapOf("Kotlin" to 18, "Java" to 12, "Android" to 8, "Compose" to 4)),
+            // Slug and title differ on purpose: the tile shows one and searches by the other.
+            UiFeedSection.Categories(
+                "kinds", "Browse by kind",
+                listOf(
+                    UiStoreCategory("kotlin", "Kotlin", 18),
+                    UiStoreCategory("java", "Java", 12),
+                    UiStoreCategory("android", "Android scaffolds", 8),
+                    UiStoreCategory("compose", "Multiplatform", 4),
+                ),
+            ),
             UiFeedSection.Personalized(
                 "because", "Because you installed Compose Multiplatform Starter",
                 "Kotlin picks from the same shelf", catalogue,

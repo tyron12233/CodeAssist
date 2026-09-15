@@ -7,18 +7,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiStoreCatalog
-import dev.ide.ui.backend.UiStoreItem
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
- * State and intents for the Projects Store: the catalog it browses, and the debounced search that replaces
- * the browse view while a query or category is active.
+ * State for the bundled catalogue the Projects Store browses when no remote feed is reachable.
+ *
+ * Browse only. Search moved to [StoreSearchState], which pages the store's own catalogue rather than
+ * filtering this list, and is shared with the Explore feed so there is one search in the app.
  */
 @Stable
 internal class ProjectsStoreState(
@@ -28,33 +26,10 @@ internal class ProjectsStoreState(
 ) {
     var catalog: UiStoreCatalog by mutableStateOf(UiStoreCatalog())
         private set
-    var query: String by mutableStateOf("")
-        private set
-    var category: String? by mutableStateOf(null)
-        private set
-    var results: List<UiStoreItem> by mutableStateOf(emptyList())
-        private set
-
-    /** True while a query or category narrows the view, so the results list replaces the browse sections. */
-    val filtering: Boolean get() = query.isNotBlank() || category != null
 
     init {
         scope.launch { catalog = runCatching { backend.store.catalog() }.getOrDefault(UiStoreCatalog()) }
-        scope.launch {
-            snapshotFlow { Triple(query, category, filtering) }.collectLatest { (text, cat, active) ->
-                if (!active) {
-                    results = emptyList()
-                    return@collectLatest
-                }
-                delay(180)
-                results = runCatching { backend.store.search(text, cat) }.getOrDefault(emptyList())
-            }
-        }
     }
-
-    fun updateQuery(value: String) { query = value }
-
-    fun selectCategory(value: String?) { category = value }
 }
 
 @Composable

@@ -543,6 +543,7 @@
     <string name="store_use">使用</string>
     <string name="store_open">打开</string>
     <string name="store_no_results">没有与"%1$s"匹配的项目</string>
+    <string name="store_search_all">商店中还没有发布任何项目。</string>
     <string name="store_all">全部</string>
     <string name="store_unavailable">发现页暂不可用</string>
     <string name="store_unavailable_content">当前构建版本不支持发现页。</string>
@@ -638,6 +639,8 @@
     <string name="reviews_yours">你的评价</string>
     <string name="reviews_sort_helpful">最有帮助</string>
     <string name="reviews_sort_recent">最新</string>
+    <string name="reviews_show_more">查看更多评价</string>
+    <string name="reviews_loading_more">加载中…</string>
     <string name="reviews_helpful">有帮助</string>
     <string name="reviews_helpful_count">有帮助（%1$d）</string>
     <string name="reviews_count">%1$d 条评价</string>

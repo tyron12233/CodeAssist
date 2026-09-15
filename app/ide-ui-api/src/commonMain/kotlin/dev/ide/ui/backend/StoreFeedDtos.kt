@@ -96,6 +96,15 @@ data class UiGhostShelf(
 )
 
 /**
+ * One category of the store, as the store itself defines it.
+ *
+ * [id] is the slug a search filters by and [title] is what a reader sees, and they are not the same
+ * string: the tile that says "Android apps" filters on `android-apps`. Carrying only the title is what
+ * made the browse-by-kind tiles unable to filter anything.
+ */
+data class UiStoreCategory(val id: String, val title: String, val count: Int = 0)
+
+/**
  * How a shelf is drawn.
  *
  * Chosen per shelf by the server, which is what lets a new shelf arrive with a new look and no app
@@ -127,9 +136,7 @@ sealed interface UiFeedSection {
     data class Categories(
         override val id: String,
         val title: String,
-        val categories: List<String>,
-        /** Project count per category, keyed by name; absent means unknown rather than zero. */
-        val counts: Map<String, Int> = emptyMap(),
+        val categories: List<UiStoreCategory>,
     ) : UiFeedSection
 
     data class Personalized(
@@ -324,6 +331,20 @@ data class UiPackagedProject(
     val excluded: List<String>,
     /** Where the built zip is; the engine uploads and deletes it. Not shown to the user. */
     val archivePath: String,
+)
+
+/**
+ * One page of search results.
+ *
+ * Paged because the store's catalogue outgrows any single response, and a search that silently stopped at
+ * its first page would be telling the reader the store holds less than it does. [hasMore] is what the
+ * caller scrolls on; it is the server's answer, not a guess from the page size.
+ */
+data class UiStoreSearchPage(
+    val items: List<UiStoreItem> = emptyList(),
+    val hasMore: Boolean = false,
+    /** Set when the page could not be fetched at all. The results already on screen stay. */
+    val error: String? = null,
 )
 
 /** What the submit form collects. Mirrors the engine's request, minus anything the engine can derive. */
@@ -565,6 +586,8 @@ data class UiReviewPage(
     val distribution: Map<Int, Int> = emptyMap(),
     val mine: UiStoreReview? = null,
     val reviews: List<UiStoreReview> = emptyList(),
+    /** Whether asking from `reviews.size` would return more. The panel offers "show more" only then. */
+    val hasMore: Boolean = false,
     val loading: Boolean = false,
     /** Set when the page could not be fetched; shown verbatim. */
     val error: String? = null,
