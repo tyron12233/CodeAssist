@@ -161,6 +161,7 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":ide-android",
         // A plugin packaged as its own app, built here so it cannot drift from the SPI it compiles against.
         ":samples:hello-plugin",
+        ":samples:ndk-plugin",
     )
 }
 
