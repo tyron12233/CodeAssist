@@ -608,6 +608,23 @@ class SupabaseSubmissionService(
         body: String?,
         token: String,
         prefer: String? = null,
+    ): StoreResult<String> {
+        val first = send(method, path, body, token, prefer)
+        // The profile behind the You screen is read from a session that may have been sitting idle since
+        // launch, so a 401 here is almost always an expired access token rather than a signed-out user.
+        if (first is StoreResult.Failed && first.status == 401) {
+            val fresh = accounts.reauthorize(token) ?: return first
+            return send(method, path, body, fresh, prefer)
+        }
+        return first
+    }
+
+    private fun send(
+        method: String,
+        path: String,
+        body: String?,
+        token: String,
+        prefer: String? = null,
     ): StoreResult<String> = try {
         val conn = (URL("$base$path").openConnection() as HttpURLConnection).apply {
             requestMethod = method

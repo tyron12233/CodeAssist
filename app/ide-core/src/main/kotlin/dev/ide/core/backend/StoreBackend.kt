@@ -518,7 +518,12 @@ internal class StoreBackend(
     // ---- your own profile ----
 
     override suspend fun myProfile(): dev.ide.ui.backend.UiMyProfile? = withContext(storeIo) {
-        submissionState.profile()?.also(::noticeVerification)?.let {
+        val profile = submissionState.profile()
+        // The profile is the first authenticated call the You screen makes, so it is where a session that
+        // died while the app was open is noticed. Without this the screen keeps its signed-in state and
+        // reports the account as unreachable, which sends the user looking at their connection.
+        if (profile == null) accountState.recheckSession()
+        profile?.also(::noticeVerification)?.let {
             dev.ide.ui.backend.UiMyProfile(
                 handle = it.handle,
                 displayName = it.displayName,

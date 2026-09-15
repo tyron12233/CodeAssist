@@ -213,8 +213,17 @@ class SupabaseModerationService(
         if (!configured) return StoreResult.Unavailable("No store endpoint configured")
         val token = accounts.bearer() ?: return StoreResult.Failed("Sign in first")
         return try {
-            val conn = open("$base/storage/v1/object/$bucket/$storagePath", "GET", token)
-            val code = conn.responseCode
+            var conn = open("$base/storage/v1/object/$bucket/$storagePath", "GET", token)
+            var code = conn.responseCode
+            if (code == 401) {
+                // Same expired-session retry the JSON calls make. This one is worth making by hand
+                // because a review fetches the archive after reading a queue that may be hours old.
+                conn.errorStream?.use { it.readBytes() }
+                val fresh = accounts.reauthorize(token)
+                    ?: return StoreResult.Failed("Could not read that file (HTTP $code)", code)
+                conn = open("$base/storage/v1/object/$bucket/$storagePath", "GET", fresh)
+                code = conn.responseCode
+            }
             if (code !in 200..299) {
                 conn.errorStream?.use { it.readBytes() }
                 return StoreResult.Failed("Could not read that file (HTTP $code)", code)
@@ -310,6 +319,17 @@ class SupabaseModerationService(
 
     private fun request(method: String, url: String, body: String?, token: String): StoreResult<String> {
         if (!configured) return StoreResult.Unavailable("No store endpoint configured")
+        val first = send(method, url, body, token)
+        // The queue is read from a screen that can sit open for hours, so the token in hand is the one
+        // most likely to have expired underneath it. One refresh and one retry, then the answer stands.
+        if (first is StoreResult.Failed && first.status == 401) {
+            val fresh = accounts.reauthorize(token) ?: return first
+            return send(method, url, body, fresh)
+        }
+        return first
+    }
+
+    private fun send(method: String, url: String, body: String?, token: String): StoreResult<String> {
         return try {
             val conn = open(url, method, token).apply {
                 if (body != null) {

@@ -183,6 +183,19 @@ class SupabaseReviewService(
 
     private fun rpc(name: String, body: String): StoreResult<String> {
         if (!configured) return StoreResult.Unavailable("No store endpoint configured")
+        val token = accounts?.bearer()
+        val first = send(name, body, token)
+        // An access token that expired while the app sat open is not a sign-in problem. Trading the
+        // refresh token in and going again makes it one call as far as the caller is concerned; without
+        // it a signed-in reader is told to sign in an hour into a session.
+        if (first is StoreResult.Failed && first.status == 401 && token != null) {
+            val fresh = accounts.reauthorize(token) ?: return first
+            return send(name, body, fresh)
+        }
+        return first
+    }
+
+    private fun send(name: String, body: String, token: String?): StoreResult<String> {
         return try {
             val conn = (URL("$base/rest/v1/rpc/$name").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -193,7 +206,7 @@ class SupabaseReviewService(
                 setRequestProperty("apikey", apiKey)
                 // The session when there is one, the publishable key otherwise. Reads work either way; the
                 // difference is whether the response can say "this is your review" and "you voted on this".
-                setRequestProperty("Authorization", "Bearer ${accounts?.bearer() ?: apiKey}")
+                setRequestProperty("Authorization", "Bearer ${token ?: apiKey}")
             }
             conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode
