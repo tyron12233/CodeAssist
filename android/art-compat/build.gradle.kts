@@ -207,38 +207,70 @@ val artShimsJar = tasks.register<Jar>("artShimsJar") {
 }
 
 // --- what this module publishes -------------------------------------------------------------------
-// One variant carrying every compatibility jar. Gradle resolves a multi-artifact variant to the whole set,
-// and AGP then transforms each jar to dex independently — which is the entire point of moving these off the
-// `files(...)` path (see the module comment above).
+// ONE jar, merged from every compatibility jar above — not one artifact per jar, which is what this
+// variant used to carry.
+//
+// A variant may hold several artifacts and AGP will dex each of them separately, but its
+// `mergeJavaResource` task cannot tell them apart. That task names every merge input after the COMPONENT
+// that produced it, and for a project dependency the name is `project(":art-compat") - Build: :` with no
+// file name appended (AGP's MergeJavaResourceTask.kt, `toSourcedInputs`; a module dependency does get a
+// `/<file name>` suffix, which is why only project artifacts are affected). Seven artifacts out of one
+// project are therefore seven inputs sharing one name, and `IncrementalFileMerger.getInputsForFile`
+// picks the inputs for a path BY NAME against the previous run's state. So all seven get asked to open
+// ecj's `org/eclipse/jdt/internal/compiler/parser/**.rsc`, and the six that do not hold it fail the
+// build with `IllegalStateException: Unknown file: …`. A clean build has no prior state to match against
+// and passes, so this only ever broke incremental builds — including every `assembleDebug` after a
+// touched file.
+//
+// Merging costs nothing that mattered: these jars are ~3.6 MB in total and only move when a dependency
+// version does, so the merged jar still dexes through one content-keyed, cached `DexingNoClasspathTransform`
+// rather than the whole-classpath `desugar<Variant>FileDependencies` task that motivated this module (see
+// the module comment above).
 //
 // The java-library plugin's own (empty) `jar` artifact and its `classes`/`resources` secondary variants are
 // removed: this module has no `src/main`, and a consumer's compile classpath asks for
-// LibraryElements=classes, so leaving them would resolve to empty directories instead of these jars.
+// LibraryElements=classes, so leaving them would resolve to empty directories instead of this jar.
 //
 // NB the unpatched inputs (`ecjUnpatched`, `eclipseRuntimeUnpatched`) are resolve-only and are deliberately
 // NOT declared as dependencies of this variant: shipping both a stock Eclipse jar and its ART-relocated copy
 // is a duplicate-class failure at dex time. :ide-android additionally strips those three stock modules from
 // its runtime classpaths, where they also arrive transitively via :lang-jdt.
-val compatJars = listOf(
-    relocateEcjForArt.flatMap { it.outputJar },
-    relocateCoreRuntimeForArt.flatMap { it.outputJar },
-    relocateEquinoxCommonForArt.flatMap { it.outputJar },
-    artShimsJar.flatMap { it.archiveFile },
-)
+val mergeCompatJars = tasks.register<Jar>("mergeCompatJars") {
+    description = "Merge every ART compatibility jar into the single artifact this module publishes."
+    archiveFileName.set("art-compat.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("art-compat"))
+    // FAIL, not EXCLUDE. The only paths these jars share are the four Eclipse/OSGi bundle-metadata files
+    // dropped just below (all of them already in :ide-android's `packaging.resources.excludes`) plus the
+    // manifests. Anything else colliding — a class above all — is a real conflict, and should stop the
+    // build rather than resolve silently to whichever jar happened to be listed first.
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    exclude(".api_description", ".options", "about.html", "plugin.properties")
+    // Each source jar's own manifest goes; the Jar task writes one of its own. Signature files go with
+    // them: a signature over one of these jars means nothing once its entries live in another.
+    exclude("META-INF/MANIFEST.MF", "META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
+    // Fixed entry order and timestamps, so the jar's content hash — and with it the cached dex — moves
+    // only when the inputs actually do.
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+
+    from(relocateEcjForArt.map { zipTree(it.outputJar) })
+    from(relocateCoreRuntimeForArt.map { zipTree(it.outputJar) })
+    from(relocateEquinoxCommonForArt.map { zipTree(it.outputJar) })
+    from(artShimsJar.map { zipTree(it.archiveFile) })
+    // These two are plain `register` tasks (no typed output property), so reach the jar through the task's
+    // declared outputs, which carries the task dependency with it.
+    from(generateStaxApiJar.map { zipTree(it.outputs.files.singleFile) })
+    from(generateSwingApiJar.map { zipTree(it.outputs.files.singleFile) })
+    // javax.lang.model + the javac API surface, checked in rather than generated: the app's Java
+    // annotation-processing path (:lang-ksp, the JDT/ecj processor host) links against types Android
+    // omits and that no JDK module here can supply verbatim.
+    from(zipTree(layout.projectDirectory.file("libs/java-compiler.jar")))
+}
+
 listOf("apiElements", "runtimeElements").forEach { elements ->
     configurations.named(elements) {
         outgoing.artifacts.clear()
-        compatJars.forEach { outgoing.artifact(it) }
-        // These two are plain `register` tasks (no typed output property), so name the file and carry the
-        // task dependency with `builtBy`.
-        outgoing.artifact(layout.buildDirectory.file("stax-api/stax-api.jar")) { builtBy(generateStaxApiJar) }
-        outgoing.artifact(layout.buildDirectory.file("swing-api/swing-api.jar")) { builtBy(generateSwingApiJar) }
-        // javax.lang.model + the javac API surface, checked in rather than generated: the app's Java
-        // annotation-processing path (:lang-ksp, the JDT/ecj processor host) links against types Android
-        // omits and that no JDK module here can supply verbatim.
-        // `type` is explicit: it is a checked-in file rather than a task output, so nothing infers it, and
-        // AGP's dexing transform chain is keyed on artifactType = jar.
-        outgoing.artifact(layout.projectDirectory.file("libs/java-compiler.jar")) { type = "jar" }
+        outgoing.artifact(mergeCompatJars.flatMap { it.archiveFile })
         outgoing.variants.removeIf { it.name == "classes" || it.name == "resources" }
     }
 }
