@@ -144,6 +144,9 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":vcs-ui", // the version-control Compose UI as a self-contained plugin module (Git panel, branches, history, sign-in, clone)
         ":ide-core",
         ":ide-desktop",
+        // The iOS shell: a Compose `UIViewController` over :ide-ui, the third host beside desktop and
+        // Android. It builds only on a machine with Xcode, which is every machine that can target iOS.
+        ":ide-ios",
         // The headless launcher: `codeassist assemble` over :ide-core's HeadlessEngine. A shell like the
         // other two (it depends on :ide-core, which api-exposes the Compose UI port), so it lives here
         // rather than in the framework.
@@ -201,10 +204,10 @@ val layers = mapOf(
     ),
     // The plugin SPI a third-party plugin compiles against, and the host that resolves it.
     "plugins" to listOf("plugin-api", "plugin-ui-api", "plugin-bom", "plugin-impl"),
-    // The IDE itself: the Compose UI, its backend port, and the desktop/Android shells.
+    // The IDE itself: the Compose UI, its backend port, and the desktop/Android/iOS shells.
     "app" to listOf(
         "ide-ui-api", "ide-ui-resources", "ide-ui-core", "ide-ui-components", "ide-ui-editor",
-        "ide-ui-screens", "ide-ui-testing", "ide-ui", "ide-core", "ide-desktop", "ide-android",
+        "ide-ui-screens", "ide-ui-testing", "ide-ui", "ide-core", "ide-desktop", "ide-android", "ide-ios",
         "build-cli",
     ),
     // Test-only harnesses, consumed via testImplementation.

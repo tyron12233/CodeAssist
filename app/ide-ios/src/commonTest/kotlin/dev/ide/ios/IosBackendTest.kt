@@ -1,0 +1,151 @@
+@file:OptIn(ExperimentalForeignApi::class)
+
+package dev.ide.ios
+
+import dev.ide.ui.backend.NodeKind
+import dev.ide.ui.backend.TreeViewMode
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.coroutines.test.runTest
+import platform.Foundation.NSTemporaryDirectory
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/**
+ * [IosBackend] against the real filesystem, on the simulator.
+ *
+ * The backend is pointed at a temporary directory rather than the Documents container, so a test run can
+ * never disturb real projects.
+ */
+class IosBackendTest {
+
+    private val root = IosFiles.join(NSTemporaryDirectory().trimEnd('/'), "ios-backend-test-${nowSuffix()}")
+    private val backend = IosBackend(root)
+
+    @AfterTest
+    fun cleanUp() {
+        IosFiles.delete(root)
+    }
+
+    @Test
+    fun createProjectScaffoldsAFolderAndOpensIt() = runTest {
+        val result = backend.projects.createProject("ios.empty", mapOf("name" to "My App", "packageName" to "com.example"))
+        assertTrue(result.success, result.message)
+
+        val created = assertNotNull(result.rootPath)
+        // "My App" is not a safe folder name; the space is replaced rather than rejected.
+        assertEquals("My_App", IosFiles.nameOf(created))
+        assertTrue(IosFiles.isDirectory(IosFiles.join(created, "src")))
+
+        val main = IosFiles.join(created, "src/Main.kt")
+        assertTrue(IosFiles.exists(main))
+        assertTrue(backend.files.readFile(main).startsWith("package com.example"))
+
+        // Creating a project also makes it the active one, so the tree is immediately populated.
+        assertEquals(created, backend.project.rootPath)
+    }
+
+    @Test
+    fun aSecondProjectWithTheSameNameIsRefused() = runTest {
+        assertTrue(backend.projects.createProject("ios.empty", mapOf("name" to "Dup")).success)
+        val again = backend.projects.createProject("ios.empty", mapOf("name" to "Dup"))
+        assertTrue(!again.success)
+        assertTrue(again.message.contains("already exists"), again.message)
+    }
+
+    @Test
+    fun anUnnamedProjectIsRefused() = runTest {
+        val result = backend.projects.createProject("ios.empty", mapOf("name" to "   "))
+        assertTrue(!result.success)
+    }
+
+    @Test
+    fun projectsListsWhatIsOnDisk() = runTest {
+        backend.projects.createProject("ios.empty", mapOf("name" to "Alpha"))
+        backend.projects.createProject("ios.empty", mapOf("name" to "Beta"))
+        assertEquals(setOf("Alpha", "Beta"), backend.projects.projects().map { it.name }.toSet())
+    }
+
+    @Test
+    fun fileTreeShowsDirectoriesBeforeFilesAndHidesDotEntries() = runTest {
+        val created = assertNotNull(backend.projects.createProject("ios.empty", mapOf("name" to "Tree")).rootPath)
+        IosFiles.writeText(IosFiles.join(created, "README.md"), "hi")
+        IosFiles.writeText(IosFiles.join(created, ".hidden"), "x")
+
+        val tree = backend.files.fileTree(TreeViewMode.Project)
+        assertEquals(NodeKind.Workspace, tree.kind)
+        assertEquals(listOf("src", "README.md"), tree.children.map { it.name })
+        assertEquals(NodeKind.Folder, tree.children[0].kind)
+        assertEquals("markdown", tree.children[1].iconId)
+
+        val main = tree.children[0].children.single()
+        assertEquals("Main.kt", main.name)
+        assertEquals("kotlin", main.iconId)
+        assertEquals(IosFiles.join(created, "src/Main.kt"), main.filePath)
+    }
+
+    @Test
+    fun withNoProjectOpenTheTreeIsEmptyRatherThanBroken() {
+        val tree = IosBackend(root).files.fileTree(TreeViewMode.Project)
+        assertEquals(NodeKind.Workspace, tree.kind)
+        assertTrue(tree.children.isEmpty())
+    }
+
+    @Test
+    fun saveFileWritesThroughToDisk() = runTest {
+        val created = assertNotNull(backend.projects.createProject("ios.empty", mapOf("name" to "Save")).rootPath)
+        val main = IosFiles.join(created, "src/Main.kt")
+        backend.editor.saveFile(main, "fun main() = Unit\n")
+        assertEquals("fun main() = Unit\n", backend.files.readFile(main))
+    }
+
+    @Test
+    fun createAndDeleteBumpTheFilesystemEpoch() = runTest {
+        val created = assertNotNull(backend.projects.createProject("ios.empty", mapOf("name" to "Epoch")).rootPath)
+        val before = backend.files.fileSystemEpoch.value
+
+        val made = assertNotNull(backend.files.createFile(created, "Extra.kt", "// x"))
+        assertTrue(backend.files.fileSystemEpoch.value > before)
+
+        assertTrue(backend.files.deletePath(made))
+        assertTrue(!IosFiles.exists(made))
+    }
+
+    @Test
+    fun createFileRefusesToOverwriteAnExistingOne() = runTest {
+        val created = assertNotNull(backend.projects.createProject("ios.empty", mapOf("name" to "NoClobber")).rootPath)
+        assertNotNull(backend.files.createFile(created, "A.kt", "first"))
+        assertNull(backend.files.createFile(created, "A.kt", "second"))
+        assertEquals("first", backend.files.readFile(IosFiles.join(created, "A.kt")))
+    }
+
+    @Test
+    fun createFileSmartMakesIntermediateDirectories() = runTest {
+        val created = assertNotNull(backend.projects.createProject("ios.empty", mapOf("name" to "Nested")).rootPath)
+        val made = assertNotNull(backend.files.createFileSmart(created, "ui/screens/Home.kt"))
+        assertTrue(IosFiles.exists(made))
+        assertTrue(IosFiles.isDirectory(IosFiles.join(created, "ui/screens")))
+    }
+
+    @Test
+    fun deletingTheOpenProjectClosesIt() = runTest {
+        val created = assertNotNull(backend.projects.createProject("ios.empty", mapOf("name" to "Gone")).rootPath)
+        assertEquals(created, backend.project.rootPath)
+        assertTrue(backend.projects.deleteProject(created))
+        assertEquals("", backend.project.rootPath)
+    }
+
+    @Test
+    fun moduleNameIsTheProjectForPathsInsideItAndNullOutside() = runTest {
+        val created = assertNotNull(backend.projects.createProject("ios.empty", mapOf("name" to "Mod")).rootPath)
+        assertEquals("Mod", backend.files.moduleNameForFile(IosFiles.join(created, "src/Main.kt")))
+        assertNull(backend.files.moduleNameForFile("/elsewhere/Other.kt"))
+    }
+}
+
+/** A per-instance suffix so concurrently-run test classes cannot share a directory. */
+private var counter = 0
+private fun nowSuffix(): String = "${++counter}-${IosFiles.modifiedMs(NSTemporaryDirectory())}"

@@ -1,0 +1,173 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 54;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		000000000000000000000009 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000008 /* App.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		000000000000000000000003 /* CodeAssist.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CodeAssist.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000008 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
+		00000000000000000000000A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		00000000000000000000000C /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		000000000000000000000007 = {isa = PBXGroup; children = (000000000000000000000005 /* iosApp */, 000000000000000000000006 /* Products */, ); sourceTree = "<group>"; };
+		000000000000000000000005 /* iosApp */ = {isa = PBXGroup; children = (000000000000000000000008 /* App.swift */, 00000000000000000000000A /* Info.plist */, ); path = iosApp; sourceTree = "<group>"; };
+		000000000000000000000006 /* Products */ = {isa = PBXGroup; children = (000000000000000000000003 /* CodeAssist.app */, ); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		000000000000000000000002 /* iosApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 00000000000000000000000F;
+			buildPhases = (000000000000000000000014 /* Build Kotlin framework */, 00000000000000000000000B, 00000000000000000000000C, 00000000000000000000000D, );
+			dependencies = ();
+			name = iosApp;
+			productName = iosApp;
+			productReference = 000000000000000000000003 /* CodeAssist.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		000000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = { BuildIndependentTargetsInParallel = 1; LastUpgradeCheck = 1600; };
+			buildConfigurationList = 00000000000000000000000E;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base, );
+			mainGroup = 000000000000000000000007;
+			productRefGroup = 000000000000000000000006 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (000000000000000000000002 /* iosApp */, );
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		00000000000000000000000D /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		000000000000000000000014 /* Build Kotlin framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ();
+			name = "Build Kotlin framework";
+			outputPaths = ();
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\ncd \"$SRCROOT/../../..\"\nexport JAVA_HOME=\"${JAVA_HOME:-/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home}\"\n./gradlew --quiet \":ide-ios:link${CONFIGURATION}FrameworkIosSimulatorArm64\" :ide-ios:syncComposeResourcesForIos\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		00000000000000000000000B /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000009 /* App.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		000000000000000000000010 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				KOTLIN_FRAMEWORK_DIR = debugFramework;
+			};
+			name = Debug;
+		};
+		000000000000000000000011 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				KOTLIN_FRAMEWORK_DIR = releaseFramework;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		000000000000000000000012 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "";
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				FRAMEWORK_SEARCH_PATHS = ("$(SRCROOT)/../build/bin/iosSimulatorArm64/$(KOTLIN_FRAMEWORK_DIR)", );
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = iosApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = ("$(inherited)", "-framework", CodeAssistUi, );
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ide.codeassist.ios;
+				PRODUCT_NAME = CodeAssist;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		000000000000000000000013 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "";
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				FRAMEWORK_SEARCH_PATHS = ("$(SRCROOT)/../build/bin/iosSimulatorArm64/$(KOTLIN_FRAMEWORK_DIR)", );
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = iosApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = ("$(inherited)", "-framework", CodeAssistUi, );
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ide.codeassist.ios;
+				PRODUCT_NAME = CodeAssist;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		00000000000000000000000E = {isa = XCConfigurationList; buildConfigurations = (000000000000000000000010 /* Debug */, 000000000000000000000011 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
+		00000000000000000000000F = {isa = XCConfigurationList; buildConfigurations = (000000000000000000000012 /* Debug */, 000000000000000000000013 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
+/* End XCConfigurationList section */
+	};
+	rootObject = 000000000000000000000001 /* Project object */;
+}
