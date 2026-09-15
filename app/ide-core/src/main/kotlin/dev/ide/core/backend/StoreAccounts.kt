@@ -143,6 +143,21 @@ internal class StoreAccounts(
         authStateFlow.value = UiStoreAuthState()
     }
 
+    /**
+     * Re-read whether a session still exists, after a call found out that it does not.
+     *
+     * A session can die while the app is open: the stored credential is revoked, or it expires, and only
+     * a call that tried to use it finds out. Nothing reports that back here, so the callers that make
+     * those calls ask afterwards. The answer costs nothing, because [hasStoredSession] reads the token
+     * store and never the network, and it is what keeps a screen from saying a signed-out account could
+     * not be reached.
+     */
+    fun recheckSession() {
+        if (authStateFlow.value.signedIn && !accounts.hasStoredSession()) {
+            authStateFlow.value = UiStoreAuthState()
+        }
+    }
+
     private fun dev.ide.store.StoreAccount.toUi() = UiStoreAccount(
         userId = userId,
         email = email,

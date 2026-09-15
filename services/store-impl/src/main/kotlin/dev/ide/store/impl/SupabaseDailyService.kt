@@ -112,6 +112,19 @@ class SupabaseDailyService(
 
     private fun rpc(name: String, body: String): StoreResult<Any?> {
         if (!configured) return StoreResult.Unavailable("Challenges are not configured in this build")
+        val token = accounts.bearer()
+        val first = send(name, body, token)
+        // A challenge screen is left open for as long as it takes to solve the problem, which is long
+        // enough for the access token underneath it to expire. Refresh once and go again, so submitting
+        // an answer does not come back as "sign in" to someone who is signed in.
+        if (first is StoreResult.Failed && first.status == 401 && token != null) {
+            val fresh = accounts.reauthorize(token) ?: return first
+            return send(name, body, fresh)
+        }
+        return first
+    }
+
+    private fun send(name: String, body: String, token: String?): StoreResult<Any?> {
         return try {
             val conn = (URL("$base/rest/v1/rpc/$name").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -122,7 +135,7 @@ class SupabaseDailyService(
                 setRequestProperty("apikey", apiKey)
                 // Signed in the call carries the user's token so auth.uid() resolves; anonymously it
                 // carries the publishable key, which is what makes browsing work without an account.
-                setRequestProperty("Authorization", "Bearer ${accounts.bearer() ?: apiKey}")
+                setRequestProperty("Authorization", "Bearer ${token ?: apiKey}")
             }
             conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode

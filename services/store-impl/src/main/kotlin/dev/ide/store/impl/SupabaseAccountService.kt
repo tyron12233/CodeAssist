@@ -48,6 +48,11 @@ interface StoreTokenStore {
  * The access token is kept in memory and never persisted; only the refresh token goes to
  * [StoreTokenStore], because an access token is short-lived and a leaked one on disk buys an attacker
  * nothing it could not get by reading the refresh token anyway.
+ *
+ * Short-lived is the operative word: Supabase issues an access token good for an hour, so a session has
+ * to be kept alive rather than merely restored. [bearer] trades the refresh token in before the one in
+ * hand expires, and [reauthorize] does it again for a call that was refused anyway, which is what a
+ * clock a minute out of step or a token revoked mid-session looks like from here.
  */
 class SupabaseAccountService(
     url: String,
@@ -75,14 +80,33 @@ class SupabaseAccountService(
     private var accessToken: String? = null
     private var account: StoreAccount? = null
 
+    /**
+     * When [accessToken] stops being accepted, as epoch milliseconds, or 0 when it carried no readable
+     * expiry.
+     *
+     * Without it the first token a session was given was held for as long as the process lived, and every
+     * authenticated call an hour in came back 401: the screens behind sign-in then read as unreachable
+     * until the app was restarted, which is the one thing that did restore a session.
+     */
+    private var accessExpiresAt: Long = 0L
+
+    /**
+     * Serialises refreshes.
+     *
+     * Refresh tokens rotate, so two calls that both notice the session is spent must not each spend it.
+     * The loser of that race is handed "Invalid Refresh Token: Already Used" and would otherwise sign the
+     * user out over timing alone.
+     */
+    private val sessionLock = Any()
+
     override fun authAvailable(): Boolean = configured
 
-    override fun current(): StoreAccount? {
-        account?.let { return it }
-        // Cold start with a stored refresh token: exchange it for a session without user interaction.
-        // This is the network call the port's doc warns about — the caller keeps it off the startup path.
-        val refresh = tokens.read()?.takeIf { it.isNotBlank() } ?: return null
-        return (refreshSession(refresh) as? StoreResult.Ok)?.value
+    // Cold start with a stored refresh token: the exchange for a session happens here, without user
+    // interaction. This is the network call the port's doc warns about; the caller keeps it off the
+    // startup path.
+    override fun current(): StoreAccount? = synchronized(sessionLock) {
+        account ?: tokens.read()?.takeIf { it.isNotBlank() }
+            ?.let { (refreshSession(it) as? StoreResult.Ok)?.value }
     }
 
     /** Live session, or a refresh token to trade for one. Reads the token store; never the network. */
@@ -106,7 +130,11 @@ class SupabaseAccountService(
         // Implicit flow: the tokens are already in the fragment, so there is nothing to exchange.
         val direct = params["access_token"]
         if (direct != null) {
-            return adopt(direct, params["refresh_token"])
+            return adopt(
+                direct,
+                params["refresh_token"],
+                expiresInSeconds = params["expires_in"]?.toLongOrNull() ?: 0L,
+            )
         }
         // PKCE flow: swap the one-time code for a session.
         val code = params["code"]
@@ -119,10 +147,11 @@ class SupabaseAccountService(
     }
 
     override fun signOut() {
-        val token = accessToken
-        accessToken = null
-        account = null
-        tokens.write(null)
+        val token = synchronized(sessionLock) {
+            val live = accessToken
+            forgetSession()
+            live
+        }
         // Best effort: revoke server-side too, but a failure must not leave the client thinking it is
         // still signed in — the local state is already cleared above.
         if (configured && token != null) runCatching { post("/auth/v1/logout", "{}", token) }
@@ -134,21 +163,58 @@ class SupabaseAccountService(
             is StoreResult.Ok -> adoptFromSession(r.value)
             is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
             is StoreResult.Failed -> {
-                // A rejected refresh token is dead; drop it so we stop retrying on every launch.
-                tokens.write(null)
+                // Only a refusal of the token itself is permanent, and then it is dropped so nothing
+                // retries it on every launch. A malformed request, a proxy in the way or a provider
+                // having a bad minute leaves a session that still works, and dropping the token for one
+                // of those signs the user out with no way back but the browser.
+                if (refusedTheToken(r.message, r.status)) forgetSession()
                 StoreResult.Failed(r.message, r.status)
             }
         }
+
+    /**
+     * Whether a refused refresh means the stored token is dead, rather than the exchange having gone
+     * wrong around it.
+     *
+     * GoTrue answers an unusable refresh token with `invalid_grant` and an `error_description` that names
+     * it ("Invalid Refresh Token: Refresh Token Not Found", "Invalid Refresh Token: Already Used"), and a
+     * 401 from this endpoint can mean nothing else.
+     */
+    private fun refusedTheToken(message: String, status: Int): Boolean {
+        if (status == 401) return true
+        val text = message.lowercase()
+        return "invalid_grant" in text || "refresh token" in text || "refresh_token" in text
+    }
+
+    /** Drop the session, live and stored, so nothing keeps presenting a credential the server refuses. */
+    private fun forgetSession() {
+        accessToken = null
+        accessExpiresAt = 0L
+        account = null
+        hints = null
+        tokens.write(null)
+    }
 
     private fun adoptFromSession(body: String): StoreResult<StoreAccount> {
         val json = JsonReader.parseOrNull(body) ?: return StoreResult.Failed("Auth response was not valid JSON")
         val access = JsonReader.str(json, "access_token")
             ?: return StoreResult.Failed(JsonReader.str(json, "msg") ?: "Auth response carried no access token")
-        return adopt(access, JsonReader.str(json, "refresh_token"), JsonReader.obj(json)?.get("user"))
+        return adopt(
+            access,
+            JsonReader.str(json, "refresh_token"),
+            JsonReader.obj(json)?.get("user"),
+            JsonReader.long(json, "expires_in"),
+        )
     }
 
-    private fun adopt(access: String, refresh: String?, userJson: Any? = null): StoreResult<StoreAccount> {
+    private fun adopt(
+        access: String,
+        refresh: String?,
+        userJson: Any? = null,
+        expiresInSeconds: Long = 0L,
+    ): StoreResult<StoreAccount> {
         accessToken = access
+        accessExpiresAt = expiryOf(access, expiresInSeconds)
         if (refresh != null) tokens.write(refresh)
         val user = userJson ?: fetchUser(access)
         val userId = JsonReader.str(user, "id")
@@ -214,15 +280,59 @@ class SupabaseAccountService(
         (get("/auth/v1/user", access) as? StoreResult.Ok)?.value?.let { JsonReader.parseOrNull(it) }
 
     /**
-     * The access token for an authenticated call, refreshing first if the session is cold.
+     * The access token for an authenticated call, refreshing first if the session is cold or spent.
      *
      * Exposed for the submission service, which needs to POST as the signed-in user.
+     *
+     * What comes back is whatever the exchange left behind: a fresh token, the one already in hand if the
+     * exchange could not be made at all, or null if the refresh token itself was refused. The middle case
+     * is deliberate. A token that may still be accepted is worth sending, and being refused by the server
+     * reads better than being refused locally over a refresh that never reached it.
      */
-    internal fun bearer(): String? {
-        accessToken?.let { return it }
-        current()
-        return accessToken
+    internal fun bearer(): String? = synchronized(sessionLock) {
+        val live = accessToken
+        if (live != null && !spent()) return@synchronized live
+        val refresh = tokens.read()?.takeIf { it.isNotBlank() } ?: return@synchronized live
+        refreshSession(refresh)
+        accessToken
     }
+
+    /**
+     * Trade the refresh token in after a call was refused with 401, and hand back what to retry with.
+     *
+     * [stale] is the token that was refused. When it is no longer the live one another call has already
+     * refreshed, and that token has not been tried yet, so it is handed back rather than spending a
+     * second refresh on it. Null means there is nothing left to retry with.
+     */
+    internal fun reauthorize(stale: String?): String? = synchronized(sessionLock) {
+        val live = accessToken
+        if (live != null && stale != null && live != stale) return@synchronized live
+        val refresh = tokens.read()?.takeIf { it.isNotBlank() } ?: return@synchronized null
+        if (refreshSession(refresh) is StoreResult.Ok) accessToken else null
+    }
+
+    /**
+     * Whether the access token is too close to expiry to start a call with.
+     *
+     * [EXPIRY_SKEW_MS] early, because the call still has to travel and the server compares against its
+     * own clock. A token whose expiry could not be read is never spent, and the retry after a 401 is what
+     * covers it.
+     */
+    private fun spent(): Boolean {
+        val at = accessExpiresAt
+        return at != 0L && System.currentTimeMillis() >= at - EXPIRY_SKEW_MS
+    }
+
+    /**
+     * When [access] stops being accepted, as epoch milliseconds, or 0 when that cannot be established.
+     *
+     * The token's own `exp` claim is preferred over the session's `expires_in`: it is what the server
+     * compares against, and it is present on every path a token arrives by, including the implicit
+     * redirect whose whole session document is a handful of URL parameters.
+     */
+    private fun expiryOf(access: String, expiresInSeconds: Long): Long =
+        jwtExpiry(access)
+            ?: if (expiresInSeconds > 0) System.currentTimeMillis() + expiresInSeconds * 1000 else 0L
 
     // ---- HTTP ----
 
@@ -291,6 +401,29 @@ class SupabaseAccountService(
     }
 
     companion object {
+        /**
+         * How early a token is treated as spent, covering the call's own flight time and a client clock
+         * that does not agree with the server's.
+         */
+        private const val EXPIRY_SKEW_MS = 60_000L
+
+        /**
+         * The `exp` claim of a JWT, as epoch milliseconds, or null for anything that is not a readable
+         * JWT.
+         *
+         * The payload is base64url and unpadded, which the decoder accepts; anything else about the token
+         * is none of this client's business, and in particular the signature is not checked here because
+         * the only thing being decided is when to ask for a new one.
+         */
+        internal fun jwtExpiry(token: String): Long? {
+            val payload = token.split('.').getOrNull(1)?.takeIf { it.isNotBlank() } ?: return null
+            val json = runCatching {
+                String(java.util.Base64.getUrlDecoder().decode(payload), Charsets.UTF_8)
+            }.getOrNull() ?: return null
+            val seconds = JsonReader.parseOrNull(json)?.let { JsonReader.long(it, "exp") } ?: return null
+            return if (seconds > 0) seconds * 1000L else null
+        }
+
         private fun enc(s: String): String = URLEncoder.encode(s, "UTF-8")
 
         /**
