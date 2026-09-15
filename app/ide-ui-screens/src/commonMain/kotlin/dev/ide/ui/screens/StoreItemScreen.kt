@@ -787,12 +787,8 @@ private fun LazyListScope.overview(
     item("about") {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 22.dp)) {
             Eyebrow(stringResource(Res.string.store_item_about))
-            Text(
-                item.description,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = 8.dp),
-            )
+            // Markdown rather than a plain Text: this is publisher-written prose. See ListingProse.
+            ListingProse(item.description, Modifier.padding(top = 8.dp))
         }
     }
     if (item.tags.isNotEmpty()) {
@@ -1055,7 +1051,7 @@ private fun RatingsPanel(item: UiStoreItem) {
     }
 }
 
-/** A README or changelog rendered as plain prose on a tonal card. */
+/** A README rendered on a tonal card. Markdown, since a README is a `.md` file wherever it came from. */
 @Composable
 private fun ProseCard(text: String) {
     val c = MaterialTheme.colorScheme
@@ -1064,11 +1060,11 @@ private fun ProseCard(text: String) {
         color = c.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 18.dp),
     ) {
-        Text(
+        ListingProse(
             text,
+            Modifier.padding(20.dp),
             style = MaterialTheme.typography.bodyMedium,
             color = c.onSurfaceVariant,
-            modifier = Modifier.padding(20.dp),
         )
     }
 }

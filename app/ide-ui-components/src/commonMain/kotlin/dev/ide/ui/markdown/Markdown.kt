@@ -52,6 +52,10 @@ fun Markdown(
     paragraphStyle: TextStyle = MaterialTheme.typography.bodyLarge,
     color: Color = MaterialTheme.colorScheme.onSurface,
     spacing: Dp = Ca.spacing.s3,
+    // Heading typography by level. The default is the document scale, right for a `.md` file or a lesson.
+    // A caller that embeds text inside a page with a title of its own (a store listing's About block)
+    // passes a flatter scale, so an `#` in the embedded text cannot outweigh the page's own heading.
+    headingStyle: @Composable (level: Int) -> TextStyle = { defaultHeadingStyle(it) },
     // Fenced-code rendering is pluggable so a caller can drop in a syntax-highlighted card (the chat's
     // CodeSample) without the markdown module depending on the highlighter. Defaults to a plain mono card.
     codeBlock: @Composable (code: String, lang: String) -> Unit = { code, _ -> DefaultCodeBlock(code) },
@@ -67,7 +71,7 @@ fun Markdown(
         link = SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline),
     )
     Column(modifier, verticalArrangement = Arrangement.spacedBy(spacing)) {
-        for (block in blocks) MarkdownBlock(block, styles, paragraphStyle, color, codeBlock)
+        for (block in blocks) MarkdownBlock(block, styles, paragraphStyle, color, headingStyle, codeBlock)
     }
 }
 
@@ -82,30 +86,40 @@ private fun MarkdownBlock(
     styles: MdStyles,
     paragraphStyle: TextStyle,
     color: Color,
+    headingStyle: @Composable (level: Int) -> TextStyle,
     codeBlock: @Composable (code: String, lang: String) -> Unit,
 ) {
     when (block) {
-        is MdBlock.Heading -> HeadingBlock(block, styles, color)
+        is MdBlock.Heading -> HeadingBlock(block, styles, color, headingStyle)
         is MdBlock.Paragraph -> Text(buildInline(block.text, styles), style = paragraphStyle, color = color)
         is MdBlock.Code -> codeBlock(block.code, block.lang)
         is MdBlock.Items -> ListBlock(block.items, styles, paragraphStyle, color)
-        is MdBlock.Quote -> QuoteBlock(block.blocks, styles, paragraphStyle, codeBlock)
+        is MdBlock.Quote -> QuoteBlock(block.blocks, styles, paragraphStyle, headingStyle, codeBlock)
         MdBlock.Divider -> Box(
             Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant),
         )
     }
 }
 
+/** The document heading scale: what [Markdown] uses unless the caller passes its own. */
 @Composable
-private fun HeadingBlock(heading: MdBlock.Heading, styles: MdStyles, color: Color) {
-    val style = when (heading.level) {
-        1 -> MaterialTheme.typography.headlineMedium
-        2 -> MaterialTheme.typography.headlineSmall
-        3 -> MaterialTheme.typography.titleLarge
-        4 -> MaterialTheme.typography.titleMedium
-        5 -> MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
-        else -> MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-    }
+fun defaultHeadingStyle(level: Int): TextStyle = when (level) {
+    1 -> MaterialTheme.typography.headlineMedium
+    2 -> MaterialTheme.typography.headlineSmall
+    3 -> MaterialTheme.typography.titleLarge
+    4 -> MaterialTheme.typography.titleMedium
+    5 -> MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+    else -> MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+}
+
+@Composable
+private fun HeadingBlock(
+    heading: MdBlock.Heading,
+    styles: MdStyles,
+    color: Color,
+    headingStyle: @Composable (level: Int) -> TextStyle,
+) {
+    val style = headingStyle(heading.level)
     Column(verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
         Text(buildInline(heading.text, styles), style = style, color = color)
         // A rule under the top two levels, matching common Markdown rendering.
@@ -156,6 +170,7 @@ private fun QuoteBlock(
     blocks: List<MdBlock>,
     styles: MdStyles,
     paragraphStyle: TextStyle,
+    headingStyle: @Composable (level: Int) -> TextStyle,
     codeBlock: @Composable (code: String, lang: String) -> Unit,
 ) {
     Row(Modifier.height(IntrinsicSize.Min)) {
@@ -172,7 +187,14 @@ private fun QuoteBlock(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                    else -> MarkdownBlock(block, styles, paragraphStyle, MaterialTheme.colorScheme.onSurfaceVariant, codeBlock)
+                    else -> MarkdownBlock(
+                        block,
+                        styles,
+                        paragraphStyle,
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                        headingStyle,
+                        codeBlock,
+                    )
                 }
             }
         }

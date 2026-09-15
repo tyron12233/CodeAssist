@@ -640,6 +640,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="submit_field_title">Title</string>
     <string name="submit_field_summary">One-line summary</string>
     <string name="submit_field_description">Description</string>
+    <string name="submit_markdown_hint">Markdown works here: **bold**, *italic*, `code`, - lists, ## headings.</string>
+    <string name="submit_markdown_preview">Preview</string>
+    <string name="submit_markdown_hide">Hide preview</string>
     <string name="submit_field_category">Category</string>
     <string name="submit_field_version">Version</string>
     <string name="submit_field_tags">Tags, comma separated</string>

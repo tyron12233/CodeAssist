@@ -51,6 +51,9 @@ import dev.ide.ui.generated.resources.submit_field_summary
 import dev.ide.ui.generated.resources.submit_field_tags
 import dev.ide.ui.generated.resources.submit_field_title
 import dev.ide.ui.generated.resources.submit_field_version
+import dev.ide.ui.generated.resources.submit_markdown_hide
+import dev.ide.ui.generated.resources.submit_markdown_hint
+import dev.ide.ui.generated.resources.submit_markdown_preview
 import dev.ide.ui.generated.resources.submit_included
 import dev.ide.ui.generated.resources.submit_no_projects
 import dev.ide.ui.generated.resources.submit_packaging
@@ -137,6 +140,9 @@ fun SubmitProjectScreen(
     var icon by remember(chosen?.rootPath) { mutableStateOf<ByteArray?>(null) }
     var sending by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    // Whether the description is being previewed rather than edited. Off by default: the field is where
+    // the work happens, and a preview that opened itself would push the rest of the form down a screen.
+    var previewDescription by remember { mutableStateOf(false) }
     // The listings this account already publishes, so this submission can be sent as a new version of one
     // instead of a second listing of the same project. Empty when signed out or nothing is published.
     var published by remember { mutableStateOf<List<UiPublishedItem>>(emptyList()) }
@@ -365,6 +371,11 @@ fun SubmitProjectScreen(
                             draft.description,
                             lines = 4,
                         ) { draft = draft.copy(description = it) }
+                        DescriptionMarkdown(
+                            text = draft.description,
+                            preview = previewDescription,
+                            onTogglePreview = { previewDescription = !previewDescription },
+                        )
                         Field(stringResource(Res.string.submit_field_version), draft.version) {
                             draft = draft.copy(version = it)
                         }
@@ -579,11 +590,54 @@ private fun Field(label: String, value: String, lines: Int = 1, onChange: (Strin
 }
 
 @Composable
-private fun Body(text: String) = Text(
+private fun Body(text: String, modifier: Modifier = Modifier) = Text(
     text,
     style = MaterialTheme.typography.bodyMedium,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
+    modifier = modifier,
 )
+
+/**
+ * The syntax note under the description, and the preview behind it.
+ *
+ * The description is stored and served as Markdown, which nothing in the form said, so descriptions were
+ * written as plain paragraphs. The note alone is a claim about what the store will do with the text; the
+ * preview renders it through [ListingProse], the composable the listing's About block uses, so the two
+ * cannot disagree. The toggle appears once something has been typed, since an empty preview shows nothing.
+ */
+@Composable
+private fun DescriptionMarkdown(text: String, preview: Boolean, onTogglePreview: () -> Unit) {
+    // Top-aligned: the note wraps to two lines on a phone, and a toggle centred against it floats.
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Body(
+            stringResource(Res.string.submit_markdown_hint),
+            Modifier.weight(1f).padding(top = 10.dp),
+        )
+        if (text.isNotBlank()) {
+            TextButton(onClick = onTogglePreview) {
+                Text(
+                    stringResource(
+                        if (preview) Res.string.submit_markdown_hide else Res.string.submit_markdown_preview,
+                    ),
+                )
+            }
+        }
+    }
+    if (preview && text.isNotBlank()) {
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+        ) {
+            ListingProse(
+                text,
+                Modifier.padding(16.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
 
 private fun formatSize(bytes: Long): String = when {
     bytes >= 1024L * 1024 -> "${(bytes * 10 / (1024 * 1024)) / 10.0} MB"

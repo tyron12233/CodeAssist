@@ -602,6 +602,9 @@
     <string name="submit_field_title">标题</string>
     <string name="submit_field_summary">一句话简介</string>
     <string name="submit_field_description">描述</string>
+    <string name="submit_markdown_hint">支持 Markdown：**粗体**、*斜体*、`代码`、- 列表、## 标题。</string>
+    <string name="submit_markdown_preview">预览</string>
+    <string name="submit_markdown_hide">隐藏预览</string>
     <string name="submit_field_category">分类</string>
     <string name="submit_field_version">版本</string>
     <string name="submit_field_tags">标签，逗号分隔</string>

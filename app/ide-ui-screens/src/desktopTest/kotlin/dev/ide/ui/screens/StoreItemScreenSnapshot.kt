@@ -27,6 +27,11 @@ import kotlin.test.Test
  * Two fixtures on purpose. A **remote** item carries everything (rating, size, version, README,
  * changelog) so all four tabs appear; a **bundled template** carries almost none of it, which is the
  * case that must degrade to Overview alone rather than showing three empty tabs.
+ *
+ * The remote fixture's description and README are Markdown, which is what the store stores and what the
+ * About block and the README tab render: headings, lists and emphasis have to come out as blocks rather
+ * than as a paragraph with hashes and asterisks in it. The bundled one stays a plain paragraph, as most
+ * descriptions are, and has to read the same as it did before anything rendered Markdown.
  */
 class StoreItemScreenSnapshot {
 
@@ -35,7 +40,17 @@ class StoreItemScreenSnapshot {
         kind = UiStoreItemKind.Sample,
         title = "Ktor + Exposed Sample App",
         summary = "A REST service with migrations and tests",
-        description = "A REST service with migrations, auth, integration tests and a Docker compose file for local Postgres.",
+        description = """
+            A REST service with migrations, auth, integration tests and a Docker compose file for local Postgres.
+
+            ## What is in it
+
+            - **Exposed** schema with Flyway migrations
+            - JWT auth, with the token issuer behind an interface
+            - Integration tests against a throwaway Postgres
+
+            Run `./gradlew test` before you change anything: it is the fastest description of the API you will find.
+        """.trimIndent(),
         category = "Server",
         iconId = "kotlin",
         tags = listOf("Ktor 3", "Exposed", "Postgres", "Flyway"),
@@ -47,7 +62,17 @@ class StoreItemScreenSnapshot {
         version = "1.8.2",
         downloadBytes = 7_235_174,
         verified = true,
-        readme = "Clone into your IDE, run the sync task and pick a run configuration.",
+        readme = """
+            # Ktor + Exposed
+
+            Clone into your IDE, run the sync task and pick a run configuration.
+
+            1. `docker compose up -d` for Postgres
+            2. `./gradlew flywayMigrate`
+            3. Run **ApplicationKt**
+
+            > The default credentials are in `application.conf` and are meant for local use only.
+        """.trimIndent(),
         changelog = "Koin replaces the hand-rolled service locator.\nShared view model test suite.",
         highlights = listOf("Database migrations wired up", "Integration tests included", "Docker compose for local Postgres"),
         screenshots = listOf("sample-snake", "sample-2048", "sample-memory"),
