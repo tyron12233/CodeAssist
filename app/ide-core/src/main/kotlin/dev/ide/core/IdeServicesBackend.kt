@@ -360,6 +360,29 @@ class IdeServicesBackend(
     override val notifications: dev.ide.ui.backend.NotificationService = notificationCenter
 
     /**
+     * Carry a plugin's [dev.ide.platform.notify.UserMessages] posts into the notification center.
+     *
+     * A plugin's engine facet has no screen of its own, and what it has to say ("the toolchain finished
+     * unpacking", "no toolchain for this device's ABI") is almost always about work the user was not
+     * watching, which is exactly what the center is for. The center's own transient queue stays the surface
+     * for a snackbar; this is what makes the capability visible in a shipped surface rather than only being
+     * a state holder nothing reads.
+     *
+     * Disposed in [close]. The center outlives this backend (it is app-global, the plugins are too), so a
+     * relay left subscribed would keep posting into a closed project's center, and every project switch
+     * would add another copy of every message.
+     */
+    private val userMessageRelay: dev.ide.platform.Disposable? = manager?.userMessages?.onMessage { posted ->
+        runCatching {
+            notificationCenter.post(
+                kind = dev.ide.ui.backend.UiNotificationKind.SYSTEM,
+                title = posted.message.text,
+                body = null,
+            )
+        }
+    }
+
+    /**
      * Hand over notifications the host received while this engine did not exist.
      *
      * The push path needs it: FCM wakes the process with no engine, the platform layer builds the
@@ -701,6 +724,7 @@ class IdeServicesBackend(
         // The version-control backend holds an open repository handle and its own refresh coroutine.
         runCatching { (vcs as? VcsBackend)?.close() }
         runCatching { fsEpochSubscription?.dispose() }
+        runCatching { userMessageRelay?.dispose() }
         activeServices?.close()
         runCatching { engineExecutor.shutdown() } // stop the dedicated ide-engine thread on teardown
         // Clean shutdown ⇒ drop the crash breadcrumb, so a file that survives to the next launch means the

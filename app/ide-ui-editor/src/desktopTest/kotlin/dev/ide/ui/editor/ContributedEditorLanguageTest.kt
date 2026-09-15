@@ -111,6 +111,81 @@ class ContributedEditorLanguageTest {
         assertSame(CodeLanguage.Markdown, languageFor("README.md"))
     }
 
+    /**
+     * A C-family language with a preprocessor. Without [EditorLanguageProfile.directivePrefix] the whole of
+     * `#include <stdio.h>` scans as operators and an identifier, which is what a C or C++ plugin would have
+     * shipped: the line that opens almost every source file, uncolored.
+     */
+    private fun cpp() = EditorLanguageProfile(
+        id = "cpp",
+        suffixes = listOf(".cpp", ".h"),
+        syntax = SyntaxFamily.C_FAMILY,
+        keywords = setOf("int", "return", "const"),
+        lineComment = "//",
+        directivePrefix = "#",
+    )
+
+    @Test
+    fun `a preprocessor directive colors as a keyword and its angle header as a string`() {
+        withProfile(cpp()) {
+            val styled = styleLine("#include <stdio.h>", entryState = 0, language = languageFor("a.cpp"))
+            val keyword = styled.spans.single { it.type == TokenType.KEYWORD }
+            assertEquals(0, keyword.start)
+            assertEquals("#include".length, keyword.end, "the marker and the directive word are one keyword")
+            val header = styled.spans.single { it.type == TokenType.STRING }
+            assertEquals("#include ".length, header.start)
+            assertEquals("#include <stdio.h>".length, header.end, "the closing angle is part of the header")
+        }
+    }
+
+    @Test
+    fun `a directive still colors when the line is indented`() {
+        withProfile(cpp()) {
+            val styled = styleLine("  #define MAX 10", entryState = 0, language = languageFor("a.cpp"))
+            val keyword = styled.spans.single { it.type == TokenType.KEYWORD }
+            assertEquals(2, keyword.start)
+            assertEquals("  #define".length, keyword.end)
+            // The macro body is ordinary code, so the literal still colors as a number.
+            assertTrue(styled.spans.any { it.type == TokenType.NUMBER })
+        }
+    }
+
+    @Test
+    fun `a quoted include is left to the ordinary string scanner`() {
+        withProfile(cpp()) {
+            val styled = styleLine("""#include "local.h"""", entryState = 0, language = languageFor("a.cpp"))
+            val header = styled.spans.single { it.type == TokenType.STRING }
+            assertEquals("""#include """.length, header.start)
+        }
+    }
+
+    @Test
+    fun `an unclosed angle header colors to end of line rather than flickering`() {
+        withProfile(cpp()) {
+            val styled = styleLine("#include <std", entryState = 0, language = languageFor("a.cpp"))
+            val header = styled.spans.single { it.type == TokenType.STRING }
+            assertEquals("#include <std".length, header.end)
+        }
+    }
+
+    @Test
+    fun `a hash inside code is not read as a directive`() {
+        withProfile(cpp()) {
+            // Only the head of the line can start a directive; `#` here is the stringize operator.
+            val styled = styleLine("const int x = a # b;", entryState = 0, language = languageFor("a.cpp"))
+            val keywords = styled.spans.filter { it.type == TokenType.KEYWORD }
+            assertEquals(setOf("const", "int"), keywords.mapTo(HashSet()) { "const int x = a # b;".substring(it.start, it.end) })
+        }
+    }
+
+    @Test
+    fun `a language with no directive prefix is unaffected`() {
+        withProfile(myLang()) {
+            val styled = styleLine("#include <stdio.h>", entryState = 0, language = languageFor("a.mylang"))
+            assertTrue(styled.spans.none { it.type == TokenType.KEYWORD || it.type == TokenType.STRING })
+        }
+    }
+
     @Test
     fun `a lower-order profile overrides a built-in suffix`() {
         val override = EditorLanguageProfile(

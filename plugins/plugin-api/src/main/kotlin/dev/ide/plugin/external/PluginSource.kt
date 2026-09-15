@@ -52,6 +52,16 @@ interface DiscoveredPlugin : PluginCandidate {
      * against this plugin rather than failing the IDE's startup.
      */
     fun classLoader(): ClassLoader
+
+    /**
+     * Where this plugin's packaged native libraries were unpacked, when the source's packaging format has
+     * such a notion and this plugin ships any. Null otherwise, which is the normal answer.
+     *
+     * Surfaced to the plugin as [dev.ide.plugin.PluginRegistration.nativeLibraryDir]. A source must name a
+     * directory the installer produced, never one the plugin can write to: it is the only place a plugin can
+     * execute a binary from, and that property comes from the file being outside app-writable storage.
+     */
+    val nativeLibraryDir: java.nio.file.Path? get() = null
 }
 
 /**

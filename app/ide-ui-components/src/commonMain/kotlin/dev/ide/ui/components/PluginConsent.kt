@@ -148,6 +148,16 @@ internal fun describeCapability(capability: String): String = when (capability) 
     "ui.overlay" -> "Show a prompt over any screen"
     "ui.editorAction" -> "Add actions at the cursor in the editor"
     "ui.editorPreview" -> "Add a preview pane for some of your files"
+    "ui.keyBinding" -> "Take keyboard shortcuts"
+    // The three that change how the user's own code looks, phrased so the difference between them is the
+    // part a reader can act on: what is marked, what is added beside it, and what is painted over it.
+    "ui.editorDecoration" -> "Mark up the text of your files"
+    "ui.editorLayer" -> "Put controls of its own inside the editor"
+    "ui.editorPainter" -> "Draw into the editor"
+    "ui.editorLanguage" -> "Color and comment a language in the editor, including ones the IDE already knows"
+    "lang.backend" -> "Teach the editor a language: parsing, completion and errors"
+    "model.moduleType" -> "Add a kind of module, and templates that create one"
+    "model.facet" -> "Keep configuration of its own in your modules"
     // Phrased as what it does to the user's own code, since that is the part worth deciding about.
     "interp.run" -> "Run your project's code inside the IDE, to preview or run it"
     "build.task" -> "Add steps to your builds"

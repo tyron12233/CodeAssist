@@ -36,6 +36,9 @@ internal class PluginRegistrationImpl(
     /** Where this plugin's [dataDir] goes. See [PluginManager] for what a host supplies and what a
      *  standalone caller gets instead. */
     private val dataRoot: Path = defaultDataRoot(),
+    /** Where the installer unpacked this plugin's packaged native libraries, when it unpacked any. Supplied
+     *  by the host per plugin (see [PluginManager]); null for a built-in and in a standalone test. */
+    override val nativeLibraryDir: Path? = null,
 ) : PluginRegistration {
 
     override val messageBus: MessageBus get() = bus
@@ -73,6 +76,20 @@ internal class PluginRegistrationImpl(
     override fun busConnection(): MessageBusConnection = bus.connect().also { teardown.add(it) }
 
     override fun logger(tag: String): Logger = Log.logger(tag, source = pluginId.value)
+
+    /**
+     * Resolved against [nativeLibraryDir] only. [name] must be the plain library name it is documented to be:
+     * anything carrying a path is refused outright rather than quietly reduced to its last segment, so
+     * `"../other/clang"` answers null instead of silently meaning `"clang"`. That keeps a crafted name from
+     * reaching another plugin's directory, and keeps a caller that passed a path by mistake from getting a
+     * confidently wrong answer.
+     */
+    override fun nativeLibrary(name: String): Path? {
+        val dir = nativeLibraryDir ?: return null
+        if (name.isBlank() || Paths.get(name).fileName?.toString() != name) return null
+        val file = dir.resolve(System.mapLibraryName(name))
+        return file.takeIf { Files.isRegularFile(it) }
+    }
 }
 
 /**

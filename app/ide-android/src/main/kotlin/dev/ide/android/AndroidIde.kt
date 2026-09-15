@@ -561,7 +561,7 @@ object AndroidIde {
             url = url,
             apiKey = key,
             // The deep link the manifest's intent-filter receives.
-            redirectUrl = dev.ide.store.StoreAuth.ANDROID_REDIRECT,
+            redirectUrl = dev.ide.store.StoreAuth.MOBILE_REDIRECT,
             // Without a store the refresh token lives in memory, so every launch presents a signed-out
             // store and asks the user to sign in with GitHub again. The default is in-memory precisely so
             // that a host has to CHOOSE where a credential goes; this is that choice.

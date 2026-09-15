@@ -1,0 +1,8 @@
+#!/system/bin/sh
+# A stand-in for the compiled binary a real plugin would package here.
+#
+# It is a shell script rather than an ELF executable so the sample needs no NDK to build, but everything
+# around it is real: it is packaged as src/main/jniLibs/<abi>/lib<name>.so, the installer unpacks it into the
+# plugin package's own library directory, and PluginRegistration.nativeLibrary("hellotool") finds it there.
+# That directory is the only place a plugin may execute from, which is the whole reason this path exists.
+echo "hello from a binary the plugin packaged, running as $0"

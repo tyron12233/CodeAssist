@@ -24,6 +24,7 @@ import dev.ide.core.REAL_VIEW_RUNTIME
 import dev.ide.core.applog.AppLogChannel
 import dev.ide.core.gradle.GradleImport
 import dev.ide.core.gradle.GradleProjectExport
+import dev.ide.core.notify.UserMessageCenter
 import dev.ide.core.plugins.KnownPlugin
 import dev.ide.core.plugins.PluginChanges
 import dev.ide.core.sdk.SdkManagerService
@@ -195,6 +196,15 @@ class ProjectManager private constructor(
         disabledAtStart = readDisabledPlugins(),
         consentedAtStart = consentedPlugins(),
     )
+
+    /**
+     * What a plugin's engine facet says to the user, and the long work it wants shown.
+     *
+     * The environment's, not a second one: a plugin's `register` runs inside the environment's constructor,
+     * so the center a plugin resolves has to exist before this class does. The shell observes it; see
+     * [dev.ide.core.notify.UserMessageCenter].
+     */
+    val userMessages: UserMessageCenter get() = env.userMessages
 
     init {
         // The launcher-supplied platform ports become APPLICATION services on the shared container, so every

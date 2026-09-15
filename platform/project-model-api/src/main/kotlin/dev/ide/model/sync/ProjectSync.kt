@@ -130,6 +130,56 @@ interface ProjectImporter {
 /** Plugins contribute project importers here; the host selects one per project root by [ProjectImporter.detect]. */
 val PROJECT_IMPORTER_EP = ExtensionPoint<ProjectImporter>("platform.projectImporter")
 
+/**
+ * Adds to a snapshot an importer already produced, for a plugin that understands part of a build system
+ * somebody else reads.
+ *
+ * [ProjectImporter] is all-or-nothing: an importer claims a project root and owns the whole reading of it.
+ * That is right for a build system, and wrong for the common case of a plugin that teaches the IDE one
+ * *feature* of a build system it does not own. A plugin adding C and C++ knows what `externalNativeBuild { }`
+ * means and nothing else about Gradle; without this it would have to replace the Gradle importer, or re-read
+ * the build files behind its back and keep a model of its own that the next Sync silently invalidates.
+ *
+ * Runs after the importer, before the host applies the snapshot, so what a contributor adds is committed in
+ * the same transaction as the rest and survives a Sync like anything else the importer produced:
+ *
+ * ```
+ * object NdkImport : ImportContributor {
+ *     override val buildSystems = setOf(BuildSystemId("gradle"))
+ *
+ *     override fun contribute(request: SyncRequest, model: ExternalProjectModel) = model.copy(
+ *         modules = model.modules.map { m ->
+ *             val cmake = CMakeBlock.findIn(request.root.resolve(m.dirRelPath)) ?: return@map m
+ *             m.copy(facets = m.facets + ExternalFacet("ndk", mapOf("cmake" to cmake.path)))
+ *         }
+ *     )
+ * }
+ * ```
+ *
+ * Contributors are applied in registration order, each seeing the previous one's result, so two plugins
+ * enriching one project compose rather than race. A contributor that throws is logged and skipped: enriching
+ * a snapshot is an addition, and failing at it must not cost the user the import.
+ */
+interface ImportContributor {
+    /**
+     * The build systems whose snapshots this applies to. Empty means every one, which is right for a
+     * contributor keyed on something the build system does not decide (a file at the project root, say).
+     */
+    val buildSystems: Set<BuildSystemId> get() = emptySet()
+
+    /**
+     * Answer [model] with whatever this contributor adds, or [model] itself when there is nothing to add.
+     *
+     * Pure with respect to the model, like [ProjectImporter.resolve]: read the file system, do not mutate the
+     * live project. A contributor names module types and facets by id and table name, so it needs no
+     * reference to the plugins that provide them.
+     */
+    fun contribute(request: SyncRequest, model: ExternalProjectModel): ExternalProjectModel
+}
+
+/** Plugins contribute snapshot enrichment here; every contributor claiming the build system is applied. */
+val IMPORT_CONTRIBUTOR_EP = ExtensionPoint<ImportContributor>("platform.importContributor")
+
 // ---------------------------------------------------------------------------
 // The snapshot: a declarative project model, free of live model/persistence types
 // ---------------------------------------------------------------------------

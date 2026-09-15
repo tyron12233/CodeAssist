@@ -100,6 +100,73 @@ class PluginManagerTest {
         }
     }
 
+    /** Captures what a plugin can find out about its own packaged native libraries. */
+    private class NativeLibPlugin(id: String) : Plugin {
+        override val manifest = PluginManifest(id = id, name = id)
+        var dir: Path? = null
+            private set
+        var resolved: Path? = null
+            private set
+        var escaped: Path? = null
+            private set
+
+        override fun register(reg: PluginRegistration) {
+            dir = reg.nativeLibraryDir
+            resolved = reg.nativeLibrary("clang")
+            escaped = reg.nativeLibrary("../../other/clang")
+        }
+    }
+
+    /**
+     * A plugin that ships a compiler has to be able to find it: an executable it packages is unpacked outside
+     * its writable storage, and since Android 10 that is the only place it may run one from. Without this a
+     * plugin could package a binary and had no supported way to name its path.
+     */
+    @Test
+    fun `a plugin resolves its own packaged native library by plain name`() {
+        val libs = Files.createTempDirectory("plugin-native-libs")
+        try {
+            val packaged = libs.resolve(System.mapLibraryName("clang"))
+            Files.writeString(packaged, "not really a compiler")
+            val p = NativeLibPlugin("com.example.ndk")
+            PluginManager(ExtensionRegistryImpl(), nativeLibraryDirs = mapOf("com.example.ndk" to libs))
+                .loadAll(listOf(p))
+
+            assertEquals(libs, p.dir)
+            assertEquals(packaged, p.resolved, "the lib prefix and the extension are the platform's to add")
+            // A name carrying a path is refused rather than reduced to `clang`, so no spelling of it reaches
+            // a sibling plugin's directory, and a caller that passed a path gets nothing rather than a
+            // confidently wrong file.
+            assertNull(p.escaped)
+        } finally {
+            libs.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `a plugin whose host unpacked no native libraries is handed none`() {
+        val p = NativeLibPlugin("com.example.plain")
+        PluginManager(ExtensionRegistryImpl()).loadAll(listOf(p))
+
+        assertNull(p.dir, "a built-in and a standalone test have no such directory, and must not invent one")
+        assertNull(p.resolved)
+    }
+
+    @Test
+    fun `a library the plugin did not package for this device answers null`() {
+        val libs = Files.createTempDirectory("plugin-native-libs")
+        try {
+            val p = NativeLibPlugin("com.example.ndk")
+            PluginManager(ExtensionRegistryImpl(), nativeLibraryDirs = mapOf("com.example.ndk" to libs))
+                .loadAll(listOf(p))
+
+            assertEquals(libs, p.dir, "the directory exists even when this ABI's binaries do not")
+            assertNull(p.resolved, "a missing library is an unsupported device, not a path to a missing file")
+        } finally {
+            libs.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `unload removes exactly the plugin's own contributions`() {
         val reg = ExtensionRegistryImpl()

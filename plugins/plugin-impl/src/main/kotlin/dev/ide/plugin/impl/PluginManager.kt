@@ -37,6 +37,12 @@ class PluginManager(
      *  standalone test, which gets a per-process temporary root instead, so a plugin under test can still
      *  write; a host passes a directory under its own app storage, which is backed up and cleaned up with it. */
     private val dataRoot: Path? = null,
+    /**
+     * Where each plugin's packaged native libraries were unpacked, by plugin id, for the plugins the host
+     * installed from a package that carries any. Empty for built-ins (their libraries are the IDE's own) and
+     * in a standalone test, and a plugin missing from it is simply handed no directory.
+     */
+    private val nativeLibraryDirs: Map<String, Path> = emptyMap(),
 ) {
 
     private class Loaded(val plugin: Plugin, val teardown: CompositeDisposable)
@@ -102,6 +108,7 @@ class PluginManager(
                 PluginRegistrationImpl(
                     id, registry, teardown, bus, hostVersion, appServices,
                     dataRoot ?: defaultDataRoot(),
+                    nativeLibraryDirs[id.value],
                 )
             )
         } catch (t: Throwable) {

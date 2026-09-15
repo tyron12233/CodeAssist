@@ -91,7 +91,11 @@ fun styleLine(line: String, entryState: Int, language: CodeLanguage): StyledLine
         SyntaxFamily.MARKDOWN -> styleMarkdownLine(line, entryState)
         SyntaxFamily.C_FAMILY ->
             if (language == CodeLanguage.Kotlin) styleKotlinLine(line, entryState)
-            else styleCodeLine(line, entryState, language.profile.keywords.ifEmpty { JAVA_KEYWORDS })
+            else styleCodeLine(
+                line, entryState,
+                language.profile.keywords.ifEmpty { JAVA_KEYWORDS },
+                language.profile.directivePrefix,
+            )
     }
 
 /**
@@ -227,7 +231,47 @@ private fun styleProguardLine(line: String): StyledLine {
     return StyledLine(spans, LexState.CODE)
 }
 
-private fun styleCodeLine(line: String, entryState: Int, keywords: Set<String> = JAVA_KEYWORDS): StyledLine {
+/**
+ * Color a leading preprocessor directive (`#include <stdio.h>`, `#define FOO 1`) and answer where ordinary
+ * code scanning should resume. Answers 0 when the line is not a directive, leaving the whole line to the
+ * caller's main loop.
+ *
+ * The marker and the word after it are one keyword span, so `# include` (legal, and rare) colors like
+ * `#include`. An angle-bracket header name is colored as a string because that is what it is: a quoted path
+ * in the language's other spelling. Everything after it is ordinary code, which is what makes a macro body
+ * color like the code it becomes.
+ */
+private fun scanDirective(line: String, prefix: String, spans: MutableList<LineSpan>): Int {
+    val n = line.length
+    var i = 0
+    while (i < n && (line[i] == ' ' || line[i] == '\t')) i++
+    if (!line.startsWith(prefix, i)) return 0
+    val start = i
+    i += prefix.length
+    while (i < n && (line[i] == ' ' || line[i] == '\t')) i++
+    val wordStart = i
+    while (i < n && (line[i].isLetterOrDigit() || line[i] == '_')) i++
+    // A bare marker with no directive after it: color the marker alone rather than swallowing the line.
+    spans.add(LineSpan(start, if (i > wordStart) i else start + prefix.length, TokenType.KEYWORD))
+    val directive = line.substring(wordStart, i)
+    if (directive != "include" && directive != "include_next" && directive != "import") return i
+    var j = i
+    while (j < n && (line[j] == ' ' || line[j] == '\t')) j++
+    if (j >= n || line[j] != '<') return i
+    val close = line.indexOf('>', startIndex = j + 1)
+    // An unclosed `<` is a header name still being typed: color to end of line rather than nothing, so it
+    // does not flicker between operator-colored and string-colored on every keystroke.
+    val end = if (close < 0) n else close + 1
+    spans.add(LineSpan(j, end, TokenType.STRING))
+    return end
+}
+
+private fun styleCodeLine(
+    line: String,
+    entryState: Int,
+    keywords: Set<String> = JAVA_KEYWORDS,
+    directivePrefix: String? = null,
+): StyledLine {
     val n = line.length
     val spans = ArrayList<LineSpan>(8)
     var i = 0
@@ -239,6 +283,10 @@ private fun styleCodeLine(line: String, entryState: Int, keywords: Set<String> =
         }
         spans.add(LineSpan(0, close + 2, TokenType.COMMENT))
         i = close + 2
+    } else if (directivePrefix != null) {
+        // Only at the head of the line, and only outside a carried block comment: `#` anywhere else in a
+        // C-family language is an operator or lives inside a string, and both are the main loop's business.
+        i = scanDirective(line, directivePrefix, spans)
     }
     while (i < n) {
         val c = line[i]

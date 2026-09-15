@@ -113,6 +113,36 @@ interface PluginRegistration {
     fun logger(tag: String): Logger
 
     /**
+     * Where this plugin's own packaged native libraries were unpacked at install time, or null when the host
+     * unpacks none (a built-in, a desktop host, a test).
+     *
+     * A plugin that ships an executable or a JNI library packages it the way an Android app does, as
+     * `src/main/jniLibs/<abi>/lib<name>.so`, and the installer extracts it into a directory outside the app's
+     * writable storage. That matters beyond convenience: since Android 10 an app may not `exec()` or
+     * `dlopen()` a file it wrote into its own data area, so this directory is the ONLY place a plugin can run
+     * a binary from. A toolchain a plugin downloads into [dataDir] can be read but never executed.
+     *
+     * The directory is read-only and shared with nothing: it belongs to the plugin's own package. Resolve a
+     * single library through [nativeLibrary] rather than composing the file name here, and keep this for the
+     * cases that need the directory itself, such as handing a child process a search path for its siblings.
+     */
+    val nativeLibraryDir: Path? get() = null
+
+    /**
+     * This plugin's packaged native library [name], named the plain way (`"clang"` for a packaged
+     * `libclang.so`), or null when the plugin ships no such library for this device's ABI.
+     *
+     * The mapping from the plain name to the packaged file name is the platform's, so a plugin neither writes
+     * `lib` and `.so` itself nor has to know which ABI the installer chose. A null answer is the normal
+     * result on a device whose ABI the plugin did not build for, and is worth reporting as "unsupported on
+     * this device" rather than treating as a broken install.
+     *
+     * [name] is a name, not a path: anything carrying a directory separator is refused rather than reduced,
+     * so there is no spelling of it that reaches outside [nativeLibraryDir].
+     */
+    fun nativeLibrary(name: String): Path? = null
+
+    /**
      * The running IDE's version, or null when the host supplied none (the desktop launcher, a standalone
      * test). This is the same value the loader compares against a manifest's `minHostVersion`, so a plugin
      * that branches on it and one that declares a floor agree about what they are running on.

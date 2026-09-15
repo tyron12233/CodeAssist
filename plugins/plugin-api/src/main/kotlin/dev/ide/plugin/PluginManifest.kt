@@ -236,8 +236,38 @@ const val PLUGIN_API_VERSION: Int = 3
  * state, nested claims resolve innermost-first, and the claim lives exactly as long as the composable that
  * holds it. `ScreenBackRegistry` is the same seam for a controller or a test outside a composition.
  * [PLUGIN_API_VERSION] stays at `3`.
+ *
+ * `2.10.0` is what a plugin for a compiled, non-JVM language needs, found by building one (C and C++ through
+ * the NDK) against `2.9.0` and hitting each gap in turn. Four additions, all to artifacts that were already
+ * published; [PLUGIN_API_VERSION] stays at `3` and `plugin-bom` gains no coordinate.
+ *
+ *  - `dev.ide.plugin.ui.EditorLanguage` and `UiRegistration.editorLanguage`. The editor's *text* layer was
+ *    the one part of the platform a language could not reach: a plugin could contribute a
+ *    [PluginCapabilities.LANG_BACKEND] with parsing, resolution, completion and semantic highlighting, and
+ *    its files still opened as grey text with no Toggle Comment, no bracket auto-close and no smart indent.
+ *    Semantic highlighting does not cover it, because it is asynchronous and debounced: without a profile
+ *    there is no coloring at all while the user types. `EditorLanguage` also carries `directivePrefix`, so a
+ *    preprocessor line reads as one (`#include <stdio.h>`) rather than as a run of operators. Declared as
+ *    [PluginCapabilities.UI_EDITOR_LANGUAGE], because a profile may claim a suffix the IDE already colors
+ *    and take that language's appearance over.
+ *  - [PluginRegistration.nativeLibraryDir] and [PluginRegistration.nativeLibrary]. A plugin that packages an
+ *    executable or a JNI library had no supported way to name its path. This is not a convenience: since
+ *    Android 10 an app may not `exec()` or `dlopen()` a file it wrote into its own storage, so the
+ *    install-time-unpacked library directory is the ONLY place a plugin can run a binary from, and a
+ *    toolchain downloaded into [PluginRegistration.dataDir] can be read but never executed.
+ *  - `dev.ide.platform.notify.UserMessages` and `USER_MESSAGES`. An engine facet has no screen of its own, so
+ *    a plugin could report only through the build console (if it happened to be inside a build) or the log
+ *    (which nobody has open). `show` and `startProgress` cover telling and waiting; asking is deliberately
+ *    absent, since a plugin that needs an answer contributes a `dev.ide.plugin.ui.Overlay` and renders its
+ *    own prompt, with its own wording and validation rather than one the host imposes.
+ *  - `dev.ide.model.sync.ImportContributor` and `IMPORT_CONTRIBUTOR_EP`. `ProjectImporter` is
+ *    all-or-nothing, which is right for a build system and wrong for a plugin that understands one *feature*
+ *    of a build system somebody else reads. A plugin adding C and C++ knows what `externalNativeBuild { }`
+ *    means and nothing else about Gradle; its only options were to replace the Gradle importer, or to re-read
+ *    the build files behind its back and keep a model the next Sync silently invalidates. A contributor runs
+ *    on the first import and on every Sync, so the two cannot disagree.
  */
-const val PLUGIN_SPI_VERSION: String = "2.9.0"
+const val PLUGIN_SPI_VERSION: String = "2.10.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry

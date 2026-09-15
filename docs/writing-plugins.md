@@ -661,6 +661,33 @@ snapshot in one transaction. The snapshot names your module type by id and your 
 importer needs no reference to the classes that provide them. Pair it with `BUILD_FILE_WRITER_EP` if edits the
 user makes in the IDE should survive the next sync.
 
+**Understanding one feature of somebody else's build system** is `IMPORT_CONTRIBUTOR_EP` instead. An importer
+is all-or-nothing: it claims a project root and owns the whole reading of it. That is right for a build system
+and wrong for the common case, which is a plugin that knows what one block in a build file means. A C/C++
+plugin knows `externalNativeBuild { }` and nothing else about Gradle; without this its only choices were to
+replace the Gradle importer outright, or to re-read the build files behind its back and keep a parallel model
+that the next Sync silently invalidates.
+
+```kotlin
+object NdkImport : ImportContributor {
+    override val buildSystems = setOf(BuildSystemId("gradle"))   // empty = every build system
+
+    override fun contribute(request: SyncRequest, model: ExternalProjectModel) = model.copy(
+        modules = model.modules.map { m ->
+            val cmake = CMakeBlock.findIn(request.root.resolve(m.dirRelPath)) ?: return@map m
+            m.copy(facets = m.facets + ExternalFacet("ndk", mapOf("cmake" to cmake.path)))
+        }
+    )
+}
+```
+
+It runs after the importer and before the host applies the snapshot, so what you add is committed in the same
+transaction and survives a Sync like anything the importer produced. It runs on the **first import** too, so a
+project imported once and one re-synced afterwards cannot disagree about what is in it. Contributors are
+applied in registration order, each seeing the previous one's result, so two plugins enriching one project
+compose rather than race; one that throws is logged and skipped, because enriching a snapshot is an addition
+and failing at it must not cost the user the import.
+
 `ModuleTypeRegistry`, `FacetCodecRegistry`, `ProjectTemplateRegistry` and `FileIconRegistry` (all in
 `dev.ide.model`) are the read side of these four EPs, if you need to resolve rather than contribute. They
 read through to the extension registry on every lookup, so a plugin that loads later is still seen.
@@ -712,6 +739,45 @@ would otherwise hand you, and add to what it returns.
 What is still JVM-shaped underneath: `Module` carries `classpath()` and `outputDir` on the interface, which is
 why a non-JVM `Module` still answers a classpath question. It is not in your way once you supply your own
 context.
+
+**Also register an `EditorLanguage`, or your files open as grey text.** This is the mistake worth calling out,
+because everything above can be right and the result still looks broken. A `LanguageBackend` gives parsing,
+resolution, completion and semantic highlighting, and all of that is *asynchronous and debounced*: while the
+user types there is no coloring at all, and there is never a Toggle Comment, a closing bracket, or a smart
+indent, because those are not parsing. They come from the editor's synchronous text layer, which is a profile:
+
+```kotlin
+class CppUi : UiPlugin {                          // the UI facet: uiEntryPoints in the manifest
+    override val id = "com.example.ndk"
+
+    override fun contribute(ui: UiRegistration) {
+        ui.editorLanguage(
+            EditorLanguage(
+                id = "cpp",                       // the same LanguageId the engine routes by
+                suffixes = listOf(".cpp", ".cc", ".cxx", ".h", ".hpp"),
+                syntax = SyntaxStyle.C_FAMILY,
+                keywords = CPP_KEYWORDS,
+                lineComment = "//",
+                blockCommentOpen = "/*", blockCommentClose = "*/",
+                directivePrefix = "#",            // `#include <stdio.h>` reads as a directive
+            )
+        )
+    }
+}
+```
+
+Declare it as `PluginCapabilities.UI_EDITOR_LANGUAGE`. Notes:
+
+- The profile's `id` must match the `LanguageId` your `FILE_TYPE_EP` mapping routes by. One language, one id,
+  across the editor and the engine.
+- `SyntaxStyle` is a small closed set (`C_FAMILY`, `XML`, `HASH_COMMENT`, `MARKDOWN`, `PLAIN`) and deliberately
+  not a way to plug in a lexer: this layer runs synchronously on every visible line on every keystroke, so it
+  is one of the few places a plugin's own code must not be. Anything a family cannot express is what the
+  backend's semantic highlighting is for, and it layers on top.
+- `keywords` is consulted only by `C_FAMILY`. Do not list type names or function names: a capitalized word
+  already colors as a type and a word followed by `(` already colors as a call.
+- `order` decides who wins when two profiles claim a suffix, lowest first. The IDE's own sit at the default, so
+  a profile that means to take over `.java` has to say so.
 
 ---
 
@@ -1013,6 +1079,25 @@ uninstalled: for a cache, a downloaded index, a small database, anything that is
 It is application-scoped, so it survives a project switch; per-project content belongs in the project, through
 `MODULE_RESOURCES` or the file system.
 
+`reg.nativeLibraryDir` and `reg.nativeLibrary(name)` find the native libraries your plugin **packaged**, which
+the installer unpacked when the plugin app was installed. Package one the way an Android app does, as
+`src/main/jniLibs/<abi>/lib<name>.so`, and ask for it by its plain name:
+
+```kotlin
+val clang = reg.nativeLibrary("clang")     // <unpacked lib dir>/libclang.so, or null
+    ?: return reg.logger("ndk").warn("no toolchain for this device's ABI")
+ProcessBuilder(clang.toString(), "--version").start()
+```
+
+This is not a convenience, and it is the one thing `dataDir` cannot substitute for: **since Android 10 an app
+may not `exec()` or `dlopen()` a file it wrote into its own storage.** A toolchain you download into `dataDir`
+can be read but never executed. The unpacked library directory is outside app-writable storage, which is
+exactly what makes it runnable, so anything a plugin needs to *run* has to ship inside the APK. Both members
+answer null on a host that unpacks nothing (a built-in, the desktop launcher, a test), and `nativeLibrary`
+also answers null for an ABI you did not build for, which is worth reporting as "unsupported on this device"
+rather than treating as a broken install. `name` is a name and not a path: anything carrying a separator is
+refused rather than reduced, so no spelling of it reaches another plugin's directory.
+
 `reg.appServices` is a read-only
 [`ServiceLookup`](../platform-core/src/main/kotlin/dev/ide/platform/Services.kt) over the application
 container: it resolves keys, and cannot define a service, evict an instance, or dispose a scope.
@@ -1117,7 +1202,7 @@ An **installed** plugin declares only `plugin-api` and `platform-core` by defaul
 `EditorTopics`. Subscribing to any of the others means adding that artifact, which the BOM already versions:
 
 ```kotlin
-compileOnly(platform("io.github.tyron12233:plugin-bom:2.9.0"))
+compileOnly(platform("io.github.tyron12233:plugin-bom:2.10.0"))
 compileOnly("io.github.tyron12233:build-api")     // BuildTopics
 ```
 
@@ -1713,7 +1798,7 @@ the published [`plugin-ui-api`](../plugin-ui-api). Same idea, deliberately small
 | --- | --- | --- |
 | Entry point | `UiPlugin.contributeUi(scope)` | `UiPlugin.contribute(ui)` |
 | Declared in | `BuiltInPlugin(engine, ui)` in `BuiltInPlugins.kt` | `uiEntryPoints` in the packaged manifest |
-| Contributions | tool windows, screens, overlays, view modes, host actions, tab decorations, tree icons, editor languages | tool windows, screens, overlays |
+| Contributions | tool windows, screens, overlays, view modes, host actions, tab decorations, tree icons, editor languages | tool windows, screens, overlays, view modes, editor previews, editor layers, editor painters, editor languages |
 | A body is handed | `ToolWindowContext` etc., carrying the whole `IdeBackend` | `UiContext`: active file, project path, `openFile`, `openScreen` |
 | Teardown | `Registration` | `UiHandle` |
 
@@ -2473,7 +2558,7 @@ the IDE's own runtime:
 ```kotlin
 dependencies {
     // The BOM carries the versions, including the Compose the IDE provides.
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.9.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.10.0"))
 
     compileOnly("io.github.tyron12233:plugin-ui-api")
     compileOnly("androidx.compose.runtime:runtime")
@@ -2531,7 +2616,7 @@ not part of it, so an id or an anchor that is wrong still shows up only once the
 The engine SPI is published, so the extension points in these modules are available to a plugin app:
 
 ```kotlin
-compileOnly(platform("io.github.tyron12233:plugin-bom:2.9.0")) // one version for everything below
+compileOnly(platform("io.github.tyron12233:plugin-bom:2.10.0")) // one version for everything below
 
 compileOnly("io.github.tyron12233:plugin-api")        // actions, menus, palette commands, editor events
 compileOnly("io.github.tyron12233:platform-core")     // scoped services, settings pages, logging
@@ -2540,7 +2625,7 @@ compileOnly("io.github.tyron12233:language-api")      // file types, completion,
 compileOnly("io.github.tyron12233:analysis-api")      // analyzers, diagnostics, quick fixes, intentions, analysis events
 compileOnly("io.github.tyron12233:index-api")         // persisted indexes, indexing events
 compileOnly("io.github.tyron12233:build-api")         // build systems, build plugins, tasks, source generators, build/run events
-compileOnly("io.github.tyron12233:plugin-ui-api")     // tool windows, screens, overlays (see part 4)
+compileOnly("io.github.tyron12233:plugin-ui-api")     // tool windows, screens, overlays, editor languages (see part 4)
 compileOnly("io.github.tyron12233:vcs-api")           // version-control providers
 compileOnly("io.github.tyron12233:agent-api")         // agent tools, workspace, LLM providers
 compileOnly("io.github.tyron12233:block-api")         // block-editor mappings
@@ -2551,8 +2636,8 @@ depends on no other CodeAssist module).
 
 The Compose UI surfaces are reachable, but through a **different, narrower model** than the built-in one in
 [section 10](#10-contribute-ui): see part 4 below and [section 10.11](#1011-an-installed-plugins-ui-facet).
-What is not reachable from an installed plugin is the internal `ide-ui-api` model itself: editor view modes,
-UI host actions and tab decorations, which are built-in-only because they hand a body the whole `IdeBackend`.
+What is not reachable from an installed plugin is the internal `ide-ui-api` model itself: UI host actions and
+tab decorations, which are built-in-only because they hand a body the whole `IdeBackend`.
 
 **3. Your plugin classes**, compiled against the plugin SPI as `compileOnly`. They implement `Plugin`,
 `dev.ide.plugin.ui.UiPlugin`, or both, and they do **not** declare a `PluginManifest`: the TOML above is this
@@ -2565,7 +2650,7 @@ The SPI is published, so it is an ordinary dependency:
 
 ```kotlin
 dependencies {
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.9.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:2.10.0"))
     compileOnly("io.github.tyron12233:plugin-api")
     compileOnly("io.github.tyron12233:platform-core")
 }
@@ -2646,6 +2731,7 @@ Every published extension point, its id, the type it carries, and what contribut
 | `dev.ide.model.template.ProjectTemplateExtensionPoint` | `platform.projectTemplate` | `ProjectTemplate` | A Create-Project template ([guide](custom-project-templates.md)) |
 | `dev.ide.model.FACET_CODEC_EP` | `platform.facetCodec` | `FacetCodec<*>` | Persistence for a module facet |
 | `dev.ide.model.sync.PROJECT_IMPORTER_EP` | `platform.projectImporter` | `ProjectImporter` | Import of a foreign project layout |
+| `dev.ide.model.sync.IMPORT_CONTRIBUTOR_EP` | `platform.importContributor` | `ImportContributor` | Add to a snapshot another importer produced, for one feature of a build system you do not own |
 | `dev.ide.model.sync.BUILD_FILE_WRITER_EP` | `platform.buildFileWriter` | `BuildFileWriter` | Writing changes back to a build file |
 
 ### Languages, completion, analysis
@@ -2834,6 +2920,7 @@ with `Module.service(key)` / `Workspace.service(key)` from an extension point ca
 | `dev.ide.analysis.MODULE_ANALYSIS` | MODULE | `ModuleAnalysis` | The module's `SourceAnalyzer` per language: resolution and diagnostics for code the plugin did not parse |
 | `dev.ide.interp.api.CODE_INTERPRETER` | APPLICATION | `CodeInterpreter` | Run the code in the user's project: lower its Kotlin with no compile step, or run its compiled classes on the bytecode VM (section 14b) |
 | `dev.ide.platform.settings.SETTINGS_ACCESS` | APPLICATION | `SettingsAccess` | Read your own settings page's stored values at any time, not only inside `onChanged` / `onAction` |
+| `dev.ide.platform.notify.USER_MESSAGES` | APPLICATION | `UserMessages` | Tell the user something from an engine facet, and show long work while it runs |
 
 The keys an installed plugin can name. The five between `WORKSPACE_SERVICE` and `CODE_INTERPRETER` are
 **narrowed aliases** of engine services listed further down: the interface is the promoted slice, declared in
@@ -2845,6 +2932,33 @@ ones the IDE committed to.
 `InterpreterPlugin` and reads whichever project is open, because a plugin resolves services through
 `appServices` and holds no project of its own. With none open it answers `LowerResult.NotReady`, the same
 shape as "still indexing", which is what a caller should retry rather than report.
+
+`USER_MESSAGES` is how an **engine facet** reaches the user. It has no screen of its own, so without this a
+plugin could report only through the build console (if it happened to be running inside a build) or the log,
+which nobody has open:
+
+```kotlin
+val ui = services.getServiceOrNull(USER_MESSAGES)
+val progress = ui?.startProgress("Unpacking the NDK toolchain")
+try {
+    entries.forEachIndexed { i, e ->
+        progress?.detail = e.name
+        progress?.fraction = i / entries.size.toFloat()
+        unpack(e)
+    }
+    ui?.info("NDK toolchain ready")
+} finally {
+    progress?.finish()          // from a finally: a handle nobody finishes is a row that never goes away
+}
+```
+
+Resolve it with `getServiceOrNull` and carry on without it: a headless build, a test harness and the desktop
+bootstrap all run with nobody watching, and a plugin must not fail because of that. Messages posted this way
+also reach the notification center, which is what makes them survive the user being elsewhere.
+
+**Asking a question is deliberately not here.** A plugin that needs an answer contributes a `ui.Overlay` from
+its UI facet and renders its own prompt: overlays exist for exactly this, and it keeps the wording, layout and
+validation yours rather than a shape the host imposes.
 
 ### Engine services: [`IdeServices.kt`](../ide-core/src/main/kotlin/dev/ide/core/IdeServices.kt)
 

@@ -36,6 +36,18 @@ class EditorLanguageProfile(
     val blockCommentOpen: String? = null,
     val blockCommentClose: String? = null,
 
+    /**
+     * Marks a line that is a preprocessor directive rather than code (`"#"` for C and C++), or null for a
+     * language that has no such notion, which is every language the IDE itself ships.
+     *
+     * Only consulted by [SyntaxFamily.C_FAMILY]. A line whose first non-blank text starts with this is
+     * colored directive-first: the marker and the word after it read as a keyword, and a `<…>` following an
+     * include-shaped directive reads as a string, which is what makes `#include <stdio.h>` look like the
+     * import line it is instead of a run of operators. The rest of the line is scanned as ordinary code, so a
+     * macro body still colors.
+     */
+    val directivePrefix: String? = null,
+
     /** Lowest wins when two profiles claim the same suffix, matching `FileTypeMapping.order`. */
     val order: Int = 1000,
 ) {

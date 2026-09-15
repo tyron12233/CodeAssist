@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.core.notify.UserMessageCenter
 import dev.ide.core.plugins.BuiltInPlugins
 import dev.ide.core.plugins.ExternalUiFacets
 import dev.ide.core.plugins.PluginManifestToml
@@ -11,6 +12,7 @@ import dev.ide.platform.ServiceLookup
 import dev.ide.platform.impl.ApplicationContainer
 import dev.ide.platform.impl.PlatformCore
 import dev.ide.platform.log.Log
+import dev.ide.platform.notify.USER_MESSAGES
 import dev.ide.plugin.PLUGIN_API_VERSION
 import dev.ide.plugin.Plugin
 import dev.ide.plugin.PluginManifest
@@ -93,6 +95,14 @@ class ApplicationEnvironment(
     /** Process-global application service container over [platform]'s registry; parents every project's. */
     val container: ApplicationContainer = ApplicationContainer(platform.extensions)
 
+    /**
+     * What a plugin's engine facet says to the user. Owned here rather than by the host above, because a
+     * plugin's `register` runs inside this constructor: a center created afterwards would not be resolvable
+     * at the one moment a plugin has something to say about how it loaded, and
+     * `getServiceOrNull(USER_MESSAGES)` would answer null exactly then.
+     */
+    val userMessages: UserMessageCenter = UserMessageCenter()
+
     /** What an installed plugin's UI facet resolves services against: the open project's container, falling
      *  back to [container]. Not [container] itself, because a UI facet is loaded once at startup and the
      *  project it should resolve against changes under it. See [PluginUiServiceLookup]. */
@@ -108,10 +118,15 @@ class ApplicationEnvironment(
     @Volatile
     var activeEngine: IdeServices? = null
 
-    /** Drives the IDE's built-in plugins onto [platform]'s app-global registry. The app-wide message bus is
-     *  passed so a plugin's registrar can publish/subscribe on the same bus the engine's events flow through. */
-    private val pluginManager =
-        PluginManager(platform.extensions, platform.messageBus, hostVersion, container, pluginDataRoot)
+    /**
+     * Drives the IDE's built-in plugins onto [platform]'s app-global registry. The app-wide message bus is
+     * passed so a plugin's registrar can publish/subscribe on the same bus the engine's events flow through.
+     *
+     * Built in [init] rather than here because it needs one thing discovery produces: where each installed
+     * plugin's packaged native libraries were unpacked. Assigned before anything loads, and the only two
+     * readers are the load below and [close].
+     */
+    private lateinit var pluginManager: PluginManager
 
     /**
      * The built-in plugin catalog: every built-in plus which are active, given the host's persisted disabled
@@ -151,6 +166,11 @@ class ApplicationEnvironment(
     val enabledUiPlugins: List<UiPlugin>
 
     init {
+        // Before any plugin loads, so a plugin's `register` can resolve it. This is the one service a plugin
+        // may need during load itself: what it reports at startup ("no toolchain for this device's ABI") is
+        // exactly the case where there is nothing else to report through.
+        container.registerServiceIfAbsent(USER_MESSAGES) { userMessages }
+
         // Load every ENABLED built-in contribution ONCE on the app registry, in dependency order. The catalog
         // keeps essentials (and their transitive dependencies) on regardless of the disabled set, and drops a
         // disabled plugin's dependents so the load graph stays valid. The capturing plugins (command actions,
@@ -205,6 +225,16 @@ class ApplicationEnvironment(
                 pruned = true
             }
         }
+
+        // Only the plugins that actually load, so a rejected or disabled plugin's directory is never handed
+        // out, and only the ones whose source unpacked native libraries at all (no built-in does).
+        val nativeLibraryDirs = discovered
+            .filter { it.manifest.id in external }
+            .mapNotNull { d -> d.nativeLibraryDir?.let { d.manifest.id to it } }
+            .toMap()
+        pluginManager = PluginManager(
+            platform.extensions, platform.messageBus, hostVersion, container, pluginDataRoot, nativeLibraryDirs,
+        )
 
         // One ordered load over both tiers, so an installed plugin's dependency on a built-in is a real edge.
         // A built-in that throws is the IDE's own bug and still fails the launch; an installed one is recorded

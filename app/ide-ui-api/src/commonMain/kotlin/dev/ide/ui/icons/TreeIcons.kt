@@ -2,6 +2,8 @@ package dev.ide.ui.icons
 
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.graphics.Color
+import dev.ide.ui.concurrent.UiLock
+import dev.ide.ui.ext.Registration
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /** How a tree node is drawn, once its icon id is resolved by [TreeIcons]. */
@@ -111,6 +113,10 @@ object TreeIcons {
 fun fileIconId(fileName: String): String = when {
     // Exact-name matches first (they'd otherwise be caught by an extension rule, e.g. AndroidManifest → xml).
     fileName == "AndroidManifest.xml" -> "manifest"
+    // A plugin's file types, before the extension rules below and after the exact names above: a plugin may
+    // claim a suffix the IDE also knows, but must not take `AndroidManifest.xml` away from the manifest by
+    // claiming `.xml`.
+    PluginFileIcons.idFor(fileName) != null -> PluginFileIcons.idFor(fileName)!!
     fileName == ".gitignore" || fileName == ".gitattributes" || fileName == ".gitmodules" || fileName == ".gitkeep" -> "git"
     fileName == ".editorconfig" -> "editorconfig"
     fileName.endsWith(".pro") -> "proguard"
@@ -128,4 +134,32 @@ fun fileIconId(fileName: String): String = when {
     fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") ||
         fileName.endsWith(".gif") || fileName.endsWith(".webp") || fileName.endsWith(".svg") -> "image"
     else -> "file"
+}
+
+
+/**
+ * Suffix-to-icon-id mappings plugins contributed, consulted by [fileIconId].
+ *
+ * The project tree asks the ENGINE which icon a file gets (`dev.ide.model.FileIconProvider`), while a tab or
+ * a breadcrumb resolves the name itself through [fileIconId] — two paths, because a file opens from places
+ * that have no tree node. This is the second one's half of a plugin's registration; [TreeIcons] holds the art
+ * both of them resolve.
+ *
+ * Process-global and tiny, like the other UI registries. Later registrations win, so a plugin can also
+ * override a built-in mapping.
+ */
+object PluginFileIcons {
+    private val mappings = ArrayList<Pair<List<String>, String>>()
+    private val lock = UiLock()
+
+    fun register(suffixes: List<String>, iconId: String): Registration {
+        val entry = suffixes.toList() to iconId
+        lock.withLock { mappings.add(entry) }
+        return Registration { lock.withLock { mappings.remove(entry) } }
+    }
+
+    /** The icon id claiming [fileName], or null when no plugin does. */
+    fun idFor(fileName: String): String? = lock.withLock {
+        mappings.lastOrNull { (suffixes, _) -> suffixes.any { fileName.endsWith(it) } }?.second
+    }
 }

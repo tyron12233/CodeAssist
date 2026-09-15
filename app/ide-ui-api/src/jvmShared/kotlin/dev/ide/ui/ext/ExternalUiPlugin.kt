@@ -1,10 +1,14 @@
 package dev.ide.ui.ext
 
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
+import dev.ide.ui.icons.TreeIcon
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.ServiceLookup
 import dev.ide.plugin.ui.Overlay
 import dev.ide.plugin.ui.EditorAnchor as ExternalAnchorPoint
+import dev.ide.plugin.ui.EditorLanguage as ExternalEditorLanguage
+import dev.ide.plugin.ui.FileIcon as ExternalFileIcon
 import dev.ide.plugin.ui.EditorLayer as ExternalEditorLayer
 import dev.ide.plugin.ui.EditorLayerContext as ExternalLayerContext
 import dev.ide.plugin.ui.EditorPaintContext as ExternalPaintContext
@@ -16,6 +20,7 @@ import dev.ide.plugin.ui.EditorViewModeContext as ExternalViewModeContext
 import dev.ide.plugin.ui.EditorPreviewContext as ExternalPreviewContext
 import dev.ide.plugin.ui.Screen
 import dev.ide.plugin.ui.ScreenUiContext
+import dev.ide.plugin.ui.SyntaxStyle as ExternalSyntax
 import dev.ide.plugin.ui.ToolWindow
 import dev.ide.plugin.ui.ToolWindowAnchor as ExternalAnchor
 import dev.ide.plugin.ui.UiContext
@@ -156,6 +161,35 @@ private class BridgedRegistration(
         return UiHandle { registration.dispose() }
     }
 
+    override fun editorLanguage(language: ExternalEditorLanguage): UiHandle {
+        val registration = scope.editorLanguage(
+            EditorLanguageProfile(
+                id = language.id,
+                suffixes = language.suffixes,
+                syntax = language.syntax.internal(),
+                keywords = language.keywords,
+                lineComment = language.lineComment,
+                blockCommentOpen = language.blockCommentOpen,
+                blockCommentClose = language.blockCommentClose,
+                directivePrefix = language.directivePrefix,
+                order = language.order,
+            ),
+        )
+        return UiHandle { registration.dispose() }
+    }
+
+    override fun fileIcon(icon: ExternalFileIcon): UiHandle {
+        val registration = scope.fileIcon(
+            iconId = icon.id,
+            suffixes = icon.suffixes,
+            // A badge, not a glyph: a plugin cannot ship a drawable (it has no Context for its own package)
+            // and the published surface carries no vector type, so the art it CAN describe is a short string
+            // and a color -- which is what the IDE's own `J`, `K` and `R8` file badges already are.
+            icon = TreeIcon.Badge(icon.badge, Color(icon.color.toULong().toLong())),
+        )
+        return UiHandle { registration.dispose() }
+    }
+
     override fun editorPreview(preview: ExternalEditorPreview): UiHandle {
         val registration = scope.editorPreview(
             EditorPreviewContribution(
@@ -173,6 +207,14 @@ private class BridgedRegistration(
         )
         return UiHandle { registration.dispose() }
     }
+}
+
+private fun ExternalSyntax.internal(): SyntaxFamily = when (this) {
+    ExternalSyntax.C_FAMILY -> SyntaxFamily.C_FAMILY
+    ExternalSyntax.XML -> SyntaxFamily.XML
+    ExternalSyntax.HASH_COMMENT -> SyntaxFamily.HASH_COMMENT
+    ExternalSyntax.MARKDOWN -> SyntaxFamily.MARKDOWN
+    ExternalSyntax.PLAIN -> SyntaxFamily.PLAIN
 }
 
 private fun ExternalAnchor.internal(): ToolWindowAnchor = when (this) {

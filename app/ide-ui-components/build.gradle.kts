@@ -27,6 +27,7 @@ kotlin {
 
     // iOS. Nothing here is platform-specific: the components are Compose over :ide-ui-core's theme.
     iosSimulatorArm64()
+    iosArm64()
 
     sourceSets {
         commonMain.dependencies {
@@ -41,6 +42,10 @@ kotlin {
                 implementation(project(":ide-ui-testing"))
                 implementation(libs.kotlinx.coroutines.test)
                 implementation(compose.desktop.currentOs) // skiko, for the off-screen snapshot assertions
+                // Test-only, and only so the consent screen can be held to the SPI's own capability
+                // vocabulary: a capability with no sentence here is shown to the user as its raw id.
+                // Not a main dependency — the components render DTOs and never name an SPI type.
+                implementation(project(":plugin-api"))
             }
         }
     }

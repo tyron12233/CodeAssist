@@ -17,6 +17,9 @@ import dev.ide.plugin.external.PluginOrigin
 import dev.ide.plugin.external.PluginSource
 import dev.ide.plugin.external.RejectedPlugin
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 import java.security.MessageDigest
 
 /**
@@ -194,6 +197,25 @@ class ApkPluginSource(
             }
             return PathClassLoader(apks.joinToString(File.pathSeparator), app.nativeLibraryDir, parent)
         }
+
+        /**
+         * The install-time-extracted `lib/<abi>` directory of the plugin's own package, which is where a
+         * packaged executable or JNI library lands and the only place the plugin may run one from.
+         *
+         * Read at load, like [classLoader] and for the same reason: an update moves the install path. A
+         * plugin that packages no native library still has the directory, so its existence is checked rather
+         * than assumed, and a plugin whose package went away between discovery and load answers null instead
+         * of throwing into the load.
+         */
+        override val nativeLibraryDir: Path?
+            get() = try {
+                packages.getApplicationInfo(packageName, 0).nativeLibraryDir
+                    ?.let { Paths.get(it) }
+                    ?.takeIf { Files.isDirectory(it) }
+            } catch (t: Throwable) {
+                log.warn("could not read the native library directory of $packageName", t)
+                null
+            }
     }
 
     companion object {

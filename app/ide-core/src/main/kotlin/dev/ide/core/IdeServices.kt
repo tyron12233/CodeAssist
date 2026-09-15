@@ -415,9 +415,18 @@ class IdeServices private constructor(
 
     /** Languages some registered [dev.ide.analysis.Analyzer] claims. A language can have inspections without
      *  having a backend: an `.aidl` file is a declaration whose diagnostics come from the AIDL compiler, not
-     *  from parsing it into the shared DOM. Keeps such a file analysable while a plain `.txt` stays inert. */
+     *  from parsing it into the shared DOM. Keeps such a file analysable while a plain `.txt` stays inert.
+     *
+     *  [DiagnosticProvider]s count for the same reason, and the languages they NAME only: a provider that
+     *  claims none applies to every language (see [DiagnosticProvider.languages]) and must not drag plain
+     *  text into analysis with it. Without this a language whose diagnostics come only from a compiler —
+     *  which is the natural shape for one whose compiler is an external process, since a provider may
+     *  suspend and an [dev.ide.analysis.Analyzer] may not — could never open the gate, and the provider
+     *  would simply never run. */
     private val analyzedLanguages: Set<LanguageId> by lazy {
-        platform.extensions.extensions(ANALYZER_EP).flatMapTo(HashSet()) { it.languages }
+        val fromAnalyzers = platform.extensions.extensions(ANALYZER_EP).flatMap { it.languages }
+        val fromProviders = platform.extensions.extensions(DIAGNOSTIC_PROVIDER_EP).flatMap { it.languages }
+        (fromAnalyzers + fromProviders).toHashSet()
     }
 
     /** File-name-suffix → [LanguageId] mappings contributed via [FILE_TYPE_EP] (built-ins in [BuiltInPlugins]),
@@ -4665,8 +4674,12 @@ class IdeServices private constructor(
             val importer = ProjectSyncService.importerFor(env.platform.extensions, root) ?: return false
             val (_, store) = openStore(root, env)
             ensureSdks(store, sdk, root)
-            val outcome = runSync { importer.resolve(SyncRequest(root, NoSyncProgress, SyncReason.IMPORT)) }
-            val model = outcome.model ?: return false
+            val request = SyncRequest(root, NoSyncProgress, SyncReason.IMPORT)
+            val outcome = runSync { importer.resolve(request) }
+            val rawModel = outcome.model ?: return false
+            // The same enrichment a later Sync applies, so a project imported once and one re-synced
+            // afterwards cannot disagree about what is in it.
+            val model = ProjectSyncService.contributeTo(env.platform.extensions, importer, request, rawModel)
             ExternalModelApplier(store).apply(model, languageLevel, removeAbsent = false)
             store.save()
             // Custom Maven repositories captured from the build files → the format DependencyService reads.

@@ -39,6 +39,14 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    packaging {
+        // A plugin that ships a tool it means to RUN has to extract it. Left compressed in the APK (the
+        // modern default) a native library is mapped straight out of the archive, which works for
+        // System.loadLibrary and not at all for exec: there is no file on disk to hand a child process.
+        // The IDE packages its own aapt2 and zipalign the same way, for the same reason.
+        jniLibs.useLegacyPackaging = true
+    }
 }
 
 dependencies {

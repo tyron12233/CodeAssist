@@ -80,6 +80,24 @@ interface UiRegistration {
 
     /** Add a surface for a tab beside Code / Blocks / Preview / Split. See [EditorViewMode]. */
     fun viewMode(mode: EditorViewMode): UiHandle
+
+    /**
+     * Teach the editor how to color, comment and indent a language. See [EditorLanguage].
+     *
+     * This is the text-level layer, and it is the one contribution a new language cannot do without: a
+     * `LanguageBackend` alone leaves files grey while the user types, because semantic highlighting is
+     * asynchronous. Registering a profile for a suffix a built-in already claims overrides it, if the
+     * profile's `order` is lower.
+     */
+    fun editorLanguage(language: EditorLanguage): UiHandle
+
+    /**
+     * Give a file type an icon, in the tree, on tabs and in breadcrumbs. See [FileIcon].
+     *
+     * A file type with no icon is not a neutral default: it is the generic grey document, the same one an
+     * unrecognised binary gets, which reads as "the IDE does not know what this is".
+     */
+    fun fileIcon(icon: FileIcon): UiHandle
 }
 
 /** Removes one contribution. */

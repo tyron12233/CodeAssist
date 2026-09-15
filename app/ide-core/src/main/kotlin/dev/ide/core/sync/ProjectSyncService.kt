@@ -6,6 +6,7 @@ import dev.ide.model.impl.ExternalModelApplier
 import dev.ide.model.sync.BUILD_FILE_WRITER_EP
 import dev.ide.model.sync.BuildFileWriter
 import dev.ide.model.sync.ExternalProjectModel
+import dev.ide.model.sync.IMPORT_CONTRIBUTOR_EP
 import dev.ide.model.sync.ModelOwnership
 import dev.ide.model.sync.PROJECT_IMPORTER_EP
 import dev.ide.model.sync.ProjectImporter
@@ -37,7 +38,6 @@ internal data class ProjectSyncOutcome(
  */
 internal class ProjectSyncService(private val ctx: EngineContext) {
 
-    private val log = Log.logger("ide.sync")
 
     /** The importer that claims this workspace, or null for a native project. */
     fun importer(): ProjectImporter? = importerFor(ctx.platform.extensions, ctx.workspaceRoot)
@@ -77,8 +77,9 @@ internal class ProjectSyncService(private val ctx: EngineContext) {
     ): ProjectSyncOutcome {
         val importer = importer()
             ?: return ProjectSyncOutcome(false, "No build files to sync from were found.")
+        val request = SyncRequest(ctx.workspaceRoot, progress, reason)
         val outcome = runCatching {
-            importer.resolve(SyncRequest(ctx.workspaceRoot, progress, reason))
+            importer.resolve(request)
         }.getOrElse { e ->
             log.error("${importer.displayName} sync failed", e)
             return ProjectSyncOutcome(false, "${importer.displayName} sync failed: ${e.message ?: e.javaClass.simpleName}")
@@ -90,7 +91,7 @@ internal class ProjectSyncService(private val ctx: EngineContext) {
             notes(outcome.messages),
         )
 
-        val report = applyToModel(model, importer)
+        val report = applyToModel(contributeTo(ctx.platform.extensions, importer, request, model), importer)
         ExternalRepositories.merge(ctx.workspaceRoot, model.repositories)
         record(importer, outcome.messages)
 
@@ -150,6 +151,8 @@ internal class ProjectSyncService(private val ctx: EngineContext) {
     private fun plural(n: Int) = if (n == 1) "" else "s"
 
     companion object {
+        private val log = Log.logger("ide.sync")
+
         /**
          * The importer claiming [root], highest [dev.ide.model.sync.Detection.confidence] first. Static so the
          * import flow can select one before any engine exists for the folder.
@@ -161,5 +164,31 @@ internal class ProjectSyncService(private val ctx: EngineContext) {
                 }
                 .maxByOrNull { it.second.confidence }
                 ?.first
+
+        /**
+         * Let every [ImportContributor] claiming [importer]'s build system add to [model], in registration
+         * order, each seeing the previous one's result.
+         *
+         * Static and shared for the same reason as [importerFor]: the first import of a folder happens before
+         * any engine exists for it, and a contributor that ran only on later syncs would mean a project
+         * imported the first time and one re-synced afterwards disagreed about what is in it.
+         *
+         * A contributor that throws, or that answers null through a Java caller, is skipped with its
+         * predecessor's model kept. Enriching a snapshot is an addition, and failing at it must not cost the
+         * user the import.
+         */
+        fun contributeTo(
+            extensions: ExtensionRegistry,
+            importer: ProjectImporter,
+            request: SyncRequest,
+            model: ExternalProjectModel,
+        ): ExternalProjectModel =
+            extensions.extensions(IMPORT_CONTRIBUTOR_EP)
+                .filter { it.buildSystems.isEmpty() || importer.id in it.buildSystems }
+                .fold(model) { current, contributor ->
+                    runCatching { contributor.contribute(request, current) }
+                        .onFailure { log.error("import contributor ${contributor.javaClass.name} failed", it) }
+                        .getOrNull() ?: current
+                }
     }
 }

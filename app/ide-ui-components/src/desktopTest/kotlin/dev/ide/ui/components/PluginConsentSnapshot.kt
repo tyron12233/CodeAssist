@@ -10,6 +10,7 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import dev.ide.plugin.PluginCapabilities
 import dev.ide.ui.backend.UiPluginInfo
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
@@ -27,6 +28,25 @@ import kotlin.test.assertTrue
  * has never heard of are exactly what a single tidy screenshot would hide.
  */
 class PluginConsentSnapshot {
+
+    /**
+     * Every capability the SPI defines has a sentence here.
+     *
+     * The fallback for an unknown capability is to show its raw id, which is right for one this build has
+     * never heard of and wrong for one it ships: `ui.editorLanguage` reached the consent screen as
+     * `ui.editorLanguage`, because adding a capability constant and adding its wording are two edits in two
+     * modules and only the first is needed to compile. This is the check that couples them.
+     */
+    @Test
+    fun everyKnownCapabilityIsWordedForTheUser() {
+        val raw = PluginCapabilities.KNOWN.filter { describeCapability(it) == it }
+        assertTrue(
+            raw.isEmpty(),
+            "these capabilities would be shown to the user as their raw ids: $raw. " +
+                "Add a sentence for each to describeCapability.",
+        )
+    }
+
 
     private fun plugin(
         capabilities: List<String> = listOf("ui.action", "ui.settingsPage"),

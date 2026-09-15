@@ -10,6 +10,8 @@ import dev.ide.model.sync.ExternalLibrary
 import dev.ide.model.sync.ExternalModule
 import dev.ide.model.sync.ExternalProjectModel
 import dev.ide.model.sync.ExternalSourceSet
+import dev.ide.model.sync.IMPORT_CONTRIBUTOR_EP
+import dev.ide.model.sync.ImportContributor
 import dev.ide.model.sync.ModelOwnership
 import dev.ide.model.sync.PROJECT_IMPORTER_EP
 import dev.ide.model.sync.ProjectImporter
@@ -186,5 +188,136 @@ class ProjectImporterExtensionTest {
                 manager.dispose()
             }
         }
+    }
+
+    /**
+     * A plugin that understands one FEATURE of somebody else's build system enriches the snapshot rather
+     * than replacing the importer.
+     *
+     * This is what a C/C++ plugin needs from a Gradle project: it knows what `externalNativeBuild { }` means
+     * and nothing else about Gradle. Without this seam its only options were to replace the Gradle importer
+     * outright, or to re-read the build files behind its back and keep a parallel model that the next Sync
+     * silently invalidates.
+     *
+     * Both call sites are checked, because they are separate code paths and the first import of a folder
+     * happens before any engine exists for it: a contributor that ran only on later syncs would mean a
+     * project imported once and one re-synced afterwards disagreed about what is in it.
+     */
+    @Test
+    fun anImportContributorEnrichesAnotherImportersSnapshotOnImportAndOnSync() {
+        withTempDir("import-contributor") { tmp ->
+            val source = tmp.resolve("MyBzlApp")
+            writeBzlProject(source, "module app apps/app", "module core libs/core")
+
+            val manager = ProjectManager.desktop(tmp.resolve("projects"))
+            try {
+                val extensions = manager.env.platform.extensions
+                extensions.register(PROJECT_IMPORTER_EP, BzlImporter(), PluginId("bzl-test"))
+                extensions.register(IMPORT_CONTRIBUTOR_EP, AddsADependency(bazel), PluginId("enricher-test"))
+
+                val ide = manager.importExternalProject(source)
+                assertTrue(ide != null, "the importer should have claimed the folder")
+                ide!!.use {
+                    assertTrue(
+                        it.modules().all { m -> m.dependsOnLibrary(ENRICHED) },
+                        "the contributor's addition must reach the model on the FIRST import",
+                    )
+
+                    // A sync re-derives the model from the build files; the contributor has to run again or
+                    // its addition is silently dropped the first time the user presses Sync.
+                    writeBzlProject(it.workspaceRoot, "module app apps/app", "module core libs/core")
+                    val outcome = runBlocking { it.syncFromBuildFiles() }
+                    assertTrue(outcome.ok, outcome.message)
+                    assertTrue(
+                        it.modules().all { m -> m.dependsOnLibrary(ENRICHED) },
+                        "the contributor's addition must survive a Sync",
+                    )
+                }
+            } finally {
+                manager.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun aContributorForAnotherBuildSystemIsNotApplied() {
+        withTempDir("import-contributor-other") { tmp ->
+            val source = tmp.resolve("MyBzlApp")
+            writeBzlProject(source, "module app apps/app")
+
+            val manager = ProjectManager.desktop(tmp.resolve("projects"))
+            try {
+                val extensions = manager.env.platform.extensions
+                extensions.register(PROJECT_IMPORTER_EP, BzlImporter(), PluginId("bzl-test"))
+                // Claims Gradle; this project is not Gradle, so it must not run.
+                extensions.register(
+                    IMPORT_CONTRIBUTOR_EP, AddsADependency(BuildSystemId("gradle")), PluginId("enricher-test"),
+                )
+
+                val ide = manager.importExternalProject(source)
+                ide!!.use {
+                    assertFalse(
+                        it.modules().any { m -> m.dependsOnLibrary(ENRICHED) },
+                        "a contributor naming another build system must not be applied",
+                    )
+                }
+            } finally {
+                manager.dispose()
+            }
+        }
+    }
+
+    /** A contributor that throws is skipped with the importer's own snapshot kept, never failing the import. */
+    @Test
+    fun aContributorThatThrowsDoesNotCostTheUserTheImport() {
+        withTempDir("import-contributor-throws") { tmp ->
+            val source = tmp.resolve("MyBzlApp")
+            writeBzlProject(source, "module app apps/app")
+
+            val manager = ProjectManager.desktop(tmp.resolve("projects"))
+            try {
+                val extensions = manager.env.platform.extensions
+                extensions.register(PROJECT_IMPORTER_EP, BzlImporter(), PluginId("bzl-test"))
+                extensions.register(
+                    IMPORT_CONTRIBUTOR_EP,
+                    object : ImportContributor {
+                        override fun contribute(request: SyncRequest, model: ExternalProjectModel) =
+                            error("contributor bug")
+                    },
+                    PluginId("broken-test"),
+                )
+                extensions.register(IMPORT_CONTRIBUTOR_EP, AddsADependency(bazel), PluginId("enricher-test"))
+
+                val ide = manager.importExternalProject(source)
+                assertTrue(ide != null, "one broken contributor must not fail the import")
+                ide!!.use {
+                    assertEquals(setOf("app"), it.moduleNames().toSet())
+                    assertTrue(
+                        it.modules().single().dependsOnLibrary(ENRICHED),
+                        "the contributors after the broken one still run",
+                    )
+                }
+            } finally {
+                manager.dispose()
+            }
+        }
+    }
+
+    /** Adds one library dependency to every module, standing in for a facet a real contributor would attach. */
+    private class AddsADependency(private val buildSystem: BuildSystemId) : ImportContributor {
+        override val buildSystems = setOf(buildSystem)
+
+        override fun contribute(request: SyncRequest, model: ExternalProjectModel) = model.copy(
+            modules = model.modules.map { m ->
+                m.copy(dependencies = m.dependencies + ExternalLibrary(ENRICHED, DependencyScope.IMPLEMENTATION))
+            },
+        )
+    }
+
+    private fun dev.ide.model.Module.dependsOnLibrary(name: String): Boolean =
+        dependencies.any { it is LibraryDependency && it.library.name == name }
+
+    private companion object {
+        const val ENRICHED = "com.example:added-by-a-contributor:1.0"
     }
 }

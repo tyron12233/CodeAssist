@@ -15,8 +15,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.ide.plugin.ui.EditorLanguage
 import dev.ide.plugin.ui.EditorPreview
 import dev.ide.plugin.ui.EditorPreviewContext
+import dev.ide.plugin.ui.SyntaxStyle
 import dev.ide.plugin.ui.ToolWindow
 import dev.ide.plugin.ui.ToolWindowAnchor
 import dev.ide.plugin.ui.UiContext
@@ -63,6 +65,21 @@ class HelloUiPlugin : UiPlugin {
                 appliesTo = { path -> path.endsWith(".hello.kt") },
             ) { ctx -> GreetingPreview(ctx) },
         )
+
+        // The editor's text layer. Without this a `.hello` file opens as grey text with no Toggle Comment,
+        // no bracket auto-close and no smart indent, however much the engine facet knows about the language:
+        // parsing is asynchronous and debounced, and this layer runs on every keystroke.
+        ui.editorLanguage(
+            EditorLanguage(
+                id = "hello",
+                suffixes = listOf(".hello"),
+                syntax = SyntaxStyle.C_FAMILY,
+                keywords = setOf("greet", "when", "to", "from", "say"),
+                lineComment = "//",
+                // A preprocessor-shaped line, the thing C and C++ need and no built-in language has.
+                directivePrefix = "@",
+            ),
+        )
     }
 }
 
@@ -86,6 +103,12 @@ private fun HelloPanel(ctx: UiContext) {
         // Reading the context is enough to follow the editor: the panel recomposes on a tab switch.
         Text(
             ctx.activeFilePath?.let { "Editing ${it.substringAfterLast('/')}" } ?: "No file open",
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        // What the binary the plugin packaged printed when the engine facet ran it at load.
+        Text(
+            HelloState.toolOutput ?: "No packaged tool for this device's ABI.",
             style = MaterialTheme.typography.bodySmall,
         )
 

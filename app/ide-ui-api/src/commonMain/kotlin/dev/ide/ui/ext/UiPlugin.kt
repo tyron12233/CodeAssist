@@ -1,5 +1,6 @@
 package dev.ide.ui.ext
 
+import dev.ide.ui.icons.PluginFileIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
 
@@ -34,6 +35,9 @@ interface UiContributionScope {
     /** Teach the editor how to color, comment, and indent a language ([EditorLanguageProfile]). This is the
      *  text-level layer; a language wanting parsing and resolution also registers a `LanguageBackend`. */
     fun editorLanguage(profile: EditorLanguageProfile): Registration
+
+    /** Register the art AND the name mapping for a file type's icon ([TreeIcons] + [PluginFileIcons]). */
+    fun fileIcon(iconId: String, suffixes: List<String>, icon: TreeIcon): Registration
 
     /** Add a preview pane for a file kind ([EditorPreviewContribution]): the Preview/Split surface for
      *  something the IDE's four built-in panes do not cover. */
@@ -105,6 +109,13 @@ object UiPluginHost {
 
         override fun editorLanguage(profile: EditorLanguageProfile): Registration =
             EditorLanguageRegistry.register(profile)
+
+        override fun fileIcon(iconId: String, suffixes: List<String>, icon: TreeIcon): Registration {
+            TreeIcons.register(iconId, icon)
+            // Only the name mapping is undone: TreeIcons is a persistent lookup with nothing to unregister,
+            // exactly like treeIcon above.
+            return PluginFileIcons.register(suffixes, iconId)
+        }
 
         override fun editorPreview(preview: EditorPreviewContribution): Registration =
             EditorPreviewRegistry.register(preview)

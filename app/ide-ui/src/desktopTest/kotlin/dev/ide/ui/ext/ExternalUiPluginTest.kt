@@ -61,6 +61,41 @@ class ExternalUiPluginTest {
         assertEquals(ToolWindowAnchor.BOTTOM, contributed.anchor)
     }
 
+    /**
+     * An editor language profile survives the crossing whole, the preprocessor prefix included. Without this
+     * the published SPI had no way to color a new language at all: a plugin could register a whole
+     * `LanguageBackend` and its files still opened as grey text while the user typed.
+     */
+    @Test
+    fun editorLanguageDeclarationIsCarriedOver() {
+        val facet = facet { ui ->
+            ui.editorLanguage(
+                dev.ide.plugin.ui.EditorLanguage(
+                    id = "cpp",
+                    suffixes = listOf(".cpp", ".h"),
+                    syntax = dev.ide.plugin.ui.SyntaxStyle.C_FAMILY,
+                    keywords = setOf("int", "return"),
+                    lineComment = "//",
+                    directivePrefix = "#",
+                    order = 10,
+                ),
+            )
+        }
+        val scope = RecordingScope("com.example.ndk")
+
+        facet.asUiPlugin("com.example.ndk").contributeUi(scope)
+
+        val contributed = scope.editorLanguages.single()
+        assertEquals("cpp", contributed.id)
+        assertEquals(listOf(".cpp", ".h"), contributed.suffixes)
+        assertEquals(SyntaxFamily.C_FAMILY, contributed.syntax)
+        assertEquals(setOf("int", "return"), contributed.keywords)
+        assertEquals("//", contributed.lineComment)
+        assertEquals("#", contributed.directivePrefix)
+        assertEquals(10, contributed.order)
+        assertTrue(contributed.matches("main.cpp"), "the crossed profile must claim its own suffixes")
+    }
+
     /** The host's manifest decides the attribution id, not what the facet says about itself. */
     @Test
     fun theHostsIdIsWhatTheFacetIsRegisteredUnder() {
@@ -494,6 +529,7 @@ class ExternalUiPluginTest {
         val viewModes = mutableListOf<EditorViewModeContribution>()
         val editorLayers = mutableListOf<EditorLayerContribution>()
         val editorPainters = mutableListOf<EditorPainterContribution>()
+        val editorLanguages = mutableListOf<EditorLanguageProfile>()
         var disposed = 0
             private set
 
@@ -506,7 +542,8 @@ class ExternalUiPluginTest {
         override fun overlay(overlay: OverlayContribution) = handle().also { overlays += overlay }
         override fun tabDecoration(decoration: TabDecorationContribution) = handle()
         override fun treeIcon(iconId: String, icon: TreeIcon) = handle()
-        override fun editorLanguage(profile: EditorLanguageProfile) = handle()
+        override fun editorLanguage(profile: EditorLanguageProfile) =
+            handle().also { editorLanguages += profile }
         override fun editorPreview(preview: EditorPreviewContribution) =
             handle().also { editorPreviews += preview }
 

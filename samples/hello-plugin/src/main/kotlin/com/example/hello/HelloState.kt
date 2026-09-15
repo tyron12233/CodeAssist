@@ -29,6 +29,13 @@ object HelloState {
     var lastSource: String? by mutableStateOf(null)
         private set
 
+    /**
+     * What the binary this plugin packaged printed when the engine facet ran it at load, or null when there
+     * was none for this device's ABI. Written once from `register`, read by the panel: the same one-object,
+     * two-facets channel as everything else here.
+     */
+    var toolOutput: String? by mutableStateOf(null)
+
     fun greeted(source: String) {
         greetings++
         lastSource = source

@@ -4,6 +4,10 @@ import dev.ide.build.BUILD_PLUGIN_EP
 import dev.ide.build.RUN_TASK_PROVIDER_EP
 import dev.ide.build.SOURCE_GENERATOR_EP
 import dev.ide.platform.log.Logger
+import dev.ide.platform.notify.MessageSeverity
+import dev.ide.platform.notify.USER_MESSAGES
+import dev.ide.platform.notify.UserMessage
+import dev.ide.platform.notify.info
 import dev.ide.platform.settings.PreferenceReader
 import dev.ide.platform.settings.SETTINGS_PAGE_EP
 import dev.ide.platform.settings.SettingControl
@@ -95,8 +99,65 @@ class HelloPlugin : Plugin {
         reg.register(SOURCE_GENERATOR_EP, HelloBuildInfoGenerator())
         reg.register(RUN_TASK_PROVIDER_EP, HelloRunTaskProvider())
 
+        reportPackagedBinaries(reg, log)
+
         log.info("registered 2 actions, 1 settings page and 3 build contributions; the UI facet adds a tool window")
     }
+}
+
+/**
+ * What a plugin that ships a native tool does at startup: find its packaged binaries, and say so.
+ *
+ * This sample packages none, so [PluginRegistration.nativeLibrary] answers null and the message says the
+ * device is unsupported, which is exactly the shape a real toolchain plugin needs on an ABI it did not build
+ * for. The directory itself is still there, because it belongs to the installed package rather than to any
+ * particular library.
+ *
+ * Why it is a directory and not [PluginRegistration.dataDir]: since Android 10 an app may not `exec()` a file
+ * it wrote into its own storage, so a binary a plugin *downloads* can never be run. Packaging it is the only
+ * option, and this is where the installer puts it.
+ */
+private fun reportPackagedBinaries(reg: PluginRegistration, log: Logger) {
+    val dir = reg.nativeLibraryDir
+    val tool = reg.nativeLibrary("hellotool")
+    log.info("packaged native libraries: dir=${dir ?: "none"}, hellotool=${tool ?: "not packaged for this ABI"}")
+
+    // The engine facet has no screen of its own; this is how it reaches the user. Optional on purpose: a
+    // headless build and a test harness have nobody to tell, and must not fail because of it.
+    val messages = reg.appServices.getServiceOrNull(USER_MESSAGES)
+
+    if (tool == null) {
+        // The honest answer on a device whose ABI this plugin has no build for. It is not a broken install,
+        // and a plugin shipping a real toolchain says exactly this rather than failing later at first use.
+        messages?.show(
+            UserMessage(
+                text = "Hello Plugin ships no tool for this device's ABI.",
+                severity = MessageSeverity.WARNING,
+                actionLabel = "Say hello",
+            ) { HelloState.greeted("the message action") },
+        )
+        return
+    }
+
+    // Running it is the whole point of packaging it. This is an ordinary child process: the plugin runs in
+    // the IDE's process under its UID, and the unpacked library directory is outside app-writable storage,
+    // which is what makes the kernel willing to execute it at all.
+    val output = runCatching {
+        val process = ProcessBuilder(tool.toString()).redirectErrorStream(true).start()
+        val text = process.inputStream.bufferedReader().readText().trim()
+        process.waitFor()
+        text
+    }.getOrElse { failure ->
+        log.warn("could not run the packaged tool at $tool", failure)
+        messages?.show(
+            UserMessage("Hello Plugin could not run its packaged tool.", MessageSeverity.ERROR),
+        )
+        return
+    }
+
+    log.info("the packaged tool said: $output")
+    HelloState.toolOutput = output
+    messages?.info("Hello Plugin ran its packaged tool: $output")
 }
 
 /**
