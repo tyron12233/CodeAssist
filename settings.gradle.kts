@@ -109,7 +109,6 @@ include(
     ":analytics-impl", // the engine: durable batch buffer + Supabase PostgREST sink + scrubbed crash reporter
     ":store-api",  // remote Projects Store SPI: catalog model + catalog/account/submission ports
     ":store-impl", // the engine: Supabase PostgREST catalog source, offline cache, submission packager
-    ":store-bridge", // the store transport mapped onto the UI's StoreService contract, shared by every host
     ":block-api",
     ":block-impl",
     ":plugin-api",  // UI extensibility SPI: the lean action model (IdeAction/ActionGroup + places) + EPs
@@ -135,6 +134,10 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
     include(
         ":interp-compose", // Compose bridge + render surface (KMP: desktop+android) — needs the Compose plugin
         ":ide-ui-api", // neutral IdeBackend port + DTOs + UI-contribution model, shared by :ide-ui and :ide-core
+        // The store transport mapped onto the UI's StoreService contract, shared by every host. It belongs
+        // to the shells rather than the framework because it api-exposes :ide-ui-api's DTOs, and that module
+        // is not in the core set: leaving it above makes the CI_CORE_ONLY build fail to CONFIGURE.
+        ":store-bridge",
         ":ide-ui-resources", // the fonts/drawables/i18n strings the UI modules share, and the one `Res` class over them
         ":ide-ui-core", // theme + platform expect/actual + the editor document model + app state: what the UI layers share
         ":ide-ui-components", // the reusable widgets (+ the shared Markdown renderer and the ad slot)

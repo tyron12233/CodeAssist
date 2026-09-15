@@ -726,7 +726,9 @@ internal class StoreBackend(
                 payload = payload,
                 projectsRoot = projectsRoot.absolutePath,
                 adopt = { dir ->
-                    val ok = manager?.adoptProjectInPlace(java.nio.file.Path.of(dir)) ?: false
+                    // Paths.get, not Path.of: the latter is API 34 and this code ships in the APK, whose
+                    // floor is 26, so it would dex clean and throw NoSuchMethodError on most devices.
+                    val ok = manager?.adoptProjectInPlace(java.nio.file.Paths.get(dir)) ?: false
                     if (ok) null else "That download isn't a project CodeAssist can open"
                 },
                 onProgress = { p -> progressState.value = progressState.value + (p.itemId to p) },
