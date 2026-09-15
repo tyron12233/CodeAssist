@@ -34,7 +34,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -196,7 +198,7 @@ fun ProjectsHomeScreen(
     val ordered = remember(projects) { projects.sortedByDescending { it.lastOpened } }
     // Rendered icons by project root. Held for the screen rather than per card: a card is recomposed every
     // time it scrolls back into view, and resolving an icon means parsing a manifest and a drawable.
-    val icons = remember { mutableStateMapOf<String, ImageBitmap?>() }
+    val icons = remember { ProjectIconCache() }
     val mostRecent = ordered.firstOrNull { it.lastOpened > 0L }
 
     // Pull-to-refresh re-reads the project list. The read is synchronous, so the spinner is held up for a
@@ -479,6 +481,44 @@ private fun SegmentRow(
 }
 
 /**
+ * The home list's rendered project icons, keyed by project root.
+ *
+ * Kept for the whole screen rather than per card, because a card is recomposed every time it scrolls back
+ * into view and resolving an icon means reading a manifest and parsing a drawable.
+ *
+ * [generation] is why this is a class and not a bare map. Emptying the cache has to reach the cards that
+ * are *currently composed*, and those cards only re-resolve if something they key on changes — so the
+ * counter is part of the same operation as the clear, and a caller cannot do one without the other. When
+ * [clear] only emptied a map, a refresh blanked every icon on screen and each one came back alone, later,
+ * when a scroll had taken its card out of composition and brought it back.
+ */
+@Stable
+internal class ProjectIconCache {
+    private val byRoot = mutableStateMapOf<String, ImageBitmap?>()
+
+    /** Bumped by [clear]; a card's loader keys on it, so a cleared cache re-resolves what is on screen. */
+    var generation by mutableIntStateOf(0)
+        private set
+
+    /** The rendered icon for [rootPath]: null both while it is being resolved and when it has none. */
+    operator fun get(rootPath: String): ImageBitmap? = byRoot[rootPath]
+
+    /** Whether [rootPath] has an answer already — including the answer "this project has no icon". */
+    fun isResolved(rootPath: String): Boolean = byRoot.containsKey(rootPath)
+
+    /** Record [rootPath]'s icon, [image] being null for a project that has none. */
+    fun put(rootPath: String, image: ImageBitmap?) {
+        byRoot[rootPath] = image
+    }
+
+    /** Drop every rendered icon and open a new generation, so composed cards resolve theirs again. */
+    fun clear() {
+        byRoot.clear()
+        generation++
+    }
+}
+
+/**
  * [project]'s launcher icon, rendered once and remembered in [cache].
  *
  * Null until it has been resolved, and null forever for a project that has no icon to show, which is the
@@ -488,21 +528,26 @@ private fun SegmentRow(
 @Composable
 private fun projectIconImage(
     project: ProjectInfo,
-    cache: MutableMap<String, ImageBitmap?>,
+    cache: ProjectIconCache,
     loadIcon: (suspend (ProjectInfo) -> UiProjectIcon?)?,
     loadImage: (suspend (String) -> ByteArray?)?,
 ): ImageBitmap? {
     if (loadIcon == null) return null
-    LaunchedEffect(project.rootPath, loadIcon) {
-        if (cache.containsKey(project.rootPath)) return@LaunchedEffect
+    // Keyed on the cache's generation as well as the project: a refresh empties the cache, and this is what
+    // makes a card that never left the screen ask for its icon again instead of sitting blank.
+    LaunchedEffect(project.rootPath, cache.generation, loadIcon) {
+        if (cache.isResolved(project.rootPath)) return@LaunchedEffect
         // Recorded even when it is null, so a project with no icon is asked about once rather than on
         // every scroll.
-        cache[project.rootPath] = runCatching {
-            val resolved = loadIcon(project) ?: return@runCatching null
-            withContext(Dispatchers.Default) {
-                ProjectIconRaster.toImage(resolved, TILE_ICON_PIXELS) { path -> loadImage?.invoke(path) }
-            }
-        }.getOrNull()
+        cache.put(
+            project.rootPath,
+            runCatching {
+                val resolved = loadIcon(project) ?: return@runCatching null
+                withContext(Dispatchers.Default) {
+                    ProjectIconRaster.toImage(resolved, TILE_ICON_PIXELS) { path -> loadImage?.invoke(path) }
+                }
+            }.getOrNull(),
+        )
     }
     return cache[project.rootPath]
 }
