@@ -51,6 +51,7 @@
     <string name="open_a_project">افتح مشروعًا أو ابدأ مشروعًا جديدًا.</string>
     <string name="new_project">مشروع جديد</string>
     <string name="new_project_content">تطبيق Android، تطبيق وحدة تحكم Java، مكتبة…</string>
+    <!-- Project import / export (.caproj packages) -->
     <string name="import_project">استيراد مشروع</string>
     <string name="import_action">استيراد</string>
     <string name="import_created_with">تم الإنشاء بواسطة %1$s</string>
@@ -62,7 +63,38 @@
     <string name="import_failed">تعذر استيراد حزمة المشروع.</string>
     <string name="import_unrecognized_title">تعذر استيراد هذا الملف</string>
     <string name="import_unrecognized">لا يتعرف CodeAssist على هذا الملف. اختر حزمة مشروع .caproj للاستيراد.</string>
-
+    <string name="import_as_title">استيراد باسم</string>
+    <string name="import_as_hint">اسم المشروع</string>
+    <string name="import_destination">سيوضع في %1$s</string>
+    <string name="import_show_files">عرض كل الملفات (%1$d)</string>
+    <string name="import_hide_files">إخفاء الملفات</string>
+    <!-- Gradle project import (best-effort compatibility mode) -->
+    <string name="import_gradle_title">استيراد مشروع</string>
+    <string name="clone_repository_title">استنساخ من Git</string>
+    <string name="clone_repository_subtitle">انسخ مستودعًا من GitHub أو أي خادم Git إلى مشروع جديد.</string>
+    <string name="import_gradle_subtitle">افتح مجلد مشروع CodeAssist، أو بناء Gradle موجودًا</string>
+    <string name="import_gradle_busy">جاري استيراد مشروع Gradle…</string>
+    <string name="import_gradle_failed">هذا المجلد ليس مشروع CodeAssist ولا بناء Gradle.</string>
+    <!-- Import-time choice: keep Gradle (compatibility) vs convert to the native module system -->
+    <string name="import_source_title">استيراد مشروع</string>
+    <string name="import_source_message">أين يوجد المشروع؟</string>
+    <string name="import_source_folder">مجلد المشروع</string>
+    <string name="import_source_folder_desc">مشروع CodeAssist، أو بناء Gradle موجود</string>
+    <string name="import_source_package">حزمة المشروع</string>
+    <string name="import_source_package_desc">ملف ‎.caproj تمت مشاركته أو تصديره من CodeAssist</string>
+    <string name="import_gradle_mode_title">استيراد مشروع Gradle</string>
+    <string name="import_gradle_mode_message">كيف ينبغي أن يفتح CodeAssist هذا المشروع؟</string>
+    <string name="import_gradle_mode_compat">وضع التوافق</string>
+    <string name="import_gradle_mode_compat_desc">الإبقاء على ملفات Gradle وإعادة المزامنة منها. يمكنك التحويل لاحقًا.</string>
+    <string name="import_gradle_mode_convert">التحويل إلى CodeAssist</string>
+    <string name="import_gradle_mode_convert_desc">الانتقال إلى نظام الوحدات في CodeAssist. تُنقل ملفات Gradle إلى مجلد نسخ احتياطي.</string>
+    <plurals name="caproj_files">
+        <item quantity="one">ملف واحد</item>
+        <item quantity="two">ملفان</item>
+        <item quantity="few">%1$d ملفات</item>
+        <item quantity="many">%1$d ملفًا</item>
+        <item quantity="other">%1$d ملف</item>
+    </plurals>
     <string name="export_title">تصدير المشروع</string>
     <string name="export_intro">حزم هذا المشروع كملف .caproj يمكنك مشاركته مع أي شخص.</string>
     <string name="export_bundle_deps">تضمين التبعيات</string>
@@ -81,6 +113,35 @@
     <string name="export_save_copy">حفظ نسخة…</string>
     <string name="export_done">تم</string>
     <string name="export_retry">إعادة المحاولة</string>
+    <string name="export_details_title">التفاصيل</string>
+    <string name="export_modules_title">الوحدات</string>
+    <string name="export_modules_desc">استبعاد وحدة يستبعد معها كل ما يعتمد عليها.</string>
+    <string name="export_options_title">الخيارات</string>
+    <string name="export_bundle_deps_cost">‎+%1$s</string>
+    <string name="export_excluded_note">لا تُحزَّم أبدًا مخرجات البناء ولا الذواكر المؤقتة ولا حزم SDK.</string>
+    <string name="export_size_estimate">نحو %1$s</string>
+    <string name="export_screenshots_title">لقطات الشاشة</string>
+    <string name="export_screenshots_desc">تُعرض لمن يستورد الحزمة.</string>
+    <string name="export_screenshot_add">إضافة صورة</string>
+    <string name="export_screenshot_remove">إزالة لقطة الشاشة</string>
+    <string name="export_screenshot_unreadable">تعذّرت معاينة هذه الصورة</string>
+    <string name="export_intro_gradle">اكتب هذا المشروع في صورة بناء Gradle، لتتمكن من فتحه في Android Studio أو بنائه باستخدام gradle.</string>
+    <string name="export_format_title">الصيغة</string>
+    <string name="export_format_package">حزمة CodeAssist</string>
+    <string name="export_format_package_desc">ملف ‎.caproj يستطيع أي شخص لديه CodeAssist استيراده، كما هو تمامًا هنا.</string>
+    <string name="export_format_gradle">مشروع Gradle</string>
+    <string name="export_format_gradle_desc">ملف ‎.zip يضم مصادرك مع ملفات بناء Gradle المولَّدة، من أجل Android Studio أو بناء gradle.</string>
+    <string name="export_gradle_title">ما الذي سيُولَّد</string>
+    <string name="export_gradle_contents">‏settings.gradle.kts، وملف build.gradle.kts لكل وحدة، وgradle.properties، وإعدادات غلاف Gradle، وكلها مكتوبة من مشروعك: الوحدات والتبعيات ومستويات SDK وأنواع البناء والنكهات وميزات البناء.</string>
+    <string name="export_gradle_caveat">هذا أفضل ما يمكن. تُولَّد ملفات البناء من نموذج المشروع لا من بناء نُفِّذ فعلًا، فاقرأها قبل أن تعتمد عليها. تُعلَن التبعيات بإحداثيات Maven وينزّلها Gradle عند أول مزامنة، لذا تحتاج تلك المزامنة إلى اتصال.</string>
+    <string name="export_gradle_wrapper_note">لا تُضمَّن سكربتات gradlew: يضيفها Android Studio عند أول مزامنة، أو نفِّذ gradle wrapper مرة واحدة.</string>
+    <string name="export_success_subtitle_gradle">مشروع Gradle جاهز.</string>
+    <string name="export_notes_title">يستحق المراجعة</string>
+    <string name="export_notes_desc">هذه موجودة أيضًا في GRADLE-EXPORT.md داخل الأرشيف.</string>
+    <!-- Module type names, shown under a module in the export and import screens -->
+    <string name="share_type_android_app">تطبيق Android</string>
+    <string name="share_type_android_lib">مكتبة Android</string>
+    <string name="share_type_java_lib">مكتبة Java</string>
     <string name="join_the_community">الانضمام إلى المجتمع</string>
     <string name="join_the_community_content">دردش واحصل على المساعدة وشارك ما تبنيه على Discord.</string>
     <string name="support_title">دعم CodeAssist</string>
@@ -91,46 +152,49 @@
     <string name="support_star">نجمة على GitHub</string>
     <string name="support_show_ads">إظهار الإعلانات</string>
     <string name="support_show_ads_desc">إظهار الإعلانات في التطبيق. يمكنك إيقاف تشغيلها في أي وقت.</string>
+    <string name="support_ad_privacy">إدارة موافقة الإعلانات</string>
+    <string name="support_ad_privacy_desc">راجع خياراتك بشأن خصوصية الإعلانات أو غيّرها.</string>
+    <string name="support_ad_privacy_button">إدارة</string>
     <string name="ad_label">إعلان</string>
     <string name="house_ad_support_title">تستمتع بـ CodeAssist؟</string>
     <string name="house_ad_support_content">ادعم المشروع على GitHub Sponsors.</string>
     <string name="no_project_yet">لا توجد مشاريع بعد. أنشئ واحدًا للبدء.</string>
     <string name="your_projects">مشاريعك</string>
     <string name="project_kind_android">Android</string>
-    <string name="project_opened_just_now">تم الفتح الآن</string>
-    <string name="beta_notice">أنت على %1$s</string>
-    <string name="beta_notice_content">قد تكون بعض الميزات غير مكتملة أو تتغير. نود الحصول على ملاحظاتك، أخبرنا بما هو مفقود أو مكسور.</string>
-    <string name="submit_suggestion">إرسال الاقتراحات</string>
-    <string name="your_codeassist_files">ملفات CodeAssist الخاصة بك</string>
-    <string name="your_codeassist_files_content">افتح هذا المجلد في أي مدير ملفات لتصفح مشاريعك، أو إضافة أيقونات أو أصول، أو التعديل من جهاز كمبيوتر.</string>
-    <string name="open_in_the_file_manager">الفتح في مدير الملفات</string>
-    <string name="choose_start_point">اختر نقطة البداية.</string>
-    <string name="backup">نسخ احتياطي</string>
-    <string name="delete_project">حذف المشروع؟</string>
-    <string name="delete_project_content">سيتم حذف "%1$s" وجميع ملفاته نهائيًا. لا يمكن التراجع عن هذا.</string>
-    <string name="cancel">إلغاء</string>
-    <string name="delete">حذف</string>
-    <string name="project_name">اسم المشروع</string>
-    <string name="package_name">اسم الحزمة</string>
-    <string name="creating">جاري الإنشاء…</string>
-    <string name="create_project">إنشاء مشروع</string>
-    <string name="no_templates_available">لا توجد قوالب متاحة.</string>
-    <string name="performance_analytics">تحليلات الأداء</string>
-    <string name="sharing_performance_data">مشاركة بيانات الأداء مجهولة الهوية</string>
-    <string name="not_sharing_performance_data">عدم مشاركة بيانات الأداء</string>
-    <string name="compatibility">التوافق</string>
-
-    <!-- AI coding agent -->
-
-    <!-- ==================== Added to reach parity with English ==================== -->
-    <!-- Plurals: projects, files, modules -->
-    <plurals name="caproj_files">
-        <item quantity="one">ملف واحد</item>
-        <item quantity="two">ملفان</item>
-        <item quantity="few">%1$d ملفات</item>
-        <item quantity="many">%1$d ملفًا</item>
-        <item quantity="other">%1$d ملف</item>
+    <!-- Short forms for the compact project row, where "4 modules · Android · Opened 2 hours ago"
+         does not fit and the "Opened" is carried by the context. -->
+    <string name="project_age_just_now">قبل قليل</string>
+    <plurals name="project_age_minutes">
+        <item quantity="one">قبل دقيقة واحدة</item>
+        <item quantity="two">قبل دقيقتين</item>
+        <item quantity="few">قبل %1$d دقائق</item>
+        <item quantity="many">قبل %1$d دقيقة</item>
+        <item quantity="other">قبل %1$d دقيقة</item>
     </plurals>
+    <plurals name="project_age_hours">
+        <item quantity="one">قبل ساعة واحدة</item>
+        <item quantity="two">قبل ساعتين</item>
+        <item quantity="few">قبل %1$d ساعات</item>
+        <item quantity="many">قبل %1$d ساعة</item>
+        <item quantity="other">قبل %1$d ساعة</item>
+    </plurals>
+    <plurals name="project_age_days">
+        <item quantity="one">قبل يوم واحد</item>
+        <item quantity="two">قبل يومين</item>
+        <item quantity="few">قبل %1$d أيام</item>
+        <item quantity="many">قبل %1$d يومًا</item>
+        <item quantity="other">قبل %1$d يوم</item>
+    </plurals>
+    <plurals name="project_age_weeks">
+        <item quantity="one">قبل أسبوع واحد</item>
+        <item quantity="two">قبل أسبوعين</item>
+        <item quantity="few">قبل %1$d أسابيع</item>
+        <item quantity="many">قبل %1$d أسبوعًا</item>
+        <item quantity="other">قبل %1$d أسبوع</item>
+    </plurals>
+    <!-- The editor's collapsed notice strip. Never shown for a single notice, which renders in place. -->
+    <string name="editor_notices_many">‏%1$d أمور تحتاج انتباهك</string>
+    <string name="project_opened_just_now">تم الفتح الآن</string>
     <plurals name="project_opened_minutes">
         <item quantity="one">فُتح قبل دقيقة واحدة</item>
         <item quantity="two">فُتح قبل دقيقتين</item>
@@ -166,6 +230,34 @@
         <item quantity="many">%1$d وحدة</item>
         <item quantity="other">%1$d وحدة</item>
     </plurals>
+    <string name="beta_notice">أنت على %1$s</string>
+    <string name="beta_notice_content">قد تكون بعض الميزات غير مكتملة أو تتغير. نود الحصول على ملاحظاتك، أخبرنا بما هو مفقود أو مكسور.</string>
+    <string name="submit_suggestion">إرسال الاقتراحات</string>
+    <string name="your_codeassist_files">ملفات CodeAssist الخاصة بك</string>
+    <string name="your_codeassist_files_content">افتح هذا المجلد في أي مدير ملفات لتصفح مشاريعك، أو إضافة أيقونات أو أصول، أو التعديل من جهاز كمبيوتر.</string>
+    <string name="open_in_the_file_manager">الفتح في مدير الملفات</string>
+    <string name="choose_start_point">اختر نقطة البداية.</string>
+    <string name="backup">نسخ احتياطي</string>
+    <string name="delete_project">حذف المشروع؟</string>
+    <string name="delete_project_content">سيتم حذف "%1$s" وجميع ملفاته نهائيًا. لا يمكن التراجع عن هذا.</string>
+    <string name="cancel">إلغاء</string>
+    <string name="color_picker_title">لون مخصص</string>
+    <string name="color_hue">درجة اللون</string>
+    <string name="color_saturation">التشبّع</string>
+    <string name="color_lightness">الإضاءة</string>
+    <string name="delete">حذف</string>
+    <string name="project_name">اسم المشروع</string>
+    <string name="package_name">اسم الحزمة</string>
+    <string name="creating">جاري الإنشاء…</string>
+    <string name="create_project">إنشاء مشروع</string>
+    <string name="no_templates_available">لا توجد قوالب متاحة.</string>
+    <string name="performance_analytics">تحليلات الأداء</string>
+    <string name="sharing_performance_data">مشاركة بيانات الأداء مجهولة الهوية</string>
+    <string name="not_sharing_performance_data">عدم مشاركة بيانات الأداء</string>
+    <string name="ftp_server">خادم FTP</string>
+    <string name="ftp_server_running">يعمل على 127.0.0.1:8021 · تذهب الملفات المرفوعة إلى assets/‎، وهي قابلة للكتابة من أي تطبيق على هذا الجهاز</string>
+    <string name="ftp_server_stopped">متوقف · خادم محلي لرفع الأصول</string>
+    <string name="compatibility">التوافق</string>
     <plurals name="recovered_projects">
         <item quantity="one">تم استرداد مشروع واحد من إصدار أقدم</item>
         <item quantity="two">تم استرداد مشروعين من إصدار أقدم</item>
@@ -175,7 +267,13 @@
     </plurals>
     <string name="recovered_projects_content">تستخدم هذه المشاريع Gradle وتُفتح في وضع توافق محدود، وقد لا تعمل بعض الميزات، وقد لا تُبنى حتى يُعاد إضافة التبعيات. تظل ملفاتك الأصلية آمنة في مجلد التخزين الخاص بك.</string>
 
-    <!-- Block editor -->
+
+    <!-- ============================================================ -->
+    <!-- Migrated UI strings (bulk localization pass) -->
+    <!-- ============================================================ -->
+    <!-- ============ FEATURE-PREFIXED (append to strings.xml) ============ -->
+
+    <!-- block (BlockEditor) -->
     <string name="block_cannot_project">لا يمكن عرض هذا الملف ككتل بعد.</string>
     <string name="block_projecting">جاري عرض الكتل…</string>
     <string name="block_fold">طي</string>
@@ -210,16 +308,19 @@
         <item quantity="other">· %1$d كتلة</item>
     </plurals>
 
-    <!-- Editor view -->
+    <!-- edview (EditorCenter) -->
     <string name="edview_open_a_file_from_navigator">افتح ملفًا من المتصفح</string>
     <string name="edview_no_file_open_title">لا يوجد ملف مفتوح</string>
     <string name="edview_no_file_open_hint">اختر ملفًا من المتصفح لبدء التحرير</string>
+
+    <!-- tabs (TabsStrip context menu; "Close" reuses the shared `close` string) -->
     <string name="tab_close_others">إغلاق البقية</string>
     <string name="tab_close_to_the_right">إغلاق ما على اليمين</string>
     <string name="tab_close_to_the_left">إغلاق ما على اليسار</string>
     <string name="tab_close_all">إغلاق الكل</string>
+    <string name="tab_open_files">الملفات المفتوحة</string>
 
-    <!-- File tree -->
+    <!-- filetree (FileNavigator) — reuses existing `modules` plural -->
     <string name="filetree_open_in_file_manager">الفتح في مدير الملفات</string>
     <string name="filetree_import_files">استيراد ملفات</string>
     <string name="filetree_change_view">تغيير العرض</string>
@@ -251,14 +352,18 @@
     <string name="filetree_delete">حذف</string>
     <string name="filetree_java_class">صنف Java</string>
     <string name="filetree_kotlin_file">ملف Kotlin</string>
+    <string name="filetree_aidl_file">ملف AIDL</string>
     <string name="filetree_resource_file">ملف موارد</string>
     <string name="filetree_file">ملف</string>
     <string name="filetree_directory">مجلد</string>
     <string name="filetree_new_in">جديد في %1$s</string>
 
-    <!-- Build console -->
+
+    <!-- buildc (BuildConsole/BuildDock) — uses StringResource fields on LogLevelFilter + statusTag -->
     <string name="buildc_build">بناء</string>
     <string name="buildc_collapse">طي</string>
+    <string name="buildc_fullscreen">ملء الشاشة</string>
+    <string name="buildc_exit_fullscreen">إنهاء ملء الشاشة</string>
     <string name="buildc_status_idle">خامل</string>
     <string name="buildc_status_running">قيد التشغيل…</string>
     <string name="buildc_status_succeeded">نجح</string>
@@ -277,6 +382,9 @@
     <string name="buildc_no_problems_match">لا توجد مشكلات مطابقة لهذا المرشِّح.</string>
     <string name="buildc_ungroup">إلغاء التجميع</string>
     <string name="buildc_group_by_task">التجميع حسب المهمة</string>
+    <string name="buildc_verbose_on">عرض تفاصيل البناء</string>
+    <string name="buildc_verbose_off">إخفاء تفاصيل البناء</string>
+    <string name="buildc_verbose_hidden">‏%1$d سطر تفاصيل مخفي</string>
     <string name="buildc_empty_log">اضغط تشغيل لبناء هذه الوحدة وتشغيلها.</string>
     <string name="buildc_no_log_match">لا توجد أسطر سجل مطابقة.</string>
     <string name="buildc_logcat_empty">شغّل تطبيق تصحيح لرؤية سجلاته هنا.</string>
@@ -296,7 +404,7 @@
     <string name="buildc_build_succeeded">نجح البناء</string>
     <string name="buildc_build_failed">فشل البناء</string>
 
-    <!-- Code actions -->
+    <!-- edpop (CodeActionsPopup/CompletionPopup/SignatureHelpPopup/EditorSheets/EditorSymbolBar/EditorBottomNav/EditorBreadcrumbBar) -->
     <string name="codeaction_show_context_actions">إظهار إجراءات السياق</string>
     <string name="codeaction_preview_composable">معاينة هذا الـ composable</string>
     <string name="codeaction_dismiss">تجاهل</string>
@@ -306,27 +414,82 @@
     <string name="codeaction_severity_info">معلومة</string>
     <string name="codeaction_severity_hint">تلميح</string>
     <string name="codeaction_quick_fixes">إصلاحات سريعة</string>
-
-    <!-- Completion -->
+    <string name="codeaction_same_span">‏%1$d على النطاق نفسه</string>
+    <plurals name="codeaction_problems_here">
+        <item quantity="one">مشكلة واحدة هنا</item>
+        <item quantity="two">مشكلتان هنا</item>
+        <item quantity="few">‏%1$d مشكلات هنا</item>
+        <item quantity="many">‏%1$d مشكلة هنا</item>
+        <item quantity="other">‏%1$d مشكلة هنا</item>
+    </plurals>
     <string name="completion_no_suggestions">لا توجد اقتراحات</string>
     <string name="completion_back_to_suggestions">العودة إلى الاقتراحات</string>
     <string name="completion_show_documentation">إظهار التوثيق</string>
     <string name="sig_more">+%1$d المزيد</string>
     <string name="sig_peek_tip">انقر لمعاينة التعريف الكامل</string>
     <string name="sig_peek_collapse">انقر للطي</string>
-
-    <!-- Editor sheet / symbol bar -->
     <string name="symbolbar_move_line_up">تحريك السطر لأعلى</string>
     <string name="symbolbar_move_line_down">تحريك السطر لأسفل</string>
     <string name="symbolbar_duplicate_line">تكرار السطر</string>
     <string name="symbolbar_next_problem">المشكلة التالية</string>
+    <string name="symbolbar_customize">تخصيص الرموز</string>
+    <string name="symbolbar_comment">تعليق سطر</string>
+    <string name="symed_pin">تثبيت في الصف الثابت</string>
+    <string name="symed_unpin">إلغاء التثبيت</string>
+    <string name="symed_add_action">إضافة مفتاح إجراء</string>
+    <string name="symed_title">الرموز والماكرو</string>
+    <string name="symed_symbols">الرموز</string>
+    <string name="symed_scope_global">عام</string>
+    <string name="symed_scope_project">هذا المشروع</string>
+    <string name="symed_scope_hint_global">ينطبق على كل مشروع.</string>
+    <string name="symed_scope_hint_project">محفوظ في هذا المشروع، ويمكن مشاركته مع فريقك.</string>
+    <string name="symed_project_unavailable">افتح مشروعًا لتخصيص رموزه هنا.</string>
+    <string name="symed_add_hint">أضف رمزًا أو معاملًا</string>
+    <string name="symed_add">إضافة</string>
+    <string name="symed_move_up">تحريك لأعلى</string>
+    <string name="symed_move_down">تحريك لأسفل</string>
+    <string name="symed_remove">إزالة</string>
+    <string name="symed_reset">إعادة التعيين إلى الافتراضي</string>
+    <string name="symed_suggest">اقتراح من الملف</string>
+    <string name="symed_presets">الإعدادات الجاهزة</string>
+    <string name="symed_export">نسخ بصيغة JSON</string>
+    <string name="symed_import">لصق JSON</string>
+    <string name="symed_import_title">الصق ملف JSON للرموز والماكرو</string>
+    <string name="symed_import_apply">استيراد</string>
+    <string name="symed_import_bad">لا يبدو هذا ملف تخصيص صالحًا.</string>
+    <string name="symed_empty">لا توجد رموز بعد. أضف واحدًا، أو اختر إعدادًا جاهزًا، أو أعد التعيين إلى الافتراضي، أو اقترح من الملف الحالي.</string>
+    <string name="symed_exported">نُسخ إلى الحافظة</string>
+    <string name="symed_tab_macros">الماكرو</string>
+    <string name="symed_add_macro">إضافة ماكرو</string>
+    <string name="symed_macros_empty">لا يوجد ماكرو بعد. أضف واحدًا ليوسّع اختصارًا إلى مقتطف أثناء الكتابة.</string>
+    <string name="symed_macro_abbrev">الاختصار</string>
+    <string name="symed_macro_template">القالب</string>
+    <string name="symed_macro_desc">الوصف (اختياري)</string>
+    <string name="symed_macro_languages">اللغات (بلا تحديد = الكل)</string>
+    <string name="symed_macro_enabled">مُفعَّل</string>
+    <string name="symed_macro_preview">معاينة</string>
+    <string name="symed_macro_syntax">‏$1 $2 مواضع توقّف · ‎${1:default} · $END$ المؤشر · $FILE$ $DATE$ $USER$</string>
+    <string name="symed_save">حفظ</string>
+    <string name="symed_all_languages">الكل</string>
+    <string name="symed_edit_key">تحرير المفتاح</string>
+    <string name="symed_key_label">التسمية (ما يظهر)</string>
+    <string name="symed_key_inserts">يُدرِج</string>
+    <string name="symed_key_action">الإجراء</string>
+    <string name="symed_key_pinned">مثبَّت</string>
+    <string name="symed_delete">حذف</string>
+    <string name="symed_insert_token">إدراج (انقر للإضافة في النهاية)</string>
+    <string name="symed_variable">متغيّر</string>
+    <string name="symed_macro_type">النوع — اختياري (مثل java.lang.String)</string>
+    <string name="symed_macro_type_hint">يُقترح بعد مستقبِل من هذا النوع. يستبدل «Instance» الجزء ‎`expr.`‎ — استخدم ‎$EXPR$‎ للإشارة إليه؛ أما «Static» فيكمل بعد ‎`Type.`‎.</string>
+    <string name="symed_scope_instance">كائن</string>
+    <string name="symed_scope_static">ساكن</string>
     <string name="edbottomnav_source">المصدر</string>
     <string name="breadcrumb_code">الكود</string>
     <string name="breadcrumb_blocks">الكتل</string>
     <string name="breadcrumb_preview">المعاينة</string>
     <string name="breadcrumb_split">مقسّم</string>
 
-    <!-- Editor chrome -->
+    <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">الملفات</string>
     <string name="edchrome_more">المزيد</string>
     <string name="edchrome_settings_and_tools">الإعدادات والأدوات</string>
@@ -353,6 +516,13 @@
         <item quantity="many">تعذّر حل %1$d تبعية</item>
         <item quantity="other">تعذّر حل %1$d تبعية</item>
     </plurals>
+    <plurals name="edchrome_empty_dependencies">
+        <item quantity="one">تبعية واحدة لم تُحَل إلى شيء</item>
+        <item quantity="two">تبعيتان لم تُحَلّا إلى شيء</item>
+        <item quantity="few">‏%1$d تبعيات لم تُحَل إلى شيء</item>
+        <item quantity="many">‏%1$d تبعية لم تُحَل إلى شيء</item>
+        <item quantity="other">‏%1$d تبعية لم تُحَل إلى شيء</item>
+    </plurals>
     <string name="edchrome_search_tasks">البحث في المهام…</string>
     <string name="edchrome_nothing_to_run">لا شيء لتشغيله</string>
     <string name="edchrome_no_matching_tasks">لا توجد مهام مطابقة</string>
@@ -364,7 +534,7 @@
     <string name="edchrome_indexing_percent">جاري الفهرسة… %1$d%</string>
     <string name="edchrome_indexed">تمت الفهرسة</string>
 
-    <!-- Find / replace -->
+    <!-- find (FindReplaceBar) -->
     <string name="find_toggle_replace">تبديل الاستبدال</string>
     <string name="find_placeholder">بحث</string>
     <string name="find_case_sensitive">Aa</string>
@@ -376,32 +546,88 @@
     <string name="find_replace">استبدال</string>
     <string name="find_all">الكل</string>
 
-    <!-- Gradle compatibility -->
+    <!-- app/banners/editor-screen -->
     <string name="gradle_mode_title">وضع توافق Gradle</string>
     <string name="gradle_resync">إعادة المزامنة</string>
+    <string name="gradle_sync_needed">تغيّرت ملفات البناء منذ آخر مزامنة. أعد المزامنة لتحديث المشروع.</string>
     <string name="gradle_syncing">جاري المزامنة من Gradle…</string>
-
-    <!-- Sources download -->
+    <string name="gradle_convert">تحويل</string>
+    <string name="gradle_convert_title">التحويل إلى مشروع CodeAssist؟</string>
+    <string name="gradle_convert_body">تُنقل ملفات بناء Gradle إلى مجلد نسخ احتياطي ويتولّى نظام الوحدات الخاص بـ CodeAssist. لن تتوفر بعدها إعادة المزامنة من Gradle. يمكنك التراجع عن هذا.</string>
+    <string name="gradle_convert_notes_intro">قرأ المستورِد هذه بأفضل ما يمكن — ولن يُعاد فحصها بعد التحويل:</string>
+    <string name="gradle_convert_action">تحويل</string>
+    <string name="gradle_convert_working">جاري التحويل…</string>
+    <string name="gradle_converted">تم التحويل إلى مشروع CodeAssist.</string>
+    <string name="gradle_convert_failed">تعذّر تحويل هذا المشروع.</string>
+    <string name="gradle_convert_undo">تراجع</string>
+    <string name="gradle_convert_done">تم</string>
+    <string name="unrecognized_project_title">مفتوح للتحرير فقط</string>
+    <string name="unrecognized_project_origin">مستنسخ من %1$s</string>
+    <string name="toolchain_warning_build_anyway">البناء على أي حال</string>
+    <string name="toolchain_warning_many">‏%1$d وحدات لديها بيئة تشغيل غير متوافقة مع معالج مضمَّن</string>
+    <string name="toolchain_warning_accept_note">ستستمر عمليات بناء هذه الوحدة في الفشل إلى أن تتطابق الإصدارات.</string>
+    <string name="toolchain_warning_working">جاري العمل…</string>
     <string name="sources_not_installed">لم يتم تثبيت مصادر منصة Android (%1$s). وهي مطلوبة لأسماء معاملات android.* وتوثيقها.</string>
     <string name="sources_download">تنزيل</string>
     <string name="sources_downloading">جاري التنزيل…</string>
     <string name="sources_download_failed">فشل التنزيل: %1$s</string>
-
-    <!-- Structure -->
+    <string name="library_readonly_source">مصدر مكتبة · للقراءة فقط</string>
+    <string name="library_readonly_decompiled">مُفكَّك · للقراءة فقط</string>
+    <string name="editor_large_file_notice">ملف كبير: ذكاء الكود محدود هنا للحفاظ على الذاكرة</string>
+    <string name="library_decompile_java">تفكيك إلى Java</string>
     <string name="structure_title">البنية</string>
     <string name="structure_filter">تصفية…</string>
     <string name="structure_no_symbols">لا توجد رموز في هذا الملف</string>
     <string name="structure_no_matches">لا توجد نتائج مطابقة</string>
+    <string name="structure_no_file">افتح ملفًا لرؤية بنيته</string>
     <string name="comingsoon_footnote">قريبًا</string>
     <string name="edscreen_project_root">جذر المشروع</string>
+    <!-- NOTE: CodeAssistApp.kt reuses settings_title (must exist — expect from settings batch); dep flagged -->
 
-    <!-- Home / Explore / Store -->
+    <!-- home/store/learn/search/logs/palette — reuses projects, join_the_community -->
     <string name="home_store">استكشاف</string>
     <string name="home_learn">تعلّم</string>
+    <string name="home_challenges">اليومي</string>
+    <!-- Home / Projects tab, Material 3 Expressive redesign -->
+    <string name="home_your_projects">مشاريعك</string>
+    <string name="home_good_morning">صباح الخير</string>
+    <string name="home_good_afternoon">طاب يومك</string>
+    <string name="home_good_evening">مساء الخير</string>
+    <string name="home_new_project">مشروع جديد</string>
+    <string name="home_new_project_subtitle">تُولَّد الهياكل محليًا، دون حاجة إلى شبكة.</string>
+    <string name="home_import_project">استيراد مشروع</string>
+    <string name="home_clone_repository">استنساخ من Git</string>
+    <string name="home_from_store">ابدأ من قالب في المتجر</string>
+    <string name="home_seg_projects">المشاريع</string>
+    <string name="home_seg_updates">التحديثات</string>
+    <string name="home_seg_saved">المحفوظة</string>
+    <string name="home_empty_list">لا شيء في هذه القائمة</string>
+    <string name="home_open">فتح</string>
+    <string name="home_open_named">فتح %1$s</string>
+    <string name="home_share">مشاركة</string>
+    <string name="home_delete">حذف</string>
+    <string name="home_dismiss">تجاهل</string>
+    <string name="home_resume_title">تابع من حيث توقفت</string>
+    <string name="home_account_title">الحساب والأدوات</string>
+    <string name="home_settings_tools">الإعدادات والأدوات</string>
+    <string name="home_open_in_files">فتح وحدة التخزين في «الملفات»</string>
+    <string name="home_backup">نسخ المشاريع احتياطيًا</string>
+    <string name="home_star_github">ضع نجمة على GitHub</string>
+    <string name="home_sponsor">ادعم CodeAssist</string>
+    <string name="home_feedback">إرسال ملاحظات</string>
+    <string name="home_legacy_recovery">يمكن استرجاع المشاريع من إصدار أقدم.</string>
     <string name="store_title">استكشاف</string>
     <string name="store_subtitle">قوالب ومشاريع نموذجية للبدء منها</string>
     <string name="store_settings_and_tools">الإعدادات والأدوات</string>
     <string name="store_search_hint">ابحث في القوالب والنماذج</string>
+    <!-- Explore tab, Material 3 Expressive redesign -->
+    <string name="store_search_placeholder">قوالب وتطبيقات نموذجية وإضافات</string>
+    <string name="store_browse_by_kind">التصفح حسب النوع</string>
+    <string name="store_see_all">عرض الكل</string>
+    <string name="store_install">تثبيت</string>
+    <string name="store_use">استخدام</string>
+    <string name="store_open">فتح</string>
+    <string name="store_no_results">لا توجد مشاريع تطابق «%1$s»</string>
     <string name="store_all">الكل</string>
     <string name="store_unavailable">الاستكشاف غير متاح</string>
     <string name="store_unavailable_content">الاستكشاف غير متاح في هذا الإصدار.</string>
@@ -415,17 +641,266 @@
     <string name="store_item_about">حول</string>
     <string name="store_item_whats_included">ما ستحصل عليه</string>
     <string name="store_item_details">التفاصيل</string>
+    <string name="store_item_size">الحجم</string>
+    <string name="store_item_version">الإصدار</string>
+    <!-- Hero figure labels: lowercase, because they read as captions under a number, not as headings -->
+    <string name="store_hero_installs">عمليات تثبيت</string>
+    <string name="store_hero_download">تنزيل</string>
+    <string name="store_install_project">تثبيت المشروع</string>
+    <string name="store_open_in_editor">فتح في المحرر</string>
+    <string name="store_item_reviews">‏%1$d مراجعة</string>
+    <string name="store_item_tab_overview">نظرة عامة</string>
+    <string name="store_item_tab_readme">README</string>
+    <string name="store_item_tab_reviews">التقييمات والمراجعات</string>
+    <string name="store_item_tab_changelog">سجل التغييرات</string>
     <string name="store_item_type">النوع</string>
     <string name="store_item_language">اللغة</string>
     <string name="store_item_publisher">الناشر</string>
     <string name="store_item_downloads">التنزيلات</string>
     <string name="store_installing">جاري التثبيت…</string>
+    <string name="store_downloading_pct">%1$d%%</string>
+    <string name="store_unpacking">جاري فك الحزمة…</string>
+    <string name="store_retry">إعادة المحاولة</string>
+    <string name="store_signin_title">النشر في المتجر</string>
+    <string name="store_signin_why">يتطلب النشر حسابًا ليكون للمشروع مالك وليجد المشرف من يخاطبه. أما التصفح والتثبيت فلا يتطلبان ذلك أبدًا.</string>
+    <string name="store_signin_github">المتابعة باستخدام GitHub</string>
+    <string name="store_signin_google">المتابعة باستخدام Google</string>
+    <string name="store_signin_waiting_title">في انتظار GitHub</string>
+    <string name="store_signin_waiting_body">أكمل تسجيل الدخول في المتصفح ثم عد إلى هنا. تتحدث هذه الشاشة تلقائيًا.</string>
+    <string name="store_signin_reopen">فتح المتصفح مرة أخرى</string>
+    <string name="store_signin_completing">جاري تسجيل الدخول…</string>
+    <string name="store_signin_signed_in_as">تم تسجيل الدخول باسم %1$s</string>
+    <string name="store_signin_submit_soon">إرسال مشروع سيتاح قريبًا. حسابك جاهز له.</string>
+    <string name="store_signin_sign_out">تسجيل الخروج</string>
+    <string name="store_signin_failed">لم يكتمل تسجيل الدخول</string>
+    <string name="store_signin_unavailable_title">تسجيل الدخول غير متاح</string>
+    <string name="store_signin_unavailable_body">لا يتضمن هذا الإصدار مزوّد حسابات للمتجر، لذا فالنشر معطّل. أما بقية المتجر فتعمل كالمعتاد.</string>
+    <string name="store_signin_dismiss">ليس الآن</string>
+    <string name="submit_title">نشر مشروع</string>
+    <string name="submit_pick_project">أي مشروع؟</string>
+    <string name="submit_no_projects">ليس لديك مشاريع لنشرها بعد.</string>
+    <string name="submit_packaging">جاري التحزيم…</string>
+    <string name="submit_included">‏%1$d ملف · %2$s</string>
+    <string name="submit_excluded_title">مستبعَد من الرفع</string>
+    <string name="submit_excluded_why">لا تُرفع الأسرار ولا مخرجات البناء أبدًا. هذه ما عُثر عليه واستُبعد:</string>
+    <string name="submit_excluded_none">لم يكن هناك ما يستدعي الاستبعاد.</string>
+    <string name="submit_details">بطاقة المتجر</string>
+    <string name="submit_field_title">العنوان</string>
+    <string name="submit_field_summary">ملخص من سطر واحد</string>
+    <string name="submit_field_description">الوصف</string>
+    <string name="submit_markdown_hint">‏Markdown يعمل هنا: ‎**عريض**‎، ‎*مائل*‎، ‎`كود`‎، ‎- قوائم، ‎## عناوين.</string>
+    <string name="submit_markdown_preview">معاينة</string>
+    <string name="submit_markdown_hide">إخفاء المعاينة</string>
+    <string name="submit_field_category">الفئة</string>
+    <string name="submit_field_version">الإصدار</string>
+    <string name="submit_field_tags">وسوم مفصولة بفواصل</string>
+    <string name="submit_category_loading">جاري تحميل الفئات…</string>
+    <string name="submit_category_unavailable">تعذّر تحميل الفئات. كل إرسال لا بد أن يحدد فئة، لذا يحتاج هذا إلى اتصال قبل أن ترسله.</string>
+    <string name="submit_category_retry">إعادة المحاولة</string>
+    <string name="submit_screenshots">لقطات الشاشة</string>
+    <string name="submit_screenshots_desc">حتى ست صور. هذا ما ينظر إليه الناس قبل أن يثبّتوا أي شيء.</string>
+    <string name="submit_add_screenshot">إضافة لقطة شاشة</string>
+    <string name="submit_send">إرسال للمراجعة</string>
+    <string name="submit_sending">جاري الإرسال…</string>
+    <string name="submit_review_note">يراجع مشرف كل إرسال قبل ظهوره. لا شيء يصبح علنيًا قبل الموافقة عليه.</string>
+    <string name="submit_required">املأ العنوان والملخص والوصف والفئة.</string>
+    <string name="submit_target">النشر بصفة</string>
+    <string name="submit_target_new">بطاقة متجر جديدة</string>
+    <string name="submit_target_update">تحديث %1$s</string>
+    <string name="submit_update_live">منشور: %1$s</string>
+    <string name="submit_update_unreviewed">لم يُنشر بعد</string>
+    <string name="submit_update_note">إصدار جديد من هذه البطاقة. النص أدناه هو ما يعرضه المتجر الآن، وأي شيء تغيّره هنا يُراجَع مع الإصدار الجديد.</string>
+    <string name="submit_screenshots_kept">هذه هي لقطات الشاشة الموجودة في البطاقة الآن. ما يكون هنا عند الإرسال يحل محلها، لذا احذف ما تريد تغييره واترك الباقي.</string>
+    <string name="submit_screenshots_offline">تعذّر تحميل لقطات شاشة هذه البطاقة، لذا يُبقي المتجر على ما لديه. أي شيء تضيفه هنا سيحل محلها جميعًا.</string>
+    <string name="submit_category_current">ستبقى في %1$s. تعذّر تحميل قائمة الفئات، لذا لا يمكن تغييرها الآن.</string>
+    <string name="submit_field_changelog">ما الذي تغيّر</string>
+    <string name="submit_required_version">اكتب الإصدار في ثلاثة أرقام، مثل 1.2.0.</string>
+    <string name="submit_mine_title">إرسالاتك</string>
+    <string name="submit_withdraw">سحب</string>
+    <string name="submit_unavailable">النشر غير متاح في هذا الإصدار.</string>
+    <string name="submit_signin_first">سجّل الدخول للنشر.</string>
+    <string name="you_title">حسابك</string>
+    <string name="you_signed_out">سجّل الدخول لترى ملفك الشخصي وإرسالاتك وكل ما نشرته.</string>
+    <string name="you_sign_in">تسجيل الدخول</string>
+    <string name="you_unavailable">تعذّر تحميل ملفك الشخصي. يحتاج ذلك إلى اتصال.</string>
+    <string name="you_edit">تحرير الملف الشخصي</string>
+    <string name="you_field_name">الاسم المعروض</string>
+    <string name="you_field_handle">المعرّف</string>
+    <string name="you_field_bio">نبذة</string>
+    <string name="you_field_location">الموقع</string>
+    <string name="you_field_link">رابط</string>
+    <string name="you_handle_rules">من حرفين إلى 39 حرفًا: أحرف وأرقام و - و _</string>
+    <string name="you_handle_taken">هذا المعرّف محجوز</string>
+    <string name="you_handle_free">متاح</string>
+    <string name="you_handle_note">معرّفك هو عنوان ملفك الشخصي العام، وتغييره يغيّر ذلك العنوان.</string>
+    <string name="you_stat_published">منشور</string>
+    <string name="you_stat_review">قيد المراجعة</string>
+    <string name="you_stat_followers">المتابعون</string>
+    <string name="you_stat_installs">عمليات التثبيت</string>
+    <string name="you_submissions">الإرسالات</string>
+    <string name="you_submissions_none">لا شيء قيد المراجعة. المشروع الذي تنشره ينتظر هنا حتى يردّ مشرف.</string>
+    <string name="you_published">منشور</string>
+    <string name="you_published_none">لا شيء من أعمالك منشور في المتجر بعد.</string>
+    <string name="you_view_public">عرض الملف الشخصي العام</string>
+    <string name="you_sign_out">تسجيل الخروج</string>
+    <string name="you_publish">نشر مشروع</string>
+    <string name="you_version">الإصدار %1$s</string>
+    <string name="you_status_submitted">قيد المراجعة</string>
+    <string name="you_status_building">قيد البناء</string>
+    <string name="you_status_changes">مطلوب تعديلات</string>
+    <string name="you_status_rejected">غير مقبول</string>
+    <string name="you_status_published">منشور</string>
+    <string name="you_reason_rejected">سبب عدم القبول</string>
+    <string name="you_reason_changes">ما يجب تغييره</string>
+    <string name="you_reason_note">من المراجِع</string>
+    <string name="you_update">صحّح وأعد الإرسال</string>
+    <string name="you_delete">حذف</string>
+    <string name="you_delete_title">حذف هذا الإرسال؟</string>
+    <string name="you_delete_body">ستُزال %1$s %2$s والملفات التي رفعها من المتجر. والمشروع الذي كان هذا إرساله الوحيد يُزال معه.</string>
+    <string name="you_status_listing_pending">في انتظار المراجعة</string>
+    <string name="you_status_listing_rejected">غير مقبول</string>
+    <string name="you_status_listing_unpublished">غير منشور</string>
+
+    <!-- Moderation: the review queue and the report queue, for an account listed in store_admins. -->
+    <string name="you_moderation">الإشراف</string>
+    <string name="you_moderation_waiting">‏%1$d في انتظار المراجعة</string>
+    <string name="you_moderation_clear">لا شيء ينتظر المراجعة</string>
+    <string name="moderation_title">الإشراف</string>
+    <string name="moderation_not_allowed">هذا الحساب لا يشرف على المتجر.</string>
+    <string name="moderation_tab_queue">قائمة الانتظار</string>
+    <string name="moderation_tab_reports">البلاغات</string>
+    <string name="moderation_queue_clear">لا شيء ينتظر المراجعة.</string>
+    <string name="moderation_recent">القرارات الأخيرة</string>
+    <string name="moderation_version_by">‏%1$s بواسطة %2$s</string>
+    <string name="moderation_view_publisher">الناشر</string>
+    <string name="moderation_flag_banned">ناشر محظور</string>
+    <string name="moderation_files">‏%1$d ملف</string>
+    <string name="moderation_show_files">عرض الملفات (%1$d)</string>
+    <string name="moderation_hide_files">إخفاء الملفات</string>
+    <string name="moderation_files_more">و%1$d غيرها</string>
+    <string name="moderation_changelog">ما الذي تغيّر</string>
+    <string name="moderation_listing_edit">تغيير مقترح على البطاقة</string>
+    <string name="moderation_edit_nothing">لا شيء</string>
+    <string name="moderation_approve">موافقة</string>
+    <string name="moderation_reject">رفض</string>
+    <string name="moderation_reject_title">رفض %1$s؟</string>
+    <string name="moderation_reject_body">الملاحظة هي الشيء الوحيد الذي يصل ناشره، فوضّح ما الذي كان يجب تغييره.</string>
+    <string name="moderation_reject_note">ملاحظة إلى الناشر</string>
+    <string name="moderation_icon_title">هذا الإصدار لا يتضمن أيقونة تطبيق</string>
+    <string name="moderation_icon_body">ليس لـ %1$s %2$s أيقونة، لكن للبطاقة أيقونة. امسحها إن كان الناشر قد أزال أيقونته، أو أبقِها إن كان هذا تطبيقًا أقدم لم يستطع رفع واحدة.</string>
+    <string name="moderation_icon_clear">مسح الأيقونة</string>
+    <string name="moderation_icon_keep">الإبقاء على الأيقونة الحالية</string>
+    <string name="moderation_reports_none">لم يُبلَّغ عن أي شيء.</string>
+    <string name="moderation_report_project">تم الإبلاغ عن المشروع بأكمله</string>
+    <string name="moderation_report_review">تم الإبلاغ عن مراجعة</string>
+    <string name="moderation_already_hidden">مخفي بالفعل</string>
+    <string name="moderation_reporter_said">قال المبلِّغ: %1$s</string>
+    <string name="moderation_open_listing">فتح البطاقة</string>
+    <string name="moderation_hide_review">إخفاء المراجعة</string>
+    <string name="moderation_restore_review">استعادة المراجعة</string>
+    <string name="moderation_dismiss_report">تجاهل</string>
+    <string name="moderation_mark_actioned">تعليم كمُعالَج</string>
+    <string name="notif_title">الإشعارات</string>
+    <string name="notif_empty">لا جديد لتطّلع عليه.</string>
+    <string name="notif_empty_body">تظهر هنا المراجعات والتحديثات وعمليات البناء المنتهية.</string>
+    <string name="notif_mark_all">تعليم الكل كمقروء</string>
+    <string name="notif_clear">مسح</string>
+    <string name="notif_open">فتح</string>
+    <string name="notif_dismiss">تجاهل</string>
+    <string name="notif_just_now">قبل قليل</string>
+    <string name="notif_minutes">قبل %1$d د</string>
+    <string name="notif_hours">قبل %1$d س</string>
+    <string name="notif_days">قبل %1$d ي</string>
+    <string name="reviews_title">التقييمات والمراجعات</string>
+    <string name="reviews_none">لا توجد مراجعات بعد</string>
+    <string name="reviews_none_body">كن أول من يخبرنا كيف كان هذا المشروع.</string>
+    <string name="reviews_write">كتابة مراجعة</string>
+    <string name="reviews_edit">تحرير مراجعتك</string>
+    <string name="reviews_yours">مراجعتك</string>
+    <string name="reviews_sort_helpful">الأكثر إفادة</string>
+    <string name="reviews_sort_recent">الأحدث</string>
+    <string name="reviews_helpful">مفيدة</string>
+    <string name="reviews_helpful_count">مفيدة (%1$d)</string>
+    <string name="reviews_count">‏%1$d مراجعة</string>
+    <string name="reviews_count_one">مراجعة واحدة</string>
+    <string name="reviews_reader">أحد مستخدمي CodeAssist</string>
+    <string name="reviews_reply">ردّ الناشر</string>
+    <string name="reviews_on_version">على الإصدار %1$s</string>
+    <string name="reviews_delete">حذف</string>
+    <string name="reviews_signin_to_write">سجّل الدخول لترك مراجعة</string>
+    <string name="reviews_signin_to_vote">سجّل الدخول للتصويت</string>
+    <string name="reviews_stars_label">‏%1$d من 5 نجوم</string>
+    <string name="reviews_your_rating">تقييمك</string>
+    <string name="reviews_optional_text">هل من شيء يستحق أن يعرفه القادم؟ (اختياري)</string>
+    <string name="reviews_submit">نشر المراجعة</string>
+    <string name="reviews_posting">جاري النشر…</string>
+    <string name="reviews_unavailable">المراجعات غير متاحة الآن.</string>
+    <string name="home_more_actions">إجراءات أخرى</string>
+    <string name="home_delete_confirm_title">حذف %1$s؟</string>
+    <string name="home_delete_confirm_body">يزيل هذا المشروع وكل ما فيه من هذا الجهاز. لا يمكن التراجع عن ذلك.</string>
+    <string name="home_delete_confirm_action">حذف المشروع</string>
+    <string name="home_cancel">إلغاء</string>
+    <string name="publish_from_share">النشر في المتجر</string>
+    <string name="publish_from_share_body">شاركه مع الجميع، لا مع شخص واحد فقط. يراجعه مشرف أولًا.</string>
+    <string name="guide_title">كيف يعمل النشر</string>
+    <string name="guide_intro">يضع النشر مشروعك في المتجر ليثبّته أي شخص. وإليك ما يحدث من البداية إلى النهاية.</string>
+    <string name="guide_step_package_title">يُضغط مشروعك على هذا الجهاز</string>
+    <string name="guide_step_package_body">تُستبعد مخرجات البناء والذواكر المؤقتة و‎.git. وكذلك الأسرار: ملفات المفاتيح، وlocal.properties، و‎.env، وgoogle-services.json. ترى قائمة الملفات بالضبط وما استُبعد منها قبل رفع أي شيء.</string>
+    <string name="guide_step_review_title">يراجعه شخص</string>
+    <string name="guide_step_review_body">لا شيء يصبح علنيًا قبل الموافقة عليه. ينزّل المشرف الأرشيف، ويقرأ ما كتبته، ثم إما ينشره أو يعيده إليك مع ملاحظة.</string>
+    <string name="guide_step_live_title">يُنشر باسمك</string>
+    <string name="guide_step_live_body">تظهر المشاريع المقبولة في «استكشاف» ويستطيع أي شخص تثبيتها. وتواصل أنت نشر إصدارات جديدة؛ وتبقى الإصدارات الأقدم متاحة.</string>
+    <string name="guide_step_notified_title">تُعلَم بالنتيجة في الحالتين</string>
+    <string name="guide_step_notified_body">قُبل أو لم يُقبل، يصلك القرار في صورة إشعار، حتى لو كان التطبيق مغلقًا.</string>
+    <string name="guide_limits_title">الحدود</string>
+    <string name="guide_limits_body">‏5 ميغابايت لكل أرشيف، وحتى 2000 ملف. عشرة مشاريع منشورة لكل حساب، وثلاثة إرسالات تنتظر المراجعة في الوقت نفسه.</string>
+    <string name="guide_own_title">ما يبقى لك</string>
+    <string name="guide_own_body">يظل مشروعك ملكك. يمكنك سحب إرسال ما دام قيد الانتظار، وطلب إزالة مشروع منشور.</string>
+    <string name="notify_launch_saved">سنُعلمك عند وصول المشاريع.</string>
+    <string name="notify_launch_cleared">لن تصلك إشعارات.</string>
+    <string name="notify_launch_failed">تعذّر حفظ ذلك الآن.</string>
+    <string name="review_actions">إجراءات المراجعة</string>
+    <string name="review_report">إبلاغ</string>
+    <string name="review_reply">رد</string>
+    <string name="review_reply_edit">تحرير الرد</string>
+    <string name="review_reply_delete">حذف الرد</string>
+    <string name="review_hide">إخفاء المراجعة</string>
+    <string name="review_unhide">استعادة المراجعة</string>
+    <string name="review_reported">تم الإبلاغ. سينظر فيها مشرف.</string>
+    <string name="review_hidden_done">أُخفيت. لم تعد تُحتسب في التقييم.</string>
+    <string name="report_title">الإبلاغ عن هذه المراجعة</string>
+    <string name="report_body">أخبرنا ما الخطأ فيها. يقرأ مشرف كل بلاغ.</string>
+    <string name="report_reason_spam">رسائل مزعجة أو إعلانات</string>
+    <string name="report_reason_inappropriate">مسيئة أو غير لائقة</string>
+    <string name="report_reason_copyright">حقوق نشر</string>
+    <string name="report_reason_malware">برمجيات خبيثة</string>
+    <string name="report_reason_broken">خاطئة أو مضللة</string>
+    <string name="report_reason_other">شيء آخر</string>
+    <string name="report_detail">هل من شيء آخر ينبغي أن يعرفه المشرف؟ (اختياري)</string>
+    <string name="report_send">إرسال البلاغ</string>
+    <string name="report_sending">جاري الإرسال…</string>
+    <string name="reply_title">الرد بصفتك الناشر</string>
+    <string name="reply_body_hint">يظهر ردك أسفل المراجعة، موسومًا بأنه من الناشر.</string>
+    <string name="reply_send">نشر الرد</string>
+    <string name="profile_projects">المشاريع</string>
+    <string name="profile_installs">عمليات التثبيت</string>
+    <string name="profile_likes">الإعجابات</string>
+    <string name="profile_rating">التقييم</string>
+    <string name="profile_followers">‏%1$d متابع</string>
+    <string name="profile_follow">متابعة</string>
+    <string name="profile_following">تتابعه</string>
+    <string name="profile_published">المشاريع المنشورة</string>
+    <string name="profile_none">لا شيء منشور بعد</string>
+    <string name="profile_missing">لا يوجد ناشر بهذا الاسم</string>
+    <string name="profile_unrated">بلا تقييم</string>
+    <string name="profile_signin_to_follow">سجّل الدخول للمتابعة</string>
+    <string name="like_action">إعجاب</string>
+    <string name="like_liked">أعجبك</string>
+    <string name="like_signin">سجّل الدخول للإعجاب</string>
     <string name="store_get">الحصول عليه</string>
     <string name="store_kind_template">قالب</string>
     <string name="store_kind_sample">نموذج</string>
     <string name="store_kind_community">المجتمع</string>
-
-    <!-- Learn -->
     <string name="learn_title">تعلّم</string>
     <string name="learn_subtitle">أدلة ونماذج والمجتمع</string>
     <string name="learn_documentation">التوثيق</string>
@@ -445,6 +920,10 @@
     <string name="learn_review">مراجعة</string>
     <string name="learn_continue">متابعة</string>
     <string name="learn_completed">مكتمل</string>
+    <!-- Learn tab, Material 3 Expressive redesign -->
+    <string name="learn_lessons_done">‏%1$d درس مكتمل</string>
+    <string name="learn_module_meta">‏%1$d من %2$d درس · %3$d دقيقة</string>
+    <string name="learn_resume_lesson">متابعة الدرس %1$d</string>
     <string name="learn_minutes">%1$d دقيقة</string>
     <string name="learn_lessons_progress">%1$d / %2$d دروس</string>
     <string name="learn_step_progress">الخطوة %1$d من %2$d</string>
@@ -477,8 +956,6 @@
         <item quantity="many">%1$d درسًا</item>
         <item quantity="other">%1$d درس</item>
     </plurals>
-
-    <!-- Search -->
     <string name="search_tab_symbols">الرموز</string>
     <string name="search_tab_members">الأعضاء</string>
     <string name="search_tab_text">النص</string>
@@ -489,8 +966,6 @@
     <string name="search_no_symbols">لم يُعثر على رموز.</string>
     <string name="search_no_members">لم يُعثر على أعضاء.</string>
     <string name="search_no_text_matches">لا توجد نتائج مطابقة في ملفات المشروع.</string>
-
-    <!-- Logs -->
     <string name="logs_title">السجلات</string>
     <string name="logs_filter_all">الكل</string>
     <string name="logs_filter_warnings">التحذيرات</string>
@@ -502,8 +977,6 @@
     <string name="logs_copy_all">نسخ الكل</string>
     <string name="logs_empty">لا توجد سجلات بعد.</string>
     <string name="logs_no_match">لا توجد سجلات مطابقة لهذا المرشِّح.</string>
-
-    <!-- Command palette -->
     <string name="palette_filter_all">الكل</string>
     <string name="palette_filter_commands">الأوامر</string>
     <string name="palette_filter_files">الملفات</string>
@@ -513,7 +986,7 @@
     <string name="palette_type_to_search">اكتب للبحث في %1$s…</string>
     <string name="palette_no_matches">لا توجد نتائج مطابقة</string>
 
-    <!-- Run -->
+    <!-- run/preview/edoverlay — reuses copy(shared) -->
     <string name="run_no_active_run">لا يوجد تشغيل نشط.</string>
     <string name="run_back">رجوع</string>
     <string name="run_run_again">تشغيل مرة أخرى</string>
@@ -532,16 +1005,13 @@
     <string name="run_conflict_message">لا يزال هناك بناء أو برنامج قيد التشغيل. هل تريد إيقافه وبدء هذا التشغيل بدلاً منه؟</string>
     <string name="run_conflict_stop_and_run">إيقاف وتشغيل</string>
     <string name="run_conflict_dont_ask">عدم السؤال مرة أخرى</string>
-
-    <!-- Build notifications -->
+    <!-- Build notifications: the first-build permission prompt + its in-process fallback, and the Settings re-request -->
     <string name="build_notif_title">عرض إشعارات البناء؟</string>
     <string name="build_notif_message">يمكن لـ CodeAssist تشغيل عمليات البناء وبرنامجك في عملية منفصلة ومعزولة وعرض إشعار تقدّم أثناء تشغيلها. يمنع هذا Android من إيقاف البناء عند التبديل إلى تطبيق آخر، ويتيح لك متابعة التقدّم. اسمح بالإشعارات لتفعيل هذا.</string>
     <string name="build_notif_not_now">ليس الآن</string>
     <string name="build_notif_inprocess_title">ستُشغَّل عمليات البناء داخل التطبيق</string>
     <string name="build_notif_inprocess_message">بدون إذن الإشعارات، تُشغَّل عمليات البناء داخل CodeAssist بدلاً من عملية منفصلة، ولن ترى إشعارات تقدّم البناء. يمكنك تفعيل الإشعارات في أي وقت من الإعدادات، ضمن وقت تشغيل البناء.</string>
     <string name="build_notif_enabled">تم تفعيل إشعارات البناء</string>
-
-    <!-- Preview -->
     <string name="preview_live">مباشر</string>
     <string name="preview_paused">متوقف مؤقتًا</string>
     <string name="preview_stop_live">إيقاف المعاينة المباشرة</string>
@@ -550,6 +1020,7 @@
     <string name="preview_choose_preview">اختيار المعاينة</string>
     <string name="preview_no_preview_found">لم يُعثر على @Preview</string>
     <string name="preview_renders_on_device">تُعرض معاينة Compose على الجهاز</string>
+    <string name="preview_preparing">جاري تجهيز المعاينة (فهرسة المكتبات)…</string>
     <string name="preview_device_phone">هاتف</string>
     <string name="preview_device_compact">مدمج</string>
     <string name="preview_device_tablet">جهاز لوحي</string>
@@ -558,6 +1029,10 @@
     <string name="preview_night">ليلي</string>
     <string name="preview_zoom_in">تكبير</string>
     <string name="preview_fit">ملاءمة</string>
+    <string name="preview_lock">ثبّت العرض لتصل النقرات إلى المعاينة (يعطّل التحريك والتكبير)</string>
+    <string name="preview_unlock">ألغِ التثبيت لتعود إلى التحريك والتكبير</string>
+    <string name="preview_collapse_toolbar">طيّ شريط الأدوات</string>
+    <string name="preview_expand_toolbar">توسيع شريط الأدوات</string>
     <string name="preview_problems">مشكلات المعاينة</string>
     <string name="preview_copy_problems">نسخ المشكلات</string>
     <string name="preview_render_error">خطأ في العرض</string>
@@ -569,8 +1044,6 @@
         <item quantity="many">%1$d مشكلة</item>
         <item quantity="other">%1$d مشكلة</item>
     </plurals>
-
-    <!-- Editor overlay -->
     <string name="edoverlay_rename_kind">إعادة تسمية %1$s</string>
     <string name="edoverlay_renaming">جاري إعادة التسمية…</string>
     <string name="edoverlay_rename_hint">اضغط Enter لإعادة تسمية "%1$s"، وEsc للإلغاء</string>
@@ -582,8 +1055,16 @@
     <string name="edoverlay_select_all">تحديد الكل</string>
     <string name="edoverlay_quick_documentation">توثيق سريع</string>
     <string name="edoverlay_quick_actions">إجراءات سريعة</string>
+    <string name="nav_go_to">الانتقال إلى</string>
+    <string name="nav_declaration">التصريح</string>
+    <string name="nav_implementations">التطبيقات</string>
+    <string name="nav_type_declaration">تصريح النوع</string>
+    <string name="nav_super">الأصل</string>
+    <string name="nav_none">لم يُعثر على شيء في المصدر.</string>
+    <string name="ctxmenu_actions">الإجراءات</string>
+    <string name="ctxmenu_intentions">الاقتراحات</string>
 
-    <!-- New file -->
+    <!-- dialogs: NewFileDialog (enums hold StringResource label) -->
     <string name="newfile_title">ملف جديد</string>
     <string name="newfile_new_folder">مجلد جديد</string>
     <string name="newfile_in">في %1$s</string>
@@ -604,10 +1085,13 @@
     <string name="newfile_kind_file">ملف</string>
     <string name="newfile_kind_data_class">صنف بيانات</string>
     <string name="newfile_kind_object">كائن</string>
+    <string name="newfile_kind_parcelable">Parcelable</string>
     <string name="newfile_new_java_class">صنف Java جديد</string>
     <string name="newfile_new_kotlin_file">ملف Kotlin جديد</string>
     <string name="newfile_source_java_hint">MyClass</string>
     <string name="newfile_source_kotlin_hint">MyFile</string>
+    <string name="newfile_new_aidl_file">ملف AIDL جديد</string>
+    <string name="newfile_source_aidl_hint">IMyService</string>
     <string name="newfile_reskind_layout">تخطيط</string>
     <string name="newfile_reskind_values">قيم</string>
     <string name="newfile_reskind_drawable">قابل للرسم</string>
@@ -628,6 +1112,7 @@
     <string name="newfile_kind_android_res">موارد Android</string>
     <string name="newfile_kind_assets">الأصول</string>
     <string name="newfile_preset_aidl">AIDL</string>
+    <string name="newfile_preset_jni_libs">مكتبات JNI</string>
     <string name="newfile_preset_custom">مخصص</string>
     <string name="newfile_role_sources">المصادر</string>
     <string name="newfile_add_source_root">إضافة جذر مصدر</string>
@@ -639,7 +1124,7 @@
     <string name="newfile_treat_as">معاملته كـ</string>
     <string name="newfile_created_at">أُنشئ في %1$s</string>
 
-    <!-- File operations -->
+    <!-- dialogs: FileOperationsDialogs -->
     <string name="fileop_rename_title">إعادة تسمية "%1$s"</string>
     <string name="fileop_new_name">الاسم الجديد</string>
     <string name="fileop_delete_dir_title">حذف "%1$s" ومحتوياته؟</string>
@@ -652,13 +1137,13 @@
     <string name="fileop_move_here">النقل هنا</string>
     <string name="fileop_copy_here">النسخ هنا</string>
 
-    <!-- Error dialog -->
+    <!-- dialogs: ErrorDialog -->
     <string name="errdlg_unexpected">حدث خطأ غير متوقع. ظل التطبيق يعمل.</string>
     <string name="errdlg_hide_details">إخفاء التفاصيل</string>
     <string name="errdlg_show_details">إظهار التفاصيل</string>
     <string name="errdlg_dismiss">تجاهل</string>
 
-    <!-- Index -->
+    <!-- dialogs: IndexStatusDialog -->
     <string name="index_title_building">جاري الفهرسة</string>
     <string name="index_title_idle">الفهرس</string>
     <string name="index_working">جاري العمل…</string>
@@ -675,7 +1160,7 @@
     <string name="index_build_phases">المكتبات %1$d مللي ثانية · المصدر %2$d مللي ثانية</string>
     <string name="index_more">+%1$d المزيد</string>
 
-    <!-- Run permissions -->
+    <!-- dialogs: PermissionDialog (roleLabel/labelFor return StringResource) -->
     <string name="perm_wants_to">يريد البرنامج قيد التشغيل %1$s:</string>
     <string name="perm_title_network">السماح بالوصول إلى الشبكة؟</string>
     <string name="perm_verb_network">الاتصال بالشبكة</string>
@@ -694,7 +1179,7 @@
     <string name="perm_allow_always">السماح دائمًا في هذا المشروع</string>
     <string name="perm_deny">رفض</string>
 
-    <!-- Settings hub -->
+    <!-- settings (SettingsScreen/SettingsControls/SettingsHubScreen) — provides settings_title reused by CodeAssistApp -->
     <string name="settings_title">الإعدادات</string>
     <string name="settings_no_settings_available">لا توجد إعدادات متاحة.</string>
     <string name="settings_all_settings">جميع الإعدادات</string>
@@ -706,19 +1191,60 @@
     <string name="settings_settings_subtitle">المظهر والمحرر والإكمال والتحليل</string>
     <string name="settings_code_style">نمط الكود</string>
     <string name="settings_code_style_subtitle">ملفات تنسيق لكل لغة ومعاينة مباشرة</string>
+    <string name="settings_symbols">الرموز والماكرو</string>
+    <string name="settings_symbols_subtitle">تخصيص شريط رموز لوحة المفاتيح وماكرو النصوص</string>
     <string name="settings_sdk_manager">مدير SDK</string>
     <string name="settings_sdk_manager_subtitle">تنزيل مصادر Android SDK وJDK</string>
     <string name="settings_keystore_manager">مدير مخازن المفاتيح</string>
     <string name="settings_keystore_manager_subtitle">إنشاء واستيراد وإدارة مخازن مفاتيح التوقيع</string>
     <string name="settings_plugins">الإضافات</string>
     <string name="settings_plugins_subtitle">تفعيل أو تعطيل الإضافات المدمجة</string>
-
-    <!-- Plugins -->
+    <string name="settings_storage">التخزين</string>
+    <string name="settings_storage_subtitle">اطّلع على ما يشغل المساحة وحرّرها</string>
+    <string name="storage_total_used">إجمالي المستخدم</string>
+    <string name="storage_clear">مسح</string>
+    <string name="storage_clear_all_caches">مسح كل الذواكر المؤقتة</string>
+    <string name="storage_projects_header">المشاريع</string>
+    <string name="storage_open_badge">مفتوح</string>
+    <string name="storage_unavailable">معلومات التخزين غير متاحة.</string>
+    <string name="storage_freed">تم تحرير %1$s</string>
+    <string name="storage_clear_sdk_title">مسح حزمة Android SDK؟</string>
+    <string name="storage_clear_sdk_body">يزيل هذا مكوّنات SDK المنزّلة والتنزيلات (%1$s). وستُنزَّل مرة أخرى في المرة القادمة التي يحتاجها فيها بناء.</string>
+    <string name="storage_cat_dependencies_title">التبعيات</string>
+    <string name="storage_cat_dependencies_desc">مكتبات منزّلة، يُعاد تنزيلها عند الحاجة</string>
+    <string name="storage_cat_index_title">الفهارس</string>
+    <string name="storage_cat_index_desc">فهارس البحث في الكود والإكمال، يُعاد بناؤها تلقائيًا</string>
+    <string name="storage_cat_build_title">مخرجات البناء</string>
+    <string name="storage_cat_build_desc">أصناف مترجَمة وذواكر dex المؤقتة، يُعاد بناؤها في البناء التالي</string>
+    <string name="storage_cat_preview_title">المعاينات</string>
+    <string name="storage_cat_preview_desc">ذواكر معاينة التخطيطات وCompose المؤقتة، تُولَّد عند الطلب</string>
+    <string name="storage_cat_language_title">ذواكر اللغات المؤقتة</string>
+    <string name="storage_cat_language_desc">ذواكر Kotlin والعروض المخصصة، يُعاد بناؤها تلقائيًا</string>
+    <string name="storage_cat_sdk_title">حزمة Android SDK والتنزيلات</string>
+    <string name="storage_cat_sdk_desc">مكوّنات SDK والتنزيلات، يمكن تنزيلها مجددًا</string>
+    <string name="storage_cat_projects_title">ملفات المشاريع</string>
+    <string name="storage_cat_projects_desc">شفرتك المصدرية وإعدادات مشاريعك</string>
+    <string name="storage_cat_other_title">أخرى</string>
+    <string name="storage_cat_other_desc">ملفات المفاتيح والنسخ الاحتياطية وبيانات التطبيق</string>
     <string name="plugins_restart_hint">أعد التشغيل لتطبيق تغييرات الإضافات.</string>
+    <string name="plugins_restart_now">إعادة التشغيل الآن</string>
+    <string name="plugins_restarting">جاري إعادة التشغيل…</string>
+    <string name="plugins_change_installed">مثبّتة</string>
+    <string name="plugins_change_updated">محدّثة</string>
+    <string name="plugins_change_uninstalled">مُزالة</string>
+    <string name="plugins_change_enabled">مُفعّلة</string>
+    <string name="plugins_change_disabled">معطّلة</string>
+    <string name="plugins_changes_more">و%1$d غيرها</string>
     <string name="plugins_required">مطلوب</string>
+    <string name="plugins_review">مراجعة</string>
+    <string name="plugins_logs">السجلات</string>
     <string name="plugins_requires">يتطلب %1$s</string>
+    <string name="plugins_tab_builtin">مضمَّنة</string>
+    <string name="plugins_tab_installed">مثبّتة</string>
+    <string name="plugins_installed_empty">لا شيء مثبّت بعد. تظهر هنا إضافة CodeAssist التي تثبّتها من متجر التطبيقات لديك.</string>
+    <string name="plugins_failed">لم تُحمَّل: %1$s</string>
 
-    <!-- Keystore manager -->
+    <!-- keystore (KeystoreManagerScreen) -->
     <string name="keystore_manager_title">مدير مخازن المفاتيح</string>
     <string name="keystore_section_title">مخازن مفاتيح التوقيع</string>
     <string name="keystore_section_description"><![CDATA[أنشئ أو استورد مخازن المفاتيح التي توقّع بها إصدارات النشر. تُخزَّن مرة واحدة وتُشارَك عبر المشاريع؛ عيّن واحدًا لنوع بناء في علامة تبويب التوقيع الخاصة بالوحدة.]]></string>
@@ -743,7 +1269,7 @@
     <string name="keystore_import_alias">اسم مستعار للمفتاح (فارغ = الأول)</string>
     <string name="keystore_import_key_password">كلمة مرور المفتاح (فارغ = كلمة مرور المخزن)</string>
 
-    <!-- SDK manager -->
+    <!-- sdk (SdkManagerScreen) -->
     <string name="sdk_manager_title">مدير SDK</string>
     <string name="sdk_could_not_load">تعذّر تحميل الحزم.</string>
     <string name="sdk_sources_documentation">المصادر والتوثيق</string>
@@ -752,6 +1278,8 @@
     <string name="sdk_clear_finished">مسح المكتملة</string>
     <string name="sdk_jdk">JDK</string>
     <string name="sdk_jdk_version">JDK %1$s</string>
+    <string name="sdk_jdk_android_runtime">بيئة تشغيل Android ‏(ART)</string>
+    <string name="sdk_jdk_android_runtime_desc">يعمل هذا الجهاز على ART لا على JDK. ويترجم المحرر Java بسلسلة أدوات مضمَّنة. نزّل مصادر JDK أدناه للحصول على توثيق ‎java.*‎.</string>
     <string name="sdk_jdk_sources_available">المصادر متاحة، وتوثيق android.* وjava.* مُفعّل.</string>
     <string name="sdk_jdk_no_sources">لم يُعثر على مصادر JDK. نزّل نسخة JDK تتضمنها:</string>
     <string name="sdk_jdk_downloading">JDK %1$d…</string>
@@ -767,7 +1295,7 @@
     <string name="sdk_installed">مثبّت</string>
     <string name="sdk_resume">استئناف</string>
 
-    <!-- Dependencies -->
+    <!-- dep (DependenciesScreen) — enums use @Composable label() extensions -->
     <string name="dep_declared">مُعلَن</string>
     <string name="dep_resolved">محلول</string>
     <string name="dep_tree">شجرة</string>
@@ -788,6 +1316,7 @@
     <string name="dep_resolving_dependencies">جاري حل التبعيات</string>
     <string name="dep_downloading_artifacts">جاري تنزيل ملفات POM والعناصر…</string>
     <string name="dep_unresolved_count">%1$d غير محلولة</string>
+    <string name="dep_empty_count">‏%1$d لم تُحَل إلى شيء</string>
     <string name="dep_none_declared">لا توجد تبعيات مُعلَنة. انقر إضافة لتنزيل واحدة.</string>
     <string name="dep_nothing_resolved">لم يُحل شيء بعد.</string>
     <string name="dep_not_resolved">غير محلولة. تحقق من الإصدار/المستودع أو أعد الحل</string>
@@ -804,6 +1333,19 @@
     <string name="dep_remove_exclusion">إزالة الاستبعاد</string>
     <string name="dep_excluded">مستبعدة</string>
     <string name="dep_add_dependency">إضافة تبعية</string>
+    <string name="dep_search_hint">ابحث أو الصق group:name:version</string>
+    <string name="dep_options_summary">‏%1$s · %2$s</string>
+    <string name="dep_show_options">خيارات النطاق والنسخة</string>
+    <string name="dep_bom_badge">BOM</string>
+    <string name="dep_quick_start">إضافة سريعة</string>
+    <string name="dep_other_sources">مصادر أخرى</string>
+    <string name="dep_source_module">وحدة أخرى في هذا المشروع</string>
+    <string name="dep_source_local">ملف ‎.jar أو ‎.aar محلي</string>
+    <string name="dep_back_to_search">العودة إلى البحث</string>
+    <string name="dep_firebase_subtitle">‏BoM + Analytics</string>
+    <string name="dep_play_auth_subtitle">تسجيل الدخول بحساب Google</string>
+    <string name="dep_maps_subtitle">‏Google Maps SDK</string>
+    <string name="dep_location_subtitle">مزوّد الموقع المدمج</string>
     <string name="dep_scope">النطاق</string>
     <string name="dep_variant">المتغيّر</string>
     <string name="dep_all_variants">جميع المتغيرات</string>
@@ -811,6 +1353,7 @@
     <string name="dep_resolving_transitive">جاري حل التبعيات المتعدية…</string>
     <string name="dep_no_other_modules">لا توجد وحدات أخرى يمكن الاعتماد عليها.</string>
     <string name="dep_no_results">لا توجد نتائج.</string>
+    <string name="dep_index_unreachable">لم يستجب أي فهرس مستودع، فليس هناك ما يُبحث فيه الآن. تحقق من الاتصال، أو اكتب group:name كاملًا لإضافته على أي حال.</string>
     <string name="dep_type_to_search">اكتب حرفين على الأقل للبحث، أو قيمة group:name[:version] كاملة.</string>
     <string name="dep_add_named">إضافة %1$s</string>
     <string name="dep_import_as_platform">استيراد كمنصة (BOM)</string>
@@ -828,6 +1371,11 @@
     <string name="dep_section_version">الإصدار</string>
     <string name="dep_section_scope">النطاق</string>
     <string name="dep_section_exclusions">الاستبعادات</string>
+    <string name="dep_section_downloaded">المنزّلة</string>
+    <string name="dep_downloaded_help">إصدارات ما زالت مخزّنة على القرص. احذف ما لم تعد تستخدمه لتحرير مساحة؛ وستُنزَّل من جديد إن احتاجها بناء.</string>
+    <string name="dep_downloaded_empty">لم يُنزَّل أي إصدار بعد.</string>
+    <string name="dep_in_use">قيد الاستخدام</string>
+    <string name="dep_delete_version_named">حذف الإصدار %1$s</string>
     <string name="dep_exclusions_help">إدخالات group:name المتعدية المراد إسقاطها (يمكن أن يكون أي طرف *)، مفصولة بفواصل أو مسافات.</string>
     <string name="dep_exclusions_hint">مثلاً com.google.guava:guava، org.json:*</string>
     <string name="dep_version_hint">الإصدار</string>
@@ -865,7 +1413,7 @@
         <item quantity="other">تم حل %1$d إصدار تلقائيًا (الأحدث يفوز)</item>
     </plurals>
 
-    <!-- Module config -->
+    <!-- modcfg (ModuleConfigScreen) — ModulesTab.label is StringResource; uses ARG_TOKEN sentinel for toasts -->
     <string name="modcfg_tab_settings">الإعدادات</string>
     <string name="modcfg_tab_build_features">ميزات البناء</string>
     <string name="modcfg_tab_compiler_plugins">إضافات المُصرِّف</string>
@@ -925,6 +1473,8 @@
     <string name="modcfg_no_source_sets">لا توجد مجموعات مصادر بعد.</string>
     <string name="modcfg_save">حفظ</string>
     <string name="modcfg_save_changes">حفظ التغييرات</string>
+    <string name="modcfg_unsaved_changes">تغييرات غير محفوظة</string>
+    <string name="modcfg_discard">تجاهل</string>
     <string name="modcfg_missing_keep_rule_files">ملفات قواعد الإبقاء مفقودة</string>
     <string name="modcfg_missing_keep_rule_files_content">هذه الملفات مشار إليها من نوع بناء لكنها غير موجودة، لذا يتخطاها R8 عند تفعيل التصغير.</string>
     <string name="modcfg_no_roots">لا توجد جذور</string>
@@ -933,7 +1483,7 @@
     <string name="modcfg_new_badge">جديد</string>
     <string name="modcfg_add_row">إضافة %1$s</string>
 
-    <!-- Code style -->
+    <!-- codestyle (CodeStyleScreen) -->
     <string name="codestyle_title">نمط الكود</string>
     <string name="codestyle_language">اللغة</string>
     <string name="codestyle_language_desc">تحتفظ كل لغة بملفها الخاص</string>
@@ -1003,7 +1553,7 @@
     <string name="codestyle_wrap_if_long">إذا كان طويلاً</string>
     <string name="codestyle_wrap_one_per_line">واحد لكل سطر</string>
 
-    <!-- Common actions -->
+    <!-- shared common labels (reused across screens) -->
     <string name="save">حفظ</string>
     <string name="close">إغلاق</string>
     <string name="clear">مسح</string>
@@ -1031,13 +1581,16 @@
     <string name="import">استيراد</string>
     <string name="install">تثبيت</string>
 
-    <!-- Module config (platform SDK) -->
     <string name="modcfg_platform_sdk">منصة SDK</string>
     <string name="modcfg_platform_sdk_auto">تلقائي (%1$s)</string>
 
-    <!-- AI chat providers -->
+    <!-- AI coding agent -->
 
-    <!-- Settings pages -->
+    <!-- Settings page content (localizes the built-in pages declared in ide-core/BuiltInSettingsPages.kt +
+         SettingsBackend). Rendered generically; the UI overlay (SettingsLocalization.kt) uses these where a
+         key exists and falls back to the backend-supplied English for plugin pages and the device-specific
+         Build Runtime descriptions. -->
+    <!-- Page titles (keyed by page id) -->
     <string name="set_page_appearance">المظهر</string>
     <string name="set_page_editor">المحرر</string>
     <string name="set_page_completion">إكمال الكود</string>
@@ -1046,17 +1599,21 @@
     <string name="set_page_build">البناء والتبعيات</string>
     <string name="set_page_build_runtime">وقت تشغيل البناء</string>
     <string name="set_page_privacy">الخصوصية والبيانات</string>
+    <!-- Group sub-headings -->
     <string name="set_grp_gestures">الإيماءات</string>
     <string name="set_grp_keyboard">لوحة المفاتيح</string>
     <string name="set_grp_preview_sandbox">صندوق حماية المعاينة</string>
     <string name="set_grp_privacy">الخصوصية</string>
     <string name="set_grp_storage">التخزين</string>
     <string name="set_grp_debug_dexing">بناء التصحيح (تحويل dex)</string>
+    <!-- Slider unit words -->
     <string name="set_unit_classes">أصناف</string>
+    <!-- Severity chip labels -->
     <string name="set_sev_error">خطأ</string>
     <string name="set_sev_warning">تحذير</string>
     <string name="set_sev_info">معلومة</string>
     <string name="set_sev_hint">تلميح</string>
+    <!-- Appearance -->
     <string name="set_appearance_theme">السمة</string>
     <string name="set_appearance_theme_desc">استخدام سمة ثابتة أو متابعة نظام التشغيل</string>
     <string name="set_appearance_theme_light">فاتح</string>
@@ -1067,6 +1624,7 @@
     <string name="set_appearance_accent_violet">بنفسجي</string>
     <string name="set_appearance_accent_teal">أزرق مخضر</string>
     <string name="set_appearance_accent_orange">برتقالي (قديم)</string>
+    <!-- Editor -->
     <string name="set_editor_font_size">حجم الخط</string>
     <string name="set_editor_code_font">خط الكود</string>
     <string name="set_editor_code_font_monospace">خط النظام أحادي المسافة</string>
@@ -1082,12 +1640,15 @@
     <string name="set_editor_wrap_desc">لف الأسطر الطويلة بمرونة عند حافة العرض بدلاً من التمرير أفقيًا</string>
     <string name="set_editor_wrap_indent">مسافة بادئة للأسطر الملفوفة</string>
     <string name="set_editor_wrap_indent_desc">محاذاة أسطر استمرار السطر الملفوف إلى مسافته البادئة (عند تفعيل التفاف النص)</string>
+    <string name="set_editor_hscrollbar">شريط التمرير الأفقي</string>
+    <string name="set_editor_hscrollbar_desc">إظهار شريط قابل للسحب على الحافة السفلية حين يمتد سطر خارج العرض (لا يترك التفاف النص ما يُمرَّر)</string>
     <string name="set_editor_two_axis">التمرير على محورين</string>
     <string name="set_editor_two_axis_desc">اسحب في أي اتجاه للتمرير على المحورين معًا (باللمس)</string>
     <string name="set_editor_pinch">القرص للتكبير</string>
     <string name="set_editor_pinch_desc">اقرص بإصبعين لتغيير حجم خط الكود</string>
     <string name="set_editor_kbd_suggest">اقتراحات لوحة المفاتيح</string>
     <string name="set_editor_kbd_suggest_desc">اسمح للوحة المفاتيح الافتراضية بالتصحيح التلقائي والاقتراح وإضافة المسافات تلقائيًا (لوحة مفاتيح عادية). أوقفه لإدخال الكود الخام، بحيث لا تحصل النقطة "." المكتوبة على مسافة مُدرَجة تلقائيًا، مقابل فقدان شريط الاقتراحات.</string>
+    <!-- Code Completion -->
     <string name="set_completion_auto">إظهار الاقتراحات تلقائيًا</string>
     <string name="set_completion_auto_desc">إظهار القائمة أثناء الكتابة (إيقاف = Ctrl-Space فقط)</string>
     <string name="set_completion_postfix">قوالب لاحقة</string>
@@ -1097,12 +1658,14 @@
     <string name="set_completion_delay">تأخير الظهور التلقائي</string>
     <string name="set_completion_delay_desc">المدة قبل ظهور القائمة بعد ضغطة المفتاح</string>
     <string name="set_completion_max">الحد الأقصى للاقتراحات</string>
+    <!-- Analysis &amp; Inspections -->
     <string name="set_analysis_otf">التحليل الفوري</string>
     <string name="set_analysis_otf_desc">عرض التشخيصات أثناء الكتابة (إيقاف = عند البناء فقط)</string>
     <string name="set_analysis_reparse">تأخير إعادة التحليل</string>
     <string name="set_analysis_reparse_desc">فترة الهدوء بعد ضغطة المفتاح قبل إعادة التحليل</string>
     <string name="set_analysis_perf">تسجيل أوقات التحليل</string>
     <string name="set_analysis_perf_desc">تشخيصي: يكتب أوقات كل مرور (دلالي / تشخيصات / طيّات / تلميحات مضمّنة / معاينات) وكل مرحلة إلى السجل حتى تجد ما يبطئ الملف. اقرأها في الخصوصية ← عرض السجلات. متوقف افتراضيًا.</string>
+    <!-- Preview sandbox -->
     <string name="set_preview_file">حظر الوصول إلى الملفات</string>
     <string name="set_preview_file_desc">منع الكود المُعاين من قراءة الملفات أو كتابتها (java.io / java.nio / kotlin.io). تُرجع الاستدعاءات المحظورة null وتُدرَج في شريحة مشكلات المعاينة. ينطبق على المعاينات المفتوحة حديثًا.</string>
     <string name="set_preview_net">حظر الوصول إلى الشبكة</string>
@@ -1111,11 +1674,13 @@
     <string name="set_preview_android_desc">منع الكود المُعاين من إطلاق الأنشطة/الخدمات، أو إرسال البثوث، أو استخدام خدمات النظام أو ContentResolver أو SharedPreferences. تبقى قراءات الموارد والكثافة متاحة.</string>
     <string name="set_preview_process">حظر العمليات والانعكاس</string>
     <string name="set_preview_process_desc">منع الكود المُعاين من تشغيل العمليات، أو استدعاء System.exit، أو تحميل المكتبات الأصلية، أو استدعاء الأعضاء بالانعكاس.</string>
+    <!-- Build &amp; Dependencies -->
     <string name="set_build_conflict">تعارضات التبعيات</string>
     <string name="set_build_conflict_desc">أي إصدار يفوز عند طلب إصدارين في الرسم البياني</string>
     <string name="set_build_conflict_newest">الأحدث</string>
     <string name="set_build_conflict_pinned">المباشر يفوز</string>
     <string name="set_build_conflict_fail">الفشل عند التعارض</string>
+    <!-- Build Runtime (titles/options/buttons + static descriptions; device-specific descriptions stay backend-English) -->
     <string name="set_br_separate">البناء في عملية منفصلة</string>
     <string name="set_br_separate_desc">شغّل عمليات البناء وبرنامجك في عملية معزولة حتى لا يُسقط عطل نفاد الذاكرة بيئة التطوير. إيقاف = البناء داخل العملية (يستخدم ذاكرة أقل، بدون عزل). يتطلب إذن الإشعارات (تعرض العملية المعزولة إشعار تقدّم)؛ وبدونه تُشغَّل عمليات البناء داخل العملية. يسري في المرة التالية التي تفتح فيها مشروعًا.</string>
     <string name="set_br_notif">إشعارات البناء</string>
@@ -1129,6 +1694,7 @@
     <string name="set_br_dexbatch">حجم دفعة دمج dex</string>
     <string name="set_br_dexbatch_desc">في التطبيقات الكبيرة جدًا تدمج خطوة تحويل dex النهائية الأصناف على دفعات حتى لا تحتاجها كلها في الذاكرة دفعة واحدة. تُبقي الدفعات الأصغر تلك الذاكرة منخفضة (جيد للأجهزة قليلة الذاكرة) لكنها تجعل APK أكبر قليلاً (ضغط مشترك أقل بين الأصناف)؛ وتحزم الدفعات الأكبر بإحكام أكثر لكنها تحتاج ذاكرة أكبر لكل دمج. لا تصل معظم التطبيقات إلى هذا الحد، إذ لا يبدأ إلا بعد بضعة آلاف من الأصناف.</string>
     <string name="set_br_dexfork">الحد الأقصى لعمليات dex المتزامنة المنفصلة</string>
+    <!-- Privacy &amp; Data -->
     <string name="set_privacy_analytics">مشاركة تحليلات الأداء</string>
     <string name="set_privacy_analytics_desc">مقاييس أداء مجهولة الهوية فقط، ولا يشمل ذلك كودك أو أسماء ملفاتك أبدًا</string>
     <string name="set_privacy_clear">مسح الذاكرة المؤقتة</string>
@@ -1141,40 +1707,199 @@
     <string name="set_privacy_backup_desc">تصدير كل مشروع إلى ملف zip واحد</string>
     <string name="set_privacy_backup_btn">نسخ احتياطي</string>
 
-    <!-- Toggles / misc -->
+    <!-- Localization pass: assorted on-screen strings previously hardcoded in composables -->
+    <!-- Generic toggle chips -->
     <string name="toggle_on">تشغيل</string>
     <string name="toggle_off">إيقاف</string>
+    <!-- Accessibility / content descriptions -->
     <string name="picker_delete_project">حذف المشروع</string>
     <string name="storage_copy_path">نسخ المسار</string>
     <string name="symbolbar_tab">Tab</string>
+    <!-- Editor fallbacks -->
     <string name="rename_failed">فشلت إعادة التسمية</string>
     <string name="learn_check_failed">فشل الفحص</string>
+    <!-- Command palette result-section headers ("Go to"; the rest reuse the filter-tab labels) -->
     <string name="palette_section_goto">الانتقال إلى</string>
-
-    <!-- Quick documentation -->
+    <!-- Quick-doc section headers -->
     <string name="quickdoc_parameters">المعاملات</string>
     <string name="quickdoc_returns">القيمة المُرجَعة</string>
     <string name="quickdoc_throws">الاستثناءات</string>
     <string name="quickdoc_see_also">انظر أيضًا</string>
-
-    <!-- Resource preview -->
+    <!-- Resource preview pane -->
     <string name="respreview_no_preview">لا تتوفر معاينة لهذا الملف</string>
     <string name="respreview_render_drawable_failed">تعذّر عرض هذا القابل للرسم</string>
     <string name="respreview_unsupported">غير مدعوم: &lt;%1$s>، %2$s</string>
     <string name="respreview_no_colors">لا توجد ألوان مُعلَنة في هذا الملف</string>
     <string name="respreview_unresolved">(غير محلول)</string>
     <string name="respreview_decode_image_failed">تعذّر فك ترميز هذه الصورة</string>
-
-    <!-- Module config (consumer) -->
+    <!-- Module config: keep-rule file build-type descriptor -->
     <string name="modcfg_consumer_suffix">%1$s · مستهلِك</string>
-
-    <!-- Block palette -->
-    <string name="block_palette_if">If</string>
-    <string name="block_palette_if_else">If / Else</string>
+    <!-- Block editor palette items -->
+    <string name="block_palette_if">إذا</string>
+    <string name="block_palette_if_else">إذا / وإلا</string>
     <string name="block_palette_for_each">لكل عنصر</string>
-    <string name="block_palette_while">While</string>
-    <string name="block_palette_return">Return</string>
+    <string name="block_palette_while">طالما</string>
+    <string name="block_palette_return">إرجاع</string>
     <string name="block_palette_variable">متغيّر</string>
     <string name="block_palette_call">استدعاء</string>
     <string name="block_palette_comment">تعليق</string>
+    <!-- Icon Manager -->
+    <string name="icons_title">مدير الأيقونات</string>
+    <string name="icons_tab_project">المشروع</string>
+    <string name="icons_tab_library">المكتبات</string>
+    <string name="icons_tab_compose">Compose</string>
+    <string name="icons_search_hint">ابحث في الأيقونات</string>
+    <string name="icons_empty">لا توجد أيقونات تطابق هذا البحث.</string>
+    <string name="icons_project_empty">لا يحتوي هذا المشروع على موارد drawable أو mipmap بعد.</string>
+    <string name="icons_compose_empty">لا توجد مكتبة أيقونات Compose في مسار أصناف هذه الوحدة.</string>
+    <string name="icons_compose_add_hint">أضف androidx.compose.material:material-icons-extended لتصفّح المجموعة كاملة.</string>
+    <string name="icons_load_set">تحميل أيقونات %1$s</string>
+    <string name="icons_loading_set">جاري تنزيل قائمة الأيقونات…</string>
+    <string name="icons_license">الترخيص: %1$s</string>
+    <string name="icons_style">النمط</string>
+    <string name="icons_style_outlined">مُحدَّد</string>
+    <string name="icons_style_rounded">مستدير</string>
+    <string name="icons_style_sharp">حاد</string>
+    <string name="icons_filled">ممتلئ</string>
+    <string name="icons_name">اسم المورد</string>
+    <string name="icons_size">الحجم</string>
+    <string name="icons_colour">اللون</string>
+    <string name="icons_colour_original">الإبقاء على الأصلي</string>
+    <string name="icons_res_type">المجلد</string>
+    <string name="icons_target">الكتابة إلى</string>
+    <string name="icons_import">إضافة إلى المشروع</string>
+    <string name="icons_import_svg">استيراد ملف SVG</string>
+    <string name="icons_copied">نُسخ إلى الحافظة</string>
+    <string name="icons_conflict_title">استبدال %1$s؟</string>
+    <string name="icons_conflict_body">تُصرّح %1$s بهذا المورد بالفعل. واستبداله يحدّث كل إشارة إليه.</string>
+    <string name="icons_replace">استبدال</string>
+    <string name="icons_configurations">‏%1$d تهيئة</string>
+    <string name="icons_app_icon_title">أيقونة التطبيق</string>
+    <string name="icons_app_icon_subtitle">عاين أيقونة المشغّل واستبدلها</string>
+    <!-- App icon studio -->
+    <string name="appicon_title">أيقونة التطبيق</string>
+    <string name="appicon_current">الأيقونة الحالية</string>
+    <string name="appicon_preview">معاينة</string>
+    <string name="appicon_mask_circle">دائرة</string>
+    <string name="appicon_mask_squircle">مربع دائري</string>
+    <string name="appicon_mask_rounded">مستدير الأركان</string>
+    <string name="appicon_mask_square">مربع</string>
+    <string name="appicon_themed">متوافق مع السمة</string>
+    <string name="appicon_foreground">المقدمة</string>
+    <string name="appicon_background">الخلفية</string>
+    <string name="appicon_monochrome">طبقة السمة</string>
+    <string name="appicon_none">بلا</string>
+    <string name="appicon_choose_icon">اختر أيقونة</string>
+    <string name="appicon_choose_image">اختر صورة</string>
+    <string name="appicon_use_project_drawable">استخدم drawable من المشروع</string>
+    <string name="appicon_same_as_foreground">مثل المقدمة</string>
+    <string name="appicon_scale">التحجيم</string>
+    <string name="appicon_offset_x">تحريك أفقي</string>
+    <string name="appicon_offset_y">تحريك رأسي</string>
+    <string name="appicon_outputs">ما الذي سيُكتب</string>
+    <string name="appicon_gen_rasters">صور PNG بالكثافات (لما قبل Android 8)</string>
+    <string name="appicon_gen_round">أيقونة دائرية</string>
+    <string name="appicon_gen_playstore">صورة Play Store ‏(512 بكسل)</string>
+    <string name="appicon_files">‏%1$d ملف</string>
+    <string name="appicon_replacing">يستبدل %1$d ملفًا موجودًا</string>
+    <string name="appicon_manifest">البيان: %1$s</string>
+    <string name="appicon_apply">تطبيق الأيقونة</string>
+    <string name="appicon_applied">تم تحديث أيقونة التطبيق</string>
+    <string name="appicon_no_module">لا يحتوي هذا المشروع على وحدة تطبيق Android.</string>
+    <string name="appicon_module">الوحدة</string>
+    <string name="filetree_image_asset">أصل صورة</string>
+    <string name="icons_insert">إدراج عند المؤشر</string>
+    <string name="icons_copy">نسخ</string>
+    <string name="icons_reference">الإشارة</string>
+    <string name="icons_app_icon_short">أيقونة التطبيق</string>
+    <string name="icons_no_repositories">لا توجد مكتبات أيقونات مسجّلة.</string>
+
+    <!-- Built-in UI actions: More-menu rows and command-palette navigation commands -->
+    <string name="action_close_project">إغلاق المشروع</string>
+    <string name="action_close_project_desc">العودة إلى كل المشاريع</string>
+    <string name="action_dependencies">إدارة التبعيات</string>
+    <string name="action_hub">الإعدادات والأدوات</string>
+    <string name="action_hub_desc">الإعدادات · نمط الكود · مدير SDK · مدير ملفات المفاتيح</string>
+    <string name="action_icons">مدير الأيقونات</string>
+    <string name="action_icons_desc">تصفّح الأيقونات واستوردها، وغيّر أيقونة التطبيق</string>
+    <string name="action_logs">عرض السجلات</string>
+    <string name="action_logs_desc">سجلات المحرر والتحليل والبناء — شاركها عندما يسوء شيء</string>
+    <string name="action_modules">الوحدات</string>
+    <string name="action_modules_desc">إضافة الوحدات وإزالتها · إصدار Java · التبعيات · المستودعات</string>
+    <string name="action_reindex">إعادة فهرسة المشروع</string>
+    <string name="action_reindex_desc">إعادة بناء فهارس الرموز والإكمال</string>
+    <string name="action_toggle_theme">تبديل السمة</string>
+    <string name="action_toggle_theme_desc">التبديل بين الفاتح والداكن</string>
+
+    <!-- Explore feed: empty and sparse states, publishing walkthrough, listing status -->
+    <string name="store_action_read_why">اقرأ السبب</string>
+    <string name="store_action_use">استخدام</string>
+    <string name="store_action_view_listing">عرض البطاقة</string>
+    <string name="store_action_view_notes">عرض الملاحظات</string>
+    <string name="store_action_withdraw">سحب</string>
+    <string name="store_badge_cd">‏%1$d مشروع منشور</string>
+    <string name="store_badge_first">أول من على الرف</string>
+    <string name="store_badge_new">جديد</string>
+    <string name="store_bundled_subtitle">هياكل جاهزة تعمل دون اتصال وتأتي مع التثبيت.</string>
+    <string name="store_bundled_title">مضمَّنة مع بيئة التطوير</string>
+    <string name="store_catalogue_subtitle">الأحدث أولًا</string>
+    <string name="store_collections_title">المجموعات</string>
+    <string name="store_empty_hero_body">تظهر هنا القوالب والتطبيقات النموذجية والإضافات فور اجتيازها المراجعة. ويمكن أن يكون مشروعك أولها.</string>
+    <string name="store_empty_hero_title">لم ينشر أحد أي مشروع بعد</string>
+    <string name="store_ghost_charts_note">تظهر المراتب بمجرد أن يصبح للمشاريع أسبوع من سجل التثبيت.</string>
+    <string name="store_ghost_collections_note">يجمّع الفريق الأرفف المنتقاة من المشاريع المنشورة.</string>
+    <string name="store_ghost_count_cd">‏%1$d من %2$d مشروع مطلوب</string>
+    <string name="store_ghost_next_title">ما الذي سيحل هنا لاحقًا</string>
+    <string name="store_ghost_recommend_note">تحتاج التوصيات إلى سجل تثبيتك — ثبّت شيئًا أولًا.</string>
+    <string name="store_ghost_section_subtitle">يُفعَّل كل رف حين يجتمع لديه ما يكفي للترتيب.</string>
+    <string name="store_ghost_section_title">ما الذي يُفتح مع نمو المتجر</string>
+    <string name="store_ghostspec_charts_note">يبدأ الترتيب عند %1$d مشروع — فقائمة من أربعة ليست إلا القائمة أعلاه.</string>
+    <string name="store_ghostspec_collections_note">يبني الفريق مجموعة حالما تتوفر مشاريع كافية لتكوين موضوع.</string>
+    <string name="store_ghostspec_rec_note">تحتاج التوصيات إلى سجل تثبيت عبر عدة مشاريع.</string>
+    <string name="store_ghostspec_rec_title">لأنك ثبّتّ…</string>
+    <string name="store_hero_eyebrow_open">المتجر مفتوح</string>
+    <string name="store_how_it_works">كيف يعمل</string>
+    <string name="store_how_publishing_title">كيف يعمل النشر</string>
+    <string name="store_meta_offline">دون اتصال</string>
+    <string name="store_not_rated">لم يُقيَّم بعد</string>
+    <string name="store_notify_state_off">الإشعارات معطّلة</string>
+    <string name="store_notify_state_on">الإشعارات مفعّلة</string>
+    <string name="store_notify_subtitle">إشعار واحد، للدفعة الأولى فقط.</string>
+    <string name="store_notify_title">أعلمني عند وصول المشاريع</string>
+    <string name="store_ordinal_fifth">الخامس</string>
+    <string name="store_ordinal_fourth">الرابع</string>
+    <string name="store_ordinal_second">الثاني</string>
+    <string name="store_ordinal_third">الثالث</string>
+    <string name="store_perk_direct_line">خط مباشر مع فريق المراجعة</string>
+    <string name="store_perk_front_page">الصفحة الأولى من اليوم الأول</string>
+    <string name="store_pitch_body">كل ما هو منشور الآن موجود على هذه الصفحة — لا ترتيب تتسلقه، ولا صفحات خلفية تسقط فيها. وهذا لن يدوم.</string>
+    <string name="store_pitch_eyebrow">الأرفف ما زالت قصيرة</string>
+    <string name="store_pitch_next">‏%1$s وسيكون مشروعك التالي.</string>
+    <string name="store_pitch_ordinal_full">‏%1$s وسيكون مشروعك %2$s.</string>
+    <string name="store_pitch_subject">‏%1$d مشروع حتى الآن.</string>
+    <string name="store_pitch_subject_one">مشروع واحد حتى الآن.</string>
+    <string name="store_publish_another">انشر مشروعًا آخر</string>
+    <string name="store_publish_cta">نشر مشروع</string>
+    <string name="store_publishing_guide">دليل النشر</string>
+    <string name="store_status_building">قيد البناء على جهاز نظيف</string>
+    <string name="store_status_changes">مطلوب تعديلات — اقرأ الملاحظات</string>
+    <string name="store_status_published">منشور في المتجر</string>
+    <string name="store_status_rejected">غير مقبول</string>
+    <string name="store_status_rejected_note">غير مقبول · %1$s</string>
+    <string name="store_status_submitted">قيد المراجعة · عادةً يومَي عمل</string>
+    <string name="store_step_listing_body">العنوان، ووصف قصير، والفئة، ولقطات الشاشة — تُلتقط من محررك داخل التطبيق.</string>
+    <string name="store_step_listing_title">املأ بطاقة المتجر</string>
+    <string name="store_step_pick_body">اختر أي مشروع محلي. يقرأ CodeAssist اسمه ولغته وإعداد JDK وGradle نيابةً عنك — لا شيء تكتبه بيدك.</string>
+    <string name="store_step_pick_title">اختر مشروعًا من الصفحة الرئيسية</string>
+    <string name="store_step_submit_body">نبنيه على جهاز نظيف ويتحقق شخص من الترخيص وملف README. عادةً في يومَي عمل.</string>
+    <string name="store_step_submit_title">أرسل للمراجعة</string>
+    <string name="store_top_charts">الأكثر رواجًا</string>
+
+    <plurals name="store_project_count">
+        <item quantity="one">مشروع واحد</item>
+        <item quantity="two">مشروعان</item>
+        <item quantity="few">‏%1$d مشاريع</item>
+        <item quantity="many">‏%1$d مشروعًا</item>
+        <item quantity="other">‏%1$d مشروع</item>
+    </plurals>
 </resources>

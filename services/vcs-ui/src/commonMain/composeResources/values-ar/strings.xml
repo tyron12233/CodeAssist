@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Panel chrome -->
+    <string name="vcs_title">Git</string>
+    <string name="vcs_refresh">تحديث</string>
+    <string name="vcs_cancel">إلغاء</string>
+    <string name="vcs_copy">نسخ</string>
+    <string name="vcs_copied">تم النسخ</string>
+    <string name="vcs_open_in_browser">فتح في المتصفح</string>
+
+    <!-- Empty and error states -->
+    <string name="vcs_not_a_repo_title">غير خاضع لإدارة الإصدارات</string>
+    <string name="vcs_not_a_repo_body">تتبّع هذا المشروع بـ Git لتحتفظ بسجل تغييراتك، وتعمل على فروع، وتدفع إلى GitHub.</string>
+    <string name="vcs_init">إنشاء مستودع</string>
+    <string name="vcs_clone">استنساخ مستودع</string>
+    <string name="vcs_no_project">افتح مشروعًا لاستخدام إدارة الإصدارات.</string>
+    <string name="vcs_clean_title">لا شيء لإيداعه</string>
+    <string name="vcs_clean_body">شجرة العمل لديك مطابقة لآخر إيداع.</string>
+
+    <!-- Branch header -->
+    <string name="vcs_branch">الفرع</string>
+    <string name="vcs_detached">‏HEAD منفصل</string>
+    <string name="vcs_no_commits">لا إيداعات بعد</string>
+    <string name="vcs_up_to_date">محدَّث</string>
+    <string name="vcs_fetch">جلب</string>
+    <string name="vcs_pull">سحب</string>
+    <string name="vcs_push">دفع</string>
+    <string name="vcs_history">السجل</string>
+    <string name="vcs_file_history">سجل هذا الملف</string>
+
+    <!-- Change sections -->
+    <string name="vcs_section_conflicts">التعارضات</string>
+    <string name="vcs_section_staged">مُجهَّز</string>
+    <string name="vcs_section_changes">التغييرات</string>
+    <string name="vcs_stage">تجهيز</string>
+    <string name="vcs_unstage">إلغاء التجهيز</string>
+    <string name="vcs_stage_all">تجهيز الكل</string>
+    <string name="vcs_unstage_all">إلغاء تجهيز الكل</string>
+    <string name="vcs_discard">تجاهل</string>
+    <string name="vcs_discard_title">تجاهل التغييرات؟</string>
+    <string name="vcs_discard_body">ستُلغى التعديلات على %1$s. لا يمكن التراجع عن ذلك.</string>
+    <string name="vcs_mark_resolved">تعليم كمحلول</string>
+    <string name="vcs_abort_merge">إلغاء الدمج</string>
+    <string name="vcs_merge_in_progress">دمج قيد التنفيذ</string>
+    <string name="vcs_rebase_in_progress">إعادة تأسيس قيد التنفيذ</string>
+    <string name="vcs_cherry_pick_in_progress">انتقاء إيداع قيد التنفيذ</string>
+    <string name="vcs_revert_in_progress">تراجع قيد التنفيذ</string>
+    <string name="vcs_bisect_in_progress">تنصيف قيد التنفيذ</string>
+
+    <!-- File status labels -->
+    <string name="vcs_status_added">مُضاف</string>
+    <string name="vcs_status_modified">مُعدَّل</string>
+    <string name="vcs_status_deleted">محذوف</string>
+    <string name="vcs_status_renamed">أُعيدت تسميته</string>
+    <string name="vcs_status_copied">منسوخ</string>
+    <string name="vcs_status_untracked">جديد</string>
+    <string name="vcs_status_conflicted">تعارض</string>
+
+    <!-- Commit -->
+    <string name="vcs_commit_hint">رسالة الإيداع</string>
+    <string name="vcs_commit">إيداع</string>
+    <string name="vcs_commit_and_push">إيداع ودفع</string>
+    <string name="vcs_amend">تعديل آخر إيداع</string>
+    <string name="vcs_nothing_staged">جهّز ملفًا لإيداعه.</string>
+    <string name="vcs_identity_missing">حدّد اسمك وبريدك الإلكتروني قبل الإيداع.</string>
+    <string name="vcs_set_identity">تحديد الهوية</string>
+    <string name="vcs_name">الاسم</string>
+    <string name="vcs_email">البريد الإلكتروني</string>
+    <string name="vcs_save">حفظ</string>
+
+    <!-- Branches screen -->
+    <string name="vcs_branches">الفروع</string>
+    <string name="vcs_branches_search">ابحث في الفروع</string>
+    <string name="vcs_branches_local">محلية</string>
+    <string name="vcs_branches_remote">بعيدة</string>
+    <string name="vcs_branches_none">لا توجد فروع مطابقة.</string>
+    <string name="vcs_new_branch">فرع جديد</string>
+    <string name="vcs_new_branch_hint">اسم الفرع</string>
+    <string name="vcs_create">إنشاء</string>
+    <string name="vcs_current_branch">الحالي</string>
+    <string name="vcs_merge_into">الدمج في %1$s</string>
+    <string name="vcs_delete">حذف</string>
+    <string name="vcs_delete_branch_title">حذف %1$s؟</string>
+    <string name="vcs_delete_branch_body">سيُزال الفرع محليًا. وقد تُفقد الإيداعات الموجودة على هذا الفرع وحده.</string>
+    <string name="vcs_force_delete">احذف على أي حال</string>
+
+    <!-- History screen -->
+    <string name="vcs_history_empty">لا إيداعات بعد.</string>
+    <string name="vcs_load_more">تحميل المزيد</string>
+    <string name="vcs_commit_files">تغيّر %1$d ملف</string>
+    <string name="vcs_insertions">‎+%1$d</string>
+    <string name="vcs_deletions">‎-%1$d</string>
+    <string name="vcs_merge_commit">دمج</string>
+
+    <!-- Diff -->
+    <string name="vcs_diff">الفروق</string>
+    <string name="vcs_diff_empty">لا يوجد اختلاف نصي.</string>
+    <string name="vcs_diff_binary">ملف ثنائي. لا فروق نصية لعرضها.</string>
+
+    <!-- Stash -->
+    <string name="vcs_stash">حفظ مؤقت</string>
+    <string name="vcs_stashes">المحفوظات المؤقتة</string>
+    <string name="vcs_stash_changes">حفظ التغييرات مؤقتًا</string>
+    <string name="vcs_stash_hint">الوصف (اختياري)</string>
+    <string name="vcs_stash_untracked">تضمين الملفات غير المتتبَّعة</string>
+    <string name="vcs_stash_apply">تطبيق</string>
+    <string name="vcs_stash_drop">إسقاط</string>
+    <string name="vcs_stash_empty">لا شيء محفوظ مؤقتًا.</string>
+
+    <!-- Ignore -->
+    <string name="vcs_add_ignores">إضافة مدخلات ‎.gitignore الافتراضية</string>
+
+    <!-- Accounts -->
+    <string name="vcs_accounts">الحسابات</string>
+    <string name="vcs_sign_in_github">تسجيل الدخول عبر GitHub</string>
+    <string name="vcs_sign_in_intro">سجّل الدخول لاستنساخ مستودعاتك الخاصة، والدفع عبر HTTPS دون كلمة مرور، وفتح طلبات السحب.</string>
+    <string name="vcs_sign_out">تسجيل الخروج</string>
+    <string name="vcs_active_account">يُستخدم لعمليات Git</string>
+    <string name="vcs_use_account">استخدام هذا الحساب</string>
+    <string name="vcs_device_code_title">أدخل هذا الرمز في GitHub</string>
+    <string name="vcs_device_code_body">افتح %1$s وأدخل الرمز. تتحدث هذه الشاشة بمجرد موافقتك.</string>
+    <string name="vcs_signing_in">في انتظار الموافقة…</string>
+    <string name="vcs_sign_in_token">استخدام رمز وصول</string>
+    <string name="vcs_token_hint">رمز وصول شخصي</string>
+    <string name="vcs_token_help">أنشئ رمزًا بنطاق «repo» في GitHub ضمن Settings ثم Developer settings ثم Personal access tokens.</string>
+    <string name="vcs_sign_in">تسجيل الدخول</string>
+    <string name="vcs_other_servers">خوادم Git أخرى</string>
+    <string name="vcs_other_servers_body">احفظ اسم مستخدم وكلمة مرور لخادم لا يدعم تسجيل الدخول بحساب، مثل GitLab أو Gitea مستضاف ذاتيًا.</string>
+    <string name="vcs_host">المضيف</string>
+    <string name="vcs_host_hint">git.example.com</string>
+    <string name="vcs_username">اسم المستخدم</string>
+    <string name="vcs_password">كلمة المرور أو الرمز</string>
+    <string name="vcs_saved_hosts">الخوادم المحفوظة</string>
+    <string name="vcs_remove">إزالة</string>
+
+    <!-- Clone -->
+    <string name="vcs_clone_title">استنساخ مستودع</string>
+    <string name="vcs_clone_url">رابط المستودع</string>
+    <string name="vcs_clone_folder">اسم المجلد</string>
+    <string name="vcs_clone_action">استنساخ</string>
+    <string name="vcs_clone_yours">مستودعاتك</string>
+    <string name="vcs_clone_search">ابحث في المستودعات</string>
+    <string name="vcs_clone_sign_in">سجّل الدخول لتصفّح مستودعاتك.</string>
+    <string name="vcs_clone_none">لم يُعثر على مستودعات.</string>
+    <string name="vcs_clone_unrecognized_title">ليس مشروعًا معروفًا</string>
+    <string name="vcs_clone_unrecognized_body">تم استنساخ %1$s وإضافته إلى مشاريعك، لكن لم يتعرّف عليه أي نظام بناء. يمكنك تصفّح ملفاته وتحريرها؛ أما البناء والتشغيل فيحتاجان إلى إعداد وحدة أولًا.</string>
+    <string name="vcs_clone_unrecognized_open">فتح للتحرير</string>
+    <string name="vcs_private">خاص</string>
+    <string name="vcs_fork">اشتقاق</string>
+
+    <!-- GitHub screen -->
+    <string name="vcs_github">GitHub</string>
+    <string name="vcs_publish_title">النشر على GitHub</string>
+    <string name="vcs_publish_body">أنشئ مستودعًا لهذا المشروع وادفع الفرع الحالي إليه.</string>
+    <string name="vcs_publish_name">اسم المستودع</string>
+    <string name="vcs_publish_description">الوصف (اختياري)</string>
+    <string name="vcs_publish_private">مستودع خاص</string>
+    <string name="vcs_publish">نشر</string>
+    <string name="vcs_publish_needs_commit">أنشئ إيداعًا قبل النشر.</string>
+    <string name="vcs_pull_requests">طلبات السحب</string>
+    <string name="vcs_pull_requests_empty">لا توجد طلبات سحب مفتوحة.</string>
+    <string name="vcs_new_pull_request">طلب سحب جديد</string>
+    <string name="vcs_pr_title">العنوان</string>
+    <string name="vcs_pr_body">الوصف</string>
+    <string name="vcs_pr_base">الدمج في</string>
+    <string name="vcs_pr_create">إنشاء طلب السحب</string>
+    <string name="vcs_pr_from">من %1$s</string>
+    <string name="vcs_draft">مسودة</string>
+
+    <!-- Remotes -->
+    <string name="vcs_remotes">المستودعات البعيدة</string>
+    <string name="vcs_add_remote">إضافة مستودع بعيد</string>
+    <string name="vcs_remote_name">اسم المستودع البعيد</string>
+    <string name="vcs_remote_url">رابط المستودع البعيد</string>
+    <string name="vcs_no_remote">لا يوجد لهذا المشروع مستودع بعيد بعد.</string>
+
+    <!-- Plain-language hints and menu wording. Git's own vocabulary is the main thing newcomers trip on, so
+         each group of files says what it is and every occasional action is a worded menu row. -->
+    <string name="vcs_hint_conflicts">غيّر الطرفان هذه الملفات. صحّح كل ملف، ثم علّمه كمحلول.</string>
+    <string name="vcs_hint_staged">جاهزة للإيداع. تدخل هذه الملفات في إيداعك التالي.</string>
+    <string name="vcs_hint_changes">مُعدَّلة لكنها غير مضمَّنة بعد. جهّز ملفًا لإضافته إلى الإيداع التالي.</string>
+    <string name="vcs_hint_commit">يحفظ الإيداع لقطة من الملفات المجهَّزة، على هذا الجهاز فقط.</string>
+    <string name="vcs_hint_push">يرسل الدفع إيداعاتك إلى المستودع البعيد ليراها الآخرون.</string>
+
+    <string name="vcs_menu_more">إجراءات أخرى</string>
+    <string name="vcs_menu_repository">المستودع</string>
+    <string name="vcs_menu_file">هذا الملف</string>
+    <string name="vcs_menu_view_changes">عرض التغييرات</string>
+    <string name="vcs_menu_file_history">سجل الملف</string>
+    <string name="vcs_menu_sync">مزامنة</string>
+    <string name="vcs_tooltip_refresh">إعادة قراءة حالة ملفاتك</string>
+    <string name="vcs_tooltip_history">تصفّح الإيداعات السابقة</string>
+    <string name="vcs_tooltip_fetch">التحقق من وجود إيداعات جديدة في المستودع البعيد دون تغيير ملفاتك</string>
+    <string name="vcs_tooltip_pull">جلب إيداعات المستودع البعيد إلى فرعك</string>
+    <string name="vcs_tooltip_push">إرسال إيداعاتك إلى المستودع البعيد</string>
+    <string name="vcs_tooltip_github">حسابك على GitHub والنشر وطلبات السحب</string>
+    <string name="vcs_tooltip_stage">إضافة هذا الملف إلى الإيداع التالي</string>
+    <string name="vcs_tooltip_unstage">إخراج هذا الملف من الإيداع التالي</string>
+    <string name="vcs_tooltip_stage_all">إضافة كل ملف مُعدَّل إلى الإيداع التالي</string>
+    <string name="vcs_tooltip_unstage_all">إخراج كل الملفات من الإيداع التالي</string>
+    <string name="vcs_tooltip_discard">إلغاء تعديلاتك على هذا الملف</string>
+    <string name="vcs_tooltip_resolved">قبول هذا الملف كما هو الآن</string>
+    <string name="vcs_tooltip_branch">‏%1$s. انقر للتبديل أو لإنشاء فرع.</string>
+    <string name="vcs_push_after_commit">الدفع بعد الإيداع</string>
+    <string name="vcs_no_remote_short">لا مستودع بعيد مُعدّ</string>
+    <string name="vcs_set_up_remote">الاتصال بـ GitHub</string>
+    <string name="vcs_sign_out_of">تسجيل الخروج من %1$s</string>
+    <string name="vcs_checkout_branch">التبديل إلى هذا الفرع</string>
+    <string name="vcs_delete_branch">حذف الفرع</string>
+    <string name="vcs_merge_into_current">الدمج في الفرع الحالي</string>
+</resources>
