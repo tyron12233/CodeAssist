@@ -10,11 +10,49 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// The Supabase endpoint, the same pair :ide-android bakes into its BuildConfig. There is no BuildConfig in
+// a Kotlin/Multiplatform module, so it is generated: one file, one object, the same property/env override
+// chain (-PSUPABASE_URL / SUPABASE_URL), so a rotated key reaches every host the same way.
+//
+// The publishable key is safe to ship in an open-source client ONLY because row-level security is what
+// actually gates access. An empty URL leaves the store wired but inert, which is what a fork with no
+// endpoint of its own should get.
+val supabaseUrl = (findProperty("SUPABASE_URL") as String?) ?: System.getenv("SUPABASE_URL")
+    ?: "https://lqlpkeummmmglikumotx.supabase.co"
+val supabaseKey = (findProperty("SUPABASE_KEY") as String?) ?: System.getenv("SUPABASE_KEY")
+    ?: "sb_publishable_5T14bUAG6fOGz47kwYzG7A_25dj3ap4"
+
+val generateStoreConfig by tasks.registering {
+    val outputDir = layout.buildDirectory.dir("generated/storeConfig/kotlin")
+    // Declared as inputs so a changed endpoint regenerates rather than being served from the build cache.
+    inputs.property("url", supabaseUrl)
+    inputs.property("key", supabaseKey)
+    inputs.property("build", project.version.toString())
+    outputs.dir(outputDir)
+    doLast {
+        val file = outputDir.get().file("dev/ide/ios/store/StoreConfig.kt").asFile
+        file.parentFile.mkdirs()
+        file.writeText(
+            """
+            package dev.ide.ios.store
+
+            /** Generated from Gradle properties; see app/ide-ios/build.gradle.kts. Do not edit. */
+            internal object StoreConfig {
+                const val SUPABASE_URL: String = "$supabaseUrl"
+                const val SUPABASE_KEY: String = "$supabaseKey"
+                const val APP_VERSION: String = "${project.version}"
+            }
+
+            """.trimIndent(),
+        )
+    }
+}
+
 kotlin {
-    // Simulator-only while the port is proven. `iosArm64()` (device) declares the same framework and is the
-    // one-line change once the app runs.
-    iosSimulatorArm64 {
-        binaries.framework {
+    // Both iOS targets: the simulator, and the device (arm64) the app is signed and installed onto. They
+    // declare the same framework, and Xcode picks the one matching whatever it is building for.
+    listOf(iosSimulatorArm64(), iosArm64()).forEach { target ->
+        target.binaries.framework {
             baseName = "CodeAssistUi"
             // Static: the Xcode app links one archive and has no dynamic framework to embed or sign.
             isStatic = true
@@ -24,6 +62,8 @@ kotlin {
     }
 
     sourceSets {
+        commonMain { kotlin.srcDir(generateStoreConfig) }
+
         // The backend's file and project handling is real Foundation IO, so its tests run on the simulator:
         // `./gradlew :ide-ios:iosSimulatorArm64Test`.
         commonTest.dependencies {
@@ -38,6 +78,14 @@ kotlin {
             // has (files, projects, saving) and inherits the empty/`Unsupported` answers for the rest.
             // `api`, not `implementation`: it is the supertype of a public class here.
             api(project(":ide-ui-testing"))
+
+            // The Projects Store. The transport (:store-impl) and its translation onto the UI contract
+            // (:store-bridge) are the same code the Android and desktop hosts run; what this host supplies
+            // is where things live (the app container), how a credential is kept (the keychain) and how a
+            // browser is opened (ASWebAuthenticationSession).
+            implementation(project(":store-api"))
+            implementation(project(":store-impl"))
+            implementation(project(":store-bridge"))
         }
     }
 }

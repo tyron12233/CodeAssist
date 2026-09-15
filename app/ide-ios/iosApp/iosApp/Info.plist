@@ -16,6 +16,22 @@
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
+	<!-- The app's own URL scheme. `codeassist://store/<id>` opens a project's page in the store (the
+	     moderation page uses it to jump from a submission into the app), and `codeassist://auth-callback`
+	     is where a sign-in provider sends the user back. The same scheme the Android manifest registers. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>dev.ide.codeassist.ios</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>codeassist</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<!-- Compose Multiplatform refuses to start without this: without it iOS caps the app at 60Hz on a

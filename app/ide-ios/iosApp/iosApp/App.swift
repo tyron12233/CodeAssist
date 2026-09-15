@@ -19,6 +19,12 @@ struct CodeAssistApp: App {
             ComposeView()
                 // The IDE draws its own chrome and reads the safe-area insets itself, as it does on Android.
                 .ignoresSafeArea(.all)
+                // `codeassist://store/<id>` opens that project's page; `codeassist://auth-callback` is a
+                // sign-in coming back. Kotlin tells the two apart -- the same code the Android activity
+                // runs -- so this only has to hand the URL over.
+                .onOpenURL { url in
+                    _ = MainViewControllerKt.handleDeepLink(url: url.absoluteString)
+                }
         }
     }
 }

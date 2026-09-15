@@ -70,7 +70,7 @@
 			outputPaths = ();
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\ncd \"$SRCROOT/../../..\"\nexport JAVA_HOME=\"${JAVA_HOME:-/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home}\"\n./gradlew --quiet \":ide-ios:link${CONFIGURATION}FrameworkIosSimulatorArm64\" :ide-ios:syncComposeResourcesForIos\n";
+			shellScript = "set -e\ncd \"$SRCROOT/../../..\"\nexport JAVA_HOME=\"${JAVA_HOME:-/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home}\"\n# The Kotlin target follows what Xcode is building for: the device links iosArm64, the\n# simulator iosSimulatorArm64. Reading SDK_NAME rather than the destination keeps one phase\n# correct for both.\ncase \"$SDK_NAME\" in\n  iphoneos*) KOTLIN_TARGET=IosArm64 ;;\n  *) KOTLIN_TARGET=IosSimulatorArm64 ;;\nesac\n./gradlew --quiet \":ide-ios:link${CONFIGURATION}Framework${KOTLIN_TARGET}\" :ide-ios:syncComposeResourcesForIos\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -120,12 +120,17 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_IDENTITY = "";
+				"CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]" = NO;
+				"CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]" = NO;
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = WL7DSQ4BM6;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
-				FRAMEWORK_SEARCH_PATHS = ("$(SRCROOT)/../build/bin/iosSimulatorArm64/$(KOTLIN_FRAMEWORK_DIR)", );
+				FRAMEWORK_SEARCH_PATHS = ("$(SRCROOT)/../build/bin/$(KOTLIN_NATIVE_TARGET)/$(KOTLIN_FRAMEWORK_DIR)", );
+				"KOTLIN_NATIVE_TARGET[sdk=iphoneos*]" = iosArm64;
+				"KOTLIN_NATIVE_TARGET[sdk=iphonesimulator*]" = iosSimulatorArm64;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = iosApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
@@ -143,12 +148,17 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_IDENTITY = "";
+				"CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]" = NO;
+				"CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]" = NO;
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = WL7DSQ4BM6;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
-				FRAMEWORK_SEARCH_PATHS = ("$(SRCROOT)/../build/bin/iosSimulatorArm64/$(KOTLIN_FRAMEWORK_DIR)", );
+				FRAMEWORK_SEARCH_PATHS = ("$(SRCROOT)/../build/bin/$(KOTLIN_NATIVE_TARGET)/$(KOTLIN_FRAMEWORK_DIR)", );
+				"KOTLIN_NATIVE_TARGET[sdk=iphoneos*]" = iosArm64;
+				"KOTLIN_NATIVE_TARGET[sdk=iphonesimulator*]" = iosSimulatorArm64;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = iosApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );

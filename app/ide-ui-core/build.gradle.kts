@@ -34,6 +34,7 @@ kotlin {
     // iOS. The platform seam this module declares (`expect`s for the back handler, system bars, cursors,
     // secondary click, the clock, and the editor's IME) is resolved for iOS in `src/iosMain`.
     iosSimulatorArm64()
+    iosArm64()
 
     sourceSets {
         commonMain.dependencies {
@@ -70,10 +71,11 @@ kotlin {
         }
 
         // The default hierarchy template is off project-wide (see gradle.properties), so the intermediate
-        // set holding this module's iOS actuals is declared here rather than inherited. Declaring it now
-        // keeps those actuals in one place when `iosArm64` joins the simulator target.
+        // set the two iOS targets share is declared here rather than inherited. It holds this module's iOS
+        // actuals for both the simulator and the device.
         val iosMain = create("iosMain") { dependsOn(getByName("commonMain")) }
         getByName("iosSimulatorArm64Main").dependsOn(iosMain)
+        getByName("iosArm64Main").dependsOn(iosMain)
 
         // The IME bridge's command mapping and code-point arithmetic are iOS-only code, so the only place
         // they can be tested is a Kotlin/Native test — which runs on the simulator via
@@ -83,5 +85,6 @@ kotlin {
             dependencies { implementation(kotlin("test")) }
         }
         getByName("iosSimulatorArm64Test").dependsOn(iosTest)
+        getByName("iosArm64Test").dependsOn(iosTest)
     }
 }

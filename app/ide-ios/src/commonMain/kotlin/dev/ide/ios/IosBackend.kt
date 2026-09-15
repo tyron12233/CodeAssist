@@ -1,5 +1,8 @@
 package dev.ide.ios
 
+import dev.ide.ios.store.IosPreferences
+import dev.ide.ios.store.IosStoreService
+import dev.ide.ios.store.StoreConfig
 import dev.ide.ui.StubBackend
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.ProjectInfo
@@ -7,10 +10,13 @@ import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiDirEntry
 import dev.ide.ui.backend.UiProjectResult
+import dev.ide.ui.backend.StoreService
 import dev.ide.ui.backend.UiProjectTemplate
 import dev.ide.ui.icons.fileIconId
+import dev.ide.ui.platform.ioDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 
 /**
  * The iOS host's [dev.ide.ui.backend.IdeBackend]: real files and real projects, no language intelligence.
@@ -34,6 +40,37 @@ class IosBackend(
 ) : StubBackend() {
 
     private var active: ProjectInfo? = null
+
+    /**
+     * The Projects Store: browse, install, sign in, review, moderate.
+     *
+     * The transport and the mapping onto the UI's contract are the shared `:store-impl` / `:store-bridge`
+     * code every host runs. What this host supplies is where things go — projects into the Documents
+     * container the Files app exposes, working state into Application Support — and what adopting an
+     * installed project means here, which is nothing beyond it being a directory: [projects] lists what is
+     * under the root, so an unpacked archive IS a project the moment it lands.
+     */
+    override val store: StoreService = IosStoreService.supabase(
+        url = StoreConfig.SUPABASE_URL,
+        apiKey = StoreConfig.SUPABASE_KEY,
+        // `CFBundleVersion`, which is iOS's build number and the exact counterpart of Android's
+        // versionCode — the store filters items by it, so a number derived from the marketing version
+        // would claim a build that does not exist and change which items the feed offers.
+        appBuild = IosBundle.buildNumber(),
+        projectsRoot = { projectsRoot },
+        cacheRoot = IosFiles.supportDir(),
+        preferences = IosPreferences(),
+        adopt = { dir ->
+            if (!IosFiles.isDirectory(dir)) {
+                "That download isn't a project CodeAssist can open"
+            } else {
+                // Nothing else to do: [projects] lists the directories under the root, so an unpacked
+                // archive is a project the moment it lands. The picker just has to be told to look again.
+                bumpProjects()
+                null
+            }
+        },
+    )
 
     private val fsEpoch = MutableStateFlow(0)
     private val projEpoch = MutableStateFlow(0)
@@ -211,6 +248,21 @@ class IosBackend(
         return true
     }
 
+    /**
+     * The bytes behind an image the UI is about to draw.
+     *
+     * Every picture in the store goes through here — a listing's icon, a screenshot gallery, an avatar —
+     * because the shared components decode bytes rather than resolve paths themselves. Unimplemented, it
+     * is not an error anywhere: each one quietly draws its flat placeholder instead, which is what the
+     * whole store looked like on this host until it was.
+     *
+     * Capped at the same 8 MB the other hosts use: this is decoded into memory on a phone, and a file
+     * larger than that is not a picture the UI has any use for.
+     */
+    override suspend fun imageBytes(path: String): ByteArray? = withContext(ioDispatcher) {
+        if (IosFiles.size(path) > MAX_PREVIEW_IMAGE_BYTES) null else IosFiles.readBytes(path)
+    }
+
     override suspend fun deleteProject(rootPath: String): Boolean {
         if (!IosFiles.delete(rootPath)) return false
         if (active?.rootPath == rootPath) active = null
@@ -235,5 +287,8 @@ class IosBackend(
     private companion object {
         const val MAX_TREE_DEPTH = 12
         const val TEMPLATE_EMPTY = "ios.empty"
+
+        /** The same ceiling the other hosts decode up to; see [imageBytes]. */
+        const val MAX_PREVIEW_IMAGE_BYTES = 8L * 1024 * 1024
     }
 }

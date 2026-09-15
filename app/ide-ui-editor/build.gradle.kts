@@ -26,6 +26,7 @@ kotlin {
     // iOS. The editor's own surface is common Compose; only the XML layout preview and the image codecs
     // resolve per platform, in `src/iosMain`.
     iosSimulatorArm64()
+    iosArm64()
 
     sourceSets {
         commonMain.dependencies {
@@ -47,6 +48,7 @@ kotlin {
         // template, so no intermediate ios set is created for us. See :ide-ui-api for the same wiring.
         val iosMain = create("iosMain") { dependsOn(getByName("commonMain")) }
         getByName("iosSimulatorArm64Main").dependsOn(iosMain)
+        getByName("iosArm64Main").dependsOn(iosMain)
 
         // `compose.uiTooling` carries `ComposeViewAdapter`, the harness the preview pane instantiates to
         // render an @Preview. Without it on the target's classpath, Studio/IntelliJ fail with

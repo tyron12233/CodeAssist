@@ -71,6 +71,7 @@ gradle.rootProject {
 // The pure-Kotlin/JVM framework — builds and tests with no Android SDK or Compose toolchain.
 include(
     ":platform-core",
+    ":platform-json", // dependency-free JSON reader/writer; multiplatform, so the store transport can use it
     ":vfs-api",
     ":project-model-api",
     ":project-model-impl",
@@ -108,6 +109,7 @@ include(
     ":analytics-impl", // the engine: durable batch buffer + Supabase PostgREST sink + scrubbed crash reporter
     ":store-api",  // remote Projects Store SPI: catalog model + catalog/account/submission ports
     ":store-impl", // the engine: Supabase PostgREST catalog source, offline cache, submission packager
+    ":store-bridge", // the store transport mapped onto the UI's StoreService contract, shared by every host
     ":block-api",
     ":block-impl",
     ":plugin-api",  // UI extensibility SPI: the lean action model (IdeAction/ActionGroup + places) + EPs
@@ -177,7 +179,9 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
 // root; the `require` below turns that into a clear message rather than a missing-directory error.
 val layers = mapOf(
     // The framework's foundation: services, the virtual file system, the project/module model.
-    "platform" to listOf("platform-core", "vfs-api", "project-model-api", "project-model-impl"),
+    "platform" to listOf(
+        "platform-core", "platform-json", "vfs-api", "project-model-api", "project-model-impl",
+    ),
     // Everything that reads source: the language SPI, indexes, analysis, the per-language backends,
     // the compiler/PSI hosts they parse against, and the block (projectional) editor over them.
     "lang" to listOf(
@@ -200,7 +204,8 @@ val layers = mapOf(
     // Cross-cutting services, each an api/impl pair (plus its own Compose UI where it has one):
     // dependency resolution, version control, the Projects Store, analytics, the AI agent.
     "services" to listOf(
-        "deps-api", "deps-impl", "vcs-api", "vcs-impl", "vcs-ui", "store-api", "store-impl",
+        "deps-api", "deps-impl", "vcs-api", "vcs-impl", "vcs-ui",
+        "store-api", "store-impl", "store-bridge",
         "analytics-api", "analytics-impl", "agent-api", "agent-impl", "agent-mcp", "agent-ui",
     ),
     // The plugin SPI a third-party plugin compiles against, and the host that resolves it.

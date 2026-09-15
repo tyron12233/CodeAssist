@@ -24,6 +24,7 @@ kotlin {
 
     // iOS. The screens are common Compose over the `IdeBackend` port, so they build for iOS unchanged.
     iosSimulatorArm64()
+    iosArm64()
 
     sourceSets {
         commonMain.dependencies {

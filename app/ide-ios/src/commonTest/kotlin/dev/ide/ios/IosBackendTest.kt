@@ -11,6 +11,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertContentEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -144,8 +145,36 @@ class IosBackendTest {
         assertEquals("Mod", backend.files.moduleNameForFile(IosFiles.join(created, "src/Main.kt")))
         assertNull(backend.files.moduleNameForFile("/elsewhere/Other.kt"))
     }
+
+    /**
+     * Every picture the UI draws goes through [IosBackend.imageBytes]: a store listing's icon, a
+     * screenshot gallery, a publisher's avatar. The shared components decode bytes rather than resolve
+     * paths, so a host that does not answer this draws a flat plate everywhere and reports no error at
+     * all — which is exactly what the store looked like here before it was implemented.
+     */
+    @Test
+    fun readsTheBytesBehindAnImage() = runTest {
+        val backend = IosBackend(projectsRoot = root)
+        val file = IosFiles.join(root, "icon.png")
+        val bytes = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        IosFiles.writeBytes(file, bytes)
+
+        assertContentEquals(bytes, backend.imageBytes(file))
+        assertNull(backend.imageBytes(IosFiles.join(root, "missing.png")), "a file that is not there is null")
+    }
+
+    /** Decoding happens in memory on a phone, so a file too large to be a picture is refused outright. */
+    @Test
+    fun refusesAnImageTooLargeToBeOne() = runTest {
+        val backend = IosBackend(projectsRoot = root)
+        val file = IosFiles.join(root, "huge.png")
+        IosFiles.writeBytes(file, ByteArray(9 * 1024 * 1024))
+
+        assertNull(backend.imageBytes(file), "past the ceiling, nothing is decoded")
+    }
 }
 
 /** A per-instance suffix so concurrently-run test classes cannot share a directory. */
 private var counter = 0
-private fun nowSuffix(): String = "${++counter}-${IosFiles.modifiedMs(NSTemporaryDirectory())}"
+private fun nowSuffix(): String = "${++counter}-${IosFiles.modifiedMs(NSTemporaryDirectory())
+}"

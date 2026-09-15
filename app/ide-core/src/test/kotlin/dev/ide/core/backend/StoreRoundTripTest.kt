@@ -7,6 +7,7 @@ import dev.ide.store.RemoteStoreItem
 import dev.ide.store.StoreCatalogSource
 import dev.ide.store.StoreQuery
 import dev.ide.store.StoreResult
+import dev.ide.store.bridge.StoreInstaller
 import dev.ide.store.impl.ProjectPackager
 import dev.ide.ui.backend.UiInstallProgress
 import dev.ide.ui.backend.UiInstallState
@@ -49,9 +50,10 @@ class StoreRoundTripTest {
             storagePath: String,
             expectedSha256: String?,
             expectedBytes: Long,
-            into: File,
+            intoPath: String,
             onProgress: (Float) -> Unit,
         ): StoreResult<Unit> {
+            val into = File(intoPath)
             archive.copyTo(into, overwrite = true)
             onProgress(1f)
             val actual = into.inputStream().use { stream ->
@@ -103,9 +105,9 @@ class StoreRoundTripTest {
                 sizeBytes = packed.value.totalBytes,
                 title = "Android Sample",
             ),
-            projectsRoot = projectsRoot,
+            projectsRoot = projectsRoot.absolutePath,
             adopt = { dir ->
-                if (manager.adoptProjectInPlace(dir.toPath())) null else "not a project"
+                if (manager.adoptProjectInPlace(java.nio.file.Path.of(dir))) null else "not a project"
             },
         ) { seen += it }
 
@@ -142,7 +144,7 @@ class StoreRoundTripTest {
                 sizeBytes = packed.value.totalBytes,
                 title = "Android Sample",
             ),
-            projectsRoot = projectsRoot,
+            projectsRoot = projectsRoot.absolutePath,
             adopt = { error("adopt must not be reached for an archive that failed verification") },
         ) {}
 

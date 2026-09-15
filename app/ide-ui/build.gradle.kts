@@ -37,6 +37,7 @@ kotlin {
     // iOS. The shell is the navigation graph and the overlay stack over `IdeBackend`; an iOS host builds
     // its own backend and calls `CodeAssistApp`, exactly as :ide-desktop and :ide-android do.
     iosSimulatorArm64()
+    iosArm64()
 
     sourceSets {
         commonMain.dependencies {

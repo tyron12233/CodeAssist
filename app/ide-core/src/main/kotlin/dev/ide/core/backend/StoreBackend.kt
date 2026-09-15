@@ -2,6 +2,18 @@ package dev.ide.core.backend
 
 import dev.ide.core.BackendContext
 import dev.ide.model.template.ProjectTemplate
+import dev.ide.store.bridge.StoreAccounts
+import dev.ide.store.bridge.StoreFeedCache
+import dev.ide.store.bridge.StoreFeedMapper
+import dev.ide.store.bridge.StoreMediaCache
+import dev.ide.store.bridge.StoreInstallHistory
+import dev.ide.store.bridge.StoreInstaller
+import dev.ide.store.bridge.StoreLikes
+import dev.ide.store.bridge.StoreModeration
+import dev.ide.store.bridge.StoreReviews
+import dev.ide.store.bridge.StoreSearchPaging
+import dev.ide.store.bridge.StoreSubmissions
+import dev.ide.store.bridge.storeIo
 import dev.ide.ui.backend.StoreService
 import dev.ide.ui.backend.UiStoreCatalog
 import dev.ide.ui.backend.UiStoreInstallResult
@@ -160,34 +172,8 @@ internal class StoreBackend(
         // shipping app however well the server computes it, which is what it was. Read on the store's own
         // dispatcher: it comes off disk.
         if (!source.configured()) return null
-        val seed = seedItemId ?: withContext(dev.ide.core.backend.storeIo) { history.mostRecent() }
-        return feedLock.withLock {
-            if (!refresh) feedMemo.get(seed)?.let { return@withLock it }
-            fetchFeed(seed).also { loaded -> if (loaded != null) feedMemo.put(seed, loaded) }
-        }
-    }
-
-    private suspend fun fetchFeed(seed: String?): UiStoreFeed? {
-        return withContext(dev.ide.core.backend.storeIo) {
-            val bundled = bundledBySlug()
-            when (val result = source.feedDocument(seed)) {
-                is dev.ide.store.StoreResult.Ok -> {
-                    val parsed = dev.ide.store.impl.StoreFeedParser.parse(result.value)
-                    if (parsed == null) {
-                        // A response we cannot read is not evidence about the store, so behave as offline.
-                        cachedFeed(bundled)
-                    } else {
-                        // Cache the exact bytes that were just rendered, so the cached copy cannot drift.
-                        writeCache(result.value)
-                        // Remember the payload coordinates so install() needs no second round trip.
-                        rememberPayloads(parsed)
-                        StoreFeedMapper.toUi(parsed, bundled)
-                    }
-                }
-                // Offline or a server hiccup: fall back to whatever was last seen.
-                else -> cachedFeed(bundled)
-            }
-        }
+        val seed = seedItemId ?: withContext(storeIo) { history.mostRecent() }
+        return feedCache.feed(seed, refresh)
     }
 
     /**
@@ -203,19 +189,27 @@ internal class StoreBackend(
         history.remember(id)
         // The install count on the card just changed, and so did the seed the personalized shelf is built
         // from, so the memoized feed is now describing the store as it was before this install.
-        feedMemo.clear()
+        feedCache.clear()
         if (!source.configured()) return
         val installId = ctx.manager?.preference(INSTALL_ID_PREF) ?: return
         runCatching { source.recordInstall(id, installId) }
     }
 
-    /** Guarded by [feedLock], which also coalesces concurrent readers into one request. */
-    private val feedLock = kotlinx.coroutines.sync.Mutex()
-    private val feedMemo = FeedMemo(FEED_MEMO_MS, CACHED_FEED_MEMO_MS)
+    /**
+     * The feed, its disk cache and the payload coordinates it carries.
+     *
+     * Shared with the iOS host: the ordering (memo, network, cache), the `fromCache` marking and the
+     * "null is not an empty store" rule are the same wherever the app runs.
+     */
+    private val feedCache = StoreFeedCache(
+        source = source,
+        cachePath = { ctx.manager?.storageRoot?.let { java.io.File(it.toFile(), "store/explore-feed.json").absolutePath } },
+        bundled = { bundledBySlug() },
+    )
 
     /** Beside the feed cache it is read with, because the two are read on the same request. */
     private val history = StoreInstallHistory {
-        ctx.manager?.storageRoot?.let { java.io.File(it.toFile(), "store/installed.txt") }
+        ctx.manager?.storageRoot?.let { java.io.File(it.toFile(), "store/installed.txt").absolutePath }
     }
 
     // ---- likes, and the Saved shelf they back ----
@@ -244,87 +238,22 @@ internal class StoreBackend(
     override suspend fun likedItems(): Set<String> = withContext(storeIo) { likeStore.reconcile() }
 
     /**
-     * One lock per media lane.
+     * The image caches, shared with the iOS host.
      *
-     * Two jobs at once. It deduplicates: a path always takes the same lane, so two cards asking for the
-     * same screenshot download it once and the second finds the file already there. And it caps
-     * concurrency: a flung list used to open a socket per visible card, and now opens at most one per lane.
+     * Published art, a submission's private art and an avatar differ in bucket, authority and limits, and
+     * the caching, the per-path lanes and the weekly avatar refresh are the same on every host.
      */
-    private val mediaLanes = List(MEDIA_LANES) { kotlinx.coroutines.sync.Mutex() }
+    private val media = StoreMediaCache(
+        source = source,
+        root = { ctx.manager?.storageRoot?.toFile()?.absolutePath },
+        // By name, not by value: the moderation adapter is declared further down with the rest of the
+        // moderation surface, and a property cannot read one that has not been initialised yet.
+        moderation = { moderationState },
+    )
 
-    /**
-     * Cache a remote screenshot to disk and return its local path, or null.
-     *
-     * The gallery decodes files, so remote images have to become files. Caching them under the store's own
-     * directory keyed by the storage path means a revisit costs nothing and the same image shared by two
-     * surfaces is fetched once. Published screenshot keys are version-scoped (`slug/version/shot-0.png`,
-     * written by approval), so the bytes at a path never change and a cached file cannot go stale.
-     */
-    override suspend fun screenshotFile(storagePath: String): String? = withContext(storeIo) {
-        val root = ctx.manager?.storageRoot?.toFile() ?: return@withContext null
-        val cached = java.io.File(root, "store/media/${storagePath.replace('/', '_')}")
-        if (cached.isFile && cached.length() > 0) return@withContext cached.absolutePath
-        laneFor(storagePath).withLock {
-            // Re-checked inside the lane: whoever held it may have been fetching this very path.
-            if (cached.isFile && cached.length() > 0) return@withLock cached.absolutePath
-            when (source.downloadMedia(storagePath, cached)) {
-                is dev.ide.store.StoreResult.Ok -> cached.absolutePath
-                // A screenshot that will not load is not worth an error surface: the gallery simply shows
-                // the ones that did.
-                else -> null
-            }
-        }
-    }
+    override suspend fun screenshotFile(storagePath: String): String? = media.screenshot(storagePath)
 
-    /** The lane a media path downloads in. Same path, same lane, which is what makes it deduplicate. */
-    private fun laneFor(storagePath: String): kotlinx.coroutines.sync.Mutex =
-        mediaLanes[(storagePath.hashCode().toLong() and 0x7fffffffL).toInt() % mediaLanes.size]
-
-    /**
-     * Cache an avatar to disk and return its local path, or null.
-     *
-     * The avatar lives wherever the identity provider serves it, so this is a plain HTTPS GET rather than
-     * a bucket download. Three limits, because the URL is not the store's: https only, a size cap, and a
-     * short timeout.
-     */
-    override suspend fun avatarFile(url: String): String? = withContext(storeIo) {
-        if (!url.startsWith("https://")) return@withContext null
-        val root = ctx.manager?.storageRoot?.toFile() ?: return@withContext null
-        val cached = java.io.File(root, "store/avatars/${url.hashCode().toUInt().toString(16)}.img")
-        // Re-fetched once a week even though the name has not changed: a provider serves a new picture from
-        // the same URL, so caching on the URL alone would pin the first face forever.
-        val fresh = System.currentTimeMillis() - cached.lastModified() < AVATAR_CACHE_MS
-        if (cached.isFile && cached.length() > 0 && fresh) return@withContext cached.absolutePath
-        runCatching {
-            val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 8_000
-                readTimeout = 8_000
-                instanceFollowRedirects = true
-            }
-            if (conn.responseCode !in 200..299) {
-                conn.errorStream?.use { it.readBytes() }
-                return@runCatching null
-            }
-            cached.parentFile?.mkdirs()
-            var written = 0L
-            conn.inputStream.use { input ->
-                cached.outputStream().buffered().use { out ->
-                    val buffer = ByteArray(16 * 1024)
-                    while (true) {
-                        val n = input.read(buffer)
-                        if (n <= 0) break
-                        written += n
-                        // An avatar is a small square. Anything past this is not one, and the file is
-                        // dropped rather than kept and decoded.
-                        if (written > MAX_AVATAR_BYTES) return@runCatching null
-                        out.write(buffer, 0, n)
-                    }
-                }
-            }
-            cached.absolutePath
-        }.getOrNull().also { if (it == null) cached.delete() }
-    }
+    override suspend fun avatarFile(url: String): String? = media.avatar(url)
 
     // ---- publisher profiles ----
 
@@ -450,7 +379,7 @@ internal class StoreBackend(
         withContext(storeIo) { reviewState.setHidden(itemId, authorId, hidden) }
 
     /** The version the catalog last advertised for [itemId], when it said. */
-    private fun versionOf(itemId: String): String? = payloads[itemId]?.version
+    private fun versionOf(itemId: String): String? = feedCache.payload(itemId)?.version
 
     // ---- accounts ----
     //
@@ -480,16 +409,10 @@ internal class StoreBackend(
      */
     private fun adoptAccount(account: dev.ide.store.StoreAccount): dev.ide.store.StoreAccount {
         bindPushDevice()
-        val profile = submissionState.profile() ?: return account
-        return account.copy(
-            handle = profile.handle,
-            displayName = profile.displayName,
-            avatarUrl = profile.avatarUrl ?: account.avatarUrl,
-            verified = profile.verified,
-            // The profile read is the only round trip that already happens on sign-in, and it now answers
-            // this too, so the app knows whether to offer moderation without a second call.
-            isAdmin = profile.isModerator,
-        )
+        // The profile half is shared with the iOS host: the fields it fills in (the handle, the name, and
+        // whether this account moderates) are the same wherever the app runs, and the device binding
+        // above is the only part that is this host's.
+        return submissionState.adopt(account)
     }
 
     /**
@@ -762,20 +685,8 @@ internal class StoreBackend(
     override suspend fun resolveReport(reportId: String, actioned: Boolean): String? =
         withContext(storeIo) { moderationState.resolveReport(reportId, actioned) }
 
-    /**
-     * A submission's screenshot as a local file, cached like a published one.
-     *
-     * Kept apart from [screenshotFile] because the bucket is different and so is the authority: this one
-     * is in the PRIVATE uploads bucket and needs the moderator's session, which the anonymous media
-     * download has no way to present. The cache directory is separate too, so an image from a submission
-     * that is later refused is not sitting under the same prefix as published art.
-     */
-    override suspend fun submissionImageFile(storagePath: String): String? = withContext(storeIo) {
-        val root = ctx.manager?.storageRoot?.toFile() ?: return@withContext null
-        val cached = java.io.File(root, "store/review/${storagePath.replace('/', '_')}")
-        if (cached.isFile && cached.length() > 0) return@withContext cached.absolutePath
-        if (moderationState.downloadSubmissionImage(storagePath, cached)) cached.absolutePath else null
-    }
+    override suspend fun submissionImageFile(storagePath: String): String? =
+        media.submissionImage(storagePath)
 
     /**
      * The bundled catalog keyed by the id a remote row would use, for the overlay.
@@ -789,37 +700,6 @@ internal class StoreBackend(
         }
 
     /**
-     * The last good feed from disk.
-     *
-     * Returns null rather than an empty feed when nothing is cached: an empty feed would render the
-     * "nobody has published anything" screen, which is a claim about the store rather than about the
-     * network.
-     */
-    private fun cachedFeed(bundled: Map<String, UiStoreItem>): UiStoreFeed? {
-        val file = cacheFile() ?: return null
-        if (!file.isFile) return null
-        val raw = runCatching { file.readText() }.getOrNull()?.takeIf { it.isNotBlank() } ?: return null
-        val parsed = dev.ide.store.impl.StoreFeedParser.parse(raw) ?: return null
-        // The cached rows are as good a source of payload coordinates as the live ones, and the sha256 is
-        // still checked against the bytes: without this, an install from a cached feed would fail claiming
-        // the item has nothing to download.
-        rememberPayloads(parsed)
-        return StoreFeedMapper.toUi(parsed, bundled).copy(fromCache = true)
-    }
-
-    private fun cacheFile(): java.io.File? =
-        ctx.manager?.storageRoot?.let { java.io.File(it.toFile(), "store/explore-feed.json") }
-
-    /** Best effort: a cache that cannot be written must not fail the fetch that produced it. */
-    private fun writeCache(document: String) {
-        val file = cacheFile() ?: return
-        runCatching {
-            file.parentFile?.mkdirs()
-            file.writeText(document)
-        }
-    }
-
-    /**
      * Download, verify and unpack a community project into the workspace.
      *
      * Templates and samples never reach here: the UI routes anything with a `templateId` through the
@@ -829,7 +709,7 @@ internal class StoreBackend(
      * the trending chart ranks on, with the items that fail to install ranking highest.
      */
     override suspend fun install(id: String, args: Map<String, String>): UiStoreInstallResult {
-        val payload = payloads[id]
+        val payload = feedCache.payload(id)
             ?: return UiStoreInstallResult(false, "That project has nothing to download yet")
         val projectsRoot = ctx.manager?.projectsRoot?.toFile()
             ?: return UiStoreInstallResult(false, "There is no projects folder to install into")
@@ -844,9 +724,9 @@ internal class StoreBackend(
         return withContext(storeIo) {
             val result = installer.install(
                 payload = payload,
-                projectsRoot = projectsRoot,
+                projectsRoot = projectsRoot.absolutePath,
                 adopt = { dir ->
-                    val ok = manager?.adoptProjectInPlace(dir.toPath()) ?: false
+                    val ok = manager?.adoptProjectInPlace(java.nio.file.Path.of(dir)) ?: false
                     if (ok) null else "That download isn't a project CodeAssist can open"
                 },
                 onProgress = { p -> progressState.value = progressState.value + (p.itemId to p) },
@@ -888,18 +768,6 @@ internal class StoreBackend(
      * Taken from the catalog row and never from the archive: the size and hash are what the server
      * promised, and checking the download against them is the point.
      */
-    private val payloads = java.util.concurrent.ConcurrentHashMap<String, StoreInstaller.Payload>()
-
-    private fun rememberPayloads(feed: dev.ide.store.StoreFeed) {
-        feed.allItems.forEach { item ->
-            val path = item.storagePath ?: return@forEach
-            payloads[item.id] =
-                StoreInstaller.Payload(item.id, path, item.sha256, item.sizeBytes, item.title, item.version)
-        }
-    }
-
-
-
     /** Sample projects are registered as `sample-`-prefixed templates so they share the create path but list
      *  under "Sample projects" rather than "Starter templates". */
     private fun isSample(t: ProjectTemplate): Boolean = t.id.value.startsWith("sample-")
@@ -965,31 +833,6 @@ internal class StoreBackend(
 
         /** Whether this account was verified the last time its profile was read, by account id. */
         const val VERIFIED_SEEN_PREF = "store.profile.verified."
-
-        /** An avatar is a small square; a response larger than this is not one. */
-        const val MAX_AVATAR_BYTES = 2L * 1024 * 1024
-
-        /** How long a cached avatar is trusted before the URL is asked again. */
-        const val AVATAR_CACHE_MS = 7L * 24 * 60 * 60 * 1000
-
-        /**
-         * How long a feed is reused before the store is asked again.
-         *
-         * Long enough that moving between tabs is free, short enough that a reader who leaves the app and
-         * comes back to it later sees a store that has moved.
-         */
-        const val FEED_MEMO_MS = 5L * 60 * 1000
-
-        /**
-         * How long a feed that came off the disk cache is reused.
-         *
-         * Much shorter: it is on screen because the network was unreachable, and the moment that stops
-         * being true the reader should get the live one rather than yesterday's ranking.
-         */
-        const val CACHED_FEED_MEMO_MS = 30L * 1000
-
-        /** How many media downloads may be in flight at once. */
-        const val MEDIA_LANES = 4
 
         /** Shared with the UI's former local-only list, so existing saves carry over. */
         const val LIKES_PREF = "store.favorites"

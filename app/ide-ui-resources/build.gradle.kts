@@ -41,6 +41,7 @@ kotlin {
     // emits for every declared target. Simulator-only while the port is being proven -- `iosArm64()` joins
     // it once the whole UI graph compiles, and costs nothing but build time.
     iosSimulatorArm64()
+    iosArm64()
 
     sourceSets {
         commonMain.dependencies {

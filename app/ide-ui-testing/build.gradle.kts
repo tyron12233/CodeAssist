@@ -26,6 +26,7 @@ kotlin {
     // iOS. :ide-ios renders the real shell against StubBackend until a real backend exists, so the fixture
     // has to build for the iOS targets too.
     iosSimulatorArm64()
+    iosArm64()
 
     sourceSets {
         commonMain.dependencies {

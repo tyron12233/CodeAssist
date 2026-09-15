@@ -11,6 +11,9 @@ dependencies {
     api(project(":ide-ui")) // IdeBackend + the Ui* DTOs IdeServices/IdeServicesBackend speak
 
     implementation(project(":platform-core"))
+    // The JSON reader the notification store and the challenge backend parse with. Its own module (rather
+    // than platform-core) because the store transport shares it and now has to compile for iOS too.
+    implementation(project(":platform-json"))
     implementation(project(":project-model-api"))
     implementation(project(":project-model-impl"))
     implementation(project(":language-api"))
@@ -55,6 +58,9 @@ dependencies {
     // ide-core constructs it except the launcher, which depends on store-impl itself.
     api(project(":store-api"))
     implementation(project(":store-impl"))
+    // The transport-to-UI translation and the install path, shared with the iOS host (:ide-ios), which
+    // orchestrates the same pieces its own way.
+    implementation(project(":store-bridge"))
     implementation(project(":vfs-api"))
 
     implementation(libs.kotlinx.coroutines.core)
@@ -97,12 +103,3 @@ tasks.named<ProcessResources>("processResources") {
     from(swingApiStubs) { into("swing") }
 }
 
-// StoreFeedWiringTest parses fixtures captured from a live `store_explore()`, which live in :store-impl's
-// test resources (see its KDoc for why they are read by path rather than off the classpath). Hand the test
-// that directory instead of letting it compose a relative one -- the module layout is the build's business.
-tasks.named<Test>("test") {
-    systemProperty(
-        "store.impl.testResources",
-        project(":store-impl").layout.projectDirectory.dir("src/test/resources").asFile.absolutePath,
-    )
-}
