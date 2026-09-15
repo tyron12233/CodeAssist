@@ -68,6 +68,33 @@ class ExtensionRegistryTest {
     }
 
     @Test
+    fun contributionsCarryTheContributingPlugin() {
+        // The attribution the host holds a plugin to account with: which contribution came from whom.
+        val reg = ExtensionRegistryImpl()
+        val other = PluginId("other")
+        reg.register(ep, Greeter { "a" }, plugin)
+        reg.register(ep, Greeter { "b" }, other)
+        assertEquals(
+            listOf("a" to plugin, "b" to other),
+            reg.contributions(ep).map { it.impl.greet() to it.plugin },
+        )
+    }
+
+    @Test
+    fun contributionsSpanTheParentRegistry() {
+        val app = ExtensionRegistryImpl()
+        val project = ExtensionRegistryImpl(parent = app)
+        val projectPlugin = PluginId("project-local")
+        app.register(ep, Greeter { "app" }, plugin)
+        project.register(ep, Greeter { "project" }, projectPlugin)
+        assertEquals(
+            listOf("app" to plugin, "project" to projectPlugin),
+            project.contributions(ep).map { it.impl.greet() to it.plugin },
+            "parent contributions first, attributed as they were registered — same order as extensions()",
+        )
+    }
+
+    @Test
     fun concurrentRegistrationIsSafe() {
         val reg = ExtensionRegistryImpl()
         val n = 500

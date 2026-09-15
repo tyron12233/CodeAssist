@@ -6,6 +6,7 @@ import dev.ide.analysis.AnalysisListener
 import dev.ide.analysis.AnalysisProfile
 import dev.ide.analysis.AnalysisService
 import dev.ide.analysis.AnalysisTarget
+import dev.ide.analysis.AnalyzerId
 import dev.ide.analysis.CaretSnapshot
 import dev.ide.analysis.AnalyzerTier
 import dev.ide.analysis.Diagnostic
@@ -31,13 +32,21 @@ import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 import dev.ide.platform.Disposable
+import dev.ide.platform.EngineCanceledException
+import dev.ide.platform.PluginId
+import dev.ide.platform.log.Log
+import dev.ide.platform.log.Logger
 import dev.ide.vfs.VirtualFile
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+
+/** Where the engine reports a third-party analyzer misbehaving; records carry the plugin as their source. */
+private const val LOG_TAG = "ide.analysis"
 
 /** Per-tier debounce windows. Set all to 0 for synchronous/deterministic runs. */
 data class SchedulerConfig(
@@ -67,10 +76,48 @@ class AnalysisEngine(
     // Position-keyed code-action providers (caret/selection intentions). Last + defaulted so the positional
     // test constructor (… , config) keeps compiling; production wires it by name.
     private val actionProviders: List<ActionProvider> = emptyList(),
+    /**
+     * The analyzers that came from an installed (third-party) plugin, each mapped to the plugin that
+     * contributed it; an analyzer absent from this map is one of the IDE's own. The engine treats the two
+     * differently on purpose, the same way plugin loading does (a built-in that throws is our bug and is
+     * left to fail; an installed one costs the user that plugin, not the IDE): an external analyzer runs
+     * last in its tier, publishes into its own bucket, is isolated from its own exceptions, and is held to
+     * [budget] by the watchdog.
+     */
+    private val externalAnalyzers: Map<AnalyzerId, PluginId> = emptyMap(),
+    budget: AnalyzerBudget = AnalyzerBudget.DEFAULT,
+    /** Source of the watchdog's clock, in nanoseconds; injectable so tests need no real time to pass. */
+    private val nanoTime: () -> Long = System::nanoTime,
 ) : AnalysisService {
 
     private val fileAnalyzers: List<FileAnalyzer> = analyzers.filterIsInstance<FileAnalyzer>()
     private val projectAnalyzers: List<ProjectAnalyzer> = analyzers.filterIsInstance<ProjectAnalyzer>()
+
+    private val watchdog = AnalyzerWatchdog(budget) { report ->
+        loggerFor(report.plugin).warn(
+            when (report.cause) {
+                QuarantinedAnalyzer.Cause.SLOW ->
+                    "'${report.displayName}' took ${report.tookMs}ms per pass (budget ${report.budgetMs}ms) and was " +
+                        "turned off for this session; re-enable it in the inspection settings"
+                QuarantinedAnalyzer.Cause.FAILING ->
+                    "'${report.displayName}' failed repeatedly and was turned off for this session; " +
+                        "re-enable it in the inspection settings"
+            }
+        )
+    }
+
+    /** Loggers attributed to the contributing plugin, so the Logs viewer can filter by it. */
+    private val pluginLoggers = ConcurrentHashMap<String, Logger>()
+
+    private fun loggerFor(plugin: PluginId): Logger =
+        pluginLoggers.getOrPut(plugin.value) { Log.logger(LOG_TAG, plugin.value.ifEmpty { null }) }
+
+    /**
+     * The third-party analyzers the watchdog has taken off the pass this session, oldest first. A host
+     * surfaces these so a plugin that degrades the editor is attributable rather than anonymous; the list
+     * empties on [configure].
+     */
+    val quarantinedAnalyzers: List<QuarantinedAnalyzer> get() = watchdog.quarantined.toList()
 
     @Volatile
     private var profile: AnalysisProfile = initialProfile
@@ -105,7 +152,11 @@ class AnalysisEngine(
             scope.checkCanceled()
             val target = scope.targetFor(file)
             val raw = ArrayList<Diagnostic>()
-            raw += collect(target, fileAnalyzers.filter { isEnabled(it) && matchesLanguage(it, environment.languageOf(file)) })
+            raw += collect(
+                target,
+                fileAnalyzers.filter { isEnabled(it) && matchesLanguage(it, environment.languageOf(file)) },
+                watch = false,
+            )
             for (provider in diagnosticProviders) if (providerMatches(provider.languages, target.file)) raw += provider.diagnose(target)
             // As in a file pass: a file that reported nothing is not worth scanning for suppressions, and
             // in a whole-project sweep most files report nothing.
@@ -191,6 +242,10 @@ class AnalysisEngine(
 
     override fun configure(profile: AnalysisProfile) {
         this.profile = profile
+        // A profile change is the user revisiting which checks run, so it is also their way back: every
+        // quarantine and every strike is released here, and an analyzer the watchdog dropped gets a fresh
+        // chance to behave (after a plugin update, say). It re-earns the quarantine soon enough if not.
+        watchdog.clear()
         // The engine does not retain the open-file set; the host re-triggers analysis (analyzeNow /
         // fileChanged) for visible files after a profile change.
     }
@@ -239,10 +294,10 @@ class AnalysisEngine(
     // ---------------------------------------------------------------------- passes
 
     private fun runSyntax(target: AnalysisTarget, suppression: Suppression = Suppression(target.parsed)) =
-        recordFileBucket(target, PublishedState.Bucket.SYNTAX, AnalyzerTier.SYNTAX, suppression)
+        recordFileBucket(target, AnalyzerTier.SYNTAX, suppression)
 
     private fun runSemantic(target: AnalysisTarget, suppression: Suppression = Suppression(target.parsed)) =
-        recordFileBucket(target, PublishedState.Bucket.SEMANTIC, AnalyzerTier.SEMANTIC, suppression)
+        recordFileBucket(target, AnalyzerTier.SEMANTIC, suppression)
 
     private suspend fun runCompiler(target: AnalysisTarget, suppression: Suppression = Suppression(target.parsed)) {
         if (diagnosticProviders.isEmpty()) return
@@ -251,12 +306,34 @@ class AnalysisEngine(
         record(target, PublishedState.Bucket.COMPILER, raw, suppression)
     }
 
-    private fun recordFileBucket(
-        target: AnalysisTarget, bucket: PublishedState.Bucket, tier: AnalyzerTier, suppression: Suppression,
-    ) {
+    /**
+     * Run one tier over [target] as two halves, the IDE's own analyzers and the installed plugins', each
+     * published as it finishes.
+     *
+     * The split is what keeps a slow plugin off everyone else's latency. A file pass is sequential on the
+     * single engine thread, and a bucket is only published once every analyzer in it has returned, so under
+     * one list the host's findings — and the compiler pass queued after them — waited out whatever the
+     * slowest plugin did. Built-ins now go first and land at their own speed; the external half publishes
+     * separately, late if it must.
+     *
+     * Both halves are recorded even when empty: an analyzer disabled (or quarantined) since the last pass
+     * at this same document version must have its previous findings cleared, and only a record does that.
+     */
+    private fun recordFileBucket(target: AnalysisTarget, tier: AnalyzerTier, suppression: Suppression) {
         val lang = environment.languageOf(target.file)
         val applicable = fileAnalyzers.filter { it.tier == tier && isEnabled(it) && matchesLanguage(it, lang) }
-        record(target, bucket, collect(target, applicable), suppression)
+        val (external, own) = applicable.partition { it.id in externalAnalyzers }
+        record(target, bucketFor(tier, external = false), collect(target, own), suppression)
+        record(target, bucketFor(tier, external = true), collect(target, external), suppression)
+    }
+
+    private fun bucketFor(tier: AnalyzerTier, external: Boolean): PublishedState.Bucket = when (tier) {
+        AnalyzerTier.SYNTAX ->
+            if (external) PublishedState.Bucket.SYNTAX_EXTERNAL else PublishedState.Bucket.SYNTAX
+        AnalyzerTier.SEMANTIC ->
+            if (external) PublishedState.Bucket.SEMANTIC_EXTERNAL else PublishedState.Bucket.SEMANTIC
+        // PROJECT-tier analyzers never take this path (they publish through the coalesced sweep).
+        AnalyzerTier.PROJECT -> PublishedState.Bucket.PROJECT
     }
 
     private fun record(
@@ -287,7 +364,14 @@ class AnalysisEngine(
      * The index defers its traversal to the first query, so a pass whose analyzers are all whole-file
      * ones (every ide-core analyzer, hence every Kotlin file) never walks the DOM at all.
      */
-    private fun collect(target: AnalysisTarget, analyzers: List<FileAnalyzer>): List<Diagnostic> {
+    private fun collect(
+        target: AnalysisTarget,
+        analyzers: List<FileAnalyzer>,
+        /** Whether a third-party analyzer's time is charged to the watchdog: true for the edit-driven passes
+         *  it protects, false for a batch lint, whose budget is a user's patience with a whole-project sweep
+         *  rather than the gap between two keystrokes. */
+        watch: Boolean = true,
+    ): List<Diagnostic> {
         if (analyzers.isEmpty()) return emptyList()
         val nodes = NodeIndex.over(target.parsed)
         val out = ArrayList<Diagnostic>()
@@ -295,9 +379,51 @@ class AnalysisEngine(
             val interested = analyzer.interestedIn
             if (interested != null && interested.none { it in nodes }) continue
             target.checkCanceled()
-            analyzer.analyze(target, AnalyzerSink(analyzer, profile, out), nodes)
+            val plugin = externalAnalyzers[analyzer.id]
+            // The IDE's own analyzers run exactly as before: unmeasured, and free to fail the pass, because
+            // a built-in throwing is a bug we want surfaced, not absorbed.
+            if (plugin == null) analyzer.analyze(target, AnalyzerSink(analyzer, profile, out), nodes)
+            else runExternal(analyzer, plugin, target, nodes, out, watch)
         }
         return out
+    }
+
+    /**
+     * Run one installed plugin's [analyzer], contained: its exceptions cost the user that check rather than
+     * the pass, and the time it took is charged to the watchdog, which decides whether it runs again.
+     *
+     * Containment is all the engine can offer *this* pass. The call is plain synchronous code on the engine
+     * thread that need never poll [AnalysisTarget.checkCanceled], so there is no safe way to cut it short
+     * once it has started — the protection is for the next keystroke, not this one.
+     */
+    private fun runExternal(
+        analyzer: FileAnalyzer,
+        plugin: PluginId,
+        target: AnalysisTarget,
+        nodes: NodeIndex,
+        out: MutableList<Diagnostic>,
+        watch: Boolean,
+    ) {
+        val reportedBefore = out.size
+        val started = nanoTime()
+        try {
+            analyzer.analyze(target, AnalyzerSink(analyzer, profile, out), nodes)
+        } catch (e: VirtualMachineError) {
+            // Out of stack or heap says the CALLER is exhausted, never that this analyzer is faulty — and
+            // swallowing one to log it is what turns a survivable error into a native crash on ART.
+            throw e
+        } catch (e: EngineCanceledException) {
+            throw e // a higher-priority editor call preempted the pass: control flow, not a failure
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            // Drop whatever it reported before throwing: half an analyzer's findings are not a result.
+            while (out.size > reportedBefore) out.removeAt(out.size - 1)
+            loggerFor(plugin).warn("analyzer '${analyzer.id.value}' failed on ${target.file.path}", t)
+            if (watch) watchdog.failed(analyzer, plugin)
+            return
+        }
+        if (watch) watchdog.completed(analyzer, plugin, (nanoTime() - started) / 1_000_000)
     }
 
     private suspend fun runProjectPass() {
@@ -340,7 +466,14 @@ class AnalysisEngine(
         for (listener in listeners) listener.diagnosticsChanged(file, current)
     }
 
-    private fun isEnabled(analyzer: Analyzer): Boolean = profile.isEnabled(analyzer.id)
+    /**
+     * Whether [analyzer] runs at all: the user's profile decides first, then the watchdog's session-local
+     * quarantine (a third-party analyzer that would not keep to its time budget, or kept throwing). The
+     * quarantine is checked here so it also reaches [fileNeedsBindings] — a dropped SEMANTIC analyzer must
+     * stop forcing the expensive binding-resolved tree too.
+     */
+    private fun isEnabled(analyzer: Analyzer): Boolean =
+        profile.isEnabled(analyzer.id) && !watchdog.isQuarantined(analyzer.id)
 
     /**
      * Whether a file in [language] needs a binding-resolved analysis tree this run: true iff an enabled

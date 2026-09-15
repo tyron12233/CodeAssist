@@ -16,7 +16,12 @@ import java.security.MessageDigest
 
 /** Identity of a loaded plugin (bundled or third-party). */
 @JvmInline
-value class PluginId(val value: String)
+value class PluginId(val value: String) {
+    companion object {
+        /** Stands for "this contribution could not be attributed" — never a loaded plugin's id. */
+        val UNKNOWN = PluginId("")
+    }
+}
 
 /** A stable digest of some content (file bytes, a classpath, a set of task inputs). String-backed (hex/base64). */
 @JvmInline
@@ -52,12 +57,28 @@ fun interface Disposable {
  */
 class ExtensionPoint<T : Any>(val id: String)
 
+/** One contribution to an extension point, with the plugin that made it. See [ExtensionRegistry.contributions]. */
+data class Contribution<T : Any>(val impl: T, val plugin: PluginId)
+
 interface ExtensionRegistry {
     /** Contribute [impl] to [ep] on behalf of [plugin]. Dispose the returned handle to remove it. */
     fun <T : Any> register(ep: ExtensionPoint<T>, impl: T, plugin: PluginId): Disposable
 
     /** All current contributions to [ep], in registration order. */
     fun <T : Any> extensions(ep: ExtensionPoint<T>): List<T>
+
+    /**
+     * [extensions], but each contribution paired with the plugin that registered it. The host needs the
+     * attribution to hold a plugin to account for what it contributed: which analyzer belongs to which
+     * plugin, so a slow or failing one can be named (and taken off the pass) rather than anonymously
+     * degrading the IDE.
+     *
+     * Defaulted so a registry implementation that does not track origins still compiles; it then reports
+     * every contribution as [PluginId.UNKNOWN], which callers must treat as "not attributable", never as
+     * a real plugin.
+     */
+    fun <T : Any> contributions(ep: ExtensionPoint<T>): List<Contribution<T>> =
+        extensions(ep).map { Contribution(it, PluginId.UNKNOWN) }
 
     /** Remove every contribution made by [plugin]. The bulk-unregister path a plugin unload takes: a plugin
      *  contributing through a facade that discards its per-registration [Disposable] is still fully removed. */

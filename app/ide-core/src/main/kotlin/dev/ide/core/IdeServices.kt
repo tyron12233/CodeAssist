@@ -2293,6 +2293,22 @@ class IdeServices private constructor(
      *  app-global XML analysis support delegates to the active engine's instance (see [registerActiveEnginePlugins]). */
     internal val xmlResourceHost: dev.ide.lang.xml.lint.XmlResourceHost by lazy { IdeXmlResourceHost() }
 
+    /**
+     * The analyzers contributed by plugins the user installed, mapped to the plugin each came from. The
+     * engine runs these after its own, publishes them separately, and holds them to a time budget, so a
+     * slow or broken third-party check degrades itself instead of the editor (see [AnalysisEngine]).
+     *
+     * Built-ins are deliberately absent: they are contributed by a plugin too (everything here is), but
+     * they are the IDE, and the watchdog must never be able to switch the Kotlin or JDT analyzers off.
+     */
+    private fun externalAnalyzers(): Map<dev.ide.analysis.AnalyzerId, dev.ide.platform.PluginId> {
+        val external = env.pluginCatalog.externalIds
+        if (external.isEmpty()) return emptyMap()
+        return platform.extensions.contributions(ANALYZER_EP)
+            .filter { it.plugin.value in external }
+            .associate { it.impl.id to it.plugin }
+    }
+
     private val analysisEngine = run {
         // Every analyzer / diagnostic / quick-fix / action provider is now contributed app-global (the stateless
         // JDT + Kotlin support, and the XML support via the active engine — see [registerStaticPlugins]); this
@@ -2304,6 +2320,7 @@ class IdeServices private constructor(
             environment = analysisEnvironment,
             scope = indexScope,
             actionProviders = platform.extensions.extensions(ACTION_PROVIDER_EP),
+            externalAnalyzers = externalAnalyzers(),
         ).also { engine ->
             // Apply the persisted per-project inspection profile (disabled checks + severity overrides).
             if (inspectionProfileState != AnalysisProfile.DEFAULT) engine.configure(

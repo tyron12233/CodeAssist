@@ -5,13 +5,18 @@ import dev.ide.vfs.VirtualFile
 
 /**
  * The per-file published diagnostic set, split into buckets so each producer can update independently
- * yet the editor always sees a consistent union. The edit-driven buckets (SYNTAX/SEMANTIC/COMPILER)
- * are version-gated: recording a newer document version clears the older edit-driven buckets so
- * stale results never linger, and an out-of-order older result is dropped. The PROJECT bucket is not
+ * yet the editor always sees a consistent union. The edit-driven buckets (everything but PROJECT) are
+ * version-gated: recording a newer document version clears the older edit-driven buckets so stale
+ * results never linger, and an out-of-order older result is dropped. The PROJECT bucket is not
  * version-gated — it is replaced wholesale by each coalesced project sweep.
+ *
+ * Each analyzer tier has two buckets, the IDE's own analyzers and the installed plugins' (`*_EXTERNAL`),
+ * because the engine publishes them separately: the built-in half of a pass is recorded the moment it
+ * finishes, so a plugin analyzer that takes a second delays only its own squiggles instead of holding
+ * the compiler's errors and the host's findings behind it.
  */
 internal class PublishedState {
-    enum class Bucket { SYNTAX, SEMANTIC, COMPILER, PROJECT }
+    enum class Bucket { SYNTAX, SYNTAX_EXTERNAL, SEMANTIC, SEMANTIC_EXTERNAL, COMPILER, PROJECT }
 
     private class Entry {
         var version: Long = -1
@@ -51,6 +56,7 @@ internal class PublishedState {
     fun clear(file: VirtualFile): Boolean = byFile.remove(file.path) != null
 
     companion object {
-        private val EDIT_BUCKETS = setOf(Bucket.SYNTAX, Bucket.SEMANTIC, Bucket.COMPILER)
+        /** Everything an edit invalidates: every bucket but the (separately replaced) project sweep. */
+        private val EDIT_BUCKETS = Bucket.entries.toSet() - Bucket.PROJECT
     }
 }
