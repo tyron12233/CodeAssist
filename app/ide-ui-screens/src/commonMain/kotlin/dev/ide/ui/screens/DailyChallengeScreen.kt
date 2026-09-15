@@ -46,6 +46,7 @@ import dev.ide.ui.backend.UiChallengeHistoryEntry
 import dev.ide.ui.backend.UiChallengeRank
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.platform.nowMillis
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import dev.ide.ui.theme.Symbol
@@ -182,7 +183,7 @@ private fun TodayHero(
     val problem = day.problem ?: return
     val pair = tonalPair(0)
     val now = rememberSecondsTicker()
-    val remaining = if (day.nextDropAtMs > 0) day.nextDropAtMs - System.currentTimeMillis() else 0L
+    val remaining = if (day.nextDropAtMs > 0) day.nextDropAtMs - nowMillis() else 0L
 
     Column(
         Modifier.fillMaxWidth().clip(cardShape(0)).background(pair.container).padding(20.dp),

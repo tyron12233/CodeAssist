@@ -165,7 +165,7 @@ internal fun LegacyCodeEditor(
             val st = e.start.coerceIn(0, len); edits.add(Ed(st, e.end.coerceIn(st, len), e.newText))
         }
         val sb = StringBuilder(value.text)
-        for (e in edits.sortedByDescending { it.start }) sb.replace(e.start, e.end, e.text)
+        for (e in edits.sortedByDescending { it.start }) sb.setRange(e.start, e.end, e.text)
 
         // Where the caret lands inside the just-inserted text — the item decides (e.g. between a method's
         // parentheses); default is the end of the insertion. Additional edits at/above the insertion (an

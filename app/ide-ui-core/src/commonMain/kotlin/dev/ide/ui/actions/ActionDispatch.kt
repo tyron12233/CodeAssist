@@ -87,7 +87,7 @@ internal fun patch(text: String, edits: List<UiTextEdit>): String {
     for (e in edits.sortedByDescending { it.start }) {
         val start = e.start.coerceIn(0, sb.length)
         val end = e.end.coerceIn(start, sb.length)
-        sb.replace(start, end, e.newText)
+        sb.setRange(start, end, e.newText)
     }
     return sb.toString()
 }

@@ -2,6 +2,7 @@ package dev.ide.ui.editor.preview
 
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
+import dev.ide.ui.concurrent.UiLock
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
@@ -43,7 +44,7 @@ object AndroidPathParser {
         val path = parse(pathData, fillEvenOdd)
         // Racing callers may each parse and put; they produce equal paths, so the last write is as good as the
         // first, and eviction under the same lock keeps the map's size bounded either way.
-        synchronized(cacheLock) {
+        cacheLock.withLock {
             if (cache.size >= MAX_CACHED_PATHS) cache.keys.take(cache.size - MAX_CACHED_PATHS + 1).forEach(cache::remove)
             cache[key] = path
         }
@@ -51,7 +52,7 @@ object AndroidPathParser {
     }
 
     private const val MAX_CACHED_PATHS = 512
-    private val cacheLock = Any()
+    private val cacheLock = UiLock()
     // LinkedHashMap for insertion order, so eviction drops the oldest entries.
     private val cache = LinkedHashMap<String, Path>()
 

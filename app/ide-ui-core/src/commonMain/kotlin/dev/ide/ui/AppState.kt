@@ -31,6 +31,7 @@ import dev.ide.ui.editor.preview.PreviewKind
 import dev.ide.ui.editor.preview.previewKindOf
 import dev.ide.ui.platform.ioDispatcher as platformIoDispatcher
 import dev.ide.ui.platform.isMobilePlatform
+import kotlin.jvm.JvmInline
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

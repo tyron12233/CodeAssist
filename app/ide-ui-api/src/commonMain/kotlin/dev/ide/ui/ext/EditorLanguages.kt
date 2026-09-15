@@ -1,5 +1,7 @@
 package dev.ide.ui.ext
 
+import dev.ide.ui.concurrent.UiLock
+
 /**
  * How the editor treats a language as *text*, independent of whether any `LanguageBackend` parses it.
  *
@@ -71,23 +73,24 @@ enum class SyntaxFamily {
  */
 object EditorLanguageRegistry {
     private val profiles = ArrayList<EditorLanguageProfile>()
+    private val lock = UiLock()
 
     fun register(profile: EditorLanguageProfile): Registration {
-        synchronized(profiles) {
+        lock.withLock {
             profiles.add(profile)
             profiles.sortBy { it.order }
         }
-        return Registration { synchronized(profiles) { profiles.remove(profile) } }
+        return Registration { lock.withLock { profiles.remove(profile) } }
     }
 
     /** The profile claiming [fileName] (lowest order first), or null when nothing claims it. */
     fun forFile(fileName: String): EditorLanguageProfile? =
-        synchronized(profiles) { profiles.firstOrNull { it.matches(fileName) } }
+        lock.withLock { profiles.firstOrNull { it.matches(fileName) } }
 
     /** The profile with [id], or null. */
     fun forId(id: String): EditorLanguageProfile? =
-        synchronized(profiles) { profiles.firstOrNull { it.id == id } }
+        lock.withLock { profiles.firstOrNull { it.id == id } }
 
     /** Every registered profile, in resolution order. */
-    fun all(): List<EditorLanguageProfile> = synchronized(profiles) { profiles.toList() }
+    fun all(): List<EditorLanguageProfile> = lock.withLock { profiles.toList() }
 }

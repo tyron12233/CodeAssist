@@ -60,6 +60,7 @@ import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.folding.FoldRegion
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.markdown.Markdown
+import dev.ide.ui.platform.nowMillis
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Ide
 import dev.ide.ui.theme.Motion
@@ -236,7 +237,7 @@ private fun Solver(
 @Composable
 private fun SolverTopBar(problem: UiChallengeProblem, startedAtMs: Long, onExit: () -> Unit) {
     val now = rememberSecondsTicker()
-    val elapsed = if (startedAtMs > 0) System.currentTimeMillis() - startedAtMs else 0L
+    val elapsed = if (startedAtMs > 0) nowMillis() - startedAtMs else 0L
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

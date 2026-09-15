@@ -8,6 +8,7 @@ import dev.ide.ui.backend.UiEditorDecorations
 import dev.ide.ui.backend.UiFoldRegion
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiSemanticToken
+import kotlin.concurrent.Volatile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job

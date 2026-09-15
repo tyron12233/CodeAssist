@@ -139,7 +139,7 @@ internal fun InlineInput(
             item.additionalEdits.isEmpty() && item.caret == null
         val nextIsSpace = end < tfv.text.length && tfv.text[end].isWhitespace()
         val insert = if (noOp && !nextIsSpace) item.insertText + " " else item.insertText
-        val sb = StringBuilder(tfv.text).replace(tokenStartInInput, end, insert)
+        val sb = StringBuilder(tfv.text).setRange(tokenStartInInput, end, insert)
         held = held + item.additionalEdits.filter { it.end <= docStart }
         val within = (item.caret?.offset ?: insert.length).coerceIn(0, insert.length)
         val caret = (tokenStartInInput + within).coerceIn(0, sb.length)
