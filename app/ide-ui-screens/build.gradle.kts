@@ -22,6 +22,9 @@ kotlin {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
     }
 
+    // iOS. The screens are common Compose over the `IdeBackend` port, so they build for iOS unchanged.
+    iosSimulatorArm64()
+
     sourceSets {
         commonMain.dependencies {
             api(project(":ide-ui-core"))

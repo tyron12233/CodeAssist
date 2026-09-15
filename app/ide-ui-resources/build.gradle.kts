@@ -36,6 +36,12 @@ kotlin {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
     }
 
+    // iOS. The UI layer is Compose Multiplatform, so it builds for iOS directly; the resources module has
+    // no Kotlin source of its own, only the generated `Res` accessors, which the Compose resources plugin
+    // emits for every declared target. Simulator-only while the port is being proven -- `iosArm64()` joins
+    // it once the whole UI graph compiles, and costs nothing but build time.
+    iosSimulatorArm64()
+
     sourceSets {
         commonMain.dependencies {
             // `api`, not `implementation`: the generated accessors expose org.jetbrains.compose.resources

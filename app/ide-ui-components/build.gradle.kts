@@ -25,6 +25,9 @@ kotlin {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
     }
 
+    // iOS. Nothing here is platform-specific: the components are Compose over :ide-ui-core's theme.
+    iosSimulatorArm64()
+
     sourceSets {
         commonMain.dependencies {
             // `api`: these types appear in the components' own signatures, so screens and the editor need

@@ -28,6 +28,11 @@ kotlin {
         }
     }
 
+    // iOS. The DTOs and the `IdeBackend` port are platform-neutral by contract (paths are opaque strings),
+    // so the iOS target compiles commonMain unchanged. The `jvmShared` set below stays out of its way: the
+    // external-plugin bridge needs the plain-JVM `plugin-ui-api`, and an iOS host loads no plugins.
+    iosSimulatorArm64()
+
     sourceSets {
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -46,5 +51,11 @@ kotlin {
         }
         getByName("desktopMain").dependsOn(jvmShared)
         getByName("androidMain").dependsOn(jvmShared)
+
+        // `iosMain` is declared rather than inherited: the explicit `dependsOn` edges above turn off the
+        // default hierarchy template, so no intermediate apple/ios set is created for us. Declaring it now
+        // means the iOS actuals stay in one place when `iosArm64` joins the simulator target.
+        val iosMain = create("iosMain") { dependsOn(getByName("commonMain")) }
+        getByName("iosSimulatorArm64Main").dependsOn(iosMain)
     }
 }

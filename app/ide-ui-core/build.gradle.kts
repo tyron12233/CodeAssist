@@ -31,6 +31,10 @@ kotlin {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
     }
 
+    // iOS. The platform seam this module declares (`expect`s for the back handler, system bars, cursors,
+    // secondary click, the clock, and the editor's IME) is resolved for iOS in `src/iosMain`.
+    iosSimulatorArm64()
+
     sourceSets {
         commonMain.dependencies {
             // `api` for both: the types in this module's own signatures come from them (IdeBackend and the
@@ -64,5 +68,20 @@ kotlin {
             // androidx.activity.compose.BackHandler — backs PlatformBackHandler's Android actual.
             implementation(libs.androidx.activity.compose)
         }
+
+        // The default hierarchy template is off project-wide (see gradle.properties), so the intermediate
+        // set holding this module's iOS actuals is declared here rather than inherited. Declaring it now
+        // keeps those actuals in one place when `iosArm64` joins the simulator target.
+        val iosMain = create("iosMain") { dependsOn(getByName("commonMain")) }
+        getByName("iosSimulatorArm64Main").dependsOn(iosMain)
+
+        // The IME bridge's command mapping and code-point arithmetic are iOS-only code, so the only place
+        // they can be tested is a Kotlin/Native test — which runs on the simulator via
+        // `./gradlew :ide-ui-core:iosSimulatorArm64Test`.
+        val iosTest = create("iosTest") {
+            dependsOn(getByName("commonTest"))
+            dependencies { implementation(kotlin("test")) }
+        }
+        getByName("iosSimulatorArm64Test").dependsOn(iosTest)
     }
 }
