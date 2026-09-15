@@ -67,6 +67,17 @@ internal class InjectAppLogProviderTask(
             return TaskResult.Success
         }
 
+        // An app that declares it has no code is one the platform loads no dex for, so a <provider> naming a
+        // Java class cannot resolve and the app dies on launch with ClassNotFoundException before any of its
+        // own code runs. A NativeActivity app is exactly that shape. Logs are worth having; an app that will
+        // not start is not, so the manifest passes through untouched.
+        if (application.androidAttr("hasCode") == "false") {
+            outManifest.parent?.let { Files.createDirectories(it) }
+            Files.copy(mergedManifest, outManifest, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            ctx.debug("injectAppLogProvider: android:hasCode=\"false\" — no dex to load the bridge from, skipped")
+            return TaskResult.Success
+        }
+
         // Idempotent: don't add a second provider if one is already present (e.g. a hand-edited manifest).
         val alreadyPresent = childElements(application).any {
             it.tagName == "provider" && it.androidAttr("name") == providerClass
