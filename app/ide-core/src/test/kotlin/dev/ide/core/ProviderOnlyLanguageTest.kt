@@ -80,12 +80,20 @@ class ProviderOnlyLanguageTest {
     }
 
     /**
-     * And the gate still holds for everything else. A provider that names NO language applies to every
-     * language, which must not be read as a reason to start analysing plain text.
+     * And the gate still holds. A provider that names NO language applies to every language, and reading
+     * that as "every language is now analysable" would open the gate for everything at once: the whole point
+     * of the gate is that a file whose language nothing claims is never parsed.
+     *
+     * The language here is one only a file-type mapping knows about, with no backend, no analyzer and no
+     * provider that names it. A `.txt` cannot show this: the plugin-manifest analyzer claims
+     * `LanguageId("text")`, so plain text has been analysable all along.
      */
     @Test
-    fun aProviderThatNamesNoLanguageDoesNotMakePlainTextAnalysable() {
+    fun aProviderThatNamesNoLanguageDoesNotOpenTheGateByItself() {
         val env = ApplicationEnvironment()
+        env.platform.extensions.register(
+            FILE_TYPE_EP, FileTypeMapping(listOf(".gadget"), LanguageId("gadget")), PluginId("test-gadget"),
+        )
         env.platform.extensions.register(
             DIAGNOSTIC_PROVIDER_EP,
             object : DiagnosticProvider {
@@ -98,12 +106,12 @@ class ProviderOnlyLanguageTest {
         )
         val s = IdeServices.bootstrapJavaDemo(root, env).also { services = it }
 
-        val text = "just some notes\n"
-        val file = write(s, "notes.txt", text)
+        val text = "a language nothing claims\n"
+        val file = write(s, "thing.gadget", text)
 
         assertTrue(
             runBlocking { s.analyzeDiagnostics(file, text) }.isEmpty(),
-            "a .txt has no language of its own and must stay inert",
+            "a language no analyzer, backend or NAMED provider claims must stay inert",
         )
     }
 
