@@ -1,6 +1,7 @@
 # kotlin-classfile (experimental)
 
-Reading `.class` files and the Kotlin metadata inside them, with no JVM. Nothing depends on it.
+Reading a classpath with no JVM: jars, `.class` files, and the Kotlin metadata inside them. No ASM, no
+kotlin-metadata-jvm, no `java.util.zip`. Nothing depends on it.
 
 ## Why
 
@@ -13,8 +14,9 @@ Unlike the parser there is nothing upstream to borrow. `core/metadata` and `libr
 both `kotlin("jvm")` and sit on JVM protobuf. So this is a real port, but a much smaller one than it looks,
 for two reasons.
 
-The **ASM surface actually used** is narrow: a `ClassReader` with `SKIP_CODE`/`SKIP_FRAMES`/`SKIP_DEBUG` and
-four visitors. Method bodies are exactly what an index does not read.
+The **ASM surface actually used** is narrow: a `ClassReader` with `SKIP_CODE`/`SKIP_FRAMES` and four
+visitors, plus `Type` and `SignatureReader`. Method BODIES are exactly what an index does not read, which is
+most of a class file.
 
 And the **34,545 lines of generated protobuf** are not the thing to port. `metadata.proto` is 709 lines and is
 the source of truth; the wire format can be walked without a schema; and only about a dozen of its messages
@@ -22,16 +24,26 @@ matter. So what is needed is a wire reader plus the field numbers, not a code ge
 
 ## What is here
 
-1,591 lines, `commonMain`, no dependencies, building for jvm + iosSimulatorArm64 + iosArm64.
+2,516 lines, `commonMain`, no dependencies, building for jvm + iosSimulatorArm64 + iosArm64.
 
 ```
-ProtoReader        the protobuf wire format: varints, tags, length-delimited fields
-MetadataEncoding   undoes the String[] packing @Metadata uses to smuggle protobuf through an annotation
-ClassFile          constant pool, class/super/interfaces, and finding the @Metadata annotation
-JvmNameResolver    the string table: every name in the protobuf is an index, and resolving one is not a lookup
-KotlinMetadata     the dozen messages an index reads, with every field number cited to metadata.proto
-KotlinFlags        the packed bit field: visibility, modality, kind, suspend/inline/infix/var/const/lateinit
-JvmDescriptors     Kotlin class names to JVM descriptors, for the signatures the compiler declines to write
+the archive
+  ByteSource       random access to bytes; a zip is read back to front, so a stream will not do
+  ZipArchive       end record, zip64, central directory, local headers, stored and deflated entries
+  Inflate          DEFLATE (RFC 1951): bit reader, canonical Huffman, back-references
+  Crc32            the archive's own statement about whether our decompressor got it right
+
+the class file
+  ClassFile        constant pool, class shape, fields, methods, InnerClasses, and the @Metadata annotation
+  JavaSignatures   descriptors and generic signatures: the JVMS 4.3 and 4.7.9.1 grammars
+
+the Kotlin metadata
+  ProtoReader      the protobuf wire format: varints, tags, length-delimited fields
+  MetadataEncoding undoes the String[] packing @Metadata uses to smuggle protobuf through an annotation
+  JvmNameResolver  the string table: every name in the protobuf is an index, and resolving one is not a lookup
+  KotlinMetadata   the dozen messages an index reads, with every field number cited to metadata.proto
+  KotlinFlags      the packed bit field: visibility, modality, kind, suspend/inline/infix/var/const/lateinit
+  JvmDescriptors   Kotlin class names to JVM descriptors, for the signatures the compiler declines to write
 ```
 
 ## How it is checked
@@ -57,6 +69,20 @@ read is not:
 
 - **990 class files agree with ASM**; **660 classes, 8,189 members and 11,053 signatures agree with
   kotlin-metadata-jvm**, with nothing in the jar the library would read and this would not.
+
+Against the Java half, which is most of a real classpath and all of `android.jar`:
+
+- **2,677 classes and 30,759 members** across the 15 jars on the test classpath, and **6,440 classes and
+  97,562 members of `android.jar`**, agree with ASM on access flags, name, superclass, interfaces, every
+  field and method, their descriptors and signatures, their `MethodParameters` names, and `InnerClasses`.
+- **128,362 descriptors** and **1,431 class, 12,318 method and 2,354 field generic signatures** parse to
+  what ASM's `Type` and `SignatureReader` read.
+
+Against `java.util.zip`, over every jar in reach:
+
+- **17,571 entries across 16 archives, 59 MB, inflated byte for byte**, with names, sizes, methods and CRCs
+  agreeing entry for entry. Plus zip64 (70,000 entries, where the 32-bit fields saturate), the stored method,
+  empty entries, and a deliberately corrupted entry that must come back null rather than plausible.
 
 Plus the negative cases that matter: a Java class must report no Kotlin metadata, garbage must return null
 rather than throw, and no entry anywhere in the stdlib may throw, because a classpath contains jars built by
@@ -107,8 +133,22 @@ library rather than against expectations someone typed.
   reconstruction, not the decode. An extension function's receiver is its first JVM parameter; leave it out
   and the descriptor is one argument short and names no method that exists.
 
+## Speed
+
+`Inflate` decodes bit by bit against the canonical code counts rather than through a lookup table. That is
+the shape whose correctness can be read off the spec, and the table is where the bugs live. The cost is
+measured rather than assumed: inflating all 1,002 entries of `kotlin-stdlib` takes around **45 ms against
+java.util.zip's under 20 ms, so 2 to 3x run to run**, and java.util.zip is native zlib. A table-driven
+decoder is the fix if that ever matters, and the oracle above is what would make trying it safe.
+
 ## Not done yet
 
-Nothing blocking. The remaining gaps are annotations on declarations, and the `TypeTable` indirection,
-neither of which this build's compiler or the stdlib actually uses for the fields read here, which is why
-11,053 stdlib signatures agree without them.
+Nothing blocking, and the remaining gaps are all things neither this build's compiler nor `android.jar`
+exercises: annotations on declarations, Kotlin's `TypeTable` indirection, and zip names in CP437 rather than
+UTF-8 (every jar writes ASCII, where the two agree). Encryption and multi-disk archives are not gaps to fill
+later: an archive needing either is not a classpath entry this can index, and pretending otherwise would be
+worse than returning null.
+
+What this does NOT yet do is BE an index. `:lang-kotlin-index` still holds the symbol model, the persistence
+format (`DataInput`/`DataOutput`) and the file walking (`java.nio.file`), and porting those is a dependency
+decision rather than more decoding.

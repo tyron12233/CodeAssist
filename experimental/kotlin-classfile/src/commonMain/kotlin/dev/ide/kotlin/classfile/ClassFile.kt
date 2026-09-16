@@ -4,7 +4,7 @@ package dev.ide.kotlin.classfile
  * What `@kotlin.Metadata` carries on a class file.
  *
  * [kind] is what the class IS to Kotlin: 1 a class, 2 a file facade, 3 a synthetic class, 4 a multi-file
- * facade part, 5 a multi-file facade. Only 1 and 2 hold declarations worth reading.
+ * facade, 5 a multi-file facade part. Only 1, 2 and 5 hold declarations worth reading.
  */
 class KotlinMetadataAnnotation(
     val kind: Int,
@@ -16,11 +16,51 @@ class KotlinMetadataAnnotation(
 )
 
 /**
+ * One field or method.
+ *
+ * Both have exactly this shape in a class file, which is why they are one type here: access flags, a name,
+ * an erased descriptor, and attributes. [signature] is the generic signature attribute, present only when
+ * generics are involved; when it is null the descriptor is the whole truth.
+ *
+ * [parameterNames] is empty unless the class was compiled with `-parameters`, and empty is the honest
+ * answer: filling it with `p0`, `p1` would be indistinguishable from real names that happen to be called
+ * that, and a caller wants to know whether to go looking for a sources jar.
+ */
+class ClassMember(
+    val access: Int,
+    val name: String,
+    val descriptor: String,
+    val signature: String?,
+    val parameterNames: List<String>,
+) {
+    /** A method's descriptor starts with its parameter list; a field's is a single type. */
+    val isMethod: Boolean get() = descriptor.startsWith("(")
+
+    override fun toString(): String = "$name$descriptor"
+}
+
+/**
+ * An `InnerClasses` entry: one nesting relationship the class file records.
+ *
+ * The attribute lists every nested class MENTIONED by this one, not only the ones declared in it, so an
+ * entry is about this class only when [outerName] is this class. [innerName] is null for an anonymous
+ * class, which is the only way to tell one from a named nested class.
+ */
+class InnerClassRef(
+    val name: String,
+    val outerName: String?,
+    val innerName: String?,
+    val access: Int,
+)
+
+/**
  * A `.class` file, read far enough to answer what a Kotlin index needs.
  *
- * This replaces the ASM surface `:lang-kotlin-index` uses, which is narrower than ASM's reputation suggests:
- * a `ClassReader` with `SKIP_CODE`/`SKIP_FRAMES`/`SKIP_DEBUG` and four visitors. Method bodies are exactly
- * what an index does not read, so the expensive half of a class file is skipped rather than parsed.
+ * This replaces the ASM surface `:lang-kotlin-index` uses, which is narrower than ASM's reputation
+ * suggests: a `ClassReader` with `SKIP_CODE`/`SKIP_FRAMES` and four visitors. Method BODIES are exactly
+ * what an index does not read, so the expensive half of a class file is skipped rather than parsed, but the
+ * members themselves are not optional: a Java class carries no `@Metadata`, and `android.jar` is forty
+ * thousand of them.
  *
  * Nothing is validated beyond what is needed to walk the structure. A classpath contains jars built by
  * anything, and an index that refuses a file it could have read mostly is worse than one that reads what it
@@ -31,15 +71,31 @@ class ClassFile private constructor(
     val superClass: String?,
     val interfaces: List<String>,
     val accessFlags: Int,
+    /** The class's generic signature: its own type parameters and its generic supertypes. */
+    val signature: String?,
+    val fields: List<ClassMember>,
+    val methods: List<ClassMember>,
+    val innerClasses: List<InnerClassRef>,
     val metadata: KotlinMetadataAnnotation?,
 ) {
 
     /** Was this class produced by the Kotlin compiler? */
     val isKotlin: Boolean get() = metadata != null
 
+    /** The types declared directly inside this one, anonymous and local classes excluded. */
+    fun nestedClasses(): List<InnerClassRef> =
+        innerClasses.filter { it.outerName == thisClass && it.innerName != null }
+
     companion object {
         private const val MAGIC = 0xCAFEBABE.toInt()
         private const val METADATA_DESCRIPTOR = "Lkotlin/Metadata;"
+
+        // Flags that are not in the access_flags word at all: the JVM spells them as marker ATTRIBUTES, and
+        // every reader folds them back in so that callers have one thing to test. ASM does the same, with
+        // these values, which is what makes the two comparable.
+        const val ACC_SYNTHETIC: Int = 0x1000
+        const val ACC_DEPRECATED: Int = 0x20000
+        const val ACC_RECORD: Int = 0x10000
 
         /** Read [bytes], or null when they are not a class file this reader understands. */
         fun read(bytes: ByteArray): ClassFile? = runCatching { Reader(bytes).read() }.getOrNull()
@@ -72,16 +128,37 @@ class ClassFile private constructor(
 
             readConstantPool()
 
-            val accessFlags = u2()
+            var accessFlags = u2()
             val thisClass = className(u2()) ?: return null
             val superIndex = u2()
             val superClass = if (superIndex == 0) null else className(superIndex)
             val interfaces = List(u2()) { className(u2()) }.filterNotNull()
 
-            skipMembers() // fields
-            skipMembers() // methods
+            val fields = readMembers()
+            val methods = readMembers()
 
-            return ClassFile(thisClass, superClass, interfaces, accessFlags, readClassAttributes())
+            var signature: String? = null
+            var metadata: KotlinMetadataAnnotation? = null
+            val innerClasses = ArrayList<InnerClassRef>()
+            repeat(u2()) {
+                val name = utf8(u2())
+                val length = u4()
+                val end = at + length
+                when (name) {
+                    "Signature" -> signature = utf8(u2())
+                    "InnerClasses" -> readInnerClasses(innerClasses)
+                    "RuntimeVisibleAnnotations" -> metadata = metadata ?: findMetadataAnnotation()
+                    "Deprecated" -> accessFlags = accessFlags or ACC_DEPRECATED
+                    "Synthetic" -> accessFlags = accessFlags or ACC_SYNTHETIC
+                    "Record" -> accessFlags = accessFlags or ACC_RECORD
+                }
+                at = end
+            }
+
+            return ClassFile(
+                thisClass, superClass, interfaces, accessFlags,
+                signature, fields, methods, innerClasses, metadata,
+            )
         }
 
         /**
@@ -168,29 +245,65 @@ class ClassFile private constructor(
         private fun className(index: Int): String? =
             if (index == 0 || index >= poolTags.size) null else utf8(poolIndices[index])
 
-        /** Fields and methods share a shape, and an index reads neither's code. */
-        private fun skipMembers() {
-            repeat(u2()) {
-                skip(6) // access flags, name index, descriptor index
+        /**
+         * Fields and methods, which share a shape exactly.
+         *
+         * The `Code` attribute is skipped rather than parsed, and it is most of the file: an index reads
+         * signatures, never bodies.
+         */
+        private fun readMembers(): List<ClassMember> {
+            val count = u2()
+            val members = ArrayList<ClassMember>(count)
+            repeat(count) {
+                var access = u2()
+                val name = utf8(u2()).orEmpty()
+                val descriptor = utf8(u2()).orEmpty()
+                var signature: String? = null
+                var parameterNames: List<String> = emptyList()
                 repeat(u2()) {
-                    skip(2)
-                    skip(u4())
+                    val attribute = utf8(u2())
+                    val length = u4()
+                    val end = at + length
+                    when (attribute) {
+                        "Signature" -> signature = utf8(u2())
+                        "MethodParameters" -> parameterNames = readParameterNames()
+                        "Deprecated" -> access = access or ACC_DEPRECATED
+                        "Synthetic" -> access = access or ACC_SYNTHETIC
+                    }
+                    at = end
                 }
+                members.add(ClassMember(access, name, descriptor, signature, parameterNames))
+            }
+            return members
+        }
+
+        /**
+         * The `MethodParameters` attribute: the real names, when javac was told to keep them.
+         *
+         * A name index of 0 means the parameter has no recorded name, which happens for synthesized and
+         * mandated parameters in an otherwise-named list. It becomes an empty string rather than being
+         * dropped, because the list has to stay positional with the descriptor: dropping one silently
+         * shifts every name after it onto the wrong type.
+         */
+        private fun readParameterNames(): List<String> {
+            val count = u1()
+            return List(count) {
+                val nameIndex = u2()
+                skip(2) // access flags
+                if (nameIndex == 0) "" else utf8(nameIndex).orEmpty()
             }
         }
 
-        private fun readClassAttributes(): KotlinMetadataAnnotation? {
-            var metadata: KotlinMetadataAnnotation? = null
+        private fun readInnerClasses(into: MutableList<InnerClassRef>) {
             repeat(u2()) {
-                val name = utf8(u2())
-                val length = u4()
-                val end = at + length
-                if (name == "RuntimeVisibleAnnotations") {
-                    metadata = metadata ?: findMetadataAnnotation()
-                }
-                at = end
+                val inner = className(u2())
+                val outerIndex = u2()
+                val outer = if (outerIndex == 0) null else className(outerIndex)
+                val innerNameIndex = u2()
+                val innerName = if (innerNameIndex == 0) null else utf8(innerNameIndex)
+                val access = u2()
+                if (inner != null) into.add(InnerClassRef(inner, outer, innerName, access))
             }
-            return metadata
         }
 
         private fun findMetadataAnnotation(): KotlinMetadataAnnotation? {
