@@ -146,8 +146,11 @@ class ZipArchive private constructor(
 
             val directory = LittleEndian(source.read(directoryOffset, directorySize.toInt()))
             val entries = ArrayList<ZipEntry>(entryCount.toInt())
+            // A record that does not start with the signature means the position has drifted, and every
+            // byte after it is being read at the wrong offset. Stopping keeps whatever was read correctly;
+            // carrying on would invent entries out of the middle of file names.
             repeat(entryCount.toInt()) {
-                entries.add(readCentralEntry(directory) ?: return@repeat)
+                entries.add(readCentralEntry(directory) ?: return ZipArchive(source, entries))
             }
             return ZipArchive(source, entries)
         }

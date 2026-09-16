@@ -1,7 +1,7 @@
 # kotlin-classfile (experimental)
 
-Reading a classpath with no JVM: jars, `.class` files, and the Kotlin metadata inside them. No ASM, no
-kotlin-metadata-jvm, no `java.util.zip`. Nothing depends on it.
+Reading a classpath with no JVM: a path, a jar, a `.class` file, and the Kotlin metadata inside it. No ASM,
+no kotlin-metadata-jvm, no `java.util.zip`, no `java.io`. Nothing depends on it.
 
 ## Why
 
@@ -24,11 +24,14 @@ matter. So what is needed is a wire reader plus the field numbers, not a code ge
 
 ## What is here
 
-2,516 lines, `commonMain`, no dependencies, building for jvm + iosSimulatorArm64 + iosArm64.
+2,782 lines, almost all `commonMain`, no dependencies, building for jvm + iosSimulatorArm64 + iosArm64.
 
 ```
-the archive
+the file
   ByteSource       random access to bytes; a zip is read back to front, so a stream will not do
+  openFile         the ONLY expect/actual in the module: RandomAccessFile on the JVM, POSIX on iOS
+
+the archive
   ZipArchive       end record, zip64, central directory, local headers, stored and deflated entries
   Inflate          DEFLATE (RFC 1951): bit reader, canonical Huffman, back-references
   Crc32            the archive's own statement about whether our decompressor got it right
@@ -44,6 +47,10 @@ the Kotlin metadata
   KotlinMetadata   the dozen messages an index reads, with every field number cited to metadata.proto
   KotlinFlags      the packed bit field: visibility, modality, kind, suspend/inline/infix/var/const/lateinit
   JvmDescriptors   Kotlin class names to JVM descriptors, for the signatures the compiler declines to write
+
+the persisted index
+  DataWriter       the bytes java.io.DataOutputStream writes, modified UTF-8 included
+  DataReader       and back again
 ```
 
 ## How it is checked
@@ -83,6 +90,19 @@ Against `java.util.zip`, over every jar in reach:
 - **17,571 entries across 16 archives, 59 MB, inflated byte for byte**, with names, sizes, methods and CRCs
   agreeing entry for entry. Plus zip64 (70,000 entries, where the 32-bit fields saturate), the stored method,
   empty entries, and a deliberately corrupted entry that must come back null rather than plausible.
+
+Against `java.io.DataOutputStream`, because the persisted index format is not ours to choose:
+
+- Every awkward string **encodes to the same bytes**, and a whole segment written by one reads back through
+  the other in **both directions**. Modified UTF-8 differs from UTF-8 in exactly two places, NUL and the
+  supplementary plane, so a test corpus without either would pass while being wrong.
+
+And on the phone, not only for it:
+
+- The six platform-independent tests, the file seam included, **run on the iOS simulator**
+  (`:kotlin-classfile:iosSimulatorArm64Test`). Compiling for a target says nothing about whether its `fopen`
+  was called correctly, and a seek-and-read that silently returns zeros surfaces as a corrupt class file much
+  later. One of those six opens a zip archive through the seam and reads an entry out of it.
 
 Plus the negative cases that matter: a Java class must report no Kotlin metadata, garbage must return null
 rather than throw, and no entry anywhere in the stdlib may throw, because a classpath contains jars built by
@@ -149,6 +169,8 @@ UTF-8 (every jar writes ASCII, where the two agree). Encryption and multi-disk a
 later: an archive needing either is not a classpath entry this can index, and pretending otherwise would be
 worse than returning null.
 
-What this does NOT yet do is BE an index. `:lang-kotlin-index` still holds the symbol model, the persistence
-format (`DataInput`/`DataOutput`) and the file walking (`java.nio.file`), and porting those is a dependency
-decision rather than more decoding.
+What this does NOT yet do is BE an index. Everything a classpath is made of can now be read on either
+platform, but `:lang-kotlin-index` still owns the symbol model it reads them INTO, which means
+`:language-api`'s `TypeRef` / `SymbolKind` / `Modifier` and `:index-api`'s `IndexExtension`, both of them
+JVM-only modules. Directory walking is also still `java.nio.file`, though after `openFile` that is one more
+`expect` rather than a decision.
