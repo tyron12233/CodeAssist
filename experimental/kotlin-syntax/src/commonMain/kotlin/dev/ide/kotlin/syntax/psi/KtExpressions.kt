@@ -1,9 +1,9 @@
 package dev.ide.kotlin.syntax.psi
 
-import dev.ide.kotlin.syntax.KtNodeTypes
-import dev.ide.kotlin.syntax.lexer.KtTokens
-import dev.ide.kotlin.syntax.tree.AstNode
-import dev.ide.kotlin.syntax.tree.IElementType
+import com.intellij.platform.syntax.SyntaxElementType
+import org.jetbrains.kotlin.kmp.lexer.KtTokens
+import org.jetbrains.kotlin.kmp.parser.KtNodeTypes
+import org.jetbrains.kotlin.kmp.tree.LightNode
 
 /**
  * The expression half of the facade, mirroring `org.jetbrains.kotlin.psi`'s expression classes.
@@ -14,29 +14,29 @@ import dev.ide.kotlin.syntax.tree.IElementType
  * member goes through [KtQualifiedExpression.receiverExpression] and [KtQualifiedExpression.selectorExpression]
  * for that reason.
  */
-open class KtExpression(node: AstNode) : KtElement(node)
+open class KtExpression internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node)
 
 /** A code block, mirroring `KtBlockExpression`. */
-class KtBlockExpression(node: AstNode) : KtExpression(node) {
+class KtBlockExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val statements: List<KtExpression> get() = childrenOfType()
 }
 
 /** A bare name in expression position, mirroring `KtNameReferenceExpression`. */
-class KtNameReferenceExpression(node: AstNode) : KtExpression(node) {
+class KtNameReferenceExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     fun getReferencedName(): String = text.removeSurrounding("`")
 
-    val getIdentifier: AstNode? get() = node.findChildByType(KtTokens.IDENTIFIER)
+    val identifier: KtElement? get() = child(KtTokens.IDENTIFIER)
 }
 
 /** The operator position of a unary or binary expression, mirroring `KtOperationReferenceExpression`. */
-class KtOperationReferenceExpression(node: AstNode) : KtExpression(node) {
+class KtOperationReferenceExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     /** The operator token, or null when the operator is an infix function name. */
-    val operationSignTokenType: IElementType? get() = node.firstChildNode?.elementType
+    val operationSignTokenType: SyntaxElementType? get() = children.firstOrNull()?.elementType
 
     fun getReferencedName(): String = text
 }
 
-class KtCallExpression(node: AstNode) : KtExpression(node) {
+class KtCallExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
 
     /** What is being called: a name, or another expression for an invoke. */
     val calleeExpression: KtExpression? get() = children.firstOrNull() as? KtExpression
@@ -53,26 +53,34 @@ class KtCallExpression(node: AstNode) : KtExpression(node) {
     val typeArguments: List<KtTypeProjection> get() = typeArgumentList?.arguments.orEmpty()
 }
 
-class KtValueArgumentList(node: AstNode) : KtElement(node) {
+class KtValueArgumentList internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node) {
     val arguments: List<KtValueArgument> get() = childrenOfType()
 }
 
-class KtValueArgument(node: AstNode) : KtElement(node) {
+/**
+ * One argument of a call.
+ *
+ * Its accessors are FUNCTIONS rather than properties, and so are the label accessors below. PSI is Java, so
+ * the editor backend spells them `getX()` — 207 of its ~226 such call sites are five methods, these among
+ * them — and a Kotlin property cannot be called that way from Kotlin source even though it compiles to the
+ * same JVM getter.
+ */
+class KtValueArgument internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node) {
 
-    val argumentExpression: KtExpression? get() = childrenOfType<KtExpression>().lastOrNull()
+    fun getArgumentExpression(): KtExpression? = childrenOfType<KtExpression>().lastOrNull()
 
     /** `name = value` in a call: the name, or null for a positional argument. */
-    val argumentName: String? get() = child(KtNodeTypes.VALUE_ARGUMENT_NAME)?.text
+    fun getArgumentName(): String? = child(KtNodeTypes.VALUE_ARGUMENT_NAME)?.text
 
-    val isSpread: Boolean get() = node.children.any { it.elementType === KtTokens.MUL }
+    val isSpread: Boolean get() = hasChild(KtTokens.MUL)
 }
 
 /** A lambda passed outside the parentheses, mirroring `KtLambdaArgument`. */
-class KtLambdaArgument(node: AstNode) : KtElement(node) {
+class KtLambdaArgument internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node) {
     val lambdaExpression: KtLambdaExpression? get() = firstChildOfType()
 }
 
-class KtLambdaExpression(node: AstNode) : KtExpression(node) {
+class KtLambdaExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
 
     val functionLiteral: KtFunctionLiteral? get() = firstChildOfType()
 
@@ -81,7 +89,7 @@ class KtLambdaExpression(node: AstNode) : KtExpression(node) {
     val bodyExpression: KtBlockExpression? get() = functionLiteral?.bodyExpression
 }
 
-class KtFunctionLiteral(node: AstNode) : KtExpression(node) {
+class KtFunctionLiteral internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
 
     val valueParameterList: KtParameterList? get() = firstChildOfType()
 
@@ -94,7 +102,7 @@ class KtFunctionLiteral(node: AstNode) : KtExpression(node) {
 }
 
 /** `a.b` or `a?.b`, mirroring `KtQualifiedExpression`. */
-abstract class KtQualifiedExpression(node: AstNode) : KtExpression(node) {
+abstract class KtQualifiedExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
 
     // The dot itself is a child too, so both sides are found by type rather than by position.
     val receiverExpression: KtExpression? get() = childrenOfType<KtExpression>().firstOrNull()
@@ -102,21 +110,21 @@ abstract class KtQualifiedExpression(node: AstNode) : KtExpression(node) {
     val selectorExpression: KtExpression?
         get() = childrenOfType<KtExpression>().let { if (it.size > 1) it.last() else null }
 
-    val operationTokenNode: AstNode?
-        get() = node.findChildByType(KtTokens.DOT) ?: node.findChildByType(KtTokens.SAFE_ACCESS)
+    val operationTokenNode: KtElement?
+        get() = child(KtTokens.DOT) ?: child(KtTokens.SAFE_ACCESS)
 }
 
-class KtDotQualifiedExpression(node: AstNode) : KtQualifiedExpression(node)
+class KtDotQualifiedExpression internal constructor(session: KtTreeSession, node: LightNode) : KtQualifiedExpression(session, node)
 
-class KtSafeQualifiedExpression(node: AstNode) : KtQualifiedExpression(node)
+class KtSafeQualifiedExpression internal constructor(session: KtTreeSession, node: LightNode) : KtQualifiedExpression(session, node)
 
-class KtBinaryExpression(node: AstNode) : KtExpression(node) {
+class KtBinaryExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
 
     val left: KtExpression? get() = childrenOfType<KtExpression>().firstOrNull { it !is KtOperationReferenceExpression }
 
     val operationReference: KtOperationReferenceExpression? get() = firstChildOfType()
 
-    val operationToken: IElementType? get() = operationReference?.operationSignTokenType
+    val operationToken: SyntaxElementType? get() = operationReference?.operationSignTokenType
 
     val right: KtExpression?
         get() {
@@ -126,56 +134,56 @@ class KtBinaryExpression(node: AstNode) : KtExpression(node) {
 }
 
 /** `a is B` / `a !is B`, mirroring `KtIsExpression`. */
-class KtIsExpression(node: AstNode) : KtExpression(node) {
+class KtIsExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val leftHandSide: KtExpression? get() = children.firstOrNull() as? KtExpression
     val typeReference: KtTypeReference? get() = firstChildOfType()
-    val isNegated: Boolean get() = node.children.any { it.elementType === KtTokens.NOT_IS }
+    val isNegated: Boolean get() = hasChild(KtTokens.NOT_IS)
 }
 
 /** `a as B` / `a as? B`, mirroring `KtBinaryExpressionWithTypeRHS`. */
-class KtBinaryExpressionWithTypeRHS(node: AstNode) : KtExpression(node) {
+class KtBinaryExpressionWithTypeRHS internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val left: KtExpression? get() = children.firstOrNull() as? KtExpression
     val right: KtTypeReference? get() = firstChildOfType()
 }
 
-class KtPrefixExpression(node: AstNode) : KtExpression(node) {
+class KtPrefixExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val operationReference: KtOperationReferenceExpression? get() = firstChildOfType()
-    val operationToken: IElementType? get() = operationReference?.operationSignTokenType
+    val operationToken: SyntaxElementType? get() = operationReference?.operationSignTokenType
     val baseExpression: KtExpression?
         get() = childrenOfType<KtExpression>().lastOrNull { it !is KtOperationReferenceExpression }
 }
 
-class KtPostfixExpression(node: AstNode) : KtExpression(node) {
+class KtPostfixExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val operationReference: KtOperationReferenceExpression? get() = firstChildOfType()
-    val operationToken: IElementType? get() = operationReference?.operationSignTokenType
+    val operationToken: SyntaxElementType? get() = operationReference?.operationSignTokenType
     val baseExpression: KtExpression?
         get() = childrenOfType<KtExpression>().firstOrNull { it !is KtOperationReferenceExpression }
 }
 
-class KtParenthesizedExpression(node: AstNode) : KtExpression(node) {
+class KtParenthesizedExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val expression: KtExpression? get() = firstChildOfType()
 }
 
-class KtArrayAccessExpression(node: AstNode) : KtExpression(node) {
+class KtArrayAccessExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val arrayExpression: KtExpression? get() = children.firstOrNull() as? KtExpression
     val indexExpressions: List<KtExpression> get() = child(KtNodeTypes.INDICES)?.childrenOfType<KtExpression>().orEmpty()
 }
 
-class KtCallableReferenceExpression(node: AstNode) : KtExpression(node) {
+class KtCallableReferenceExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val receiverExpression: KtExpression? get() = children.firstOrNull()?.takeIf { it.textOffset < textOffset + 2 } as? KtExpression
     val callableReference: KtNameReferenceExpression? get() = childrenOfType<KtNameReferenceExpression>().lastOrNull()
 }
 
-class KtClassLiteralExpression(node: AstNode) : KtExpression(node) {
+class KtClassLiteralExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val receiverExpression: KtExpression? get() = children.firstOrNull() as? KtExpression
 }
 
-class KtConstantExpression(node: AstNode) : KtExpression(node) {
+class KtConstantExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     /** INTEGER_CONSTANT, FLOAT_CONSTANT, BOOLEAN_CONSTANT, CHARACTER_CONSTANT or NULL. */
-    val constantType: IElementType get() = elementType
+    val constantType: SyntaxElementType get() = elementType
 }
 
-class KtStringTemplateExpression(node: AstNode) : KtExpression(node) {
+class KtStringTemplateExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
 
     val entries: List<KtStringTemplateEntry> get() = childrenOfType()
 
@@ -183,29 +191,29 @@ class KtStringTemplateExpression(node: AstNode) : KtExpression(node) {
     val isPlain: Boolean get() = entries.all { it is KtLiteralStringTemplateEntry || it is KtEscapeStringTemplateEntry }
 }
 
-abstract class KtStringTemplateEntry(node: AstNode) : KtElement(node) {
+abstract class KtStringTemplateEntry internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node) {
     open val expression: KtExpression? get() = firstChildOfType()
 }
 
-class KtLiteralStringTemplateEntry(node: AstNode) : KtStringTemplateEntry(node) {
+class KtLiteralStringTemplateEntry internal constructor(session: KtTreeSession, node: LightNode) : KtStringTemplateEntry(session, node) {
     override val expression: KtExpression? get() = null
 }
 
-class KtEscapeStringTemplateEntry(node: AstNode) : KtStringTemplateEntry(node) {
+class KtEscapeStringTemplateEntry internal constructor(session: KtTreeSession, node: LightNode) : KtStringTemplateEntry(session, node) {
     override val expression: KtExpression? get() = null
 }
 
-class KtSimpleNameStringTemplateEntry(node: AstNode) : KtStringTemplateEntry(node)
+class KtSimpleNameStringTemplateEntry internal constructor(session: KtTreeSession, node: LightNode) : KtStringTemplateEntry(session, node)
 
-class KtBlockStringTemplateEntry(node: AstNode) : KtStringTemplateEntry(node)
+class KtBlockStringTemplateEntry internal constructor(session: KtTreeSession, node: LightNode) : KtStringTemplateEntry(session, node)
 
-class KtIfExpression(node: AstNode) : KtExpression(node) {
+class KtIfExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val condition: KtExpression? get() = child(KtNodeTypes.CONDITION)?.firstChildOfType()
     val then: KtExpression? get() = child(KtNodeTypes.THEN)?.firstChildOfType()
     val `else`: KtExpression? get() = child(KtNodeTypes.ELSE)?.firstChildOfType()
 }
 
-class KtWhenExpression(node: AstNode) : KtExpression(node) {
+class KtWhenExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
 
     /**
      * `when (subject) { … }`, or null for the subjectless form.
@@ -220,9 +228,9 @@ class KtWhenExpression(node: AstNode) : KtExpression(node) {
     val elseExpression: KtExpression? get() = entries.firstOrNull { it.isElse }?.expression
 }
 
-class KtWhenEntry(node: AstNode) : KtElement(node) {
+class KtWhenEntry internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node) {
 
-    val isElse: Boolean get() = node.children.any { it.elementType === KtTokens.ELSE_KEYWORD }
+    val isElse: Boolean get() = hasChild(KtTokens.ELSE_KEYWORD)
 
     val conditions: List<KtWhenCondition> get() = childrenOfType()
 
@@ -231,104 +239,116 @@ class KtWhenEntry(node: AstNode) : KtElement(node) {
     /** The entry's body, which is everything after the arrow. */
     val expression: KtExpression?
         get() {
-            val arrow = node.children.firstOrNull { it.elementType === KtTokens.ARROW } ?: return null
-            return children.firstOrNull { it.textOffset > arrow.startOffset } as? KtExpression
+            val arrow = session.tree.findChildByType(node, KtTokens.ARROW) ?: return null
+            val at = session.tree.getStartOffset(arrow)
+            return children.firstOrNull { it.textOffset > at } as? KtExpression
         }
 }
 
-abstract class KtWhenCondition(node: AstNode) : KtElement(node)
+abstract class KtWhenCondition internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node)
 
-class KtWhenConditionWithExpression(node: AstNode) : KtWhenCondition(node) {
+class KtWhenConditionWithExpression internal constructor(session: KtTreeSession, node: LightNode) : KtWhenCondition(session, node) {
     val expression: KtExpression? get() = firstChildOfType()
 }
 
-class KtWhenConditionInRange(node: AstNode) : KtWhenCondition(node) {
+class KtWhenConditionInRange internal constructor(session: KtTreeSession, node: LightNode) : KtWhenCondition(session, node) {
     val rangeExpression: KtExpression?
         get() = childrenOfType<KtExpression>().lastOrNull { it !is KtOperationReferenceExpression }
-    val isNegated: Boolean get() = node.children.any { it.elementType === KtTokens.NOT_IN }
+    val isNegated: Boolean get() = hasChild(KtTokens.NOT_IN)
 }
 
-class KtWhenConditionIsPattern(node: AstNode) : KtWhenCondition(node) {
+class KtWhenConditionIsPattern internal constructor(session: KtTreeSession, node: LightNode) : KtWhenCondition(session, node) {
     val typeReference: KtTypeReference? get() = firstChildOfType()
-    val isNegated: Boolean get() = node.children.any { it.elementType === KtTokens.NOT_IS }
+    val isNegated: Boolean get() = hasChild(KtTokens.NOT_IS)
 }
 
-class KtTryExpression(node: AstNode) : KtExpression(node) {
+class KtTryExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val tryBlock: KtBlockExpression? get() = firstChildOfType()
     val catchClauses: List<KtCatchClause> get() = childrenOfType()
     val finallyBlock: KtFinallySection? get() = firstChildOfType()
 }
 
-class KtCatchClause(node: AstNode) : KtElement(node) {
+class KtCatchClause internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node) {
     val parameterList: KtParameterList? get() = firstChildOfType()
     val catchParameter: KtParameter? get() = parameterList?.parameters?.firstOrNull()
     val catchBody: KtBlockExpression? get() = firstChildOfType()
 }
 
-class KtFinallySection(node: AstNode) : KtElement(node) {
+class KtFinallySection internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node) {
     val finalExpression: KtBlockExpression? get() = firstChildOfType()
 }
 
-class KtForExpression(node: AstNode) : KtExpression(node) {
+/**
+ * `for`, `while` and `do`-`while`, mirroring `KtLoopExpression`.
+ *
+ * The editor backend walks loops through this base rather than the three concrete types, so it has to exist
+ * even though nothing in the tree is named after it.
+ */
+abstract class KtLoopExpression internal constructor(session: KtTreeSession, node: LightNode) :
+    KtExpression(session, node) {
+    abstract val body: KtExpression?
+}
+
+class KtForExpression internal constructor(session: KtTreeSession, node: LightNode) : KtLoopExpression(session, node) {
     val loopParameter: KtParameter? get() = firstChildOfType()
     val destructuringDeclaration: KtDestructuringDeclaration? get() = firstChildOfType()
     val loopRange: KtExpression? get() = child(KtNodeTypes.LOOP_RANGE)?.firstChildOfType()
-    val body: KtExpression? get() = child(KtNodeTypes.BODY)?.firstChildOfType()
+    override val body: KtExpression? get() = child(KtNodeTypes.BODY)?.firstChildOfType()
 }
 
-class KtWhileExpression(node: AstNode) : KtExpression(node) {
+class KtWhileExpression internal constructor(session: KtTreeSession, node: LightNode) : KtLoopExpression(session, node) {
     val condition: KtExpression? get() = child(KtNodeTypes.CONDITION)?.firstChildOfType()
-    val body: KtExpression? get() = child(KtNodeTypes.BODY)?.firstChildOfType()
+    override val body: KtExpression? get() = child(KtNodeTypes.BODY)?.firstChildOfType()
 }
 
-class KtDoWhileExpression(node: AstNode) : KtExpression(node) {
+class KtDoWhileExpression internal constructor(session: KtTreeSession, node: LightNode) : KtLoopExpression(session, node) {
     val condition: KtExpression? get() = child(KtNodeTypes.CONDITION)?.firstChildOfType()
-    val body: KtExpression? get() = child(KtNodeTypes.BODY)?.firstChildOfType()
+    override val body: KtExpression? get() = child(KtNodeTypes.BODY)?.firstChildOfType()
 }
 
-class KtReturnExpression(node: AstNode) : KtExpression(node) {
+class KtReturnExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val returnedExpression: KtExpression? get() = firstChildOfType()
     /** `return@label`, or null for a plain return. */
-    val labelName: String? get() = child(KtNodeTypes.LABEL_QUALIFIER)?.text?.removePrefix("@")
+    fun getLabelName(): String? = child(KtNodeTypes.LABEL_QUALIFIER)?.text?.removePrefix("@")
 }
 
-class KtThrowExpression(node: AstNode) : KtExpression(node) {
+class KtThrowExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val thrownExpression: KtExpression? get() = firstChildOfType()
 }
 
-class KtBreakExpression(node: AstNode) : KtExpression(node) {
-    val labelName: String? get() = child(KtNodeTypes.LABEL_QUALIFIER)?.text?.removePrefix("@")
+class KtBreakExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
+    fun getLabelName(): String? = child(KtNodeTypes.LABEL_QUALIFIER)?.text?.removePrefix("@")
 }
 
-class KtContinueExpression(node: AstNode) : KtExpression(node) {
-    val labelName: String? get() = child(KtNodeTypes.LABEL_QUALIFIER)?.text?.removePrefix("@")
+class KtContinueExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
+    fun getLabelName(): String? = child(KtNodeTypes.LABEL_QUALIFIER)?.text?.removePrefix("@")
 }
 
-class KtThisExpression(node: AstNode) : KtExpression(node) {
-    val labelName: String? get() = child(KtNodeTypes.LABEL_QUALIFIER)?.text?.removePrefix("@")
+class KtThisExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
+    fun getLabelName(): String? = child(KtNodeTypes.LABEL_QUALIFIER)?.text?.removePrefix("@")
 }
 
-class KtSuperExpression(node: AstNode) : KtExpression(node) {
+class KtSuperExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val superTypeQualifier: KtTypeReference? get() = firstChildOfType()
-    val labelName: String? get() = child(KtNodeTypes.LABEL_QUALIFIER)?.text?.removePrefix("@")
+    fun getLabelName(): String? = child(KtNodeTypes.LABEL_QUALIFIER)?.text?.removePrefix("@")
 }
 
-class KtObjectLiteralExpression(node: AstNode) : KtExpression(node) {
+class KtObjectLiteralExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val objectDeclaration: KtObjectDeclaration? get() = firstChildOfType()
 }
 
-class KtLabeledExpression(node: AstNode) : KtExpression(node) {
-    val labelName: String? get() = child(KtNodeTypes.LABEL_QUALIFIER)?.text?.removeSuffix("@")
+class KtLabeledExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
+    fun getLabelName(): String? = child(KtNodeTypes.LABEL_QUALIFIER)?.text?.removeSuffix("@")
     val baseExpression: KtExpression? get() = firstChildOfType()
 }
 
-class KtAnnotatedExpression(node: AstNode) : KtExpression(node) {
+class KtAnnotatedExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val baseExpression: KtExpression? get() = childrenOfType<KtExpression>().lastOrNull()
 }
 
-class KtCollectionLiteralExpression(node: AstNode) : KtExpression(node) {
+class KtCollectionLiteralExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val innerExpressions: List<KtExpression> get() = childrenOfType()
 }
 
 /** A region the parser could not make sense of, mirroring `PsiErrorElement`. */
-class KtErrorElement(node: AstNode) : KtElement(node)
+class KtErrorElement internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node)

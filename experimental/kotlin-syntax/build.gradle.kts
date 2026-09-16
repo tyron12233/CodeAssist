@@ -14,8 +14,9 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // compiler's accessor names. That makes the port checkable rather than merely plausible: the tests diff our
 // token stream and our tree against the real compiler's, over this repository's own sources.
 //
-// NOTHING depends on this module. It is deliberately off to the side until the differential suites are green
-// across a wide corpus; see docs/kotlin-syntax.md for the state of play and what is not covered yet.
+// NOTHING depends on this module. CI runs its jvmTest by name (a multiplatform module has no `test` task, so
+// the aggregate `./gradlew test` walks past it); the iOS suites need a Mac and run locally. See
+// docs/kotlin-syntax.md for the state of play and what is not covered yet.
 //
 // Multiplatform with an iOS target from the first commit, on purpose: whether `commonMain` is portable is
 // unanswerable until a non-JVM target actually compiles it, and a dependency that quietly arrives through
@@ -34,6 +35,19 @@ kotlin {
     iosArm64()
 
     sourceSets {
+        commonMain {
+            // The Kotlin compiler's own multiplatform parser, vendored byte-identical — see
+            // src/commonMain/vendor/VENDOR.md. Kept in its own source root so "what is upstream's" and
+            // "what is ours" never has to be guessed, and so a re-sync is an overwrite.
+            kotlin.srcDir("src/commonMain/vendor")
+            dependencies {
+                // What that parser is written against. Upstream builds it for jvm and wasm only; both of
+                // these publish Apple targets, which is what lets it be built for iOS here.
+                api(libs.jetbrains.syntax.api)
+                implementation(libs.jetbrains.annotations)
+            }
+        }
+
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
@@ -71,4 +85,11 @@ tasks.named<Test>("jvmTest") {
     // compiler's PSI environment, which wants room.
     maxHeapSize = "2g"
     systemProperty("kotlinSyntax.corpusRoot", rootDir.absolutePath)
+    // Rewrite the parity baseline after a deliberate change, the way the framework's regression suites take
+    // `-Dbench.updateBaselines`. Forwarded explicitly: a `-D` on the Gradle command line reaches the Gradle
+    // JVM, not the forked test one.
+    System.getProperty("kotlinSyntax.updateBaseline")
+        ?.let { systemProperty("kotlinSyntax.updateBaseline", it) }
+    // The corpus is large and the comparison stands up the real PSI environment.
+    outputs.upToDateWhen { false }
 }

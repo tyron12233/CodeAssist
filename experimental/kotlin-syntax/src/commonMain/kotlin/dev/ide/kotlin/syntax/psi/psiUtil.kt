@@ -1,7 +1,5 @@
 package dev.ide.kotlin.syntax.psi
 
-import dev.ide.kotlin.syntax.tree.AstNode
-
 /**
  * The tree-walking helpers, mirroring `org.jetbrains.kotlin.psi.psiUtil` and `PsiTreeUtil`.
  *
@@ -37,26 +35,40 @@ val KtElement.prevSiblings: Sequence<KtElement>
 
 /** Every descendant of type [T], depth first, this element included. */
 inline fun <reified T : KtElement> KtElement.collectDescendantsOfType(): List<T> =
-    node.descendants().filter { !it.isTrivia() }.map { it.toPsi() }.filterIsInstance<T>().toList()
+    descendants().filterIsInstance<T>().toList()
 
 /** The first descendant of type [T], or null. */
 inline fun <reified T : KtElement> KtElement.findDescendantOfType(): T? =
-    node.descendants().filter { !it.isTrivia() }.map { it.toPsi() }.filterIsInstance<T>().firstOrNull()
+    descendants().filterIsInstance<T>().firstOrNull()
+
+/** This element and every descendant, depth first, trivia excluded. */
+fun KtElement.descendants(): Sequence<KtElement> = sequence {
+    yield(this@descendants)
+    for (child in children) yieldAll(child.descendants())
+}
 
 /** Does the subtree contain a region the parser could not read? */
 fun KtElement.hasErrorElements(): Boolean =
-    node.descendants().any { it.elementType === dev.ide.kotlin.syntax.tree.TokenType.ERROR_ELEMENT }
+    descendants().any { it.elementType == com.intellij.platform.syntax.element.SyntaxTokenTypes.ERROR_ELEMENT }
 
-/** The innermost element covering [offset], which is what a caret-position query needs. */
-fun KtFile.findElementAt(offset: Int): KtElement? = node.findElementAt(offset)?.toPsi()
+/**
+ * The innermost element covering [offset], which is what a caret-position query needs.
+ *
+ * Walks down rather than consulting an index: the light tree has no offset lookup, and a caret query is one
+ * descent per call, not a hot loop.
+ */
+fun KtFile.findElementAt(offset: Int): KtElement? {
+    var current: KtElement = this
+    if (offset !in current.textRange) return null
+    while (true) {
+        val next = current.children.firstOrNull { offset in it.textRange } ?: return current
+        current = next
+    }
+}
 
 /** The innermost element of type [T] covering [offset]. */
 inline fun <reified T : KtElement> KtFile.findElementOfTypeAt(offset: Int): T? =
     findElementAt(offset)?.getParentOfType<T>()
 
 /** Every element in the file, depth first, trivia excluded. */
-fun KtFile.allElements(): Sequence<KtElement> =
-    node.descendants().filter { !it.isTrivia() }.map { it.toPsi() }
-
-/** The node's text with the surrounding backticks removed, if it has any. */
-internal fun AstNode.unquoted(): String = text.removeSurrounding("`")
+fun KtFile.allElements(): Sequence<KtElement> = descendants()

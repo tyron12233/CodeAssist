@@ -30,6 +30,13 @@ dependencyResolutionManagement {
                 includeGroupByRegex("org\\.jetbrains\\.intellij.*")
                 includeGroup("org.jetbrains.kotlin")
                 includeModule("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm") // JB coroutines fork (…-intellij-N)
+                // The syntax-tree builder the Kotlin compiler's multiplatform parser is written against,
+                // vendored into :kotlin-syntax. Not on Maven Central, and one of the few IntelliJ artifacts
+                // published for Apple targets, which is what lets that parser reach iOS at all. The regex
+                // also admits its per-target siblings (syntax-api-jvm, -iosarm64, -iossimulatorarm64): a
+                // multiplatform artifact publishes each variant as its own module, so a filter naming only
+                // the root coordinate resolves the metadata and then finds no jar.
+                includeModuleByRegex("org\\.jetbrains", "syntax-api.*")
             }
         }
         maven("https://cache-redirector.jetbrains.com/intellij-repository/releases") {

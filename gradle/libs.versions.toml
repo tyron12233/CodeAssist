@@ -66,6 +66,12 @@ moshi = "1.15.2"   # com.squareup.moshi — moshi-kotlin-codegen (KSP-native JSO
 glide = "5.0.9"    # com.github.bumptech.glide — the `ksp` processor + `annotations` (@GlideModule) marker
 dagger = "2.60.1"  # com.google.dagger — Hilt/Dagger; hilt-compiler is the KSP processor, hilt-core the marker
 
+# The Kotlin compiler's multiplatform parser (vendored into :kotlin-syntax) is written against IntelliJ's
+# standalone syntax-tree builder. Bump it together with the vendored sources — see that module's VENDOR.md;
+# the version is whatever the matching Kotlin revision pins in its own libs.versions.toml.
+jetbrains-syntax-api = "0.3.376"
+jetbrains-annotations = "26.0.2"
+
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
@@ -218,6 +224,11 @@ glide-ksp = { module = "com.github.bumptech.glide:ksp", version.ref = "glide" }
 glide-annotations = { module = "com.github.bumptech.glide:annotations", version.ref = "glide" }
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "dagger" }
 hilt-core = { module = "com.google.dagger:hilt-core", version.ref = "dagger" }
+
+# Consumed only by :kotlin-syntax, for the vendored Kotlin parser. Both publish Apple targets, which is the
+# reason that parser can be built for iOS here when upstream builds it only for the JVM and wasm.
+jetbrains-syntax-api = { module = "org.jetbrains:syntax-api", version.ref = "jetbrains-syntax-api" }
+jetbrains-annotations = { module = "org.jetbrains:annotations", version.ref = "jetbrains-annotations" }
 
 [plugins]
 # Reads google-services.json into resources. Applied conditionally by :ide-android — a build without that

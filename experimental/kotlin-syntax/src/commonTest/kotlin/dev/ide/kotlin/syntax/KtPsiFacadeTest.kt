@@ -1,7 +1,6 @@
 package dev.ide.kotlin.syntax
 
-import dev.ide.kotlin.syntax.lexer.KtTokens
-import dev.ide.kotlin.syntax.parsing.KotlinParser
+import org.jetbrains.kotlin.kmp.lexer.KtTokens
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
@@ -29,15 +28,18 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * The `Kt*` facade: the accessors the editor backend actually calls.
+ * The `Kt*` facade: the accessors the editor backend actually calls, over the VENDORED grammar.
  *
- * These names are the compiler's, and that is the point of the suite — it is the check that a caller written
- * against `org.jetbrains.kotlin.psi` would find what it expects here. The tree oracle proves the SHAPE
- * matches; this proves the reading of it does.
+ * The parser is the compiler's now, so this suite is no longer about whether the tree is right — the parity
+ * suite answers that against 774 of the compiler's own corpus files. What is left to check here is the
+ * bridge: that reading a `LightSyntaxTree` through PSI-shaped accessors gives PSI-shaped answers.
+ *
+ * The names are the compiler's, deliberately: a call site written against `org.jetbrains.kotlin.psi` should
+ * need an import change and little else.
  */
 class KtPsiFacadeTest {
 
-    private fun file(text: String) = KotlinParser.parseFile(text)
+    private fun file(text: String) = KotlinSyntax.parseFile(text)
 
     // --- identity ----------------------------------------------------------------------------------------
 
@@ -85,10 +87,10 @@ class KtPsiFacadeTest {
         assertTrue(cls.isData)
         assertFalse(cls.isInterface)
         assertEquals(listOf("x", "y"), cls.primaryConstructor?.valueParameters?.map { it.name })
-        assertTrue(cls.primaryConstructor!!.valueParameters[0].hasValOrVar)
+        assertTrue(cls.primaryConstructor!!.valueParameters[0].hasValOrVar())
         assertFalse(cls.primaryConstructor!!.valueParameters[0].isMutable)
         assertTrue(cls.primaryConstructor!!.valueParameters[1].isMutable)
-        assertTrue(cls.primaryConstructor!!.valueParameters[1].hasDefaultValue)
+        assertTrue(cls.primaryConstructor!!.valueParameters[1].hasDefaultValue())
         assertEquals(2, cls.superTypeListEntries.size)
         assertEquals(listOf("f"), cls.declarations.filterIsInstance<KtNamedFunction>().map { it.name })
     }
@@ -96,10 +98,11 @@ class KtPsiFacadeTest {
     @Test
     fun modifiersReadBackByToken() {
         val cls = file("private sealed class Foo").declarations.single() as KtClass
-        assertTrue(cls.hasModifier(KtTokens.PRIVATE_KEYWORD))
-        assertTrue(cls.hasModifier(KtTokens.SEALED_KEYWORD))
-        assertFalse(cls.hasModifier(KtTokens.PUBLIC_KEYWORD))
-        assertEquals(listOf("PRIVATE_KEYWORD", "SEALED_KEYWORD"), cls.modifierList?.modifiers?.map { it.debugName })
+        assertTrue(cls.hasModifier(KtTokens.PRIVATE_MODIFIER))
+        assertTrue(cls.hasModifier(KtTokens.SEALED_MODIFIER))
+        assertFalse(cls.hasModifier(KtTokens.PUBLIC_MODIFIER))
+        // The vendored vocabulary prints a keyword as its text, which is what a reader wants to see anyway.
+        assertEquals(listOf("private", "sealed"), cls.modifierList?.modifiers?.map { it.toString() })
     }
 
     @Test
@@ -131,12 +134,12 @@ class KtPsiFacadeTest {
         val fn = file("suspend fun <T> List<T>.transform(n: Int, f: (T) -> T): List<T> = this")
             .declarations.single() as KtNamedFunction
         assertEquals("transform", fn.name)
-        assertTrue(fn.hasModifier(KtTokens.SUSPEND_KEYWORD))
+        assertTrue(fn.hasModifier(KtTokens.SUSPEND_MODIFIER))
         assertEquals(listOf("T"), fn.typeParameters.map { it.name })
         assertEquals("List<T>", fn.receiverTypeReference?.text)
         assertEquals(listOf("n", "f"), fn.valueParameters.map { it.name })
         assertEquals("List<T>", fn.typeReference?.text)
-        assertFalse(fn.hasBlockBody)
+        assertFalse(fn.hasBlockBody())
     }
 
     @Test
@@ -155,7 +158,7 @@ class KtPsiFacadeTest {
         assertEquals("1", property.initializer?.text)
 
         val delegated = file("val b by lazy { 1 }").declarations.single() as KtProperty
-        assertTrue(delegated.hasDelegate)
+        assertTrue(delegated.hasDelegate())
         assertNull(delegated.initializer)
 
         val withAccessors = file("var c: Int = 0\n    get() = field\n    private set")
@@ -163,7 +166,7 @@ class KtPsiFacadeTest {
         assertTrue(withAccessors.isVar)
         assertNotNull(withAccessors.getter)
         assertNotNull(withAccessors.setter)
-        assertTrue(withAccessors.setter!!.hasModifier(KtTokens.PRIVATE_KEYWORD))
+        assertTrue(withAccessors.setter!!.hasModifier(KtTokens.PRIVATE_MODIFIER))
     }
 
     @Test
@@ -184,14 +187,14 @@ class KtPsiFacadeTest {
         val call = qualified.selectorExpression as KtCallExpression
         assertEquals("bar", (call.calleeExpression as KtNameReferenceExpression).getReferencedName())
         assertEquals(1, call.valueArguments.size)
-        assertEquals("1", call.valueArguments.single().argumentExpression?.text)
+        assertEquals("1", call.valueArguments.single().getArgumentExpression()?.text)
     }
 
     @Test
     fun namedAndSpreadArguments() {
         val call = file("val x = f(a = 1, *rest)").collectDescendantsOfType<KtCallExpression>().single()
-        assertEquals("a", call.valueArguments[0].argumentName)
-        assertNull(call.valueArguments[1].argumentName)
+        assertEquals("a", call.valueArguments[0].getArgumentName())
+        assertNull(call.valueArguments[1].getArgumentName())
         assertTrue(call.valueArguments[1].isSpread)
     }
 
