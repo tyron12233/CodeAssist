@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtDelegatedSuperTypeEntry
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
 
 /** Inheritance analysis: supertype member closure, overridable members, and unimplemented-abstract / hidden-member reports. */
 
@@ -75,8 +76,13 @@ class InheritanceReport(
     val missing: List<KotlinSymbol>,
     val overridesNothing: List<KtCallableDeclaration>,
     val needsOverride: List<Pair<KtCallableDeclaration, KotlinSymbol>>,
+    /** Each `override` function whose `suspend`-ness disagrees with the supertype member it overrides,
+     *  paired with that member. Both directions are compile errors. */
+    val suspendMismatch: List<Pair<KtCallableDeclaration, KotlinSymbol>> = emptyList(),
 ) {
-    val isEmpty: Boolean get() = missing.isEmpty() && overridesNothing.isEmpty() && needsOverride.isEmpty()
+    val isEmpty: Boolean
+        get() = missing.isEmpty() && overridesNothing.isEmpty() && needsOverride.isEmpty() &&
+                suspendMismatch.isEmpty()
 
     companion object {
         val EMPTY = InheritanceReport(emptyList(), emptyList(), emptyList())
@@ -104,6 +110,7 @@ fun KotlinResolver.inheritanceProblems(cls: KtClassOrObject, concrete: Boolean):
     }
     val overridesNothing = ArrayList<KtCallableDeclaration>()
     val needsOverride = ArrayList<Pair<KtCallableDeclaration, KotlinSymbol>>()
+    val suspendMismatch = ArrayList<Pair<KtCallableDeclaration, KotlinSymbol>>()
     for (d in cls.declarations) {
         val member = d as? KtCallableDeclaration ?: continue
         if (member !is KtNamedFunction && member !is KtProperty) continue
@@ -111,11 +118,12 @@ fun KotlinResolver.inheritanceProblems(cls: KtClassOrObject, concrete: Boolean):
         val sameName = byName[name].orEmpty()
         if (member.hasModifier(KtTokens.OVERRIDE_KEYWORD)) {
             if (closureFullyEnumerable && sameName.isEmpty()) overridesNothing += member // `override` but nothing carries this name
+            else suspendMismatchedOverride(member, sameName)?.let { suspendMismatch += member to it }
         } else if (!member.hasModifier(KtTokens.PRIVATE_KEYWORD)) {
             hiddenSupertypeMember(member, sameName)?.let { needsOverride += member to it }
         }
     }
-    return InheritanceReport(missing, overridesNothing, needsOverride)
+    return InheritanceReport(missing, overridesNothing, needsOverride, suspendMismatch)
 }
 
 /**
@@ -178,18 +186,66 @@ internal fun KotlinResolver.hiddenSupertypeMember(
     sameName: List<KotlinSymbol>
 ): KotlinSymbol? {
     if (sameName.isEmpty()) return null
+    val matches = sameShapeMembers(member, sameName)
+    if (matches.isEmpty()) return null
+    if (matches.any { Modifier.FINAL in it.modifiers || Modifier.STATIC in it.modifiers }) return null
+    return matches.first()
+}
+
+/** The [sameName] members [member] could be overriding: same kind, and for a function the same arity + param
+ *  simple-type names. Loose only in the safe direction — a substituted generic parameter spells differently
+ *  and so drops out, leaving the caller with nothing to report. */
+private fun KotlinResolver.sameShapeMembers(
+    member: KtCallableDeclaration,
+    sameName: List<KotlinSymbol>
+): List<KotlinSymbol> {
     val isFun = member is KtNamedFunction
     val localParams =
         if (member is KtNamedFunction) member.valueParameters.map { simpleTypeName(it.typeReference?.text) } else emptyList()
-    val matches = sameName.filter { m ->
+    return sameName.filter { m ->
         (m.kind == SymbolKind.METHOD) == isFun &&
                 if (isFun) m.paramTypes.size == localParams.size &&
                         m.paramTypes.indices.all { i -> paramSimpleName(m.paramTypes[i]) == localParams[i] }
                 else true
     }
-    if (matches.isEmpty()) return null
-    if (matches.any { Modifier.FINAL in it.modifiers || Modifier.STATIC in it.modifiers }) return null
-    return matches.first()
+}
+
+/**
+ * The supertype function whose `suspend`-ness the `override` [member] contradicts, or null. Kotlin errors both
+ * ways — "Non-suspend function 'load' cannot override suspend function" (what the generated "Implement members"
+ * stub used to produce, and what nothing flagged until the user built) and "Suspend function 'load' cannot
+ * override non-suspend function".
+ *
+ * Fires only on POSITIVE agreement-free evidence, the same conservative contract as the rest of this file: it
+ * needs a supertype candidate of the SAME shape, and stays silent the moment ANY candidate agrees with the
+ * member. So an unknown/unmatched supertype reports nothing, and a supertype member whose `suspend` flag never
+ * reached the model can only silence the check, never invent an error. (A `suspend` member decoded from plain
+ * bytecode — no `@Metadata` — carries its `Continuation` parameter, so it differs in ARITY and drops out of
+ * the candidates rather than reading as non-suspend.)
+ */
+internal fun KotlinResolver.suspendMismatchedOverride(
+    member: KtCallableDeclaration,
+    sameName: List<KotlinSymbol>
+): KotlinSymbol? {
+    val fn = member as? KtNamedFunction ?: return null // only a function can be `suspend`
+    if (sameName.isEmpty()) return null
+    val candidates = sameShapeMembers(fn, sameName)
+    if (candidates.isEmpty()) return null // can't tell which member it overrides
+    val isSuspend = fn.hasModifier(KtTokens.SUSPEND_KEYWORD)
+    if (candidates.any { it.isSuspend == isSuspend }) return null // it agrees with one of them
+    return candidates.first()
+}
+
+/** The supertype member whose `suspend`-ness the `override` [member] contradicts, or null — the standalone
+ *  entry for the quick-fix (the diagnostic pass computes the same thing for the whole class at once). Null
+ *  for a member that isn't an `override`, isn't inside a class, or whose supertype closure can't be resolved,
+ *  so a stale diagnostic yields no fix. */
+fun KotlinResolver.suspendMismatchFor(member: KtCallableDeclaration): KotlinSymbol? {
+    if (!member.hasModifier(KtTokens.OVERRIDE_KEYWORD)) return null
+    val name = member.name ?: return null
+    val cls = member.containingClassOrObject ?: return null
+    val closure = resolvedSupertypeMembers(cls) ?: return null
+    return suspendMismatchedOverride(member, closure.filter { it.name == name })
 }
 
 /** A name+shape key so a concrete member of the same shape (in the class or up the chain) counts as

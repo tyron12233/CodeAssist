@@ -48,6 +48,10 @@ object KotlinDiagnosticCodes {
     const val NOTHING_TO_OVERRIDE = "kt.nothingToOverride"
     /** A member hides an inherited member of the same signature but is missing the `override` modifier. */
     const val OVERRIDE_REQUIRED = "kt.overrideRequired"
+    /** An `override` function whose `suspend`-ness contradicts the member it overrides — either direction
+     *  ("Non-suspend function 'f' cannot override suspend function" / "Suspend function 'f' cannot override
+     *  non-suspend function"). */
+    const val SUSPEND_OVERRIDE = "kt.suspendOverride"
     /** A constructor call on an interface or abstract/sealed class (which cannot be instantiated). */
     const val ABSTRACT_INSTANTIATION = "kt.abstractInstantiation"
     /** A class supertype written without its constructor call (`class C : Base` → should be `Base()`). */

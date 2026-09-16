@@ -5,7 +5,9 @@ import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -271,6 +273,89 @@ class KotlinInheritanceDiagnosticsTest {
         assertTrue(inserted.contains("TODO("), "stub body is a TODO; got '$inserted'")
     }
 
+    // --- suspend-ness of an override (kt.suspendOverride) ---
+
+    @Test
+    fun nonSuspendOverrideOfASuspendMemberIsFlagged() {
+        // The reported case: the generated stub dropped `suspend` and NOTHING said so until the build failed
+        // with "Non-suspend function 'load' cannot override suspend function".
+        val d = diagnose("Loader1.kt", "package demo\nclass Loader1 : Loader { override fun load(id: String) = id; override fun plain() = 1; override fun mix(n: Int) = n; override fun mix(s: String) = s }")
+        val err = d.firstOrNull { it.code == "kt.suspendOverride" }
+        assertNotNull(err, "a non-suspend override of a suspend member must be flagged; got $d")
+        assertTrue(
+            err.message.contains("Non-suspend function 'load' cannot override suspend function " +
+                "'suspend fun load(id: String): String'"),
+            "the message mirrors the compiler's, naming the overridden member; got '${err.message}'",
+        )
+    }
+
+    @Test
+    fun suspendOverrideOfANonSuspendMemberIsFlagged() {
+        val d = diagnose("Loader2.kt", "package demo\nclass Loader2 : Loader { override suspend fun load(id: String) = id; override suspend fun plain() = 1; override fun mix(n: Int) = n; override fun mix(s: String) = s }")
+        val err = d.firstOrNull { it.code == "kt.suspendOverride" }
+        assertNotNull(err, "the other direction is a compile error too; got $d")
+        assertTrue(err.message.contains("Suspend function 'plain'"), "names the offending member; got '${err.message}'")
+    }
+
+    @Test
+    fun aMatchingOverrideIsNotFlagged() {
+        val d = codes("Loader3.kt", "package demo\nclass Loader3 : Loader { override suspend fun load(id: String) = id; override fun plain() = 1; override fun mix(n: Int) = n; override fun mix(s: String) = s }")
+        assertFalse("kt.suspendOverride" in d, "a correct override must not be flagged; got $d")
+    }
+
+    @Test
+    fun anOverloadOfADifferentShapeBacksOff() {
+        // `mix(Double)` matches NO supertype member by shape, so which one it overrides is unknown — the check
+        // must stay silent rather than pick a candidate (the `override` itself is another check's concern).
+        val d = codes("Loader4.kt", "package demo\nclass Loader4 : Loader { override suspend fun load(id: String) = id; override fun plain() = 1; override fun mix(n: Int) = n; override fun mix(s: String) = s; override fun mix(d: Double) = d }")
+        assertFalse("kt.suspendOverride" in d, "an unmatched shape must back off; got $d")
+    }
+
+    // --- the `suspend` modifier quick-fix ---
+
+    private fun suspendFix(fileName: String, code: String, at: Int): KotlinSourceAnalyzer.KotlinImportFix? {
+        val doc = SnippetDoc(code, DiskFile(srcDir.resolve(fileName)))
+        return runBlocking {
+            analyzer.incrementalParser.parseFull(doc); analyzer.suspendModifierFix(doc.file, at)
+        }
+    }
+
+    private fun applyEdits(text: String, fix: KotlinSourceAnalyzer.KotlinImportFix): String =
+        fix.edits.sortedByDescending { it.offset }
+            .fold(text) { t, e -> t.substring(0, e.offset) + e.newText + t.substring(e.offset + e.oldLength) }
+
+    @Test
+    fun theFixAddsTheMissingSuspendModifier() {
+        val code = "package demo\nclass Loader5 : Loader { override fun load(id: String) = id; override fun plain() = 1; override fun mix(n: Int) = n; override fun mix(s: String) = s }"
+        val fix = suspendFix("Loader5.kt", code, code.indexOf("load(id"))
+        assertNotNull(fix, "expected a fix on the mismatched override")
+        assertEquals("Add 'suspend' modifier", fix.title)
+        val fixed = applyEdits(code, fix)
+        assertTrue("override suspend fun load(id: String)" in fixed, "`suspend` goes before `fun`; got $fixed")
+        assertFalse(
+            "kt.suspendOverride" in codes("Loader5.kt", fixed),
+            "applying the fix must clear the diagnostic; got ${codes("Loader5.kt", fixed)}",
+        )
+    }
+
+    @Test
+    fun theFixRemovesASuspendModifierThatCannotBeThere() {
+        val code = "package demo\nclass Loader6 : Loader { override suspend fun load(id: String) = id; override suspend fun plain() = 1; override fun mix(n: Int) = n; override fun mix(s: String) = s }"
+        val fix = suspendFix("Loader6.kt", code, code.indexOf("plain()"))
+        assertNotNull(fix, "expected a fix on the over-suspended override")
+        assertEquals("Remove 'suspend' modifier", fix.title)
+        val fixed = applyEdits(code, fix)
+        assertTrue("override fun plain() = 1" in fixed, "the keyword and its space go together; got $fixed")
+        assertFalse("kt.suspendOverride" in codes("Loader6.kt", fixed), "the diagnostic must clear")
+    }
+
+    @Test
+    fun noFixIsOfferedForAnOverrideThatAlreadyMatches() {
+        // A stale diagnostic (the user fixed it by hand) must offer nothing rather than write the wrong edit.
+        val code = "package demo\nclass Loader7 : Loader { override suspend fun load(id: String) = id; override fun plain() = 1; override fun mix(n: Int) = n; override fun mix(s: String) = s }"
+        assertNull(suspendFix("Loader7.kt", code, code.indexOf("load(id")), "nothing is mismatched here")
+    }
+
     // --- @Parcelize: the kotlin-parcelize compiler plugin supplies Parcelable's members ---
 
     @Test
@@ -331,6 +416,7 @@ class KotlinInheritanceDiagnosticsTest {
                     fun doRun() {}
                     class Parcel
                     interface Parcelable { fun writeToParcel(dest: Parcel, flags: Int); fun describeContents(): Int }
+                    interface Loader { suspend fun load(id: String): String; fun plain(): Int; fun mix(n: Int): Int; fun mix(s: String): String }
                     annotation class Parcelize
                 """.trimIndent(),
             ),

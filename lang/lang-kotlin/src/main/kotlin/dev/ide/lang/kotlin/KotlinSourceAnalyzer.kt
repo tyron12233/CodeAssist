@@ -943,6 +943,46 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         return KotlinImportFix("Implement members", listOf(edit))
     }
 
+    /**
+     * The `suspend`-modifier quick-fix for a `kt.suspendOverride` diagnostic anchored at [offset] (the member
+     * name): add `suspend` to an override that must have it, or remove it from one that must not. The mismatch
+     * is RE-DERIVED here ([KotlinResolver.suspendMismatchFor]) rather than read off the diagnostic, so a stale
+     * diagnostic — the user already fixed it by hand — offers nothing instead of writing the wrong edit.
+     *
+     * `suspend` goes immediately before `fun`, which is both the Kotlin modifier order (`override suspend fun`)
+     * and where the generated override stub puts it.
+     */
+    fun suspendModifierFix(file: VirtualFile, offset: Int): KotlinImportFix? {
+        val parsed = lastByFile[file.path] ?: return null
+        refreshOverlay(); syncFocal(parsed)
+        val ktFile = parsed.ktFile
+        val fn = functionCovering(ktFile, offset) ?: return null
+        val resolver = KotlinResolver(ktFile, parsed, service)
+        val superMember = resolver.suspendMismatchFor(fn) ?: return null
+        val text = ktFile.text
+        return if (superMember.isSuspend) {
+            val at = (fn.funKeyword ?: return null).textRange.startOffset
+            KotlinImportFix("Add 'suspend' modifier", listOf(DocumentEdit(at, 0, "suspend ")))
+        } else {
+            val tok = fn.modifierList?.getModifier(org.jetbrains.kotlin.lexer.KtTokens.SUSPEND_KEYWORD)
+                ?: return null
+            val start = tok.textRange.startOffset
+            var end = tok.textRange.endOffset
+            while (end < text.length && text[end] == ' ') end++ // the separating space goes with the keyword
+            KotlinImportFix("Remove 'suspend' modifier", listOf(DocumentEdit(start, end - start, "")))
+        }
+    }
+
+    /** The innermost function enclosing [offset] (the suspend-override diagnostic anchors on its name). */
+    private fun functionCovering(ktFile: KtFile, offset: Int): KtNamedFunction? {
+        var n: PsiElement? =
+            ktFile.findElementAt(offset.coerceIn(0, (ktFile.textLength - 1).coerceAtLeast(0)))
+        while (n != null) {
+            if (n is KtNamedFunction) return n; n = n.parent
+        }
+        return null
+    }
+
     /** The innermost class/object enclosing [offset] (the abstract-not-implemented diagnostic anchors on its name). */
     private fun classCovering(ktFile: KtFile, offset: Int): KtClassOrObject? {
         var n: PsiElement? =

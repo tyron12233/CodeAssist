@@ -91,7 +91,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
      * diligently, `kotlin.builtins` now corrected). Increment FORMAT (never a per-index base) for every future
      * wire-format change here, and only ever increase it.
      */
-    const val FORMAT = 3 // 1: TypeShape.typeParameterVariances; 2: KotlinType.projection (use-site variance); 3: TypeShape.isFinalClass
+    const val FORMAT = 4 // 1: TypeShape.typeParameterVariances; 2: KotlinType.projection (use-site variance); 3: TypeShape.isFinalClass; 4: KotlinSymbol.isSuspend
 
     private val BINARY = SymbolOrigin(fromSource = false, file = null)
 
@@ -159,6 +159,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         out.writeBoolean(s.isComposable)
         out.writeBoolean(s.isInline)
         out.writeBoolean(s.isInfix)
+        out.writeBoolean(s.isSuspend)
         out.writeInt(s.varargParamIndex)
         out.writeInt(s.paramHasDefault.size); s.paramHasDefault.forEach { out.writeBoolean(it) }
         out.writeBoolean(s.isDeprecated)
@@ -183,6 +184,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         val isComposable = inp.readBoolean()
         val isInline = inp.readBoolean()
         val isInfix = inp.readBoolean()
+        val isSuspend = inp.readBoolean()
         val varargIdx = inp.readInt()
         val paramHasDefault = List(inp.readInt()) { inp.readBoolean() }
         val isDeprecated = inp.readBoolean()
@@ -206,6 +208,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
             isComposable = isComposable,
             isInline = isInline,
             isInfix = isInfix,
+            isSuspend = isSuspend,
             isDeprecated = isDeprecated,
             varargParamIndex = varargIdx,
             paramHasDefault = paramHasDefault,

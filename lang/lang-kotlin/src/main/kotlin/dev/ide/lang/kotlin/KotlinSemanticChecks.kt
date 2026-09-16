@@ -406,9 +406,10 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
 
     /**
      * The class/object inheritance diagnostics in one pass: unimplemented inherited abstract members (concrete
-     * declarations only), an `override` that overrides nothing, and a member that hides an inherited one but is
-     * missing `override`. Conservative throughout — [KotlinResolver.inheritanceProblems] backs off (emits
-     * nothing) whenever the supertype closure can't be resolved, so the parse-only model never false-positives.
+     * declarations only), an `override` that overrides nothing, a member that hides an inherited one but is
+     * missing `override`, and an `override` whose `suspend`-ness contradicts the member it overrides.
+     * Conservative throughout — [KotlinResolver.inheritanceProblems] backs off (emits nothing) whenever the
+     * supertype closure can't be resolved, so the parse-only model never false-positives.
      */
     private fun inheritanceDiagnostics(cls: KtClassOrObject, resolver: KotlinResolver, out: MutableList<Diagnostic>) {
         if (cls is KtEnumEntry) return // an enum entry's abstract impls belong to the enum constant's own body
@@ -435,6 +436,20 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 memberNameRange(m), Severity.ERROR,
                 "'${m.name}' hides a supertype member and must be marked with the 'override' modifier",
                 KotlinDiagnosticCodes.OVERRIDE_REQUIRED,
+            )
+        }
+        report.suspendMismatch.forEach { (m, superMember) ->
+            val (self, other) =
+                if (superMember.isSuspend) "Non-suspend" to "suspend" else "Suspend" to "non-suspend"
+            // The compiler's own wording, down to naming the overridden member by its rendered signature; the
+            // declaring class is named only when the symbol carries it (a binary member always does).
+            val suspendPrefix = if (superMember.isSuspend) "suspend " else ""
+            val rendered = superMember.signature?.let { "${suspendPrefix}fun ${superMember.name}$it" } ?: superMember.name
+            val where = superMember.declaringClassFqn?.let { " defined in '$it'" } ?: ""
+            out += Diagnostic(
+                memberNameRange(m), Severity.ERROR,
+                "$self function '${m.name}' cannot override $other function '$rendered'$where",
+                KotlinDiagnosticCodes.SUSPEND_OVERRIDE,
             )
         }
     }

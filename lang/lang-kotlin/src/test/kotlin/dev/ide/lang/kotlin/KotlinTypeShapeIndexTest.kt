@@ -30,6 +30,7 @@ import java.util.jar.JarEntry
 import java.util.jar.JarOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -98,6 +99,63 @@ class KotlinTypeShapeIndexTest {
         assertTrue("upper" in names, "the real method (also in the indexed shape) must surface; got $names")
     }
 
+    /**
+     * Every modifier flag a member carries must survive the codec. A LIBRARY member reaches the editor ONLY
+     * through this index, so a flag the codec forgets is simply gone: the dropped `isSuspend` (fixed here) took
+     * `suspend` off every override stub generated over a library supertype, silently un-`suspend`ed the
+     * suspension-point highlighting, and disarmed the suspend-context diagnostic for such a member.
+     */
+    @Test
+    fun codecRoundTripsMemberFlags() {
+        val m = KotlinSymbol(
+            "f", SymbolKind.METHOD, origin = SymbolOrigin(false, null), signature = "(vararg xs: Int)",
+            isComposable = true, isInline = true, isInfix = true, isSuspend = true, isDeprecated = true,
+            varargParamIndex = 0,
+        )
+        val back = roundTrip(TypeShape(emptyList(), emptyList(), emptyList(), emptyList(), listOf(m))).members.single()
+        assertTrue(
+            back.isComposable && back.isInline && back.isInfix && back.isSuspend && back.isDeprecated,
+            "flags dropped: composable=${'$'}{back.isComposable} inline=${'$'}{back.isInline} infix=${'$'}{back.isInfix} " +
+                "suspend=${'$'}{back.isSuspend} deprecated=${'$'}{back.isDeprecated}",
+        )
+        assertEquals(0, back.varargParamIndex, "the vararg index survives")
+    }
+
+    /** End to end over the same codec: implementing a LIBRARY interface's `suspend` member must generate a
+     *  `suspend` override — the reported bug (the stub didn't compile: "Non-suspend function 'load' cannot
+     *  override suspend function"). */
+    @Test
+    fun suspendSurvivesTheIndexIntoTheOverrideStub() {
+        val code = "package demo\nclass Impl : gen.Susp"
+        val doc = SnippetDoc(code, DiskFile(srcDir.resolve("Impl.kt")))
+        val fix = runBlocking {
+            analyzer.incrementalParser.parseFull(doc)
+            analyzer.implementMembersFix(doc.file, code.indexOf("Impl"))
+        }
+        val inserted = fix?.edits?.joinToString("") { it.newText }
+        assertTrue(
+            inserted?.contains("override suspend fun load()") == true,
+            "the stub must repeat `suspend`; got '${'$'}inserted'",
+        )
+    }
+
+    /** And the editor now SAYS so before the build does: a non-suspend override of that library member is
+     *  flagged (`kt.suspendOverride`) instead of compiling-time-only. */
+    @Test
+    fun aNonSuspendOverrideOfAnIndexedSuspendMemberIsFlagged() {
+        val code = "package demo\nclass Bad : gen.Susp { override fun load(): gen.Txt = TODO() }"
+        val doc = SnippetDoc(code, DiskFile(srcDir.resolve("Bad.kt")))
+        val diags = runBlocking {
+            analyzer.incrementalParser.parseFull(doc); analyzer.analyze(doc.file).diagnostics
+        }
+        val err = diags.firstOrNull { it.code == "kt.suspendOverride" }
+        assertNotNull(err, "the stub's missing `suspend` must be reported; got ${'$'}{diags.map { it.code }}")
+        assertTrue(
+            err.message.contains("Non-suspend function 'load' cannot override suspend function"),
+            "got '${'$'}{err.message}'",
+        )
+    }
+
     private fun hints(code: String): List<String> {
         val doc = SnippetDoc(code, DiskFile(srcDir.resolve("Use.kt")))
         analyzer.incrementalParser.parseFull(doc)
@@ -113,7 +171,7 @@ class KotlinTypeShapeIndexTest {
         /** The persisted shapes, served by a fake index — built by running the REAL producer over the fixture
          *  `.class` bytes and passing each through the codec, with a sentinel added to `gen.Txt`. */
         private val served: Map<String, TypeShape> = produce().mapValues { (fqn, shape) ->
-            val rt = roundTrip(shape)
+            val rt = roundTrip(if (fqn == "gen.Susp") suspendify(shape) else shape)
             if (fqn != "gen.Txt") rt
             else TypeShape(rt.typeParameters, rt.typeParameterBounds, rt.typeParameterVariances, rt.supertypes,
                 rt.members + KotlinSymbol("fromIndex", SymbolKind.METHOD, origin = SymbolOrigin(false, null), signature = "(): Txt"))
@@ -144,6 +202,20 @@ class KotlinTypeShapeIndexTest {
             return out
         }
 
+        /** [shape] with every member marked `suspend` — what the `@Metadata` decode produces for a
+         *  `suspend fun` and what the codec then has to carry. */
+        private fun suspendify(shape: TypeShape): TypeShape = TypeShape(
+            shape.typeParameters, shape.typeParameterBounds, shape.typeParameterVariances, shape.supertypes,
+            shape.members.map {
+                KotlinSymbol(
+                    it.name, it.kind, it.type, modifiers = it.modifiers, origin = it.origin,
+                    signature = it.signature, paramTypes = it.paramTypes, paramNames = it.paramNames,
+                    declaringClassFqn = it.declaringClassFqn, isSuspend = true,
+                )
+            },
+            isKotlin = true, isInterface = true,
+        )
+
         private fun roundTrip(shape: TypeShape): TypeShape {
             val bos = ByteArrayOutputStream()
             DataOutputStream(bos).use { TypeShapeExternalizer.write(it, shape) }
@@ -166,6 +238,15 @@ class KotlinTypeShapeIndexTest {
                 val cw = ClassWriter(0)
                 cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, "gen/Txt", null, OBJ, null)
                 cw.visitMethod(Opcodes.ACC_PUBLIC, "upper", "()Lgen/Txt;", null, null).visitEnd()
+                cw.visitEnd(); cw.toByteArray()
+            },
+            // An interface whose member the served shape marks `suspend` (as a Kotlin @Metadata decode would —
+            // ASM alone can only produce the Java shape), for the flag's trip through the codec.
+            "gen/Susp.class" to run {
+                val cw = ClassWriter(0)
+                cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT or Opcodes.ACC_INTERFACE,
+                    "gen/Susp", null, OBJ, null)
+                cw.visitMethod(Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT, "load", "()Lgen/Txt;", null, null).visitEnd()
                 cw.visitEnd(); cw.toByteArray()
             },
             "gen/Box.class" to run {

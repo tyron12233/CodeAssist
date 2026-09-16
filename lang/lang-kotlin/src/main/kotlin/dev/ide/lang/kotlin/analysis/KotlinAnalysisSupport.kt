@@ -80,6 +80,24 @@ class KotlinImplementMembersFixProvider : QuickFixProvider {
     }
 }
 
+/** Code-keyed quick-fix: on `kt.suspendOverride`, add the `suspend` modifier the override is missing (or
+ *  remove the one it shouldn't have) so it matches the member it overrides. */
+class KotlinSuspendModifierFixProvider : QuickFixProvider {
+    override val forCodes = setOf(KotlinDiagnosticCodes.SUSPEND_OVERRIDE)
+    override val languages = setOf(KOTLIN)
+
+    override fun fixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix> {
+        val analyzer = target.resolver as? KotlinSourceAnalyzer ?: return emptyList()
+        val fix = analyzer.suspendModifierFix(target.file, diagnostic.range.start) ?: return emptyList()
+        return listOf(object : QuickFix {
+            override val title = fix.title
+            override val kind = CodeActionKind.QUICK_FIX
+            override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit =
+                WorkspaceEdit.of(ctx.target.file, *fix.edits.toTypedArray())
+        })
+    }
+}
+
 object KotlinAnalysisSupport {
     val PLUGIN = PluginId("kotlin-analysis")
 
@@ -87,6 +105,7 @@ object KotlinAnalysisSupport {
         extensions.register(DIAGNOSTIC_PROVIDER_EP, KotlinDiagnosticProvider(), plugin)
         extensions.register(ACTION_PROVIDER_EP, KotlinImportActionProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, KotlinImplementMembersFixProvider(), plugin)
+        extensions.register(QUICK_FIX_PROVIDER_EP, KotlinSuspendModifierFixProvider(), plugin)
         // Caret intentions (see KotlinEditorActions).
         extensions.register(ACTION_PROVIDER_EP, KotlinSurroundActionProvider(), plugin)
         extensions.register(ACTION_PROVIDER_EP, KotlinIntroduceVariableActionProvider(), plugin)
