@@ -123,6 +123,12 @@ include(
     ":awt-toolkit", // owned java.awt/javax.swing over RCanvas + the ASM remapper that points a program at it
     ":bench-support", // test-only: shared regression/benchmark harness (consumed via testImplementation)
     ":test-support",  // test-only: shared fixtures/infrastructure (temp dirs, stubs, jars, contexts) — auto-wired
+
+    // EXPERIMENTAL, and depended on by nothing. A portable Kotlin lexer/parser that mirrors the
+    // compiler's own token + element vocabulary and PSI shape, so the editor backend could one day parse
+    // without the JVM-only compiler. It stays out of every other module's dependency list until its
+    // differential suites (ours vs. the real compiler, over this repo's sources) are green.
+    ":kotlin-syntax",
 )
 
 // The IDE shells (Compose Multiplatform + AGP). These apply the Android Gradle plugin / Compose KMP plugin,
@@ -221,6 +227,8 @@ val layers = mapOf(
     ),
     // Test-only harnesses, consumed via testImplementation.
     "tools" to listOf("test-support", "bench-support"),
+    // Work that is not part of the product yet: built and tested by CI, imported by nothing.
+    "experimental" to listOf("kotlin-syntax"),
 )
 
 // `samples` holds plugins built as their own apps; it is already a directory, so it needs no mapping.
