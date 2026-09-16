@@ -31,6 +31,56 @@ class IosBackendTest {
         IosFiles.delete(root)
     }
 
+    // ---- Kotlin outline and folding, which is the first language intelligence this host has ever had ----
+
+    private val kotlinSource = """
+        package demo
+
+        import kotlin.math.max
+
+        class Holder {
+            fun render(prefix: String): String {
+                return prefix
+            }
+        }
+    """.trimIndent()
+
+    @Test
+    fun aKotlinFileHasAnOutline() = runTest {
+        val outline = backend.fileStructure("/p/Holder.kt", kotlinSource)
+        assertEquals(listOf("Holder", "render"), outline.map { it.name })
+        assertEquals(listOf("class", "method"), outline.map { it.kind })
+        assertEquals(listOf(0, 1), outline.map { it.depth }, "the function is a member of the class")
+        assertEquals(
+            "render",
+            kotlinSource.substring(outline[1].nameOffset, outline[1].nameOffset + 6),
+            "the offset must land on the name, since that is where navigation puts the caret",
+        )
+    }
+
+    @Test
+    fun aKotlinFileHasFoldableRegions() = runTest {
+        val kinds = backend.codeFolds("/p/Holder.kt", kotlinSource).map { it.kind }.toSet()
+        assertTrue("classBody" in kinds, kinds.toString())
+        assertTrue("functionBody" in kinds, kinds.toString())
+    }
+
+    @Test
+    fun halfTypedKotlinStillAnswers() = runTest {
+        // What an editor actually holds most of the time. It must not throw and must not go blank.
+        val outline = backend.fileStructure("/p/Broken.kt", "class A {\n    fun good() {}\n    fun \n}")
+        assertTrue(outline.any { it.name == "A" }, "the class survives: $outline")
+        assertTrue(outline.any { it.name == "good" }, "and the complete member does too: $outline")
+    }
+
+    @Test
+    fun aNonKotlinFileIsLeftAlone() = runTest {
+        // The other hosts answer for Java and XML through backends that do not exist here. Returning nothing
+        // is honest; guessing would put a Kotlin outline on a Java file.
+        assertTrue(backend.fileStructure("/p/Thing.java", "class Thing {}").isEmpty())
+        assertTrue(backend.codeFolds("/p/layout.xml", "<a>\n</a>").isEmpty())
+    }
+
     @Test
     fun createProjectScaffoldsAFolderAndOpensIt() = runTest {
         val result = backend.projects.createProject("ios.empty", mapOf("name" to "My App", "packageName" to "com.example"))

@@ -200,6 +200,28 @@ An expanded body is kept against its start offset and validated against its text
 every body above the caret and drops those below it. Caching on text alone would be wrong: a body's tree
 carries offsets, so the same body moved down a line is a different answer.
 
+## It has a consumer
+
+`IosBackend` now answers `fileStructure` and `codeFolds` for `.kt`/`.kts` from `KotlinOutline`, and
+`:ide-ios` depends on `:kotlin-syntax`. That is the first language intelligence the iOS host has ever had:
+until now it extended `StubBackend` and returned nothing for every language question.
+
+Both answers need syntax and nothing else — no symbol table, no classpath, no index — which is exactly why
+they are the ones that could cross. Completion and diagnostics still need all three, and that layer has not.
+
+`KotlinOutline` lives in `:kotlin-syntax` rather than in the host so it is tested on both targets; the host
+does a field-for-field mapping to the UI types and a `.kt` check. It refuses non-Kotlin files rather than
+guessing, since the other hosts answer for Java and XML through backends that do not exist on iOS.
+
+Three details worth keeping:
+
+- The outline is built from a LAZY parse. Neither answer looks inside a function body, so descending into
+  every one would be paying for depth nobody reads.
+- `nameOffset` is the NAME's offset, not the declaration's, because that is where navigation puts the caret
+  and what a sticky header pins.
+- Single-line regions are not offered as folds. A control that collapses one line into one line does nothing,
+  and a gutter full of them is worse than none.
+
 ## Not done yet
 
 - Nothing in `:lang-kotlin` actually depends on this; the probe is a copy, not a wiring. The remaining known

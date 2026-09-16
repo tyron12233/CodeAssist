@@ -1,5 +1,6 @@
 package dev.ide.ios
 
+import dev.ide.kotlin.syntax.KotlinOutline
 import dev.ide.ios.store.IosPreferences
 import dev.ide.ios.store.IosStoreService
 import dev.ide.ios.store.StoreConfig
@@ -11,6 +12,8 @@ import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiDirEntry
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.StoreService
+import dev.ide.ui.backend.UiFileSymbol
+import dev.ide.ui.backend.UiFoldRegion
 import dev.ide.ui.backend.UiProjectTemplate
 import dev.ide.ui.icons.fileIconId
 import dev.ide.ui.platform.ioDispatcher
@@ -29,7 +32,12 @@ import kotlinx.coroutines.withContext
  *
  * What the user gets is still a real editor. The lexical layer lives entirely in `commonMain`
  * (`EditorSession.styles` -> `LineTokens`), so syntax highlighting, bracket matching and indent all work
- * against these files with no backend involvement; what is missing is completion, diagnostics and build.
+ * against these files with no backend involvement.
+ *
+ * Kotlin's OUTLINE and code FOLDING now work too, from `:kotlin-syntax` — the Kotlin compiler's own parser,
+ * vendored and built for this target. They are the two answers that need syntax and nothing else: no symbol
+ * table, no classpath, no index. Completion and diagnostics still need all of those, and that layer has not
+ * crossed, so they remain empty here.
  */
 class IosBackend(
     /**
@@ -191,12 +199,38 @@ class IosBackend(
 
     // ---- EditorService ------------------------------------------------------------------------------
 
-    /** Nothing analyses the buffer on this host, so a live edit needs no registration. */
+    /** Nothing caches a parse across calls on this host yet, so a live edit needs no registration. */
     override fun updateDocument(path: String, text: String) = Unit
 
     override fun saveFile(path: String, text: String) {
         IosFiles.writeText(path, text)
     }
+
+    /**
+     * The file's outline, for the structure view and the sticky headers.
+     *
+     * Parsed on the caller's coroutine rather than moved to [ioDispatcher]: this is CPU work on a string, not
+     * IO, and a lazy parse of a large file measures in single-digit milliseconds.
+     */
+    override suspend fun fileStructure(path: String, text: String): List<UiFileSymbol> {
+        if (!path.isKotlin()) return emptyList()
+        return KotlinOutline.symbols(text).map {
+            UiFileSymbol(it.name, it.detail, it.kind, it.nameOffset, it.endOffset, it.depth)
+        }
+    }
+
+    override suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> {
+        if (!path.isKotlin()) return emptyList()
+        return KotlinOutline.folds(text).map {
+            UiFoldRegion(it.startOffset, it.endOffset, it.placeholder, it.kind, it.collapsedByDefault)
+        }
+    }
+
+    /**
+     * Only Kotlin, deliberately. The other hosts answer for Java and XML too, through backends that do not
+     * exist here; returning nothing is honest, where guessing would put a wrong outline on a `.java` file.
+     */
+    private fun String.isKotlin(): Boolean = endsWith(".kt") || endsWith(".kts")
 
     // ---- ProjectService -----------------------------------------------------------------------------
 
