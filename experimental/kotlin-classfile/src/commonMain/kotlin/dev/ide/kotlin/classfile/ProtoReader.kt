@@ -67,6 +67,19 @@ class ProtoReader(private val bytes: ByteArray, private var position: Int = 0, p
 
     fun readString(): String = readBytes().decodeToString()
 
+    /**
+     * A packed repeated int field: one length-delimited run of varints.
+     *
+     * Only the packed encoding is read here. A caller that may also meet the unpacked form has to check the
+     * wire type itself, because the two are indistinguishable from the field number alone.
+     */
+    fun readPackedInts(): IntArray {
+        val nested = ProtoReader(readBytes())
+        val values = ArrayList<Int>()
+        while (nested.hasMore) values.add(nested.readInt())
+        return values.toIntArray()
+    }
+
     /** Step over a field this decoder does not care about. */
     fun skip(wireType: Int) {
         when (wireType) {

@@ -2,7 +2,10 @@ package dev.ide.kotlin.classfile
 
 import java.io.File
 import kotlin.metadata.KmClass
+import kotlin.metadata.KmClassifier
 import kotlin.metadata.KmPackage
+import kotlin.metadata.KmType
+import kotlin.metadata.isNullable
 import kotlin.metadata.jvm.KotlinClassMetadata
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -136,6 +139,83 @@ class ClassFileOracleTest {
         assertEquals(null, ClassFile.read(ByteArray(0)))
         assertEquals(null, ClassFile.read(byteArrayOf(1, 2, 3, 4)))
         assertEquals(null, ClassFile.read(ByteArray(200) { it.toByte() }))
+    }
+
+    @Test
+    fun typesAndSignaturesMatchTheJvmLibrary() {
+        // The part most likely to be subtly wrong. A name is one index; a type is a nested message with
+        // several mutually exclusive classifier fields, and getting the wrong one back still renders as a
+        // perfectly plausible type.
+        val files = classFiles(400)
+        var compared = 0
+        var classes = 0
+
+        for (file in files) {
+            val annotation = ClassFile.read(file.readBytes())?.metadata ?: continue
+            val theirs = KotlinClassMetadata.readStrict(
+                kotlin.Metadata(
+                    kind = annotation.kind,
+                    metadataVersion = annotation.metadataVersion,
+                    data1 = annotation.data1,
+                    data2 = annotation.data2,
+                ),
+            )
+            val expected: Map<String, String> = when (theirs) {
+                is KotlinClassMetadata.Class -> theirs.kmClass.signatures()
+                is KotlinClassMetadata.FileFacade -> theirs.kmPackage.signatures()
+                is KotlinClassMetadata.MultiFileClassPart -> theirs.kmPackage.signatures()
+                else -> continue
+            }
+            val decoded = KotlinMetadata.read(annotation) ?: continue
+            val actual = decoded.declarations
+                .filter { it.kind == KotlinDeclaration.Kind.FUNCTION }
+                .associate { it.name to it.signature() }
+
+            for ((name, signature) in expected) {
+                val ours = actual[name] ?: continue
+                assertEquals(signature, ours, "signature of `$name` in ${file.name}")
+                compared++
+            }
+            classes++
+        }
+
+        assertTrue(compared > 200, "expected a real sample of signatures; compared $compared")
+        println("types and signatures: $compared function signatures across $classes classes agree")
+    }
+
+    /** The JVM library's view, rendered the way `KotlinDeclaration.signature()` renders ours. */
+    private fun KmClass.signatures(): Map<String, String> {
+        val classScope = typeParameters.associate { it.id to it.name }
+        return functions.associate { it.name to it.render(classScope) }
+    }
+
+    private fun KmPackage.signatures(): Map<String, String> =
+        functions.associate { it.name to it.render(emptyMap()) }
+
+    private fun kotlin.metadata.KmFunction.render(outer: Map<Int, String> = emptyMap()): String {
+        // Their classifier names a type parameter by ID; ours renders the NAME, which is what a completion
+        // list shows. Map one to the other here rather than weakening the comparison to ignore both.
+        val scope = outer + typeParameters.associate { it.id to it.name }
+        return buildString {
+            receiverParameterType?.let { append(it.render(scope)).append('.') }
+            append(name)
+            append(valueParameters.joinToString(", ", "(", ")") { "${it.name}: ${it.type?.render(scope) ?: "?"}" })
+            append(": ").append(returnType.render(scope))
+        }
+    }
+
+    private fun KmType.render(scope: Map<Int, String>): String = buildString {
+        append(
+            when (val c = classifier) {
+                is KmClassifier.Class -> c.name.replace('/', '.')
+                is KmClassifier.TypeAlias -> c.name.replace('/', '.')
+                is KmClassifier.TypeParameter -> scope[c.id] ?: ("T#" + c.id)
+            },
+        )
+        if (arguments.isNotEmpty()) {
+            append(arguments.joinToString(", ", "<", ">") { it.type?.render(scope) ?: "*" })
+        }
+        if (isNullable) append('?')
     }
 
     private fun KmClass.declarationNames(): List<String> =

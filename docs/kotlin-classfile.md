@@ -40,6 +40,8 @@ replace, over this build's own compiled output.
 
 - **353 class files agree with ASM** on name, superclass and interfaces.
 - **326 Kotlin classes, 2,653 declarations agree with kotlin-metadata-jvm.**
+- **906 function signatures agree**, rendered whole: receiver, parameter names and types, return type,
+  generics and nullability.
 
 Plus the negative cases that matter: a Java class must report no Kotlin metadata, and garbage must return null
 rather than throw, because a classpath contains jars built by anything and an index that throws stops indexing.
@@ -55,8 +57,23 @@ rather than throw, because a classpath contains jars built by anything and an in
 - **`long` and `double` take two constant-pool slots.** Miss it and every index after is off by one, which
   reads as corrupt names rather than as an off-by-one.
 
+## Three things the oracle caught that no hand-written test would have
+
+Each rendered as a perfectly plausible answer, which is the whole argument for diffing against the real
+library rather than against expectations someone typed.
+
+- **`position += readInt()` is wrong in Kotlin.** The left operand is read BEFORE the right is evaluated, so
+  the position captured predates the length varint and the assignment discards that advance. One byte short,
+  no error, and everything after it reads as plausible nonsense. It surfaced as `unknown wire type 6` a
+  hundred bytes later.
+- **A type parameter carries both an id and a name, and the id wins.** Taking whichever field arrived last
+  preferred the name and silently produced a different type.
+- **A LOCAL class name is marked with a leading dot.** That convention is the only thing separating a class
+  declared inside a function from a top-level class of the same name, and `local_name` in the string table is
+  what records it.
+
 ## Not done yet
 
-The spike reads structure and declaration NAMES. An index also needs signatures, types, type parameters,
-flags (visibility, modality, `suspend`, `inline`), and the JVM signature extensions from `jvm_metadata.proto`.
-Those are more field numbers against the same machinery rather than new machinery.
+Flags (visibility, modality, `suspend`, `inline`, `infix`) and the JVM signature extensions from
+`jvm_metadata.proto`. Both are more field numbers against the same machinery rather than new machinery: the
+wire reader, the name resolver and the type decoder are all in place and checked.
