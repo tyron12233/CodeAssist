@@ -7,6 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.objectweb.asm.ClassReader
+import org.objectweb.asm.AnnotationVisitor
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.FieldVisitor
 import org.objectweb.asm.MethodVisitor
@@ -109,7 +110,8 @@ class JavaClassOracleTest {
     }
 
     private fun render(member: ClassMember): String =
-        "${member.access}|${member.name}|${member.descriptor}|${member.signature}|${member.parameterNames}"
+        "${member.access}|${member.name}|${member.descriptor}|${member.signature}|" +
+            "${member.parameterNames}|${member.annotations.sorted()}"
 
     private fun render(reference: InnerClassRef): String =
         "${reference.access}|${reference.name}|${reference.outerName}|${reference.innerName}"
@@ -322,8 +324,22 @@ class JavaClassOracleTest {
                             fieldSignature: String?,
                             value: Any?,
                         ): FieldVisitor? {
-                            fields.add("$fieldAccess|$fieldName|$descriptor|$fieldSignature|[]")
-                            return null
+                            val annotations = ArrayList<String>()
+                            fields.add(
+                                "$fieldAccess|$fieldName|$descriptor|$fieldSignature|[]|$annotations",
+                            )
+                            return object : FieldVisitor(Opcodes.ASM9) {
+                                override fun visitAnnotation(
+                                    annotationDescriptor: String,
+                                    visible: Boolean,
+                                ): AnnotationVisitor? {
+                                    annotations.add(annotationDescriptor)
+                                    annotations.sort()
+                                    fields[fields.lastIndex] =
+                                        "$fieldAccess|$fieldName|$descriptor|$fieldSignature|[]|$annotations"
+                                    return null
+                                }
+                            }
                         }
 
                         override fun visitMethod(
@@ -334,14 +350,24 @@ class JavaClassOracleTest {
                             exceptions: Array<out String>?,
                         ): MethodVisitor {
                             val parameters = ArrayList<String>()
+                            val annotations = ArrayList<String>()
                             return object : MethodVisitor(Opcodes.ASM9) {
                                 override fun visitParameter(parameterName: String?, parameterAccess: Int) {
                                     parameters.add(parameterName.orEmpty())
                                 }
 
+                                override fun visitAnnotation(
+                                    annotationDescriptor: String,
+                                    visible: Boolean,
+                                ): AnnotationVisitor? {
+                                    annotations.add(annotationDescriptor)
+                                    return null
+                                }
+
                                 override fun visitEnd() {
                                     methods.add(
-                                        "$methodAccess|$methodName|$descriptor|$methodSignature|$parameters",
+                                        "$methodAccess|$methodName|$descriptor|$methodSignature|" +
+                                            "$parameters|${annotations.sorted()}",
                                     )
                                 }
                             }

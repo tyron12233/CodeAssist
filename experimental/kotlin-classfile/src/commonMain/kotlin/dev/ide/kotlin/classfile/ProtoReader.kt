@@ -68,6 +68,15 @@ class ProtoReader(private val bytes: ByteArray, private var position: Int = 0, p
     fun readString(): String = readBytes().decodeToString()
 
     /**
+     * Everything left, without consuming it.
+     *
+     * For a decoder that has to read one message TWICE. A type parameter's bound may name a sibling that is
+     * written after it (`fun <T : R, R>` is legal), so the id-to-name mapping has to be complete before any
+     * bound is decoded, and one forward pass cannot do both.
+     */
+    fun remainingBytes(): ByteArray = bytes.copyOfRange(position, limit)
+
+    /**
      * A packed repeated int field: one length-delimited run of varints.
      *
      * Only the packed encoding is read here. A caller that may also meet the unpacked form has to check the

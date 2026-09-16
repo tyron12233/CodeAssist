@@ -32,9 +32,26 @@ class TypeName(
     val isTypeParameter: Boolean = false,
     /** `out`, `in`, `*` or empty, as this type appears in an argument position. */
     val projection: String = "",
+    val nullable: Boolean = false,
+    /**
+     * A `kotlin.FunctionN` that is a RECEIVER function type (`T.() -> R`).
+     *
+     * The only thing distinguishing it from `(T) -> R`, which is the same `Function1`. It reaches the
+     * metadata as an annotation ON the type, not as a flag.
+     */
+    val isExtensionFunctionType: Boolean = false,
+    /** A `@Composable` function type: a Compose content slot. Also an annotation on the type. */
+    val isComposable: Boolean = false,
 ) {
     fun withProjection(value: String): TypeName =
-        if (value == projection) this else TypeName(qualifiedName, typeArguments, isTypeParameter, value)
+        if (value == projection) {
+            this
+        } else {
+            TypeName(
+                qualifiedName, typeArguments, isTypeParameter, value,
+                nullable, isExtensionFunctionType, isComposable,
+            )
+        }
 
     /** The form the diff compares. Deliberately total: every field that a port could get wrong is in it. */
     fun render(): String = buildString {
@@ -52,24 +69,50 @@ class TypeName(
     override fun toString(): String = render()
 }
 
-/** One member of a type, as bytecode describes it. */
-class JavaSymbol(
+/**
+ * One declaration, from either source of truth.
+ *
+ * ONE type for both, as in the original: bytecode fills some fields and `@Metadata` fills others, and
+ * nothing above this level is supposed to be able to tell which a symbol came from. Splitting it in two
+ * would have made the port neater and the comparison meaningless.
+ */
+class Symbol(
     val name: String,
     val kind: SymbolKind,
-    val type: TypeName?,
-    val modifiers: Set<Modifier>,
-    /** The display string a completion list shows, built from the ERASED descriptor. */
-    val signature: String?,
-    val typeParameters: List<String>,
-    val typeParameterBounds: List<TypeName>,
-    val paramTypes: List<TypeName?>,
-    /** Empty unless the class carries real names; never filled with `p0`, `p1`. */
-    val paramNames: List<String>,
-    val declaringClassFqn: String?,
-    val isDeprecated: Boolean,
+    val type: TypeName? = null,
+    val owner: Symbol? = null,
+    val modifiers: Set<Modifier> = emptySet(),
+    /** The display string a completion list shows. */
+    val signature: String? = null,
+    val typeParameters: List<String> = emptyList(),
+    val typeParameterBounds: List<TypeName> = emptyList(),
+    /**
+     * When a type parameter's upper bound is a SIBLING parameter (`fun <R, T : R>`), that parameter's
+     * name, positional with [typeParameters]; null when the bound is concrete or absent.
+     */
+    val typeParamBoundNames: List<String?> = emptyList(),
+    val paramTypes: List<TypeName?> = emptyList(),
+    /** Empty when the source does not carry real names; never filled with `p0`, `p1`. */
+    val paramNames: List<String> = emptyList(),
+    /** Whether each parameter declares a default. Empty means UNKNOWN, which is not the same as none. */
+    val paramHasDefault: List<Boolean> = emptyList(),
+    /** The receiver type's FQN when this is an extension; null otherwise. */
+    val receiverTypeFqn: String? = null,
+    val receiverTypeArgs: List<TypeName> = emptyList(),
+    /** When the receiver IS a bare type parameter (`fun <T> T.also()`), its name. */
+    val receiverTypeParam: String? = null,
+    val declaringClassFqn: String? = null,
+    val isInternal: Boolean = false,
+    val isComposable: Boolean = false,
+    val isInline: Boolean = false,
+    val isInfix: Boolean = false,
+    val isSuspend: Boolean = false,
+    val isDeprecated: Boolean = false,
     /** The index of the vararg parameter, or -1. A vararg absorbs trailing positional arguments. */
-    val varargParamIndex: Int,
+    val varargParamIndex: Int = -1,
 ) {
+    val isExtension: Boolean get() = receiverTypeFqn != null
+
     override fun toString(): String = "$kind $name${signature.orEmpty()}"
 }
 
@@ -84,7 +127,7 @@ class JavaShape(
     val typeParameters: List<String>,
     val typeParameterBounds: List<TypeName>,
     val superTypes: List<TypeName>,
-    val members: List<JavaSymbol>,
+    val members: List<Symbol>,
     val isInterface: Boolean,
     val isAbstract: Boolean,
     val isFinal: Boolean,

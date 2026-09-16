@@ -71,24 +71,16 @@ object JavaSymbols {
 
         // Order matters, and it is not alphabetical: nested types, then fields, then methods. That is the
         // order the class file itself puts them in, which is the order the original's visitors append in.
-        val members = ArrayList<JavaSymbol>()
+        val members = ArrayList<Symbol>()
         for (nested in classFile.innerClasses) {
             if (hidden(nested.access) || nested.innerName == null || nested.outerName != selfName) continue
             members.add(
-                JavaSymbol(
+                Symbol(
                     name = nested.innerName!!,
                     kind = SymbolKind.CLASS,
                     type = TypeName(nested.name.replace('/', '.').replace('$', '.')),
                     // A nested type is reached statically through the outer one.
                     modifiers = modifiers(nested.access) + Modifier.STATIC,
-                    signature = null,
-                    typeParameters = emptyList(),
-                    typeParameterBounds = emptyList(),
-                    paramTypes = emptyList(),
-                    paramNames = emptyList(),
-                    declaringClassFqn = null,
-                    isDeprecated = false,
-                    varargParamIndex = -1,
                 )
             )
         }
@@ -110,27 +102,21 @@ object JavaSymbols {
         )
     }
 
-    private fun readField(field: ClassMember): JavaSymbol? {
+    private fun readField(field: ClassMember): Symbol? {
         if (hidden(field.access)) return null
         val erased = JavaSignatures.parseTypeDescriptor(field.descriptor) ?: return null
         val type = field.signature?.let(JavaSignatures::parseFieldSignature)?.fromSignature() ?: erased.erased()
-        return JavaSymbol(
+        return Symbol(
             name = field.name,
             kind = SymbolKind.FIELD,
             type = type,
             modifiers = modifiers(field.access),
             signature = ": " + erased.jvmClassName().substringAfterLast('.'),
-            typeParameters = emptyList(),
-            typeParameterBounds = emptyList(),
-            paramTypes = emptyList(),
-            paramNames = emptyList(),
-            declaringClassFqn = null,
             isDeprecated = field.access and ACC_DEPRECATED != 0,
-            varargParamIndex = -1,
         )
     }
 
-    private fun readMethod(method: ClassMember, classFqn: String): JavaSymbol? {
+    private fun readMethod(method: ClassMember, classFqn: String): Symbol? {
         if (hidden(method.access)) return null
         // A static initialiser is not a member anyone can call or complete.
         if (method.name == "<clinit>") return null
@@ -175,7 +161,7 @@ object JavaSymbols {
                 descriptor.returnType.jvmClassName().substringAfterLast('.')
         }
 
-        return JavaSymbol(
+        return Symbol(
             // A constructor is keyed by the simple class name, matching the `@Metadata` decode, and types to
             // the class itself so a call site can validate its arguments.
             name = if (isConstructor) classFqn.substringAfterLast('.') else method.name,

@@ -1,15 +1,57 @@
 package dev.ide.kotlin.classfile
 
 /**
+ * Declaration-site or use-site variance.
+ *
+ * The numbers are the protobuf enum's. A star projection is not a variance: it is an argument with no type
+ * at all, which is why it lives on [KotlinTypeArgument] rather than here.
+ */
+enum class KotlinVariance(val number: Int) {
+    IN(0), OUT(1), INVARIANT(2);
+
+    companion object {
+        fun of(number: Int): KotlinVariance? = entries.firstOrNull { it.number == number }
+    }
+}
+
+/**
+ * One argument in a `<...>` list, with the projection written at the use site.
+ *
+ * `List<*>` is an argument with no type. `Array<out Number>` and `Comparator<in T>` are arguments whose
+ * variance differs from the declaration's, and dropping that is how `Array<out T>` comes back as `Array<T>`
+ * and a variance check then passes something it should not.
+ */
+class KotlinTypeArgument(
+    val type: KotlinType?,
+    val variance: KotlinVariance = KotlinVariance.INVARIANT,
+) {
+    val isStar: Boolean get() = type == null
+
+    override fun toString(): String = when {
+        type == null -> "*"
+        variance == KotlinVariance.OUT -> "out $type"
+        variance == KotlinVariance.IN -> "in $type"
+        else -> type.toString()
+    }
+}
+
+/** A declared type parameter: its id (what a type refers to it by), name, variance and bounds. */
+class KotlinTypeParameter(
+    val id: Int,
+    val name: String,
+    val variance: KotlinVariance,
+    val upperBounds: List<KotlinType>,
+)
+
+/**
  * A type as the metadata records it.
  *
  * [classifier] is a class name (`kotlin.String`) or a type parameter's name, and [arguments] its type
- * arguments. A star projection is an argument with no type, which is why the list holds nulls rather than
- * being filtered.
+ * arguments.
  */
 class KotlinType(
     val classifier: String,
-    val arguments: List<KotlinType?>,
+    val arguments: List<KotlinTypeArgument>,
     val isNullable: Boolean,
     /**
      * The same class, spelled the way the metadata's own string table spells it: slashes between package
@@ -21,12 +63,41 @@ class KotlinType(
      * either.
      */
     val jvmName: String? = null,
+    /** The `Type` flag word. Its layout is its own chain, sharing no bits with a declaration's. */
+    val flags: Int = 0,
+    /**
+     * The annotations written ON the type, as class ids.
+     *
+     * Rare and load-bearing: `kotlin/ExtensionFunctionType` is the only thing distinguishing `T.() -> R`
+     * from `(T) -> R`, which are the same `Function1` otherwise.
+     */
+    val annotations: List<String> = emptyList(),
+    /**
+     * Whether [classifier] names a TYPE PARAMETER rather than a class or a type alias.
+     *
+     * Not derivable after the fact: a parameter called `T` and a class called `T` produce the same string,
+     * and a caller that substitutes one for the other has to know which it has.
+     */
+    val isTypeParameter: Boolean = false,
+    /** The parameter's id, when this is a type parameter referred to by id. */
+    val typeParameterId: Int? = null,
+    /**
+     * The parameter's NAME, when the metadata named it instead of numbering it.
+     *
+     * Both forms occur in output from the same compiler, and neither is legacy: `type_parameter` (7) and
+     * `type_parameter_name` (9) are alternatives, not versions. A reader that handles only the id resolves
+     * a real `V` to the fallback `T` and never fails.
+     */
+    val typeParameterName: String? = null,
 ) {
+    /** A `suspend` function type. Stored in its JVM-lowered shape, so the flag is the only marker. */
+    val isSuspend: Boolean get() = KotlinFlags.isSuspendType(flags)
+
     /** The type as Kotlin would print it, which is also what the oracle compares. */
     fun render(): String = buildString {
         append(classifier)
         if (arguments.isNotEmpty()) {
-            append(arguments.joinToString(", ", "<", ">") { it?.render() ?: "*" })
+            append(arguments.joinToString(", ", "<", ">") { it.type?.render() ?: "*" })
         }
         if (isNullable) append('?')
     }
@@ -61,7 +132,18 @@ class KotlinPropertySignatures(
 )
 
 /** One parameter of a function. */
-class KotlinParameter(val name: String, val type: KotlinType?, val flags: Int = 0) {
+class KotlinParameter(
+    val name: String,
+    val type: KotlinType?,
+    val flags: Int = 0,
+    /**
+     * For a `vararg` parameter, the ELEMENT type. The declared [type] is the array, so a caller that wants
+     * to know what one argument may be has to read this instead.
+     */
+    val varargElementType: KotlinType? = null,
+) {
+    val isVararg: Boolean get() = varargElementType != null
+
     val declaresDefaultValue: Boolean get() = KotlinFlags.declaresDefaultValue(flags)
     val isCrossinline: Boolean get() = KotlinFlags.isCrossinline(flags)
     val isNoinline: Boolean get() = KotlinFlags.isNoinline(flags)
@@ -75,6 +157,10 @@ class KotlinDeclaration(
     val receiverType: KotlinType? = null,
     val parameters: List<KotlinParameter> = emptyList(),
     val flags: Int = 0,
+    /** The declaration's OWN type parameters, in order. */
+    val typeParameters: List<KotlinTypeParameter> = emptyList(),
+    /** For a `typealias`, the type it ultimately expands to. Null for anything else. */
+    val expandedType: KotlinType? = null,
     /** The JVM method this compiles to, for a function or constructor. */
     val jvmSignature: JvmMemberSignature? = null,
     /** The JVM field and accessors this compiles to, for a property. */
@@ -137,6 +223,17 @@ class KotlinClassInfo(
     val name: String?,
     val declarations: List<KotlinDeclaration>,
     val flags: Int = 0,
+    /** Supertypes WITH their type arguments, which is what makes an inherited generic member substitute. */
+    val supertypes: List<KotlinType> = emptyList(),
+    val typeParameters: List<KotlinTypeParameter> = emptyList(),
+    /** The simple name of this class's companion object, or null when it has none. */
+    val companionObjectName: String? = null,
+    /** Simple names of the classes nested directly in this one, the companion object included. */
+    val nestedClassNames: List<String> = emptyList(),
+    /** Entry names, in declaration order, when this is an enum class. */
+    val enumEntryNames: List<String> = emptyList(),
+    /** A `sealed` type's direct subclasses, which is what makes a `when` over a library type exhaustive. */
+    val sealedSubclassNames: List<String> = emptyList(),
 ) {
     /** A file facade is not a Kotlin declaration and carries no flags, so it has none of these. */
     private val isClassifier: Boolean get() = name != null
@@ -174,10 +271,15 @@ object KotlinMetadata {
     // metadata.proto, `message Class`
     private const val CLASS_FLAGS = 1
     private const val CLASS_FQ_NAME = 3
+    private const val CLASS_COMPANION_OBJECT_NAME = 4
+    private const val CLASS_SUPERTYPE = 6
+    private const val CLASS_NESTED_CLASS_NAME = 7
     private const val CLASS_CONSTRUCTOR = 8
     private const val CLASS_FUNCTION = 9
     private const val CLASS_PROPERTY = 10
     private const val CLASS_TYPE_ALIAS = 11
+    private const val CLASS_ENUM_ENTRY = 13
+    private const val CLASS_SEALED_SUBCLASS_FQ_NAME = 16
 
     /** `Class.flags` when the field is absent: `public final class`, no annotations. */
     private const val CLASS_FLAGS_DEFAULT = 6
@@ -226,21 +328,37 @@ object KotlinMetadata {
     private const val PARAM_FLAGS = 1
     private const val PARAM_NAME = 2
     private const val PARAM_TYPE = 3
+    private const val PARAM_VARARG_ELEMENT_TYPE = 4
+
+    // `message EnumEntry`
+    private const val ENUM_ENTRY_NAME = 1
+
+    // `message Annotation`
+    private const val ANNOTATION_ID = 1
+
+    // `message TypeAlias`
+    private const val TYPE_ALIAS_EXPANDED_TYPE = 6
 
     // `message Type`
+    private const val TYPE_FLAGS = 1
     private const val TYPE_ARGUMENT = 2
     private const val TYPE_NULLABLE = 3
     private const val TYPE_CLASS_NAME = 6
     private const val TYPE_PARAMETER_ID = 7
     private const val TYPE_PARAMETER_NAME = 9
     private const val TYPE_ALIAS_NAME = 12
+    private const val TYPE_ANNOTATION = 100
 
-    // `message Type.Argument`
+    // `message Type.Argument`. The projection is an enum, and STAR means "no type is written at all".
+    private const val ARGUMENT_PROJECTION = 1
     private const val ARGUMENT_TYPE = 2
+    private const val PROJECTION_STAR = 3
 
     // `message TypeParameter`
     private const val TYPE_PARAM_ID = 1
     private const val TYPE_PARAM_NAME = 2
+    private const val TYPE_PARAM_VARIANCE = 4
+    private const val TYPE_PARAM_UPPER_BOUND = 5
 
     // `message Class` / `message Function` both declare their own type parameters, on different numbers.
     private const val CLASS_TYPE_PARAMETER = 5
@@ -295,9 +413,10 @@ object KotlinMetadata {
         // into a string, and the reader would start the real message mid-field without consuming it.
         val names = JvmNameResolver.read(reader.readBytes(), strings)
 
+        val message = reader.remainingBytes()
         return when (annotation.kind) {
-            KIND_CLASS -> readClass(reader, names)
-            KIND_FILE_FACADE, KIND_MULTIFILE_CLASS_PART -> readPackage(reader, names)
+            KIND_CLASS -> readClass(message, names)
+            KIND_FILE_FACADE, KIND_MULTIFILE_CLASS_PART -> readPackage(message, names)
             else -> null
         }
     }
@@ -312,14 +431,24 @@ object KotlinMetadata {
     fun readMultiFileParts(annotation: KotlinMetadataAnnotation): List<String>? =
         if (annotation.kind == KIND_MULTIFILE_CLASS) annotation.data1.toList() else null
 
-    private fun readClass(reader: ProtoReader, names: JvmNameResolver): KotlinClassInfo {
+    private fun readClass(message: ByteArray, names: JvmNameResolver): KotlinClassInfo {
         var name: String? = null
         var flags = CLASS_FLAGS_DEFAULT
+        var companionObjectName: String? = null
         val declarations = ArrayList<KotlinDeclaration>()
+        val supertypes = ArrayList<KotlinType>()
+        val nestedClassNames = ArrayList<String>()
+        val enumEntryNames = ArrayList<String>()
+        val sealedSubclassNames = ArrayList<String>()
+
         // A type in a member can name a type parameter by ID, and the id means nothing without the
-        // declaration that introduced it. The class's own parameters are in scope for every member, so they
-        // are collected as they are met, which works because the compiler writes them before the members.
-        val typeParameters = HashMap<Int, String>()
+        // declaration that introduced it. Every id-to-name pair is registered in a FIRST pass, because a
+        // bound may name a sibling written after it and one forward pass cannot resolve that.
+        val scope = HashMap<Int, String>()
+        registerTypeParameterNames(message, CLASS_TYPE_PARAMETER, names, scope)
+        val typeParameters = ArrayList<KotlinTypeParameter>()
+
+        val reader = ProtoReader(message)
         reader.forEachField { number, _ ->
             when (number) {
                 CLASS_FLAGS -> {
@@ -332,27 +461,106 @@ object KotlinMetadata {
                     true
                 }
 
-                CLASS_TYPE_PARAMETER -> {
-                    readTypeParameter(reader.readMessage(), names, typeParameters)
+                CLASS_COMPANION_OBJECT_NAME -> {
+                    companionObjectName = names.getString(reader.readInt())
                     true
                 }
 
-                CLASS_FUNCTION -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.FUNCTION, typeParameters)
-                CLASS_PROPERTY -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.PROPERTY, typeParameters)
-                CLASS_TYPE_ALIAS -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.TYPE_ALIAS, typeParameters)
+                CLASS_TYPE_PARAMETER -> {
+                    typeParameters.add(readTypeParameter(reader.readMessage(), names, scope))
+                    true
+                }
+
+                CLASS_SUPERTYPE -> {
+                    supertypes.add(readType(reader.readMessage(), names, scope))
+                    true
+                }
+
+                CLASS_NESTED_CLASS_NAME -> {
+                    for (id in reader.readPackedInts()) nestedClassNames.add(names.getString(id))
+                    true
+                }
+
+                CLASS_ENUM_ENTRY -> {
+                    readEnumEntry(reader.readMessage(), names)?.let(enumEntryNames::add)
+                    true
+                }
+
+                CLASS_SEALED_SUBCLASS_FQ_NAME -> {
+                    for (id in reader.readPackedInts()) sealedSubclassNames.add(names.getClassName(id))
+                    true
+                }
+
+                CLASS_FUNCTION -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.FUNCTION, scope)
+                CLASS_PROPERTY -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.PROPERTY, scope)
+                CLASS_TYPE_ALIAS -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.TYPE_ALIAS, scope)
                 CLASS_CONSTRUCTOR -> {
-                    declarations.add(readConstructor(reader.readMessage(), names, typeParameters))
+                    declarations.add(readConstructor(reader.readMessage(), names, scope))
                     true
                 }
 
                 else -> false
             }
         }
-        return KotlinClassInfo(name, declarations, flags)
+        return KotlinClassInfo(
+            name = name,
+            declarations = declarations,
+            flags = flags,
+            supertypes = supertypes,
+            typeParameters = typeParameters,
+            companionObjectName = companionObjectName,
+            nestedClassNames = nestedClassNames,
+            enumEntryNames = enumEntryNames,
+            sealedSubclassNames = sealedSubclassNames,
+        )
     }
 
-    private fun readPackage(reader: ProtoReader, names: JvmNameResolver): KotlinClassInfo {
+    /**
+     * The id-to-name pass.
+     *
+     * Reads ONLY [field]'s id and name out of [message], leaving bounds and everything else alone, so that a
+     * later full pass can resolve a bound naming any sibling regardless of the order they were written in.
+     */
+    private fun registerTypeParameterNames(
+        message: ByteArray,
+        field: Int,
+        names: JvmNameResolver,
+        into: MutableMap<Int, String>,
+    ) {
+        val reader = ProtoReader(message)
+        reader.forEachField { number, _ ->
+            if (number != field) return@forEachField false
+            val nested = reader.readMessage()
+            var id = -1
+            var nameId = -1
+            nested.forEachField { inner, _ ->
+                when (inner) {
+                    TYPE_PARAM_ID -> { id = nested.readInt(); true }
+                    TYPE_PARAM_NAME -> { nameId = nested.readInt(); true }
+                    else -> false
+                }
+            }
+            if (id >= 0 && nameId >= 0) into[id] = names.getString(nameId)
+            true
+        }
+    }
+
+    private fun readEnumEntry(reader: ProtoReader, names: JvmNameResolver): String? {
+        var nameId = -1
+        reader.forEachField { number, _ ->
+            if (number == ENUM_ENTRY_NAME) {
+                nameId = reader.readInt()
+                true
+            } else {
+                false
+            }
+        }
+        return if (nameId >= 0) names.getString(nameId) else null
+    }
+
+    private fun readPackage(message: ByteArray, names: JvmNameResolver): KotlinClassInfo {
         val declarations = ArrayList<KotlinDeclaration>()
+        val reader = ProtoReader(message)
         reader.forEachField { number, _ ->
             when (number) {
                 PACKAGE_FUNCTION -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.FUNCTION, emptyMap())
@@ -412,9 +620,13 @@ object KotlinMetadata {
         kind: KotlinDeclaration.Kind,
         outerTypeParameters: Map<Int, String>,
     ): Boolean {
-        val nested = reader.readMessage()
-        // The declaration's OWN parameters shadow and extend the class's, so start from the outer scope.
+        val message = reader.readBytes()
+        // The declaration's OWN parameters shadow and extend the class's, so start from the outer scope,
+        // and register every one of them before any type is decoded.
         val scope = HashMap(outerTypeParameters)
+        registerTypeParameterNames(message, FUNCTION_TYPE_PARAMETER, names, scope)
+
+        val nested = ProtoReader(message)
         val newFlagsField = when (kind) {
             KotlinDeclaration.Kind.FUNCTION -> FUNCTION_FLAGS
             KotlinDeclaration.Kind.PROPERTY -> PROPERTY_FLAGS
@@ -425,6 +637,8 @@ object KotlinMetadata {
         var nameId = -1
         var returnType: KotlinType? = null
         var receiverType: KotlinType? = null
+        var expandedType: KotlinType? = null
+        val typeParameters = ArrayList<KotlinTypeParameter>()
         val parameters = ArrayList<KotlinParameter>()
         var methodSignature: JvmMemberSignature? = null
         var propertySignature: ProtoReader? = null
@@ -434,20 +648,31 @@ object KotlinMetadata {
                 newFlagsField -> { newFlags = nested.readInt(); true }
                 OLD_FLAGS -> { oldFlags = nested.readInt(); true }
                 NAME -> { nameId = nested.readInt(); true }
-                FUNCTION_TYPE_PARAMETER -> { readTypeParameter(nested.readMessage(), names, scope); true }
+                FUNCTION_TYPE_PARAMETER -> {
+                    typeParameters.add(readTypeParameter(nested.readMessage(), names, scope))
+                    true
+                }
+
                 RETURN_TYPE -> { returnType = readType(nested.readMessage(), names, scope); true }
                 RECEIVER_TYPE -> { receiverType = readType(nested.readMessage(), names, scope); true }
-                // Field 6 is `value_parameter` on a Function and `setter_value_parameter` on a Property:
-                // the same number, a different meaning. Reading it for both puts the setter's argument
-                // into the property's parameter list, where nothing expects one.
-                VALUE_PARAMETER -> {
-                    if (kind == KotlinDeclaration.Kind.FUNCTION) {
+                // Field 6 means three different things. On a Function it is `value_parameter`, on a Property
+                // the SETTER's parameter, and on a TypeAlias the expanded type. Reading it the same way for
+                // all three puts a setter's argument into a property's parameter list and a type where a
+                // parameter was expected.
+                VALUE_PARAMETER -> when (kind) {
+                    KotlinDeclaration.Kind.FUNCTION -> {
                         parameters.add(readParameter(nested.readMessage(), names, scope))
                         true
-                    } else {
-                        false
                     }
+
+                    KotlinDeclaration.Kind.TYPE_ALIAS -> {
+                        expandedType = readType(nested.readMessage(), names, scope)
+                        true
+                    }
+
+                    else -> false
                 }
+
                 EXTENSION_SIGNATURE -> {
                     when (kind) {
                         KotlinDeclaration.Kind.FUNCTION -> methodSignature = readMethodSignature(nested.readMessage(), names)
@@ -491,6 +716,8 @@ object KotlinMetadata {
                 receiverType = receiverType,
                 parameters = parameters,
                 flags = flags,
+                typeParameters = typeParameters,
+                expandedType = expandedType,
                 jvmSignature = jvmSignature,
                 propertySignatures = propertySignature?.let { readPropertySignatures(it, names, name, returnType) },
             ),
@@ -498,18 +725,44 @@ object KotlinMetadata {
         return true
     }
 
-    /** Records one type parameter's id and name, so a type that names it by id can be rendered. */
-    private fun readTypeParameter(reader: ProtoReader, names: JvmNameResolver, into: MutableMap<Int, String>) {
+    /**
+     * One type parameter, with the bounds it declares.
+     *
+     * The id-to-name registration has already happened in [registerTypeParameterNames], so a bound naming a
+     * sibling resolves here no matter which order the two were written in.
+     */
+    private fun readTypeParameter(
+        reader: ProtoReader,
+        names: JvmNameResolver,
+        scope: Map<Int, String>,
+    ): KotlinTypeParameter {
         var id = -1
         var nameId = -1
+        var variance = KotlinVariance.INVARIANT
+        val upperBounds = ArrayList<KotlinType>()
         reader.forEachField { number, _ ->
             when (number) {
                 TYPE_PARAM_ID -> { id = reader.readInt(); true }
                 TYPE_PARAM_NAME -> { nameId = reader.readInt(); true }
+                TYPE_PARAM_VARIANCE -> {
+                    variance = KotlinVariance.of(reader.readInt()) ?: KotlinVariance.INVARIANT
+                    true
+                }
+
+                TYPE_PARAM_UPPER_BOUND -> {
+                    upperBounds.add(readType(reader.readMessage(), names, scope))
+                    true
+                }
+
                 else -> false
             }
         }
-        if (id >= 0 && nameId >= 0) into[id] = names.getString(nameId)
+        return KotlinTypeParameter(
+            id = id,
+            name = if (nameId >= 0) names.getString(nameId) else "",
+            variance = variance,
+            upperBounds = upperBounds,
+        )
     }
 
     private fun readParameter(
@@ -520,15 +773,26 @@ object KotlinMetadata {
         var flags = 0
         var nameId = -1
         var type: KotlinType? = null
+        var varargElementType: KotlinType? = null
         reader.forEachField { number, _ ->
             when (number) {
                 PARAM_FLAGS -> { flags = reader.readInt(); true }
                 PARAM_NAME -> { nameId = reader.readInt(); true }
                 PARAM_TYPE -> { type = readType(reader.readMessage(), names, scope); true }
+                PARAM_VARARG_ELEMENT_TYPE -> {
+                    varargElementType = readType(reader.readMessage(), names, scope)
+                    true
+                }
+
                 else -> false
             }
         }
-        return KotlinParameter(if (nameId >= 0) names.getString(nameId) else "", type, flags)
+        return KotlinParameter(
+            name = if (nameId >= 0) names.getString(nameId) else "",
+            type = type,
+            flags = flags,
+            varargElementType = varargElementType,
+        )
     }
 
     /**
@@ -547,10 +811,18 @@ object KotlinMetadata {
         var parameterId: Int? = null
         var parameterName: String? = null
         var nullable = false
-        val arguments = ArrayList<KotlinType?>()
+        var flags = 0
+        val annotations = ArrayList<String>()
+        val arguments = ArrayList<KotlinTypeArgument>()
 
         reader.forEachField { number, _ ->
             when (number) {
+                TYPE_FLAGS -> { flags = reader.readInt(); true }
+                TYPE_ANNOTATION -> {
+                    readAnnotationClassName(reader.readMessage(), names)?.let(annotations::add)
+                    true
+                }
+
                 TYPE_CLASS_NAME -> {
                     val id = reader.readInt()
                     className = names.getClassName(id)
@@ -572,21 +844,61 @@ object KotlinMetadata {
             ?: parameterId?.let { scope[it] ?: "T#$it" }
             ?: parameterName
             ?: "?"
-        return KotlinType(classifier, arguments, nullable, classNameRaw)
+        val isTypeParameter = className == null && aliasName == null &&
+            (parameterId != null || parameterName != null)
+        return KotlinType(
+            classifier = classifier,
+            arguments = arguments,
+            isNullable = nullable,
+            jvmName = classNameRaw,
+            flags = flags,
+            annotations = annotations,
+            isTypeParameter = isTypeParameter,
+            typeParameterId = parameterId,
+            typeParameterName = parameterName,
+        )
     }
 
-    /** One type argument, or null for a star projection, which carries no type at all. */
-    private fun readArgument(reader: ProtoReader, names: JvmNameResolver, scope: Map<Int, String>): KotlinType? {
+    /**
+     * One type argument.
+     *
+     * A STAR projection carries no type at all, which is why the type is nullable rather than filled with
+     * `Any`. The projection is written as an enum whose default is invariant, so an absent field is not an
+     * absent projection.
+     */
+    private fun readArgument(
+        reader: ProtoReader,
+        names: JvmNameResolver,
+        scope: Map<Int, String>,
+    ): KotlinTypeArgument {
+        var projection = KotlinVariance.INVARIANT.number
         var type: KotlinType? = null
         reader.forEachField { number, _ ->
-            if (number == ARGUMENT_TYPE) {
-                type = readType(reader.readMessage(), names, scope)
+            when (number) {
+                ARGUMENT_PROJECTION -> { projection = reader.readInt(); true }
+                ARGUMENT_TYPE -> { type = readType(reader.readMessage(), names, scope); true }
+                else -> false
+            }
+        }
+        if (projection == PROJECTION_STAR) return KotlinTypeArgument(null)
+        return KotlinTypeArgument(type, KotlinVariance.of(projection) ?: KotlinVariance.INVARIANT)
+    }
+
+    /**
+     * An annotation's class, as the string table spells it: slashes between packages, dots between nested
+     * names. That is the form a caller compares against, so it is not turned into a display name here.
+     */
+    private fun readAnnotationClassName(reader: ProtoReader, names: JvmNameResolver): String? {
+        var id = -1
+        reader.forEachField { number, _ ->
+            if (number == ANNOTATION_ID) {
+                id = reader.readInt()
                 true
             } else {
                 false
             }
         }
-        return type
+        return if (id >= 0) names.getString(id) else null
     }
 
     /**

@@ -32,6 +32,14 @@ class ClassMember(
     val descriptor: String,
     val signature: String?,
     val parameterNames: List<String>,
+    /**
+     * The annotations on this member, as descriptors (`Landroidx/compose/runtime/Composable;`).
+     *
+     * Both retentions, because the ones that matter are mostly the invisible kind: `@Composable` is
+     * `BINARY`, so a reader that only looked at `RuntimeVisibleAnnotations` would find nothing and
+     * conclude that no function in Compose is composable.
+     */
+    val annotations: List<String> = emptyList(),
 ) {
     /** A method's descriptor starts with its parameter list; a field's is a single type. */
     val isMethod: Boolean get() = descriptor.startsWith("(")
@@ -260,6 +268,7 @@ class ClassFile private constructor(
                 val descriptor = utf8(u2()).orEmpty()
                 var signature: String? = null
                 var parameterNames: List<String> = emptyList()
+                val annotations = ArrayList<String>()
                 repeat(u2()) {
                     val attribute = utf8(u2())
                     val length = u4()
@@ -269,10 +278,14 @@ class ClassFile private constructor(
                         "MethodParameters" -> parameterNames = readParameterNames()
                         "Deprecated" -> access = access or ACC_DEPRECATED
                         "Synthetic" -> access = access or ACC_SYNTHETIC
+                        "RuntimeVisibleAnnotations", "RuntimeInvisibleAnnotations" ->
+                            readAnnotationDescriptors(annotations)
                     }
                     at = end
                 }
-                members.add(ClassMember(access, name, descriptor, signature, parameterNames))
+                members.add(
+                    ClassMember(access, name, descriptor, signature, parameterNames, annotations),
+                )
             }
             return members
         }
@@ -303,6 +316,14 @@ class ClassFile private constructor(
                 val innerName = if (innerNameIndex == 0) null else utf8(innerNameIndex)
                 val access = u2()
                 if (inner != null) into.add(InnerClassRef(inner, outer, innerName, access))
+            }
+        }
+
+        /** Just the descriptors: what each annotation IS, not what it says. */
+        private fun readAnnotationDescriptors(into: MutableList<String>) {
+            repeat(u2()) {
+                utf8(u2())?.let(into::add)
+                skipAnnotationPairs()
             }
         }
 
@@ -381,7 +402,9 @@ class ClassFile private constructor(
             }
         }
 
-        private fun skipAnnotationValues() {
+        private fun skipAnnotationValues() = skipAnnotationPairs()
+
+        private fun skipAnnotationPairs() {
             repeat(u2()) {
                 skip(2)
                 skipValue()

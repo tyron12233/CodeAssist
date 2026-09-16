@@ -126,7 +126,7 @@ class JavaSymbolsPortTest {
         varargParamIndex = symbol.varargParamIndex,
     )
 
-    private fun render(symbol: JavaSymbol): String = render(
+    private fun render(symbol: Symbol): String = render(
         kind = symbol.kind.name,
         name = symbol.name,
         type = symbol.type?.let(::render),

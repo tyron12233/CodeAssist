@@ -26,10 +26,16 @@ against the real one.
 ## What is here
 
 ```
-Symbols.kt       SymbolKind, Modifier, TypeName, JavaSymbol, JavaShape: the bytecode-filled subset of
-                 :language-api's model, ported rather than redesigned
+Symbols.kt       SymbolKind, Modifier, TypeName, Symbol, JavaShape: the subset of :language-api's model
+                 that reading a classpath fills in, ported rather than redesigned
 JavaSymbols.kt   the port of JavaBytecode, rule for rule, on ClassFile + JavaSignatures
+KotlinSymbols.kt the port of the index's own KotlinMetadata, on the portable @Metadata decoder
+TypeRendering.kt how a type is spelled for display: `(A, B) -> R`, not `Function2<A, B, R>`
 ```
+
+ONE `Symbol` type for both paths, as in the original: bytecode fills some fields and `@Metadata` fills
+others, and nothing above this level is supposed to be able to tell which a symbol came from. Splitting it
+in two would have made the port neater and the comparison meaningless.
 
 `:lang-kotlin-index` is a **jvmTest** dependency, for the diff and for nothing else. The module itself
 depends only on `:kotlin-classfile` and builds for jvm + iosSimulatorArm64 + iosArm64.
@@ -43,12 +49,21 @@ projection included, because a `T` that lost the flag renders identically and is
 
 - **android.jar (API 37): 6,440 classes and 97,148 symbols identical.** The corpus this layer exists for:
   entirely Java, no Kotlin metadata anywhere, and the biggest single thing on a real classpath.
-- **4,195 classes and 27,114 symbols across the 23 jars on the test classpath, identical.**
+- **4,199 classes and 27,152 symbols across the 23 jars on the test classpath, identical.**
 - **946 Kotlin classes of `kotlin-stdlib` read identically as plain bytecode.** The index reads both shapes
   for a Kotlin class, the metadata for its Kotlin signatures and the bytecode for what the JVM actually has,
   so the Java path has to agree on Kotlin classes too.
-- One real class file is embedded in `commonTest` and decoded **on the iOS simulator**, asserting the
-  answers a completion list would use.
+
+And for the `@Metadata` path, against the real `KotlinMetadata`, with everything bytecode erases:
+
+- **kotlin-stdlib: 852 units and 8,871 symbols identical.**
+- **The whole test classpath: 2,125 units and 17,446 symbols identical.**
+- Compared field by field, including the ones that only exist on this path: extension receiver and its type
+  arguments, `internal`, `inline`, `infix`, `suspend`, per-parameter defaults, sibling bound names, use-site
+  projections, declaration-site variance, companion, sealed subclasses, enum entries, and type aliases with
+  their expansions.
+- One real class file is embedded in `commonTest` and decoded **on the iOS simulator** through both paths,
+  asserting the answers a completion list would use.
 
 ## Two bugs the probe found in the original
 
@@ -67,11 +82,22 @@ one, this fails and says why.
   declared with one. Rare, because it needs a generic outer AND a non-static inner, which is why it has
   survived; 8 classes on the test classpath hit it.
 
+## Two things only the Kotlin path could have taught
+
+- **A type parameter is referred to by id OR by name, and both come out of the same compiler.**
+  `type_parameter` (7) and `type_parameter_name` (9) are alternatives, not versions. A reader that handles
+  only the id silently resolves a real `V` to the fallback `T`, and an extension whose receiver is a bare
+  parameter loses the parameter entirely, so it can never be bound to the actual receiver. Two of the three
+  failures in this port were this, in different places.
+- **A `suspend (...) -> R` is stored in a shape it is not read back in.** The metadata records it as a plain
+  `FunctionN` with a trailing `Continuation<R>` parameter and an erased `Any` return, with only a flag to say
+  what it really is. Rebuilding `kotlin.SuspendFunctionN` from that is what makes a binary suspend type
+  compare equal to a source one.
+
 ## What this says about the port
 
-The Java half of `:lang-kotlin-index`'s symbol layer ports with no loss and no surprises: the rules move
-across unchanged, and the only structural difference is that ASM's push API becomes a pull walk. What is
-NOT yet ported is the Kotlin half (`@Metadata` to symbols), and neither half can become a real index until
-`:language-api`'s `TypeRef` / `SymbolKind` / `Modifier` and `:index-api`'s `IndexExtension` are reachable
-from common code. Both are JVM-only modules today, and that is a change to production structure rather than
-more decoding.
+Both halves of `:lang-kotlin-index`'s symbol layer port with no loss: the rules move across unchanged, and
+the only structural difference is that ASM's push API becomes a pull walk. What remains is not decoding.
+`:language-api`'s `TypeRef` / `SymbolKind` / `Modifier` and `:index-api`'s `IndexExtension` are the model all
+of this would be read INTO, and both are JVM-only modules; making them reachable from common code is a change
+to production structure.

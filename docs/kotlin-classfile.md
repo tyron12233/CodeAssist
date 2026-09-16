@@ -44,7 +44,9 @@ the Kotlin metadata
   ProtoReader      the protobuf wire format: varints, tags, length-delimited fields
   MetadataEncoding undoes the String[] packing @Metadata uses to smuggle protobuf through an annotation
   JvmNameResolver  the string table: every name in the protobuf is an index, and resolving one is not a lookup
-  KotlinMetadata   the dozen messages an index reads, with every field number cited to metadata.proto
+  KotlinMetadata   the dozen messages an index reads, with every field number cited to metadata.proto:
+                   supertypes, type parameters with variance and bounds, companion, nested classes, enum
+                   entries, sealed subclasses, varargs, use-site projections, type annotations
   KotlinFlags      the packed bit field: visibility, modality, kind, suspend/inline/infix/var/const/lateinit
   JvmDescriptors   Kotlin class names to JVM descriptors, for the signatures the compiler declines to write
 
@@ -164,8 +166,9 @@ decoder is the fix if that ever matters, and the oracle above is what would make
 ## Not done yet
 
 Nothing blocking, and the remaining gaps are all things neither this build's compiler nor `android.jar`
-exercises: annotations on declarations, Kotlin's `TypeTable` indirection, and zip names in CP437 rather than
-UTF-8 (every jar writes ASCII, where the two agree). Encryption and multi-disk archives are not gaps to fill
+exercises: annotations on DECLARATIONS (the ones on types are read, because `@ExtensionFunctionType` is the
+only thing distinguishing `T.() -> R` from `(T) -> R`), Kotlin's `TypeTable` indirection, and zip names in
+CP437 rather than UTF-8 (every jar writes ASCII, where the two agree). Encryption and multi-disk archives are not gaps to fill
 later: an archive needing either is not a classpath entry this can index, and pretending otherwise would be
 worse than returning null.
 

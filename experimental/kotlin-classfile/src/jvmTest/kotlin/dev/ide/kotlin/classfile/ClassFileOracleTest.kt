@@ -9,6 +9,8 @@ import kotlin.metadata.KmFunction
 import kotlin.metadata.KmPackage
 import kotlin.metadata.KmProperty
 import kotlin.metadata.KmType
+import kotlin.metadata.KmTypeParameter
+import kotlin.metadata.KmVariance
 import kotlin.metadata.isConst
 import kotlin.metadata.isData
 import kotlin.metadata.isExpect
@@ -25,10 +27,12 @@ import kotlin.metadata.isTailrec
 import kotlin.metadata.isValue
 import kotlin.metadata.isVar
 import kotlin.metadata.jvm.KotlinClassMetadata
+import kotlin.metadata.jvm.annotations
 import kotlin.metadata.jvm.fieldSignature
 import kotlin.metadata.jvm.getterSignature
 import kotlin.metadata.jvm.setterSignature
 import kotlin.metadata.jvm.signature
+import kotlin.metadata.isSuspend as isSuspendType
 import kotlin.metadata.kind
 import kotlin.metadata.modality
 import kotlin.metadata.visibility
@@ -209,6 +213,147 @@ class ClassFileOracleTest {
     }
 
     @Test
+    fun theClassShapeMatchesTheJvmLibrary() {
+        // Everything about a class that is NOT a member: its supertypes with their arguments, its own type
+        // parameters with variance and bounds, its companion, its nested classes, its enum entries and its
+        // sealed subclasses. Each is one more field number, and each is invisible until something asks for
+        // it, so each is checked rather than assumed.
+        val files = classFiles(400)
+        var classes = 0
+        var supertypes = 0
+        var typeParameters = 0
+
+        for (file in files) {
+            val annotation = ClassFile.read(file.readBytes())?.metadata ?: continue
+            val theirs = readWithTheJvmLibrary(annotation) as? KotlinClassMetadata.Class ?: continue
+            val km = theirs.kmClass
+            val ours = KotlinMetadata.read(annotation) ?: continue
+            compareClassShape(km, ours, file.name)
+            classes++
+            supertypes += km.supertypes.size
+            typeParameters += km.typeParameters.size
+        }
+
+        assertTrue(classes > 30, "expected Kotlin classes in the corpus; found $classes")
+        println("class shape: $classes classes, $supertypes supertypes and $typeParameters type parameters agree")
+    }
+
+    /** Everything about a class that is not a member. Shared by both corpora. */
+    private fun compareClassShape(km: KmClass, ours: KotlinClassInfo, fileName: String) {
+        val where = "${km.name} in $fileName"
+        val scope = km.typeParameters.scope()
+        assertEquals(
+            km.supertypes.map { it.render(scope) },
+            ours.supertypes.map { it.render() },
+            "supertypes of $where",
+        )
+        assertEquals(
+            km.typeParameters.map { "${it.name} ${it.variance}" },
+            ours.typeParameters.map { "${it.name} ${it.variance.asKm()}" },
+            "type parameters of $where",
+        )
+        assertEquals(
+            km.typeParameters.map { p -> p.upperBounds.map { it.render(scope) } },
+            ours.typeParameters.map { p -> p.upperBounds.map { it.render() } },
+            "type parameter bounds of $where",
+        )
+        assertEquals(km.companionObject, ours.companionObjectName, "companion object of $where")
+        assertEquals(km.nestedClasses, ours.nestedClassNames, "nested classes of $where")
+        assertEquals(km.enumEntries, ours.enumEntryNames, "enum entries of $where")
+        assertEquals(
+            km.sealedSubclasses.map { it.replace('/', '.') },
+            ours.sealedSubclassNames,
+            "sealed subclasses of $where",
+        )
+    }
+
+    @Test
+    fun projectionsVarargsAndTypeAliasesMatchTheJvmLibrary() {
+        // The three things a decoder can drop without anything looking wrong. A lost `out` turns
+        // `Array<out T>` into `Array<T>`; a lost vararg element type makes a `vararg x: String` look like it
+        // takes an array; a typealias with no expansion resolves to nothing.
+        val files = classFiles(400)
+        var projections = 0
+        var varargs = 0
+        var aliases = 0
+
+        for (file in files) {
+            val annotation = ClassFile.read(file.readBytes())?.metadata ?: continue
+            val theirs = readWithTheJvmLibrary(annotation)
+            val ours = KotlinMetadata.read(annotation) ?: continue
+            val where = file.name
+
+            val theirFunctions = when (theirs) {
+                is KotlinClassMetadata.Class -> theirs.kmClass.functions
+                is KotlinClassMetadata.FileFacade -> theirs.kmPackage.functions
+                is KotlinClassMetadata.MultiFileClassPart -> theirs.kmPackage.functions
+                else -> continue
+            }
+            val theirAliases = when (theirs) {
+                is KotlinClassMetadata.Class -> theirs.kmClass.typeAliases
+                is KotlinClassMetadata.FileFacade -> theirs.kmPackage.typeAliases
+                is KotlinClassMetadata.MultiFileClassPart -> theirs.kmPackage.typeAliases
+                else -> emptyList()
+            }
+
+            val ourFunctions = ours.declarations.filter { it.kind == KotlinDeclaration.Kind.FUNCTION }
+            for ((theirFunction, mine) in theirFunctions.zip(ourFunctions)) {
+                assertEquals(
+                    theirFunction.valueParameters.map { it.varargElementType?.render(emptyMap()) },
+                    mine.parameters.map { it.varargElementType?.render() },
+                    "vararg element types of ${theirFunction.name} in $where",
+                )
+                varargs += theirFunction.valueParameters.count { it.varargElementType != null }
+                assertEquals(
+                    theirFunction.returnType.projections(),
+                    mine.returnType?.projections().orEmpty(),
+                    "argument projections of ${theirFunction.name} in $where",
+                )
+                projections += theirFunction.returnType.arguments.size
+            }
+
+            val ourAliases = ours.declarations.filter { it.kind == KotlinDeclaration.Kind.TYPE_ALIAS }
+            for ((theirAlias, mine) in theirAliases.zip(ourAliases)) {
+                assertEquals(
+                    theirAlias.expandedType.render(emptyMap()),
+                    mine.expandedType?.render(),
+                    "expansion of typealias ${theirAlias.name} in $where",
+                )
+                aliases++
+            }
+        }
+
+        println("projections/varargs/aliases: $projections arguments, $varargs varargs, $aliases aliases agree")
+    }
+
+    /** The use-site projection of every argument, flattened, so a lost one shows as a diff. */
+    private fun KmType.projections(): List<String> = arguments.map {
+        when {
+            it.type == null -> "*"
+            it.variance == KmVariance.OUT -> "out"
+            it.variance == KmVariance.IN -> "in"
+            else -> ""
+        }
+    }
+
+    private fun KotlinType.projections(): List<String> = arguments.map {
+        when {
+            it.type == null -> "*"
+            it.variance == KotlinVariance.OUT -> "out"
+            it.variance == KotlinVariance.IN -> "in"
+            else -> ""
+        }
+    }
+
+    private fun KotlinVariance.asKm(): KmVariance = when (this) {
+        KotlinVariance.IN -> KmVariance.IN
+        KotlinVariance.OUT -> KmVariance.OUT
+        KotlinVariance.INVARIANT -> KmVariance.INVARIANT
+    }
+
+    private fun List<KmTypeParameter>.scope(): Map<Int, String> = associate { it.id to it.name }
+
+    @Test
     fun theFlagsMatchTheJvmLibrary() {
         // Flags are a packed bit field whose layout exists only as a chain of offsets in the compiler, each
         // one a consequence of the widths before it. Every way of getting it wrong produces a valid-looking
@@ -236,7 +381,9 @@ class ClassFileOracleTest {
                     assertEquals(km.isExpect, ours.isExpect, "isExpect of $where")
                     assertEquals(km.isExternal, ours.isExternal, "isExternal of $where")
                     classesCompared++
-                    membersCompared += compareMembers(km.functions, km.properties, ours, file.name)
+                    membersCompared += compareMembers(
+                        km.functions, km.properties, ours, file.name, km.typeParameters.scope(),
+                    )
                 }
 
                 is KotlinClassMetadata.FileFacade ->
@@ -265,6 +412,7 @@ class ClassFileOracleTest {
         properties: List<KmProperty>,
         ours: KotlinClassInfo,
         fileName: String,
+        outerScope: Map<Int, String> = emptyMap(),
     ): Int {
         val ourFunctions = ours.declarations.filter { it.kind == KotlinDeclaration.Kind.FUNCTION }
         val ourProperties = ours.declarations.filter { it.kind == KotlinDeclaration.Kind.PROPERTY }
@@ -273,6 +421,24 @@ class ClassFileOracleTest {
 
         for ((theirs, mine) in functions.zip(ourFunctions)) {
             val where = "fun ${theirs.name} in $fileName"
+            // A type variable renders by NAME on our side and by ID on theirs, so the function's own
+            // parameters have to be in scope or every generic signature reads as a difference.
+            val scope = outerScope + theirs.typeParameters.scope()
+            assertEquals(
+                theirs.valueParameters.map { it.varargElementType?.render(scope) },
+                mine.parameters.map { it.varargElementType?.render() },
+                "vararg element types of $where",
+            )
+            assertEquals(
+                theirs.returnType.projections(),
+                mine.returnType?.projections().orEmpty(),
+                "return type projections of $where",
+            )
+            assertEquals(
+                theirs.valueParameters.map { p -> p.type?.projections().orEmpty() },
+                mine.parameters.map { p -> p.type?.projections().orEmpty() },
+                "parameter projections of $where",
+            )
             assertEquals(theirs.visibility.name, mine.visibility?.name, "visibility of $where")
             assertEquals(theirs.modality.name, mine.modality?.name, "modality of $where")
             assertEquals(theirs.kind.name, mine.memberKind?.name, "member kind of $where")
@@ -463,6 +629,7 @@ class ClassFileOracleTest {
                         assertEquals(km.isInner, mine.isInner, "isInner of $where")
                         assertEquals(km.isValue, mine.isValue, "isValue of $where")
                         assertEquals(km.isFunInterface, mine.isFunInterface, "isFunInterface of $where")
+                        compareClassShape(km, mine, entry.name)
                         classes++
                         Triple(km.functions, km.properties, km.constructors)
                     }
@@ -476,7 +643,10 @@ class ClassFileOracleTest {
                     else -> continue
                 }
 
-                members += compareMembers(theirFunctions, theirProperties, mine, entry.name)
+                members += compareMembers(
+                    theirFunctions, theirProperties, mine, entry.name,
+                    (theirs as? KotlinClassMetadata.Class)?.kmClass?.typeParameters?.scope().orEmpty(),
+                )
                 signatures += compareSignatures(theirFunctions, theirProperties, theirConstructors, mine, entry.name)
             }
         }
