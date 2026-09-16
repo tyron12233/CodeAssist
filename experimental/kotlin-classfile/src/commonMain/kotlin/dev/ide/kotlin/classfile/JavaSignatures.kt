@@ -70,6 +70,21 @@ sealed class JavaType {
         else -> render()
     }
 
+    /**
+     * The spelling ASM's `Type.getClassName()` uses: dots between packages, `$` between nested names, `[]`
+     * for arrays. `java.util.Map$Entry`, `int[]`, `java.lang.String[][]`.
+     *
+     * Distinct from [render] on purpose. This is the form a display string is cut down from, where
+     * `substringAfterLast('.')` has to leave `Map$Entry` intact rather than reducing it to `Entry`, and it is
+     * what a caller comparing against ASM needs.
+     */
+    fun jvmClassName(): String = when (this) {
+        is Primitive -> primitiveName(descriptor)
+        is Variable -> name
+        is Array -> element.jvmClassName() + "[]"
+        is Class -> if (outer == null) name.replace('/', '.') else outer.jvmClassName() + "$" + name
+    }
+
     override fun toString(): String = render()
 
     companion object {

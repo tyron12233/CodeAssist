@@ -139,6 +139,11 @@ include(
     // The other half of the same question: reading `.class` files and their Kotlin metadata without a JVM,
     // which is what completion against a real classpath needs and what ASM + kotlin-metadata-jvm supply today.
     ":kotlin-classfile",
+    // And the question those two exist to answer: does :lang-kotlin-index actually port? A portable
+    // rewrite of its bytecode-to-symbol layer on top of :kotlin-classfile, diffed symbol for symbol
+    // against the real one over android.jar. A decoder agreeing with ASM's API is not the same claim as
+    // the CONSUMER producing the same symbols.
+    ":kotlin-symbols",
 )
 
 // The IDE shells (Compose Multiplatform + AGP). These apply the Android Gradle plugin / Compose KMP plugin,
@@ -238,7 +243,7 @@ val layers = mapOf(
     // Test-only harnesses, consumed via testImplementation.
     "tools" to listOf("test-support", "bench-support"),
     // Work that is not part of the product yet: built and tested by CI, imported by nothing.
-    "experimental" to listOf("kotlin-syntax", "kotlin-classfile"),
+    "experimental" to listOf("kotlin-syntax", "kotlin-classfile", "kotlin-symbols"),
 )
 
 // `samples` holds plugins built as their own apps; it is already a directory, so it needs no mapping.
