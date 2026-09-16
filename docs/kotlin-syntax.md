@@ -154,21 +154,34 @@ collapses it into a single `BLOCK`, exactly as PSI's lazy-parseable elements do.
 that alone is 2.1x. The interior of a body is then parsed only when asked for, and per keystroke that is one
 body: the one under the caret.
 
+There is a third level, and it is where the win actually is. Most keystrokes land inside a body and change
+nothing outside it, so when that is provably true the file is **not reparsed at all** and the keystroke costs
+one body rather than one file.
+
 ```
                       full parse   keystroke
- 1,482 lines            7.8 ms       2.9 ms
- 3,653 lines            6.4 ms       2.4 ms
- 4,795 lines            6.8 ms       3.6 ms   ← 43% of a 120Hz frame, was 81%
-                        ------------------
- totals                64.9 ms      29.1 ms   (2.2x cheaper)
+ 1,482 lines            7.1 ms      0.096 ms
+ 3,653 lines            6.6 ms      0.054 ms
+ 4,795 lines            7.0 ms      0.058 ms
+                        -------------------
+ totals                66.8 ms       0.54 ms   (124x cheaper)
 ```
 
-Two files in that table show no gain: `IdeBackend.kt` and `LearnContent.kt` are mostly declarations and string
-data with few function bodies, so there is nothing for lazy mode to skip. That is the honest shape of the win
-rather than a flat multiplier.
+Worst keystroke: **96 µs, or 1.2% of a 120 Hz frame**, down from 81%. Over that run, 280 edits were absorbed
+without a file parse against 10 performed. Even if ART is ten times slower, that is about a millisecond.
 
-The remaining cost is now the lazy FILE parse, not the body. Going further means true incremental reparse at
-file level, which this design does not attempt.
+The proof obligation for skipping the file parse is **brace balance**: typing `}` inside a body ends it early
+and changes everything after it. So the edited body is re-lexed and checked to reach depth zero exactly at its
+end and nowhere before. It LEXES rather than scanning characters, because a brace inside a string or a comment
+is not a brace, and a scan would count it — there is a test for exactly that.
+
+When the fast path applies the file tree is left stale and reparsed on first access, which is deliberate:
+folding, breadcrumbs and the outline do not run per keystroke, so they can pay once. Reading `fileTree` inside
+a typing loop gives back everything the fast path saves.
+
+Two files are absent from that table. `IdeBackend.kt` and `LearnContent.kt` are declarations and string data
+with no function body big enough to type in, so the benchmark skips them rather than measuring the slow path
+and calling it the fast one.
 
 ### Two things that do not work, and cost time to discover
 

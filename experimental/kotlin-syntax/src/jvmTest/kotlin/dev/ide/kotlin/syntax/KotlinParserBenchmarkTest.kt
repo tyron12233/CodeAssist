@@ -131,9 +131,10 @@ class KotlinParserBenchmarkTest {
     /**
      * What a keystroke costs, which is the number all of this was for.
      *
-     * Simulates typing inside a function body of each file: reparse the file lazily, then ask for the body
-     * under the caret. That is exactly what an editor needs after a character is typed, and it is the honest
-     * comparison against a full parse of everything.
+     * The caret is placed inside a real function body — found from the parse rather than guessed at an
+     * arbitrary offset, since an offset outside every body measures the slow path and calls it the fast one.
+     * Then a character is typed, alternating between two buffers so that each edit is a genuine change rather
+     * than a no-op the fast path would refuse.
      */
     @Test
     fun aKeystrokeCostsFarLessThanAFullParse() {
@@ -142,39 +143,66 @@ class KotlinParserBenchmarkTest {
         var worstIncremental = 0L
         var totalFull = 0L
         var totalIncremental = 0L
+        var skipped = 0
+        var reparsed = 0
 
         for (sample in samples.sortedBy { it.lines }) {
-            // A caret in the middle of the file, then a character typed at it.
-            val caret = sample.text.indexOf("\n", sample.text.length / 2).let { if (it < 0) sample.text.length / 2 else it }
-            val edited = sample.text.substring(0, caret) + " " + sample.text.substring(caret)
+            val caret = caretInsideABody(sample.text) ?: continue
+            val typed = sample.text.substring(0, caret) + " " + sample.text.substring(caret)
+            val twice = sample.text.substring(0, caret) + "  " + sample.text.substring(caret)
 
             val incremental = IncrementalKotlinParse(sample.text)
             incremental.blockAt(caret)
-            repeat(3) { incremental.edit(edited); incremental.blockAt(caret) }
+            repeat(4) {
+                incremental.edit(typed); incremental.blockAt(caret)
+                incremental.edit(twice); incremental.blockAt(caret)
+            }
 
-            val full = fastestNanos(10) { KotlinSyntax.parse(edited) } / 1_000
-            val keystroke = fastestNanos(10) {
-                incremental.edit(edited)
+            val full = fastestNanos(10) { KotlinSyntax.parse(typed) } / 1_000
+            var flip = false
+            val keystroke = fastestNanos(20) {
+                flip = !flip
+                incremental.edit(if (flip) typed else twice)
                 incremental.blockAt(caret)
             } / 1_000
 
             totalFull += full
             totalIncremental += keystroke
             worstIncremental = maxOf(worstIncremental, keystroke)
-            println("  %,6d lines   full %,6d us   keystroke %,6d us   (%.1fx cheaper)  %s".format(
+            println("  %,6d lines   full %,6d us   keystroke %,6d us   (%.0fx cheaper)  %s".format(
                 sample.lines, full, keystroke, full.toDouble() / keystroke.coerceAtLeast(1), sample.name))
+            skipped += incremental.fileReparsesSkipped
+            reparsed += incremental.fileReparses
         }
 
-        println("  totals: full %,d us, keystroke %,d us — %.1fx cheaper overall".format(
-            totalFull, totalIncremental, totalFull.toDouble() / totalIncremental))
-        println("  worst keystroke: %,d us against an 8,300 us 120Hz frame (%.0f%% of it)".format(
+        println("  totals: full %,d us, keystroke %,d us — %.0fx cheaper overall".format(
+            totalFull, totalIncremental, totalFull.toDouble() / totalIncremental.coerceAtLeast(1)))
+        println("  worst keystroke: %,d us against an 8,300 us 120Hz frame (%.1f%% of it)".format(
             worstIncremental, worstIncremental * 100.0 / 8_300))
+        println("  file reparses skipped: $skipped, performed: $reparsed")
 
         assertTrue(
             totalIncremental < totalFull,
-            "the incremental path was not cheaper than a full parse, which would mean the lazy/expand split " +
-                "buys nothing and the design is wrong.",
+            "the incremental path was not cheaper than a full parse, which would mean the lazy/expand/skip " +
+                "split buys nothing and the design is wrong.",
         )
+    }
+
+    /** An offset genuinely inside a collapsed body, found from the parse rather than guessed. */
+    private fun caretInsideABody(text: String): Int? {
+        val tree = KotlinSyntax.parse(text, lazy = true)
+        var best: Int? = null
+        fun walk(node: org.jetbrains.kotlin.kmp.tree.LightNode) {
+            val children = tree.getChildren(node)
+            val collapsed = tree.getType(node) == org.jetbrains.kotlin.kmp.parser.KtNodeTypes.BLOCK &&
+                children.isNotEmpty() && children.all { tree.isToken(it) }
+            val size = tree.getEndOffset(node) - tree.getStartOffset(node)
+            // Prefer a big body: it is the interesting case, and a one-liner would flatter the measurement.
+            if (collapsed && size > 200 && best == null) best = tree.getStartOffset(node) + 2
+            if (!collapsed) children.forEach(::walk)
+        }
+        walk(tree.getRoot())
+        return best
     }
 
     @Test

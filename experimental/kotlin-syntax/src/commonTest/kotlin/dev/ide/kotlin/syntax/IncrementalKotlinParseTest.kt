@@ -163,6 +163,72 @@ class IncrementalKotlinParseTest {
         assertEquals(3, incremental.blockParses, "the edited body is parsed afresh")
     }
 
+    // --- skipping the file parse -------------------------------------------------------------------------
+
+    @Test
+    fun anEditInsideABodyDoesNotReparseTheFile() {
+        val incremental = IncrementalKotlinParse(source)
+        val caret = source.indexOf("val doubled")
+        incremental.blockAt(caret)
+        val before = incremental.fileReparses
+
+        val edited = source.replace("val doubled = n * 2", "val doubled = n * 2; val extra = 1")
+        incremental.edit(edited)
+
+        assertEquals(1, incremental.fileReparsesSkipped, "the edit is inside a body and changes nothing outside")
+        assertEquals(before, incremental.fileReparses, "so the file must not have been reparsed")
+        assertNotNull(incremental.blockAt(caret), "and the body is still reachable without one")
+    }
+
+    @Test
+    fun typingAClosingBraceForcesAFullReparse() {
+        // The proof obligation. A `}` ends the body early, so everything after it belongs to something else
+        // and none of the old structure can be trusted.
+        val incremental = IncrementalKotlinParse(source)
+        incremental.blockAt(source.indexOf("val doubled"))
+        val before = incremental.fileReparses
+
+        incremental.edit(source.replace("val doubled = n * 2", "val doubled = n * 2 }"))
+
+        assertEquals(0, incremental.fileReparsesSkipped, "an unbalanced body cannot be absorbed")
+        assertTrue(incremental.fileReparses > before, "the file has to be reparsed")
+    }
+
+    @Test
+    fun aBraceInsideAStringIsNotABrace() {
+        // Why the balance check lexes instead of scanning characters.
+        val incremental = IncrementalKotlinParse(source)
+        incremental.blockAt(source.indexOf("val doubled"))
+        incremental.edit(source.replace("val doubled = n * 2", "val doubled = \"}\".length"))
+        assertEquals(1, incremental.fileReparsesSkipped, "a brace in a string leaves the body balanced")
+    }
+
+    @Test
+    fun anEditOutsideAnyBodyReparsesTheFile() {
+        val incremental = IncrementalKotlinParse(source)
+        incremental.blockAt(source.indexOf("val doubled"))
+        val before = incremental.fileReparses
+        incremental.edit(source.replace("fun outer(n: Int)", "fun outer(n: Long)"))
+        assertEquals(0, incremental.fileReparsesSkipped, "a signature change is not body-local")
+        assertTrue(incremental.fileReparses > before)
+    }
+
+    @Test
+    fun aStaleFileTreeIsCorrectOnceItIsAskedFor() {
+        // The fast path defers the file parse; it must not lose it. Reading the tree has to give the truth.
+        val incremental = IncrementalKotlinParse(source)
+        incremental.blockAt(source.indexOf("val doubled"))
+        val edited = source.replace("val doubled = n * 2", "val doubled = n * 2; val extra = 1")
+        incremental.edit(edited)
+        assertEquals(1, incremental.fileReparsesSkipped)
+
+        assertEquals(
+            KotlinSyntax.parse(edited, lazy = true).render(),
+            incremental.fileTree.render(),
+            "the deferred tree must equal a fresh parse of the current buffer",
+        )
+    }
+
     @Test
     fun theFileTreeFollowsTheBuffer() {
         val incremental = IncrementalKotlinParse(source)
