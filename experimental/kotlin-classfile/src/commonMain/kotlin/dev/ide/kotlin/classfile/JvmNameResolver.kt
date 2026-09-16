@@ -5,14 +5,14 @@ package dev.ide.kotlin.classfile
  *
  * Nothing in the protobuf is a name: everything is an index, and resolving one is not a lookup. `@Metadata`
  * carries a `StringTableTypes` message alongside the strings, and each of its records says how to BUILD the
- * string at that index — take a predefined constant, or a literal, or the string from `d2`; then optionally
+ * string at that index: take a predefined constant, or a literal, or the string from `d2`; then optionally
  * substring it, replace a character, and map an internal name to a class id. The compiler does this to make
  * the annotation small, and a decoder that skips it gets `java/util/Map$Entry` where the answer is
  * `java/util/Map.Entry`, or an index into the wrong table entirely.
  *
  * Two details that are easy to miss and silently wrong:
  *
- *  * Records carry a `range`, and the list must be EXPANDED by it before indexing — one record can stand for
+ *  * Records carry a `range`, and the list must be EXPANDED by it before indexing, because one record can stand for
  *    many consecutive indices. Index without expanding and every name after the first repeat is someone
  *    else's.
  *  * [PREDEFINED_STRINGS] is indexed BY POSITION, so its order is part of the format. It is reproduced here
@@ -69,7 +69,7 @@ class JvmNameResolver(private val strings: Array<String>, records: List<Record>,
     /**
      * A class name as Kotlin spells it: dots between packages, dots between nested names.
      *
-     * A LOCAL class — one declared inside a function, or an anonymous object — is marked with a leading dot.
+     * A LOCAL class (one declared inside a function, or an anonymous object) is marked with a leading dot.
      * That convention is the only thing distinguishing it from a top-level class of the same name, and it is
      * what `local_name` in the string table exists to record. Dropping it is not cosmetic: two different
      * classes then answer to one name.

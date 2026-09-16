@@ -10,7 +10,7 @@ compiler-free, but they decode class files with **ASM** and `@kotlin.Metadata` w
 and neither artifact exists off the JVM.
 
 Unlike the parser there is nothing upstream to borrow. `core/metadata` and `libraries/kotlinx-metadata` are
-both `kotlin("jvm")` and sit on JVM protobuf. So this is a real port — but a much smaller one than it looks,
+both `kotlin("jvm")` and sit on JVM protobuf. So this is a real port, but a much smaller one than it looks,
 for two reasons.
 
 The **ASM surface actually used** is narrow: a `ClassReader` with `SKIP_CODE`/`SKIP_FRAMES`/`SKIP_DEBUG` and
@@ -22,13 +22,16 @@ matter. So what is needed is a wire reader plus the field numbers, not a code ge
 
 ## What is here
 
-752 lines, `commonMain`, no dependencies, building for jvm + iosSimulatorArm64 + iosArm64.
+1,591 lines, `commonMain`, no dependencies, building for jvm + iosSimulatorArm64 + iosArm64.
 
 ```
 ProtoReader        the protobuf wire format: varints, tags, length-delimited fields
 MetadataEncoding   undoes the String[] packing @Metadata uses to smuggle protobuf through an annotation
 ClassFile          constant pool, class/super/interfaces, and finding the @Metadata annotation
+JvmNameResolver    the string table: every name in the protobuf is an index, and resolving one is not a lookup
 KotlinMetadata     the dozen messages an index reads, with every field number cited to metadata.proto
+KotlinFlags        the packed bit field: visibility, modality, kind, suspend/inline/infix/var/const/lateinit
+JvmDescriptors     Kotlin class names to JVM descriptors, for the signatures the compiler declines to write
 ```
 
 ## How it is checked
@@ -36,28 +39,41 @@ KotlinMetadata     the dozen messages an index reads, with every field number ci
 Hand-written cases prove nothing for a decoder of someone else's binary format. It is either right about real
 input or it is not, and the failure mode is not an exception: a wrong field number reads a **different** field
 and returns something plausible. So the suite is an oracle against the JVM libraries this module exists to
-replace, over this build's own compiled output.
+replace, over two corpora: this build's own compiled output, and the whole `kotlin-stdlib` jar.
+
+Against this build's output:
 
 - **353 class files agree with ASM** on name, superclass and interfaces.
 - **326 Kotlin classes, 2,653 declarations agree with kotlin-metadata-jvm.**
 - **906 function signatures agree**, rendered whole: receiver, parameter names and types, return type,
   generics and nullability.
+- **312 classes and 2,652 members agree on flags**: visibility, modality, class kind, member kind, and
+  `data`/`inner`/`value`/`fun interface`/`suspend`/`inline`/`infix`/`operator`/`tailrec`/`var`/`const`/
+  `lateinit`/`expect`/`external`.
+- **6,361 members agree on their JVM signature**: method name and descriptor, backing field, getter, setter.
 
-Plus the negative cases that matter: a Java class must report no Kotlin metadata, and garbage must return null
-rather than throw, because a classpath contains jars built by anything and an index that throws stops indexing.
+Against `kotlin-stdlib`, because one compiler's output is a soft corpus and the jar an index actually has to
+read is not:
+
+- **990 class files agree with ASM**; **660 classes, 8,189 members and 11,053 signatures agree with
+  kotlin-metadata-jvm**, with nothing in the jar the library would read and this would not.
+
+Plus the negative cases that matter: a Java class must report no Kotlin metadata, garbage must return null
+rather than throw, and no entry anywhere in the stdlib may throw, because a classpath contains jars built by
+anything, and an index that dies on one entry stops indexing.
 
 ## Three things worth knowing
 
 - **`@Metadata` has two encodings**, chosen by a marker character: current compilers use UTF-8 mode (each
   char's low byte is the byte), older ones pack eight bits into seven so every char survives the class file's
-  modified UTF-8. A third, oldest form has no marker at all and is also 8-to-7 — which is why the marker check
+  modified UTF-8. A third, oldest form has no marker at all and is also 8-to-7, which is why the marker check
   cannot end in an `else`.
 - **Modified UTF-8 is not UTF-8.** A NUL is two bytes and a supplementary character is two three-byte
   surrogates, so `decodeToString` gets both wrong on names that contain either.
 - **`long` and `double` take two constant-pool slots.** Miss it and every index after is off by one, which
   reads as corrupt names rather than as an off-by-one.
 
-## Three things the oracle caught that no hand-written test would have
+## Four things the oracle caught that no hand-written test would have
 
 Each rendered as a perfectly plausible answer, which is the whole argument for diffing against the real
 library rather than against expectations someone typed.
@@ -71,9 +87,28 @@ library rather than against expectations someone typed.
 - **A LOCAL class name is marked with a leading dot.** That convention is the only thing separating a class
   declared inside a function from a top-level class of the same name, and `local_name` in the string table is
   what records it.
+- **`k=4` is the multi-file class FACADE, not one of its parts** (`k=5` is). A facade's `d1` is the only one
+  that is not protobuf at all: it holds the plain internal names of the part classes, never passed through
+  the encoding step, so reading it as a message takes a length prefix out of the middle of a class name and
+  then runs off the end of the array. This one DID throw, which is the exception that proves the rule: it
+  only threw because the corpus finally contained a `@JvmMultifileClass`, and every module in this build is
+  written by one compiler in one style. Widening the corpus to the stdlib found it in the first run.
+
+## Two things that are not field numbers
+
+- **Flags are a bit field with no schema.** `metadata.proto` gives one `int32`; the layout exists only as a
+  chain in the compiler, where each field is placed immediately after the previous one and an enum field is
+  as wide as `values.size - 1` needs. So every offset is a consequence of every offset above it, and adding
+  a seventh visibility to Kotlin would move all of them. `KotlinFlags` spells the widths as `bitWidth(N)`
+  against the enum sizes rather than as constants, so that they move together. Getting one wrong reports
+  `private` for a `public` function.
+- **Most JVM signatures are not written down.** The compiler records one only when it is *not* derivable
+  from the Kotlin declaration, and expects the reader to recompute the rest, so the bulk of the work is the
+  reconstruction, not the decode. An extension function's receiver is its first JVM parameter; leave it out
+  and the descriptor is one argument short and names no method that exists.
 
 ## Not done yet
 
-Flags (visibility, modality, `suspend`, `inline`, `infix`) and the JVM signature extensions from
-`jvm_metadata.proto`. Both are more field numbers against the same machinery rather than new machinery: the
-wire reader, the name resolver and the type decoder are all in place and checked.
+Nothing blocking. The remaining gaps are annotations on declarations, and the `TypeTable` indirection,
+neither of which this build's compiler or the stdlib actually uses for the fields read here, which is why
+11,053 stdlib signatures agree without them.

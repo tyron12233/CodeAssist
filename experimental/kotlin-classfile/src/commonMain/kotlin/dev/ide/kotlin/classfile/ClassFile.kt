@@ -87,7 +87,7 @@ class ClassFile private constructor(
         /**
          * The constant pool.
          *
-         * Two entries occupy TWO slots — `long` and `double` — a quirk of the format that is easy to miss and
+         * Two entries occupy TWO slots (`long` and `double`), a quirk of the format that is easy to miss and
          * misaligns every index after it when missed, which then reads as corrupt names rather than as an
          * off-by-one.
          */

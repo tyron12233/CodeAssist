@@ -12,7 +12,7 @@ package dev.ide.kotlin.classfile
  *    every char stays inside the range that survives the class file's modified UTF-8. Still met in older
  *    libraries on a real classpath, so it is not optional.
  *
- * A third case has no marker at all and is also 8-to-7 — the oldest form. Which is why the marker check
+ * A third case has no marker at all and is also 8-to-7, the oldest form. Which is why the marker check
  * cannot be an `else`.
  */
 object MetadataEncoding {

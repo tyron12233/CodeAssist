@@ -4,8 +4,8 @@ package dev.ide.kotlin.classfile
  * A protobuf wire-format reader.
  *
  * Kotlin's metadata is protobuf, and the generated reader for it is 34,545 lines of Java that only runs on
- * the JVM. Porting that is not the job. The wire format is self-describing enough to walk without a schema —
- * every field is a tag carrying a number and one of four encodings — so what is needed is this, plus a
+ * the JVM. Porting that is not the job. The wire format is self-describing enough to walk without a schema:
+ * every field is a tag carrying a number and one of four encodings, so what is needed is this, plus a
  * handful of field numbers read off `metadata.proto`, which is 709 lines and the actual source of truth.
  *
  * Deliberately small and non-validating: it decodes what it is asked for and SKIPS whatever it is not, which
@@ -89,7 +89,7 @@ class ProtoReader(private val bytes: ByteArray, private var position: Int = 0, p
                 // NOT `position += readInt()`. Kotlin reads the left operand of `+=` BEFORE evaluating the
                 // right, so the position captured is the one from before the length varint was consumed, and
                 // the assignment then throws that advance away. It lands one byte short, which is not an
-                // error — it resumes mid-field and reads plausible nonsense from then on.
+                // error: it resumes mid-field and reads plausible nonsense from then on.
                 val length = readInt()
                 position += length
             }
