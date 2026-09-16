@@ -50,10 +50,13 @@ jobs:
         run: ./gradlew test --console=plain --stacktrace
 
       # `test` is a Kotlin/JVM task name; a multiplatform module has `jvmTest` instead, so the aggregate above
-      # walks straight past :kotlin-syntax. Named explicitly, or its suites do not run at all.
-      # (The iOS target's tests need a Mac, so they run locally rather than here.)
-      - name: Experimental Kotlin syntax (multiplatform)
-        run: ./gradlew :kotlin-syntax:jvmTest --console=plain --stacktrace
+      # walks straight past both experimental modules. Named explicitly, or their suites do not run at all.
+      # (The iOS targets' tests need a Mac, so they run locally rather than here.)
+      #
+      # :kotlin-classfile reads compiled output from the step above as one of its two corpora, so it has to
+      # follow `test` rather than stand on its own.
+      - name: Experimental Kotlin syntax and class files (multiplatform)
+        run: ./gradlew :kotlin-syntax:jvmTest :kotlin-classfile:jvmTest --console=plain --stacktrace
 
       # 2) The quality gates: deterministic given the pinned JDK (same `jrt` class library + fixed indexes),
       #    so they gate ranking/recall regressions. One unambiguous invocation per module.
