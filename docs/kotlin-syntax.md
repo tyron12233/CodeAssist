@@ -117,6 +117,76 @@ And `KtTokensCompat.kt` exists because the vendored vocabulary renamed every mod
 where PSI said `PRIVATE_KEYWORD`, 34 of them, 82 references in `:lang-kotlin`. It re-exports all 163 tokens
 and token sets under PSI's names, so the migration is an import swap rather than 82 hand edits.
 
+## Measured
+
+`KotlinParserBenchmarkTest`, over the twelve largest Kotlin files in this repository (33,877 lines, 2.0 MB of
+real code), on a desktop JVM with a warm JIT:
+
+| | |
+|---|---|
+| Vendored parser | 33,528 chars/ms |
+| PSI parser | 14,576 chars/ms |
+| | **vendored is 2.3x faster** |
+
+That is a reason to want this parser on the JVM for its own sake, independent of portability.
+
+**But a full parse does NOT make incremental reparse redundant, which is the answer I was hoping against.**
+Latency by file size:
+
+```
+ 1,482 lines   2.6 ms
+ 2,137 lines   1.5 ms
+ 3,653 lines   6.3 ms
+ 4,795 lines   6.8 ms   ← 81% of a 120Hz frame
+```
+
+Typical files are comfortable. The largest are not, and 6.8 ms is a floor twice over: it is the fastest of
+twenty runs on a warmed JIT, and ART will be several times slower again.
+
+The benchmark asserts a catastrophe bound rather than the frame, deliberately: asserting the frame would be
+asserting this machine, it passes here at 81%, and it would flake on CI hardware.
+
+## Incremental parsing
+
+`IncrementalKotlinParse` closes that gap without an incremental mode, by using the split the grammar already
+offers. In **lazy** mode the parser does not descend into function bodies: it counts braces past each one and
+collapses it into a single `BLOCK`, exactly as PSI's lazy-parseable elements do. Bodies are most of a file, so
+that alone is 2.1x. The interior of a body is then parsed only when asked for, and per keystroke that is one
+body: the one under the caret.
+
+```
+                      full parse   keystroke
+ 1,482 lines            7.8 ms       2.9 ms
+ 3,653 lines            6.4 ms       2.4 ms
+ 4,795 lines            6.8 ms       3.6 ms   ← 43% of a 120Hz frame, was 81%
+                        ------------------
+ totals                64.9 ms      29.1 ms   (2.2x cheaper)
+```
+
+Two files in that table show no gain: `IdeBackend.kt` and `LearnContent.kt` are mostly declarations and string
+data with few function bodies, so there is nothing for lazy mode to skip. That is the honest shape of the win
+rather than a flat multiplier.
+
+The remaining cost is now the lazy FILE parse, not the body. Going further means true incremental reparse at
+file level, which this design does not attempt.
+
+### Two things that do not work, and cost time to discover
+
+- **`withStartOffset` cannot select a sub-range.** It shifts the offsets of elements the parser MARKS, but not
+  the tokens, which carry the offsets they were lexed at — and the builder still consumes from the first
+  token. Used that way it silently parses the whole file and returns a tree whose composites are absolute and
+  whose tokens are relative. `KotlinSyntax.parseBlock` therefore takes the block's own text and returns
+  RELATIVE offsets, and `ExpandedBlock` carries the translation explicitly.
+- **A collapsed block is not childless.** It keeps every token it swallowed and loses only the structure, so
+  "has no composite children" is the test for whether a body still needs expanding. Testing for no children at
+  all finds nothing.
+
+### What is cached
+
+An expanded body is kept against its start offset and validated against its text, so typing in one body keeps
+every body above the caret and drops those below it. Caching on text alone would be wrong: a body's tree
+carries offsets, so the same body moved down a line is a different answer.
+
 ## Not done yet
 
 - Nothing in `:lang-kotlin` actually depends on this; the probe is a copy, not a wiring. The remaining known
