@@ -511,6 +511,38 @@ private fun packageDottedPath(expr: org.jetbrains.kotlin.psi.KtExpression): Stri
     else -> null
 }
 
+/**
+ * The CONSTRUCTOR a capitalized `Foo(…)` call targets, chosen by arity — the callee [resolveCalleeFunction]
+ * never returns, since it resolves FUNCTIONS only and a constructor is not one. This is what lets a lambda
+ * ARGUMENT of a constructor be typed from the parameter it fills: `EditorPainter(paint = { … })` gets the
+ * receiver and parameters of `paint: DrawScope.(EditorPaintContext) -> Unit` exactly as a function's lambda
+ * argument does — without it the lambda has no receiver, and every `DrawScope` member called in the body was
+ * reported unresolved (the code compiles; the editor was wrong).
+ *
+ * Only ever consulted where a function callee didn't resolve, and only for a name [constructorTypeFqn]
+ * accepts (a KNOWN type, not shadowed by a local), so it cannot make an unresolved call resolve — it supplies
+ * a parameter shape the lambda would otherwise go without.
+ */
+internal fun KotlinResolver.constructorCallee(call: KtCallExpression): KotlinSymbol? {
+    val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
+    val parent = call.parent
+    // A bare `Foo(…)`, or the qualified `pkg.Foo(…)` / `Outer.Inner(…)` spelling where the call is the selector.
+    val name = if (parent is KtQualifiedExpression && parent.selectorExpression === call)
+        parent.receiverExpression.text + "." + callee.getReferencedName()
+    else callee.getReferencedName()
+    val fqn = constructorTypeFqn(name, callee.textRange.startOffset) ?: return null
+    val ctors = service.constructorsOf(fqn) +
+        service.sourceClass(fqn)?.constructors.orEmpty().map { sourceCtorSymbol(it, fqn) }
+    if (ctors.isEmpty()) return null
+    val argCount = call.valueArguments.size
+    // The same tiering [computeCallee] applies to functions: exact arity first, then the narrowest constructor
+    // with MORE parameters (the caller omitted defaulted ones — `EditorPainter(id, paint)` against its five),
+    // then the widest with fewer (a vararg tail absorbing the rest).
+    return ctors.firstOrNull { it.paramTypes.size == argCount }
+        ?: ctors.filter { it.paramTypes.size > argCount }.minByOrNull { it.paramTypes.size }
+        ?: ctors.maxByOrNull { it.paramTypes.size }
+}
+
 internal fun KotlinResolver.sourceCtorSymbol(
     rc: dev.ide.lang.kotlin.symbols.RawCallable,
     fqn: String

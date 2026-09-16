@@ -117,7 +117,9 @@ internal fun KotlinResolver.expectedFunctionTypeFor(lambda: KtLambdaExpression):
     // type, not by an enclosing call — so `val f: Scope.() -> Unit = { }` establishes its receiver.
     contextualFunctionType(lambda)?.let { return it }
     val (call, argIndex) = enclosingCallAndParamIndex(lambda) ?: return null
-    val sym = resolveCalleeFunction(call) ?: return null
+    // A CONSTRUCTOR is not a function callee, so it falls to [constructorCallee] — a lambda argument of
+    // `EditorPainter(paint = { … })` carries a receiver exactly as a function's does.
+    val sym = resolveCalleeFunction(call) ?: constructorCallee(call) ?: return null
     val raw = sym.paramTypes.getOrNull(lambdaParamIndex(call, argIndex, sym)) as? KotlinType
         ?: return null
     if (!TypeRendering.isFunctionType(raw.qualifiedName)) return null
@@ -159,8 +161,8 @@ internal fun KotlinResolver.expectedLambdaShape(lambda: KtLambdaExpression): Kot
     val (call, argIndex) = enclosingCallAndParamIndex(lambda) ?: return null
     // A SAM constructor (`Comparator<String> { a, b -> … }`, a project `fun interface`) has no callee FUNCTION —
     // the lambda IS the interface's single-abstract-method body. Fall back to that method's shape.
-    val sym =
-        resolveCalleeFunction(call) ?: return arrayInitShape(call) ?: samConstructorShape(call)
+    val sym = resolveCalleeFunction(call) ?: constructorCallee(call)
+        ?: return arrayInitShape(call) ?: samConstructorShape(call)
     val raw = sym.paramTypes.getOrNull(lambdaParamIndex(call, argIndex, sym)) as? KotlinType
         ?: return arrayInitShape(call) ?: samConstructorShape(call)
     // Bind the function's type params from the NON-lambda value args (`with(x){…}` binds T from x) AND the call's
