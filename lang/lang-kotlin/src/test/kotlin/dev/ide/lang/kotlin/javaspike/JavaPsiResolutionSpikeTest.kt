@@ -1,5 +1,7 @@
 package dev.ide.lang.kotlin.javaspike
 
+import dev.ide.index.normalizedJarKey
+
 import dev.ide.index.IndexExtension
 import dev.ide.index.IndexId
 import dev.ide.index.IndexInput
@@ -279,7 +281,7 @@ private object SpikeClassLocator : IndexExtension<String, String> {
         if ('$' in entry) return emptyMap()
         val jar = input.sourcePath ?: return emptyMap()
         val fqn = entry.removeSuffix(".class").replace('/', '.')
-        return mapOf(fqn to listOf(jar.toAbsolutePath().normalize().toString()))
+        return mapOf(fqn to listOf(normalizedJarKey(jar)))
     }
 }
 

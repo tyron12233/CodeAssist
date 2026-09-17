@@ -156,7 +156,7 @@ class IndexBackedNameEnvTest {
         override val origin = originKind
         override val contentHash = ContentHash("test")
         override val unitName = entry
-        override val sourcePath = jar
+        override val sourcePath = jar.toString()
         override fun bytes() = ByteArray(0)
         override fun text(): String? = null
         override fun dom(): ParsedFile? = null

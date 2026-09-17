@@ -13,4 +13,8 @@ dependencies {
     // which compiles inside this repository (one classpath) but leaves an external consumer unable to
     // implement the interface without declaring language-api itself.
     api(project(":language-api"))
+    // The half an index IMPLEMENTS (IndexExtension, Externalizer, IndexInput, the value types) lives there,
+    // in common code. What stays here is the half that RUNS them, which memory-maps segments and walks a
+    // project tree. Packages are unchanged, so every `import dev.ide.index.IndexExtension` still resolves.
+    api(project(":model-api"))
 }

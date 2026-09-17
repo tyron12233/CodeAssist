@@ -16,8 +16,8 @@ import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import dev.ide.lang.resolve.SymbolOrigin
 import dev.ide.lang.resolve.TypeRef
-import java.io.DataInput
-import java.io.DataOutput
+import dev.ide.platform.DataReader
+import dev.ide.platform.DataWriter
 
 /**
  * `kotlin.callables` — the persistent, prefix-queryable index for classpath **extensions** and **top-level
@@ -203,7 +203,7 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
      */
     const val FORMAT = 0
 
-    override fun write(out: DataOutput, value: CallableShape) {
+    override fun write(out: DataWriter, value: CallableShape) {
         out.writeUTF(value.name)
         out.writeByte(value.kind.ordinal)
         out.writeUTF(value.receiverFqn ?: "")
@@ -234,9 +234,9 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
         out.writeInt(value.typeParamBoundNames.size); value.typeParamBoundNames.forEach { out.writeUTF(it ?: "") }
     }
 
-    override fun read(inp: DataInput): CallableShape {
+    override fun read(inp: DataReader): CallableShape {
         val name = inp.readUTF()
-        val kind = SymbolKind.entries[inp.readByte().toInt()]
+        val kind = SymbolKind.entries[inp.readByte()]
         val receiver = inp.readUTF().ifEmpty { null }
         val sig = inp.readUTF().ifEmpty { null }
         val pkg = inp.readUTF().ifEmpty { null }
@@ -280,7 +280,7 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
     }
 
     /** Recursive, context-free encoding of a [KotlinType] (fqn + flags + args). */
-    private fun writeType(out: DataOutput, t: KotlinType?) {
+    private fun writeType(out: DataWriter, t: KotlinType?) {
         out.writeBoolean(t != null)
         if (t == null) return
         out.writeUTF(t.qualifiedName)
@@ -292,7 +292,7 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
         t.typeArguments.forEach { writeType(out, it as? KotlinType) }
     }
 
-    private fun readType(inp: DataInput): KotlinType? {
+    private fun readType(inp: DataReader): KotlinType? {
         if (!inp.readBoolean()) return null
         val fqn = inp.readUTF()
         val nullable = inp.readBoolean()

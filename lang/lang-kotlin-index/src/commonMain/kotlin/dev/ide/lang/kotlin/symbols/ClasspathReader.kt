@@ -1,7 +1,5 @@
 package dev.ide.lang.kotlin.symbols
 
-import dev.ide.kotlin.classfile.DataReader
-import dev.ide.kotlin.classfile.DataWriter
 import dev.ide.kotlin.classfile.FileSource
 import dev.ide.kotlin.classfile.Lock
 import dev.ide.kotlin.classfile.ZipArchive
@@ -11,6 +9,10 @@ import dev.ide.kotlin.classfile.fileInfo
 import dev.ide.kotlin.classfile.openFile
 import dev.ide.kotlin.classfile.readFile
 import dev.ide.kotlin.classfile.writeFileAtomically
+import dev.ide.platform.ByteArrayDataReader
+import dev.ide.platform.ByteArrayDataWriter
+import dev.ide.platform.DataReader
+import dev.ide.platform.DataWriter
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import dev.ide.lang.resolve.SymbolOrigin
@@ -322,7 +324,7 @@ class ClasspathReader(
      *  is a real state — and a torn read is worse than a miss, since the length prefixes it decodes are then
      *  garbage. The write goes to a unique sibling and is moved into place. */
     private fun writeJarData(file: String, data: JarScanData) {
-        val out = DataWriter()
+        val out = ByteArrayDataWriter()
         out.writeInt(FORMAT_VERSION)
         writeList(out, data.extensions)
         writeList(out, data.topLevel)
@@ -331,7 +333,7 @@ class ClasspathReader(
     }
 
     private fun readJarData(file: String): JarScanData? {
-        val inp = DataReader(readFile(file) ?: return null)
+        val inp = ByteArrayDataReader(readFile(file) ?: return null)
         if (inp.readInt() != FORMAT_VERSION) return null
         return JarScanData(readList(inp), readList(inp))
     }

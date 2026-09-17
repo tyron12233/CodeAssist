@@ -45,7 +45,7 @@ import org.jetbrains.kotlin.psi.KtProperty
 /** Parse (or reuse the shared parse of) [input] as a [KtFile]; null on failure / non-text input. */
 private fun sharedKt(input: IndexInput): KtFile? {
     val text = input.text() ?: return null
-    val name = input.sourcePath?.fileName?.toString() ?: input.unitName?.substringAfterLast('/') ?: "Source.kt"
+    val name = input.sourcePath?.substringAfterLast('/') ?: input.unitName?.substringAfterLast('/') ?: "Source.kt"
     return input.shared("kt.file") { KotlinMainScan.parse(name, text) }
 }
 

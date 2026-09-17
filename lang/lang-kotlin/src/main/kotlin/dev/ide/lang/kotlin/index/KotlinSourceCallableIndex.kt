@@ -48,7 +48,7 @@ object KotlinSourceCallableIndex : IndexExtension<String, CallableShape> {
 
     override fun index(input: IndexInput): Map<String, Collection<CallableShape>> {
         val text = input.text() ?: return emptyMap()
-        val name = input.sourcePath?.fileName?.toString() ?: input.unitName?.substringAfterLast('/') ?: "Source.kt"
+        val name = input.sourcePath?.substringAfterLast('/') ?: input.unitName?.substringAfterLast('/') ?: "Source.kt"
         // The same shared parse the other Kotlin source indexes reuse (one PSI per file per pass).
         val kt = input.shared("kt.file") { KotlinMainScan.parse(name, text) } ?: return emptyMap()
         val pkg = kt.packageFqName.asString().ifEmpty { null }

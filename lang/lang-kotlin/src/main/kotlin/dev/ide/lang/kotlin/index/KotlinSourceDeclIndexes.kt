@@ -73,7 +73,7 @@ object KotlinSourceSubtypeIndex : IndexExtension<String, SubtypeValue> {
 
     override fun index(input: IndexInput): Map<String, Collection<SubtypeValue>> {
         val text = input.text() ?: return emptyMap()
-        val name = input.sourcePath?.fileName?.toString() ?: input.unitName?.substringAfterLast('/') ?: "Source.kt"
+        val name = input.sourcePath?.substringAfterLast('/') ?: input.unitName?.substringAfterLast('/') ?: "Source.kt"
         val kt = input.shared("kt.file") { KotlinMainScan.parse(name, text) } ?: return emptyMap()
         val pkg = kt.packageFqName.asString().ifEmpty { null }
         val imports = KotlinSourceNames.importsBySimpleName(kt)
@@ -126,7 +126,7 @@ object KotlinSourceAnnotationIndex : IndexExtension<String, AnnotatedValue> {
 
     override fun index(input: IndexInput): Map<String, Collection<AnnotatedValue>> {
         val text = input.text() ?: return emptyMap()
-        val name = input.sourcePath?.fileName?.toString() ?: input.unitName?.substringAfterLast('/') ?: "Source.kt"
+        val name = input.sourcePath?.substringAfterLast('/') ?: input.unitName?.substringAfterLast('/') ?: "Source.kt"
         val kt = input.shared("kt.file") { KotlinMainScan.parse(name, text) } ?: return emptyMap()
         val pkg = kt.packageFqName.asString().ifEmpty { null }
         val imports = KotlinSourceNames.importsBySimpleName(kt)

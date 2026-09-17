@@ -10,8 +10,8 @@ import dev.ide.index.KeyDescriptor
 import dev.ide.index.MatchingMode
 import dev.ide.index.StringKeyDescriptor
 import dev.ide.index.classEntryToFqn
-import java.io.DataInput
-import java.io.DataOutput
+import dev.ide.platform.DataReader
+import dev.ide.platform.DataWriter
 
 /**
  * `kotlin.pkgDecls` — per-package enumeration of a library/SDK's **top-level Kotlin declarations**
@@ -115,14 +115,14 @@ class PkgDecl(
 
 /** Context-free codec for a [PkgDecl]. */
 object PkgDeclExternalizer : Externalizer<PkgDecl> {
-    override fun write(out: DataOutput, value: PkgDecl) {
+    override fun write(out: DataWriter, value: PkgDecl) {
         out.writeUTF(value.name)
         out.writeBoolean(value.classifier)
         out.writeUTF(value.facade ?: "")
         out.writeUTF(value.aliasTarget ?: "")
     }
 
-    override fun read(inp: DataInput): PkgDecl {
+    override fun read(inp: DataReader): PkgDecl {
         val name = inp.readUTF()
         val classifier = inp.readBoolean()
         val facade = inp.readUTF().ifEmpty { null }

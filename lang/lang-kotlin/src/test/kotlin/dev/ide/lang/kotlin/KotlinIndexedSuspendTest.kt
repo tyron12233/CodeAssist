@@ -1,5 +1,8 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.platform.ByteArrayDataReader
+import dev.ide.platform.ByteArrayDataWriter
+
 import dev.ide.index.Hit
 import dev.ide.index.IndexId
 import dev.ide.index.IndexScope
@@ -43,9 +46,9 @@ class KotlinIndexedSuspendTest {
         val shape = suspendShape("doWork")
         assertTrue(shape.toSymbol(null).isSuspend, "from/toSymbol must preserve isSuspend")
         // Codec round-trip (the persisted form).
-        val bos = ByteArrayOutputStream()
-        DataOutputStream(bos).use { CallableShapeExternalizer.write(it, shape) }
-        val back = DataInputStream(ByteArrayInputStream(bos.toByteArray())).use { CallableShapeExternalizer.read(it) }
+        val bos = ByteArrayDataWriter()
+        CallableShapeExternalizer.write(bos, shape)
+        val back = CallableShapeExternalizer.read(ByteArrayDataReader(bos.toByteArray()))
         assertTrue(back.isSuspend, "the codec must persist isSuspend")
         assertTrue(back.toSymbol(null).isSuspend, "the decoded shape's symbol must be suspend")
     }
@@ -61,9 +64,9 @@ class KotlinIndexedSuspendTest {
             isComposable = false, isInline = false, isInfix = true, isSuspend = false,
         )
         assertTrue(shape.toSymbol(null).isInfix, "from/toSymbol must preserve isInfix")
-        val bos = ByteArrayOutputStream()
-        DataOutputStream(bos).use { CallableShapeExternalizer.write(it, shape) }
-        val back = DataInputStream(ByteArrayInputStream(bos.toByteArray())).use { CallableShapeExternalizer.read(it) }
+        val bos = ByteArrayDataWriter()
+        CallableShapeExternalizer.write(bos, shape)
+        val back = CallableShapeExternalizer.read(ByteArrayDataReader(bos.toByteArray()))
         assertTrue(back.isInfix, "the codec must persist isInfix")
         assertTrue(back.toSymbol(null).isInfix, "the decoded shape's symbol must be infix")
     }

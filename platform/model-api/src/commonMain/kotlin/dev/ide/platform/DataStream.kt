@@ -1,4 +1,4 @@
-package dev.ide.kotlin.classfile
+package dev.ide.platform
 
 /**
  * The wire format `java.io.DataOutput` writes, without `java.io`.
@@ -15,7 +15,20 @@ package dev.ide.kotlin.classfile
  * characters, and it is sixteen bits, which is why an over-long string is an error rather than a longer
  * prefix.
  */
-class DataWriter {
+interface DataWriter {
+    fun writeByte(value: Int)
+    fun writeBoolean(value: Boolean)
+    fun writeShort(value: Int)
+    fun writeInt(value: Int)
+    fun writeLong(value: Long)
+
+    /** A string in modified UTF-8. An implementation may store it any way it likes, as long as its reader
+     *  agrees: the segment writer interns it and writes a pool id instead, and no externalizer notices. */
+    fun writeUTF(value: String)
+}
+
+/** The in-memory [DataWriter]: it accumulates bytes, and [toByteArray] is the result. */
+class ByteArrayDataWriter : DataWriter {
 
     private var bytes = ByteArray(256)
     private var at = 0
@@ -24,22 +37,22 @@ class DataWriter {
 
     fun toByteArray(): ByteArray = bytes.copyOf(at)
 
-    fun writeByte(value: Int) {
+    override fun writeByte(value: Int) {
         ensure(1)
         bytes[at++] = value.toByte()
     }
 
-    fun writeBoolean(value: Boolean) {
+    override fun writeBoolean(value: Boolean) {
         writeByte(if (value) 1 else 0)
     }
 
-    fun writeShort(value: Int) {
+    override fun writeShort(value: Int) {
         ensure(2)
         bytes[at++] = (value ushr 8).toByte()
         bytes[at++] = value.toByte()
     }
 
-    fun writeInt(value: Int) {
+    override fun writeInt(value: Int) {
         ensure(4)
         bytes[at++] = (value ushr 24).toByte()
         bytes[at++] = (value ushr 16).toByte()
@@ -47,7 +60,7 @@ class DataWriter {
         bytes[at++] = value.toByte()
     }
 
-    fun writeLong(value: Long) {
+    override fun writeLong(value: Long) {
         writeInt((value ushr 32).toInt())
         writeInt(value.toInt())
     }
@@ -59,7 +72,7 @@ class DataWriter {
     }
 
     /** A string in modified UTF-8, length-prefixed with the BYTE count in two bytes. */
-    fun writeUTF(value: String) {
+    override fun writeUTF(value: String) {
         var length = 0
         for (char in value) {
             val code = char.code
@@ -108,22 +121,33 @@ class DataWriter {
  * Big-endian, like everything the JVM serialises and unlike the zip container two files over. The two
  * readers are kept apart rather than given a byte-order flag, so neither can be pointed at the wrong format.
  */
-class DataReader(private val bytes: ByteArray, private var at: Int = 0) {
+interface DataReader {
+    fun readByte(): Int
+    fun readUnsignedByte(): Int
+    fun readBoolean(): Boolean
+    fun readShort(): Int
+    fun readInt(): Int
+    fun readLong(): Long
+    fun readUTF(): String
+}
+
+/** The in-memory [DataReader], over bytes already read. */
+class ByteArrayDataReader(private val bytes: ByteArray, private var at: Int = 0) : DataReader {
 
     val hasMore: Boolean get() = at < bytes.size
     val position: Int get() = at
 
-    fun readByte(): Int = bytes[at++].toInt()
+    override fun readByte(): Int = bytes[at++].toInt()
 
-    fun readUnsignedByte(): Int = bytes[at++].toInt() and 0xFF
+    override fun readUnsignedByte(): Int = bytes[at++].toInt() and 0xFF
 
-    fun readBoolean(): Boolean = readUnsignedByte() != 0
+    override fun readBoolean(): Boolean = readUnsignedByte() != 0
 
-    fun readShort(): Int = (readUnsignedByte() shl 8) or readUnsignedByte()
+    override fun readShort(): Int = (readUnsignedByte() shl 8) or readUnsignedByte()
 
-    fun readInt(): Int = (readShort() shl 16) or readShort()
+    override fun readInt(): Int = (readShort() shl 16) or readShort()
 
-    fun readLong(): Long = (readInt().toLong() shl 32) or (readInt().toLong() and 0xFFFFFFFFL)
+    override fun readLong(): Long = (readInt().toLong() shl 32) or (readInt().toLong() and 0xFFFFFFFFL)
 
     fun readBytes(count: Int): ByteArray {
         val slice = bytes.copyOfRange(at, at + count)
@@ -138,7 +162,7 @@ class DataReader(private val bytes: ByteArray, private var at: Int = 0) {
      * comes back: as the two surrogates it was written as, which Kotlin's string already stores that way.
      * So nothing here recombines them, and nothing should.
      */
-    fun readUTF(): String {
+    override fun readUTF(): String {
         val length = readShort()
         val end = at + length
         val out = StringBuilder(length)

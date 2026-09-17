@@ -1,5 +1,7 @@
 package dev.ide.kotlin.classfile
 
+import dev.ide.platform.ByteArrayDataReader
+import dev.ide.platform.ByteArrayDataWriter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -96,7 +98,7 @@ class FileSystemTest {
         val directory = scratchDirectory("kotlin-classfile-cache")
         val path = "$directory/scan.bin"
 
-        val writer = DataWriter()
+        val writer = ByteArrayDataWriter()
         writer.writeInt(2)
         writer.writeUTF("kotlin.collections.CollectionsKt")
         writer.writeBoolean(true)
@@ -104,7 +106,7 @@ class FileSystemTest {
         writer.writeBoolean(false)
         assertTrue(writeFileAtomically(path, writer.toByteArray()))
 
-        val reader = DataReader(assertNotNull(readFile(path)))
+        val reader = ByteArrayDataReader(assertNotNull(readFile(path)))
         assertEquals(2, reader.readInt())
         assertEquals("kotlin.collections.CollectionsKt", reader.readUTF())
         assertEquals(true, reader.readBoolean())

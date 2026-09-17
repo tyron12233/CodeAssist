@@ -14,8 +14,8 @@ import org.xml.sax.Attributes
 import org.xml.sax.InputSource
 import org.xml.sax.Locator
 import org.xml.sax.helpers.DefaultHandler
-import java.io.DataInput
-import java.io.DataOutput
+import dev.ide.platform.DataReader
+import dev.ide.platform.DataWriter
 import java.io.StringReader
 import javax.xml.parsers.SAXParser
 import javax.xml.parsers.SAXParserFactory
@@ -32,12 +32,12 @@ data class ResourceDeclValue(
 )
 
 object ResourceDeclExternalizer : Externalizer<ResourceDeclValue> {
-    override fun write(out: DataOutput, value: ResourceDeclValue) {
+    override fun write(out: DataWriter, value: ResourceDeclValue) {
         out.writeUTF(value.type); out.writeUTF(value.name); out.writeUTF(value.filePath); out.writeInt(value.offset)
         out.writeBoolean(value.value != null)
         if (value.value != null) out.writeUTF(value.value)
     }
-    override fun read(inp: DataInput): ResourceDeclValue {
+    override fun read(inp: DataReader): ResourceDeclValue {
         val type = inp.readUTF(); val name = inp.readUTF(); val path = inp.readUTF(); val offset = inp.readInt()
         val value = if (inp.readBoolean()) inp.readUTF() else null
         return ResourceDeclValue(type, name, path, offset, value)
@@ -91,9 +91,9 @@ object AndroidResourceIndex : IndexExtension<String, ResourceDeclValue> {
     }
 
     override fun index(input: IndexInput): Map<String, Collection<ResourceDeclValue>> {
-        val path = input.sourcePath?.toString() ?: return emptyMap()
+        val path = input.sourcePath ?: return emptyMap()
         val text = input.text() ?: return emptyMap()
-        val folder = input.sourcePath?.parent?.fileName?.toString() ?: return emptyMap()
+        val folder = input.sourcePath?.substringBeforeLast('/', "")?.substringAfterLast('/')?.ifEmpty { null } ?: return emptyMap()
         val out = HashMap<String, MutableList<ResourceDeclValue>>()
         for (d in ResourceFileScanner.scan(folder, path, text)) {
             out.getOrPut(key(d.type, d.name)) { ArrayList() }.add(d)

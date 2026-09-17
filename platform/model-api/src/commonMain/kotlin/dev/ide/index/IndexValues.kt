@@ -1,7 +1,7 @@
 package dev.ide.index
 
-import java.io.DataInput
-import java.io.DataOutput
+import dev.ide.platform.DataReader
+import dev.ide.platform.DataWriter
 
 /**
  * Value payloads for the v1 indexes, shared by their producers (index-impl, lang-jdt) and consumers
@@ -224,46 +224,46 @@ object MembersIndex {
 }
 
 object SubtypeExternalizer : Externalizer<SubtypeValue> {
-    override fun write(out: DataOutput, value: SubtypeValue) {
+    override fun write(out: DataWriter, value: SubtypeValue) {
         out.writeUTF(value.fqn); out.writeUTF(value.kind); out.writeUTF(value.supertype); out.writeInt(value.fileId)
     }
-    override fun read(inp: DataInput) = SubtypeValue(inp.readUTF(), inp.readUTF(), inp.readUTF(), inp.readInt())
+    override fun read(inp: DataReader) = SubtypeValue(inp.readUTF(), inp.readUTF(), inp.readUTF(), inp.readInt())
 }
 
 object AnnotatedExternalizer : Externalizer<AnnotatedValue> {
-    override fun write(out: DataOutput, value: AnnotatedValue) {
+    override fun write(out: DataWriter, value: AnnotatedValue) {
         out.writeUTF(value.fqn); out.writeUTF(value.kind); out.writeUTF(value.annotation); out.writeInt(value.fileId)
     }
-    override fun read(inp: DataInput) = AnnotatedValue(inp.readUTF(), inp.readUTF(), inp.readUTF(), inp.readInt())
+    override fun read(inp: DataReader) = AnnotatedValue(inp.readUTF(), inp.readUTF(), inp.readUTF(), inp.readInt())
 }
 
 object EntryPointExternalizer : Externalizer<EntryPointValue> {
-    override fun write(out: DataOutput, value: EntryPointValue) {
+    override fun write(out: DataWriter, value: EntryPointValue) {
         out.writeUTF(value.fqn); out.writeInt(value.fileId); out.writeBoolean(value.instance)
     }
-    override fun read(inp: DataInput) = EntryPointValue(inp.readUTF(), inp.readInt(), inp.readBoolean())
+    override fun read(inp: DataReader) = EntryPointValue(inp.readUTF(), inp.readInt(), inp.readBoolean())
 }
 
 object ClassNameExternalizer : Externalizer<ClassNameValue> {
-    override fun write(out: DataOutput, value: ClassNameValue) {
+    override fun write(out: DataWriter, value: ClassNameValue) {
         out.writeUTF(value.fqn); out.writeByte(value.origin.ordinal); out.writeUTF(value.kind)
     }
-    override fun read(inp: DataInput) =
+    override fun read(inp: DataReader) =
         ClassNameValue(inp.readUTF(), IndexOrigin.entries[inp.readByte().toInt()], inp.readUTF())
 }
 
 object StringExternalizer : Externalizer<String> {
-    override fun write(out: DataOutput, value: String) = out.writeUTF(value)
-    override fun read(inp: DataInput): String = inp.readUTF()
+    override fun write(out: DataWriter, value: String) = out.writeUTF(value)
+    override fun read(inp: DataReader): String = inp.readUTF()
 }
 
 object SymbolExternalizer : Externalizer<SymbolValue> {
-    override fun write(out: DataOutput, value: SymbolValue) {
+    override fun write(out: DataWriter, value: SymbolValue) {
         out.writeUTF(value.name); out.writeUTF(value.kind); out.writeInt(value.fileId)
         out.writeInt(value.offset); out.writeBoolean(value.container != null)
         if (value.container != null) out.writeUTF(value.container)
     }
-    override fun read(inp: DataInput): SymbolValue {
+    override fun read(inp: DataReader): SymbolValue {
         val name = inp.readUTF(); val kind = inp.readUTF(); val fileId = inp.readInt(); val off = inp.readInt()
         val container = if (inp.readBoolean()) inp.readUTF() else null
         return SymbolValue(name, kind, fileId, off, container)
@@ -271,20 +271,20 @@ object SymbolExternalizer : Externalizer<SymbolValue> {
 }
 
 object MemberExternalizer : Externalizer<MemberValue> {
-    override fun write(out: DataOutput, value: MemberValue) {
+    override fun write(out: DataWriter, value: MemberValue) {
         out.writeUTF(value.name); out.writeUTF(value.owner); out.writeUTF(value.kind); out.writeUTF(value.signature)
     }
-    override fun read(inp: DataInput) = MemberValue(inp.readUTF(), inp.readUTF(), inp.readUTF(), inp.readUTF())
+    override fun read(inp: DataReader) = MemberValue(inp.readUTF(), inp.readUTF(), inp.readUTF(), inp.readUTF())
 }
 
 object SourceDocExternalizer : Externalizer<SourceDocValue> {
-    override fun write(out: DataOutput, value: SourceDocValue) {
+    override fun write(out: DataWriter, value: SourceDocValue) {
         out.writeUTF(value.name)
         out.writeInt(value.arity)
         out.writeInt(value.names.size); value.names.forEach { out.writeUTF(it) }
         out.writeBoolean(value.doc != null); if (value.doc != null) out.writeUTF(value.doc)
     }
-    override fun read(inp: DataInput): SourceDocValue {
+    override fun read(inp: DataReader): SourceDocValue {
         val name = inp.readUTF(); val arity = inp.readInt()
         val names = List(inp.readInt()) { inp.readUTF() }
         val doc = if (inp.readBoolean()) inp.readUTF() else null

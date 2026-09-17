@@ -158,7 +158,7 @@ class KotlinSourceCallableIndexTest {
         private class SourceInput(override val unitName: String, private val text: String) : IndexInput {
             override val origin = IndexOrigin.SOURCE
             override val contentHash = ContentHash("")
-            override val sourcePath: Path = Paths.get("/virtual/$unitName")
+            override val sourcePath: String? = "/virtual/$unitName"
             override fun bytes() = text.toByteArray()
             override fun text() = text
             override fun dom() = null

@@ -1,4 +1,4 @@
-package dev.ide.kotlin.classfile
+package dev.ide.platform
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,7 +32,7 @@ class DataStreamTest {
 
     @Test
     fun everyScalarRoundTrips() {
-        val writer = DataWriter()
+        val writer = ByteArrayDataWriter()
         writer.writeBoolean(true)
         writer.writeBoolean(false)
         writer.writeByte(-1)
@@ -45,7 +45,7 @@ class DataStreamTest {
         writer.writeLong(Long.MIN_VALUE)
         writer.writeLong(Long.MAX_VALUE)
 
-        val reader = DataReader(writer.toByteArray())
+        val reader = ByteArrayDataReader(writer.toByteArray())
         assertEquals(true, reader.readBoolean())
         assertEquals(false, reader.readBoolean())
         assertEquals(-1, reader.readByte())
@@ -62,9 +62,9 @@ class DataStreamTest {
 
     @Test
     fun everyAwkwardStringRoundTrips() {
-        val writer = DataWriter()
+        val writer = ByteArrayDataWriter()
         for (value in AWKWARD_STRINGS) writer.writeUTF(value)
-        val reader = DataReader(writer.toByteArray())
+        val reader = ByteArrayDataReader(writer.toByteArray())
         for (value in AWKWARD_STRINGS) assertEquals(value, reader.readUTF())
         assertTrue(!reader.hasMore)
     }
@@ -74,8 +74,8 @@ class DataStreamTest {
         // The length prefix is sixteen bits, so there is no encoding for a longer string. Writing one
         // anyway would wrap the prefix and produce a file that reads back as something shorter and
         // plausible, which is worse than refusing.
-        assertFailsWith<IllegalStateException> { DataWriter().writeUTF("x".repeat(70_000)) }
+        assertFailsWith<IllegalStateException> { ByteArrayDataWriter().writeUTF("x".repeat(70_000)) }
         // Counted in BYTES, not characters: a three-byte character reaches the limit three times sooner.
-        assertFailsWith<IllegalStateException> { DataWriter().writeUTF("€".repeat(22_000)) }
+        assertFailsWith<IllegalStateException> { ByteArrayDataWriter().writeUTF("€".repeat(22_000)) }
     }
 }

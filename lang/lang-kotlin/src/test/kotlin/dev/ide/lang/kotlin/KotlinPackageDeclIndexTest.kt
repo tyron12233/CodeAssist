@@ -1,5 +1,8 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.platform.ByteArrayDataReader
+import dev.ide.platform.ByteArrayDataWriter
+
 import dev.ide.index.IndexInput
 import dev.ide.index.IndexOrigin
 import dev.ide.lang.kotlin.index.KotlinPackageDeclIndex
@@ -74,22 +77,26 @@ class KotlinPackageDeclIndexTest {
         assertEquals(alias.name, aliasBack.name)
         assertEquals(alias.facade, aliasBack.facade)
         assertEquals(alias.aliasTarget, aliasBack.aliasTarget)
-        val bos = ByteArrayOutputStream()
-        DataOutputStream(bos).use { PkgDeclExternalizer.write(it, v) }
-        val back = DataInputStream(ByteArrayInputStream(bos.toByteArray())).use { PkgDeclExternalizer.read(it) }
+        val bos = ByteArrayDataWriter()
+        PkgDeclExternalizer.write(bos, v)
+        val back = PkgDeclExternalizer.read(ByteArrayDataReader(bos.toByteArray()))
         assertEquals(v.name, back.name)
         assertEquals(v.classifier, back.classifier)
         assertEquals(v.facade, back.facade)
         // classifier form: null facade round-trips as null (not "")
-        val c = DataInputStream(ByteArrayInputStream(ByteArrayOutputStream().also { b -> DataOutputStream(b).use { PkgDeclExternalizer.write(it, PkgDecl("C", true, null)) } }.toByteArray())).use { PkgDeclExternalizer.read(it) }
+        val c = PkgDeclExternalizer.read(
+            ByteArrayDataReader(
+                ByteArrayDataWriter().also { PkgDeclExternalizer.write(it, PkgDecl("C", true, null)) }.toByteArray(),
+            ),
+        )
         assertEquals(null, c.facade)
         assertEquals(null, c.aliasTarget, "a non-alias round-trips with no target (not \"\")")
     }
 
     private fun roundTrip(value: PkgDecl): PkgDecl {
-        val bos = ByteArrayOutputStream()
-        DataOutputStream(bos).use { PkgDeclExternalizer.write(it, value) }
-        return DataInputStream(ByteArrayInputStream(bos.toByteArray())).use { PkgDeclExternalizer.read(it) }
+        val bos = ByteArrayDataWriter()
+        PkgDeclExternalizer.write(bos, value)
+        return PkgDeclExternalizer.read(ByteArrayDataReader(bos.toByteArray()))
     }
 
     @Test
@@ -149,7 +156,7 @@ class KotlinPackageDeclIndexTest {
         private class FakeInput(override val unitName: String, private val b: ByteArray) : IndexInput {
             override val origin = IndexOrigin.LIBRARY
             override val contentHash = ContentHash("")
-            override val sourcePath: Path? = null
+            override val sourcePath: String? = null
             override fun bytes() = b
             override fun text(): String? = null
             override fun dom() = null

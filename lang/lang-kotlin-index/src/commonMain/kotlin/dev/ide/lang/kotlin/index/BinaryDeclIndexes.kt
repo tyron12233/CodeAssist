@@ -1,5 +1,7 @@
 package dev.ide.lang.kotlin.index
 
+import dev.ide.kotlin.classfile.ClassFile
+
 import dev.ide.index.AnnotatedExternalizer
 import dev.ide.index.AnnotatedValue
 import dev.ide.index.AnnotationIndex
@@ -14,7 +16,6 @@ import dev.ide.index.StringKeyDescriptor
 import dev.ide.index.SubtypeExternalizer
 import dev.ide.index.SubtypeIndex
 import dev.ide.index.SubtypeValue
-import org.objectweb.asm.Opcodes
 
 /**
  * The BINARY producers of the direct-inheritor ([SubtypeIndex.BINARY]) and annotated-by
@@ -31,9 +32,9 @@ private val binaryClassFilter = InputFilter {
 }
 
 private fun kindOf(access: Int): String = when {
-    access and Opcodes.ACC_ANNOTATION != 0 -> "annotation"
-    access and Opcodes.ACC_INTERFACE != 0 -> "interface"
-    access and Opcodes.ACC_ENUM != 0 -> "enum"
+    access and ClassFile.ACC_ANNOTATION != 0 -> "annotation"
+    access and ClassFile.ACC_INTERFACE != 0 -> "interface"
+    access and ClassFile.ACC_ENUM != 0 -> "enum"
     else -> "class"
 }
 
@@ -58,7 +59,7 @@ object BinarySubtypeIndex : IndexExtension<String, SubtypeValue> {
 
     override fun index(input: IndexInput): Map<String, Collection<SubtypeValue>> {
         val classFile = sharedClassFile(input) ?: return emptyMap()
-        if (classFile.accessFlags and Opcodes.ACC_SYNTHETIC != 0) return emptyMap()
+        if (classFile.accessFlags and ClassFile.ACC_SYNTHETIC != 0) return emptyMap()
         val fqn = dotted(classFile.thisClass)
         val kind = kindOf(classFile.accessFlags)
         val out = HashMap<String, MutableList<SubtypeValue>>()
@@ -96,11 +97,11 @@ object BinaryAnnotationIndex : IndexExtension<String, AnnotatedValue> {
 
         for (descriptor in classFile.annotations) emit(owner, ownerKind, descriptor)
         for (method in classFile.methods) {
-            if (method.access and Opcodes.ACC_SYNTHETIC != 0) continue
+            if (method.access and ClassFile.ACC_SYNTHETIC != 0) continue
             for (descriptor in method.annotations) emit("$owner#${method.name}", "method", descriptor)
         }
         for (field in classFile.fields) {
-            if (field.access and Opcodes.ACC_SYNTHETIC != 0) continue
+            if (field.access and ClassFile.ACC_SYNTHETIC != 0) continue
             for (descriptor in field.annotations) emit("$owner#${field.name}", "field", descriptor)
         }
         return out

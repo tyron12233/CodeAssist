@@ -35,6 +35,12 @@ kotlin {
     iosArm64()
 
     sourceSets {
+        commonMain.dependencies {
+            // DataWriter/DataReader moved to :model-api when the index SPI started naming them. They are
+            // the java.io.DataOutput wire format and not a class-file concern, so they belong with the model.
+            api(project(":model-api"))
+        }
+
         commonTest.dependencies {
             implementation(kotlin("test"))
         }

@@ -1,5 +1,8 @@
 package dev.ide.android.support.index
 
+import dev.ide.platform.ByteArrayDataReader
+import dev.ide.platform.ByteArrayDataWriter
+
 import dev.ide.index.IndexInput
 import dev.ide.index.IndexOrigin
 import dev.ide.platform.ContentHash
@@ -58,15 +61,15 @@ class AndroidResourceIndexTest {
     @Test
     fun valueRoundTripsThroughTheExternalizer() {
         val v = ResourceDeclValue("string", "app_name", "/p/res/values/strings.xml", 12, "My App")
-        val bytes = java.io.ByteArrayOutputStream()
-        ResourceDeclExternalizer.write(java.io.DataOutputStream(bytes), v)
-        val back = ResourceDeclExternalizer.read(java.io.DataInputStream(bytes.toByteArray().inputStream()))
+        val bytes = ByteArrayDataWriter()
+        ResourceDeclExternalizer.write(bytes, v)
+        val back = ResourceDeclExternalizer.read(ByteArrayDataReader(bytes.toByteArray()))
         assertEquals(v, back)
         // …and a null value round-trips too.
         val noVal = v.copy(value = null)
-        val b2 = java.io.ByteArrayOutputStream()
-        ResourceDeclExternalizer.write(java.io.DataOutputStream(b2), noVal)
-        assertEquals(noVal, ResourceDeclExternalizer.read(java.io.DataInputStream(b2.toByteArray().inputStream())))
+        val b2 = ByteArrayDataWriter()
+        ResourceDeclExternalizer.write(b2, noVal)
+        assertEquals(noVal, ResourceDeclExternalizer.read(ByteArrayDataReader(b2.toByteArray())))
     }
 
     @Test
@@ -103,7 +106,7 @@ class AndroidResourceIndexTest {
     @Test
     fun indexFiltersAndKeysByName() {
         val input = FakeInput(
-            Path.of("/p/res/values/strings.xml"),
+            "/p/res/values/strings.xml",
             "<resources><string name=\"hello\">Hi</string></resources>",
         )
         assertTrue(AndroidResourceIndex.inputFilter.accepts(input))
@@ -111,13 +114,13 @@ class AndroidResourceIndexTest {
         assertEquals("string", indexed["string/hello"]?.single()?.type) // keyed by "<type>/<name>"
 
         // A non-res XML (e.g. under src/) is not accepted.
-        assertTrue(!AndroidResourceIndex.inputFilter.accepts(FakeInput(Path.of("/p/src/main/foo.xml"), "<x/>")))
+        assertTrue(!AndroidResourceIndex.inputFilter.accepts(FakeInput(("/p/src/main/foo.xml"), "<x/>")))
     }
 
-    private class FakeInput(override val sourcePath: Path, private val txt: String) : IndexInput {
+    private class FakeInput(override val sourcePath: String?, private val txt: String) : IndexInput {
         override val origin = IndexOrigin.SOURCE
         override val contentHash = ContentHash("t")
-        override val unitName: String? = sourcePath.fileName.toString()
+        override val unitName: String? = sourcePath?.substringAfterLast('/').orEmpty()
         override fun bytes(): ByteArray = txt.toByteArray()
         override fun text(): String = txt
         override fun dom(): ParsedFile? = null

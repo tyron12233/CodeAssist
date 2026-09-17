@@ -112,7 +112,7 @@ class SourceDocIndexTest {
     private class Input(override val unitName: String, private val src: String) : IndexInput {
         override val origin = IndexOrigin.LIBRARY_SOURCE
         override val contentHash = ContentHash("")
-        override val sourcePath: Path? = null
+        override val sourcePath: String? = null
         override fun bytes() = src.toByteArray()
         override fun text() = src
         override fun dom() = null

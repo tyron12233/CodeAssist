@@ -10,9 +10,9 @@ import java.io.BufferedOutputStream
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
-import java.io.DataInput
+import dev.ide.platform.DataReader
 import java.io.DataInputStream
-import java.io.DataOutput
+import dev.ide.platform.DataWriter
 import java.io.DataOutputStream
 import java.io.OutputStream
 import java.nio.ByteBuffer
@@ -543,25 +543,17 @@ internal fun DataInputStream.readVarLong(): Long {
 }
 
 /**
- * A [DataOutput] that transparently interns every [writeUTF]'d string into the segment's constant pool: it
+ * A [DataWriter] that transparently interns every [writeUTF]'d string into the segment's constant pool: it
  * writes a varint pool-id in place of the string's inline bytes, so a value externalizer needs no change to
  * benefit from pooling. Every other write delegates verbatim to the underlying payload stream.
  */
-private class PoolingDataOutput(private val d: DataOutputStream, private val intern: (String) -> Int) : DataOutput {
+private class PoolingDataOutput(private val d: DataOutputStream, private val intern: (String) -> Int) : DataWriter {
     override fun writeUTF(s: String) { d.writeVarLong(intern(s).toLong()) }
-    override fun write(b: Int) = d.write(b)
-    override fun write(b: ByteArray) = d.write(b)
-    override fun write(b: ByteArray, off: Int, len: Int) = d.write(b, off, len)
     override fun writeBoolean(v: Boolean) = d.writeBoolean(v)
     override fun writeByte(v: Int) = d.writeByte(v)
     override fun writeShort(v: Int) = d.writeShort(v)
-    override fun writeChar(v: Int) = d.writeChar(v)
     override fun writeInt(v: Int) = d.writeInt(v)
     override fun writeLong(v: Long) = d.writeLong(v)
-    override fun writeFloat(v: Float) = d.writeFloat(v)
-    override fun writeDouble(v: Double) = d.writeDouble(v)
-    override fun writeBytes(s: String) = d.writeBytes(s)
-    override fun writeChars(s: String) = d.writeChars(s)
 }
 
 /**
@@ -569,23 +561,37 @@ private class PoolingDataOutput(private val d: DataOutputStream, private val int
  * string via [deref]; every other read delegates to the payload stream. Reading past the framed payload
  * (a drifted/corrupt value) throws exactly as before, so the skip-and-continue path is preserved.
  */
-private class PoolingDataInput(private val d: DataInputStream, private val deref: (Int) -> String) : DataInput {
+private class PoolingDataInput(private val d: DataInputStream, private val deref: (Int) -> String) : DataReader {
     override fun readUTF(): String = deref(d.readVarLong().toInt())
-    override fun readFully(b: ByteArray) = d.readFully(b)
-    override fun readFully(b: ByteArray, off: Int, len: Int) = d.readFully(b, off, len)
-    override fun skipBytes(n: Int): Int = d.skipBytes(n)
     override fun readBoolean(): Boolean = d.readBoolean()
-    override fun readByte(): Byte = d.readByte()
+    override fun readByte(): Int = d.readByte().toInt()
     override fun readUnsignedByte(): Int = d.readUnsignedByte()
-    override fun readShort(): Short = d.readShort()
-    override fun readUnsignedShort(): Int = d.readUnsignedShort()
-    override fun readChar(): Char = d.readChar()
+    override fun readShort(): Int = d.readShort().toInt()
     override fun readInt(): Int = d.readInt()
     override fun readLong(): Long = d.readLong()
-    override fun readFloat(): Float = d.readFloat()
-    override fun readDouble(): Double = d.readDouble()
-    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-    override fun readLine(): String? = d.readLine()
+}
+
+/**
+ * The plain adapters, for the paths that do NOT pool: the source-entry cache writes and reads values
+ * straight onto a stream. Same six operations, no interning.
+ */
+internal class StreamDataWriter(private val d: DataOutputStream) : DataWriter {
+    override fun writeUTF(value: String) = d.writeUTF(value)
+    override fun writeBoolean(value: Boolean) = d.writeBoolean(value)
+    override fun writeByte(value: Int) = d.writeByte(value)
+    override fun writeShort(value: Int) = d.writeShort(value)
+    override fun writeInt(value: Int) = d.writeInt(value)
+    override fun writeLong(value: Long) = d.writeLong(value)
+}
+
+internal class StreamDataReader(private val d: DataInputStream) : DataReader {
+    override fun readUTF(): String = d.readUTF()
+    override fun readBoolean(): Boolean = d.readBoolean()
+    override fun readByte(): Int = d.readByte().toInt()
+    override fun readUnsignedByte(): Int = d.readUnsignedByte()
+    override fun readShort(): Int = d.readShort().toInt()
+    override fun readInt(): Int = d.readInt()
+    override fun readLong(): Long = d.readLong()
 }
 
 /**

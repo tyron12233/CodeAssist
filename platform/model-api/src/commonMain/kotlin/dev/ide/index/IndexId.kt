@@ -1,5 +1,7 @@
 package dev.ide.index
 
+import kotlin.jvm.JvmInline
+
 /**
  * index-api — the SPI for the on-device indexing subsystem.
  *

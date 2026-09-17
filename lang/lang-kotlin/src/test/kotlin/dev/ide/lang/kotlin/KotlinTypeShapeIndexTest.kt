@@ -1,5 +1,8 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.platform.ByteArrayDataReader
+import dev.ide.platform.ByteArrayDataWriter
+
 import dev.ide.index.Hit
 import dev.ide.index.IndexId
 import dev.ide.index.IndexInput
@@ -217,15 +220,15 @@ class KotlinTypeShapeIndexTest {
         )
 
         private fun roundTrip(shape: TypeShape): TypeShape {
-            val bos = ByteArrayOutputStream()
-            DataOutputStream(bos).use { TypeShapeExternalizer.write(it, shape) }
-            return DataInputStream(ByteArrayInputStream(bos.toByteArray())).use { TypeShapeExternalizer.read(it) }
+            val bos = ByteArrayDataWriter()
+            TypeShapeExternalizer.write(bos, shape)
+            return TypeShapeExternalizer.read(ByteArrayDataReader(bos.toByteArray()))
         }
 
         private class FakeInput(override val unitName: String, private val b: ByteArray) : IndexInput {
             override val origin = IndexOrigin.LIBRARY
             override val contentHash = ContentHash("")
-            override val sourcePath: Path? = null
+            override val sourcePath: String? = null
             override fun bytes() = b
             override fun text(): String? = null
             override fun dom() = null

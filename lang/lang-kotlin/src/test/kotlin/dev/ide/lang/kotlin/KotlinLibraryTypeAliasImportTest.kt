@@ -187,7 +187,7 @@ class KotlinLibraryTypeAliasImportTest {
         private class FakeInput(override val unitName: String, private val b: ByteArray) : IndexInput {
             override val origin = IndexOrigin.LIBRARY
             override val contentHash = ContentHash("")
-            override val sourcePath: Path? = null
+            override val sourcePath: String? = null
             override fun bytes() = b
             override fun text(): String? = null
             override fun dom() = null

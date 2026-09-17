@@ -124,7 +124,7 @@ class DeclRelationIndexesTest {
     private class BinInput(override val unitName: String, private val b: ByteArray) : IndexInput {
         override val origin = IndexOrigin.LIBRARY
         override val contentHash = ContentHash("")
-        override val sourcePath: Path? = null
+        override val sourcePath: String? = null
         override fun bytes() = b
         override fun text(): String? = null
         override fun dom() = null
@@ -133,7 +133,7 @@ class DeclRelationIndexesTest {
     private class SrcInput(override val unitName: String, private val text: String) : IndexInput {
         override val origin = IndexOrigin.SOURCE
         override val contentHash = ContentHash("")
-        override val sourcePath: Path = Paths.get("/virtual/$unitName")
+        override val sourcePath: String? = "/virtual/$unitName"
         override fun bytes() = text.toByteArray()
         override fun text() = text
         override fun dom() = null

@@ -29,7 +29,9 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            // The neutral symbol model surface (TypeRef/SymbolKind/Modifier/SymbolOrigin), now common.
+            // The neutral symbol model (TypeRef/SymbolKind/Modifier/SymbolOrigin) AND the half of the
+            // index SPI an extension implements (IndexExtension, Externalizer, IndexInput, the value
+            // types). :index-api keeps only the half that RUNS them, which is JVM-bound.
             api(project(":model-api"))
             // Jars, class files and `@kotlin.Metadata`, with no JVM behind any of it. What ASM,
             // kotlin-metadata-jvm and java.util.zip did on the JVM-only path, and the reason the decoders
@@ -39,7 +41,6 @@ kotlin {
 
         jvmMain.dependencies {
             api(project(":language-api"))
-            api(project(":index-api"))    // IndexExtension SPI + shared value types
             // Decode Kotlin libraries' @kotlin.Metadata to recover real Kotlin signatures (extensions,
             // properties, default args, nullability) that plain bytecode erases. Small + compiler-free.
             implementation(libs.kotlin.metadata.jvm)

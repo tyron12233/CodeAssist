@@ -107,6 +107,12 @@ class ClassFile private constructor(
         const val ACC_DEPRECATED: Int = 0x20000
         const val ACC_RECORD: Int = 0x10000
 
+        // And the ones that ARE in the word, for a caller that would otherwise reach for ASM's Opcodes
+        // just to name a constant.
+        const val ACC_INTERFACE: Int = 0x0200
+        const val ACC_ENUM: Int = 0x4000
+        const val ACC_ANNOTATION: Int = 0x2000
+
         /** Read [bytes], or null when they are not a class file this reader understands. */
         fun read(bytes: ByteArray): ClassFile? = runCatching { Reader(bytes).read() }.getOrNull()
     }

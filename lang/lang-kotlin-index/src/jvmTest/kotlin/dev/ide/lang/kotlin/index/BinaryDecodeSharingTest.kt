@@ -26,7 +26,7 @@ class BinaryDecodeSharingTest {
         private val b: ByteArray,
     ) : IndexInput {
         override val contentHash = ContentHash.of(b)
-        override val sourcePath: Path? = null
+        override val sourcePath: String? = null
         var bytesCalls = 0
             private set
         val computeRuns = HashMap<String, Int>()

@@ -1,5 +1,8 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.platform.ByteArrayDataReader
+import dev.ide.platform.ByteArrayDataWriter
+
 import dev.ide.index.Hit
 import dev.ide.index.IndexId
 import dev.ide.index.IndexInput
@@ -44,9 +47,9 @@ class KotlinCallableIndexTest {
     fun codecRoundTripsAShape() {
         val key = served.keys.first { it.startsWith(KotlinCallableIndex.EXT_PREFIX) && it.endsWith(" trim") }
         val shape = served.getValue(key).first()
-        val bos = ByteArrayOutputStream()
-        DataOutputStream(bos).use { CallableShapeExternalizer.write(it, shape) }
-        val back = DataInputStream(ByteArrayInputStream(bos.toByteArray())).use { CallableShapeExternalizer.read(it) }
+        val bos = ByteArrayDataWriter()
+        CallableShapeExternalizer.write(bos, shape)
+        val back = CallableShapeExternalizer.read(ByteArrayDataReader(bos.toByteArray()))
         assertEquals(shape.name, back.name)
         assertEquals(shape.receiverFqn, back.receiverFqn)
         assertEquals(shape.signature, back.signature)
@@ -128,7 +131,7 @@ class KotlinCallableIndexTest {
         private class FakeInput(override val unitName: String, private val b: ByteArray) : IndexInput {
             override val origin = IndexOrigin.LIBRARY
             override val contentHash = ContentHash("")
-            override val sourcePath: Path? = null
+            override val sourcePath: String? = null
             override fun bytes() = b
             override fun text(): String? = null
             override fun dom() = null

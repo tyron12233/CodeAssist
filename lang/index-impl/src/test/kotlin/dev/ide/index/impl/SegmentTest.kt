@@ -217,8 +217,8 @@ class SegmentTest {
                 override val version = 1
                 override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
                 override val valueExternalizer = object : Externalizer<String> {
-                    override fun write(out: java.io.DataOutput, value: String) = out.writeUTF(value)
-                    override fun read(inp: java.io.DataInput): String {
+                    override fun write(out: dev.ide.platform.DataWriter, value: String) = out.writeUTF(value)
+                    override fun read(inp: dev.ide.platform.DataReader): String {
                         val s = inp.readUTF()
                         if (s.startsWith("BAD")) inp.readInt() // phantom field → reads past the framed payload
                         return s
@@ -264,8 +264,8 @@ class SegmentTest {
                 override val version = 1
                 override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
                 override val valueExternalizer = object : Externalizer<String> {
-                    override fun write(out: java.io.DataOutput, value: String) = out.writeUTF(value)
-                    override fun read(inp: java.io.DataInput): String {
+                    override fun write(out: dev.ide.platform.DataWriter, value: String) = out.writeUTF(value)
+                    override fun read(inp: dev.ide.platform.DataReader): String {
                         val v = inp.readUTF()
                         if (explode) throw StackOverflowError()
                         return v

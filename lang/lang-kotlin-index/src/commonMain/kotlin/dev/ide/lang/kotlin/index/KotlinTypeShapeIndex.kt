@@ -18,8 +18,8 @@ import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import dev.ide.lang.resolve.SymbolOrigin
 import dev.ide.lang.resolve.TypeRef
-import java.io.DataInput
-import java.io.DataOutput
+import dev.ide.platform.DataReader
+import dev.ide.platform.DataWriter
 
 /**
  * `kotlin.typeShape` — the owner-keyed member-shape index for classpath BINARIES, the persistent backing
@@ -95,7 +95,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
 
     private val BINARY = SymbolOrigin(fromSource = false, file = null)
 
-    override fun write(out: DataOutput, value: TypeShape) {
+    override fun write(out: DataWriter, value: TypeShape) {
         writeStrings(out, value.typeParameters)
         writeTypes(out, value.typeParameterBounds)
         writeStrings(out, value.typeParameterVariances)
@@ -111,7 +111,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         out.writeBoolean(value.isFinalClass)
     }
 
-    override fun read(inp: DataInput): TypeShape {
+    override fun read(inp: DataReader): TypeShape {
         val tps = readStrings(inp)
         val bounds = readTypes(inp)
         val variances = readStrings(inp)
@@ -140,7 +140,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         )
     }
 
-    private fun writeSymbol(out: DataOutput, s: KotlinSymbol) {
+    private fun writeSymbol(out: DataWriter, s: KotlinSymbol) {
         out.writeUTF(s.name)
         out.writeByte(s.kind.ordinal)
         out.writeInt(modifierBits(s.modifiers))
@@ -165,9 +165,9 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         out.writeBoolean(s.isDeprecated)
     }
 
-    private fun readSymbol(inp: DataInput): KotlinSymbol {
+    private fun readSymbol(inp: DataReader): KotlinSymbol {
         val name = inp.readUTF()
-        val kind = SymbolKind.entries[inp.readByte().toInt()]
+        val kind = SymbolKind.entries[inp.readByte()]
         val mods = modifiersOf(inp.readInt())
         val type = readType(inp)
         val recvFqn = inp.readUTF().ifEmpty { null }
@@ -221,21 +221,21 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
     private fun modifiersOf(bits: Int): Set<Modifier> =
         Modifier.entries.filterTo(HashSet()) { bits and (1 shl it.ordinal) != 0 }
 
-    private fun writeStrings(out: DataOutput, xs: List<String>) {
+    private fun writeStrings(out: DataWriter, xs: List<String>) {
         out.writeInt(xs.size); xs.forEach { out.writeUTF(it) }
     }
 
-    private fun readStrings(inp: DataInput): List<String> = List(inp.readInt()) { inp.readUTF() }
+    private fun readStrings(inp: DataReader): List<String> = List(inp.readInt()) { inp.readUTF() }
 
-    private fun writeTypes(out: DataOutput, ts: List<TypeRef>) {
+    private fun writeTypes(out: DataWriter, ts: List<TypeRef>) {
         out.writeInt(ts.size); ts.forEach { writeType(out, it as? KotlinType) }
     }
 
-    private fun readTypes(inp: DataInput): List<TypeRef> =
+    private fun readTypes(inp: DataReader): List<TypeRef> =
         buildList { repeat(inp.readInt()) { readType(inp)?.let(::add) } }
 
     /** Recursive, context-free encoding of a [KotlinType] (fqn + flags + args); mirrors the `.kxt` codec. */
-    private fun writeType(out: DataOutput, t: KotlinType?) {
+    private fun writeType(out: DataWriter, t: KotlinType?) {
         out.writeBoolean(t != null)
         if (t == null) return
         out.writeUTF(t.qualifiedName)
@@ -248,7 +248,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         t.typeArguments.forEach { writeType(out, it as? KotlinType) }
     }
 
-    private fun readType(inp: DataInput): KotlinType? {
+    private fun readType(inp: DataReader): KotlinType? {
         if (!inp.readBoolean()) return null
         val fqn = inp.readUTF()
         val nullable = inp.readBoolean()

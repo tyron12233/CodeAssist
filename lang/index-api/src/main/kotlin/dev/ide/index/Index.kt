@@ -1,31 +1,8 @@
 package dev.ide.index
 
-import dev.ide.lang.dom.ParsedFile
-import dev.ide.platform.ContentHash
 import dev.ide.platform.Disposable
 import dev.ide.platform.ExtensionPoint
-import java.io.DataInput
-import java.io.DataOutput
 import java.nio.file.Path
-
-/** Serialize + ORDER keys (ordering is what enables prefix scans). v1 keys are strings. */
-interface KeyDescriptor<K : Any> : Comparator<K> {
-    /** The searchable term form of a key. */
-    fun asTerm(key: K): String
-    fun fromTerm(term: String): K
-}
-
-interface Externalizer<V : Any> {
-    fun write(out: DataOutput, value: V)
-    fun read(inp: DataInput): V
-}
-
-/** Which units an index consumes (a `.class` in a jar? a `.kt` source? an `.xml`?). */
-fun interface InputFilter {
-    fun accepts(input: IndexInput): Boolean
-}
-
-data class Hit<V>(val key: String, val value: V, val score: Int)
 
 /** State of one unit of indexing work, for the detail view. */
 enum class IndexItemState { PENDING, ACTIVE, DONE }
@@ -120,13 +97,6 @@ interface IndexService {
 
     val status: IndexStatus
     fun observeStatus(listener: (IndexStatus) -> Unit): Disposable
-}
-
-/** Convenience descriptor for the common string-keyed index. */
-object StringKeyDescriptor : KeyDescriptor<String> {
-    override fun compare(a: String, b: String): Int = a.compareTo(b)
-    override fun asTerm(key: String): String = key
-    override fun fromTerm(term: String): String = term
 }
 
 /** The platform extension point every index registers on. */

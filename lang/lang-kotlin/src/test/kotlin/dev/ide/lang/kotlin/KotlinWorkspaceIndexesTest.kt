@@ -118,7 +118,7 @@ class KotlinWorkspaceIndexesTest {
     ) : IndexInput {
         override val origin = IndexOrigin.SOURCE
         override val contentHash = ContentHash("")
-        override val sourcePath: Path = Paths.get("/virtual/$unitName")
+        override val sourcePath: String? = "/virtual/$unitName"
         override fun bytes() = body.toByteArray()
         override fun text() = body
         override fun dom() = null

@@ -936,7 +936,7 @@ class IndexServiceImpl(
                         val entries = ArrayList<IndexEntry>(count)
                         repeat(count) {
                             val term = din.readUTF()
-                            val value = ser.read(din)
+                            val value = ser.read(StreamDataReader(din))
                             entries.add(IndexEntry(term, value, IndexOrigin.SOURCE))
                         }
                         map[id] = entries
@@ -977,7 +977,7 @@ class IndexServiceImpl(
                         out.writeInt(id)
                         out.writeInt(entries.size)
                         for (e in entries) {
-                            out.writeUTF(e.term); ser.write(out, e.value)
+                            out.writeUTF(e.term); ser.write(StreamDataWriter(out), e.value)
                         }
                     }
                 }
@@ -1081,7 +1081,7 @@ class IndexServiceImpl(
                     .filter { !it.isDirectory && (it.name.endsWith(".class") || it.name.endsWith(".kotlin_builtins")) }
                     .map { entry ->
                         LibraryInput(
-                            IndexOrigin.LIBRARY, hash, entry.name, path
+                            IndexOrigin.LIBRARY, hash, entry.name, path.toString()
                         ) { zip.getInputStream(entry).readBytes() }
                     }
                 return seq to Closeable { zip.close() }
@@ -1198,7 +1198,7 @@ class IndexServiceImpl(
                         path.relativize(f).toString()
                     }.getOrDefault(f.fileName.toString())
                     ResourceFileInput(
-                        hash, rel, f
+                        hash, rel, f.toString()
                     ) { runCatching { Files.readAllBytes(f) }.getOrDefault(ByteArray(0)) } as IndexInput
                 }
                 return seq to Closeable {}
@@ -1211,7 +1211,7 @@ class IndexServiceImpl(
     private class ResourceFileInput(
         override val contentHash: ContentHash,
         override val unitName: String?,
-        override val sourcePath: Path,
+        override val sourcePath: String?,
         private val readBytes: () -> ByteArray,
     ) : IndexInput {
         override val origin = IndexOrigin.LIBRARY
@@ -1227,7 +1227,7 @@ class IndexServiceImpl(
         override val unitName: String?,
         // The owning artifact (the jar) for a library unit; null for jrt/SDK units (served from the jrt image).
         // Lets a locator index record fqcn -> jar so a name environment can open exactly the owning jar.
-        override val sourcePath: Path? = null,
+        override val sourcePath: String? = null,
         private val readBytes: () -> ByteArray,
     ) : IndexInput {
         // Inflate the zip entry (or read the jrt bytes) ONCE — this input is handed to every extension for the
@@ -1258,7 +1258,7 @@ class IndexServiceImpl(
         private val readBytes: () -> ByteArray,
     ) : IndexInput {
         override val origin = IndexOrigin.LIBRARY_SOURCE
-        override val sourcePath: Path? = null
+        override val sourcePath: String? = null
         private val bytes by lazy { readBytes() }
         override fun bytes(): ByteArray = bytes
         override fun text(): String = bytes.decodeToString()
@@ -1290,7 +1290,7 @@ class IndexServiceImpl(
         override val unitName: String? =
             (root?.let { runCatching { it.relativize(file).toString() }.getOrNull() }
                 ?: file.fileName?.toString())
-        override val sourcePath: Path = file
+        override val sourcePath: String? = file.toString()
         override fun bytes(): ByteArray = text.toByteArray()
         override fun text(): String = text
         override fun dom(): ParsedFile? = shared("dom") { parse(file, text) }

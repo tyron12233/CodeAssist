@@ -1,16 +1,13 @@
-package dev.ide.kotlin.classfile
+package dev.ide.platform
 
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
-import java.io.File
 import java.io.UTFDataFormatException
-import java.util.zip.ZipFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -37,7 +34,7 @@ class DataStreamOracleTest {
         for (value in AWKWARD_STRINGS) {
             if (value.length > 20_000) continue // the over-long case has its own test
             val theirs = jvmBytes { writeUTF(value) }
-            val ours = DataWriter().apply { writeUTF(value) }.toByteArray()
+            val ours = ByteArrayDataWriter().apply { writeUTF(value) }.toByteArray()
             assertTrue(
                 theirs.contentEquals(ours),
                 "encoding of ${value.take(24)}: expected ${theirs.toHex()} but was ${ours.toHex()}",
@@ -51,7 +48,7 @@ class DataStreamOracleTest {
         // primitive the externalizers use.
         val names = AWKWARD_STRINGS.filter { it.length <= 20_000 }
 
-        val ours = DataWriter().apply {
+        val ours = ByteArrayDataWriter().apply {
             writeInt(names.size)
             for ((index, name) in names.withIndex()) {
                 writeUTF(name)
@@ -88,7 +85,7 @@ class DataStreamOracleTest {
         }
 
         // Our reader over theirs.
-        val reader = DataReader(theirs)
+        val reader = ByteArrayDataReader(theirs)
         assertEquals(names.size, reader.readInt())
         for ((index, name) in names.withIndex()) {
             assertEquals(name, reader.readUTF())
@@ -106,48 +103,7 @@ class DataStreamOracleTest {
         // other would read a shorter, plausible string and carry on.
         val tooLong = "x".repeat(70_000)
         assertFailsWith<UTFDataFormatException> { jvmBytes { writeUTF(tooLong) } }
-        assertFailsWith<IllegalStateException> { DataWriter().writeUTF(tooLong) }
-    }
-
-    @Test
-    fun aJarIsIndexedThroughTheFileSeamWithoutBeingLoaded() {
-        // The whole stack, in the shape an index would use it: a path goes in, symbols come out, and the
-        // 43 MB never becomes a byte array.
-        val jar = System.getProperty("java.class.path").orEmpty()
-            .split(File.pathSeparator)
-            .map(::File)
-            .firstOrNull { it.isFile && it.name.startsWith("kotlin-stdlib-") && it.name.endsWith(".jar") }
-        if (jar == null) {
-            println("kotlin-stdlib is not on the test classpath; skipping")
-            return
-        }
-
-        val source = assertNotNull(openFile(jar.absolutePath), "opening ${jar.name}")
-        var classes = 0
-        var declarations = 0
-        try {
-            val archive = assertNotNull(ZipArchive.open(source))
-            ZipFile(jar).use { theirs ->
-                assertEquals(
-                    theirs.entries().asSequence().map { it.name }.toList(),
-                    archive.entries.map { it.name },
-                    "the same entries as java.util.zip sees",
-                )
-            }
-            for (entry in archive.entries) {
-                if (!entry.name.endsWith(".class")) continue
-                val metadata = ClassFile.read(archive.read(entry) ?: continue)?.metadata ?: continue
-                val decoded = KotlinMetadata.read(metadata) ?: continue
-                classes++
-                declarations += decoded.declarations.size
-            }
-        } finally {
-            source.close()
-        }
-
-        assertTrue(classes > 500, "expected the stdlib's Kotlin classes; decoded $classes")
-        assertTrue(declarations > 5000, "expected real declarations; decoded $declarations")
-        println("file seam: $classes classes and $declarations declarations read out of ${jar.name} by path")
+        assertFailsWith<IllegalStateException> { ByteArrayDataWriter().writeUTF(tooLong) }
     }
 
     private fun ByteArray.toHex(): String = joinToString(" ") { "%02X".format(it) }

@@ -29,7 +29,7 @@ class JavaNestedTypeIndexTest {
         private val b: ByteArray = ByteArray(0),
         private val t: String? = null,
         override val fileId: Int = -1,
-        override val sourcePath: Path? = null,
+        override val sourcePath: String? = null,
     ) : IndexInput {
         override val contentHash = ContentHash.of(t?.toByteArray() ?: b)
         override fun bytes(): ByteArray = b
