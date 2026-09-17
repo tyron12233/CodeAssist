@@ -11,6 +11,12 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 //
 // The one that looked hardest is not: BlockCache reads segments through FileChannel at an ABSOLUTE
 // position, never a memory map, which is exactly what :kotlin-classfile's FileSource already does.
+//
+// Segment is the exception to "file by file": it split in half instead. READING a segment needs positioned
+// reads and a byte decoder, which every platform has; WRITING one needs an external merge sort that spills
+// its runs to temp files, which needs streaming file output the portable seam does not have. Splitting at
+// that line got the QUERY path off the JVM without waiting for the build path, which is the half that
+// matters -- completion queries a prebuilt index.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
 }
