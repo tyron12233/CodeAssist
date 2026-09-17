@@ -12,23 +12,6 @@ import dev.ide.platform.Topic
  * "handle file modifications": editor edits, external changes, and generated outputs all surface
  * the same way.
  */
-interface VirtualFile {
-    val path: String
-    val name: String
-    val isDirectory: Boolean
-    val exists: Boolean
-    val length: Long
-
-    fun parent(): VirtualFile?
-    fun children(): List<VirtualFile>
-
-    /** Cheap, cached digest of the file's bytes; used as a cache key by builds and analysis. */
-    fun contentHash(): ContentHash
-
-    fun readBytes(): ByteArray
-    fun readText(): CharSequence
-}
-
 interface VirtualFileSystem {
     fun findByPath(path: String): VirtualFile?
     fun root(): VirtualFile

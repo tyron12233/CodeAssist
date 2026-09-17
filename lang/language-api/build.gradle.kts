@@ -8,6 +8,9 @@ plugins {
 // language-api -> project-model-api, vfs-api, platform-core. ClasspathSnapshot, VirtualFile and
 // LanguageLevel appear in the LanguageBackend / CompilationContext SPIs, so all three are `api`.
 dependencies {
+    // The DOM and the symbol model moved to :model-api (packages unchanged) so that they can be named
+    // from common code. Both are all over this module's public signatures, so the dependency is `api`.
+    api(project(":model-api"))
     api(project(":project-model-api"))
     api(project(":vfs-api"))
     api(project(":platform-core"))

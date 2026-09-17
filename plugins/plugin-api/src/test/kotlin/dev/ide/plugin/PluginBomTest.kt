@@ -18,8 +18,14 @@ class PluginBomTest {
     fun `the BOM constrains every module this build publishes`() {
         val root = repoRoot()
         val modules = moduleDirs(root)
+        // Two ways to opt in, not one: `dev.ide.spi-publish` for a plain JVM artifact, and
+        // `dev.ide.spi-pom` directly for a multiplatform one, which cannot apply the `java-library`
+        // convention. Matching only the first is how a published module slips past this guard.
         val published = modules
-            .filter { "dev.ide.spi-publish" in File(it, "build.gradle.kts").readText() }
+            .filter { module ->
+                val build = File(module, "build.gradle.kts").readText()
+                ("dev.ide.spi-publish" in build || "dev.ide.spi-pom" in build) && module.name != "plugin-bom"
+            }
             .map { it.name }
             .sorted()
         assertTrue(published.isNotEmpty(), "found no published modules under $root; has the layout changed?")

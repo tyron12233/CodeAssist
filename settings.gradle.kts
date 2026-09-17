@@ -127,6 +127,9 @@ include(
     ":agent-mcp",   // Model Context Protocol server: exposes the agent's tools over stdio JSON-RPC to external clients
     ":layout-preview-api",  // owned XML-layout preview: render contracts (RCanvas/RenderNode/Renderer), android-free
     ":layout-preview-impl", // the preview engine: resource value resolver, inflater, built-in renderers, ASM bridge remapper
+    // The platform-free core of the SPI: the symbol model, the DOM, VirtualFile and ContentHash.
+    // Multiplatform, because a model that cannot be named from common code cannot be built there.
+    ":model-api",
     ":awt-toolkit", // owned java.awt/javax.swing over RCanvas + the ASM remapper that points a program at it
     ":bench-support", // test-only: shared regression/benchmark harness (consumed via testImplementation)
     ":test-support",  // test-only: shared fixtures/infrastructure (temp dirs, stubs, jars, contexts) — auto-wired
@@ -204,7 +207,8 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
 val layers = mapOf(
     // The framework's foundation: services, the virtual file system, the project/module model.
     "platform" to listOf(
-        "platform-core", "platform-json", "vfs-api", "project-model-api", "project-model-impl",
+        "model-api", "platform-core", "platform-json", "vfs-api", "project-model-api",
+        "project-model-impl",
     ),
     // Everything that reads source: the language SPI, indexes, analysis, the per-language backends,
     // the compiler/PSI hosts they parse against, and the block (projectional) editor over them.

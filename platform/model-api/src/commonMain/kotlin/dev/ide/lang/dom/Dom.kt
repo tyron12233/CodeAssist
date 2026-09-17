@@ -1,6 +1,7 @@
 package dev.ide.lang.dom
 
 import dev.ide.vfs.VirtualFile
+import kotlin.jvm.JvmInline
 
 /**
  * A backend-neutral DOM. IDE features (navigation, completion, refactor) target these types, never

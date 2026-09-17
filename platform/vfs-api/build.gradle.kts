@@ -9,4 +9,7 @@ plugins {
 // public signatures, so the dependency is `api` (transitively visible to consumers).
 dependencies {
     api(project(":platform-core"))
+    // VirtualFile itself lives in :model-api; the file system, watches and event stream stay here,
+    // because the message bus they publish on is typed by java.lang.Class.
+    api(project(":model-api"))
 }

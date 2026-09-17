@@ -51,6 +51,7 @@ dependencies {
         // its name or its group cannot be left behind here. PluginBomTest checks the list is complete.
         api(project(":plugin-api"))
         api(project(":plugin-ui-api"))
+        api(project(":model-api"))
         api(project(":platform-core"))
         api(project(":project-model-api"))
         api(project(":language-api"))

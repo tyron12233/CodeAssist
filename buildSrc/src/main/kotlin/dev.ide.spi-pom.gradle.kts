@@ -38,6 +38,10 @@ publishing {
                     "plugin-ui-api" ->
                         "The CodeAssist plugin UI SPI: what a plugin implements to contribute a tool " +
                             "window, a screen, or an overlay, and the context those bodies render against."
+                    "model-api" ->
+                        "The platform-free core of the CodeAssist SPI: the symbol model, the neutral " +
+                            "syntax tree, VirtualFile, and the content digest they are keyed by. " +
+                            "Multiplatform, and exposed by every other SPI artifact."
                     "platform-core" ->
                         "The CodeAssist platform substrate the plugin SPI exposes: extension points, " +
                             "scoped services, the message bus, logging, and the settings model."
