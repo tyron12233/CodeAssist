@@ -130,6 +130,10 @@ include(
     // The platform-free core of the SPI: the symbol model, the DOM, VirtualFile and ContentHash.
     // Multiplatform, because a model that cannot be named from common code cannot be built there.
     ":model-api",
+    // Reading a classpath with no JVM: jars, `.class` files and the Kotlin metadata inside them. Graduated
+    // out of `experimental` when :lang-kotlin-index started decoding through it instead of through ASM,
+    // kotlin-metadata-jvm and java.util.zip, which is what it was written to replace.
+    ":kotlin-classfile",
     ":awt-toolkit", // owned java.awt/javax.swing over RCanvas + the ASM remapper that points a program at it
     ":bench-support", // test-only: shared regression/benchmark harness (consumed via testImplementation)
     ":test-support",  // test-only: shared fixtures/infrastructure (temp dirs, stubs, jars, contexts) — auto-wired
@@ -139,9 +143,6 @@ include(
     // without the JVM-only compiler. It stays out of every other module's dependency list until its
     // differential suites (ours vs. the real compiler, over this repo's sources) are green.
     ":kotlin-syntax",
-    // The other half of the same question: reading `.class` files and their Kotlin metadata without a JVM,
-    // which is what completion against a real classpath needs and what ASM + kotlin-metadata-jvm supply today.
-    ":kotlin-classfile",
     // And the question those two exist to answer: does :lang-kotlin-index actually port? A portable
     // rewrite of its bytecode-to-symbol layer on top of :kotlin-classfile, diffed symbol for symbol
     // against the real one over android.jar. A decoder agreeing with ASM's API is not the same claim as
@@ -213,6 +214,7 @@ val layers = mapOf(
     // Everything that reads source: the language SPI, indexes, analysis, the per-language backends,
     // the compiler/PSI hosts they parse against, and the block (projectional) editor over them.
     "lang" to listOf(
+        "kotlin-classfile",
         "language-api", "index-api", "index-impl", "analysis-api", "analysis-impl",
         "lang-jdt", "lang-java", "lang-kotlin", "lang-kotlin-index", "lang-ksp", "lang-xml",
         "kotlin-compiler-deps", "intellij-psi-host", "decompiler", "block-api", "block-impl",
@@ -247,7 +249,7 @@ val layers = mapOf(
     // Test-only harnesses, consumed via testImplementation.
     "tools" to listOf("test-support", "bench-support"),
     // Work that is not part of the product yet: built and tested by CI, imported by nothing.
-    "experimental" to listOf("kotlin-syntax", "kotlin-classfile", "kotlin-symbols"),
+    "experimental" to listOf("kotlin-syntax", "kotlin-symbols"),
 )
 
 // `samples` holds plugins built as their own apps; it is already a directory, so it needs no mapping.

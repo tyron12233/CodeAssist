@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-// kotlin-classfile (EXPERIMENTAL): reading a classpath with no JVM. Jars, `.class` files, and the Kotlin
-// metadata inside them.
+// kotlin-classfile: reading a classpath with no JVM. Jars, `.class` files, and the Kotlin metadata
+// inside them.
 //
 // The second of the two things that pin Kotlin COMPLETION to the JVM. The first was the parser, and that is
 // solved: :kotlin-syntax vendors the compiler's own. This is the other half. `:lang-kotlin-index` is 3,244
@@ -19,7 +19,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // every jar on the test classpath. A decoder for someone else's binary format either agrees with the
 // reference on real input or it is quietly wrong; hand-written expectations prove nothing.
 //
-// NOTHING depends on this module.
+// :lang-kotlin-index decodes through this instead of through ASM, kotlin-metadata-jvm and
+// java.util.zip, which is what it was written to replace, and which is why it left `experimental`.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
 }
