@@ -1,4 +1,4 @@
-package dev.ide.kotlin.classfile
+package dev.ide.platform
 
 import platform.Foundation.NSRecursiveLock
 

@@ -1,7 +1,7 @@
 package dev.ide.lang.kotlin.symbols
 
 import dev.ide.kotlin.classfile.FileSource
-import dev.ide.kotlin.classfile.Lock
+import dev.ide.platform.Lock
 import dev.ide.kotlin.classfile.ZipArchive
 import dev.ide.kotlin.classfile.createDirectories
 import dev.ide.kotlin.classfile.deleteFile

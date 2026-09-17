@@ -1,7 +1,7 @@
 package dev.ide.index.impl
 
 import dev.ide.kotlin.classfile.FileSource
-import dev.ide.kotlin.classfile.Lock
+import dev.ide.platform.Lock
 import dev.ide.kotlin.classfile.openFile
 
 /** Thrown when a block is asked for from a segment that has been closed or invalidated. */

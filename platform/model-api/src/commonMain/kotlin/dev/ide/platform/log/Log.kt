@@ -3,7 +3,7 @@
 // See LICENSE-EXCEPTION: a plugin linking against this file may use any license.
 package dev.ide.platform.log
 
-import java.util.concurrent.CopyOnWriteArrayList
+import dev.ide.platform.Lock
 
 /** Severity of a [LogRecord], ordered DEBUG < INFO < WARN < ERROR (compare by [ordinal]). */
 enum class LogLevel { DEBUG, INFO, WARN, ERROR }
@@ -50,26 +50,31 @@ class Logger internal constructor(private val tag: String, private val source: S
 /**
  * The process-wide logging hub. Records fan out to every registered [LogSink]; a [RingBufferSink] (kept
  * by default) retains the most recent records so reports/diagnostics can attach recent context via
- * [recent]. A [ConsoleLogSink] is also registered by default. Hosts add their own sinks (the
- * critical-error dialog bridge, the analytics bridge) at startup.
+ * [recent]. A console sink is also registered by default. Hosts add their own sinks (the critical-error
+ * dialog bridge, the analytics bridge) at startup.
  *
- * Deliberately dependency-free and platform-neutral (lives in platform-core, depended on by everything),
+ * Deliberately dependency-free and platform-neutral (it is in the lowest module, depended on by everything),
  * so any module can `Log.logger("tag")` without a back-dependency. Thread-safe; a misbehaving sink can't
  * break dispatch (each call is guarded).
+ *
+ * Three things here are not platform-neutral, and each is a seam rather than a fork of the whole hub: the
+ * clock, the current thread's name, and what a default console sink is. On the JVM the last of those binds
+ * the console streams at CONSTRUCTION, which is load-bearing (see `ConsoleLogSink`), and that is exactly the
+ * sort of detail a common implementation would have quietly lost.
  */
 object Log {
-    private val sinks = CopyOnWriteArrayList<LogSink>()
+    private val lock = Lock()
+    private var sinks: List<LogSink> = emptyList()
 
     /** The default in-memory ring — recent records for the in-app Logs viewer / attaching to a report. */
     val ring = RingBufferSink(capacity = 1000)
 
     /** Records below this level are dropped before reaching any sink. */
-    @Volatile
     var minLevel: LogLevel = LogLevel.DEBUG
 
     init {
-        sinks.add(ConsoleLogSink())
-        sinks.add(ring)
+        defaultLogSink()?.let { sinks = sinks + it }
+        sinks = sinks + ring
     }
 
     fun logger(tag: String): Logger = Logger(tag)
@@ -78,60 +83,46 @@ object Log {
      *  by plugin. The platform sets [source] when a plugin mints its logger; callers cannot forge it. */
     fun logger(tag: String, source: String?): Logger = Logger(tag, source)
 
-    fun addSink(sink: LogSink) { sinks.add(sink) }
-    fun removeSink(sink: LogSink) { sinks.remove(sink) }
+    fun addSink(sink: LogSink) {
+        lock.withLock { sinks = sinks + sink }
+    }
+
+    fun removeSink(sink: LogSink) {
+        lock.withLock { sinks = sinks - sink }
+    }
 
     /** A snapshot of the most recent records (oldest first), for diagnostics or a report attachment. */
     fun recent(): List<LogRecord> = ring.snapshot()
 
     internal fun dispatch(level: LogLevel, tag: String, message: String, throwable: Throwable?, source: String? = null) {
         if (level.ordinal < minLevel.ordinal) return
-        val record = LogRecord(level, tag, message, throwable, System.currentTimeMillis(), Thread.currentThread().name, source)
+        val record = LogRecord(level, tag, message, throwable, currentTimeMillis(), currentThreadName(), source)
+        // Read once: the list is replaced, never mutated, so a dispatch cannot see a half-updated set of
+        // sinks and does not have to hold the lock while a sink runs.
         for (sink in sinks) runCatching { sink.log(record) }
     }
 }
 
 /** Keeps the last [capacity] records in memory (drops the oldest). Thread-safe. */
 class RingBufferSink(private val capacity: Int) : LogSink {
-    private val lock = Any()
+    private val lock = Lock()
     private val buffer = ArrayDeque<LogRecord>(capacity)
 
     override fun log(record: LogRecord) {
-        synchronized(lock) {
+        lock.withLock {
             buffer.addLast(record)
             while (buffer.size > capacity) buffer.removeFirst()
         }
     }
 
-    fun snapshot(): List<LogRecord> = synchronized(lock) { buffer.toList() }
+    fun snapshot(): List<LogRecord> = lock.withLock { buffer.toList() }
 }
 
-/**
- * Prints records to stdout (and stack traces to stderr for ERROR). The baseline sink for desktop/logcat.
- *
- * Binds to the console streams captured at CONSTRUCTION — not at each call. [Log] builds the default sink at
- * process startup, long before any program run, so this captures the true console (the desktop terminal /
- * the Android `System.out`→logcat redirect). That matters because a program run redirects the process-global
- * `System.out`/`System.err`/`System.in` to the run console for the duration of the run (so the interpreted
- * program's output and bridged standard-library I/O both reach it); a call-time `println` would then dump
- * every concurrent IDE log (build tasks, the `ide.mem` heartbeat, daemon chatter) into the user program's
- * output. Holding the originals keeps IDE logs out of it.
- */
-class ConsoleLogSink(
-    private val out: java.io.PrintStream = System.out,
-    private val err: java.io.PrintStream = System.err,
-) : LogSink {
-    override fun log(record: LogRecord) {
-        val origin = record.source?.let { "$it/" } ?: ""
-        val line = "[${record.level}] $origin${record.tag}: ${record.message}"
-        if (record.level == LogLevel.ERROR) {
-            err.println(line)
-            record.throwable?.printStackTrace(err)
-        } else {
-            out.println(line)
-            // A WARN with an attached throwable used to swallow it entirely, leaving bare "X failed" lines
-            // in the device log with no cause. Print the stack for those too.
-            record.throwable?.printStackTrace(out)
-        }
-    }
-}
+/** Milliseconds since the epoch, which is what a [LogRecord] is stamped with. */
+internal expect fun currentTimeMillis(): Long
+
+/** The running thread's name, for attributing a record to the work that produced it. */
+internal expect fun currentThreadName(): String
+
+/** The console sink this platform starts with, or null where there is nothing sensible to print to. */
+internal expect fun defaultLogSink(): LogSink?

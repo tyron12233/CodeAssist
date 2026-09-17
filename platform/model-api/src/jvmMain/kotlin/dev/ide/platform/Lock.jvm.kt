@@ -1,4 +1,4 @@
-package dev.ide.kotlin.classfile
+package dev.ide.platform
 
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
