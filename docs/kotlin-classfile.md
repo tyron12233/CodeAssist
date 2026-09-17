@@ -29,7 +29,9 @@ matter. So what is needed is a wire reader plus the field numbers, not a code ge
 ```
 the file
   ByteSource       random access to bytes; a zip is read back to front, so a stream will not do
-  openFile         the ONLY expect/actual in the module: RandomAccessFile on the JVM, POSIX on iOS
+  openFile         RandomAccessFile on the JVM, POSIX on iOS
+  FileSystem       stat, list, read, mkdirs, atomic write, delete: what caching a classpath needs
+  FileSink         the write half — append-only, plus the atomic rename, for what will not fit in memory
 
 the archive
   ZipArchive       end record, zip64, central directory, local headers, stored and deflated entries
@@ -162,6 +164,20 @@ the shape whose correctness can be read off the spec, and the table is where the
 measured rather than assumed: inflating all 1,002 entries of `kotlin-stdlib` takes around **45 ms against
 java.util.zip's under 20 ms, so 2 to 3x run to run**, and java.util.zip is native zlib. A table-driven
 decoder is the fix if that ever matters, and the oracle above is what would make trying it safe.
+
+## Why there is a streaming write as well as an atomic one
+
+`writeFileAtomically` is the right shape for a cache: small, built in memory, and a reader must never see
+half of it. It is the wrong shape for building an index segment, which is what `FileSink` was added for.
+
+A segment is written by an external merge sort that spills its sorted runs to temporary files *precisely so
+the whole thing is never in memory at once*. Handing that a `ByteArray` undoes the one property it exists
+for. So `FileSink` is append-only with no seeking and no atomicity, and a caller that wants atomicity writes
+a temporary and calls `moveFile` — which is what the atomic write does internally anyway.
+
+The two platforms disagree about enough of this to be worth stating: `ATOMIC_MOVE` is refused across file
+systems on the JVM (so it falls back to the replacing move), and POSIX `rename` refuses a non-empty target
+on some platforms (so the iOS side removes first). Both are covered.
 
 ## Not done yet
 
