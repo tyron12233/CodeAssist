@@ -7,6 +7,7 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.usePinned
 import platform.posix.fclose
+import platform.posix.fflush
 import platform.posix.fopen
 import platform.posix.fwrite
 import platform.posix.remove
@@ -26,6 +27,10 @@ actual fun openFileForWrite(path: String): FileSink? {
             bytes.usePinned { pinned ->
                 fwrite(pinned.addressOf(offset), 1.convert(), length.convert(), file)
             }
+        }
+
+        override fun flush() {
+            fflush(file)
         }
 
         override fun close() {

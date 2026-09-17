@@ -610,7 +610,7 @@ class IndexServiceImpl(
             if (Files.exists(f)) {
                 runCatching {
                     Segment.open(
-                        f,
+                        f.toString(),
                         st.ext,
                         blockCache,
                         segIds.getAndIncrement()
@@ -644,7 +644,7 @@ class IndexServiceImpl(
         // whole artifact's entries in an ArrayList. A large artifact (android.jar holds ~95k entries × every
         // extension) used to keep all of that resident until the segment was written, driving the build-time
         // heap peak and forcing serial indexing on device; the writer spills to disk past a bounded batch.
-        val writers = needBuild.associateWith { SegmentWriter(segmentFile(it.ext, hash), it.ext) }
+        val writers = needBuild.associateWith { SegmentWriter(segmentFile(it.ext, hash).toString(), it.ext) }
         try {
             val (inputs, closeable) = art.open()
             try {
@@ -679,7 +679,7 @@ class IndexServiceImpl(
                 // a skip, so the index is marked incomplete and ready is withheld), not be swallowed into a
                 // falsely "ready" index that the name environment would then trust for authoritative negatives.
                 w.finish()
-                val seg = Segment.open(segmentFile(st.ext, hash), st.ext, blockCache, segIds.getAndIncrement())
+                val seg = Segment.open(segmentFile(st.ext, hash).toString(), st.ext, blockCache, segIds.getAndIncrement())
                 st.segments.add(seg)
                 st.openHashes.add(key)
             }

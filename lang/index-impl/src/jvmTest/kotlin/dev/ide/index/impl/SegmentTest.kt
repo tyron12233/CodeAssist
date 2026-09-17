@@ -47,8 +47,8 @@ class SegmentTest {
     ): Segment {
         val ext = StringIndex(mode)
         val file = dir.resolve("seg.seg")
-        Segment.write(file, ext, entries)
-        return Segment.open(file, ext, cache, 0)
+        writeSegment(file.toString(), ext, entries)
+        return Segment.open(file.toString(), ext, cache, 0)
     }
 
     private fun entry(term: String, value: String, origin: IndexOrigin = IndexOrigin.SDK) = IndexEntry(term, value, origin)
@@ -171,7 +171,7 @@ class SegmentTest {
 
             fun build(name: String, maxE: Int, maxT: Int, spill: Int): Path {
                 val f = dir.resolve(name)
-                SegmentWriter(f, ext, maxBufferedEntries = maxE, maxBufferedTrigrams = maxT, regionSpillBytes = spill).use { w ->
+                SegmentWriter(f.toString(), ext, maxBufferedEntries = maxE, maxBufferedTrigrams = maxT, regionSpillBytes = spill).use { w ->
                     for (e in entries) w.add(e.term, e.value, e.origin)
                     w.finish()
                 }
@@ -192,7 +192,7 @@ class SegmentTest {
 
             // ...and the spilled result is a correct, queryable segment (paged from a tiny block cache). prefix
             // returns one hit per posting (value), so the count is every value whose term starts with the prefix.
-            val s = Segment.open(spilled, ext, BlockCache(maxBytes = 256, blockSize = 64), 0)
+            val s = Segment.open(spilled.toString(), ext, BlockCache(maxBytes = 256, blockSize = 64), 0)
             try {
                 assertEquals(entries.count { it.term.startsWith("Item1") }, prefix(s, "Item1").size)
                 assertEquals(setOf("v7", "alt7"), exact(s, "Item007").toSet())
@@ -229,8 +229,7 @@ class SegmentTest {
                 override fun index(input: IndexInput): Map<String, Collection<String>> = emptyMap()
             }
             val file = dir.resolve("drift.seg")
-            Segment.write(
-                file, driftExt,
+            writeSegment(file.toString(), driftExt,
                 listOf(
                     entry("Foo", "Foo.good"),
                     entry("Foo", "BAD.foo"),  // second value under Foo can't be read
@@ -238,7 +237,7 @@ class SegmentTest {
                     entry("Baz", "Baz.good"),
                 ),
             )
-            val s = Segment.open(file, driftExt, BlockCache(8L * 1024 * 1024), 0)
+            val s = Segment.open(file.toString(), driftExt, BlockCache(8L * 1024 * 1024), 0)
             try {
                 assertEquals(listOf("Foo.good"), exact(s, "Foo")) // the good value survives, the bad one is skipped
                 assertTrue(exact(s, "Bar").isEmpty())             // an all-bad term degrades to empty, no crash
@@ -276,8 +275,8 @@ class SegmentTest {
                 override fun index(input: IndexInput): Map<String, Collection<String>> = emptyMap()
             }
             val file = dir.resolve("overflow.seg")
-            Segment.write(file, ext, listOf(entry("Foo", "Foo.value")))
-            val s = Segment.open(file, ext, BlockCache(8L * 1024 * 1024), 0)
+            writeSegment(file.toString(), ext, listOf(entry("Foo", "Foo.value")))
+            val s = Segment.open(file.toString(), ext, BlockCache(8L * 1024 * 1024), 0)
             try {
                 assertFailsWith<StackOverflowError> { exact(s, "Foo") }
                 explode = false
@@ -416,13 +415,13 @@ class SegmentTest {
             val shared = (0 until 500).map {
                 IndexEntry("m$it", MemberValue("m$it", owner, "method", "(Ljava/lang/String;)V"), IndexOrigin.LIBRARY)
             }
-            val sharedFile = dir.resolve("shared.seg"); Segment.write(sharedFile, ext, shared)
+            val sharedFile = dir.resolve("shared.seg"); writeSegment(sharedFile.toString(), ext, shared)
 
             val distinct = (0 until 500).map {
                 val o = "com.example.some.deeply.nested.pkg.OwnerTypeNumber%05d".format(it)
                 IndexEntry("m$it", MemberValue("m$it", o, "method", "(Ljava/lang/String;)V"), IndexOrigin.LIBRARY)
             }
-            val distinctFile = dir.resolve("distinct.seg"); Segment.write(distinctFile, ext, distinct)
+            val distinctFile = dir.resolve("distinct.seg"); writeSegment(distinctFile.toString(), ext, distinct)
 
             // Owner (56 bytes) + signature + kind stored once vs 500× ⇒ the shared segment is well under half the
             // distinct one (which must repeat each unique owner in the pool).
@@ -432,7 +431,7 @@ class SegmentTest {
             )
 
             // Values still round-trip exactly through the pool (a tiny block cache paging the pool region).
-            val s = Segment.open(sharedFile, ext, BlockCache(maxBytes = 256, blockSize = 64), 0)
+            val s = Segment.open(sharedFile.toString(), ext, BlockCache(maxBytes = 256, blockSize = 64), 0)
             try {
                 val v = exact(s, "m42").single() as MemberValue
                 assertEquals("m42", v.name)

@@ -17,6 +17,15 @@ interface FileSink {
     /** Append [length] bytes of [bytes] starting at [offset]. */
     fun write(bytes: ByteArray, offset: Int = 0, length: Int = bytes.size - offset)
 
+    /**
+     * Push everything written so far out to the file.
+     *
+     * Both implementations buffer, so until this returns a reader that opens the same path sees a SHORT file
+     * rather than an empty one — which does not fail, it truncates. The index's spill buffer writes a region
+     * and then reads it back to concatenate it, so it is the caller that needs this and the reason it exists.
+     */
+    fun flush()
+
     /** Flush and release the handle. Writing after this is an error. */
     fun close()
 }

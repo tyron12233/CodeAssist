@@ -4,40 +4,12 @@ import dev.ide.index.Externalizer
 import dev.ide.index.IndexExtension
 import dev.ide.index.IndexOrigin
 import dev.ide.index.MatchingMode
-import dev.ide.platform.DataReader
+import dev.ide.kotlin.classfile.createDirectories
+import dev.ide.kotlin.classfile.deleteFile
+import dev.ide.kotlin.classfile.moveFile
+import dev.ide.kotlin.classfile.openFile
+import dev.ide.kotlin.classfile.openFileForWrite
 import dev.ide.platform.DataWriter
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
-import java.io.ByteArrayOutputStream
-import java.io.Closeable
-import java.io.DataInputStream
-import java.io.DataOutputStream
-import java.io.OutputStream
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.StandardCopyOption
-import java.util.PriorityQueue
-import java.util.UUID
-
-/**
- * Building a segment, which is the half of the format that has not crossed to common code.
- *
- * Reading one has: [Segment] needs positioned reads and a byte decoder, and both exist on every platform.
- * Writing one needs an external merge sort that spills its runs to temp files, and that needs streaming file
- * output, which the portable file seam does not have. Splitting the file here is what let the query path off
- * the JVM without waiting for the build path.
- */
-
-/**
- * Open an existing segment named by a [Path], for the JVM callers that already hold one.
- *
- * The member takes a path string, because that is what the portable file seam takes. This keeps every
- * existing call site spelled the way it was.
- */
-internal fun Segment.Companion.open(file: Path, ext: IndexExtension<*, *>, cache: BlockCache, segId: Int): Segment =
-    Segment.open(file.toString(), ext, cache, segId) { t ->
-        LOG.warn("an index segment has unreadable value(s) (stale/corrupt payload) — skipping; a re-index will rebuild it", t)
-    }
 
 /**
  * Build a segment file from a full [entries] list.
@@ -46,52 +18,10 @@ internal fun Segment.Companion.open(file: Path, ext: IndexExtension<*, *>, cache
  * whole-list builds); the engine streams via [SegmentWriter.add] instead, so a large artifact never buffers
  * all of its entries at once.
  */
-internal fun Segment.Companion.write(file: Path, ext: IndexExtension<*, *>, entries: List<IndexEntry>) {
+internal fun writeSegment(file: String, ext: IndexExtension<*, *>, entries: List<IndexEntry>) {
     SegmentWriter(file, ext).use { w ->
         for (e in entries) w.add(e.term, e.value, e.origin)
         w.finish()
-    }
-}
-
-private val LOG = dev.ide.platform.log.Log.logger("index")
-
-/**
- * The varint decode again, against a stream.
- *
- * A second copy of eight lines, deliberately: the common one is on [DataReader], and reaching it from here
- * means either a wrapper allocated per call on the k-way merge's hot path, or reading payload bytes one
- * interface call at a time. The run files this reads are written by [DataOutputStream.writeVarLong] directly
- * above, so the two that have to agree sit together.
- */
-private fun DataInputStream.readVarLong(): Long {
-    var shift = 0
-    var result = 0L
-    while (true) {
-        val b = readUnsignedByte()
-        result = result or ((b.toLong() and 0x7F) shl shift)
-        if (b < 0x80) return result
-        shift += 7
-    }
-}
-
-/** The runtime's own errors, which a value-payload guard must never swallow. */
-internal actual fun rethrowIfFatal(t: Throwable) {
-    if (t is VirtualMachineError) throw t
-}
-
-/** Write [v] as a fixed [width]-byte big-endian unsigned int (a pool-table entry). */
-internal fun DataOutputStream.writeFixedUInt(v: Int, width: Int) {
-    var shift = (width - 1) * 8
-    while (shift >= 0) { writeByte((v ushr shift) and 0xFF); shift -= 8 }
-}
-
-/** Unsigned LEB128 — small values cost one byte; offsets/counts/deltas in a segment are all non-negative. */
-internal fun DataOutputStream.writeVarLong(v0: Long) {
-    var v = v0
-    while (true) {
-        val b = (v and 0x7F).toInt()
-        v = v ushr 7
-        if (v != 0L) writeByte(b or 0x80) else { writeByte(b); return }
     }
 }
 
@@ -100,7 +30,7 @@ internal fun DataOutputStream.writeVarLong(v0: Long) {
  * writes a varint pool-id in place of the string's inline bytes, so a value externalizer needs no change to
  * benefit from pooling. Every other write delegates verbatim to the underlying payload stream.
  */
-private class PoolingDataOutput(private val d: DataOutputStream, private val intern: (String) -> Int) : DataWriter {
+private class PoolingDataOutput(private val d: DataWriter, private val intern: (String) -> Int) : DataWriter {
     override fun writeUTF(s: String) { d.writeVarLong(intern(s).toLong()) }
     override fun writeBoolean(v: Boolean) = d.writeBoolean(v)
     override fun writeByte(v: Int) = d.writeByte(v)
@@ -110,68 +40,83 @@ private class PoolingDataOutput(private val d: DataOutputStream, private val int
 }
 
 /**
- * The plain adapters, for the paths that do NOT pool: the source-entry cache writes and reads values
- * straight onto a stream. Same six operations, no interning.
- */
-internal class StreamDataWriter(private val d: DataOutputStream) : DataWriter {
-    override fun writeUTF(value: String) = d.writeUTF(value)
-    override fun writeBoolean(value: Boolean) = d.writeBoolean(value)
-    override fun writeByte(value: Int) = d.writeByte(value)
-    override fun writeShort(value: Int) = d.writeShort(value)
-    override fun writeInt(value: Int) = d.writeInt(value)
-    override fun writeLong(value: Long) = d.writeLong(value)
-}
-
-internal class StreamDataReader(private val d: DataInputStream) : DataReader {
-    override fun readUTF(): String = d.readUTF()
-    override fun readBoolean(): Boolean = d.readBoolean()
-    override fun readByte(): Int = d.readByte().toInt()
-    override fun readUnsignedByte(): Int = d.readUnsignedByte()
-    override fun readShort(): Int = d.readShort().toInt()
-    override fun readInt(): Int = d.readInt()
-    override fun readLong(): Long = d.readLong()
-}
-
-/**
  * An append-only byte sink that stays in memory until it exceeds [cap], then spills the remainder to a temp
  * file under [tmpDir] — so a small segment region never touches disk (fast path) while a large one (e.g.
  * android.jar's postings/names) stays bounded in RAM. [length] is exact after every write (there is no
  * buffering between the caller's `DataOutputStream` and this), so it doubles as the running region offset.
  * Single pass: write, then [copyTo] the final segment, then [close] (which deletes the temp file).
  */
-private class SpillBuffer(private val cap: Int, private val tmpDir: Path) : OutputStream() {
-    private var mem: ByteArrayOutputStream? = ByteArrayOutputStream()
-    private var file: Path? = null
-    private var fileOut: OutputStream? = null
-    private var len = 0L
+private class SpillBuffer(private val cap: Int, private val tmpDir: String) : SegmentOut {
+    private var mem: MemorySegmentOut? = MemorySegmentOut()
+    private var file: String? = null
+    private var fileOut: SinkSegmentOut? = null
 
-    override fun write(b: Int) { ensureRoom(1); target().write(b); len++ }
-    override fun write(b: ByteArray, off: Int, l: Int) { ensureRoom(l); target().write(b, off, l); len += l }
+    // Exact after every write, because it is the region offset the footer will point at: a spill carries the
+    // bytes already buffered into the sink writer, so one side or the other holds all of them, never both.
+    override val length: Long get() = fileOut?.length ?: mem?.length ?: 0L
 
-    private fun ensureRoom(n: Int) {
-        val m = mem ?: return
-        if (m.size() + n <= cap) return
-        val f = tmpDir.resolve("seg-region-${UUID.randomUUID()}.tmp")
-        val out = BufferedOutputStream(Files.newOutputStream(f))
-        m.writeTo(out)
-        mem = null; file = f; fileOut = out
+    // Set when a spill could not open its file; the region stays in memory rather than retrying per write.
+    private var cannotSpill = false
+
+    override fun writeByte(value: Int) = withRoom(1) { it.writeByte(value) }
+    override fun writeBoolean(value: Boolean) = withRoom(1) { it.writeBoolean(value) }
+    override fun writeShort(value: Int) = withRoom(2) { it.writeShort(value) }
+    override fun writeInt(value: Int) = withRoom(4) { it.writeInt(value) }
+    override fun writeLong(value: Long) = withRoom(8) { it.writeLong(value) }
+    override fun writeUTF(value: String) = withRoom(2 + value.length * 3) { it.writeUTF(value) }
+    override fun writeBytes(value: ByteArray) = withRoom(value.size) { it.writeBytes(value) }
+
+    private inline fun withRoom(n: Int, write: (SegmentOut) -> Unit) {
+        val m = mem
+        if (m != null && !cannotSpill && m.length + n > cap) spill(m)
+        write(fileOut ?: mem!!)
     }
 
-    private fun target(): OutputStream = fileOut ?: mem!!
-    fun length(): Long = len
+    private fun spill(m: MemorySegmentOut) {
+        val f = "$tmpDir/${temporaryName("seg-region")}.tmp"
+        val sink = openFileForWrite(f)
+        if (sink == null) {
+            // Nowhere to spill: keep going in memory rather than lose the region, and stop trying on every
+            // subsequent write.
+            cannotSpill = true
+            return
+        }
+        val out = SinkSegmentOut(sink)
+        out.writeBytes(m.toByteArray())
+        mem = null
+        file = f
+        fileOut = out
+    }
 
     /** Append every written byte to [out], in order. Call once, before [close]. */
-    fun copyTo(out: OutputStream) {
+    fun copyTo(out: SegmentOut) {
         val m = mem
-        if (m != null) { m.writeTo(out); return }
-        fileOut?.let { it.flush(); it.close(); fileOut = null }
-        Files.newInputStream(file!!).use { it.copyTo(out) }
+        if (m != null) {
+            out.writeBytes(m.toByteArray())
+            return
+        }
+        fileOut?.flush()
+        val source = openFile(file!!) ?: return
+        try {
+            var at = 0L
+            while (at < source.size) {
+                val take = minOf(COPY_CHUNK.toLong(), source.size - at).toInt()
+                out.writeBytes(source.read(at, take))
+                at += take
+            }
+        } finally {
+            source.close()
+        }
     }
 
-    override fun close() {
+    fun close() {
         runCatching { fileOut?.close() }; fileOut = null
-        file?.let { runCatching { Files.deleteIfExists(it) } }; file = null
+        file?.let { runCatching { deleteFile(it) } }; file = null
         mem = null
+    }
+
+    private companion object {
+        const val COPY_CHUNK = 256 * 1024
     }
 }
 
@@ -184,25 +129,26 @@ private class SpillBuffer(private val cap: Int, private val tmpDir: Path) : Outp
  */
 private class Sorter<T>(
     private val cap: Int,
-    private val tmpDir: Path,
+    private val tmpDir: String,
     private val cmp: Comparator<T>,
-    private val writeT: (DataOutputStream, T) -> Unit,
-    private val readT: (DataInputStream) -> T,
-) : Closeable {
+    private val writeT: (SegmentOut, T) -> Unit,
+    private val readT: (SegmentIn) -> T,
+) : AutoCloseable {
     private var buf = ArrayList<T>()
-    private val runs = ArrayList<Path>()
-    private val open = ArrayList<DataInputStream>()
+    private val runs = ArrayList<String>()
+    private val open = ArrayList<SourceSegmentIn>()
 
     fun add(t: T) { buf.add(t); if (buf.size >= cap) spill() }
 
     private fun spill() {
         if (buf.isEmpty()) return
         buf.sortWith(cmp)
-        val run = tmpDir.resolve("seg-run-${UUID.randomUUID()}.tmp")
-        DataOutputStream(BufferedOutputStream(Files.newOutputStream(run))).use { out ->
-            out.writeVarLong(buf.size.toLong())
-            for (t in buf) writeT(out, t)
-        }
+        val run = "$tmpDir/${temporaryName("seg-run")}.tmp"
+        val sink = openFileForWrite(run) ?: return
+        val out = SinkSegmentOut(sink)
+        out.writeVarLong(buf.size.toLong())
+        for (t in buf) writeT(out, t)
+        out.close()
         runs.add(run)
         buf = ArrayList()
     }
@@ -211,17 +157,17 @@ private class Sorter<T>(
     fun sortedIterator(): Iterator<T> {
         if (runs.isEmpty()) { buf.sortWith(cmp); return buf.iterator() }
         spill() // flush the tail buffer as a final run so all data is on disk and read uniformly
-        val readers = runs.map { DataInputStream(BufferedInputStream(Files.newInputStream(it))).also { r -> open.add(r) } }
+        val readers = runs.mapNotNull { openFile(it) }.map { SourceSegmentIn(it).also { r -> open.add(r) } }
         val remaining = LongArray(readers.size) { readers[it].readVarLong() }
         val heads = arrayOfNulls<Any?>(readers.size)
-        val pq = PriorityQueue<Int>(maxOf(1, readers.size)) { a, b -> cmp.compare(heads[a] as T, heads[b] as T) }
-        for (i in readers.indices) if (remaining[i] > 0) { heads[i] = readT(readers[i]); remaining[i]--; pq.add(i) }
+        val heap = IntHeap { a, b -> cmp.compare(heads[a] as T, heads[b] as T) < 0 }
+        for (i in readers.indices) if (remaining[i] > 0) { heads[i] = readT(readers[i]); remaining[i]--; heap.add(i) }
         return object : Iterator<T> {
-            override fun hasNext() = pq.isNotEmpty()
+            override fun hasNext() = !heap.isEmpty
             override fun next(): T {
-                val i = pq.poll()
+                val i = heap.poll()
                 val v = heads[i] as T
-                if (remaining[i] > 0) { heads[i] = readT(readers[i]); remaining[i]--; pq.add(i) } else heads[i] = null
+                if (remaining[i] > 0) { heads[i] = readT(readers[i]); remaining[i]--; heap.add(i) } else heads[i] = null
                 return v
             }
         }
@@ -229,7 +175,7 @@ private class Sorter<T>(
 
     override fun close() {
         open.forEach { runCatching { it.close() } }; open.clear()
-        runs.forEach { runCatching { Files.deleteIfExists(it) } }; runs.clear()
+        runs.forEach { runCatching { deleteFile(it) } }; runs.clear()
         buf = ArrayList()
     }
 }
@@ -248,16 +194,16 @@ private class Sorter<T>(
  * preserved. Locked in by `SegmentWriterTest` (a spilling build equals a non-spilling build byte-for-byte).
  */
 internal class SegmentWriter(
-    private val file: Path,
+    private val file: String,
     private val ext: IndexExtension<*, *>,
     private val maxBufferedEntries: Int = 50_000,
     private val maxBufferedTrigrams: Int = 200_000,
     private val regionSpillBytes: Int = 8 * 1024 * 1024,
-) : Closeable {
+) : AutoCloseable {
     private val fuzzy = ext.matching == MatchingMode.PREFIX_AND_FUZZY
     @Suppress("UNCHECKED_CAST")
     private val ser = ext.valueExternalizer as Externalizer<Any>
-    private val tmpDir: Path = file.parent
+    private val tmpDir: String = file.substringBeforeLast('/', ".")
     private var seq = 0L
     private var added = 0
     // Origin is a per-artifact property, so every entry of a real segment shares one; track that so [finish]
@@ -281,12 +227,12 @@ internal class SegmentWriter(
     private class Tri(val gram: String, val nameRel: Long)
 
     private val entries: Sorter<Rec> = run {
-        Files.createDirectories(tmpDir)
+        createDirectories(tmpDir)
         Sorter(
             maxBufferedEntries, tmpDir,
             compareBy({ it.term }, { it.seq }),
-            { out, r -> writeBytes(out, r.term.toByteArray(Charsets.UTF_8)); out.writeVarLong(r.seq); out.writeByte(r.origin); writeBytes(out, r.value) },
-            { din -> Rec(String(readBytes(din), Charsets.UTF_8), din.readVarLong(), din.readUnsignedByte(), readBytes(din)) },
+            { out, r -> writeFramed(out, r.term.encodeToByteArray()); out.writeVarLong(r.seq); out.writeByte(r.origin); writeFramed(out, r.value) },
+            { din -> Rec(readFramed(din).decodeToString(), din.readVarLong(), din.readUnsignedByte(), readFramed(din)) },
         )
     }
 
@@ -298,23 +244,21 @@ internal class SegmentWriter(
         if (firstOrigin == -1) firstOrigin = o else if (o != firstOrigin) uniformOrigin = false
         // Serialize through [PoolingDataOutput] so each string field becomes a varint pool-id (deduped) rather
         // than inline bytes; the id is stable (first-seen) and identical whether or not the build spills.
-        val vb = ByteArrayOutputStream().also { bos ->
-            DataOutputStream(bos).use { dos -> ser.write(PoolingDataOutput(dos) { s -> intern(s) }, value) }
-        }.toByteArray()
+        val vb = MemorySegmentOut().also { out -> ser.write(PoolingDataOutput(out) { s -> intern(s) }, value) }.toByteArray()
         entries.add(Rec(term, seq++, o, vb))
         added++
     }
 
     fun finish() {
-        val postings = SpillBuffer(regionSpillBytes, tmpDir); val pOut = DataOutputStream(postings)
-        val names = SpillBuffer(regionSpillBytes, tmpDir); val nOut = DataOutputStream(names)
-        val tgNames = SpillBuffer(regionSpillBytes, tmpDir); val tnOut = DataOutputStream(tgNames)
-        val tgPostings = SpillBuffer(regionSpillBytes, tmpDir); val tpOut = DataOutputStream(tgPostings)
+        val postings = SpillBuffer(regionSpillBytes, tmpDir); val pOut: SegmentOut = postings
+        val names = SpillBuffer(regionSpillBytes, tmpDir); val nOut: SegmentOut = names
+        val tgNames = SpillBuffer(regionSpillBytes, tmpDir); val tnOut: SegmentOut = tgNames
+        val tgPostings = SpillBuffer(regionSpillBytes, tmpDir); val tpOut: SegmentOut = tgPostings
         val tri = if (fuzzy) Sorter<Tri>(
             maxBufferedTrigrams, tmpDir,
             compareBy({ it.gram }, { it.nameRel }),
-            { out, t -> writeBytes(out, t.gram.toByteArray(Charsets.UTF_8)); out.writeVarLong(t.nameRel) },
-            { din -> Tri(String(readBytes(din), Charsets.UTF_8), din.readVarLong()) },
+            { out, t -> writeFramed(out, t.gram.encodeToByteArray()); out.writeVarLong(t.nameRel) },
+            { din -> Tri(readFramed(din).decodeToString(), din.readVarLong()) },
         ) else null
         val sparseTerms = ArrayList<String>(); val sparseTermOff = ArrayList<Long>()
         val sparseGrams = ArrayList<String>(); val sparseGramOff = ArrayList<Long>()
@@ -330,26 +274,24 @@ internal class SegmentWriter(
                 val term = head.term
                 if (minTerm == null) minTerm = term
                 maxTerm = term
-                val postingsRel = postings.length()
+                val postingsRel = postings.length
                 val group = ArrayList<Rec>()
                 while (head != null && head.term == term) { group.add(head); head = if (it.hasNext()) it.next() else null }
                 pOut.writeVarLong(group.size.toLong())
                 // Omit the per-posting origin byte for a uniform segment (the common case); it lives in the footer.
                 for (r in group) {
                     if (!uniformOrigin) pOut.writeByte(r.origin)
-                    pOut.writeVarLong(r.value.size.toLong()); pOut.write(r.value)
+                    pOut.writeVarLong(r.value.size.toLong()); pOut.writeBytes(r.value)
                 }
 
-                val nameRel = names.length()
-                val tb = term.toByteArray(Charsets.UTF_8)
-                nOut.writeVarLong(tb.size.toLong()); nOut.write(tb); nOut.writeVarLong(postingsRel)
+                val nameRel = names.length
+                val tb = term.encodeToByteArray()
+                nOut.writeVarLong(tb.size.toLong()); nOut.writeBytes(tb); nOut.writeVarLong(postingsRel)
 
                 if (numTerms % Segment.SPARSE_INTERVAL == 0) { sparseTerms.add(term); sparseTermOff.add(nameRel) }
                 if (tri != null) for (g in HashSet(Scoring.trigramsOf(term.lowercase()))) tri.add(Tri(g, nameRel))
                 numTerms++
             }
-            pOut.flush(); nOut.flush()
-
             // Pass 2: merge trigram tuples in (gram, nameRel) order → trigram names + postings (delta-encoded).
             if (tri != null) {
                 val tit = tri.sortedIterator()
@@ -357,48 +299,46 @@ internal class SegmentWriter(
                 var gi = 0
                 while (th != null) {
                     val gram = th.gram
-                    val tgPostingsRel = tgPostings.length()
+                    val tgPostingsRel = tgPostings.length
                     val rels = ArrayList<Long>()
                     while (th != null && th.gram == gram) { rels.add(th.nameRel); th = if (tit.hasNext()) tit.next() else null }
                     tpOut.writeVarLong(rels.size.toLong())
                     var prev = 0L; for (nr in rels) { tpOut.writeVarLong(nr - prev); prev = nr }
 
-                    val gb = gram.toByteArray(Charsets.UTF_8)
-                    val tgNameRel = tgNames.length()
-                    tnOut.writeVarLong(gb.size.toLong()); tnOut.write(gb); tnOut.writeVarLong(tgPostingsRel)
+                    val gb = gram.encodeToByteArray()
+                    val tgNameRel = tgNames.length
+                    tnOut.writeVarLong(gb.size.toLong()); tnOut.writeBytes(gb); tnOut.writeVarLong(tgPostingsRel)
                     if (gi % Segment.SPARSE_INTERVAL == 0) { sparseGrams.add(gram); sparseGramOff.add(tgNameRel) }
                     gi++
                 }
-                tpOut.flush(); tnOut.flush()
             }
 
             // Assemble: concatenate the four regions then the footer into a unique temp, atomic-move into place.
             // Deterministic bytes ⇒ two concurrent writers of the same content-addressed segment can't corrupt
             // each other (last-writer-wins is a no-op overwrite).
-            val tmp = file.resolveSibling("${file.fileName}.${UUID.randomUUID()}.tmp")
+            val tmp = "$file.${temporaryName("build")}.tmp"
             try {
-                DataOutputStream(BufferedOutputStream(Files.newOutputStream(tmp))).use { out ->
+                val sink = openFileForWrite(tmp) ?: error("cannot write $tmp")
+                SinkSegmentOut(sink).let { out ->
                     var pos = 0L
-                    val postingsBase = pos; postings.copyTo(out); pos += postings.length()
-                    val namesBase = pos; names.copyTo(out); pos += names.length()
-                    val tgNamesBase = pos; tgNames.copyTo(out); pos += tgNames.length()
-                    val tgPostingsBase = pos; tgPostings.copyTo(out); pos += tgPostings.length()
+                    val postingsBase = pos; postings.copyTo(out); pos += postings.length
+                    val namesBase = pos; names.copyTo(out); pos += names.length
+                    val tgNamesBase = pos; tgNames.copyTo(out); pos += tgNames.length
+                    val tgPostingsBase = pos; tgPostings.copyTo(out); pos += tgPostings.length
 
                     // Pool: the distinct strings (length-framed, in id order) followed by a fixed-width u32 table
                     // mapping id → its offset within the strings region. The strings are deduped, so this buffers
                     // far less than the inline copies it replaces; the table is numStrings × 4 bytes.
                     val poolStringsBase = pos
                     val poolOffsets = IntArray(poolStrings.size)
-                    val poolBuf = ByteArrayOutputStream()
-                    DataOutputStream(poolBuf).use { pd ->
-                        for (i in poolStrings.indices) {
-                            poolOffsets[i] = poolBuf.size()
-                            val sb = poolStrings[i].toByteArray(Charsets.UTF_8)
-                            pd.writeVarLong(sb.size.toLong()); pd.write(sb)
-                        }
+                    val poolBuf = MemorySegmentOut()
+                    for (i in poolStrings.indices) {
+                        poolOffsets[i] = poolBuf.length.toInt()
+                        val sb = poolStrings[i].encodeToByteArray()
+                        poolBuf.writeVarLong(sb.size.toLong()); poolBuf.writeBytes(sb)
                     }
                     val poolBytes = poolBuf.toByteArray()
-                    out.write(poolBytes); pos += poolBytes.size
+                    out.writeBytes(poolBytes); pos += poolBytes.size
                     // Table entries are the fewest bytes that hold any offset into the strings region — 1 byte
                     // for a <256B pool, up to 4 — so the table doesn't pay a flat u32 on a small segment.
                     val poolTableWidth = poolOffsetWidth(poolBytes.size)
@@ -410,38 +350,39 @@ internal class SegmentWriter(
 
                     out.writeVarLong(sparseTerms.size.toLong())
                     for (i in sparseTerms.indices) {
-                        val sb = sparseTerms[i].toByteArray(Charsets.UTF_8)
-                        out.writeVarLong(sb.size.toLong()); out.write(sb); out.writeVarLong(sparseTermOff[i])
+                        val sb = sparseTerms[i].encodeToByteArray()
+                        out.writeVarLong(sb.size.toLong()); out.writeBytes(sb); out.writeVarLong(sparseTermOff[i])
                     }
                     out.writeByte(if (fuzzy) 1 else 0)
                     if (fuzzy) {
                         out.writeVarLong(sparseGrams.size.toLong())
                         for (i in sparseGrams.indices) {
-                            val gb = sparseGrams[i].toByteArray(Charsets.UTF_8)
-                            out.writeVarLong(gb.size.toLong()); out.write(gb); out.writeVarLong(sparseGramOff[i])
+                            val gb = sparseGrams[i].encodeToByteArray()
+                            out.writeVarLong(gb.size.toLong()); out.writeBytes(gb); out.writeVarLong(sparseGramOff[i])
                         }
                     }
                     out.writeInt(ext.version)
                     out.writeVarLong(numTerms.toLong())
                     out.writeByte(if (uniformOrigin) 1 else 0)
                     out.writeByte(if (uniformOrigin) firstOrigin.coerceAtLeast(0) else 0)
-                    val minB = (minTerm ?: "").toByteArray(Charsets.UTF_8)
-                    out.writeVarLong(minB.size.toLong()); out.write(minB)
-                    val maxB = maxTerm.toByteArray(Charsets.UTF_8)
-                    out.writeVarLong(maxB.size.toLong()); out.write(maxB)
+                    val minB = (minTerm ?: "").encodeToByteArray()
+                    out.writeVarLong(minB.size.toLong()); out.writeBytes(minB)
+                    val maxB = maxTerm.encodeToByteArray()
+                    out.writeVarLong(maxB.size.toLong()); out.writeBytes(maxB)
                     out.writeVarLong(poolStrings.size.toLong())
                     out.writeByte(poolTableWidth)
                     out.writeVarLong(poolStringsBase); out.writeVarLong(poolTableBase)
-                    out.writeVarLong(postingsBase); out.writeVarLong(postings.length())
-                    out.writeVarLong(namesBase); out.writeVarLong(names.length())
-                    out.writeVarLong(tgNamesBase); out.writeVarLong(tgNames.length())
-                    out.writeVarLong(tgPostingsBase); out.writeVarLong(tgPostings.length())
+                    out.writeVarLong(postingsBase); out.writeVarLong(postings.length)
+                    out.writeVarLong(namesBase); out.writeVarLong(names.length)
+                    out.writeVarLong(tgNamesBase); out.writeVarLong(tgNames.length)
+                    out.writeVarLong(tgPostingsBase); out.writeVarLong(tgPostings.length)
                     out.writeInt(Segment.MAGIC)
                     out.writeLong(footerStart)
+                    out.close()
                 }
-                Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                check(moveFile(tmp, file)) { "cannot move $tmp into place" }
             } finally {
-                Files.deleteIfExists(tmp)
+                deleteFile(tmp)
             }
         } finally {
             postings.close(); names.close(); tgNames.close(); tgPostings.close()
@@ -452,7 +393,8 @@ internal class SegmentWriter(
     override fun close() { runCatching { entries.close() } }
 
     private companion object {
-        fun writeBytes(out: DataOutputStream, b: ByteArray) { out.writeVarLong(b.size.toLong()); out.write(b) }
-        fun readBytes(din: DataInputStream): ByteArray { val n = din.readVarLong().toInt(); val b = ByteArray(n); din.readFully(b); return b }
+        /** A length-framed blob, the shape every run-file field takes. */
+        fun writeFramed(out: SegmentOut, b: ByteArray) { out.writeVarLong(b.size.toLong()); out.writeBytes(b) }
+        fun readFramed(din: SegmentIn): ByteArray = din.readBytes(din.readVarLong().toInt())
     }
 }

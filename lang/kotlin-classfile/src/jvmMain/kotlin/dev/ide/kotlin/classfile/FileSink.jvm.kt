@@ -11,6 +11,7 @@ actual fun openFileForWrite(path: String): FileSink? = runCatching {
     val out = BufferedOutputStream(Files.newOutputStream(Paths.get(path)))
     object : FileSink {
         override fun write(bytes: ByteArray, offset: Int, length: Int) = out.write(bytes, offset, length)
+        override fun flush() = out.flush()
         override fun close() = out.close()
     }
 }.getOrNull()
