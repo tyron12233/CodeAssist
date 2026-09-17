@@ -8,6 +8,7 @@ import dev.ide.kotlin.syntax.psi.KtClass
 import dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtElement
 import dev.ide.kotlin.syntax.psi.KtIfExpression
+import dev.ide.kotlin.syntax.psi.KtLambdaArgument
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
@@ -66,15 +67,17 @@ class KtPsiFacadeTest {
     @Test
     fun fileStructure() {
         val parsed = file("package a.b\n\nimport c.D\nimport e.F as G\n\nclass H\nfun i() {}\nval j = 1")
-        assertEquals("a.b", parsed.packageFqName)
-        assertEquals(listOf("c.D", "e.F"), parsed.importDirectives.map { it.importedFqName })
+        assertEquals("a.b", parsed.packageFqName.asString())
+        assertEquals(listOf("c.D", "e.F"), parsed.importDirectives.map { it.importedFqName?.asString() })
         assertEquals(listOf("D", "G"), parsed.importDirectives.map { it.aliasName })
         assertEquals(3, parsed.declarations.size)
     }
 
     @Test
-    fun theDefaultPackageIsEmptyRatherThanNull() {
-        assertEquals("", file("class Foo").packageFqName)
+    fun theDefaultPackageIsRootRatherThanNull() {
+        val packageName = file("class Foo").packageFqName
+        assertTrue(packageName.isRoot)
+        assertEquals("", packageName.asString())
     }
 
     // --- classifiers -------------------------------------------------------------------------------------
@@ -84,8 +87,8 @@ class KtPsiFacadeTest {
         val cls = file("data class Point(val x: Int, var y: Int = 0) : Base(), Marker { fun f() {} }")
             .declarations.single() as KtClass
         assertEquals("Point", cls.name)
-        assertTrue(cls.isData)
-        assertFalse(cls.isInterface)
+        assertTrue(cls.isData())
+        assertFalse(cls.isInterface())
         assertEquals(listOf("x", "y"), cls.primaryConstructor?.valueParameters?.map { it.name })
         assertTrue(cls.primaryConstructor!!.valueParameters[0].hasValOrVar())
         assertFalse(cls.primaryConstructor!!.valueParameters[0].isMutable)
@@ -107,22 +110,22 @@ class KtPsiFacadeTest {
 
     @Test
     fun interfacesEnumsAndCompanions() {
-        assertTrue((file("interface Foo").declarations.single() as KtClass).isInterface)
+        assertTrue((file("interface Foo").declarations.single() as KtClass).isInterface())
 
         val enum = file("enum class E { A, B }").declarations.single() as KtClass
-        assertTrue(enum.isEnum)
+        assertTrue(enum.isEnum())
         assertEquals(listOf("A", "B"), enum.enumEntries.map { it.name })
 
         val outer = file("class A { companion object Named { val x = 1 } }").declarations.single() as KtClass
         val companion = outer.declarations.filterIsInstance<KtObjectDeclaration>().single()
-        assertTrue(companion.isCompanion)
+        assertTrue(companion.isCompanion())
         assertEquals("Named", companion.name)
     }
 
     @Test
     fun annotationsAreReadableByShortName() {
         val fn = file("@Deprecated(\"why\")\n@field:JvmStatic\nfun f() {}").declarations.single() as KtNamedFunction
-        assertEquals(listOf("Deprecated", "JvmStatic"), fn.annotationEntries.map { it.shortName })
+        assertEquals(listOf("Deprecated", "JvmStatic"), fn.annotationEntries.map { it.shortName?.asString() })
         assertEquals("field", fn.annotationEntries[1].useSiteTarget)
         assertEquals(1, fn.annotationEntries[0].valueArguments.size)
     }
@@ -193,7 +196,7 @@ class KtPsiFacadeTest {
     @Test
     fun namedAndSpreadArguments() {
         val call = file("val x = f(a = 1, *rest)").collectDescendantsOfType<KtCallExpression>().single()
-        assertEquals("a", call.valueArguments[0].getArgumentName())
+        assertEquals("a", call.valueArguments[0].getArgumentName()?.asName?.identifier)
         assertNull(call.valueArguments[1].getArgumentName())
         assertTrue(call.valueArguments[1].isSpread)
     }
@@ -210,8 +213,14 @@ class KtPsiFacadeTest {
     fun trailingLambdasAreArgumentsOfTheirCall() {
         val call = file("val x = list.map { it * 2 }").collectDescendantsOfType<KtCallExpression>().single()
         assertEquals(1, call.lambdaArguments.size)
-        assertTrue(call.valueArguments.isEmpty())
-        val lambda = call.lambdaArguments.single().lambdaExpression
+
+        // valueArguments INCLUDES the trailing lambda, as upstream. The obvious reading is "what is in the
+        // parentheses", and an arity check written against that counts `map { }` as a call with no
+        // arguments, which is wrong on most Kotlin ever written.
+        assertEquals(1, call.valueArguments.size)
+        assertTrue(call.valueArguments.single() is KtLambdaArgument)
+
+        val lambda = call.lambdaArguments.single().getLambdaExpression()
         assertNotNull(lambda)
         assertFalse(lambda.functionLiteral!!.hasParameterSpecification)
     }
@@ -295,7 +304,7 @@ class KtPsiFacadeTest {
     @Test
     fun docCommentsAttachToTheDeclarationBelowThem() {
         val fn = file("/** Explains f. */\nfun f() {}").declarations.single() as KtNamedFunction
-        assertEquals("/** Explains f. */", fn.docComment)
+        assertEquals("/** Explains f. */", fn.docComment?.text)
         assertNull((file("fun g() {}").declarations.single() as KtNamedFunction).docComment)
     }
 }

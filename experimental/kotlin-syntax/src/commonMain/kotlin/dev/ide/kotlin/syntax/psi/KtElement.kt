@@ -63,6 +63,9 @@ open class KtElement internal constructor(
     /** The file this element belongs to. */
     val containingKtFile: KtFile get() = session.file
 
+    /** The same file under the name `PsiElement` gives it. */
+    val containingFile: KtFile get() = session.file
+
     internal fun child(type: SyntaxElementType): KtElement? =
         session.tree.findChildByType(node, type)?.let { session.psi(it) }
 
@@ -92,7 +95,7 @@ open class KtElement internal constructor(
      * import list even when it has neither, and those empty elements sit between a comment and the first
      * declaration.
      */
-    val docComment: String?
+    val docComment: KtElement?
         get() = leadingDocComment(session.tree.getChildren(node), 0, step = 1)
             ?: session.tree.getParent(node)?.let { parentNode ->
                 val siblings = session.tree.getChildren(parentNode)
@@ -100,12 +103,12 @@ open class KtElement internal constructor(
                 if (index <= 0) null else leadingDocComment(siblings, index - 1, step = -1)
             }
 
-    private fun leadingDocComment(nodes: List<LightNode>, from: Int, step: Int): String? {
+    private fun leadingDocComment(nodes: List<LightNode>, from: Int, step: Int): KtElement? {
         var index = from
         while (index in nodes.indices) {
             val candidate = nodes[index]
             val type = session.tree.getType(candidate)
-            if (type == KtTokens.DOC_COMMENT) return session.tree.getText(candidate).toString()
+            if (type == KtTokens.DOC_COMMENT) return session.psi(candidate)
             val empty = session.tree.getEndOffset(candidate) == session.tree.getStartOffset(candidate)
             if (type != KtTokens.WHITE_SPACE && !empty) return null
             index += step
@@ -129,6 +132,32 @@ abstract class KtNamedDeclaration internal constructor(session: KtTreeSession, n
     open val nameIdentifier: KtElement? get() = child(KtTokens.IDENTIFIER)
 
     open val name: String? get() = nameIdentifier?.text?.removeSurrounding("`")
+
+    val nameAsName: Name? get() = name?.let { Name.identifier(it) }
+
+    /** The name, or `<no name provided>` for an anonymous declaration, as upstream spells it. */
+    val nameAsSafeName: Name get() = nameAsName ?: Name.identifier("<no name provided>")
+
+    /**
+     * The fully qualified name, or null for a local or anonymous declaration.
+     *
+     * Built by walking out through the containing classes to the package directive, which is the only way
+     * available here: upstream reads it off a stub when there is one, and computes exactly this when there
+     * is not.
+     */
+    val fqName: FqName?
+        get() {
+            val own = name ?: return null
+            val segments = mutableListOf(own)
+            var owner = (this as KtDeclaration).containingClassOrObject
+            while (owner != null) {
+                segments += owner.name ?: return null
+                owner = owner.containingClassOrObject
+            }
+            val packageName = containingKtFile.packageFqName
+            if (!packageName.isRoot) segments += packageName.asString()
+            return FqName(segments.asReversed().joinToString("."))
+        }
 }
 
 /** Anything that declares something, mirroring `KtDeclaration`. */
@@ -167,7 +196,9 @@ abstract class KtCallableDeclaration internal constructor(session: KtTreeSession
             return childrenOfType<KtTypeReference>().firstOrNull { it.textOffset > nameOffset }
         }
 
-    val typeConstraintList: KtTypeConstraintList? get() = firstChildOfType()
+    override val typeConstraintList: KtTypeConstraintList? get() = firstChildOfType()
+
+    override val typeConstraints: List<KtTypeConstraint> get() = typeConstraintList?.constraints.orEmpty()
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -178,10 +209,13 @@ abstract class KtCallableDeclaration internal constructor(session: KtTreeSession
 class KtFile internal constructor(session: KtTreeSession, node: LightNode) :
     KtElement(session, node), KtAnnotated {
 
+    /** The file name, carried through the parse; nothing in the text says what file it came from. */
+    val name: String get() = session.fileName
+
     val packageDirective: KtPackageDirective? get() = firstChildOfType()
 
-    /** The declared package, or the empty string for the default package. */
-    val packageFqName: String get() = packageDirective?.qualifiedName ?: ""
+    /** The declared package, or the root for the default package. */
+    val packageFqName: FqName get() = FqName(packageDirective?.qualifiedName ?: "")
 
     val importList: KtImportList? get() = firstChildOfType()
 
@@ -210,20 +244,24 @@ class KtImportList internal constructor(session: KtTreeSession, node: LightNode)
 class KtImportDirective internal constructor(session: KtTreeSession, node: LightNode) :
     KtElement(session, node) {
 
+    /** The `a.b.C` of `import a.b.C as D`, as an expression. */
+    val importedReference: KtExpression? get() = children.firstOrNull { it is KtExpression } as? KtExpression
+
     /** `a.b.C` from `import a.b.C as D`, without the star. */
-    val importedFqName: String?
-        get() = children.firstOrNull { it is KtExpression }?.text?.filterNot { it.isWhitespace() }
+    val importedFqName: FqName?
+        get() = importedReference?.text?.filterNot { it.isWhitespace() }?.let { FqName(it) }
 
     val isAllUnder: Boolean get() = hasChild(KtTokens.MUL)
 
     val alias: KtImportAlias? get() = firstChildOfType()
 
     /** The name this import introduces: the alias if there is one, otherwise the last name part. */
-    val aliasName: String? get() = alias?.name ?: importedFqName?.substringAfterLast('.')
+    val aliasName: String? get() = alias?.name ?: importedFqName?.shortName()?.asString()
 }
 
 class KtImportAlias internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node) {
-    val name: String? get() = child(KtTokens.IDENTIFIER)?.text
+    val nameIdentifier: KtElement? get() = child(KtTokens.IDENTIFIER)
+    val name: String? get() = nameIdentifier?.text
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -251,22 +289,52 @@ abstract class KtClassOrObject internal constructor(session: KtTreeSession, node
     override val typeParameterList: KtTypeParameterList? get() = firstChildOfType()
 
     override val typeParameters: List<KtTypeParameter> get() = typeParameterList?.parameters.orEmpty()
+
+    override val typeConstraintList: KtTypeConstraintList? get() = firstChildOfType()
+
+    override val typeConstraints: List<KtTypeConstraint> get() = typeConstraintList?.constraints.orEmpty()
+
+    val primaryConstructorParameters: List<KtParameter> get() = primaryConstructor?.valueParameters.orEmpty()
+
+    /**
+     * True only when the constructor is WRITTEN.
+     *
+     * `class Foo` has a primary constructor and no `KtPrimaryConstructor` node, so a check that asked whether
+     * the node exists and one that asked whether the class has a primary constructor are different questions
+     * with the same obvious-looking spelling.
+     */
+    fun hasExplicitPrimaryConstructor(): Boolean = primaryConstructor != null
+
+    fun hasPrimaryConstructor(): Boolean = hasExplicitPrimaryConstructor() || !hasSecondaryConstructors()
+
+    fun hasSecondaryConstructors(): Boolean = secondaryConstructors.isNotEmpty()
+
+    fun getAnonymousInitializers(): List<KtClassInitializer> = body?.childrenOfType<KtClassInitializer>().orEmpty()
+
+    /** Companions declared in the body. A class can only have one, but the tree can hold a malformed two. */
+    val companionObjects: List<KtObjectDeclaration>
+        get() = body?.childrenOfType<KtObjectDeclaration>()?.filter { it.isCompanion() }.orEmpty()
 }
 
-class KtClass internal constructor(session: KtTreeSession, node: LightNode) :
+open class KtClass internal constructor(session: KtTreeSession, node: LightNode) :
     KtClassOrObject(session, node) {
 
-    val isInterface: Boolean get() = hasChild(KtTokens.INTERFACE_KEYWORD)
+    // Functions, not properties. `isElse` on a when-entry is a property upstream and `isInterface()` on a
+    // class is a method, so the call sites differ by a pair of parentheses and there is no rule to infer it
+    // from: each one follows whatever upstream declared.
+    fun isInterface(): Boolean = hasChild(KtTokens.INTERFACE_KEYWORD)
 
-    val isEnum: Boolean get() = hasModifier(KtTokens.ENUM_MODIFIER)
+    fun isEnum(): Boolean = hasModifier(KtTokens.ENUM_MODIFIER)
 
-    val isAnnotation: Boolean get() = hasModifier(KtTokens.ANNOTATION_MODIFIER)
+    fun isAnnotation(): Boolean = hasModifier(KtTokens.ANNOTATION_MODIFIER)
 
-    val isData: Boolean get() = hasModifier(KtTokens.DATA_MODIFIER)
+    fun isData(): Boolean = hasModifier(KtTokens.DATA_MODIFIER)
 
-    val isSealed: Boolean get() = hasModifier(KtTokens.SEALED_MODIFIER)
+    fun isSealed(): Boolean = hasModifier(KtTokens.SEALED_MODIFIER)
 
-    val isInner: Boolean get() = hasModifier(KtTokens.INNER_MODIFIER)
+    fun isInner(): Boolean = hasModifier(KtTokens.INNER_MODIFIER)
+
+    fun isValue(): Boolean = hasModifier(KtTokens.VALUE_MODIFIER)
 
     val enumEntries: List<KtEnumEntry> get() = body?.childrenOfType<KtEnumEntry>().orEmpty()
 }
@@ -274,17 +342,29 @@ class KtClass internal constructor(session: KtTreeSession, node: LightNode) :
 class KtObjectDeclaration internal constructor(session: KtTreeSession, node: LightNode) :
     KtClassOrObject(session, node) {
     /** A companion object has the `companion` modifier and usually no name. */
-    val isCompanion: Boolean get() = hasModifier(KtTokens.COMPANION_MODIFIER)
+    fun isCompanion(): Boolean = hasModifier(KtTokens.COMPANION_MODIFIER)
+
+    fun isObjectLiteral(): Boolean = parent is KtObjectLiteralExpression
+
+    val objectKeyword: KtElement? get() = child(KtTokens.OBJECT_KEYWORD)
 }
 
 class KtClassBody internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node) {
     val declarations: List<KtDeclaration> get() = childrenOfType<KtDeclaration>().filter { it !is KtEnumEntry }
+    val properties: List<KtProperty> get() = childrenOfType()
+    val functions: List<KtNamedFunction> get() = childrenOfType()
+    val lBrace: KtElement? get() = child(KtTokens.LBRACE)
+    val rBrace: KtElement? get() = child(KtTokens.RBRACE)
 }
 
+/**
+ * `A(1)` inside an enum. Upstream this extends [KtClass], not [KtNamedDeclaration], because an entry can
+ * declare a body with members of its own and everything that walks a classifier has to reach those.
+ */
 class KtEnumEntry internal constructor(session: KtTreeSession, node: LightNode) :
-    KtNamedDeclaration(session, node) {
-    val initializerList: KtValueArgumentList? get() = firstChildOfType()
-    val body: KtClassBody? get() = firstChildOfType()
+    KtClass(session, node) {
+    val initializerList: KtInitializerList? get() = firstChildOfType()
+    fun hasInitializer(): Boolean = initializerList != null
 }
 
 class KtPrimaryConstructor internal constructor(session: KtTreeSession, node: LightNode) :
@@ -293,6 +373,7 @@ class KtPrimaryConstructor internal constructor(session: KtTreeSession, node: Li
     override val valueParameters: List<KtParameter> get() = valueParameterList?.parameters.orEmpty()
 
     /** A primary constructor never has a body; its initialization lives in the class's initializers. */
+    override val equalsToken: KtElement? get() = null
     override val bodyExpression: KtExpression? get() = null
     override val bodyBlockExpression: KtBlockExpression? get() = null
     override fun hasBlockBody(): Boolean = false
@@ -305,11 +386,12 @@ class KtSecondaryConstructor internal constructor(session: KtTreeSession, node: 
     override val valueParameters: List<KtParameter> get() = valueParameterList?.parameters.orEmpty()
     override val bodyExpression: KtBlockExpression? get() = firstChildOfType()
     override val bodyBlockExpression: KtBlockExpression? get() = bodyExpression
+    override val equalsToken: KtElement? get() = null
     override fun hasBlockBody(): Boolean = bodyExpression != null
     override fun hasBody(): Boolean = bodyExpression != null
 
     /** `: this(...)` or `: super(...)`, absent when the constructor delegates implicitly. */
-    val delegationCall: KtConstructorDelegationCall? get() = firstChildOfType()
+    fun getDelegationCall(): KtConstructorDelegationCall? = firstChildOfType()
 }
 
 class KtClassInitializer internal constructor(session: KtTreeSession, node: LightNode) :
@@ -333,6 +415,7 @@ class KtSuperTypeEntry internal constructor(session: KtTreeSession, node: LightN
 class KtSuperTypeCallEntry internal constructor(session: KtTreeSession, node: LightNode) :
     KtSuperTypeListEntry(session, node) {
     val valueArgumentList: KtValueArgumentList? get() = firstChildOfType()
+    val valueArguments: List<KtValueArgument> get() = valueArgumentList?.arguments.orEmpty()
 }
 
 class KtDelegatedSuperTypeEntry internal constructor(session: KtTreeSession, node: LightNode) :
@@ -357,6 +440,10 @@ class KtNamedFunction internal constructor(session: KtTreeSession, node: LightNo
     /** An abstract or expect function has neither kind of body. */
     override fun hasBody(): Boolean = bodyExpression != null
 
+    override val equalsToken: KtElement? get() = child(KtTokens.EQ)
+
+    val funKeyword: KtElement? get() = child(KtTokens.FUN_MODIFIER)
+
     val isLocal: Boolean get() = getStrictParentOfType<KtBlockExpression>() != null
 }
 
@@ -370,6 +457,15 @@ class KtProperty internal constructor(session: KtTreeSession, node: LightNode) :
     val delegate: KtPropertyDelegate? get() = firstChildOfType()
 
     fun hasDelegate(): Boolean = delegate != null
+
+    /** The `by f()` expression, which is where a delegate diagnostic has to point. */
+    val delegateExpression: KtExpression? get() = delegate?.expression
+
+    fun hasDelegateExpression(): Boolean = delegateExpression != null
+
+    val delegateExpressionOrInitializer: KtExpression? get() = delegateExpression ?: initializer
+
+    val valOrVarKeyword: KtElement get() = child(KtTokens.VAL_KEYWORD) ?: child(KtTokens.VAR_KEYWORD) ?: this
 
     /** The `= …` initializer, told from the accessors and the type by position. */
     val initializer: KtExpression?
@@ -391,6 +487,7 @@ class KtProperty internal constructor(session: KtTreeSession, node: LightNode) :
 class KtPropertyDelegate internal constructor(session: KtTreeSession, node: LightNode) :
     KtElement(session, node) {
     val expression: KtExpression? get() = firstChildOfType()
+    val property: KtProperty? get() = parent as? KtProperty
 }
 
 class KtPropertyAccessor internal constructor(session: KtTreeSession, node: LightNode) :
@@ -404,12 +501,19 @@ class KtPropertyAccessor internal constructor(session: KtTreeSession, node: Ligh
 
     override val bodyBlockExpression: KtBlockExpression? get() = bodyExpression as? KtBlockExpression
 
+    override val equalsToken: KtElement? get() = child(KtTokens.EQ)
+
+    /** The `get` or `set` keyword, which stands where a named declaration would put its name. */
+    val namePlaceholder: KtElement
+        get() = child(KtTokens.GET_KEYWORD) ?: child(KtTokens.SET_KEYWORD) ?: this
+
     /** An accessor declared without a body (`var x: Int get`) is a parse fragment, not a declaration. */
     override fun hasBlockBody(): Boolean = bodyBlockExpression != null
 
     override fun hasBody(): Boolean = bodyExpression != null
 
-    val valueParameters: List<KtParameter> get() = firstChildOfType<KtParameterList>()?.parameters.orEmpty()
+    override val valueParameters: List<KtParameter>
+        get() = firstChildOfType<KtParameterList>()?.parameters.orEmpty()
 
     val returnTypeReference: KtTypeReference? get() = firstChildOfType()
 }
@@ -418,6 +522,8 @@ class KtTypeAlias internal constructor(session: KtTreeSession, node: LightNode) 
     KtNamedDeclaration(session, node), KtTypeParameterListOwner {
     override val typeParameterList: KtTypeParameterList? get() = firstChildOfType()
     override val typeParameters: List<KtTypeParameter> get() = typeParameterList?.parameters.orEmpty()
+    override val typeConstraintList: KtTypeConstraintList? get() = firstChildOfType()
+    override val typeConstraints: List<KtTypeConstraint> get() = typeConstraintList?.constraints.orEmpty()
     val typeReference: KtTypeReference? get() = firstChildOfType()
 }
 
@@ -445,7 +551,12 @@ class KtParameter internal constructor(session: KtTreeSession, node: LightNode) 
     /** A primary-constructor parameter that also declares a property. */
     fun hasValOrVar(): Boolean = hasChild(KtTokens.VAL_KEYWORD) || hasChild(KtTokens.VAR_KEYWORD)
 
+    val valOrVarKeyword: KtElement? get() = child(KtTokens.VAL_KEYWORD) ?: child(KtTokens.VAR_KEYWORD)
+
     val isMutable: Boolean get() = hasChild(KtTokens.VAR_KEYWORD)
+
+    /** `{ (a, b) -> }`: a lambda parameter that destructures instead of naming one thing. */
+    val destructuringDeclaration: KtDestructuringDeclaration? get() = firstChildOfType()
 }
 
 class KtTypeParameterList internal constructor(session: KtTreeSession, node: LightNode) :
@@ -455,6 +566,15 @@ class KtTypeParameterList internal constructor(session: KtTreeSession, node: Lig
 
 class KtTypeParameter internal constructor(session: KtTreeSession, node: LightNode) :
     KtNamedDeclaration(session, node) {
+
+    /** Declaration-site variance: `<out T>` / `<in T>`, or invariant when neither is written. */
+    val variance: Variance
+        get() = when {
+            hasModifier(KtTokens.IN_MODIFIER) -> Variance.IN_VARIANCE
+            hasModifier(KtTokens.OUT_MODIFIER) -> Variance.OUT_VARIANCE
+            else -> Variance.INVARIANT
+        }
+
     val extendsBound: KtTypeReference? get() = firstChildOfType()
     val isReified: Boolean get() = hasModifier(KtTokens.REIFIED_MODIFIER)
 }
@@ -473,6 +593,15 @@ class KtTypeConstraint internal constructor(session: KtTreeSession, node: LightN
 class KtDestructuringDeclaration internal constructor(session: KtTreeSession, node: LightNode) :
     KtDeclaration(session, node) {
     val entries: List<KtDestructuringDeclarationEntry> get() = childrenOfType()
+
+    /** The `= f()` of `val (a, b) = f()`, which is the only child that is not an entry. */
+    val initializer: KtExpression? get() = childrenOfType<KtExpression>().lastOrNull()
+
+    fun hasInitializer(): Boolean = initializer != null
+
+    val isVar: Boolean get() = hasChild(KtTokens.VAR_KEYWORD)
+
+    val valOrVarKeyword: KtElement? get() = child(KtTokens.VAL_KEYWORD) ?: child(KtTokens.VAR_KEYWORD)
 }
 
 class KtDestructuringDeclarationEntry internal constructor(session: KtTreeSession, node: LightNode) :
@@ -488,6 +617,9 @@ class KtModifierList internal constructor(session: KtTreeSession, node: LightNod
     KtElement(session, node) {
 
     override fun hasModifier(token: SyntaxElementType): Boolean = hasChild(token)
+
+    /** The element carrying [token], for a diagnostic that has to underline the modifier itself. */
+    fun getModifier(token: SyntaxElementType): KtElement? = child(token)
 
     override val annotationEntries: List<KtAnnotationEntry> get() = childrenOfType()
 
@@ -507,7 +639,8 @@ class KtAnnotationEntry internal constructor(session: KtTreeSession, node: Light
     val typeReference: KtTypeReference? get() = child(KtNodeTypes.CONSTRUCTOR_CALLEE)?.firstChildOfType()
 
     /** The annotation's short name, which is what most call sites actually want. */
-    val shortName: String? get() = typeReference?.text?.substringAfterLast('.')?.substringBefore('<')
+    val shortName: Name?
+        get() = typeReference?.text?.substringAfterLast('.')?.substringBefore('<')?.let { Name.identifier(it) }
 
     val valueArgumentList: KtValueArgumentList? get() = firstChildOfType()
 
@@ -568,4 +701,12 @@ class KtTypeProjection internal constructor(session: KtTreeSession, node: LightN
     KtElement(session, node), KtAnnotated, KtModifierListOwner {
     val typeReference: KtTypeReference? get() = firstChildOfType()
     val isStar: Boolean get() = hasChild(KtTokens.MUL)
+
+    val projectionKind: KtProjectionKind
+        get() = when {
+            isStar -> KtProjectionKind.STAR
+            hasModifier(KtTokens.IN_MODIFIER) -> KtProjectionKind.IN
+            hasModifier(KtTokens.OUT_MODIFIER) -> KtProjectionKind.OUT
+            else -> KtProjectionKind.NONE
+        }
 }

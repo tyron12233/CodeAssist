@@ -139,6 +139,34 @@ reaching too little and neither fails to compile. Three that matter:
 `KtPsiInterfacesTest` is 20 tests about exactly this: not that each interface exists, but which elements it
 reaches and which it does not.
 
+## What the repoint probe found, which naming alone could not
+
+Having every name is not the same as having every name MEAN the same thing. A throwaway worktree with
+`:lang-kotlin`'s 682 PSI imports rewritten onto the facade turns the compiler into the oracle for that, and
+it went from **924 errors to 252**, of which 115 are call sites still holding IntelliJ types (`PsiTreeUtil`,
+`PsiElement`-typed signatures) rather than anything missing here.
+
+Five of the differences it found would have compiled on both sides and been wrong at runtime:
+
+- **`valueArguments` INCLUDES the trailing lambda.** The obvious reading is "what is in the parentheses", and
+  upstream appends the lambda arguments. Every arity rule in the backend reads this list, so the obvious
+  version counts `list.map { }` as a call with no arguments.
+- **`KtLambdaArgument` extends `KtValueArgument`.** Which is what makes `arg is KtLambdaArgument` over that
+  list compile at all; as unrelated types it is a compile error, and as a silent miss it would be worse.
+- **`KtEnumEntry` extends `KtClass`.** An entry can declare a body with members of its own. Fixing this broke
+  the module's own outline, whose `when` had `is KtClass` above `is KtEnumEntry` and started calling every
+  enum constant a class — which is exactly how this would have failed in the backend.
+- **`importedFqName`, `shortName`, `packageFqName` and `nameAsName` return `Name`/`FqName`, not `String`.**
+  About 130 call sites write `.asString()`. A string-returning facade is the better API and turns an import
+  swap into 130 hand edits, each a chance to change behaviour with the compiler silent.
+- **`getArgumentName()` returns a NODE, and `operationReference`/`receiverExpression` are not nullable.**
+  Upstream is Java, so the backend reads them straight through; nullable versions here look harmless and
+  produce 60 errors with no bearing on what the code means.
+
+And `isInterface()`, `isEnum()`, `isData()`, `isCompanion()` are FUNCTIONS while `isElse` is a property.
+There is no rule to infer that from: each follows whatever upstream declared, and the 74 call sites that
+disagreed are what said so.
+
 And `KtTokensCompat.kt` exists because the vendored vocabulary renamed every modifier — `PRIVATE_MODIFIER`
 where PSI said `PRIVATE_KEYWORD`, 34 of them, 82 references in `:lang-kotlin`. It re-exports all 163 tokens
 and token sets under PSI's names, so the migration is an import swap rather than 82 hand edits.

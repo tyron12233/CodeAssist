@@ -31,7 +31,7 @@ class TextRange(val startOffset: Int, val endOffset: Int) {
  * elements, and a facade that minted a fresh wrapper per access would turn every one of those into a leak
  * that still passed its own tests.
  */
-class KtTreeSession internal constructor(val tree: LightSyntaxTree) {
+class KtTreeSession internal constructor(val tree: LightSyntaxTree, val fileName: String = "dummy.kt") {
 
     private val wrappers = HashMap<Int, KtElement>()
 

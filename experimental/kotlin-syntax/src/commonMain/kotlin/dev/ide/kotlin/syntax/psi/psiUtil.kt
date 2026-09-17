@@ -8,8 +8,14 @@ package dev.ide.kotlin.syntax.psi
  * compiler's names so those call sites need an import change and nothing else.
  */
 
-/** The nearest ancestor of type [T], this element included. */
-inline fun <reified T : KtElement> KtElement.getParentOfType(strict: Boolean = false): T? {
+/**
+ * The nearest ancestor of type [T], this element included.
+ *
+ * [T] is not bounded by [KtElement] because the useful targets include the bases that are interfaces —
+ * `getParentOfType<KtTypeParameterListOwner>()` is how the backend walks out to whatever declares a type
+ * parameter, and that is not a class.
+ */
+inline fun <reified T : Any> KtElement.getParentOfType(strict: Boolean = false): T? {
     var current: KtElement? = if (strict) parent else this
     while (current != null) {
         if (current is T) return current
@@ -19,7 +25,7 @@ inline fun <reified T : KtElement> KtElement.getParentOfType(strict: Boolean = f
 }
 
 /** The nearest ancestor of type [T], NOT counting this element. */
-inline fun <reified T : KtElement> KtElement.getStrictParentOfType(): T? = getParentOfType<T>(strict = true)
+inline fun <reified T : Any> KtElement.getStrictParentOfType(): T? = getParentOfType<T>(strict = true)
 
 /**
  * The class or object this declaration is a member of, or null for a top-level or local one.

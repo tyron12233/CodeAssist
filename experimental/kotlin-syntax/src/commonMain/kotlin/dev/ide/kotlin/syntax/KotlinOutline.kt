@@ -76,12 +76,20 @@ object KotlinOutline {
         val kind: String
         val detail: String?
         when (element) {
+            // BEFORE the KtClass branch: an enum entry IS a KtClass, as upstream declares it, because an
+            // entry can carry a body with members of its own. Put this second and every entry reads "class".
+            is KtEnumEntry -> {
+                name = element.name ?: return null
+                kind = "enum_constant"
+                detail = null
+            }
+
             is KtClass -> {
                 name = element.name ?: return null
                 kind = when {
-                    element.isInterface -> "interface"
-                    element.isEnum -> "enum"
-                    element.isAnnotation -> "annotation_type"
+                    element.isInterface() -> "interface"
+                    element.isEnum() -> "enum"
+                    element.isAnnotation() -> "annotation_type"
                     else -> "class"
                 }
                 detail = element.primaryConstructor?.valueParameterList?.text
@@ -90,14 +98,8 @@ object KotlinOutline {
             is KtObjectDeclaration -> {
                 // A companion object usually has no name of its own, and "companion" is what a reader expects
                 // to see in an outline rather than a blank row.
-                name = element.name ?: if (element.isCompanion) "companion" else return null
+                name = element.name ?: if (element.isCompanion()) "companion" else return null
                 kind = "class"
-                detail = null
-            }
-
-            is KtEnumEntry -> {
-                name = element.name ?: return null
-                kind = "enum_constant"
                 detail = null
             }
 

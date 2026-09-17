@@ -17,7 +17,7 @@ import org.jetbrains.kotlin.kmp.tree.LightNode
 class KtValueArgumentName internal constructor(session: KtTreeSession, node: LightNode) :
     KtElement(session, node) {
     val referenceExpression: KtNameReferenceExpression? get() = firstChildOfType()
-    val asName: String? get() = referenceExpression?.getReferencedName()
+    val asName: Name? get() = referenceExpression?.getReferencedName()?.let { Name.identifier(it) }
 }
 
 /** An `@[Foo Bar]` group. The entries inside it are ordinary [KtAnnotationEntry]s. */
@@ -52,6 +52,10 @@ class KtConstructorDelegationCall internal constructor(session: KtTreeSession, n
     val valueArgumentList: KtValueArgumentList? get() = firstChildOfType()
     val valueArguments: List<KtValueArgument> get() = valueArgumentList?.arguments.orEmpty()
     val isImplicit: Boolean get() = textLength == 0
+
+    /** `: this(...)` rather than `: super(...)`. An implicit delegation is to super. */
+    val isCallToThis: Boolean
+        get() = calleeExpression?.text == "this" || (isImplicit && false)
 }
 
 /** The `this` or `super` word inside a [KtConstructorDelegationCall]. */

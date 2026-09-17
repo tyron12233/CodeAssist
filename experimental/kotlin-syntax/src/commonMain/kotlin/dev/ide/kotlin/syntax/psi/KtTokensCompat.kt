@@ -180,4 +180,19 @@ object KtTokens {
     val COMMENTS: SyntaxElementTypeSet = Vendored.COMMENTS
     val WHITE_SPACE_OR_COMMENT_BIT_SET: SyntaxElementTypeSet = Vendored.WHITE_SPACE_OR_COMMENT_BIT_SET
     val VAL_VAR: SyntaxElementTypeSet = Vendored.VAL_VAR
+
+    /** Upstream's `KEYWORDS` is the hard keywords; the vendored vocabulary folds modifiers in with them. */
+    val KEYWORDS: SyntaxElementTypeSet = Vendored.HARD_KEYWORDS_AND_MODIFIERS
+
+    val MODIFIER_KEYWORDS: SyntaxElementTypeSet = Vendored.MODIFIERS
 }
+
+/**
+ * Upstream a modifier keyword has a type of its own, `KtModifierKeywordToken`, so a function can take one
+ * and not any token. The vendored vocabulary has a single element type, so this is an alias: it keeps the
+ * call sites readable and gives up the checking they had.
+ */
+typealias KtModifierKeywordToken = SyntaxElementType
+
+/** `TokenSet.getTypes()` upstream, which hands back an array rather than the set. */
+val SyntaxElementTypeSet.types: List<SyntaxElementType> get() = toList()

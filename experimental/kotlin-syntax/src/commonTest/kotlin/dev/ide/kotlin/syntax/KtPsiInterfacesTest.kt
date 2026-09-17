@@ -154,7 +154,8 @@ class KtPsiInterfacesTest {
             listOf("KtValueArgument", "KtValueArgument", "KtLambdaArgument"),
             arguments.map { it::class.simpleName },
         )
-        assertEquals(listOf("a", null, null), arguments.map { it.getArgumentName() })
+        // An argument name is a NODE upstream, not a string, so `arg.getArgumentName()?.asName` works.
+        assertEquals(listOf("a", null, null), arguments.map { it.getArgumentName()?.asName?.identifier })
         assertEquals(listOf(true, false, false), arguments.map { it.isNamed() })
         assertEquals(listOf("1", "b", "{ 2 }"), arguments.map { it.getArgumentExpression()?.text })
     }
@@ -278,15 +279,15 @@ class KtPsiInterfacesTest {
             }
             """.trimIndent(),
         )
-        assertEquals(listOf("JvmName"), parsed.annotationEntries.map { it.shortName })
+        assertEquals(listOf("JvmName"), parsed.annotationEntries.map { it.shortName?.asString() })
         assertIs<KtFileAnnotationList>(parsed.fileAnnotationList)
 
         val cls = parsed.all<KtClass>().single()
-        assertEquals(listOf("Deprecated"), cls.annotationEntries.map { it.shortName })
+        assertEquals(listOf("Deprecated"), cls.annotationEntries.map { it.shortName?.asString() })
         assertIs<KtModifierListOwner>(cls)
 
         val onType = parsed.all<KtTypeReference>().single { it.annotationEntries.isNotEmpty() }
-        assertEquals(listOf("A"), onType.annotationEntries.map { it.shortName })
+        assertEquals(listOf("A"), onType.annotationEntries.map { it.shortName?.asString() })
     }
 
     @Test
@@ -311,7 +312,7 @@ class KtPsiInterfacesTest {
             """.trimIndent(),
         )
         val secondary = parsed.all<KtSecondaryConstructor>().single()
-        val call = assertNotNull(secondary.delegationCall)
+        val call = assertNotNull(secondary.getDelegationCall())
         assertIs<KtConstructorDelegationCall>(call)
         assertEquals(listOf("1"), call.valueArguments.map { it.text })
     }

@@ -1,5 +1,9 @@
 package dev.ide.kotlin.syntax.psi
 
+import com.intellij.platform.syntax.SyntaxElementType
+import org.jetbrains.kotlin.kmp.parser.KtNodeTypes
+import org.jetbrains.kotlin.kmp.tree.LightNode
+
 /**
  * The bases the compiler's PSI declares and a call site names, even though it never constructs one.
  *
@@ -31,6 +35,8 @@ interface KtModifierListOwner {
 interface KtTypeParameterListOwner {
     val typeParameterList: KtTypeParameterList?
     val typeParameters: List<KtTypeParameter>
+    val typeConstraintList: KtTypeConstraintList?
+    val typeConstraints: List<KtTypeConstraint>
 }
 
 /**
@@ -42,6 +48,11 @@ interface KtTypeParameterListOwner {
 interface KtDeclarationWithBody {
     val bodyExpression: KtExpression?
     val bodyBlockExpression: KtBlockExpression?
+
+    /** The `=` of an expression body, which is where a quick fix converting to a block body cuts. */
+    val equalsToken: KtElement?
+
+    val valueParameters: List<KtParameter>
 
     // Functions, not properties: `hasX()` is not a Java getter prefix, so Kotlin sees a METHOD, and a
     // call site written against the compiler's PSI writes the parentheses. The facade learned this the
@@ -61,7 +72,7 @@ interface ValueArgument {
     fun getArgumentExpression(): KtExpression?
 
     /** The `name` of `name = value`, or null when the argument is positional. */
-    fun getArgumentName(): String?
+    fun getArgumentName(): KtValueArgumentName?
 
     fun isNamed(): Boolean = getArgumentName() != null
 }
@@ -78,23 +89,61 @@ interface KtSimpleNameExpression {
     fun getReferencedName(): String
 }
 
-/** A `!x`, `-x`, `x!!`, `x++`: one operand and one operator, either side of it. */
+/**
+ * Anything written with an operator: `a + b`, `-x`, `x++`, `a as B`.
+ *
+ * `operationReference` is NOT nullable, which upstream reaches by being Java. Every one of these nodes is
+ * parsed around its operator, so there is no such thing as one without a reference, and 37 call sites read
+ * it straight through.
+ */
 interface KtOperationExpression {
-    val operationReference: KtOperationReferenceExpression?
+    val operationReference: KtOperationReferenceExpression
+
+    /** The operator token's own element, which a formatter aligns on. */
+    val operationTokenNode: KtElement get() = operationReference
 }
 
-interface KtUnaryExpression : KtOperationExpression {
-    val baseExpression: KtExpression?
+/**
+ * An abstract class, not an interface, because upstream `KtUnaryExpression` extends `KtExpression` and the
+ * backend passes one straight into code that wants an element: `unsupported("unary without operand", e)`.
+ * A bare interface compiles until the first such call and then fails somewhere with nothing to do with
+ * unary expressions.
+ */
+abstract class KtUnaryExpression internal constructor(session: KtTreeSession, node: LightNode) :
+    KtExpression(session, node), KtOperationExpression {
+    abstract val baseExpression: KtExpression?
+    val operationToken: SyntaxElementType? get() = operationReference.operationSignTokenType
 }
 
 /** `break@loop`, `return@run`, `this@Foo`: an expression carrying an optional label. */
-interface KtExpressionWithLabel {
-    val labelQualifier: KtElement?
-    fun getLabelName(): String?
+open class KtExpressionWithLabel internal constructor(session: KtTreeSession, node: LightNode) :
+    KtExpression(session, node) {
+
+    val labelQualifier: KtElement? get() = child(KtNodeTypes.LABEL_QUALIFIER)
+
+    /**
+     * The label, without its `@`.
+     *
+     * A label is WRITTEN `loop@ while (…)` and READ `break@loop`, so the `@` sits on opposite ends of the
+     * same text; [KtLabeledExpression] overrides this for the writing side.
+     */
+    open fun getLabelName(): String? = labelQualifier?.text?.removePrefix("@")
+
+    /**
+     * The `@name` token itself, which is what a highlighter colours.
+     *
+     * Every label site holds it the same way, so this is settled once here rather than repeated on the six
+     * expressions that can carry one.
+     */
+    fun getTargetLabel(): KtLabelReferenceExpression? = labelQualifier?.firstChildOfType()
 }
 
 /** `this@Foo` and `super@Foo`, the two labelled instance expressions. */
-interface KtInstanceExpressionWithLabel : KtExpressionWithLabel
+abstract class KtInstanceExpressionWithLabel internal constructor(session: KtTreeSession, node: LightNode) :
+    KtExpressionWithLabel(session, node) {
+    /** The `this` or `super` word, which a highlighter colours as a keyword even inside a template. */
+    val instanceReference: KtElement get() = firstChildOfType<KtNameReferenceExpression>() ?: this
+}
 
 /**
  * Anything callable that is declared: a named function, a constructor, a function literal.
@@ -104,7 +153,6 @@ interface KtInstanceExpressionWithLabel : KtExpressionWithLabel
  * `is KtFunction` that missed lambdas would be quietly wrong in every rule about function bodies.
  */
 interface KtFunction : KtDeclarationWithBody {
-    val valueParameters: List<KtParameter>
     val valueParameterList: KtParameterList?
 }
 
@@ -114,14 +162,16 @@ interface KtFunction : KtDeclarationWithBody {
  * Both are reached the same way from a name reference: walk up, and if the parent is one of these, the name
  * is a reflection target rather than a value being read.
  */
-interface KtDoubleColonExpression {
-    val receiverExpression: KtExpression?
+abstract class KtDoubleColonExpression internal constructor(session: KtTreeSession, node: LightNode) :
+    KtExpression(session, node) {
+    abstract val receiverExpression: KtExpression?
 }
 
 /** `while (c) { }` and `do { } while (c)`, which differ only in where the condition is written. */
-interface KtWhileExpressionBase {
-    val condition: KtExpression?
-    val body: KtExpression?
+abstract class KtWhileExpressionBase internal constructor(session: KtTreeSession, node: LightNode) :
+    KtLoopExpression(session, node) {
+    val condition: KtExpression? get() = child(KtNodeTypes.CONDITION)?.firstChildOfType()
+    override val body: KtExpression? get() = child(KtNodeTypes.BODY)?.firstChildOfType()
 }
 
 /** `Foo`, `Foo?`, `() -> Unit`, `dynamic`: the shapes a type reference can wrap. */

@@ -91,9 +91,18 @@ object KotlinSyntax {
         )
     }
 
-    /** Parse [text] and return it behind the `Kt*` facade, which is what callers normally want. */
-    fun parseFile(text: CharSequence, isScript: Boolean = false, lazy: Boolean = false): KtFile =
-        KtTreeSession(parse(text, isScript, lazy)).file
+    /**
+     * Parse [text] and return it behind the `Kt*` facade, which is what callers normally want.
+     *
+     * [name] is carried rather than derived: nothing in the text says what file it came from, and the symbol
+     * layer keys declarations on the file name.
+     */
+    fun parseFile(
+        text: CharSequence,
+        isScript: Boolean = false,
+        lazy: Boolean = false,
+        name: String = "dummy.kt",
+    ): KtFile = KtTreeSession(parse(text, isScript, lazy), name).file
 
     /** Drives the vendored grammar's block rule rather than its file rule. */
     private object BlockParser : AbstractParser() {
