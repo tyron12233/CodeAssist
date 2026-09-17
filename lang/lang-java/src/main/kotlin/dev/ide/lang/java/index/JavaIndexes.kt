@@ -46,13 +46,13 @@ private val TYPE_KINDS =
  *  bound on the climb even for a pathological file (`class A { class A { } }`). */
 private const val MAX_NESTING = 8
 
-/** The raw ASM [org.objectweb.asm.ClassReader] for [input], constructed ONCE per class and SHARED — via the
- *  cross-family [IndexInput.CLASS_READER] key — with the Kotlin binary indexes, so a library `.class`' constant
- *  pool is parsed a single time for the whole pass instead of once per index (≈6× on every android.jar class). */
-private fun sharedReader(input: IndexInput): org.objectweb.asm.ClassReader? =
-    input.shared(IndexInput.CLASS_READER) {
+/** The parsed class file for [input], read ONCE per class and SHARED — via the cross-family
+ *  [IndexInput.CLASS_FILE] key — with the Kotlin binary indexes, so a library `.class` is read a single time
+ *  for the whole pass instead of once per index (≈6× on every android.jar class). */
+private fun sharedReader(input: IndexInput): dev.ide.kotlin.classfile.ClassFile? =
+    input.shared(IndexInput.CLASS_FILE) {
         val bytes = runCatching { input.bytes() }.getOrNull() ?: return@shared null
-        runCatching { org.objectweb.asm.ClassReader(bytes) }.getOrNull()
+        dev.ide.kotlin.classfile.ClassFile.read(bytes)
     }
 
 /** The ASM class shape for [input], distilled ONCE per class and SHARED across the `java.*` binary indexes that

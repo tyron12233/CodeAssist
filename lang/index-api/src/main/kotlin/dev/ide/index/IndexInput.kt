@@ -40,5 +40,14 @@ interface IndexInput {
          *  The cached value is an `org.objectweb.asm.ClassReader` — a type known only to those modules; this key
          *  is just the neutral coordination point so they agree on it. */
         const val CLASS_READER: String = "asm.classReader"
+
+        /**
+         * One parsed `.class` per class file, shared by the Java AND Kotlin binary index families.
+         *
+         * The successor to [CLASS_READER]: the indexes now read through `:kotlin-classfile`, which has no
+         * JVM behind it, so the same decode runs on a phone. The old key stays declared because it is
+         * published SPI and a plugin may hold it, but nothing in this build shares under it any more.
+         */
+        const val CLASS_FILE: String = "classfile"
     }
 }

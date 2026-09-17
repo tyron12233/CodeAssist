@@ -367,22 +367,22 @@ class KotlinSymbolService(
 
     /** Level → not-null Optional so a "not a marker" answer is cached too. */
     private val optInLevelCache = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<OptInLevel>>()
-    private val optInScanCache = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<KotlinMetadata.OptInScan>>()
+    private val optInScanCache = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<KotlinOptIn.OptInScan>>()
 
     /** The opt-in [OptInLevel] of annotation class [annotationFqn] IF it is a `@RequiresOptIn` marker (source
      *  or library), else null. Cached. This is what turns "is this annotation experimental?" into a decision. */
     fun optInLevelOf(annotationFqn: String): OptInLevel? =
         optInLevelCache.getOrPut(annotationFqn) {
             val fromSource = model().classByFqn[annotationFqn]?.optInLevel
-            val level = fromSource ?: reader.classBytes(annotationFqn)?.let { KotlinMetadata.scanOptIn(it)?.requiresOptInLevel }
+            val level = fromSource ?: reader.classBytes(annotationFqn)?.let { KotlinOptIn.scan(it)?.requiresOptInLevel }
             java.util.Optional.ofNullable(level?.let { if (it == "WARNING") OptInLevel.WARNING else OptInLevel.ERROR })
         }.orElse(null)
 
     /** The ASM opt-in scan of library class [classFqn]'s bytecode (annotations on the class + its methods),
      *  cached. Null for a source class / one not on the classpath. */
-    private fun optInScanOf(classFqn: String): KotlinMetadata.OptInScan? =
+    private fun optInScanOf(classFqn: String): KotlinOptIn.OptInScan? =
         optInScanCache.getOrPut(classFqn) {
-            java.util.Optional.ofNullable(reader.classBytes(classFqn)?.let { KotlinMetadata.scanOptIn(it) })
+            java.util.Optional.ofNullable(reader.classBytes(classFqn)?.let { KotlinOptIn.scan(it) })
         }.orElse(null)
 
     /** The `@RequiresOptIn` markers that gate USE of [target] — those placed on the declaration itself, plus

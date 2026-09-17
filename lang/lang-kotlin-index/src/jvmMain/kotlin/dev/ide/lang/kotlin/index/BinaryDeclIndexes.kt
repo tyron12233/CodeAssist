@@ -14,11 +14,6 @@ import dev.ide.index.StringKeyDescriptor
 import dev.ide.index.SubtypeExternalizer
 import dev.ide.index.SubtypeIndex
 import dev.ide.index.SubtypeValue
-import org.objectweb.asm.AnnotationVisitor
-import org.objectweb.asm.ClassReader
-import org.objectweb.asm.ClassVisitor
-import org.objectweb.asm.FieldVisitor
-import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
 
 /**
@@ -62,15 +57,16 @@ object BinarySubtypeIndex : IndexExtension<String, SubtypeValue> {
     override val inputFilter = binaryClassFilter
 
     override fun index(input: IndexInput): Map<String, Collection<SubtypeValue>> {
-        val r = sharedClassReader(input) ?: return emptyMap()
-        if (r.access and Opcodes.ACC_SYNTHETIC != 0) return emptyMap()
-        val fqn = dotted(r.className)
-        val kind = kindOf(r.access)
+        val classFile = sharedClassFile(input) ?: return emptyMap()
+        if (classFile.accessFlags and Opcodes.ACC_SYNTHETIC != 0) return emptyMap()
+        val fqn = dotted(classFile.thisClass)
+        val kind = kindOf(classFile.accessFlags)
         val out = HashMap<String, MutableList<SubtypeValue>>()
-        val supers = ArrayList<String>(1 + r.interfaces.size)
-        r.superName?.takeIf { it != "java/lang/Object" && it != "java/lang/Record" && it != "java/lang/Enum" }
+        val supers = ArrayList<String>(1 + classFile.interfaces.size)
+        classFile.superClass
+            ?.takeIf { it != "java/lang/Object" && it != "java/lang/Record" && it != "java/lang/Enum" }
             ?.let { supers += dotted(it) }
-        r.interfaces.forEach { supers += dotted(it) }
+        classFile.interfaces.forEach { supers += dotted(it) }
         for (s in supers) {
             if (s == "kotlin.jvm.internal.Lambda" || s.startsWith("kotlin.jvm.functions.Function")) continue
             out.getOrPut(SubtypeIndex.key(s)) { ArrayList() }.add(SubtypeValue(fqn, kind, s))
@@ -88,43 +84,25 @@ object BinaryAnnotationIndex : IndexExtension<String, AnnotatedValue> {
     override val inputFilter = binaryClassFilter
 
     override fun index(input: IndexInput): Map<String, Collection<AnnotatedValue>> {
-        val r = sharedClassReader(input) ?: return emptyMap()
+        val classFile = sharedClassFile(input) ?: return emptyMap()
         val out = HashMap<String, MutableList<AnnotatedValue>>()
-        val owner = dotted(r.className)
-        val ownerKind = kindOf(r.access)
+        val owner = dotted(classFile.thisClass)
+        val ownerKind = kindOf(classFile.accessFlags)
 
         fun emit(declFqn: String, declKind: String, descriptor: String) {
             val ann = annotationFqn(descriptor) ?: return
             out.getOrPut(AnnotationIndex.key(ann)) { ArrayList() }.add(AnnotatedValue(declFqn, declKind, ann))
         }
 
-        r.accept(object : ClassVisitor(Opcodes.ASM9) {
-            override fun visitAnnotation(descriptor: String, visible: Boolean): AnnotationVisitor? {
-                emit(owner, ownerKind, descriptor); return null
-            }
-
-            override fun visitMethod(
-                access: Int, name: String, descriptor: String, signature: String?, exceptions: Array<out String>?,
-            ): MethodVisitor? {
-                if (access and Opcodes.ACC_SYNTHETIC != 0) return null
-                return object : MethodVisitor(Opcodes.ASM9) {
-                    override fun visitAnnotation(desc: String, visible: Boolean): AnnotationVisitor? {
-                        emit("$owner#$name", "method", desc); return null
-                    }
-                }
-            }
-
-            override fun visitField(
-                access: Int, name: String, descriptor: String, signature: String?, value: Any?,
-            ): FieldVisitor? {
-                if (access and Opcodes.ACC_SYNTHETIC != 0) return null
-                return object : FieldVisitor(Opcodes.ASM9) {
-                    override fun visitAnnotation(desc: String, visible: Boolean): AnnotationVisitor? {
-                        emit("$owner#$name", "field", desc); return null
-                    }
-                }
-            }
-        }, ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES)
+        for (descriptor in classFile.annotations) emit(owner, ownerKind, descriptor)
+        for (method in classFile.methods) {
+            if (method.access and Opcodes.ACC_SYNTHETIC != 0) continue
+            for (descriptor in method.annotations) emit("$owner#${method.name}", "method", descriptor)
+        }
+        for (field in classFile.fields) {
+            if (field.access and Opcodes.ACC_SYNTHETIC != 0) continue
+            for (descriptor in field.annotations) emit("$owner#${field.name}", "field", descriptor)
+        }
         return out
     }
 }

@@ -84,6 +84,8 @@ class ClassFile private constructor(
     val fields: List<ClassMember>,
     val methods: List<ClassMember>,
     val innerClasses: List<InnerClassRef>,
+    /** The annotations on the class itself, as descriptors. Both retentions, as on a member. */
+    val annotations: List<String>,
     val metadata: KotlinMetadataAnnotation?,
 ) {
 
@@ -148,6 +150,7 @@ class ClassFile private constructor(
             var signature: String? = null
             var metadata: KotlinMetadataAnnotation? = null
             val innerClasses = ArrayList<InnerClassRef>()
+            val annotations = ArrayList<String>()
             repeat(u2()) {
                 val name = utf8(u2())
                 val length = u4()
@@ -155,7 +158,16 @@ class ClassFile private constructor(
                 when (name) {
                     "Signature" -> signature = utf8(u2())
                     "InnerClasses" -> readInnerClasses(innerClasses)
-                    "RuntimeVisibleAnnotations" -> metadata = metadata ?: findMetadataAnnotation()
+                    "RuntimeVisibleAnnotations" -> {
+                        // One walk, two answers: the descriptors every annotation index wants, and the
+                        // `@Metadata` payload. Walking twice would mean parsing the values twice.
+                        val here = at
+                        metadata = metadata ?: findMetadataAnnotation()
+                        at = here
+                        readAnnotationDescriptors(annotations)
+                    }
+
+                    "RuntimeInvisibleAnnotations" -> readAnnotationDescriptors(annotations)
                     "Deprecated" -> accessFlags = accessFlags or ACC_DEPRECATED
                     "Synthetic" -> accessFlags = accessFlags or ACC_SYNTHETIC
                     "Record" -> accessFlags = accessFlags or ACC_RECORD
@@ -165,7 +177,7 @@ class ClassFile private constructor(
 
             return ClassFile(
                 thisClass, superClass, interfaces, accessFlags,
-                signature, fields, methods, innerClasses, metadata,
+                signature, fields, methods, innerClasses, annotations, metadata,
             )
         }
 

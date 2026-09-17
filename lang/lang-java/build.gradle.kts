@@ -10,6 +10,9 @@ plugins {
 // stays the build system's job (ecj via :lang-jdt / :jvm-build). Intended to replace :lang-jdt as the `.java`
 // editor backend once at parity.
 dependencies {
+    // The binary indexes read class files through this, and share ONE parse per class with the
+    // Kotlin binary indexes, which decode through the same reader.
+    implementation(project(":kotlin-classfile"))
     api(project(":language-api"))            // the SPI (+ project-model-api / vfs-api / platform-core, transitively)
     implementation(project(":index-api"))    // shared class/member indexes for completion + go-to-symbol
     implementation(project(":analysis-api"))  // QuickFixProvider/QuickFix for the native code-fix providers

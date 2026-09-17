@@ -31,6 +31,10 @@ kotlin {
         commonMain.dependencies {
             // The neutral symbol model surface (TypeRef/SymbolKind/Modifier/SymbolOrigin), now common.
             api(project(":model-api"))
+            // Jars, class files and `@kotlin.Metadata`, with no JVM behind any of it. What ASM,
+            // kotlin-metadata-jvm and java.util.zip did on the JVM-only path, and the reason the decoders
+            // below can live in commonMain at all.
+            implementation(project(":kotlin-classfile"))
         }
 
         jvmMain.dependencies {

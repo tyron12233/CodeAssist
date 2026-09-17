@@ -101,6 +101,11 @@ class JavaClassOracleTest {
                 assertEquals(theirs.fields, ours.fields.map(::render), "fields of $where")
                 assertEquals(theirs.methods, ours.methods.map(::render), "methods of $where")
                 assertEquals(theirs.innerClasses, ours.innerClasses.map(::render), "inner classes of $where")
+                assertEquals(
+                    theirs.annotations.sorted(),
+                    ours.annotations.sorted(),
+                    "class annotations of $where",
+                )
 
                 classes++
                 onMembers(ours.fields.size + ours.methods.size)
@@ -279,6 +284,7 @@ class JavaClassOracleTest {
         val fields: List<String>,
         val methods: List<String>,
         val innerClasses: List<String>,
+        val annotations: List<String>,
     ) {
         companion object {
             fun of(bytes: ByteArray): AsmShape {
@@ -290,6 +296,7 @@ class JavaClassOracleTest {
                 val fields = ArrayList<String>()
                 val methods = ArrayList<String>()
                 val inners = ArrayList<String>()
+                val classAnnotations = ArrayList<String>()
 
                 ClassReader(bytes).accept(
                     object : ClassVisitor(Opcodes.ASM9) {
@@ -306,6 +313,14 @@ class JavaClassOracleTest {
                             signature = classSignature
                             superName = superClass
                             interfaces = classInterfaces?.toList().orEmpty()
+                        }
+
+                        override fun visitAnnotation(
+                            annotationDescriptor: String,
+                            visible: Boolean,
+                        ): AnnotationVisitor? {
+                            classAnnotations.add(annotationDescriptor)
+                            return null
                         }
 
                         override fun visitInnerClass(
@@ -377,7 +392,9 @@ class JavaClassOracleTest {
                     // names are the reason this is read at all. The same flags :lang-kotlin-index uses.
                     ClassReader.SKIP_CODE or ClassReader.SKIP_FRAMES,
                 )
-                return AsmShape(access, name, signature, superName, interfaces, fields, methods, inners)
+                return AsmShape(
+                    access, name, signature, superName, interfaces, fields, methods, inners, classAnnotations,
+                )
             }
         }
     }

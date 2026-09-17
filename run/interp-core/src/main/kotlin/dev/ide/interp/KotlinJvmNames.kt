@@ -1,6 +1,7 @@
 package dev.ide.interp
 
 import dev.ide.lang.kotlin.symbols.KotlinMetadata
+import dev.ide.lang.kotlin.symbols.jvmNameIndex
 import java.util.concurrent.ConcurrentHashMap
 
 /**
