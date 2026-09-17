@@ -124,5 +124,7 @@ internal fun createPsi(session: KtTreeSession, node: LightNode): KtElement = whe
 
     SyntaxTokenTypes.ERROR_ELEMENT -> KtErrorElement(session, node)
 
-    else -> KtElement(session, node)
+    // The types the facade grew for `:lang-kotlin` are kept in their own file and consulted last, so this
+    // table stays a readable map of the language rather than of one consumer's import list.
+    else -> createAddedPsi(session, node) ?: KtElement(session, node)
 }

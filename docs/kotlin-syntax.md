@@ -113,6 +113,32 @@ Getting there closed four real gaps, each found by the compiler rather than gues
   `getLabelName()` must be functions too** — 207 of `:lang-kotlin`'s ~226 Java-style getter calls are those
   five. A Kotlin property compiles to the same JVM getter but cannot be *called* that way from Kotlin source.
 
+## The vocabulary is now complete
+
+`:lang-kotlin` names 133 distinct things out of `org.jetbrains.kotlin.psi` — 127 `Kt*` types plus the
+`psiUtil` helpers and `KtProjectionKind`. **All 133 are in the facade**, which is 134 classes and interfaces
+over 106 node types in 1,750 lines of `commonMain`.
+
+Closing the last 42 was mostly interfaces, and that is the part with a trap in it. An abstract base is not
+documentation: `is KtFunction`, `parent as? ValueArgument` and `member as? KtTypeParameterListOwner` are
+live dispatch in the diagnostics and inference code, so an interface reaching too MUCH is as wrong as one
+reaching too little and neither fails to compile. Three that matter:
+
+- **`KtFunction` covers four things, and a lambda is one of them.** Named function, function literal, primary
+  and secondary constructor. A rule about value parameters that skipped lambdas would be quietly wrong
+  wherever a lambda declares its own; one that also matched `init` blocks would change what the branch above
+  it sees.
+- **`KtAnnotated` and `KtModifierListOwner` cannot go on `KtElement`.** `annotationEntries`, `modifierList`
+  and `hasModifier` were already on every element as a convenience, so attaching the interfaces there was one
+  line and would have made `is KtAnnotated` always true — which is exactly what one of the diagnostics
+  dispatches on. They go on `KtDeclaration`, `KtFile`, `KtTypeReference` and `KtTypeProjection`, as upstream.
+- **`containingClassOrObject` has three shapes, not one.** A member reaches its class through the class BODY,
+  an enum entry and a primary constructor hang off the class directly, and a constructor property reaches it
+  through the parameter list. The first version here had two of the three; the upstream bytecode settled it.
+
+`KtPsiInterfacesTest` is 20 tests about exactly this: not that each interface exists, but which elements it
+reaches and which it does not.
+
 And `KtTokensCompat.kt` exists because the vendored vocabulary renamed every modifier — `PRIVATE_MODIFIER`
 where PSI said `PRIVATE_KEYWORD`, 34 of them, 82 references in `:lang-kotlin`. It re-exports all 163 tokens
 and token sets under PSI's names, so the migration is an import swap rather than 82 hand edits.
@@ -224,9 +250,10 @@ Three details worth keeping:
 
 ## Not done yet
 
-- Nothing in `:lang-kotlin` actually depends on this; the probe is a copy, not a wiring. The remaining known
-  cost for a real migration is the `.isX()` call sites that need their parentheses removed, which the
-  compiler finds for you.
+- Nothing in `:lang-kotlin` actually depends on this; the probe is a copy, not a wiring. The vocabulary gap
+  is closed, so the remaining known cost for a real migration is the `.isX()` call sites that need their
+  parentheses removed, which the compiler finds for you, and splitting out the 597 lines in three files that
+  drive the K2 compiler itself and stay JVM-only.
 - KDoc parsing is vendored but unexercised.
 - The 55 baselined divergences are unexamined individually; they are known to be dominated by `BAD_CHARACTER`
   handling, but nobody has read them one at a time.

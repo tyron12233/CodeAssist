@@ -21,6 +21,22 @@ inline fun <reified T : KtElement> KtElement.getParentOfType(strict: Boolean = f
 /** The nearest ancestor of type [T], NOT counting this element. */
 inline fun <reified T : KtElement> KtElement.getStrictParentOfType(): T? = getParentOfType<T>(strict = true)
 
+/**
+ * The class or object this declaration is a member of, or null for a top-level or local one.
+ *
+ * Three shapes reach a class, not one: a member's parent is the class BODY; an enum entry and a primary
+ * constructor hang off the class directly; and a primary-constructor property is a parameter, so it reaches
+ * the class through the parameter list. A declaration inside a function body is local and has no containing
+ * class even when a class is further up, which is why this is these four cases and not a walk.
+ */
+val KtDeclaration.containingClassOrObject: KtClassOrObject?
+    get() = when (val owner = parent) {
+        is KtClassBody -> owner.parent as? KtClassOrObject
+        is KtClassOrObject -> owner
+        is KtParameterList -> (owner.parent as? KtPrimaryConstructor)?.parent as? KtClassOrObject
+        else -> null
+    }
+
 /** Ancestors, innermost first. */
 val KtElement.parents: Sequence<KtElement>
     get() = generateSequence(parent) { it.parent }
