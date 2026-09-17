@@ -64,46 +64,59 @@ subprojects {
                 "testImplementation"(project(":test-support"))
             }
         }
-        // Two kinds of test task:
-        //   * `test` (and `check`/`build`) — the fast correctness suite. It EXCLUDES the slow, opt-in
-        //     benchmark/quality/memory suites, which are tagged `@Tag("regression")`.
-        //   * `regressionTest` — runs ONLY the regression-tagged suites, against committed JSON baselines.
-        //     It is deliberately not wired into `check`, so routine builds stay fast; run it on demand:
-        //       ./gradlew :lang-jdt:regressionTest :index-impl:regressionTest
-        //     Update baselines after a deliberate change with `-Dbench.updateBaselines=true`.
-        tasks.withType<Test>().configureEach {
-            useJUnitPlatform {
-                if (name == "regressionTest") includeTags("regression") else excludeTags("regression")
+    }
+
+    // Two kinds of test task:
+    //   * `test`/`jvmTest` (and `check`/`build`) — the fast correctness suite. It EXCLUDES the slow,
+    //     opt-in benchmark/quality/memory suites, which are tagged `@Tag("regression")`.
+    //   * `regressionTest` — runs ONLY the regression-tagged suites, against committed JSON baselines.
+    //     It is deliberately not wired into `check`, so routine builds stay fast; run it on demand:
+    //       ./gradlew :lang-jdt:regressionTest :index-impl:regressionTest
+    //     Update baselines after a deliberate change with `-Dbench.updateBaselines=true`.
+    //
+    // Applied to BOTH plugins. The shared test STACK above (junit, kotlin-test, :test-support) stays
+    // JVM-only: a multiplatform module declares its own, since those artifacts have no common variant. They used to live inside the Kotlin/JVM
+    // guard above, which meant converting a module to multiplatform silently dropped both: its
+    // `regressionTest` task vanished (CI names :index-impl's by hand) and, worse, `jvmTest` stopped
+    // EXCLUDING the regression tag, so the slow benchmark suites would have started running in the fast
+    // gate. Keyed off whichever test task the module actually has.
+    listOf("org.jetbrains.kotlin.jvm", "org.jetbrains.kotlin.multiplatform").forEach { pluginId ->
+        plugins.withId(pluginId) {
+            tasks.withType<Test>().configureEach {
+                useJUnitPlatform {
+                    if (name == "regressionTest") includeTags("regression") else excludeTags("regression")
+                }
             }
-        }
-        tasks.register<Test>("regressionTest") {
-            group = "verification"
-            description = "Runs the opt-in @Tag(\"regression\") completion benchmark/quality/memory suites."
-            val testTask = tasks.named<Test>("test")
-            testClassesDirs = testTask.get().testClassesDirs
-            classpath = testTask.get().classpath
-            // Baselines are committed under <module>/baselines and compared on every run; point the suites
-            // at that directory (the Test working dir is the module dir, but be explicit) and give the
-            // memory suites headroom. Always re-run (perf isn't an up-to-date-able output) and surface the
-            // printed comparison tables without needing --info.
-            workingDir = projectDir
-            systemProperty("bench.baselineDir", layout.projectDirectory.dir("baselines").asFile.absolutePath)
-            System.getProperty("bench.updateBaselines")?.let { systemProperty("bench.updateBaselines", it) }
-            // `-Dbench.quick=true`: one timed batch instead of five, for iterating on a suite. Gates and
-            // baseline writes are off in that mode — see `Bench.quick`.
-            System.getProperty("bench.quick")?.let { systemProperty("bench.quick", it) }
-            maxHeapSize = "1536m"
-            // Benchmarks must always run fresh: never UP-TO-DATE, and never served FROM-CACHE (a cached
-            // full run would otherwise replay regardless of a `--tests` filter, and cached perf numbers are
-            // meaningless). Together these force a real execution every time.
-            outputs.upToDateWhen { false }
-            outputs.doNotCacheIf("regression benchmarks must measure a fresh run") { true }
-            testLogging {
-                showStandardStreams = true
-                events("passed", "failed", "skipped")
+            tasks.register<Test>("regressionTest") {
+                group = "verification"
+                description = "Runs the opt-in @Tag(\"regression\") completion benchmark/quality/memory suites."
+                val testTask = tasks.named<Test>(if (pluginId.endsWith("multiplatform")) "jvmTest" else "test")
+                testClassesDirs = testTask.get().testClassesDirs
+                classpath = testTask.get().classpath
+                // Baselines are committed under <module>/baselines and compared on every run; point the suites
+                // at that directory (the Test working dir is the module dir, but be explicit) and give the
+                // memory suites headroom. Always re-run (perf isn't an up-to-date-able output) and surface the
+                // printed comparison tables without needing --info.
+                workingDir = projectDir
+                systemProperty("bench.baselineDir", layout.projectDirectory.dir("baselines").asFile.absolutePath)
+                System.getProperty("bench.updateBaselines")?.let { systemProperty("bench.updateBaselines", it) }
+                // `-Dbench.quick=true`: one timed batch instead of five, for iterating on a suite. Gates and
+                // baseline writes are off in that mode — see `Bench.quick`.
+                System.getProperty("bench.quick")?.let { systemProperty("bench.quick", it) }
+                maxHeapSize = "1536m"
+                // Benchmarks must always run fresh: never UP-TO-DATE, and never served FROM-CACHE (a cached
+                // full run would otherwise replay regardless of a `--tests` filter, and cached perf numbers are
+                // meaningless). Together these force a real execution every time.
+                outputs.upToDateWhen { false }
+                outputs.doNotCacheIf("regression benchmarks must measure a fresh run") { true }
+                testLogging {
+                    showStandardStreams = true
+                    events("passed", "failed", "skipped")
+                }
             }
         }
     }
+
 }
 
 // ---------------------------------------------------------------------------------------------------
