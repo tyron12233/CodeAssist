@@ -1,19 +1,21 @@
 package dev.ide.lang.kotlin.symbols
 
+import dev.ide.kotlin.classfile.DataReader
+import dev.ide.kotlin.classfile.DataWriter
+import dev.ide.kotlin.classfile.FileSource
+import dev.ide.kotlin.classfile.Lock
+import dev.ide.kotlin.classfile.ZipArchive
+import dev.ide.kotlin.classfile.createDirectories
+import dev.ide.kotlin.classfile.deleteFile
+import dev.ide.kotlin.classfile.fileInfo
+import dev.ide.kotlin.classfile.openFile
+import dev.ide.kotlin.classfile.readFile
+import dev.ide.kotlin.classfile.writeFileAtomically
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import dev.ide.lang.resolve.SymbolOrigin
 import dev.ide.lang.resolve.TypeRef
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
-import java.io.Closeable
-import java.io.DataInputStream
-import java.io.DataOutputStream
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.StandardCopyOption
-import java.util.concurrent.ConcurrentHashMap
-import java.util.zip.ZipFile
+import kotlin.concurrent.Volatile
 
 /**
  * Reads classpath binaries for the symbol service: locates a class's `.class` bytes, decodes its Kotlin
@@ -23,10 +25,14 @@ import java.util.zip.ZipFile
  * The scan is the main cost metadata introduces, so it is made cheap and durable two ways:
  *  1. Skip non-Kotlin jars. A Kotlin library always ships a `META-INF/<name>.kotlin_module`; a plain
  *     Java/Android jar (`android.jar`, etc.) never does. Checking that one entry name skips the whole jar
- *     without reading a single class, so a 40k-class `android.jar` costs an entry scan, not a decode storm.
+ *     without reading a single class, so a 6,400-class `android.jar` costs an entry scan, not a decode storm.
  *  2. Per-jar, content-keyed cache. Each jar's scan result is cached in memory and (if a `cacheDir` is
  *     given) persisted keyed by name+size+mtime, so an unchanged jar is read from disk once and reused
  *     across launches, never re-scanned.
+ *
+ * Paths are strings and archives are read through `:kotlin-classfile`, so this runs wherever the decoders
+ * above it do. The persisted format is unchanged, byte for byte: `DataWriter` writes what
+ * `DataOutputStream` wrote, so a cache directory written by an older build still reads.
  */
 /** A library callable user code can never reach: `private` (file-scoped to its library source) or `internal`
  *  (a library is always a DIFFERENT module than the user's source). See `KotlinCallableIndex`'s twin. */
@@ -34,39 +40,56 @@ private fun KotlinSymbol.inaccessibleFromAnotherModule(): Boolean =
     Modifier.PRIVATE in modifiers || isInternal
 
 class ClasspathReader(
-    private val containers: List<Path>,
-    private val cacheDir: Path? = null,
-) : Closeable {
+    private val containers: List<String>,
+    private val cacheDir: String? = null,
+) : AutoCloseable {
 
-    // A BOUNDED LRU of open jar handles, NOT one-per-jar-forever. Each open ZipFile holds a file descriptor,
+    // A BOUNDED LRU of open jar handles, NOT one-per-jar-forever. Each open archive holds a file descriptor,
     // and a real (Compose) classpath is hundreds of jars; Android's per-process FD limit is ~1024 (lower on
-    // older releases), so keeping every jar open exhausts descriptors and any later open — even
-    // `Files.list` while walking the project tree — fails with "Too many open files". The eldest handle is
-    // closed on eviction; an evicted jar is simply reopened on its next access (gated behind the decode and
-    // jar-scan caches, so reopens are infrequent).
-    private val zips =
-        object : LinkedHashMap<String, ZipFile>(16, 0.75f, /* accessOrder = */ true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ZipFile>): Boolean {
-                if (size <= MAX_OPEN_ZIPS) return false
-                runCatching { eldest.value.close() }
-                return true
-            }
-        }
-    private val decodeCache = ConcurrentHashMap<String, Holder<KotlinMetadata.Decoded>>()
-    private val jarDataCache = ConcurrentHashMap<String, JarScanData>()
+    // older releases), so keeping every jar open exhausts descriptors and any later open — even listing the
+    // project tree — fails with "Too many open files". The eldest handle is closed on eviction; an evicted
+    // jar is simply reopened on its next access (gated behind the decode and jar-scan caches, so reopens are
+    // infrequent).
+    //
+    // Insertion order IS the recency order here, maintained by removing and re-putting on access, because
+    // common Kotlin's LinkedHashMap has no access-ordered mode to inherit from.
+    private val zips = LinkedHashMap<String, OpenJar>()
+    private val zipLock = Lock()
+
+    // Guarded rather than concurrent maps: common Kotlin has no ConcurrentHashMap, and the analysis calls
+    // that reach here are already serialized onto one dispatcher, so an uncontended lock costs nothing.
+    private val cacheLock = Lock()
+    private val decodeCache = HashMap<String, Holder<KotlinMetadata.Decoded>>()
+    private val jarDataCache = HashMap<String, JarScanData>()
 
     private class Holder<T>(val value: T?)
 
+    private class OpenJar(val source: FileSource, val archive: ZipArchive)
+
     /**
-     * Run [block] with an open [ZipFile] for [path] from the bounded LRU, opening it if absent. The block
+     * Run [block] with an open archive for [path] from the bounded LRU, opening it if absent. The block
      * runs while the LRU lock is held, so the handle it reads can never be the one a concurrent caller
      * evicts and closes. Returns null when the jar can't be opened (the block may also return null).
      */
-    private fun <T> withZip(path: Path, block: (ZipFile) -> T?): T? = synchronized(zips) {
-        val key = path.toString()
-        val z =
-            zips[key] ?: runCatching { ZipFile(path.toFile()) }.getOrNull()?.also { zips[key] = it }
-        if (z == null) null else block(z)
+    private fun <T> withZip(path: String, block: (ZipArchive) -> T?): T? = zipLock.withLock {
+        val jar = zips.remove(path) ?: openJar(path)
+        if (jar == null) return@withLock null
+        zips[path] = jar
+        while (zips.size > MAX_OPEN_ZIPS) {
+            val eldest = zips.keys.firstOrNull() ?: break
+            zips.remove(eldest)?.source?.close()
+        }
+        block(jar.archive)
+    }
+
+    private fun openJar(path: String): OpenJar? {
+        val source = openFile(path) ?: return null
+        val archive = ZipArchive.open(source)
+        if (archive == null) {
+            source.close()
+            return null
+        }
+        return OpenJar(source, archive)
     }
 
     /** Raw bytes of [fqn]'s class file, searching jars then directories. A nested type may be written with
@@ -78,7 +101,7 @@ class ClasspathReader(
         val chars = fqn.toCharArray()
         while (dot > 0) {
             chars[dot] = '$'
-            readEntry(String(chars).replace('.', '/') + ".class")?.let { return it }
+            readEntry(chars.concatToString().replace('.', '/') + ".class")?.let { return it }
             dot = fqn.lastIndexOf('.', dot - 1)
         }
         return null
@@ -86,13 +109,13 @@ class ClasspathReader(
 
     private fun readEntry(rel: String): ByteArray? {
         for (c in containers) {
-            if (Files.isDirectory(c)) {
-                val f = c.resolve(rel)
-                if (Files.isRegularFile(f)) return runCatching { Files.readAllBytes(f) }.getOrNull()
+            if (fileInfo(c)?.isDirectory == true) {
+                val f = "$c/$rel"
+                if (fileInfo(f)?.isDirectory == false) readFile(f)?.let { return it }
             } else {
-                val bytes = withZip(c) { z ->
-                    val e = z.getEntry(rel) ?: return@withZip null
-                    runCatching { z.getInputStream(e).use { it.readBytes() } }.getOrNull()
+                val bytes = withZip(c) { archive ->
+                    val entry = archive.entry(rel) ?: return@withZip null
+                    archive.read(entry)
                 }
                 if (bytes != null) return bytes
             }
@@ -102,13 +125,8 @@ class ClasspathReader(
 
     /** Decode [fqn]'s Kotlin shape (own members + supertypes), or null if absent / not Kotlin. Cached. */
     fun decoded(fqn: String, ctx: KotlinTypeContext?): KotlinMetadata.Decoded? =
-        decodeCache.getOrPut(fqn) {
-            Holder(classBytes(fqn)?.let {
-                KotlinMetadata.decode(
-                    it,
-                    ctx
-                )
-            })
+        cacheLock.withLock {
+            decodeCache.getOrPut(fqn) { Holder(classBytes(fqn)?.let { KotlinMetadata.decode(it, ctx) }) }
         }.value
 
     @Volatile
@@ -122,105 +140,97 @@ class ClasspathReader(
     /** Lazily scan all classpath jars for extensions + top-level callables. Cached. */
     fun scan(ctx: KotlinTypeContext?): Scan {
         scan?.let { return it }
-        synchronized(this) {
-            scan?.let { return it }
+        return scanLock.withLock {
+            scan?.let { return@withLock it }
             val byReceiver = HashMap<String, MutableList<KotlinSymbol>>()
             val byName = HashMap<String, MutableList<KotlinSymbol>>()
             for (c in containers) {
-                if (Files.isDirectory(c)) continue // project outputs: the source side already covers these
+                // project outputs: the source side already covers these
+                if (fileInfo(c)?.isDirectory != false) continue
                 val data = jarScanData(c)
                 data.extensions.forEach { re ->
-                    re.receiverFqn?.let {
-                        byReceiver.getOrPut(it) { ArrayList() }.add(re.toSymbol(ctx))
-                    }
+                    re.receiverFqn?.let { byReceiver.getOrPut(it) { ArrayList() }.add(re.toSymbol(ctx)) }
                 }
                 data.topLevel.forEach { re ->
                     byName.getOrPut(re.name) { ArrayList() }.add(re.toSymbol(ctx))
                 }
             }
-            return Scan(byReceiver, byName).also { scan = it }
+            Scan(byReceiver, byName).also { scan = it }
         }
     }
 
+    private val scanLock = Lock()
+
     /** Per-jar scan result (context-free, cacheable): the main cost of metadata, paid once per jar. */
-    private fun jarScanData(path: Path): JarScanData {
+    private fun jarScanData(path: String): JarScanData {
         val key = jarKey(path) ?: return JarScanData.EMPTY
-        jarDataCache[key]?.let { return it }
+        cacheLock.withLock { jarDataCache[key] }?.let { return it }
         cacheDir?.let { dir ->
-            val f = dir.resolve("$key.kxt")
-            if (Files.isRegularFile(f)) {
+            val f = "$dir/$key.kxt"
+            if (fileInfo(f)?.isDirectory == false) {
                 val d = runCatching { readJarData(f) }.getOrNull()
                 if (d != null) {
-                    jarDataCache[key] = d; return d
+                    cacheLock.withLock { jarDataCache[key] = d }
+                    return d
                 }
             }
         }
         // Open a fresh handle and close it immediately: the full-jar scan runs once per jar (then the .kxt /
         // jarDataCache memoize it), so it should not occupy a slot in the LRU of hot read handles.
-        val z0 = runCatching { ZipFile(path.toFile()) }.getOrNull() ?: return JarScanData.EMPTY
-        val data = z0.use { z -> if (!hasKotlinModule(z)) JarScanData.EMPTY else scanJar(z) }
-        jarDataCache[key] = data
-        if (data !== JarScanData.EMPTY) cacheDir?.let { dir ->
-            runCatching {
-                Files.createDirectories(dir)
-                writeJarData(dir.resolve("$key.kxt"), data)
+        val jar = openJar(path) ?: return JarScanData.EMPTY
+        val data = try {
+            if (!hasKotlinModule(jar.archive)) JarScanData.EMPTY else scanJar(jar.archive)
+        } finally {
+            jar.source.close()
+        }
+        cacheLock.withLock { jarDataCache[key] = data }
+        if (data !== JarScanData.EMPTY) {
+            cacheDir?.let { dir ->
+                runCatching {
+                    createDirectories(dir)
+                    writeJarData("$dir/$key.kxt", data)
+                }
             }
         }
         return data
     }
 
-    private fun scanJar(z: ZipFile): JarScanData {
+    private fun scanJar(archive: ZipArchive): JarScanData {
         val ext = ArrayList<RawCallableData>()
         val top = ArrayList<RawCallableData>()
-        val entries = z.entries()
-        while (entries.hasMoreElements()) {
-            val e = entries.nextElement()
-            if (!e.name.endsWith(".class")) continue
-            val bytes =
-                runCatching { z.getInputStream(e).use { it.readBytes() } }.getOrNull() ?: continue
+        for (entry in archive.entries) {
+            if (!entry.name.endsWith(".class")) continue
+            val bytes = archive.read(entry) ?: continue
             val decoded = runCatching { KotlinMetadata.decode(bytes, null) }.getOrNull() ?: continue
-            val pkg = e.name.substringBeforeLast('/', "").replace('/', '.').ifEmpty { null }
+            val pkg = entry.name.substringBeforeLast('/', "").replace('/', '.').ifEmpty { null }
             // The .class being scanned IS the JVM facade these top-level/extension functions compile into
             // (`kotlin/io/ConsoleKt` for println) — exactly what the interpreter reflects into.
-            val facade = e.name.removeSuffix(".class").replace('/', '.')
-            // Skip library `private`/`internal` callables — never accessible from the user's (other) module, so
-            // they must not leak into completion/resolution (mirrors KotlinCallableIndex, the on-device path).
+            val facade = entry.name.removeSuffix(".class").replace('/', '.')
+            // Skip library `private`/`internal` callables — never accessible from the user's (other) module,
+            // so they must not leak into completion/resolution (mirrors KotlinCallableIndex, the on-device
+            // path).
             decoded.extensions.forEach { s ->
-                if (!s.inaccessibleFromAnotherModule()) ext += RawCallableData.from(
-                    s,
-                    pkg,
-                    facade
-                )
+                if (!s.inaccessibleFromAnotherModule()) ext += RawCallableData.from(s, pkg, facade)
             }
             decoded.topLevel.forEach { s ->
-                if (!s.inaccessibleFromAnotherModule()) top += RawCallableData.from(
-                    s,
-                    pkg,
-                    facade
-                )
+                if (!s.inaccessibleFromAnotherModule()) top += RawCallableData.from(s, pkg, facade)
             }
         }
         return if (ext.isEmpty() && top.isEmpty()) JarScanData.EMPTY else JarScanData(ext, top)
     }
 
-    private fun hasKotlinModule(z: ZipFile): Boolean {
-        val entries = z.entries()
-        while (entries.hasMoreElements()) {
-            val n = entries.nextElement().name
-            if (n.startsWith("META-INF/") && n.endsWith(".kotlin_module")) return true
-        }
-        return false
+    private fun hasKotlinModule(archive: ZipArchive): Boolean =
+        archive.entries.any { it.name.startsWith("META-INF/") && it.name.endsWith(".kotlin_module") }
+
+    private fun jarKey(path: String): String? {
+        val info = fileInfo(path) ?: return null
+        if (info.isDirectory) return null
+        val name = path.substringAfterLast('/')
+        return "${name}_${info.size}_${info.lastModified}".replace(Regex("[^A-Za-z0-9._-]"), "_")
     }
 
-    private fun jarKey(path: Path): String? {
-        if (!Files.isRegularFile(path)) return null
-        val size = runCatching { Files.size(path) }.getOrDefault(0L)
-        val mtime = runCatching { Files.getLastModifiedTime(path).toMillis() }.getOrDefault(0L)
-        return "${path.fileName}_${size}_$mtime".replace(Regex("[^A-Za-z0-9._-]"), "_")
-    }
-
-    override fun close() = synchronized(zips) {
-        zips.values.forEach { runCatching { it.close() } }
+    override fun close() = zipLock.withLock {
+        zips.values.forEach { runCatching { it.source.close() } }
         zips.clear()
     }
 
@@ -228,7 +238,7 @@ class ClasspathReader(
 
     private class JarScanData(
         val extensions: List<RawCallableData>,
-        val topLevel: List<RawCallableData>
+        val topLevel: List<RawCallableData>,
     ) {
         companion object {
             val EMPTY = JarScanData(emptyList(), emptyList())
@@ -310,29 +320,23 @@ class ClasspathReader(
     /** Write [data] atomically: a reader must see either the whole entry or none of it. Several processes can
      *  share one cache dir (the IDE and the preview process; parallel test workers), so a half-written file
      *  is a real state — and a torn read is worse than a miss, since the length prefixes it decodes are then
-     *  garbage. Write to a unique sibling and move it into place. */
-    private fun writeJarData(file: Path, data: JarScanData) {
-        val tmp = Files.createTempFile(file.parent, file.fileName.toString(), ".tmp")
-        try {
-            DataOutputStream(BufferedOutputStream(Files.newOutputStream(tmp))).use { out ->
-                out.writeInt(FORMAT_VERSION)
-                writeList(out, data.extensions)
-                writeList(out, data.topLevel)
-            }
-            Files.move(tmp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-        } catch (t: Throwable) {
-            Files.deleteIfExists(tmp)
-            throw t // the caller treats a failed write as "no cache entry", never as a failure to scan
-        }
+     *  garbage. The write goes to a unique sibling and is moved into place. */
+    private fun writeJarData(file: String, data: JarScanData) {
+        val out = DataWriter()
+        out.writeInt(FORMAT_VERSION)
+        writeList(out, data.extensions)
+        writeList(out, data.topLevel)
+        // A failed write is "no cache entry" to the caller, never a failure to scan.
+        if (!writeFileAtomically(file, out.toByteArray())) deleteFile(file)
     }
 
-    private fun readJarData(file: Path): JarScanData? =
-        DataInputStream(BufferedInputStream(Files.newInputStream(file))).use { inp ->
-            if (inp.readInt() != FORMAT_VERSION) return null
-            JarScanData(readList(inp), readList(inp))
-        }
+    private fun readJarData(file: String): JarScanData? {
+        val inp = DataReader(readFile(file) ?: return null)
+        if (inp.readInt() != FORMAT_VERSION) return null
+        return JarScanData(readList(inp), readList(inp))
+    }
 
-    private fun writeList(out: DataOutputStream, list: List<RawCallableData>) {
+    private fun writeList(out: DataWriter, list: List<RawCallableData>) {
         out.writeInt(list.size)
         for (r in list) {
             out.writeUTF(r.name)
@@ -342,11 +346,7 @@ class ClasspathReader(
             out.writeUTF(r.packageName ?: "")
             out.writeUTF(r.receiverTypeParam ?: "")
             out.writeInt(r.typeParameters.size); r.typeParameters.forEach { out.writeUTF(it) }
-            out.writeInt(r.typeParamBoundNames.size); r.typeParamBoundNames.forEach {
-                out.writeUTF(
-                    it ?: ""
-                )
-            }
+            out.writeInt(r.typeParamBoundNames.size); r.typeParamBoundNames.forEach { out.writeUTF(it ?: "") }
             writeType(out, r.returnType)
             out.writeInt(r.paramTypes.size); r.paramTypes.forEach { writeType(out, it) }
             out.writeInt(r.receiverTypeArgs.size); r.receiverTypeArgs.forEach { writeType(out, it) }
@@ -361,12 +361,12 @@ class ClasspathReader(
         }
     }
 
-    private fun readList(inp: DataInputStream): List<RawCallableData> {
+    private fun readList(inp: DataReader): List<RawCallableData> {
         val n = inp.readInt()
         val out = ArrayList<RawCallableData>(n)
         repeat(n) {
             val name = inp.readUTF()
-            val kind = SymbolKind.entries[inp.readByte().toInt()]
+            val kind = SymbolKind.entries[inp.readByte()]
             val receiver = inp.readUTF().ifEmpty { null }
             val sig = inp.readUTF().ifEmpty { null }
             val pkg = inp.readUTF().ifEmpty { null }
@@ -385,32 +385,16 @@ class ClasspathReader(
             val varargIdx = inp.readInt()
             val paramHasDefault = List(inp.readInt()) { inp.readBoolean() }
             out += RawCallableData(
-                name,
-                kind,
-                receiver,
-                sig,
-                pkg,
-                recvParam,
-                tps,
-                boundNames,
-                ret,
-                params,
-                recvArgs,
-                declaringFqn,
-                paramNames,
-                isComposable,
-                isInline,
-                isInfix,
-                isSuspend,
-                varargIdx,
-                paramHasDefault
+                name, kind, receiver, sig, pkg, recvParam, tps, boundNames, ret, params, recvArgs,
+                declaringFqn, paramNames, isComposable, isInline, isInfix, isSuspend, varargIdx,
+                paramHasDefault,
             )
         }
         return out
     }
 
     /** Recursive, context-free encoding of a [KotlinType] (fqn + nullability + type-param flag + args). */
-    private fun writeType(out: DataOutputStream, t: KotlinType?) {
+    private fun writeType(out: DataWriter, t: KotlinType?) {
         out.writeBoolean(t != null)
         if (t == null) return
         out.writeUTF(t.qualifiedName)
@@ -422,7 +406,7 @@ class ClasspathReader(
         t.typeArguments.forEach { writeType(out, it as? KotlinType) }
     }
 
-    private fun readType(inp: DataInputStream): KotlinType? {
+    private fun readType(inp: DataReader): KotlinType? {
         if (!inp.readBoolean()) return null
         val fqn = inp.readUTF()
         val nullable = inp.readBoolean()
@@ -433,13 +417,8 @@ class ClasspathReader(
         val args = ArrayList<TypeRef>(n)
         repeat(n) { readType(inp)?.let { args.add(it) } }
         return KotlinType(
-            fqn,
-            args,
-            nullable,
-            context = null,
-            isTypeParameter = isTp,
-            isExtensionFunctionType = isExtFn,
-            isComposable = isComposable
+            fqn, args, nullable, context = null, isTypeParameter = isTp,
+            isExtensionFunctionType = isExtFn, isComposable = isComposable,
         )
     }
 

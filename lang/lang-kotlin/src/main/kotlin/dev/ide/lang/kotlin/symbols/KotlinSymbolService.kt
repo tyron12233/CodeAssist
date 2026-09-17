@@ -106,7 +106,9 @@ class KotlinSymbolService(
     // other library; [reader] is only consulted when NO index is wired (standalone / tests).
     private val stdlibJar = BundledKotlinStdlib.jar()
     private val allJars = (classpathJars + listOfNotNull(stdlibJar)).distinct()
-    private val reader = ClasspathReader(allJars, cacheDir)
+    // ClasspathReader takes string paths now that it is multiplatform: `java.nio.file.Path` cannot be
+    // named from common code, and a path is a string on every platform that has one.
+    private val reader = ClasspathReader(allJars.map { it.toString() }, cacheDir?.toString())
 
     // The real Kotlin built-ins (List/Int/String/…) from .kotlin_builtins, preferred over the java mapping.
     // These are NOT `.class` files, so the `kotlin.typeShape` index can't carry them — this stays a (lazy,
