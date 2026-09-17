@@ -45,6 +45,10 @@ kotlin {
 
         commonTest.dependencies {
             implementation(kotlin("test"))
+            // The end-to-end probe: the Kotlin symbol/index layer, so a real classpath can be indexed and
+            // queried through this engine's own segments on every platform it builds for. Test-only, and
+            // one-directional -- :lang-kotlin-index knows nothing about this module.
+            implementation(project(":lang-kotlin-index"))
         }
 
         jvmTest.dependencies {
