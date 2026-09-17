@@ -16,9 +16,14 @@ import org.jetbrains.kotlin.kmp.tree.LightNode
 /** The `name =` of a named argument. */
 class KtValueArgumentName internal constructor(session: KtTreeSession, node: LightNode) :
     KtElement(session, node) {
-    val referenceExpression: KtNameReferenceExpression? get() = firstChildOfType()
-    val asName: Name? get() = referenceExpression?.getReferencedName()?.let { Name.identifier(it) }
+    // Both non-null as upstream: the node exists only because a name was written.
+    val referenceExpression: KtNameReferenceExpression get() = firstChildOfType()!!
+    val asName: Name get() = Name.identifier(referenceExpression.getReferencedName())
 }
+
+/** `@get:` / `@field:` / `@file:`: the target written before the colon of a use-site annotation. */
+class KtAnnotationUseSiteTarget internal constructor(session: KtTreeSession, node: LightNode) :
+    KtElement(session, node)
 
 /** An `@[Foo Bar]` group. The entries inside it are ordinary [KtAnnotationEntry]s. */
 class KtAnnotation internal constructor(session: KtTreeSession, node: LightNode) :
@@ -134,6 +139,7 @@ internal fun createAddedPsi(session: KtTreeSession, node: LightNode): KtElement?
     when (session.tree.getType(node)) {
         KtNodeTypes.VALUE_ARGUMENT_NAME -> KtValueArgumentName(session, node)
         KtNodeTypes.ANNOTATION -> KtAnnotation(session, node)
+        KtNodeTypes.ANNOTATION_TARGET -> KtAnnotationUseSiteTarget(session, node)
         KtNodeTypes.FILE_ANNOTATION_LIST -> KtFileAnnotationList(session, node)
         KtNodeTypes.CONSTRUCTOR_CALLEE -> KtConstructorCalleeExpression(session, node)
         KtNodeTypes.CONSTRUCTOR_DELEGATION_CALL -> KtConstructorDelegationCall(session, node)

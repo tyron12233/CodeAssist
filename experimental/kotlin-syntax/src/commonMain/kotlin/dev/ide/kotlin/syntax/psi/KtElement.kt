@@ -26,23 +26,23 @@ import org.jetbrains.kotlin.kmp.tree.LightNode
 open class KtElement internal constructor(
     @PublishedApi internal val session: KtTreeSession,
     @PublishedApi internal val node: LightNode,
-) {
+) : KtPsiElement {
 
-    val elementType: SyntaxElementType get() = session.tree.getType(node)
+    override val elementType: SyntaxElementType get() = session.tree.getType(node)
 
-    val text: String get() = session.tree.getText(node).toString()
+    override val text: String get() = session.tree.getText(node).toString()
 
-    val textOffset: Int get() = session.tree.getStartOffset(node)
+    override val textOffset: Int get() = session.tree.getStartOffset(node)
 
-    val textLength: Int get() = session.tree.getEndOffset(node) - textOffset
+    override val textLength: Int get() = session.tree.getEndOffset(node) - textOffset
 
-    val textRange: TextRange
+    override val textRange: TextRange
         get() = TextRange(session.tree.getStartOffset(node), session.tree.getEndOffset(node))
 
-    val parent: KtElement? get() = session.tree.getParent(node)?.let { session.psi(it) }
+    override val parent: KtElement? get() = session.tree.getParent(node)?.let { session.psi(it) }
 
     /** Children, trivia excluded. */
-    val children: List<KtElement> get() = session.childrenOf(node).map { session.psi(it) }
+    override val children: List<KtElement> get() = session.childrenOf(node).map { session.psi(it) }
 
     val firstChild: KtElement? get() = children.firstOrNull()
 
@@ -61,7 +61,7 @@ open class KtElement internal constructor(
     }
 
     /** The file this element belongs to. */
-    val containingKtFile: KtFile get() = session.file
+    override val containingKtFile: KtFile get() = session.file
 
     /** The same file under the name `PsiElement` gives it. */
     val containingFile: KtFile get() = session.file
@@ -390,8 +390,14 @@ class KtSecondaryConstructor internal constructor(session: KtTreeSession, node: 
     override fun hasBlockBody(): Boolean = bodyExpression != null
     override fun hasBody(): Boolean = bodyExpression != null
 
-    /** `: this(...)` or `: super(...)`, absent when the constructor delegates implicitly. */
-    fun getDelegationCall(): KtConstructorDelegationCall? = firstChildOfType()
+    /**
+     * `: this(...)` or `: super(...)`.
+     *
+     * Non-null as upstream, and the reason is the interesting part: a constructor that delegates IMPLICITLY
+     * still gets a node, a zero-width one, which is what [KtConstructorDelegationCall.isImplicit] reads. A
+     * nullable accessor would push that distinction onto every call site.
+     */
+    fun getDelegationCall(): KtConstructorDelegationCall = firstChildOfType()!!
 }
 
 class KtClassInitializer internal constructor(session: KtTreeSession, node: LightNode) :
@@ -607,6 +613,9 @@ class KtDestructuringDeclaration internal constructor(session: KtTreeSession, no
 class KtDestructuringDeclarationEntry internal constructor(session: KtTreeSession, node: LightNode) :
     KtNamedDeclaration(session, node) {
     val typeReference: KtTypeReference? get() = firstChildOfType()
+
+    /** An entry is mutable only through the whole declaration: `var (a, b) = …` makes both entries vars. */
+    val isVar: Boolean get() = (parent as? KtDestructuringDeclaration)?.isVar == true
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -653,7 +662,7 @@ class KtAnnotationEntry internal constructor(session: KtTreeSession, node: Light
 class KtTypeReference internal constructor(session: KtTreeSession, node: LightNode) :
     KtElement(session, node), KtAnnotated, KtModifierListOwner {
     /** The type itself, with the reference's own modifiers and annotations stripped. */
-    val typeElement: KtElement? get() = children.firstOrNull { it !is KtModifierList }
+    val typeElement: KtTypeElement? get() = children.firstOrNull { it !is KtModifierList } as? KtTypeElement
 }
 
 class KtUserType internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node), KtTypeElement {
@@ -672,7 +681,7 @@ class KtUserType internal constructor(session: KtTreeSession, node: LightNode) :
 
 class KtNullableType internal constructor(session: KtTreeSession, node: LightNode) :
     KtElement(session, node), KtTypeElement {
-    val innerType: KtElement? get() = children.firstOrNull { it !is KtModifierList }
+    val innerType: KtTypeElement? get() = children.firstOrNull { it !is KtModifierList } as? KtTypeElement
 }
 
 class KtIntersectionType internal constructor(session: KtTreeSession, node: LightNode) :

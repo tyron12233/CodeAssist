@@ -312,9 +312,32 @@ class KtPsiInterfacesTest {
             """.trimIndent(),
         )
         val secondary = parsed.all<KtSecondaryConstructor>().single()
-        val call = assertNotNull(secondary.getDelegationCall())
-        assertIs<KtConstructorDelegationCall>(call)
+        val call = secondary.getDelegationCall()
         assertEquals(listOf("1"), call.valueArguments.map { it.text })
+        assertFalse(call.isImplicit)
+        assertTrue(call.isCallToThis)
+    }
+
+    @Test
+    fun anImplicitDelegationIsAZeroWidthNodeRatherThanNothing() {
+        // getDelegationCall() is non-null as upstream, which only works because the parser emits a node of
+        // zero width for `constructor(x: Int) { }`. If it emitted nothing, the non-null accessor would throw
+        // on the commonest secondary constructor there is.
+        val parsed = file("class Foo { constructor(x: Int) { } }")
+        val call = parsed.all<KtSecondaryConstructor>().single().getDelegationCall()
+        assertTrue(call.isImplicit)
+        assertEquals(0, call.textLength)
+        assertFalse(call.isCallToThis, "an implicit delegation goes to super")
+    }
+
+    @Test
+    fun aLambdaAlwaysHasItsBraces() {
+        // lBrace is non-null as upstream; the braces are what makes the node.
+        val literal = file("val f = { 1 }").all<KtFunctionLiteral>().single()
+        assertEquals("{", literal.lBrace.text)
+        assertEquals("}", literal.rBrace?.text)
+        assertNull(literal.arrow, "no arrow when no parameters are declared")
+        assertEquals("->", file("val g = { a: Int -> a }").all<KtFunctionLiteral>().single().arrow?.text)
     }
 
     @Test

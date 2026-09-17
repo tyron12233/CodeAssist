@@ -125,7 +125,8 @@ class KtLambdaArgument internal constructor(session: KtTreeSession, node: LightN
 
 class KtLambdaExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
 
-    val functionLiteral: KtFunctionLiteral? get() = firstChildOfType()
+    /** Non-null as upstream: a lambda expression IS its literal plus the braces around it. */
+    val functionLiteral: KtFunctionLiteral get() = firstChildOfType()!!
 
     val valueParameters: List<KtParameter> get() = functionLiteral?.valueParameters.orEmpty()
 
@@ -135,7 +136,8 @@ class KtLambdaExpression internal constructor(session: KtTreeSession, node: Ligh
 class KtFunctionLiteral internal constructor(session: KtTreeSession, node: LightNode) :
     KtExpression(session, node), KtFunction {
 
-    val lBrace: KtElement? get() = child(KtTokens.LBRACE)
+    // Non-null as upstream: a function literal is the braces and what is between them.
+    val lBrace: KtElement get() = child(KtTokens.LBRACE)!!
 
     val rBrace: KtElement? get() = child(KtTokens.RBRACE)
 
@@ -387,7 +389,8 @@ class KtWhenConditionIsPattern internal constructor(session: KtTreeSession, node
 }
 
 class KtTryExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
-    val tryBlock: KtBlockExpression? get() = firstChildOfType()
+    /** Non-null as upstream: `try` without a block does not parse as a try expression. */
+    val tryBlock: KtBlockExpression get() = firstChildOfType()!!
     val catchClauses: List<KtCatchClause> get() = childrenOfType()
     val finallyBlock: KtFinallySection? get() = firstChildOfType()
 }

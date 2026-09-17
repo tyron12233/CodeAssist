@@ -194,5 +194,11 @@ object KtTokens {
  */
 typealias KtModifierKeywordToken = SyntaxElementType
 
-/** `TokenSet.getTypes()` upstream, which hands back an array rather than the set. */
-val SyntaxElementTypeSet.types: List<SyntaxElementType> get() = toList()
+/**
+ * `TokenSet.getTypes()` upstream, which hands back an array rather than the set.
+ *
+ * The cast is not decoration: `SyntaxElementTypeSet` implements `java.util.Set` and carries Kotlin's mapped
+ * marker, so iterating one directly is an ambiguous `iterator()`.
+ */
+@Suppress("USELESS_CAST")
+val SyntaxElementTypeSet.types: List<SyntaxElementType> get() = (this as Set<SyntaxElementType>).toList()

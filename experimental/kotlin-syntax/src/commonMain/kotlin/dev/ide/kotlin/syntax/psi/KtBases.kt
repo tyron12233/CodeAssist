@@ -20,19 +20,38 @@ import org.jetbrains.kotlin.kmp.tree.LightNode
  * of these by naming it and nothing else.
  */
 
+/**
+ * What `PsiElement` is: the tree surface every element has, declared where an INTERFACE can inherit it.
+ *
+ * The bases below are interfaces because upstream's hierarchy is not this one — a function literal is a
+ * declaration upstream and an expression here — and a Kotlin interface cannot extend a class. Without this,
+ * the backend's `owner.getParentOfType<…>()` on a value typed `KtTypeParameterListOwner` has no receiver,
+ * which fails at the call site rather than anywhere near type parameters.
+ */
+interface KtPsiElement {
+    val elementType: SyntaxElementType
+    val text: String
+    val textOffset: Int
+    val textLength: Int
+    val textRange: TextRange
+    val parent: KtElement?
+    val children: List<KtElement>
+    val containingKtFile: KtFile
+}
+
 /** Anything that can carry annotation entries. */
-interface KtAnnotated {
+interface KtAnnotated : KtPsiElement {
     val annotationEntries: List<KtAnnotationEntry>
 }
 
 /** Anything that can carry a modifier list, and so can be asked whether it has a given modifier. */
-interface KtModifierListOwner {
+interface KtModifierListOwner : KtPsiElement {
     val modifierList: KtModifierList?
     fun hasModifier(modifier: com.intellij.platform.syntax.SyntaxElementType): Boolean
 }
 
 /** Anything that declares its own type parameters: a class, a function, a property, a type alias. */
-interface KtTypeParameterListOwner {
+interface KtTypeParameterListOwner : KtPsiElement {
     val typeParameterList: KtTypeParameterList?
     val typeParameters: List<KtTypeParameter>
     val typeConstraintList: KtTypeConstraintList?
@@ -45,7 +64,7 @@ interface KtTypeParameterListOwner {
  * The body is EITHER a block or an expression, never both, which is why both accessors exist and why a
  * caller that only reads [bodyExpression] silently ignores every block-bodied function.
  */
-interface KtDeclarationWithBody {
+interface KtDeclarationWithBody : KtPsiElement {
     val bodyExpression: KtExpression?
     val bodyBlockExpression: KtBlockExpression?
 
@@ -68,7 +87,7 @@ interface KtDeclarationWithBody {
  * lambda is an argument that was written outside the parentheses. A resolver that iterated only
  * `valueArguments` would miss every trailing lambda in the language.
  */
-interface ValueArgument {
+interface ValueArgument : KtPsiElement {
     fun getArgumentExpression(): KtExpression?
 
     /** The `name` of `name = value`, or null when the argument is positional. */
@@ -85,7 +104,7 @@ interface ValueArgument {
  * every existing `KtLambdaExpression.functionLiteral` call site sees. Interfaces let a type join a family
  * without leaving the one it is already in, which is what these families are for.
  */
-interface KtSimpleNameExpression {
+interface KtSimpleNameExpression : KtPsiElement {
     fun getReferencedName(): String
 }
 
@@ -96,7 +115,7 @@ interface KtSimpleNameExpression {
  * parsed around its operator, so there is no such thing as one without a reference, and 37 call sites read
  * it straight through.
  */
-interface KtOperationExpression {
+interface KtOperationExpression : KtPsiElement {
     val operationReference: KtOperationReferenceExpression
 
     /** The operator token's own element, which a formatter aligns on. */
@@ -175,30 +194,16 @@ abstract class KtWhileExpressionBase internal constructor(session: KtTreeSession
 }
 
 /** `Foo`, `Foo?`, `() -> Unit`, `dynamic`: the shapes a type reference can wrap. */
-interface KtTypeElement
+interface KtTypeElement : KtPsiElement
 
 /** A `$name` or `${expr}` inside a string template, as opposed to its literal text. */
-interface KtStringTemplateEntryWithExpression {
+interface KtStringTemplateEntryWithExpression : KtPsiElement {
     val expression: KtExpression?
 }
 
 /** An `init { }` block. Named for what it is upstream, where a class initializer is one of two kinds. */
-interface KtAnonymousInitializer {
+interface KtAnonymousInitializer : KtPsiElement {
     val body: KtExpression?
-}
-
-/** Where a use-site annotation target points: `@get:`, `@set:`, `@field:`, and the rest. */
-enum class KtAnnotationUseSiteTarget(val renderName: String) {
-    FIELD("field"),
-    FILE("file"),
-    PROPERTY("property"),
-    PROPERTY_GETTER("get"),
-    PROPERTY_SETTER("set"),
-    RECEIVER("receiver"),
-    CONSTRUCTOR_PARAMETER("param"),
-    SETTER_PARAMETER("setparam"),
-    PROPERTY_DELEGATE_FIELD("delegate"),
-    ALL("all"),
 }
 
 /** The variance written at a use site: `out T`, `in T`, `*`, or nothing. */

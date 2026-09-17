@@ -143,8 +143,14 @@ reaches and which it does not.
 
 Having every name is not the same as having every name MEAN the same thing. A throwaway worktree with
 `:lang-kotlin`'s 682 PSI imports rewritten onto the facade turns the compiler into the oracle for that, and
-it went from **924 errors to 252**, of which 115 are call sites still holding IntelliJ types (`PsiTreeUtil`,
-`PsiElement`-typed signatures) rather than anything missing here.
+it went from **924 errors to 231**. What is left is the migration rather than the facade:
+
+| | |
+|---|---|
+| still holding an IntelliJ type (`PsiTreeUtil`, `PsiElement`- and `TextRange`-typed signatures) | 126 |
+| imports and cascades | 69 |
+| a signature or file not yet repointed off compiler PSI | 28 |
+| `e.node.elementType`, which the facade spells `e.elementType` | 8 |
 
 Five of the differences it found would have compiled on both sides and been wrong at runtime:
 
@@ -166,6 +172,23 @@ Five of the differences it found would have compiled on both sides and been wron
 And `isInterface()`, `isEnum()`, `isData()`, `isCompanion()` are FUNCTIONS while `isElse` is a property.
 There is no rule to infer that from: each follows whatever upstream declared, and the 74 call sites that
 disagreed are what said so.
+
+Two structural changes came out of the same probe:
+
+- **`KtUnaryExpression`, `KtWhileExpressionBase`, `KtDoubleColonExpression` and the two label bases are
+  abstract CLASSES, not interfaces.** Upstream they extend `KtExpression`, and the backend passes one
+  straight into code that wants an element. As interfaces they compile until the first such call.
+- **`KtPsiElement` carries the tree surface, so the remaining interfaces can inherit it.** The bases that
+  really are interfaces upstream stay interfaces here, and a Kotlin interface cannot extend a class — so
+  `owner.getParentOfType<…>()` on a value typed `KtTypeParameterListOwner` had no receiver at all.
+
+Where a facade accessor is nullable and upstream's is not, the facade is wrong. Upstream is Java, so the
+backend reads `operationReference`, `receiverExpression`, `tryBlock`, `functionLiteral`, `whenKeyword`,
+`lBrace` and `getDelegationCall()` straight through, and nullable versions here produce sixty errors with no
+bearing on what the code means. `getDelegationCall()` is the one worth knowing about: it is non-null because
+an IMPLICIT delegation still gets a node, a zero-width one, which is the whole basis of `isImplicit` — and
+there is a test for that, because if the parser emitted nothing the non-null accessor would throw on the
+commonest secondary constructor there is.
 
 And `KtTokensCompat.kt` exists because the vendored vocabulary renamed every modifier — `PRIVATE_MODIFIER`
 where PSI said `PRIVATE_KEYWORD`, 34 of them, 82 references in `:lang-kotlin`. It re-exports all 163 tokens

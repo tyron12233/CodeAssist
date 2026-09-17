@@ -15,8 +15,8 @@ package dev.ide.kotlin.syntax.psi
  * `getParentOfType<KtTypeParameterListOwner>()` is how the backend walks out to whatever declares a type
  * parameter, and that is not a class.
  */
-inline fun <reified T : Any> KtElement.getParentOfType(strict: Boolean = false): T? {
-    var current: KtElement? = if (strict) parent else this
+inline fun <reified T : Any> KtPsiElement.getParentOfType(strict: Boolean = false): T? {
+    var current: KtPsiElement? = if (strict) parent else this
     while (current != null) {
         if (current is T) return current
         current = current.parent
@@ -25,7 +25,7 @@ inline fun <reified T : Any> KtElement.getParentOfType(strict: Boolean = false):
 }
 
 /** The nearest ancestor of type [T], NOT counting this element. */
-inline fun <reified T : Any> KtElement.getStrictParentOfType(): T? = getParentOfType<T>(strict = true)
+inline fun <reified T : Any> KtPsiElement.getStrictParentOfType(): T? = getParentOfType<T>(strict = true)
 
 /**
  * The class or object this declaration is a member of, or null for a top-level or local one.
@@ -44,7 +44,7 @@ val KtDeclaration.containingClassOrObject: KtClassOrObject?
     }
 
 /** Ancestors, innermost first. */
-val KtElement.parents: Sequence<KtElement>
+val KtPsiElement.parents: Sequence<KtElement>
     get() = generateSequence(parent) { it.parent }
 
 /** Siblings after this one, in source order. */
@@ -56,16 +56,18 @@ val KtElement.prevSiblings: Sequence<KtElement>
     get() = generateSequence(prevSibling) { it.prevSibling }
 
 /** Every descendant of type [T], depth first, this element included. */
-inline fun <reified T : KtElement> KtElement.collectDescendantsOfType(): List<T> =
+inline fun <reified T : KtElement> KtPsiElement.collectDescendantsOfType(): List<T> =
     descendants().filterIsInstance<T>().toList()
 
 /** The first descendant of type [T], or null. */
-inline fun <reified T : KtElement> KtElement.findDescendantOfType(): T? =
+inline fun <reified T : KtElement> KtPsiElement.findDescendantOfType(): T? =
     descendants().filterIsInstance<T>().firstOrNull()
 
 /** This element and every descendant, depth first, trivia excluded. */
-fun KtElement.descendants(): Sequence<KtElement> = sequence {
-    yield(this@descendants)
+fun KtPsiElement.descendants(): Sequence<KtElement> = sequence {
+    // Every implementation IS a KtElement; the interface exists so a value typed as one of the abstract
+    // bases can still be walked, not because anything else can be in a tree.
+    (this@descendants as? KtElement)?.let { yield(it) }
     for (child in children) yieldAll(child.descendants())
 }
 
