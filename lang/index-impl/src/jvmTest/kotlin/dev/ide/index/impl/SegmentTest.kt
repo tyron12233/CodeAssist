@@ -390,15 +390,15 @@ class SegmentTest {
             val cache = BlockCache(8L * 1024 * 1024)
             val s = seg(dir, entries, cache = cache) // range is Item000..Item299
 
-            val before = cache.blockReads.get()
+            val before = cache.blockReads
             assertTrue(exact(s, "ZZZ").isEmpty())        // past the max term
             assertTrue(prefix(s, "ZZZ").isEmpty())       // window sorts after everything
             assertTrue(prefix(s, "AAA").isEmpty())        // window sorts before everything
-            assertEquals(before, cache.blockReads.get(), "an out-of-range query must not read any block")
+            assertEquals(before, cache.blockReads, "an out-of-range query must not read any block")
 
             // Sanity: an in-range query DOES page from disk, so the counter is genuinely wired.
             assertEquals(1, exact(s, "Item150").size)
-            assertTrue(cache.blockReads.get() > before, "an in-range query must actually read blocks")
+            assertTrue(cache.blockReads > before, "an in-range query must actually read blocks")
             s.close()
         }
     }

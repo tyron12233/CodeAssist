@@ -413,7 +413,7 @@ internal class Segment private constructor(
                 val tgPostingsBase = r.readVarLong(); r.readVarLong() // tgPostingsLen (unused)
                 require(r.readInt() == MAGIC) { "bad index segment magic in $file" }
 
-                cache.registerSegment(segId, file)
+                cache.registerSegment(segId, file.toString())
                 @Suppress("UNCHECKED_CAST")
                 Segment(
                     cache, segId, ext.valueExternalizer as Externalizer<Any>,
