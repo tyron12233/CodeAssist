@@ -3,11 +3,12 @@ package dev.ide.index.impl
 import dev.ide.index.Hit
 import dev.ide.index.IndexOrigin
 import dev.ide.index.MatchingMode
-import java.util.TreeMap
+import kotlin.concurrent.Volatile
+import kotlin.jvm.JvmField
 
 /**
  * The in-memory, **file-partitioned** source-side index for one extension: a sorted term dictionary
- * (TreeMap) over postings, plus an optional trigram index for fuzzy/substring. This is the pragmatic
+ * ([SortedTermMap]) over postings, plus an optional trigram index for fuzzy/substring. This is the pragmatic
  * stand-in for the doc's mmap'd front-coded segments — same query semantics, loaded into RAM (small: names
  * are short). The static (SDK + libraries) side lives in disk-backed [Segment]s; this holds only project
  * source, which changes every keystroke.
@@ -57,7 +58,7 @@ internal class IndexData(matching: MatchingMode) {
         val termById = ArrayList<String?>()   // docId -> term  (null once tombstoned)
         val valueById = ArrayList<Any?>()     // docId -> value (null once tombstoned)
         val originById = ArrayList<IndexOrigin>()
-        val terms = TreeMap<String, IntList>()                                    // term  -> ascending docIds
+        val terms = SortedTermMap<IntList>()                                      // term  -> ascending docIds
         val trigrams: HashMap<String, IntList>? = if (fuzzy) HashMap() else null  // gram  -> ascending docIds
         val docsByFile = HashMap<Int, IntList>()                                  // fileId -> the docIds it owns
         var liveDocs = 0
@@ -156,14 +157,15 @@ internal class IndexData(matching: MatchingMode) {
 
     fun prefix(p: String, out: MutableList<Hit<Any>>, cap: Int) {
         val s = store
-        for ((term, ids) in s.terms.tailMap(p)) {
-            if (!term.startsWith(p)) break
+        s.terms.forEachFrom(p) { term, ids ->
+            if (!term.startsWith(p)) return@forEachFrom false
             for (i in 0 until ids.size) {
                 val id = ids[i]
                 val v = s.valueById[id] ?: continue
                 out.add(Hit(term, v, Scoring.scorePrefix(term, p, s.originById[id])))
-                if (out.size >= cap) return
+                if (out.size >= cap) return@forEachFrom false
             }
+            true
         }
     }
 
@@ -222,19 +224,20 @@ internal class IndexData(matching: MatchingMode) {
     /** Scan the window of terms starting with [first], scoring each entry via [score] (skipping [seen] ids). */
     private inline fun windowScan(
         s: Store, first: Char, out: MutableList<Hit<Any>>, cap: Int, seen: Set<Int>?,
-        score: (String, IndexOrigin) -> Int,
+        crossinline score: (String, IndexOrigin) -> Int,
     ) {
         if (out.size >= cap) return
         val p = first.toString()
-        for ((term, ids) in s.terms.tailMap(p)) {
-            if (!term.startsWith(p)) break
+        s.terms.forEachFrom(p) { term, ids ->
+            if (!term.startsWith(p)) return@forEachFrom false
             for (i in 0 until ids.size) {
                 val id = ids[i]
                 if (seen != null && id in seen) continue
                 val v = s.valueById[id] ?: continue
                 val sc = score(term, s.originById[id])
-                if (sc > 0) { out.add(Hit(term, v, sc)); if (out.size >= cap) return }
+                if (sc > 0) { out.add(Hit(term, v, sc)); if (out.size >= cap) return@forEachFrom false }
             }
+            true
         }
     }
 

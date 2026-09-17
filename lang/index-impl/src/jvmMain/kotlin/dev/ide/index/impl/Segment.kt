@@ -24,9 +24,6 @@ import java.nio.file.StandardOpenOption
 import java.util.PriorityQueue
 import java.util.UUID
 
-/** One (term, value, origin) entry handed to the indexer — the unit both the segment and the source side store. */
-internal class IndexEntry(val term: String, val value: Any, val origin: IndexOrigin)
-
 /**
  * An immutable, on-disk index partition for one artifact — the disk-backed replacement for holding a
  * library/SDK index in RAM. Written once (per `(indexId, version, artifactHash)`), then queried in place:
