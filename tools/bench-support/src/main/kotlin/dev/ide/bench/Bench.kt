@@ -69,7 +69,11 @@ object Bench {
         val bean = allocBean ?: run { var s = 0L; repeat(ops) { s += op() }; sink += s; return 0 }
         var s = 0L
         repeat(warmup) { s += op() }
-        val tid = Thread.currentThread().threadId()
+        // `Thread.id`, not `threadId()`: the latter is JDK 19+, and the build compiles every module against
+        // the Java 17 API (`-Xjdk-release=17` in the root build) so that a post-17 JDK member can never
+        // shadow a Kotlin stdlib extension and reach a device that has no such method.
+        @Suppress("DEPRECATION")
+        val tid = Thread.currentThread().id
         val before = bean.getThreadAllocatedBytes(tid)
         var i = 0
         while (i < ops) { s += op(); i++ }

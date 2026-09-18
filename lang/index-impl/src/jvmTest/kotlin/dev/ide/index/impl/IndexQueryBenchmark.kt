@@ -206,7 +206,7 @@ class IndexQueryBenchmark {
     private inline fun allocPerOp(ops: Int, op: () -> Unit): Long {
         val bean = java.lang.management.ManagementFactory.getThreadMXBean() as? com.sun.management.ThreadMXBean ?: return 0
         if (!bean.isThreadAllocatedMemorySupported) return 0
-        val tid = Thread.currentThread().threadId()
+        @Suppress("DEPRECATION") val tid = Thread.currentThread().id
         repeat(200) { op() }
         val before = bean.getThreadAllocatedBytes(tid)
         repeat(ops) { op() }
@@ -218,7 +218,7 @@ class IndexQueryBenchmark {
     private inline fun allocPerScan(scan: () -> Unit): Long {
         val bean = java.lang.management.ManagementFactory.getThreadMXBean() as? com.sun.management.ThreadMXBean ?: return 0
         if (!bean.isThreadAllocatedMemorySupported) return 0
-        val tid = Thread.currentThread().threadId()
+        @Suppress("DEPRECATION") val tid = Thread.currentThread().id
         repeat(5) { scan() }
         val reps = 50
         val before = bean.getThreadAllocatedBytes(tid)

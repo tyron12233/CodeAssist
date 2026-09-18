@@ -40,6 +40,7 @@ subprojects {
         tasks.withType<KotlinCompile>().configureEach {
             compilerOptions {
                 jvmTarget.set(JvmTarget.JVM_17)
+                // See `-Xjdk-release` below, which every Kotlin/JVM compilation in the build gets.
             }
         }
         extensions.configure<JavaPluginExtension> {
@@ -64,6 +65,38 @@ subprojects {
                 "testImplementation"(project(":test-support"))
             }
         }
+    }
+
+    // The Java half of the jvm target, for a multiplatform module that has Java sources (`:lang-kotlin`'s
+    // test fixtures do). The Kotlin/JVM guard above sets this through the `java` extension, which a
+    // multiplatform module configures differently; without it KGP fails the build with an inconsistent
+    // jvm-target between `compileJvmTestJava` (the JDK's default, 21 here) and `compileTestKotlinJvm` (17).
+    // Here rather than in the module, because it is the same trap for the next module converted.
+    plugins.withId("org.jetbrains.kotlin.multiplatform") {
+        tasks.withType<JavaCompile>().configureEach {
+            sourceCompatibility = JavaVersion.VERSION_17.toString()
+            targetCompatibility = JavaVersion.VERSION_17.toString()
+        }
+    }
+
+    // COMPILE AGAINST THE JAVA 17 API, not merely to Java 17 BYTECODE, in EVERY module whatever plugin
+    // created its Kotlin/JVM compilation -- `kotlin.jvm`, `kotlin.multiplatform`, or AGP's built-in Kotlin.
+    //
+    // `jvmTarget` picks the class-file version; the API the compiler RESOLVES against is still the JDK it
+    // runs on, which is 21+ here. On Android that difference is not academic. A JDK method added after 17
+    // becomes visible, and where the JDK and the Kotlin stdlib declare the same name, the MEMBER wins over
+    // the extension: `MutableList.removeLast()` was Kotlin's extension until JDK 21 gave `java.util.List` a
+    // member of its own, after which it compiles to an interface method that does not exist below Android
+    // API 35 and throws `NoSuchMethodError` the first time the line runs. It dexes clean, so nothing before
+    // the device says a word.
+    //
+    // That is how the vendored Kotlin lexer came to crash on every Android below 15 -- ordinary string
+    // templates reach `popState`, which pops a `MutableList`. Found by `KotlinAnalysisArtParityTest` on an
+    // API 26 image; invisible on the JVM, to the source scan, and on a current emulator. Fixing it here
+    // rather than at the call site is deliberate: the vendored parser is byte-identical to upstream on
+    // purpose (see its VENDOR.md), and this closes the whole class rather than the one method.
+    tasks.withType<KotlinCompile>().configureEach {
+        compilerOptions { freeCompilerArgs.add("-Xjdk-release=17") }
     }
 
     // Two kinds of test task:
