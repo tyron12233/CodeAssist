@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   pull_request:
   workflow_dispatch:
+  schedule:
+    # 04:00 UTC nightly, for the emulator job below — it is too slow to sit on every push.
+    - cron: "0 4 * * *"
 
 # Build and test only the pure-Kotlin/JVM framework. The IDE shells (:ide-ui/:ide-core/:ide-desktop/
 # :ide-android) apply the Compose/Android Gradle plugins, which need the Android SDK even to configure;
@@ -51,15 +54,18 @@ jobs:
 
       # `test` is a Kotlin/JVM task name; a multiplatform module has `jvmTest` instead, so the aggregate
       # above walks straight past every one of them. Named explicitly, or their suites do not run at all.
-      # (The iOS targets' tests need a Mac, so they run locally rather than here.)
+      # (These are the JVM targets of those modules; their iOS targets are the `ios` job below.)
       #
       # :kotlin-classfile reads compiled output from the step above as one of its two corpora, and
       # :kotlin-symbols diffs its port against the real :lang-kotlin-index, so both have to follow `test`
       # rather than stand on their own.
-      - name: Multiplatform suites (Kotlin syntax, class files, symbols, the model)
+      - name: Multiplatform suites (the Kotlin backend, dependency resolution, syntax, class files, the model)
         run: >-
           ./gradlew :kotlin-syntax:jvmTest :kotlin-classfile:jvmTest :kotlin-symbols:jvmTest
-          :model-api:jvmTest :lang-kotlin-index:jvmTest --console=plain --stacktrace
+          :model-api:jvmTest :lang-kotlin-index:jvmTest :index-impl:jvmTest
+          :language-api:jvmTest :lang-kotlin:jvmTest :deps-impl:jvmTest
+          :project-templates:jvmTest
+          --console=plain --stacktrace
 
       # 2) The quality gates: deterministic given the pinned JDK (same `jrt` class library + fixed indexes),
       #    so they gate ranking/recall regressions. One unambiguous invocation per module.
@@ -86,6 +92,150 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-and-benchmark-reports
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ART parity for the Kotlin front end, on the API the app actually floors at.
+  #
+  # This is the only job that can catch its class of bug, and it has already caught one that every other
+  # gate passed: `MutableList.removeLast()` resolving to the JDK 21 member, which dexes clean and throws
+  # `NoSuchMethodError` below API 35 — invisible to the JVM suites, to the source scan, and to a current
+  # emulator, because a current emulator HAS the method. API 26 is the app's minSdk and the whole point:
+  # run this on a modern image and it proves almost nothing.
+  #
+  # Not on every push. It boots an emulator and builds an APK that dexes the bundled Kotlin compiler, so it
+  # is ~20 minutes against the framework job's few. Nightly plus on demand is the trade; the digest itself
+  # is recorded by `:lang-kotlin:jvmTest` above, which DOES run on every push, so a change to the analysis
+  # still shows up immediately as a golden diff — this job only answers whether the device agrees.
+  android-parity:
+    name: Kotlin analysis parity on ART (API 26)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    env:
+      CI_CORE_ONLY: "false"   # the instrumented suite lives in the shells, which need the full module set
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 platforms;android-36.1 build-tools;36.0.0"
+
+      - name: Disable Kotlin incremental compilation (CI)
+        run: |
+          mkdir -p ~/.gradle
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+
+      # `default` rather than a Google-APIs image: nothing here touches Play services, and the plain image
+      # is the smaller download. KVM is enabled by the step above it, or the emulator falls back to an
+      # unusably slow software CPU.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+      - name: Kotlin analysis parity on ART
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 26
+          target: default
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-save -noaudio -no-boot-anim
+          disable-animations: true
+          script: >-
+            ./gradlew :ide-android:connectedDebugAndroidTest
+            -Pandroid.testInstrumentationRunnerArguments.class=dev.ide.android.parity.KotlinAnalysisArtParityTest
+            --console=plain --stacktrace
+
+      - name: Upload instrumented test reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-parity-reports
+          path: app/ide-android/build/reports/androidTests/**
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The port. Every module below builds for iOS as well as the JVM, and what breaks it is almost never an
+  # iOS-specific edit — it is an ordinary change to `commonMain` that happens to name something the JVM has
+  # and Kotlin/Native does not (`java.*`, but also `synchronized`, `ThreadLocal`, `@Volatile` from
+  # `kotlin.jvm`, `toSortedSet`, `Dispatchers.IO`). That compiles and tests green everywhere else, so
+  # without this job the port rots silently and the next person to open Xcode pays for weeks of it.
+  #
+  # The tests RUN, on a simulator the Kotlin plugin picks itself (it shells out to `xcrun simctl list
+  # devices available`), so no device is pinned here — a runner image bump changes the device list and a
+  # pinned name would fail on it.
+  ios:
+    name: iOS simulator suites
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Disable Kotlin incremental compilation (CI)
+        run: |
+          mkdir -p ~/.gradle
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+
+      # 1) The framework on the simulator: the model and its store, the index and its segment format, the
+      #    Kotlin editor (parse -> symbols -> resolve -> completion), the class-file decoder and the Maven
+      #    resolver. CI_CORE_ONLY keeps the Compose shells out, so this step needs no Android SDK.
+      - name: Framework suites (iosSimulatorArm64)
+        run: >-
+          ./gradlew :model-api:iosSimulatorArm64Test :project-model-impl:iosSimulatorArm64Test
+          :index-impl:iosSimulatorArm64Test :lang-kotlin:iosSimulatorArm64Test
+          :kotlin-classfile:iosSimulatorArm64Test :kotlin-syntax:iosSimulatorArm64Test
+          :kotlin-symbols:iosSimulatorArm64Test :deps-impl:iosSimulatorArm64Test
+          :store-impl:iosSimulatorArm64Test :project-templates:iosSimulatorArm64Test
+          --console=plain --stacktrace
+
+      # 2) The host itself: `IosBackend` (files, projects, dependencies, the editor passes) and the
+      #    editor's IME command layer. These live in the shells, so the full module set is needed and with
+      #    it the Android SDK — the Compose/Android plugins want one even to CONFIGURE. Same provisioning
+      #    as the APK workflow.
+      - name: Set up Android SDK (the shells need one to configure)
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 platforms;android-36.1 build-tools;36.0.0"
+
+      - name: iOS host suites (ide-ios, ide-ui-core)
+        env:
+          CI_CORE_ONLY: "false"
+        run: >-
+          ./gradlew :ide-ios:iosSimulatorArm64Test :ide-ui-core:iosSimulatorArm64Test
+          --console=plain --stacktrace
+
+      # NOT run here: linking the `CodeAssistUi` framework the Xcode app embeds. A cold Kotlin/Native link
+      # of the whole UI graph is ~6 minutes and the compile above already proves every module builds for
+      # the target; the link is exercised by actually building the app in Xcode.
+
+      - name: Upload iOS test reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-reports
           path: |
             **/build/reports/tests/**
             **/build/test-results/**
