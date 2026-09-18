@@ -208,9 +208,14 @@ tasks.named<Test>("jvmTest") {
     // Forwarded explicitly, because a `-D` on the command line reaches the GRADLE JVM and the tests run in
     // a forked one -- the same trap :kotlin-syntax's baseline flag documents.
     System.getProperty("kt.updateDigest")?.let { systemProperty("kt.updateDigest", it) }
-    // An external Kotlin checkout for the real-world analysis sweep (opt-in; self-skips without it).
-    System.getProperty("kt.externalCorpus")?.let {
-        systemProperty("kt.externalCorpus", it)
+    // The analysis sweeps, both opt-in. `-Dkt.sweep=true` runs the one over THIS repository's own Kotlin
+    // (the root is handed over the way :kotlin-syntax hands its parser sweep the same one);
+    // `-Dkt.externalCorpus=<kotlin checkout>` runs the one over the standard library. Opt-in because a sweep
+    // is ~3,000 files of analysis, which does not belong in the fast correctness gate.
+    val sweeping = System.getProperty("kt.sweep") != null || System.getProperty("kt.externalCorpus") != null
+    if (System.getProperty("kt.sweep") != null) systemProperty("kt.repoRoot", rootDir.absolutePath)
+    System.getProperty("kt.externalCorpus")?.let { systemProperty("kt.externalCorpus", it) }
+    if (sweeping) {
         // The sweep's OUTPUT is the whole point of running it, and a test task swallows stdout by default --
         // asking for the sweep and getting a silent BUILD SUCCESSFUL reads as "no findings" when it actually
         // means "you never saw them". Re-running is likewise not optional: the task is UP-TO-DATE from the

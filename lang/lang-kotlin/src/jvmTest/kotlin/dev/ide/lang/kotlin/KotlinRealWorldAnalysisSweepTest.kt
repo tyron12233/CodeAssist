@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.Severity
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -7,91 +8,169 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * The ANALYSIS, swept over a real Kotlin checkout — the other half of the parser sweep in `:kotlin-syntax`.
+ * The ANALYSIS, swept over real Kotlin — the other half of the parser sweep in `:kotlin-syntax`.
  *
  * Agreeing with the compiler about the TREE says nothing about what the editor then claims is wrong with it.
- * This runs the semantic checks over code that is known-good by construction (the Kotlin standard library's
- * own sources, which the compiler builds every day) and treats every ERROR as a suspected FALSE POSITIVE.
- * That is the failure this project cares most about: a missing diagnostic is a gap, a wrong one is a bug
- * report from a user whose correct code is underlined.
+ * This runs the semantic checks over code that is known-good by construction and treats every ERROR as a
+ * suspected FALSE POSITIVE. That is the failure this project cares most about: a missing diagnostic is a gap,
+ * a wrong one is a bug report from a user whose correct code is underlined.
  *
  * It is not a parity test against the compiler's diagnostics — our checks are deliberately a subset, so
  * counting what we DON'T report would measure scope rather than correctness. It is a false-positive hunt,
  * plus the harder guarantee that nothing in the pipeline throws on real input.
  *
- * Opt-in, like the parser sweep, because it needs a checkout:
+ * TWO CORPORA, because they are wrong in different ways:
  *
- *     ./gradlew :lang-kotlin:jvmTest --tests '*RealWorldAnalysisSweep*' -Dkt.externalCorpus=<kotlin checkout>
+ *  * The Kotlin STANDARD LIBRARY, opt-in because it needs a checkout:
  *
- * WHAT THE CLASSPATH IS. The kotlin-stdlib jar and nothing else — no JDK, no android.jar. So every
- * `java.lang` name a file uses (`Exception`, `IllegalArgumentException`, `Thread`) is genuinely not there to
- * find, and `kt.unresolved` measures the harness rather than the checker. It is reported, because a real
- * false positive would show up in it, but it is kept out of the headline count, which is about the
- * STRUCTURAL and flow checks — the population that can go wrong without an index at all.
+ *        ./gradlew :lang-kotlin:jvmTest --tests '*RealWorldAnalysisSweep*' \
+ *            -Dkt.externalCorpus=<kotlin checkout>
  *
- * WHICH FILES COUNT. The classpath is the RELEASED JVM stdlib jar, so only the source sets that jar actually
- * describes can be held to it: `common`, `src`, `jvm`, `jdk7`, `jdk8`, `unsigned`. The JS, wasm and native
- * sets declare types the JVM jar has never heard of (`JsAny`, `ExperimentalWasmJsInterop`) and members with
- * no bodies that only a builtins compilation accepts, so an "unresolved reference" there says nothing about
- * the checker. Every file is still SWEPT — the crash gate wants the breadth — but the headline number and the
- * per-code tally come from the checkable half, and the rest is reported separately so the split stays visible
- * rather than quietly inflating both.
+ *    A deliberately hard corpus and an unrepresentative one: `expect`/`actual`, builtins with no bodies,
+ *    `-opt-in=` and `-Xallow-kotlin-package` flags no ordinary project passes.
+ *
+ *  * THIS REPOSITORY's own Kotlin, which needs no checkout — it is the one the build is running in:
+ *
+ *        ./gradlew :lang-kotlin:jvmTest --tests '*RealWorldAnalysisSweep*' -Dkt.sweep=true
+ *
+ *    The other kind of input, and the kind users actually write: coroutines, Compose, sealed hierarchies,
+ *    DSLs, delegation. A structural check that fires here is a bug report waiting to happen. Opt-in like the
+ *    other one, because ~3,000 files of analysis does not belong in the fast correctness gate.
+ *
+ * WHAT THE CLASSPATH IS. The kotlin-stdlib jar and nothing else — no JDK, no android.jar, and for the
+ * repository sweep no Compose, coroutines, ASM or JDT either. So every name out of any of those is genuinely
+ * not there to find, and `kt.unresolved` measures the harness rather than the checker. It is reported,
+ * because a real false positive would show up in it, but it is kept out of the headline count, which is
+ * about the STRUCTURAL and flow checks — the population that can go wrong without an index at all.
  */
 class KotlinRealWorldAnalysisSweepTest {
 
+    /**
+     * WHICH FILES COUNT in the stdlib sweep: the classpath is the RELEASED JVM stdlib jar, so only the source
+     * sets that jar actually describes can be held to it. The JS, wasm and native sets declare types the JVM
+     * jar has never heard of (`JsAny`, `ExperimentalWasmJsInterop`) and members with no bodies that only a
+     * builtins compilation accepts. Every file is still SWEPT — the crash gate wants the breadth — but the
+     * headline number and the per-code tally come from the checkable half, and the rest is reported
+     * separately so the split stays visible rather than quietly inflating both.
+     */
     @Test
     fun theCheckersReportNothingOnTheKotlinStandardLibrarysOwnSources() {
         val root = System.getProperty("kt.externalCorpus")?.let(::File) ?: return
         val stdlib = File(root, "libraries/stdlib")
         assertTrue(stdlib.isDirectory, "expected libraries/stdlib under $root")
 
-        val files = stdlib.walkTopDown()
-            .onEnter { it.name !in setOf("build", "test", "testData", ".git") && !it.name.startsWith(".") }
+        val files = kotlinFilesUnder(stdlib, skip = setOf("build", "test", "testData"))
+        assertTrue(files.size > 500, "expected the stdlib sources, found ${files.size}")
+
+        val jvmCheckable = setOf("common", "src", "jvm", "jdk7", "jdk8", "unsigned")
+        val report = sweep(files, stdlib) { it.substringBefore('/') in jvmCheckable }
+
+        println(
+            "stdlib sweep: ${report.clean}/${report.counted} JVM-checkable files clean of structural " +
+                "errors, ${report.crashed} crashed",
+        )
+        println(
+            "  (not counted: ${report.skippedWithErrors}/${report.skipped} JS/wasm/native files report " +
+                "something against a JVM classpath that does not describe them)",
+        )
+        report.printCodes()
+        assertTrue(report.crashed == 0, "the analysis threw on ${report.crashed} of ${files.size} stdlib files")
+    }
+
+    /** The repository's own Kotlin; the build hands over its root only when `-Dkt.sweep` asked for it. */
+    @Test
+    fun theCheckersReportNothingOnThisRepositorysOwnKotlin() {
+        val root = System.getProperty("kt.repoRoot")?.let(::File) ?: return
+        // `testData` is the parser's corpus, deliberately full of malformed Kotlin.
+        val files = kotlinFilesUnder(root, skip = setOf("build", ".gradle", "testData"))
+        assertTrue(files.size > 2000, "expected this repository's sources, found ${files.size}")
+
+        val report = sweep(files, root) { true }
+
+        println(
+            "repository sweep: ${report.clean}/${report.counted} files clean of structural errors, " +
+                "${report.crashed} crashed",
+        )
+        report.printCodes()
+        assertTrue(report.crashed == 0, "the analysis threw on ${report.crashed} of ${files.size} files")
+    }
+
+    // ---- the sweep itself ----------------------------------------------------------------------------
+
+    private fun kotlinFilesUnder(root: File, skip: Set<String>): List<File> =
+        root.walkTopDown()
+            .onEnter { it.name !in skip && !it.name.startsWith(".") }
             .filter { it.isFile && it.extension == "kt" }
             .sortedBy { it.path }
             .toList()
-        assertTrue(files.size > 500, "expected the stdlib sources, found ${files.size}")
 
-        // The source sets the released JVM stdlib jar on this analyzer's classpath actually describes.
-        val jvmCheckable = setOf("common", "src", "jvm", "jdk7", "jdk8", "unsigned")
-        val byCode = HashMap<String, Int>()
-        // Up to three DISTINCT messages per code. One sample names the category; three show whether the hits
-        // are one repeated shape (usually a single missing rule) or a scatter of unrelated ones.
-        val samples = HashMap<String, MutableSet<String>>()
-        // Per code, how the hits are spread over files. A count alone cannot tell a real false positive from a
-        // corpus artefact: 3,546 "property must be initialized" all landing in the JS builtins (bodyless
-        // `actual` declarations the compiler only accepts with -Xallow-kotlin-package) is one quirk, whereas
-        // the same count spread over 400 ordinary files is a bug every user would hit.
-        val byCodeFiles = HashMap<String, MutableMap<String, Int>>()
-        var crashed = 0
-        var withErrors = 0
-        var checkable = 0
-        var otherTargets = 0
-        var otherTargetsWithErrors = 0
+    /**
+     * Analyze each of [files] and tally what the checkers said. [counts] decides which files the headline
+     * number and the per-code tally are drawn from; the rest are still analyzed — the crash gate wants every
+     * file — and reported only as a count.
+     */
+    private fun sweep(files: List<File>, base: File, counts: (String) -> Boolean): Report {
+        val report = Report()
         for (file in files) {
             val text = runCatching { file.readText().replace("\r\n", "\n") }.getOrNull() ?: continue
-            val relative = file.relativeTo(stdlib).path.replace(File.separatorChar, '/')
-            // The RELATIVE path, not the base name. stdlib has many same-named files across its platform
-            // source sets (`Array.kt`, `Collections.kt`, …); keying on the name alone collapses them onto one
-            // VirtualFile, the source model merges their declarations, and the sweep then invents thousands of
-            // repeated-modifier and conflicting-declaration reports that the checkers never actually produce.
+            // The RELATIVE path, not the base name. A real tree has many same-named files (`Array.kt`,
+            // `Collections.kt`, …); keying on the name alone collapses them onto one VirtualFile, the source
+            // model merges their declarations, and the sweep then invents thousands of repeated-modifier and
+            // conflicting-declaration reports that the checkers never actually produce.
+            val relative = file.relativeTo(base).path.replace(File.separatorChar, '/')
             val doc = SnippetDoc(text, DiskFile(srcDir.resolve(relative)))
             val diagnostics = runCatching {
                 runBlocking { analyzer.incrementalParser.parseFull(doc); analyzer.analyze(doc.file).diagnostics }
-            }.getOrElse { crashed++; emptyList() }
+            }.getOrElse { report.crash(relative, it); emptyList() }
 
             // Syntax errors are the parser's business and the `:kotlin-syntax` sweep already gates them; a
-            // stdlib file that fails to PARSE would show up there as a divergence from the compiler.
+            // file that fails to PARSE would show up there as a divergence from the compiler.
             val errors = diagnostics.filter {
                 it.severity == Severity.ERROR && it.code != KotlinDiagnosticCodes.SYNTAX
             }
-            if (relative.substringBefore('/') !in jvmCheckable) {
-                otherTargets++
-                if (errors.isNotEmpty()) otherTargetsWithErrors++
-                continue
+            report.record(relative, errors, counted = counts(relative))
+        }
+        return report
+    }
+
+    private class Report {
+        /** The files the analysis THREW on, with what it threw. A count alone says the gate failed and
+         *  nothing about where to look, and this gate is the one that matters most: the analysis runs on
+         *  every keystroke, so an exception is a dead editor pane. */
+        private val crashes = LinkedHashMap<String, String>()
+        val crashed: Int get() = crashes.size
+        var counted = 0
+            private set
+        var skipped = 0
+            private set
+        var skippedWithErrors = 0
+            private set
+        private var withErrors = 0
+        private val byCode = HashMap<String, Int>()
+
+        /** Up to three DISTINCT messages per code. One sample names the category; three show whether the hits
+         *  are one repeated shape (usually a single missing rule) or a scatter of unrelated ones. */
+        private val samples = HashMap<String, MutableSet<String>>()
+
+        /** Per code, how the hits are spread over files. A count alone cannot tell a real false positive from
+         *  a corpus artefact: 3,546 "property must be initialized" all landing in the JS builtins is one
+         *  quirk, whereas the same count spread over 400 ordinary files is a bug every user would hit. */
+        private val byCodeFiles = HashMap<String, MutableMap<String, Int>>()
+
+        val clean: Int get() = counted - withErrors
+
+        fun crash(relative: String, cause: Throwable) {
+            crashes[relative] = "${cause::class.simpleName}: ${cause.message?.take(160)}"
+        }
+
+        fun record(relative: String, errors: List<Diagnostic>, counted: Boolean) {
+            if (!counted) {
+                skipped++
+                if (errors.isNotEmpty()) skippedWithErrors++
+                return
             }
-            checkable++
-            if (errors.isEmpty()) continue
+            this.counted++
+            if (errors.isEmpty()) return
             if (errors.any { it.code !in CLASSPATH_BOUND }) withErrors++
             for (d in errors) {
                 val code = d.code ?: "<none>"
@@ -101,27 +180,20 @@ class KotlinRealWorldAnalysisSweepTest {
             }
         }
 
-        println(
-            "stdlib sweep: ${checkable - withErrors}/$checkable JVM-checkable files clean of structural " +
-                "errors, $crashed crashed"
-        )
-        println("  (not counted: $otherTargetsWithErrors/$otherTargets JS/wasm/native files report something " +
-            "against a JVM classpath that does not describe them)")
-        byCode.entries.sortedByDescending { it.value }.forEach { (code, n) ->
-            val spread = byCodeFiles[code].orEmpty()
-            println("  $n x $code  (across ${spread.size} files)")
-            samples[code].orEmpty().forEach { println("      $it") }
-            spread.entries.sortedByDescending { it.value }.take(3)
-                .forEach { (f, c) -> println("      $c in $f") }
+        fun printCodes() {
+            crashes.forEach { (file, cause) -> println("  THREW on $file -- $cause") }
+            byCode.entries.sortedByDescending { it.value }.forEach { (code, n) ->
+                val spread = byCodeFiles[code].orEmpty()
+                println("  $n x $code  (across ${spread.size} files)")
+                samples[code].orEmpty().forEach { println("      $it") }
+                spread.entries.sortedByDescending { it.value }.take(3)
+                    .forEach { (f, c) -> println("      $c in $f") }
+            }
+            byCode.keys.filter { it in CLASSPATH_BOUND }.forEach {
+                println("  ^ $it is classpath-bound: this harness holds the stdlib jar and nothing else, so a")
+                println("    `java.lang` (or Compose, or coroutines) name has nothing to resolve to. Not counted.")
+            }
         }
-
-        byCode.keys.filter { it in CLASSPATH_BOUND }.forEach {
-            println("  ^ $it is classpath-bound: this harness has the stdlib jar and no JDK, so a `java.lang`")
-            println("    name has nothing to resolve to. Not counted above.")
-        }
-
-        // Nothing may THROW: the analysis runs on every keystroke, and an exception is a dead editor pane.
-        assertTrue(crashed == 0, "the analysis threw on $crashed of ${files.size} stdlib files")
     }
 
     companion object {
