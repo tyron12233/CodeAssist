@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.ide.android.AndroidIde
 import dev.ide.core.IdeServicesBackend
+import dev.ide.model.impl.rootPath
 import dev.ide.preview.PreviewRequest
 import org.junit.Assert.assertTrue
 import org.junit.Test

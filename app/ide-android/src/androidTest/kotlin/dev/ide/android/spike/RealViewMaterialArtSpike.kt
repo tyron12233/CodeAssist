@@ -10,6 +10,7 @@ import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidVariants
 import dev.ide.core.IdeServicesBackend
 import dev.ide.model.Module
+import dev.ide.model.impl.rootPath
 import dev.ide.preview.PreviewRequest
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue

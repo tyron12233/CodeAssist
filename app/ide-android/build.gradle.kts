@@ -485,6 +485,12 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("applog-runtime-asset").get().asFile)
     sourceSets.getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("vm-spike-asset").get().asFile)
     sourceSets.getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("moshi-libs-asset").get().asFile)
+    // The Kotlin-analysis parity corpus and its goldens, staged as test assets so the instrumented suite
+    // reads the SAME bytes the JVM suite recorded from. Two directories rather than a copy task: nothing is
+    // transformed, and a copy would be one more place for the two sides to drift apart.
+    // See :lang-kotlin's KotlinAnalysisDigestTest and KotlinAnalysisArtParityTest here.
+    sourceSets.getByName("androidTest").assets.srcDir(rootProject.file("experimental/kotlin-syntax/testData"))
+    sourceSets.getByName("androidTest").assets.srcDir(rootProject.file("lang/lang-kotlin/parity"))
 
     // Release signing, never committed. Resolution order per field: keystore.properties (gitignored,
     // alongside this build script) → Gradle property (-PRELEASE_*) → env var (RELEASE_*). With no keystore

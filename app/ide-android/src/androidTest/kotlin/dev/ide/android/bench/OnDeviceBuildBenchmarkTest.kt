@@ -60,6 +60,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import dev.ide.model.impl.open
 
 /**
  * On-device build benchmark: opens a real Android project already present on this device, forces a **fresh**
