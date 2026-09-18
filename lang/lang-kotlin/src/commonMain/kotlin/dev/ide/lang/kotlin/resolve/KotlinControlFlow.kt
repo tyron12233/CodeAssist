@@ -356,10 +356,34 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
 
             is KtWhenExpression -> {
                 val afterSubject = flowAssign(e.subjectExpression, inSet, candidates, out)
-                // Conservative: don't assume any branch ran (a no-match path keeps the entry set). Each branch's
-                // body reads see the entry set.
-                e.entries.forEach { flowAssign(it.expression, afterSubject, candidates, out) }
-                return afterSubject
+                // Joined like an `if`, over the branches that can REACH the code after: the intersection of
+                // what they assign. Returning the entry set unchanged, as this did, meant a `when` could never
+                // initialize anything, and the shape it could not see is ordinary Kotlin:
+                //
+                //     val name: String
+                //     when (element) {
+                //         is KtEnumEntry -> { name = …; }
+                //         is KtClass -> { name = …; }
+                //         else -> return null
+                //     }
+                //     use(name)          // <- "Variable 'name' must be initialized before it is used"
+                //
+                // Every live branch assigns it and the `else` jumps, so it IS definitely assigned. Twelve of
+                // those in one file of this repository alone.
+                //
+                // The intersection also covers an EXHAUSTIVE `when` with no `else` (over a sealed subject),
+                // which this pass cannot prove exhaustive -- it is purely PSI, so it has no subject type --
+                // but which reaches the same answer whenever every branch assigns. What it does NOT cover is a
+                // non-exhaustive `when` where every listed branch assigns: there a no-match path leaves the
+                // variable unassigned and this misses it. A missing diagnostic is a gap; a wrong one is a bug
+                // report from someone whose correct code is underlined, and that is the trade this whole pass
+                // is written to make.
+                val branchOuts = ArrayList<Set<KtProperty>>()
+                for (entry in e.entries) {
+                    val branch = flowAssign(entry.expression, afterSubject, candidates, out)
+                    if (liveness(entry.expression) != Liveness.DEAD) branchOuts.add(branch)
+                }
+                return if (branchOuts.isEmpty()) afterSubject else branchOuts.reduce { a, b -> a intersect b }
             }
 
             is KtWhileExpression -> {
