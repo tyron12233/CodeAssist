@@ -86,6 +86,11 @@ tasks.named<Test>("jvmTest") {
     // compiler's PSI environment, which wants room.
     maxHeapSize = "2g"
     systemProperty("kotlinSyntax.corpusRoot", rootDir.absolutePath)
+    // An external Kotlin checkout to sweep as well (opt-in; the suite self-skips without it). Forwarded
+    // explicitly for the same reason as the baseline flag below: a `-D` reaches the Gradle JVM, not the
+    // forked test one.
+    System.getProperty("kotlinSyntax.externalCorpus")
+        ?.let { systemProperty("kotlinSyntax.externalCorpus", it) }
     // Rewrite the parity baseline after a deliberate change, the way the framework's regression suites take
     // `-Dbench.updateBaselines`. Forwarded explicitly: a `-D` on the Gradle command line reaches the Gradle
     // JVM, not the forked test one.

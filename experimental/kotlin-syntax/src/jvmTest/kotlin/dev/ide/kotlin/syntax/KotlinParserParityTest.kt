@@ -154,6 +154,100 @@ class KotlinParserParityTest {
     }
 
     /**
+     * The same comparison over an EXTERNAL Kotlin checkout, at whatever scale you point it at.
+     *
+     * The two suites above are bounded on purpose: a vendored snapshot that can be reviewed in a diff, and
+     * this repository's own code. Neither answers "does the grammar hold up against the whole Kotlin
+     * project", which is tens of thousands of files including every `compiler/testData` corner the language
+     * has accumulated. That question needs a checkout, so it is opt-in rather than vendored:
+     *
+     *     git clone --filter=blob:none --sparse --depth 1 https://github.com/JetBrains/kotlin.git
+     *     cd kotlin && git sparse-checkout set compiler/testData compiler/psi libraries/stdlib
+     *     ./gradlew :kotlin-syntax:jvmTest --tests '*ParityTest*' -DkotlinSyntax.externalCorpus=<path>
+     *
+     * It REPORTS rather than gates: the corpus moves whenever upstream does, so a committed threshold would
+     * be a number about someone else's repository. The rate and the clustered differences are the output --
+     * a cluster is where the grammar actually disagrees, and one cluster usually covers hundreds of files.
+     *
+     * Self-skipping when the property is absent, so it costs nothing in a normal run.
+     */
+    @Test
+    fun theVendoredGrammarAgreesOnAnExternalKotlinCheckout() {
+        val root = System.getProperty("kotlinSyntax.externalCorpus")?.let(::File) ?: return
+        assertTrue(root.isDirectory, "kotlinSyntax.externalCorpus is not a directory: $root")
+        // `testData` is NOT skipped here, unlike the sweep of this repository. There the name means our own
+        // vendored snapshot, which the first suite already covers; in a Kotlin checkout it is the compiler's
+        // own adversarial corpus, which is the entire reason to point this at one. Skipping it left 1,567 of
+        // 31,537 files swept, all of them ordinary source.
+        val skipped = SKIPPED_DIRECTORIES - "testData"
+        val files = root.walkTopDown()
+            .onEnter { it.name !in skipped && !it.name.startsWith(".") }
+            .filter { it.isFile && (it.extension == "kt" || it.extension == "kts") }
+            .sortedBy { it.path }
+            .toList()
+        assertTrue(files.size > 1000, "expected a Kotlin checkout, found ${files.size} files under $root")
+
+        val clusters = HashMap<String, Int>()
+        val samples = HashMap<String, String>()
+        var agreed = 0
+        var crashed = 0
+        // Split by whether the COMPILER found a syntax error in the file, because the two populations are
+        // different questions. A file it parses cleanly is valid Kotlin and the grammar must match exactly.
+        // A file it rejects is a recovery question -- what shape of ERROR_ELEMENT to build around the
+        // damage -- which two independent parsers can answer differently while both being reasonable, and
+        // which the compiler's own testData is full of on purpose.
+        var validTotal = 0
+        var validAgreed = 0
+        val divergedValid = ArrayList<String>()
+        for (file in files) {
+            val text = runCatching { file.readText().replace("\r\n", "\n") }.getOrNull() ?: continue
+            val relative = file.relativeTo(root).path.replace(File.separatorChar, '/')
+            val isScript = file.extension == "kts"
+            val ours = runCatching { ourRender(KotlinSyntax.parse(text, isScript)) }
+                .getOrElse { "<threw: ${it::class.simpleName}: ${it.message}>" }
+            val theirs = runCatching { psiRender(relative, text) }
+                .getOrElse { "<threw: ${it::class.simpleName}: ${it.message}>" }
+            if (ours.startsWith("<threw")) crashed++
+            val compilerAccepted = !theirs.contains("ERROR_ELEMENT") && !theirs.startsWith("<threw")
+            if (compilerAccepted) validTotal++
+            if (ours == theirs) {
+                agreed++
+                if (compilerAccepted) validAgreed++
+            } else {
+                if (compilerAccepted && divergedValid.size < 10) {
+                    divergedValid += "$relative\n${firstDifference(theirs, ours)}"
+                }
+                val kind = differenceKind(theirs, ours)
+                clusters.merge(kind, 1, Int::plus)
+                samples.putIfAbsent(kind, "$relative\n${firstDifference(theirs, ours)}")
+            }
+        }
+
+        val rate = if (files.isEmpty()) 0.0 else agreed * 100.0 / files.size
+        val validRate = if (validTotal == 0) 0.0 else validAgreed * 100.0 / validTotal
+        println("external corpus: $agreed/${files.size} agree (${"%.2f".format(rate)}%), $crashed crashed")
+        println("  of which VALID Kotlin (the compiler accepts): $validAgreed/$validTotal (${"%.2f".format(validRate)}%)")
+        if (divergedValid.isNotEmpty()) {
+            println("  divergences on VALID files — these are real grammar bugs:")
+            divergedValid.forEach { println("    $it") }
+        }
+        clusters.entries.sortedByDescending { it.value }.take(12).forEach { (kind, n) ->
+            println("  $n x $kind")
+            println("      ${samples[kind]?.replace("\n", "\n      ")}")
+        }
+        // Two hard gates. The parser must never CRASH, whatever it is handed -- a thrown exception in the
+        // editor's parse is a dead file, and this corpus is exactly the adversarial input a real project can
+        // contain. And it must agree on every file the compiler ACCEPTS: that half is not a matter of taste,
+        // it is whether the grammar is the same grammar.
+        assertTrue(crashed == 0, "the vendored grammar threw on $crashed of ${files.size} files")
+        assertTrue(
+            validAgreed == validTotal,
+            "the vendored grammar diverges on ${validTotal - validAgreed} files the compiler accepts:\n\n" +
+                divergedValid.joinToString("\n\n"),
+        )
+    }
+
+    /**
      * Our tree, rendered under the shared vocabulary. Deliberately NOT the module's own `render`: both sides
      * have to agree on what an element is CALLED before a difference means anything, and that mapping is
      * test-only knowledge.
