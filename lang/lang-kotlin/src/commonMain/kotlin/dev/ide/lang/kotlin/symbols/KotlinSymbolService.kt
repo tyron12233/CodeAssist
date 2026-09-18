@@ -3225,23 +3225,78 @@ class KotlinSymbolService(
      * stays on the always-complete [sealedSubclassesOf] model walk).
      */
     fun directInheritors(superFqn: String): List<SubtypeValue> {
-        val idx = index ?: return emptyList()
         val short = superFqn.substringAfterLast('.')
         // Match either FQN form: bytecode records `java.lang.Throwable`, source may resolve to `kotlin.Throwable`.
         val targets =
             setOfNotNull(superFqn, Builtins.javaTypeFor(superFqn), Builtins.kotlinTypeFor(superFqn))
         val seen = HashSet<String>()
         val out = ArrayList<SubtypeValue>()
+        fun admit(v: SubtypeValue) {
+            val sup = v.supertype.substringBefore('<').trim()
+            val matches = sup in targets || ('.' !in sup && sup == short)
+            if (matches && seen.add(v.fqn)) out += v
+        }
+        // The module's own SOURCE first, and deliberately first: it is the LIVE truth for project types. A class
+        // that gained a supertype one keystroke ago is in the model and is in no segment yet, so where both
+        // answer, the fresher one is the one that lands. It is also the only answer on a host that indexes the
+        // CLASSPATH and nothing else -- iOS -- where every project type's gutter marker was blank and
+        // go-to-implementation found nothing, for want of a workspace indexer that will not port.
+        for (v in sourceSubtypes()[short].orEmpty()) admit(v)
+        val idx = index ?: return out
         for (id in SubtypeIndex.ALL) {
-            for (v in idx.exact<SubtypeValue>(
-                id,
-                SubtypeIndex.key(superFqn)
-            )) {
-                val sup = v.supertype.substringBefore('<').trim()
-                val matches = sup in targets || ('.' !in sup && sup == short)
-                if (matches && seen.add(v.fqn)) out += v
+            for (v in idx.exact<SubtypeValue>(id, SubtypeIndex.key(superFqn))) admit(v)
+        }
+        return out
+    }
+
+    // Memoized against the MODEL INSTANCE rather than cleared by hand. The other memos here depend on the file
+    // scope, the synthetics and the classpath index as well, so they are dropped explicitly wherever any of
+    // those move; this one has exactly one input, and a model rebuild makes the previous map unreachable by
+    // construction. [subtypeMemo] is published BEFORE [subtypeModel], so a reader that sees the new model
+    // identity cannot then read the old map.
+    @Volatile
+    private var subtypeModel: ModuleSourceModel? = null
+
+    @Volatile
+    private var subtypeMemo: Map<String, List<SubtypeValue>> = emptyMap()
+
+    /**
+     * The subtype relation of the module's OWN SOURCE, keyed the way the index keys it: by the supertype's
+     * SHORT name ([SubtypeIndex.key]), with the value carrying the best-effort RESOLVED supertype so a
+     * consumer can tell `demo.Base` from `other.Base`.
+     *
+     * This is not a second copy of what the index holds; it is the half the index cannot be relied on for.
+     * A binary subtype relation (one library class extending another) only ever comes from the classpath
+     * index, and a SOURCE one only ever comes from a workspace pass that may not have run, may be stale by a
+     * keystroke, or may not exist at all. The model already carries both halves of the source answer -- every
+     * class and the supertype texts it declares -- so deriving it costs one pass over the model per rebuild.
+     *
+     * Local and anonymous types are skipped: their FQN is a synthetic key, so nothing can navigate to one.
+     */
+    private fun sourceSubtypes(): Map<String, List<SubtypeValue>> {
+        val m = model()
+        if (subtypeModel === m) return subtypeMemo
+        val out = HashMap<String, MutableList<SubtypeValue>>()
+        for (rc in m.classByFqn.values) {
+            if (rc.isLocal) continue
+            val kind = when {
+                rc.isObject -> "object"
+                rc.isInterface -> "interface"
+                rc.isEnum -> "enum"
+                rc.isAnnotation -> "annotation"
+                else -> "class"
+            }
+            for (text in rc.superTypeTexts) {
+                // `Base<T>()` and `Base<T>` both name `Base`; the constructor call and the type arguments are
+                // not part of the key, exactly as the index producer strips them.
+                val bare = text.substringBefore('<').substringBefore('(').trim()
+                if (bare.isEmpty()) continue
+                out.getOrPut(SubtypeIndex.key(bare)) { ArrayList() } +=
+                    SubtypeValue(rc.fqn, kind, superHeadFqn(text, rc.ctx) ?: bare)
             }
         }
+        subtypeMemo = out
+        subtypeModel = m
         return out
     }
 
