@@ -227,9 +227,13 @@ jobs:
           ./gradlew :ide-ios:iosSimulatorArm64Test :ide-ui-core:iosSimulatorArm64Test
           --console=plain --stacktrace
 
-      # NOT run here: linking the `CodeAssistUi` framework the Xcode app embeds. A cold Kotlin/Native link
-      # of the whole UI graph is ~6 minutes and the compile above already proves every module builds for
-      # the target; the link is exercised by actually building the app in Xcode.
+      # Linking the `CodeAssistUi` framework the Xcode app embeds. This step was left out at first, on the
+      # reasoning that the compiles above already prove every module builds for the target. They do not:
+      # Kotlin/Native lowers the WHOLE program at link time, so a tree that every target compiles cleanly can
+      # still fail here. It did -- `CastsOptimization` blew its stack on this graph and the iOS app could not
+      # be built at all, while every compile task stayed green. A ~6 minute link is worth catching that.
+      - name: Link the CodeAssistUi framework (whole-program lowering)
+        run: ./gradlew :ide-ios:linkDebugFrameworkIosSimulatorArm64 --console=plain --stacktrace
 
       - name: Upload iOS test reports
         if: ${{ always() }}
