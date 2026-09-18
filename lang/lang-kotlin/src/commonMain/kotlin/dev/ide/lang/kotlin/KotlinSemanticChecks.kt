@@ -1549,16 +1549,39 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
     private fun modifierConflicts(decl: KtDeclaration): List<Diagnostic> {
         val ml = decl.modifierList ?: return emptyList()
         val present = LinkedHashMap<KtModifierKeywordToken, KtElement>()
+        val annotations = HashSet<String>()
         val out = ArrayList<Diagnostic>()
         var c = ml.firstChild
         while (c != null) {
             val et = c.elementType
-            if (et is KtModifierKeywordToken) {
+            // A modifier list holds two different things, and they need two different keys.
+            //
+            // MEMBERSHIP in the modifier-keyword set, not a type test: `KtModifierKeywordToken` is a
+            // typealias for `SyntaxElementType` in the vendored vocabulary (its own doc says the alias
+            // "gives up the checking they had"), so `is KtModifierKeywordToken` was true of EVERY child of
+            // the list -- annotations included. Keyed by element type, which is the same `ANNOTATION_ENTRY`
+            // for all of them, that made every annotation after the first a repeat of the one before:
+            // `@Composable @Preview fun` reported a bogus Repeated '@Preview' modifier. It fired 7,713 times
+            // sweeping the Kotlin standard library's own sources.
+            //
+            // Annotations still have to be checked -- a repeated one IS an error -- but keyed by their TEXT,
+            // which is what distinguishes `@Deprecated @Deprecated` from `@Deprecated @Suppress`. Text is
+            // also the limit of what can be known here: a `@Repeatable` annotation may legitimately appear
+            // twice, and that is a resolution question this check does not ask.
+            if (et in KtTokens.MODIFIER_KEYWORDS) {
                 if (present.containsKey(et)) {
                     val r = c.textRange
                     out += Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Repeated '${c.text}' modifier", KotlinDiagnosticCodes.MODIFIERS)
                 } else {
                     present[et] = c
+                }
+            } else if (c is KtAnnotationEntry) {
+                val key = c.text.trim()
+                if (key in annotations) {
+                    val r = c.textRange
+                    out += Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Repeated '$key' modifier", KotlinDiagnosticCodes.MODIFIERS)
+                } else {
+                    annotations += key
                 }
             }
             c = c.nextSibling
