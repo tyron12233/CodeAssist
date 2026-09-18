@@ -21,10 +21,12 @@ import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
 import dev.ide.kotlin.syntax.psi.KtParenthesizedExpression
 import dev.ide.kotlin.syntax.psi.KtProperty
+import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtReturnExpression
 import dev.ide.kotlin.syntax.psi.KtThrowExpression
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.KtTryExpression
+import dev.ide.kotlin.syntax.psi.KtValueArgumentName
 import dev.ide.kotlin.syntax.psi.KtWhenExpression
 import dev.ide.kotlin.syntax.psi.KtWhileExpression
 
@@ -438,6 +440,21 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
      *  boundaries, since a lambda/local function captures outer locals (needed to see a captured `x = 1`). Stops
      *  at a class body (a member is not a local). */
     private fun boundLocal(ref: KtNameReferenceExpression): KtProperty? {
+        // A name that is not a bare name binds to nothing here, and matching it by SPELLING alone is how a
+        // local got confused with an unrelated member:
+        //
+        //     val name: String
+        //     when (element) {
+        //         is KtEnumEntry -> { name = element.name ?: return null }   // <- `element.name`
+        //
+        // `element.name` is a member of `element`; it only shares the local's spelling. Read as a use of the
+        // local, it is a use BEFORE the assignment on that very line, so the line that initializes `name` was
+        // underlined for not having initialized it. Six of those in `KotlinOutline.describe` alone, and the
+        // names it takes to hit are the common ones -- `name`, `size`, `value`, `text`.
+        val parent = ref.parent
+        if (parent is KtQualifiedExpression && parent.selectorExpression === ref) return null
+        // `f(name = 1)`: an argument LABEL is the callee's parameter name, not a reference to anything in scope.
+        if (parent is KtValueArgumentName) return null
         val name = ref.getReferencedName()
         val offset = ref.textRange.startOffset
         var node: KtElement? = ref.parent
