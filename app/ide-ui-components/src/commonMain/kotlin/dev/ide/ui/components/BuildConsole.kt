@@ -615,6 +615,7 @@ private fun ProblemsTab(diagnostics: List<BuildDiagnosticUi>, onOpen: (BuildDiag
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             ConsoleChip(stringResource(Res.string.buildc_filter_all, diagnostics.size), filter == ProblemFilter.All) {
@@ -627,6 +628,15 @@ private fun ProblemsTab(diagnostics: List<BuildDiagnosticUi>, onOpen: (BuildDiag
                 stringResource(Res.string.buildc_filter_warnings, warnings),
                 filter == ProblemFilter.Warnings
             ) { filter = ProblemFilter.Warnings }
+            Spacer(Modifier.weight(1f))
+            // In-tab copy-all so Problems can be copied without hunting the header control (#1599).
+            if (diagnostics.isNotEmpty()) {
+                CopyButton(
+                    stringResource(BuildTab.Problems.label),
+                    provide = { renderProblemsForCopy(diagnostics) },
+                    boxSize = 30,
+                )
+            }
         }
         if (shown.isEmpty()) {
             EmptyState(
@@ -790,6 +800,13 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             SearchField(query, { query = it }, Modifier.weight(1f))
+            if (log.isNotEmpty()) {
+                CopyButton(
+                    stringResource(BuildTab.Log.label),
+                    provide = { log.joinToString("\n", transform = ::renderLogForCopy) },
+                    boxSize = 30,
+                )
+            }
             IconButtonCa(
                 CaIcons.layers, if (grouped) stringResource(Res.string.buildc_ungroup) else stringResource(Res.string.buildc_group_by_task),
                 onClick = { grouped = !grouped }, boxSize = 30, iconSize = 16,
