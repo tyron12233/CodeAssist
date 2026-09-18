@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -53,6 +52,7 @@ import dev.ide.ui.backend.UiLearnTrack
 import dev.ide.ui.backend.UiResumePoint
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.Eyebrow
+import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.MonoChip
 import dev.ide.ui.components.PillChip
 import dev.ide.ui.components.SupportingOnContainer

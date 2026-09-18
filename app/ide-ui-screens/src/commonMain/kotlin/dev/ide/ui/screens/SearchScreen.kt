@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +47,7 @@ import dev.ide.ui.backend.SymbolHit
 import dev.ide.ui.backend.UiSearchOptions
 import dev.ide.ui.backend.UiTextMatch
 import dev.ide.ui.components.Chip
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.search
 import dev.ide.ui.generated.resources.search_find_in_files_hint

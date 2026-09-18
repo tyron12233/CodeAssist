@@ -9,6 +9,7 @@ import dev.ide.model.ModuleId
 import dev.ide.model.ModuleType
 import dev.ide.model.SourceSetTemplate
 import dev.ide.model.impl.ProjectModelStore
+import dev.ide.model.impl.rootPath
 import java.nio.file.Files
 import kotlin.io.path.writeText
 

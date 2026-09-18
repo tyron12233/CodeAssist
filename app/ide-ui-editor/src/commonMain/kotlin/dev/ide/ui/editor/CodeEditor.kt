@@ -53,7 +53,6 @@ import dev.ide.ui.backend.UiNavTarget
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.clipForClipboard
-import dev.ide.ui.editor.core.EditorImeHandle
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.MEASURER_CACHE_ENTRIES
 import dev.ide.ui.ext.KeymapHost
@@ -221,7 +220,9 @@ private fun CodeEditorContent(
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
     // The soft keyboard is raised only through this handle (on a deliberate tap) — never on focus alone.
-    val editorIme = remember { EditorImeHandle() }
+    // It belongs to the SESSION, not to this composable: the accessory bar outside the editor dismisses the
+    // keyboard through the same handle, and a tab switch must not leave the bar holding a stale one.
+    val editorIme = session.ime
     @Suppress("DEPRECATION") val clipboard = LocalClipboardManager.current
     val density = LocalDensity.current
     val editorSession = session

@@ -19,6 +19,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import dev.ide.model.impl.open
 
 /**
  * Where the synthetic `R` gets its merged resources from.

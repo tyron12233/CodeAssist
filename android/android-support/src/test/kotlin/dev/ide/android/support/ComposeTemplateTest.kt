@@ -17,6 +17,8 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.ide.model.impl.rootPath
+import dev.ide.model.impl.open
 
 class ComposeTemplateTest {
 

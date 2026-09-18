@@ -1,0 +1,1596 @@
+package dev.ide.deps.impl
+
+import dev.ide.deps.ArtifactKind
+import dev.ide.deps.ConflictPolicy
+import dev.ide.deps.Repository
+import dev.ide.model.Coordinate
+import dev.ide.model.Exclusion
+import dev.ide.platform.ProgressReporter
+import dev.ide.vfs.local.LocalFileSystem
+import kotlinx.coroutines.runBlocking
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
+import kotlin.io.path.createTempDirectory
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class MavenDependencyResolverTest {
+
+    private val noProgress = object : ProgressReporter {
+        override fun report(fraction: Double, message: String?) {}
+        override fun checkCanceled() {}
+        override val isCanceled: Boolean = false
+    }
+
+    private val repo = Repository("fixture", BASE)
+
+    @Test
+    fun resolvesTransitivesAndPicksNewestOnConflict() {
+        // a → common:1.0 ; b → common:2.0  (diamond). NEWEST must win for common.
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "common", "1.0")))
+        files.put("b", "1.0", deps = listOf(Dep("g", "common", "2.0")))
+        files.put("common", "1.0")
+        files.put("common", "2.0")
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("a", "1.0"), coord("b", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        assertEquals(setOf("a", "b", "common"), byName.keys)
+        assertEquals("2.0", byName.getValue("common").coordinate.version)
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+
+        val conflict = result.conflicts.single()
+        assertEquals("g:common", conflict.coordinate)
+        assertEquals(listOf("1.0", "2.0"), conflict.requested)
+        assertEquals("2.0", conflict.chosen)
+
+        // The dependsOn edges expose the diamond for the UI graph.
+        assertEquals(listOf(coord("common", "2.0")), byName.getValue("a").dependsOn)
+        assertEquals(listOf(coord("common", "2.0")), byName.getValue("b").dependsOn)
+    }
+
+    @Test
+    fun managedProvidedScopeKeepsATransitiveOffTheClasspath() {
+        // com.google.zxing:android-core declares `com.google.android:android` with NEITHER a version nor a
+        // scope. Both come from zxing-parent's <dependencyManagement>, where the scope is `provided`. Reading
+        // only the managed VERSION and defaulting the scope to `compile` put that artifact (a 2012 API-16
+        // android.jar: `android.app.Activity`, `android.content.Context`, 1698 classes) on the consumer's
+        // compile classpath, where it shadows the real framework, so every androidx supertype fails to load
+        // ("Cannot access 'androidx.core.app.ComponentActivity'"). A `provided` dependency is never transitive.
+        val files = FakeRepo()
+        files.put(
+            "zxing-parent", "3.3.0", group = "com.google.zxing", packaging = "pom",
+            managed = listOf(Dep("com.google.android", "android", "4.1.1.4", scope = "provided")),
+        )
+        files.put(
+            "android-core", "3.3.0", group = "com.google.zxing",
+            parent = Triple("com.google.zxing", "zxing-parent", "3.3.0"),
+            deps = listOf(Dep("com.google.android", "android", "")),   // no <version>, no <scope>
+        )
+        files.put("android", "4.1.1.4", group = "com.google.android")
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(Coordinate("com.google.zxing", "android-core", "3.3.0")),
+                listOf(repo), ConflictPolicy.NEWEST, noProgress,
+            )
+        }
+
+        assertEquals(
+            setOf("com.google.zxing:android-core"),
+            result.resolved.map { "${it.coordinate.group}:${it.coordinate.name}" }.toSet(),
+            "a dependency whose scope is `provided` via dependencyManagement must not reach the classpath",
+        )
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+    }
+
+    @Test
+    fun managedVersionWithoutAScopeStillYieldsACompileTransitive() {
+        // The over-correction guard: dependencyManagement that supplies only a VERSION leaves the scope at its
+        // `compile` default, so the transitive must still resolve.
+        val files = FakeRepo()
+        files.put("parent", "1.0", packaging = "pom", managed = listOf(Dep("g", "lib", "2.0")))
+        files.put("app", "1.0", parent = Triple("g", "parent", "1.0"), deps = listOf(Dep("g", "lib", "")))
+        files.put("lib", "2.0")
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("app", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        assertEquals(setOf("app", "lib"), byName.keys, "unexpected unresolved: ${result.unresolved}")
+        assertEquals("2.0", byName.getValue("lib").coordinate.version)
+    }
+
+    @Test
+    fun anEntrysOwnScopeWinsOverDependencyManagement() {
+        // Maven's precedence: dependencyManagement supplies a scope only where the <dependency> declares none.
+        val files = FakeRepo()
+        files.put("parent", "1.0", packaging = "pom", managed = listOf(Dep("g", "lib", "2.0", scope = "provided")))
+        files.put("app", "1.0", parent = Triple("g", "parent", "1.0"), deps = listOf(Dep("g", "lib", "", scope = "compile")))
+        files.put("lib", "2.0")
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("app", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+
+        assertEquals(setOf("app", "lib"), result.resolved.map { it.coordinate.name }.toSet(),
+            "an explicit <scope>compile</scope> must override the managed `provided`; unresolved=${result.unresolved}")
+    }
+
+    @Test
+    fun kotlinStdlibCommonTransitiveIsPrunedNotUnresolved() {
+        // A library (kotlinx.serialization, coroutines, …) pulls `kotlin-stdlib-common` transitively. It's a KMP
+        // metadata-only module — no JVM bytecode, and since Kotlin 1.9.20 not published as a plain jar, so a
+        // JVM resolve 404s fetching it and used to flag it unresolved. The platform kotlin-stdlib provides the
+        // classes, so it must be PRUNED from the graph, not fetched or surfaced as unresolved.
+        val files = FakeRepo()
+        files.put("lib", "1.0", deps = listOf(Dep("org.jetbrains.kotlin", "kotlin-stdlib-common", "2.1.20")))
+        // Deliberately absent from the repo (mirrors the real 404): the prune must happen BEFORE any fetch.
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("lib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        assertEquals(setOf("lib"), result.resolved.map { it.coordinate.name }.toSet(),
+            "kotlin-stdlib-common must be pruned (not resolved); got ${result.resolved.map { it.coordinate }}")
+        assertTrue(result.unresolved.isEmpty(),
+            "kotlin-stdlib-common must NOT be flagged unresolved — the platform stdlib provides it; got ${result.unresolved}")
+    }
+
+    @Test
+    fun directKotlinStdlibCommonIsPruned() {
+        val files = FakeRepo()
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(Coordinate("org.jetbrains.kotlin", "kotlin-stdlib-common", "2.1.20")),
+                listOf(repo), ConflictPolicy.NEWEST, noProgress,
+            )
+        }
+        assertTrue(result.resolved.isEmpty() && result.unresolved.isEmpty(),
+            "a directly-declared kotlin-stdlib-common must be pruned entirely; " +
+                "resolved=${result.resolved.map { it.coordinate }} unresolved=${result.unresolved}")
+    }
+
+    @Test
+    fun normalizesHardPinAndRangeVersionsOnTransitives() {
+        // AndroidX pins same-group deps as `[1.0]` (a Maven hard-pin range). The literal brackets must not
+        // leak into the fetch URL, else the dep's POM 404s and its whole subtree is silently dropped — which
+        // is how `androidx.activity:activity` (ComponentActivity) went missing from the Compose classpath.
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "mid", "[1.0]")))   // hard pin
+        files.put("mid", "1.0", deps = listOf(Dep("g", "leaf", "[1.0,2.0)")))   // range → lower bound
+        files.put("leaf", "1.0")
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        assertEquals(setOf("a", "mid", "leaf"), byName.keys, "range-pinned transitives must resolve: ${result.unresolved}")
+        assertEquals("1.0", byName.getValue("mid").coordinate.version)
+        assertEquals("1.0", byName.getValue("leaf").coordinate.version)
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+    }
+
+    @Test
+    fun followsPomRelocationToTheMovedCoordinate() {
+        // com.itextpdf:itext7-core:9.2.0 is a `pom`-packaged relocation stub (NO jar, NO <dependencies>) that
+        // moved to :itext-core, itself a `pom` aggregator pulling the real module jars. Without following the
+        // <relocation> the direct dep resolves to nothing → "cannot import". Here itext7-core relocates (by
+        // artifactId only, inheriting group + version) to itext-core, whose aggregator pom pulls kernel + io.
+        val files = FakeRepo()
+        files.putRelocation("itext7-core", "9.2.0", toName = "itext-core")
+        files.put("itext-core", "9.2.0", packaging = "pom", deps = listOf(Dep("g", "kernel", "9.2.0"), Dep("g", "io", "9.2.0")))
+        files.put("kernel", "9.2.0")
+        files.put("io", "9.2.0")
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("itext7-core", "9.2.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        // Both aggregator poms carry no artifact; the real jars behind the relocation must all resolve.
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        assertEquals(setOf("kernel", "io"), byName.keys, "relocated aggregator must pull the real jars: ${result.unresolved}")
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+    }
+
+    @Test
+    fun followsPomRelocationWithAFullTargetCoordinate() {
+        // A relocation that changes group + artifact + version, moving to a normal jar: the moved-to artifact
+        // (not the stub) is what ends up on the classpath.
+        val files = FakeRepo()
+        files.putRelocation("old-lib", "1.0", toGroup = "g2", toName = "new-lib", toVersion = "2.0")
+        files.put("new-lib", "2.0", group = "g2")
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("old-lib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        val art = result.resolved.single()
+        assertEquals(Coordinate("g2", "new-lib", "2.0"), art.coordinate)
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+    }
+
+    @Test
+    fun pinnedPolicyKeepsTheDirectlyDeclaredVersion() {
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "common", "2.0")))
+        files.put("common", "1.0")
+        files.put("common", "2.0")
+        val (resolver, _) = newResolver(files)
+
+        // common is declared directly at 1.0 but a pulls 2.0 transitively → PINNED keeps 1.0.
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("a", "1.0"), coord("common", "1.0")), listOf(repo), ConflictPolicy.PINNED, noProgress)
+        }
+        assertEquals("1.0", result.resolved.single { it.coordinate.name == "common" }.coordinate.version)
+    }
+
+    @Test
+    fun extractsClassesJarAndResFromAar() {
+        val files = FakeRepo()
+        files.put("widget", "1.0", packaging = "aar", jarBytes = aarWithRes())
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking { resolver.resolve(listOf(coord("widget", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val art = result.resolved.single()
+        assertEquals(ArtifactKind.AAR, art.kind)
+        assertEquals("classes.jar", art.classesRoot.name)
+        assertTrue(art.classesRoot.exists)
+        // the AAR's res/ is exploded next to classes.jar, for the IDE's resource model
+        val res = Path.of(art.classesRoot.path).parent.resolve("res/values/strings.xml")
+        assertTrue(Files.isRegularFile(res), "AAR res/ should be extracted next to classes.jar: $res")
+    }
+
+    @Test
+    fun extractsAClassesJarStoredWithADataDescriptor() {
+        // The FastJarFileSystem preview crash class: an AAR whose nested `classes.jar` is STORED (a jar is
+        // already compressed) with a trailing DATA DESCRIPTOR. `ZipInputStream` (the old extractor) throws
+        // "only DEFLATED entries can have EXT descriptor" on that shape / can't find the entry boundary;
+        // `ZipFile` reads it by its central-directory size, byte-exact. The exploded classes.jar must be a
+        // valid, openable archive with the nested jar's entries.
+        val inner = nestedClassesJar()
+        val files = FakeRepo()
+        files.put("iconpack", "1.0", packaging = "aar", jarBytes = aarWithStoredDataDescriptorClassesJar(inner))
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking { resolver.resolve(listOf(coord("iconpack", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+        val classesJar = Path.of(result.resolved.single().classesRoot.path)
+        assertTrue(Files.isRegularFile(classesJar), "classes.jar must be extracted")
+        assertContentEquals(inner, Files.readAllBytes(classesJar), "the STORED+data-descriptor classes.jar must extract byte-exact")
+        val names = mutableListOf<String>()
+        java.util.zip.ZipFile(classesJar.toFile()).use { zf ->
+            val e = zf.entries(); while (e.hasMoreElements()) names.add(e.nextElement().name)
+        }
+        assertEquals(setOf("pkg/Foo.class", "pkg/Bar.class"), names.toSet())
+    }
+
+    @Test
+    fun reExtractsAStaleExplodedAarMissingRes() {
+        // The AndroidX-Navigation "attribute … not found" bug: an AAR exploded by an OLDER build left
+        // classes.jar + AndroidManifest.xml + an empty `.extracted` marker but NO `res/` (res unpacking was
+        // added later). Such a dir was reused as-is, so a (transitive) library's attrs never reached aapt2.
+        // Versioning the marker makes a stale explosion re-extract, restoring `res/`.
+        val files = FakeRepo()
+        files.put("widget", "1.0", packaging = "aar", jarBytes = aarWithRes())
+        val tmp = createTempDirectory("deps-stale-aar")
+        val lfs = LocalFileSystem(tmp)
+        val cache = ResolverCache(tmp.toString())
+        val resolver = MavenDependencyResolver(cache, lfs::fileFor, files)
+
+        // Warm: the first resolve explodes the AAR fully (classes.jar + res/ + manifest + marker).
+        runBlocking { resolver.resolve(listOf(coord("widget", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val dir = java.nio.file.Paths.get(cache.explodedDir(coord("widget", "1.0")))
+        val res = dir.resolve("res/values/strings.xml")
+        assertTrue(Files.isRegularFile(res), "warm resolve should extract res/")
+
+        // Simulate an OLD-format exploded dir: drop res/, rewrite the marker in the pre-version (empty) format,
+        // keeping classes.jar + AndroidManifest.xml (which the old reuse-shortcut deemed sufficient).
+        Files.walk(dir.resolve("res")).use { s -> s.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) } }
+        Files.writeString(dir.resolve(".extracted"), "")
+        assertFalse(Files.exists(res), "res/ removed to simulate a stale explosion")
+
+        // Re-resolve: the stale (empty) marker must trigger re-extraction, restoring res/.
+        runBlocking { resolver.resolve(listOf(coord("widget", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertTrue(Files.isRegularFile(res), "a stale exploded AAR (empty marker, no res/) must be re-extracted: $res")
+    }
+
+    @Test
+    fun resolvesResourceOnlyAarToUsableClassFreeClassesJar() {
+        // A resource-only AAR (no classes.jar inside, e.g. an Android lib that is all resources) must still
+        // resolve, producing a NON-EMPTY but class-free classes.jar. A zero-entry jar is unusable on ART
+        // (ZipFile/ZipOutputStream throw `ZipException: No entries`), so we write a single manifest entry: it
+        // opens fine everywhere and dexes to no classes.
+        val files = FakeRepo()
+        files.put("res-lib", "1.0", packaging = "aar", jarBytes = aarResOnly())
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking { resolver.resolve(listOf(coord("res-lib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val art = result.resolved.single()
+        assertEquals("classes.jar", art.classesRoot.name)
+        assertTrue(art.classesRoot.exists)
+        assertTrue(result.unresolved.isEmpty(), "a resource-only AAR resolves; got unresolved=${result.unresolved}")
+        // Openable via ZipFile (the ART-critical property; a zero-entry zip would throw here) with >=1 entry,
+        // and no `.class` entries (so it dexes to nothing).
+        val names = java.util.zip.ZipFile(Path.of(art.classesRoot.path).toFile()).use { zf ->
+            zf.entries().toList().map { it.name }
+        }
+        assertTrue(names.isNotEmpty(), "classes.jar must be a non-empty (ART-openable) archive; got $names")
+        assertTrue(names.none { it.endsWith(".class") }, "a resource-only AAR has no classes; got $names")
+    }
+
+    @Test
+    fun terminatesAndRecordsEdgesOnCyclicMetadata() {
+        // a → b → a : a cyclic POM graph must not loop forever; both edges must survive for cycle detection.
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "b", "1.0")))
+        files.put("b", "1.0", deps = listOf(Dep("g", "a", "1.0")))
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking { resolver.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        assertEquals(setOf("a", "b"), byName.keys)
+        assertEquals(listOf(coord("b", "1.0")), byName.getValue("a").dependsOn)
+        assertEquals(listOf(coord("a", "1.0")), byName.getValue("b").dependsOn)
+    }
+
+    @Test
+    fun dropsTestScopeAndExcludedTransitives() {
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(
+            Dep("g", "testonly", "1.0", scope = "test"),
+            Dep("g", "b", "1.0", exclusions = listOf("g" to "c")),
+        ))
+        files.put("b", "1.0", deps = listOf(Dep("g", "c", "1.0")))
+        files.put("testonly", "1.0")
+        files.put("b", "1.0") // overwrite ok
+        files.put("c", "1.0")
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking { resolver.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val names = result.resolved.map { it.coordinate.name }.toSet()
+        assertEquals(setOf("a", "b"), names) // testonly (test scope) and c (excluded) are gone
+    }
+
+    @Test
+    fun honorsCallerDeclaredExclusions() {
+        // The caller (not a POM) excludes `g:c` on the direct dependency `a` — the Gradle `exclude` semantics.
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "b", "1.0")))
+        files.put("b", "1.0", deps = listOf(Dep("g", "c", "1.0")))
+        files.put("c", "1.0")
+        val (resolver, _) = newResolver(files)
+
+        val a = coord("a", "1.0")
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(a), listOf(repo), ConflictPolicy.NEWEST, noProgress,
+                exclusions = mapOf(a to listOf(Exclusion("g", "c"))),
+            )
+        }
+        assertEquals(setOf("a", "b"), result.resolved.map { it.coordinate.name }.toSet(), "c is excluded by the caller")
+    }
+
+    @Test
+    fun callerExclusionAppliesPerDeclarationNotGlobally() {
+        // `a` excludes `g:c`, but `d` pulls `c` with no exclusion → c survives via d (per-path, like Gradle).
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "c", "1.0")))
+        files.put("d", "1.0", deps = listOf(Dep("g", "c", "1.0")))
+        files.put("c", "1.0")
+        val (resolver, _) = newResolver(files)
+
+        val a = coord("a", "1.0"); val d = coord("d", "1.0")
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(a, d), listOf(repo), ConflictPolicy.NEWEST, noProgress,
+                exclusions = mapOf(a to listOf(Exclusion("g", "c"))),
+            )
+        }
+        assertTrue("c" in result.resolved.map { it.coordinate.name }, "c reachable through d, which doesn't exclude it")
+    }
+
+    @Test
+    fun wildcardCallerExclusionDropsAllTransitives() {
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "b", "1.0"), Dep("g", "c", "1.0")))
+        files.put("b", "1.0")
+        files.put("c", "1.0")
+        val (resolver, _) = newResolver(files)
+
+        val a = coord("a", "1.0")
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(a), listOf(repo), ConflictPolicy.NEWEST, noProgress,
+                exclusions = mapOf(a to listOf(Exclusion("*", "*"))),
+            )
+        }
+        assertEquals(setOf("a"), result.resolved.map { it.coordinate.name }.toSet(), "`*:*` drops every transitive")
+    }
+
+    @Test
+    fun resolvesOfflineFromCacheAfterFirstFetch() {
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "common", "1.0")))
+        files.put("common", "1.0")
+
+        val tmp = createTempDirectory("deps-offline")
+        val lfs = LocalFileSystem(tmp)
+        val cache = ResolverCache(tmp.toString())
+        val warm = MavenDependencyResolver(cache, lfs::fileFor, files)
+        runBlocking { warm.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+
+        // Second run with a fetcher that refuses everything — must still resolve from the populated cache.
+        val offline = MavenDependencyResolver(cache, lfs::fileFor, ArtifactFetcher { null })
+        val result = runBlocking { offline.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertEquals(setOf("a", "common"), result.resolved.map { it.coordinate.name }.toSet())
+    }
+
+    @Test
+    fun fullyCachedReResolveTouchesNoNetworkAndNegativeCachesMissingSources() {
+        // The reopen case: once a closure is cached, re-resolving must hit the network ZERO times — including
+        // not re-probing a `-sources.jar` that doesn't exist (the dominant repeat-download cause). The first
+        // resolve probes (and 404s) the sources jar; that miss is negative-cached, so the second resolve is
+        // fully offline.
+        val files = FakeRepo()
+        files.put("a", "1.0")   // pom + jar present; no -sources.jar published → 404
+        val tmp = createTempDirectory("deps-neg")
+        val lfs = LocalFileSystem(tmp)
+        val cache = ResolverCache(tmp.toString())
+        val seen = mutableListOf<String>()
+        val counting = ArtifactFetcher { url -> seen += url; files.fetch(url) }
+        val resolver = MavenDependencyResolver(cache, lfs::fileFor, counting)
+
+        runBlocking { resolver.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertTrue(seen.any { it.contains("-sources.jar") }, "first resolve should probe the sources jar")
+
+        seen.clear()
+        val result = runBlocking { resolver.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertEquals(setOf("a"), result.resolved.map { it.coordinate.name }.toSet())
+        assertTrue(seen.isEmpty(), "a fully-cached re-resolve must touch the network 0 times (no sources re-probe): $seen")
+    }
+
+    @Test
+    fun hard404IsNotRetriable() {
+        // A coordinate that 404s on every repo is permanently absent → not retriable (so callers can stop
+        // re-walking it every open; the negative cache + an explicit Retry handle recovery).
+        val (resolver, _) = newResolver(FakeRepo())
+        val result = runBlocking { resolver.resolve(listOf(coord("ghost", "9.9")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertEquals(listOf(coord("ghost", "9.9")), result.unresolved)
+        assertFalse(result.retriable, "a clean 404 across all repos is permanent, not retriable")
+    }
+
+    @Test
+    fun transientNetworkFailureIsRetriable() {
+        // A thrown I/O error (host unreachable / timeout / 5xx) is NOT a 404 — it may succeed once back online,
+        // so the result is retriable and the miss is NOT negative-cached.
+        val tmp = createTempDirectory("deps-transient")
+        val lfs = LocalFileSystem(tmp)
+        val throwing = ArtifactFetcher { throw java.io.IOException("connection reset") }
+        val resolver = MavenDependencyResolver(ResolverCache(tmp.toString()), lfs::fileFor, throwing)
+        val result = runBlocking { resolver.resolve(listOf(coord("x", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertTrue(result.unresolved.isNotEmpty(), "the throwing fetcher can't resolve anything")
+        assertTrue(result.retriable, "a network error (not a 404) must be retriable")
+    }
+
+    @Test
+    fun platformBomSuppliesVersionForVersionlessDependency() {
+        // A BOM manages common:1.5; the user declares `common` with no version + imports the BOM.
+        val files = FakeRepo()
+        files.put("common", "1.5")
+        files.putBom("bom", "1.0", manages = listOf(Dep("g", "common", "1.5")))
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(coord("common", "")), listOf(repo), ConflictPolicy.NEWEST, noProgress,
+                platforms = listOf(coord("bom", "1.0")),
+            )
+        }
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+        assertEquals("1.5", result.resolved.single { it.coordinate.name == "common" }.coordinate.version)
+    }
+
+    @Test
+    fun platformDoesNotOverrideAnExplicitVersion() {
+        // Plain-platform semantics: an explicitly-declared version wins over the BOM's managed version.
+        val files = FakeRepo()
+        files.put("common", "1.0")
+        files.put("common", "2.0")
+        files.putBom("bom", "1.0", manages = listOf(Dep("g", "common", "2.0")))
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(coord("common", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress,
+                platforms = listOf(coord("bom", "1.0")),
+            )
+        }
+        assertEquals("1.0", result.resolved.single { it.coordinate.name == "common" }.coordinate.version)
+    }
+
+    @Test
+    fun versionlessDependencyWithoutPlatformIsUnresolved() {
+        val files = FakeRepo()
+        files.put("common", "1.0")
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("common", "")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        assertTrue(result.resolved.isEmpty(), "nothing should resolve: ${result.resolved.map { it.coordinate }}")
+        assertEquals(listOf(coord("common", "")), result.unresolved)
+    }
+
+    @Test
+    fun alignsKotlinStdlibFamilyToOneVersion() {
+        // The real failure: `kotlin-stdlib:1.8.22` (which post-1.8 carries CollectionsJDK8Kt) plus an older
+        // `kotlin-stdlib-jdk8:1.6.21` (which still carries it) dragged in transitively. These are DISTINCT
+        // artifacts, so per-coordinate newest-wins can't collapse them, and D8/R8 abort on the duplicate
+        // class. Family alignment must snap kotlin-stdlib-jdk8 up to 1.8.22, where it's an empty shim.
+        val k = "org.jetbrains.kotlin"
+        val files = FakeRepo()
+        files.put("kotlin-stdlib", "1.8.22", group = k)
+        files.put("kotlin-stdlib", "1.6.21", group = k)
+        // jdk8 1.6.21 is the standalone (class-carrying) artifact; 1.8.22 is the empty shim the build will fetch.
+        files.put("kotlin-stdlib-jdk8", "1.6.21", group = k, deps = listOf(Dep(k, "kotlin-stdlib", "1.6.21")))
+        files.put("kotlin-stdlib-jdk8", "1.8.22", group = k, deps = listOf(Dep(k, "kotlin-stdlib", "1.8.22")))
+        // An older library that still depends on the standalone jdk8 artifact (e.g. an old coroutines build).
+        files.put("legacy-lib", "1.0", group = k, deps = listOf(Dep(k, "kotlin-stdlib-jdk8", "1.6.21")))
+
+        val result = runBlocking {
+            newResolver(files).first.resolve(
+                listOf(Coordinate(k, "kotlin-stdlib", "1.8.22"), Coordinate(k, "legacy-lib", "1.0")),
+                listOf(repo), ConflictPolicy.NEWEST, noProgress,
+            )
+        }
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        assertEquals("1.8.22", byName.getValue("kotlin-stdlib").coordinate.version)
+        // The whole point: jdk8 is pulled in at 1.6.21 but aligned up to 1.8.22 (the empty shim) → no dup class.
+        assertEquals("1.8.22", byName.getValue("kotlin-stdlib-jdk8").coordinate.version)
+    }
+
+    // ---- Gradle Module Metadata variant selection --------------------------------------------
+
+    private val androidApi = mapOf(
+        "org.gradle.category" to "library", "org.gradle.usage" to "java-api",
+        "org.jetbrains.kotlin.platform.type" to "androidJvm", "org.gradle.jvm.environment" to "android",
+    )
+    private val jvmApi = mapOf(
+        "org.gradle.category" to "library", "org.gradle.usage" to "java-api",
+        "org.jetbrains.kotlin.platform.type" to "jvm", "org.gradle.jvm.environment" to "standard-jvm",
+    )
+
+    @Test
+    fun gmmVersionRangeResolvesToTheNewestPublishedVersionInRange() {
+        // The OneSignal bug. `com.onesignal:*` declares every external dependency as a Gradle-metadata RANGE
+        // (`androidx.appcompat:appcompat` → `{"requires":"[1.0.0, 1.3.99]","prefers":"1.3.1"}`). The GMM path
+        // passed `requires` through RAW (only the POM path normalized versions), so the resolver fetched
+        // `.../appcompat/[1.0.0, 1.3.99]/appcompat-[1.0.0, 1.3.99].pom`, got a 404, and dropped the edge with
+        // its whole subtree. AppCompat, firebase-messaging, work-runtime and browser all vanished from the
+        // classpath of any project that added the SDK.
+        //
+        // A range must resolve the way Maven and Gradle resolve it: the NEWEST published version inside it.
+        val files = FakeRepo()
+        files.putMetadata("lib", listOf("1.0.0", "1.2.0", "1.3.1", "1.4.0", "2.0.0"))
+        files.put("lib", "1.3.1")
+        files.putModule("sdk", "5.0", variants = listOf(
+            GmmVar("androidApiElements", androidApi, files = listOf("sdk-5.0.jar"),
+                rangeDeps = listOf(RangeDep("g", "lib", "[1.0.0, 1.3.99]"))),
+        ))
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("sdk", "5.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+
+        val lib = result.resolved.singleOrNull { it.coordinate.name == "lib" }
+        assertNotNull(lib, "the ranged edge must not be dropped; got ${result.resolved.map { it.coordinate }}")
+        // Not 1.0.0 (the lower bound the old normalizer would have taken) and not 1.4.0/2.0.0 (out of range).
+        assertEquals("1.3.1", lib.coordinate.version)
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+    }
+
+    @Test
+    fun versionRangeFallsBackToGmmPrefersWhenTheVersionIndexIsUnreachable() {
+        // No `maven-metadata.xml` published (offline, or a repo that serves no version index): the range can't
+        // be matched against real versions, so the publisher's own `prefers` is the next best answer, far
+        // better than the range's lower bound, which for OneSignal's AppCompat range means 1.0.0.
+        val files = FakeRepo()
+        files.put("lib", "1.3.1")
+        files.putModule("sdk", "5.0", variants = listOf(
+            GmmVar("androidApiElements", androidApi, files = listOf("sdk-5.0.jar"),
+                rangeDeps = listOf(RangeDep("g", "lib", "[1.0.0, 1.3.99]", prefers = "1.3.1"))),
+        ))
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("sdk", "5.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+
+        assertEquals("1.3.1", result.resolved.single { it.coordinate.name == "lib" }.coordinate.version)
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+    }
+
+    @Test
+    fun pomVersionRangeAlsoResolvesToTheNewestPublishedVersionInRange() {
+        // The POM path already collapsed a range so the URL was fetchable, but it took the LOWER bound,
+        // silently downgrading the edge to the oldest version the publisher ever allowed.
+        val files = FakeRepo()
+        files.putMetadata("lib", listOf("1.0.0", "1.3.1", "2.0.0"))
+        files.put("lib", "1.3.1")
+        files.put("app", "1.0", deps = listOf(Dep("g", "lib", "[1.0.0, 1.3.99]")))
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("app", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+
+        assertEquals("1.3.1", result.resolved.single { it.coordinate.name == "lib" }.coordinate.version)
+    }
+
+    @Test
+    fun anAarShippingAZeroEntryClassesJarIsExplodedToAUsableJar() {
+        // `com.onesignal:OneSignal` is a dependency-only umbrella module: its AAR carries a `classes.jar`
+        // entry that is itself the canonical 22-byte EMPTY zip. The explosion copied that entry verbatim
+        // (a `classes.jar` was "found", so the class-free fallback never ran), putting a zero-entry archive
+        // on the classpath, which ART's ZipFile rejects outright ("No entries"), the poison documented for
+        // resource-only AARs. Validate what was COPIED, not merely that an entry existed.
+        val files = FakeRepo()
+        files.put("umbrella", "1.0", packaging = "aar", jarBytes = aarWithRes())   // its classes.jar is entry-less
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("umbrella", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+
+        val classes = Path.of(result.resolved.single { it.coordinate.name == "umbrella" }.classesRoot.path)
+        val entries = ZipFile(classes.toFile()).use { zf -> zf.entries().toList().map { it.name } }
+        assertTrue(entries.isNotEmpty(), "an exploded classes.jar must never be zero-entry: ART cannot open it")
+        assertTrue(entries.none { it.endsWith(".class") }, "the umbrella module carries no code: $entries")
+    }
+
+    @Test
+    fun selectsAndroidVariantOverJvmFromGmm() {
+        // The core regression: a KMP library publishing both an `-android` and a `-jvm` variant must resolve
+        // to ONLY the `-android` artifact (no `-jvm`), so the old dedup band-aid is no longer needed.
+        val files = FakeRepo()
+        files.putModule("lib", "1.0", variants = listOf(
+            GmmVar("androidApiElements", androidApi, files = listOf("lib-android-1.0.jar")),
+            GmmVar("jvmApiElements", jvmApi, files = listOf("lib-jvm-1.0.jar")),
+        ))
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("lib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val art = result.resolved.single { it.coordinate.name == "lib" }
+        assertTrue(art.classesRoot.path.endsWith("lib-android-1.0.jar"), "the -android artifact must win: ${art.classesRoot.path}")
+        assertFalse(art.classesRoot.path.contains("lib-jvm"), "the -jvm artifact must not be chosen: ${art.classesRoot.path}")
+    }
+
+    @Test
+    fun kmpAvailableAtRedirectsRootToPlatformModule() {
+        // A KMP root module whose variants only point (`available-at`) to platform modules: the android
+        // variant redirects to `-core-android`, which carries the file + the real transitives.
+        val k = "org.jetbrains.kotlinx"
+        val files = FakeRepo()
+        files.putModule("coroutines-core", "1.8.0", group = k, variants = listOf(
+            GmmVar("androidApiElements", androidApi, availableAt = Triple(k, "coroutines-core-android", "1.8.0")),
+            GmmVar("jvmApiElements", jvmApi, availableAt = Triple(k, "coroutines-core-jvm", "1.8.0")),
+        ))
+        files.putModule("coroutines-core-android", "1.8.0", group = k, variants = listOf(
+            GmmVar("androidApiElements", androidApi, files = listOf("coroutines-core-android-1.8.0.jar"),
+                deps = listOf(Dep(k, "atomicfu", "0.23.0"))),
+        ))
+        files.put("atomicfu", "0.23.0", group = k)
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(listOf(Coordinate(k, "coroutines-core", "1.8.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        val core = byName.getValue("coroutines-core")
+        assertTrue(core.classesRoot.path.endsWith("coroutines-core-android-1.8.0.jar"), "redirected to the -android jar: ${core.classesRoot.path}")
+        assertTrue("atomicfu" in byName.keys, "the platform module's transitive must be walked: ${byName.keys}")
+        assertFalse(byName.keys.any { it.contains("-jvm") }, "the -jvm platform module must not be pulled: ${byName.keys}")
+    }
+
+    @Test
+    fun kmpAarFileUrlDiffersFromName() {
+        // The real AndroidX KMP AAR shape: the `-android` platform module lists its file with a logical
+        // name (`<artifact>-release.aar`) but a different `url` (`<artifact>-android-<version>.aar`). The
+        // download must use the URL — using the name 404s every KMP AndroidX AAR (the datastore/lifecycle bug).
+        val g = "androidx.datastore"
+        val files = FakeRepo()
+        files.putModule("datastore-preferences", "1.1.1", group = g, variants = listOf(
+            GmmVar("releaseApiElements-published",
+                mapOf("org.gradle.category" to "library", "org.gradle.usage" to "java-api", "org.jetbrains.kotlin.platform.type" to "androidJvm"),
+                availableAt = Triple(g, "datastore-preferences-android", "1.1.1")),
+        ))
+        files.putModule("datastore-preferences-android", "1.1.1", group = g, packaging = "aar", variants = listOf(
+            GmmVar("releaseApiElements-published",
+                mapOf("org.gradle.category" to "library", "org.gradle.usage" to "java-api", "org.jetbrains.kotlin.platform.type" to "androidJvm"),
+                files = listOf("datastore-preferences-release.aar"),
+                fileUrls = mapOf("datastore-preferences-release.aar" to "datastore-preferences-android-1.1.1.aar")),
+        ))
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(listOf(Coordinate(g, "datastore-preferences", "1.1.1")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        assertTrue(result.unresolved.isEmpty(), "KMP AAR with name≠url must resolve, not 404: ${result.unresolved}")
+        val art = result.resolved.single { it.coordinate.name == "datastore-preferences" }
+        assertEquals(ArtifactKind.AAR, art.kind)
+        assertTrue(art.classesRoot.exists, "the redirected -android AAR's classes.jar must be extracted")
+        // It was fetched from the URL path (the -android coordinate dir), not the logical name.
+        assertTrue(art.classesRoot.path.contains("datastore-preferences-android"), "fetched via the file url: ${art.classesRoot.path}")
+    }
+
+    private val libApi = mapOf("org.gradle.category" to "library", "org.gradle.usage" to "java-api")
+
+    @Test
+    fun gmmDependencyConstraintAlignsAGaInTheGraph() {
+        // libA depends on shared:1.0 AND constrains shared→2.0 (an atomic-group constraint). The constraint
+        // must align shared up to 2.0 even though only 1.0 was requested — preventing a split-version dex clash.
+        val files = FakeRepo()
+        files.putModule("libA", "1.0", variants = listOf(
+            GmmVar("api", libApi, files = listOf("libA-1.0.jar"),
+                deps = listOf(Dep("g", "shared", "1.0")), constraints = listOf(Dep("g", "shared", "2.0"))),
+        ))
+        files.put("shared", "1.0"); files.put("shared", "2.0")
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("libA", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertEquals("2.0", result.resolved.single { it.coordinate.name == "shared" }.coordinate.version, "the dependencyConstraint aligns shared up to 2.0")
+    }
+
+    @Test
+    fun followsRuntimeOnlyGmmTransitive() {
+        // AppCompat's shape: the `api` variant omits a transitive that the `runtime` variant carries
+        // (`emoji2-views-helper`, which auto-enables EmojiCompat in AppCompatTextView). GMM has no scope —
+        // variant membership IS the scope — so the packaged/dex closure must follow the runtime variant's deps
+        // too, else the built APK AND the layout preview crash with NoClassDefFoundError when the widget inflates.
+        val files = FakeRepo()
+        val libRuntime = mapOf("org.gradle.category" to "library", "org.gradle.usage" to "java-runtime")
+        files.putModule("widget", "1.0", variants = listOf(
+            GmmVar("apiElements", libApi, files = listOf("widget-1.0.jar"), deps = listOf(Dep("g", "core", "1.0"))),
+            GmmVar("runtimeElements", libRuntime, files = listOf("widget-1.0.jar"),
+                deps = listOf(Dep("g", "core", "1.0"), Dep("g", "emoji", "1.0"))),
+        ))
+        files.put("core", "1.0")
+        files.put("emoji", "1.0")
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking { resolver.resolve(listOf(coord("widget", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val names = result.resolved.map { it.coordinate.name }.toSet()
+        assertTrue("emoji" in names, "runtime-only GMM transitive (like AppCompat's emoji2-views-helper) must resolve: $names")
+        assertTrue("core" in names, "api transitive still resolves: $names")
+    }
+
+    @Test
+    fun gmmConstraintSuppliesVersionForAVersionlessEdge() {
+        // Gradle's platform-in-a-library / atomic-group pattern: a variant declares a dependency EDGE with no
+        // version and relies on a `dependencyConstraint` (same module here) to supply it. The constraint must
+        // be the version SOURCE, not merely align a GA already in the graph — else the edge is dropped and its
+        // class is missing at runtime. (A bare constraint with no edge is still never pulled; see the test below.)
+        val files = FakeRepo()
+        files.putModule("libA", "1.0", variants = listOf(
+            GmmVar("api", libApi, files = listOf("libA-1.0.jar"),
+                deps = listOf(Dep("g", "shared", "")),              // versionless edge
+                constraints = listOf(Dep("g", "shared", "1.0"))),   // version lives only here
+        ))
+        files.put("shared", "1.0")
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("libA", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val shared = result.resolved.singleOrNull { it.coordinate.name == "shared" }
+        assertNotNull(shared, "a same-module constraint must supply the version for a versionless edge: ${result.resolved.map { it.coordinate.name }}")
+        assertEquals("1.0", shared.coordinate.version)
+    }
+
+    @Test
+    fun kmpComposeUiVersionlessSavedStateComposeResolvesViaConstraint() {
+        // The reported Glance 1.3.0-alpha02 crash, end-to-end. An app pulls a KMP compose-ui whose ANDROID
+        // platform module declares `savedstate-compose` as a runtime edge WITHOUT a version — the version comes
+        // from the Compose group's `dependencyConstraints` (published on every variant, so on the api variant
+        // the resolver reads). The available-at redirect + runtime-variant follow surface the edge; the
+        // constraint must then place it. Before the fix it was dropped, so the dexed APK threw at NavHost render:
+        // NoClassDefFoundError: androidx.savedstate.compose.LocalSavedStateRegistryOwnerKt.
+        val cx = "androidx.compose.ui"; val ss = "androidx.savedstate"
+        val androidRuntime = mapOf(
+            "org.gradle.category" to "library", "org.gradle.usage" to "java-runtime",
+            "org.jetbrains.kotlin.platform.type" to "androidJvm", "org.gradle.jvm.environment" to "android")
+        val files = FakeRepo()
+        files.putModule("glance-appwidget", "1.3.0-alpha02", group = "androidx.glance", packaging = "aar", variants = listOf(
+            GmmVar("releaseApiElements-published", androidApi, files = listOf("glance-appwidget-1.3.0-alpha02.aar"),
+                deps = listOf(Dep(cx, "ui", "1.9.0")))))
+        files.putModule("ui", "1.9.0", group = cx, variants = listOf(
+            GmmVar("releaseApiElements-published", androidApi, availableAt = Triple(cx, "ui-android", "1.9.0"))))
+        files.putModule("ui-android", "1.9.0", group = cx, packaging = "aar", variants = listOf(
+            // api variant: no savedstate edge and no savedstate constraint — this exercises reading the
+            // constraint from the RUNTIME variant, where the runtime-only edge and its alignment both live.
+            GmmVar("releaseApiElements-published", androidApi, files = listOf("ui-android-1.9.0.aar")),
+            // runtime variant: the versionless edge, with its version supplied by a co-located constraint.
+            GmmVar("releaseRuntimeElements-published", androidRuntime, files = listOf("ui-android-1.9.0.aar"),
+                deps = listOf(Dep(ss, "savedstate-compose", "")),
+                constraints = listOf(Dep(ss, "savedstate-compose", "1.3.0")))))
+        files.putModule("savedstate-compose", "1.3.0", group = ss, packaging = "aar", variants = listOf(
+            GmmVar("releaseApiElements-published", androidApi, files = listOf("savedstate-compose-1.3.0.aar"))))
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(listOf(Coordinate("androidx.glance", "glance-appwidget", "1.3.0-alpha02")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        val savedstate = result.resolved.singleOrNull { it.coordinate.name == "savedstate-compose" }
+        assertNotNull(savedstate, "savedstate-compose (versioned only by the Compose group constraint) must reach the closure: ${result.resolved.map { it.coordinate.name }}")
+        assertEquals("1.3.0", savedstate.coordinate.version)
+    }
+
+    @Test
+    fun constraintBumpToUnwalkedVersionFetchesTheNewVersionsFile() {
+        // The lifecycle `-ktx` bug: `ktx` is WALKED at 1.0 (a plain GMM jar), then a dependencyConstraint bumps
+        // it to 2.0 — a version we never walked, whose files live elsewhere via `available-at` (`ktx-android`).
+        // The download must re-load 2.0's metadata and fetch ITS file, not reuse the 1.0 file refs captured at
+        // walk time (which produced a 2.0-labelled artifact backed by the 1.0 jar → a duplicate-class dex clash).
+        val files = FakeRepo()
+        files.putModule("ktx", "1.0", variants = listOf(
+            GmmVar("api", libApi, files = listOf("ktx-1.0.jar")),
+        ))
+        files.putModule("ktx", "2.0", variants = listOf(
+            GmmVar("releaseApiElements-published", androidApi, availableAt = Triple("g", "ktx-android", "2.0")),
+        ))
+        files.putModule("ktx-android", "2.0", variants = listOf(
+            GmmVar("releaseApiElements-published", androidApi, files = listOf("ktx-android-2.0.jar")),
+        ))
+        // main pulls ktx:1.0 (so it's walked at 1.0) AND constrains it to 2.0 (so it's bumped post-walk).
+        files.putModule("main", "1.0", variants = listOf(
+            GmmVar("api", libApi, files = listOf("main-1.0.jar"),
+                deps = listOf(Dep("g", "ktx", "1.0")), constraints = listOf(Dep("g", "ktx", "2.0"))),
+        ))
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("main", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val ktx = result.resolved.single { it.coordinate.name == "ktx" }
+        assertEquals("2.0", ktx.coordinate.version, "ktx aligns to 2.0")
+        assertTrue(ktx.classesRoot.path.contains("ktx-android-2.0"), "must fetch 2.0's available-at file, not the 1.0 jar: ${ktx.classesRoot.path}")
+        assertFalse(ktx.classesRoot.path.contains("ktx-1.0"), "stale 1.0 file must NOT back the 2.0 coordinate: ${ktx.classesRoot.path}")
+    }
+
+    @Test
+    fun gmmConstraintOnAvailableAtTargetAlignsStrayKtx() {
+        // The lifecycle `-ktx` merge: `lifecycle-runtime` (KMP root) redirects via `available-at` to
+        // `lifecycle-runtime-android`, which CONSTRAINS `lifecycle-runtime-ktx -> 2.10.0` (the empty post-merge
+        // shim). A stray old `lifecycle-runtime-ktx:2.6.1` (still carrying the merged classes) must align up to
+        // 2.10.0, else both define the same class and the Android dex fails ("defined multiple times").
+        val files = FakeRepo()
+        files.putModule("lifecycle-runtime", "2.10.0", variants = listOf(
+            GmmVar("releaseApiElements-published", androidApi, availableAt = Triple("g", "lifecycle-runtime-android", "2.10.0")),
+        ))
+        files.putModule("lifecycle-runtime-android", "2.10.0", packaging = "aar", variants = listOf(
+            GmmVar("releaseApiElements-published", androidApi, files = listOf("lifecycle-runtime-android-2.10.0.aar"),
+                constraints = listOf(Dep("g", "lifecycle-runtime-ktx", "2.10.0"))),
+        ))
+        files.put("lifecycle-runtime-ktx", "2.6.1")    // stray old artifact (carries the classes)
+        files.put("lifecycle-runtime-ktx", "2.10.0")   // empty post-merge shim
+        files.put("oldlib", "1.0", deps = listOf(Dep("g", "lifecycle-runtime-ktx", "2.6.1")))
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("lifecycle-runtime", "2.10.0"), coord("oldlib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        assertEquals("2.10.0", result.resolved.single { it.coordinate.name == "lifecycle-runtime-ktx" }.coordinate.version,
+            "the constraint on the available-at target must align the stray -ktx up to 2.10.0")
+    }
+
+    @Test
+    fun gmmConstraintDoesNotPullAnAbsentGa() {
+        // A constraint only aligns a GA that's in the graph; it must not pull `unused` into the closure.
+        val files = FakeRepo()
+        files.putModule("libA", "1.0", variants = listOf(
+            GmmVar("api", libApi, files = listOf("libA-1.0.jar"), constraints = listOf(Dep("g", "unused", "2.0"))),
+        ))
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("libA", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertEquals(setOf("libA"), result.resolved.map { it.coordinate.name }.toSet(), "a constraint must not add a dependency")
+    }
+
+    @Test
+    fun gmmStrictlyPinWinsOverANewerRequirement() {
+        // libA strictly-pins shared to 1.0; libB requires shared 2.0. The strict pin must win → shared stays 1.0.
+        val files = FakeRepo()
+        files.putModule("libA", "1.0", variants = listOf(
+            GmmVar("api", libApi, files = listOf("libA-1.0.jar"), strictDeps = listOf(Dep("g", "shared", "1.0"))),
+        ))
+        files.put("libB", "1.0", deps = listOf(Dep("g", "shared", "2.0")))
+        files.put("shared", "1.0"); files.put("shared", "2.0")
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("libA", "1.0"), coord("libB", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        assertEquals("1.0", result.resolved.single { it.coordinate.name == "shared" }.coordinate.version, "a strictly pin is not bumped by a newer requirement")
+    }
+
+    @Test
+    fun selectsKotlinRuntimeWhenNoJavaUsagePublished() {
+        // A pure-Kotlin JVM library publishes only kotlin-api/kotlin-runtime (no java-*); it must still resolve.
+        val files = FakeRepo()
+        files.putModule("klib", "1.0", variants = listOf(
+            GmmVar("runtime", mapOf("org.gradle.category" to "library", "org.gradle.usage" to "kotlin-runtime", "org.jetbrains.kotlin.platform.type" to "jvm"),
+                files = listOf("klib-1.0.jar")),
+        ))
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("klib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertEquals(setOf("klib"), result.resolved.map { it.coordinate.name }.toSet())
+    }
+
+    @Test
+    fun fetchesAllPrimaryFilesOfAMultiFileVariant() {
+        val files = FakeRepo()
+        files.putModule("multi", "1.0", variants = listOf(
+            GmmVar("api", libApi, files = listOf("multi-1.0.jar", "multi-extra-1.0.jar")),
+        ))
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("multi", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val art = result.resolved.single { it.coordinate.name == "multi" }
+        assertTrue(art.classesRoot.path.endsWith("multi-1.0.jar"), "primary: ${art.classesRoot.path}")
+        assertTrue(art.extraClassesRoots.any { it.path.endsWith("multi-extra-1.0.jar") }, "the extra file joins the classpath: ${art.extraClassesRoots.map { it.path }}")
+    }
+
+    @Test
+    fun usesTheGmmSourcesVariantForSources() {
+        // The sources jar lives in a GMM sources variant with a non-default name; the classifier guess would
+        // 404, so the GMM url must be used.
+        val files = FakeRepo()
+        files.putModule("withsrc", "1.0", variants = listOf(
+            GmmVar("api", libApi, files = listOf("withsrc-1.0.jar")),
+            GmmVar("sources", mapOf("org.gradle.category" to "documentation", "org.gradle.docstype" to "sources"),
+                files = listOf("withsrc-1.0-weird-sources.jar")),
+        ))
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("withsrc", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val art = result.resolved.single { it.coordinate.name == "withsrc" }
+        assertTrue(art.sourcesRoot?.path?.endsWith("withsrc-1.0-weird-sources.jar") == true, "GMM sources url used: ${art.sourcesRoot?.path}")
+    }
+
+    @Test
+    fun capabilityConflictEvictsTheSupersededModule() {
+        // guava declares it also provides the `com.google.collections:google-collections` capability, so it
+        // supersedes the old google-collections jar (which provides that capability implicitly). The loser is
+        // evicted from the graph — only guava is resolved (no duplicate classes at dex).
+        val files = FakeRepo()
+        files.putModule("guava", "33.0", group = "com.google.guava", variants = listOf(
+            GmmVar("api", libApi, files = listOf("guava-33.0.jar"),
+                capabilities = listOf(Dep("com.google.guava", "guava", "33.0"), Dep("com.google.collections", "google-collections", "33.0"))),
+        ))
+        files.put("google-collections", "1.0", group = "com.google.collections")   // POM-only; implicit capability
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(Coordinate("com.google.guava", "guava", "33.0"), Coordinate("com.google.collections", "google-collections", "1.0")),
+                listOf(repo), ConflictPolicy.NEWEST, noProgress,
+            )
+        }
+        val names = result.resolved.map { it.coordinate.name }.toSet()
+        assertTrue("guava" in names, "the superseding module is kept: $names")
+        assertFalse("google-collections" in names, "the superseded module is evicted: $names")
+    }
+
+    @Test
+    fun capabilityConflictEvictsTheLowerVersionUnconditionally() {
+        // Two modules both declare the `g:shared` capability. Gradle selects one (the highest capability version)
+        // and evicts the other entirely — it never keeps both. b (2.0) wins; a (1.0) is gone.
+        val files = FakeRepo()
+        files.putModule("a", "1.0", variants = listOf(
+            GmmVar("api", libApi, files = listOf("a-1.0.jar"),
+                capabilities = listOf(Dep("g", "a", "1.0"), Dep("g", "shared", "1.0"))),
+        ))
+        files.putModule("b", "2.0", variants = listOf(
+            GmmVar("api", libApi, files = listOf("b-2.0.jar"),
+                capabilities = listOf(Dep("g", "b", "2.0"), Dep("g", "shared", "2.0"))),
+        ))
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("a", "1.0"), coord("b", "2.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        assertEquals(setOf("b"), result.resolved.map { it.coordinate.name }.toSet(), "highest capability version wins; the loser is evicted")
+    }
+
+    @Test
+    fun evictedModulesExclusiveTransitivesArePruned() {
+        // guava supersedes google-collections; google-collections' own exclusive transitive (`gc-only`) must be
+        // pruned from the graph — Gradle keeps only what's reachable once the loser is evicted.
+        val g = "com.google.guava"
+        val files = FakeRepo()
+        files.putModule("guava", "33.0", group = g, variants = listOf(
+            GmmVar("api", libApi, files = listOf("guava-33.0.jar"),
+                capabilities = listOf(Dep(g, "guava", "33.0"), Dep("com.google.collections", "google-collections", "33.0"))),
+        ))
+        // google-collections (POM) pulls a transitive nothing else needs.
+        files.put("google-collections", "1.0", group = "com.google.collections", deps = listOf(Dep("com.google.collections", "gc-only", "1.0")))
+        files.put("gc-only", "1.0", group = "com.google.collections")
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(Coordinate(g, "guava", "33.0"), Coordinate("com.google.collections", "google-collections", "1.0")),
+                listOf(repo), ConflictPolicy.NEWEST, noProgress,
+            )
+        }
+        val names = result.resolved.map { it.coordinate.name }.toSet()
+        assertEquals(setOf("guava"), names, "google-collections + its exclusive transitive gc-only are pruned: $names")
+    }
+
+    @Test
+    fun gmmVariantDependenciesReplacePomTransitives() {
+        // When a `.module` is present its selected variant's dependencies are authoritative; the POM's
+        // `<dependencies>` (which a Gradle-published artifact keeps only for legacy Maven consumers) are ignored.
+        val files = FakeRepo()
+        files.putModule("lib", "1.0",
+            variants = listOf(GmmVar("apiElements", mapOf("org.gradle.category" to "library", "org.gradle.usage" to "java-api"),
+                files = listOf("lib-1.0.jar"), deps = listOf(Dep("g", "gmmDep", "1.0")))),
+            pomDeps = listOf(Dep("g", "pomOnly", "1.0")),
+        )
+        files.put("gmmDep", "1.0")
+        files.put("pomOnly", "1.0")
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("lib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val names = result.resolved.map { it.coordinate.name }.toSet()
+        assertTrue("gmmDep" in names, "GMM variant deps must be used: $names")
+        assertFalse("pomOnly" in names, "POM deps must be ignored when GMM is present: $names")
+    }
+
+    @Test
+    fun fallsBackToPomWhenNoGmm() {
+        // No `.module` published → the resolver must behave exactly as the POM-only path (back-compat).
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "b", "1.0")))
+        files.put("b", "1.0")
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertEquals(setOf("a", "b"), result.resolved.map { it.coordinate.name }.toSet())
+    }
+
+    @Test
+    fun picksRuntimeVariantWhenNoApiVariant() {
+        // A library publishing only runtime variants must still resolve (the api→runtime usage fallback).
+        val files = FakeRepo()
+        files.putModule("lib", "1.0", variants = listOf(
+            GmmVar("runtimeElements", mapOf(
+                "org.gradle.category" to "library", "org.gradle.usage" to "java-runtime",
+                "org.jetbrains.kotlin.platform.type" to "androidJvm", "org.gradle.jvm.environment" to "android",
+            ), files = listOf("lib-1.0.jar")),
+        ))
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("lib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertEquals(setOf("lib"), result.resolved.map { it.coordinate.name }.toSet())
+    }
+
+    @Test
+    fun gmmResolvesOfflineFromCacheAfterFirstFetch() {
+        val files = FakeRepo()
+        files.putModule("lib", "1.0", variants = listOf(
+            GmmVar("androidApiElements", androidApi, files = listOf("lib-android-1.0.jar")),
+            GmmVar("jvmApiElements", jvmApi, files = listOf("lib-jvm-1.0.jar")),
+        ))
+        val tmp = createTempDirectory("deps-gmm-offline")
+        val lfs = LocalFileSystem(tmp)
+        val cache = ResolverCache(tmp.toString())
+        runBlocking { MavenDependencyResolver(cache, lfs::fileFor, files).resolve(listOf(coord("lib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+
+        val offline = MavenDependencyResolver(cache, lfs::fileFor, ArtifactFetcher { null })
+        val result = runBlocking { offline.resolve(listOf(coord("lib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val art = result.resolved.single { it.coordinate.name == "lib" }
+        assertTrue(art.classesRoot.path.endsWith("lib-android-1.0.jar"), "offline GMM resolve still picks -android: ${art.classesRoot.path}")
+    }
+
+    @Test
+    fun unresolvedWhenRepoLacksTheArtifact() {
+        val (resolver, _) = newResolver(FakeRepo())
+        val result = runBlocking { resolver.resolve(listOf(coord("ghost", "9.9")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertTrue(result.resolved.isEmpty())
+        assertEquals(listOf(coord("ghost", "9.9")), result.unresolved)
+    }
+
+    @Test
+    fun availableVersionsReturnsPublishedVersionsNewestFirst() {
+        // maven-metadata lists versions oldest-first; availableVersions must return them newest-first
+        // (MavenVersion order: a release outranks its pre-releases, e.g. 2.0.0 > 2.0.0-rc1).
+        val files = FakeRepo()
+        files.putMetadata("widget", listOf("1.0.0", "1.2.0", "2.0.0-rc1", "2.0.0"))
+        val (resolver, _) = newResolver(files)
+
+        val versions = runBlocking { resolver.availableVersions("g", "widget", listOf(repo)) }
+        assertEquals(listOf("2.0.0", "2.0.0-rc1", "1.2.0", "1.0.0"), versions)
+    }
+
+    @Test
+    fun availableVersionsMergesAcrossRepositoriesAndDedupes() {
+        // The same artifact can be published to more than one repo; the union is returned once, newest-first.
+        val other = "https://fixture/other"
+        val files = FakeRepo()
+        files.putMetadata("widget", listOf("1.0.0", "2.0.0"), base = BASE)
+        files.putMetadata("widget", listOf("2.0.0", "3.0.0"), base = other)
+        val (resolver, _) = newResolver(files)
+
+        val versions = runBlocking {
+            resolver.availableVersions("g", "widget", listOf(repo, Repository("other", other)))
+        }
+        assertEquals(listOf("3.0.0", "2.0.0", "1.0.0"), versions)
+    }
+
+    @Test
+    fun availableVersionsEmptyWhenNoMetadata() {
+        val (resolver, _) = newResolver(FakeRepo())
+        val versions = runBlocking { resolver.availableVersions("g", "missing", listOf(repo)) }
+        assertTrue(versions.isEmpty(), "no metadata → no versions: $versions")
+    }
+
+    @Test
+    fun searchFindsGoogleMavenArtifactNotOnCentral() {
+        // androidx.* live ONLY on Google Maven (not mirrored to Central), so search must read the Google index.
+        val files = FakeRepo()
+        files.putGoogleMaster("androidx.documentfile", "androidx.core", "androidx.annotation")
+        files.putGoogleGroup("androidx.documentfile", mapOf("documentfile" to listOf("1.0.0", "1.1.0-rc01", "1.1.0")))
+        files.putGooglePom("androidx.documentfile", "documentfile", "1.1.0", "aar")
+
+        val resolver = googleResolver(files)
+        val hits = runBlocking { resolver.search("androidx.documentfile") }
+
+        val hit = hits.single { it.coordinate.group == "androidx.documentfile" }
+        assertEquals("documentfile", hit.coordinate.name)
+        assertEquals("1.1.0", hit.coordinate.version, "newest STABLE, not the -rc01 pre-release")
+        assertEquals("aar", hit.packaging)
+    }
+
+    @Test
+    fun searchReadsPackagingFromPomAndPrefersStable() {
+        // A jar-packaged androidx lib (annotation) must be reported as `jar` (POM has no <packaging>), and the
+        // stable version wins over a newer alpha so the picker defaults to something releasable.
+        val files = FakeRepo()
+        files.putGoogleMaster("androidx.annotation")
+        files.putGoogleGroup("androidx.annotation", mapOf("annotation" to listOf("1.8.0", "1.9.0-alpha01")))
+        files.putGooglePom("androidx.annotation", "annotation", "1.8.0", "jar")
+
+        val resolver = googleResolver(files)
+        val hit = runBlocking { resolver.search("androidx.annotation:annotation") }.single()
+
+        assertEquals("1.8.0", hit.coordinate.version, "stable 1.8.0 preferred over 1.9.0-alpha01")
+        assertEquals("jar", hit.packaging)
+    }
+
+    @Test
+    fun searchMatchesGoogleGroupByBareNameSubstring() {
+        // Typing just the artifact name ("documentfile") matches the group whose id contains it.
+        val files = FakeRepo()
+        files.putGoogleMaster("androidx.documentfile", "androidx.core")
+        files.putGoogleGroup("androidx.documentfile", mapOf("documentfile" to listOf("1.1.0")))
+        files.putGooglePom("androidx.documentfile", "documentfile", "1.1.0", "aar")
+
+        val resolver = googleResolver(files)
+        val hits = runBlocking { resolver.search("documentfile") }
+
+        assertEquals("androidx.documentfile:documentfile:1.1.0", hits.single().coordinate.toString())
+    }
+
+    @Test
+    fun searchAcceptsFullyTypedCoordinateInTheBox() {
+        // Pasting "group:name:version" into the search box still finds the artifact (the version is ignored
+        // for matching; the picker defaults to the newest).
+        val files = FakeRepo()
+        files.putGoogleMaster("androidx.documentfile")
+        files.putGoogleGroup("androidx.documentfile", mapOf("documentfile" to listOf("1.0.0", "1.1.0")))
+        files.putGooglePom("androidx.documentfile", "documentfile", "1.1.0", "aar")
+
+        val resolver = googleResolver(files)
+        val hits = runBlocking { resolver.search("androidx.documentfile:documentfile:1.0.0") }
+
+        assertEquals("androidx.documentfile:documentfile:1.1.0", hits.single().coordinate.toString())
+    }
+
+    @Test
+    fun searchEmptyWhenNoGoogleGroupMatchesAndCentralOffline() {
+        val files = FakeRepo()
+        files.putGoogleMaster("androidx.core", "androidx.appcompat")
+        val resolver = googleResolver(files)
+        val hits = runBlocking { resolver.search("com.squareup.retrofit2") }
+        assertTrue(hits.isEmpty(), "no group matches and Central returns nothing: $hits")
+    }
+
+    // ---- search: two Central hosts, and the difference between "nothing" and "no answer" -------------
+
+    /**
+     * The picker must survive a Central search host that does not answer.
+     *
+     * This is not hypothetical: the legacy `search.maven.org` throttles ordinary picker traffic into a
+     * socket that never replies, which is how `org.mozilla:rhino` and `rhino-android` became unfindable
+     * while the androidx searches (served by Google's index) kept working.
+     */
+    @Test
+    fun searchFallsBackToTheSecondCentralHostWhenTheFirstDoesNotAnswer() {
+        val files = FakeRepo()
+        files.putCentralSearch(FALLBACK_SEARCH, "rhino", listOf(Triple("org.mozilla", "rhino", "1.9.1")))
+
+        val hits = runBlocking { searchResolver(files).search("rhino") }
+
+        assertEquals("org.mozilla:rhino:1.9.1", hits.single().coordinate.toString())
+    }
+
+    /** With every index silent there is nothing to report an absence from, and the caller is told so. */
+    @Test
+    fun searchReportsTheIndexUnavailableRatherThanAnEmptyResult() {
+        val found = runBlocking { searchResolver(FakeRepo()).searchWithStatus("rhino") }
+
+        assertTrue(found.hits.isEmpty())
+        assertTrue(found.indexUnavailable, "no host answered, so this is not evidence of an absence")
+    }
+
+    /** A host that answers with no documents HAS answered: that is a real empty result, not an outage. */
+    @Test
+    fun aHostThatAnswersWithNoDocumentsIsAnEmptyResultNotAnOutage() {
+        val files = FakeRepo()
+        files.putCentralSearch(PRIMARY_SEARCH, "nothingmatchesthis", emptyList())
+
+        val found = runBlocking { searchResolver(files).searchWithStatus("nothingmatchesthis") }
+
+        assertTrue(found.hits.isEmpty())
+        assertFalse(found.indexUnavailable, "the index answered; it just had nothing")
+    }
+
+    private fun searchResolver(files: FakeRepo): MavenDependencyResolver {
+        val tmp = createTempDirectory("deps-search-hosts")
+        val lfs = LocalFileSystem(tmp)
+        return MavenDependencyResolver(
+            ResolverCache(tmp.toString()), lfs::fileFor, files,
+            searchEndpoints = listOf(PRIMARY_SEARCH, FALLBACK_SEARCH),
+            googleMavenBase = GOOGLE,
+        )
+    }
+
+    private fun googleResolver(files: FakeRepo): MavenDependencyResolver {
+        val tmp = createTempDirectory("deps-search")
+        val lfs = LocalFileSystem(tmp)
+        return MavenDependencyResolver(ResolverCache(tmp.toString()), lfs::fileFor, files, googleMavenBase = GOOGLE)
+    }
+
+    // ---- fixture helpers ----------------------------------------------------------------------
+
+    /**
+     * Adding a repository must let a previously-unresolvable coordinate resolve, WITHOUT a restart. TWO
+     * caches remember the absence, both keyed by the coordinate alone, so both survived the repository list
+     * changing under them: the on-disk 404 record, and the in-memory effective-POM memo
+     * (`Optional.empty()`). Clearing only the former still never reached the network — which is why
+     * `DependencyService.forgetNegativeResolutionCaches` clears both. Reported as "the repositories don't
+     * get updated when re-adding the dependency".
+     */
+    @Test
+    fun aRepositoryAddedAfterAFailedResolveIsActuallyConsulted() {
+        val files = FakeRepo()
+        // Published ONLY in the extra repository, so the first resolve genuinely cannot find it.
+        files.putAt(EXTRA, "late", "1.0")
+
+        val tmp = createTempDirectory("deps-test")
+        val cache = ResolverCache(tmp.toString())
+        val resolver = MavenDependencyResolver(cache, LocalFileSystem(tmp)::fileFor, files)
+        val bothRepos = listOf(repo, Repository("extra", EXTRA))
+        fun resolveLate(repos: List<Repository>) = runBlocking {
+            resolver.resolve(listOf(coord("late", "1.0")), repos, ConflictPolicy.NEWEST, noProgress)
+        }
+
+        val first = resolveLate(listOf(repo))
+        assertTrue(first.resolved.isEmpty(), "the artifact is absent from the only repo, so nothing resolves")
+        assertEquals(listOf("late"), first.unresolved.map { it.name })
+
+        // Clearing the on-disk 404s alone is NOT enough: the in-memory "no POM" memo keeps the retry off the
+        // network for the rest of the session, however many repositories are added.
+        cache.clearMisses()
+        assertEquals(
+            listOf("late"), resolveLate(bothRepos).unresolved.map { it.name },
+            "guards the half of the fix that is easy to drop: the in-memory memo must be cleared too",
+        )
+
+        // Both cleared, as a repository add/remove now does — the new repository is finally consulted.
+        cache.clearMisses()
+        resolver.forgetAbsentArtifacts()
+        val healed = resolveLate(bothRepos)
+        assertTrue(healed.unresolved.isEmpty(), "unexpected unresolved after adding the repo: ${healed.unresolved}")
+        assertEquals(listOf("late"), healed.resolved.map { it.coordinate.name })
+    }
+
+    private fun newResolver(files: FakeRepo): Pair<MavenDependencyResolver, Path> {
+        val tmp = createTempDirectory("deps-test")
+        val lfs = LocalFileSystem(tmp)
+        return MavenDependencyResolver(ResolverCache(tmp.toString()), lfs::fileFor, files) to tmp
+    }
+
+    private fun coord(name: String, version: String) = Coordinate("g", name, version)
+
+    private data class Dep(
+        val g: String, val a: String, val v: String,
+        val scope: String? = null, val optional: Boolean = false,
+        val exclusions: List<Pair<String, String>> = emptyList(),
+    )
+
+    /** A Gradle Module Metadata variant fixture: its attributes, published files, deps, and optional redirect.
+     *  [files] are logical names; [fileUrls] overrides a name's actual download path (AGP's name≠url case). */
+    private data class GmmVar(
+        val name: String,
+        val attrs: Map<String, String>,
+        val files: List<String> = emptyList(),
+        val deps: List<Dep> = emptyList(),
+        val availableAt: Triple<String, String, String>? = null,   // group, module, version
+        val fileUrls: Map<String, String> = emptyMap(),
+        val strictDeps: List<Dep> = emptyList(),       // deps published with version.strictly
+        val constraints: List<Dep> = emptyList(),      // dependencyConstraints (g:a:v)
+        val capabilities: List<Dep> = emptyList(),     // declared capabilities (g:a:v); empty = implicit only
+        val rangeDeps: List<RangeDep> = emptyList(),   // deps whose version.requires is a RANGE (+ optional prefers)
+    )
+
+    /** A GMM dependency published as a version RANGE, `{"requires":"[1.0.0, 1.3.99]","prefers":"1.3.1"}`,
+     *  the shape every `com.onesignal:*` module uses for its external dependencies. */
+    private data class RangeDep(val g: String, val a: String, val requires: String, val prefers: String? = null)
+
+    /** An in-memory Maven repo keyed by request URL; missing entries return null (404). */
+    private inner class FakeRepo : ArtifactFetcher {
+        private val byUrl = HashMap<String, ByteArray>()
+        override fun fetch(url: String): ByteArray? = byUrl[url]
+
+        /** A Solr search answer from [endpoint] for [query]: the URL the resolver builds, verbatim. */
+        fun putCentralSearch(endpoint: String, query: String, docs: List<Triple<String, String, String>>) {
+            val json = docs.joinToString(",") { (g, a, v) ->
+                """{"g":"$g","a":"$a","latestVersion":"$v","p":"jar"}"""
+            }
+            val url = "$endpoint?q=$query&rows=25&wt=json"
+            byUrl[url] = """{"response":{"numFound":${docs.size},"docs":[$json]}}""".toByteArray()
+        }
+
+        /** Publish under an arbitrary repository base, so a coordinate can exist in one repo and not another. */
+        fun putAt(base: String, name: String, version: String, group: String = "g") {
+            val rel = "${group.replace('.', '/')}/$name/$version/$name-$version"
+            byUrl["$base/$rel.pom"] = pom(group, name, version, "jar", emptyList()).toByteArray()
+            byUrl["$base/$rel.jar"] = emptyJar()
+        }
+
+        fun put(
+            name: String, version: String, packaging: String = "jar", deps: List<Dep> = emptyList(),
+            jarBytes: ByteArray = emptyJar(), group: String = "g",
+            managed: List<Dep> = emptyList(), parent: Triple<String, String, String>? = null,
+        ) {
+            byUrl[url(group, name, version, "pom")] = pom(group, name, version, packaging, deps, managed, parent).toByteArray()
+            val ext = if (packaging == "aar") "aar" else "jar"
+            byUrl[url(group, name, version, ext)] = jarBytes
+        }
+
+        /** A `pom`-packaged BOM: only a POM with a `<dependencyManagement>` block, no artifact. */
+        fun putBom(name: String, version: String, manages: List<Dep>) {
+            byUrl[url("g", name, version, "pom")] = pom("g", name, version, "pom", emptyList(), manages).toByteArray()
+        }
+
+        /** A `pom`-packaged relocation stub: only a POM with `<distributionManagement><relocation>` (no artifact),
+         *  mirroring com.itextpdf:itext7-core → :itext-core. Omitted target fields inherit this coordinate's. */
+        fun putRelocation(name: String, version: String, toGroup: String? = null, toName: String? = null, toVersion: String? = null, group: String = "g") {
+            byUrl[url(group, name, version, "pom")] = buildString {
+                append("""<?xml version="1.0" encoding="UTF-8"?><project>""")
+                append("<groupId>$group</groupId><artifactId>$name</artifactId><version>$version</version><packaging>pom</packaging>")
+                append("<distributionManagement><relocation>")
+                toGroup?.let { append("<groupId>$it</groupId>") }
+                toName?.let { append("<artifactId>$it</artifactId>") }
+                toVersion?.let { append("<version>$it</version>") }
+                append("</relocation></distributionManagement></project>")
+            }.toByteArray()
+        }
+
+        /** Publish Google Maven's `master-index.xml` listing [groups] (self-closing `<group.id/>` entries). */
+        fun putGoogleMaster(vararg groups: String) {
+            val entries = groups.joinToString("\n") { "  <$it/>" }
+            byUrl["$GOOGLE/master-index.xml"] = "<?xml version='1.0' encoding='UTF-8'?>\n<metadata>\n$entries\n</metadata>".toByteArray()
+        }
+
+        /** Publish a group's `group-index.xml` (`<artifact versions="a,b,c"/>` per [artifacts] entry). */
+        fun putGoogleGroup(group: String, artifacts: Map<String, List<String>>) {
+            val body = artifacts.entries.joinToString("\n") { (a, vs) -> "  <$a versions=\"${vs.joinToString(",")}\"/>" }
+            byUrl["$GOOGLE/${group.replace('.', '/')}/group-index.xml"] = "<$group>\n$body\n</$group>".toByteArray()
+        }
+
+        /** Publish a POM under the Google base so [MavenDependencyResolver.search] can read its packaging. */
+        fun putGooglePom(group: String, artifact: String, version: String, packaging: String) {
+            val rel = "${group.replace('.', '/')}/$artifact/$version/$artifact-$version.pom"
+            byUrl["$GOOGLE/$rel"] = pom(group, artifact, version, packaging, emptyList()).toByteArray()
+        }
+
+        /** Publish a `maven-metadata.xml` listing [versions] for [group]:[name] under [base] (the version index). */
+        fun putMetadata(name: String, versions: List<String>, group: String = "g", base: String = BASE) {
+            val rel = "${group.replace('.', '/')}/$name/maven-metadata.xml"
+            byUrl["$base/$rel"] = metadata(group, name, versions).toByteArray()
+        }
+
+        /** Publish a `*.module` (Gradle Module Metadata) + a POM + every variant's files (as empty jars). */
+        fun putModule(
+            name: String, version: String, variants: List<GmmVar>,
+            group: String = "g", pomDeps: List<Dep> = emptyList(), packaging: String = "jar",
+        ) {
+            byUrl[url(group, name, version, "module")] = gmmJson(group, name, version, variants).toByteArray()
+            byUrl[url(group, name, version, "pom")] = pom(group, name, version, packaging, pomDeps).toByteArray()
+            for (v in variants) for (f in v.files) {
+                val actual = v.fileUrls[f] ?: f   // the real download path (AGP's name≠url case)
+                val bytes = if (actual.endsWith(".aar")) aarWithRes() else emptyJar()
+                byUrl["$BASE/${group.replace('.', '/')}/$name/$version/$actual"] = bytes
+            }
+        }
+    }
+
+    private fun gmmJson(group: String, name: String, version: String, variants: List<GmmVar>): String = buildString {
+        append("""{"formatVersion":"1.1","component":{"group":"$group","module":"$name","version":"$version"},"variants":[""")
+        variants.forEachIndexed { i, v ->
+            if (i > 0) append(",")
+            append("""{"name":"${v.name}","attributes":{""")
+            v.attrs.entries.forEachIndexed { j, (k, value) -> if (j > 0) append(","); append(""""$k":"$value"""") }
+            append("}")
+            v.availableAt?.let { append(""","available-at":{"group":"${it.first}","module":"${it.second}","version":"${it.third}"}""") }
+            val allDeps = v.deps.map { it to "requires" } + v.strictDeps.map { it to "strictly" }
+            if (allDeps.isNotEmpty() || v.rangeDeps.isNotEmpty()) {
+                append(""","dependencies":[""")
+                allDeps.forEachIndexed { j, (d, key) -> if (j > 0) append(","); append("""{"group":"${d.g}","module":"${d.a}","version":{"$key":"${d.v}"}}""") }
+                v.rangeDeps.forEachIndexed { j, d ->
+                    if (j > 0 || allDeps.isNotEmpty()) append(",")
+                    append("""{"group":"${d.g}","module":"${d.a}","version":{"requires":"${d.requires}"""")
+                    d.prefers?.let { append(""","prefers":"$it"""") }
+                    append("}}")
+                }
+                append("]")
+            }
+            if (v.constraints.isNotEmpty()) {
+                append(""","dependencyConstraints":[""")
+                v.constraints.forEachIndexed { j, c -> if (j > 0) append(","); append("""{"group":"${c.g}","module":"${c.a}","version":{"requires":"${c.v}"}}""") }
+                append("]")
+            }
+            if (v.capabilities.isNotEmpty()) {
+                append(""","capabilities":[""")
+                v.capabilities.forEachIndexed { j, c -> if (j > 0) append(","); append("""{"group":"${c.g}","name":"${c.a}","version":"${c.v}"}""") }
+                append("]")
+            }
+            if (v.files.isNotEmpty()) {
+                append(""","files":[""")
+                v.files.forEachIndexed { j, f -> if (j > 0) append(","); append("""{"name":"$f","url":"${v.fileUrls[f] ?: f}"}""") }
+                append("]")
+            }
+            append("}")
+        }
+        append("]}")
+    }
+
+    private fun metadata(g: String, a: String, versions: List<String>): String = buildString {
+        append("""<?xml version="1.0" encoding="UTF-8"?><metadata>""")
+        append("<groupId>$g</groupId><artifactId>$a</artifactId><versioning>")
+        versions.lastOrNull()?.let { append("<latest>$it</latest><release>$it</release>") }
+        append("<versions>")
+        versions.forEach { append("<version>$it</version>") }
+        append("</versions></versioning></metadata>")
+    }
+
+    private fun url(g: String, a: String, v: String, ext: String): String =
+        "$BASE/${g.replace('.', '/')}/$a/$v/$a-$v.$ext"
+
+    private fun pom(
+        g: String, a: String, v: String, packaging: String, deps: List<Dep>,
+        managed: List<Dep> = emptyList(), parent: Triple<String, String, String>? = null,
+    ): String = buildString {
+        append("""<?xml version="1.0" encoding="UTF-8"?><project>""")
+        parent?.let { (pg, pa, pv) ->
+            append("<parent><groupId>$pg</groupId><artifactId>$pa</artifactId><version>$pv</version></parent>")
+        }
+        append("<groupId>$g</groupId><artifactId>$a</artifactId><version>$v</version>")
+        if (packaging != "jar") append("<packaging>$packaging</packaging>")
+        if (managed.isNotEmpty()) {
+            append("<dependencyManagement><dependencies>")
+            for (d in managed) {
+                append("<dependency><groupId>${d.g}</groupId><artifactId>${d.a}</artifactId><version>${d.v}</version>")
+                d.scope?.let { append("<scope>$it</scope>") }
+                append("</dependency>")
+            }
+            append("</dependencies></dependencyManagement>")
+        }
+        if (deps.isNotEmpty()) {
+            append("<dependencies>")
+            for (d in deps) {
+                append("<dependency><groupId>${d.g}</groupId><artifactId>${d.a}</artifactId>")
+                // A blank version means the entry omits <version> entirely, so dependencyManagement supplies it.
+                if (d.v.isNotEmpty()) append("<version>${d.v}</version>")
+                d.scope?.let { append("<scope>$it</scope>") }
+                if (d.optional) append("<optional>true</optional>")
+                if (d.exclusions.isNotEmpty()) {
+                    append("<exclusions>")
+                    d.exclusions.forEach { (eg, ea) -> append("<exclusion><groupId>$eg</groupId><artifactId>$ea</artifactId></exclusion>") }
+                    append("</exclusions>")
+                }
+                append("</dependency>")
+            }
+            append("</dependencies>")
+        }
+        append("</project>")
+    }
+
+    private fun emptyJar(): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        ZipOutputStream(out).use { }
+        return out.toByteArray()
+    }
+
+    /** A small nested `classes.jar` with real entries (the content the exploded jar must reproduce). */
+    private fun nestedClassesJar(): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        ZipOutputStream(out).use { z ->
+            z.putNextEntry(ZipEntry("pkg/Foo.class")); z.write(ByteArray(200) { it.toByte() }); z.closeEntry()
+            z.putNextEntry(ZipEntry("pkg/Bar.class")); z.write(ByteArray(200) { (it * 2).toByte() }); z.closeEntry()
+        }
+        return out.toByteArray()
+    }
+
+    /**
+     * Hand-craft an outer zip (the "AAR") holding [inner] as a STORED `classes.jar` entry that uses a DATA
+     * DESCRIPTOR — GP-flag bit 3 set, sizes/crc = 0 in the local header, the real values in a trailing
+     * descriptor. `java.util.zip.ZipOutputStream` cannot produce this shape, so the bytes are written directly.
+     * This is exactly what makes a streaming `ZipInputStream` reader fail while a random-access `ZipFile`
+     * (central-directory-driven) reads the entry byte-exact.
+     */
+    private fun aarWithStoredDataDescriptorClassesJar(inner: ByteArray): ByteArray {
+        fun java.io.ByteArrayOutputStream.i16(v: Int) { write(v and 0xff); write((v ushr 8) and 0xff) }
+        fun java.io.ByteArrayOutputStream.i32(v: Long) {
+            write((v and 0xff).toInt()); write(((v ushr 8) and 0xff).toInt())
+            write(((v ushr 16) and 0xff).toInt()); write(((v ushr 24) and 0xff).toInt())
+        }
+        val name = "classes.jar".toByteArray()
+        val crc = java.util.zip.CRC32().apply { update(inner) }.value
+        val sz = inner.size.toLong()
+        val o = java.io.ByteArrayOutputStream()
+        // local file header: STORED (method 0), GP flag bit 3 (data descriptor), crc/sizes = 0
+        o.i32(0x04034b50); o.i16(20); o.i16(0x0008); o.i16(0); o.i16(0); o.i16(0)
+        o.i32(0); o.i32(0); o.i32(0); o.i16(name.size); o.i16(0); o.write(name)
+        o.write(inner)
+        o.i32(0x08074b50); o.i32(crc); o.i32(sz); o.i32(sz) // data descriptor (real crc/sizes)
+        val cdOffset = o.size()
+        // central directory header carries the REAL sizes/crc + the local-header offset
+        o.i32(0x02014b50); o.i16(20); o.i16(20); o.i16(0x0008); o.i16(0); o.i16(0); o.i16(0)
+        o.i32(crc); o.i32(sz); o.i32(sz); o.i16(name.size); o.i16(0); o.i16(0); o.i16(0); o.i16(0)
+        o.i32(0); o.i32(0L); o.write(name)
+        val cdSize = o.size() - cdOffset
+        // end of central directory
+        o.i32(0x06054b50); o.i16(0); o.i16(0); o.i16(1); o.i16(1); o.i32(cdSize.toLong()); o.i32(cdOffset.toLong()); o.i16(0)
+        return o.toByteArray()
+    }
+
+    /** An AAR with resources/manifest but NO `classes.jar` (a resource-only Android library). */
+    private fun aarResOnly(): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        ZipOutputStream(out).use { zos ->
+            zos.putNextEntry(ZipEntry("AndroidManifest.xml")); zos.write("<manifest/>".toByteArray()); zos.closeEntry()
+            zos.putNextEntry(ZipEntry("res/values/strings.xml"))
+            zos.write("""<resources><string name="x">x</string></resources>""".toByteArray())
+            zos.closeEntry()
+        }
+        return out.toByteArray()
+    }
+
+    private fun aarWithRes(): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        ZipOutputStream(out).use { zos ->
+            zos.putNextEntry(ZipEntry("classes.jar")); zos.write(emptyJar()); zos.closeEntry()
+            zos.putNextEntry(ZipEntry("AndroidManifest.xml")); zos.write("<manifest/>".toByteArray()); zos.closeEntry()
+            zos.putNextEntry(ZipEntry("res/values/strings.xml"))
+            zos.write("""<resources><string name="widget_label">W</string></resources>""".toByteArray())
+            zos.closeEntry()
+        }
+        return out.toByteArray()
+    }
+
+    private companion object {
+        const val BASE = "https://fixture/repo"
+        const val GOOGLE = "https://fixture/google"
+        const val EXTRA = "https://fixture/extra"
+
+        /** Two Central search hosts, as production has: the first one tried, and the fallback. */
+        const val PRIMARY_SEARCH = "https://fixture/search-primary/select"
+        const val FALLBACK_SEARCH = "https://fixture/search-fallback/select"
+    }
+}

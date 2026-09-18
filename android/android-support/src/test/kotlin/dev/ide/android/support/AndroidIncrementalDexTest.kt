@@ -28,6 +28,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
+import dev.ide.vfs.local.fileFor
 
 /**
  * Proves the dexing is incremental: one `dexBuilder` archives every scope into content-addressed buckets,

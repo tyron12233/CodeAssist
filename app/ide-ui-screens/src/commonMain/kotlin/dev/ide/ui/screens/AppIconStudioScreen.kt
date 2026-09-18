@@ -24,7 +24,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -56,6 +55,7 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiIconLayer
 import dev.ide.ui.components.CaSwitch
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.editor.preview.AppIconRaster.drawAppIcon
 import dev.ide.ui.editor.preview.IconMask

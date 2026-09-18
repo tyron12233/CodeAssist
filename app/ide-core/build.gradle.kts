@@ -16,6 +16,9 @@ dependencies {
     implementation(project(":platform-json"))
     implementation(project(":project-model-api"))
     implementation(project(":project-model-impl"))
+    // The built-in Kotlin templates and the shared scaffolding helpers, in the framework because the iOS
+    // host creates projects from exactly the same ones.
+    implementation(project(":project-templates"))
     implementation(project(":language-api"))
     implementation(project(":lang-jdt"))
     implementation(project(":lang-java")) // IntelliJ-PSI Java backend (native resolution/inference); JDT is still the .java default

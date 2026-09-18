@@ -26,6 +26,7 @@ import java.nio.file.Path
 import java.util.zip.ZipFile
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * Proves the debug-only app-log injection: when an [AndroidAppLogRuntime] is supplied, a DEBUG build weaves

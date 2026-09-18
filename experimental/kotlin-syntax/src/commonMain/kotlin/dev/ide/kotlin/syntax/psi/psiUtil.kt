@@ -90,6 +90,23 @@ fun KtFile.findElementAt(offset: Int): KtElement? {
     }
 }
 
+/**
+ * The innermost element covering [offset], TRIVIA INCLUDED, so a comment or a run of whitespace can be the
+ * answer. [findElementAt] descends the trivia-free view and therefore never lands on one.
+ *
+ * This is how "is the caret inside a doc comment?" is asked. A doc comment is a single DOC_COMMENT token to
+ * this parser (its own grammar is vendored but the file parse does not descend into it), so there is no KDoc
+ * element to climb to the way PSI had.
+ */
+fun KtFile.findElementAtIncludingTrivia(offset: Int): KtElement? {
+    var current: KtElement = this
+    if (offset !in current.textRange) return null
+    while (true) {
+        val next = current.childrenWithTrivia.firstOrNull { offset in it.textRange } ?: return current
+        current = next
+    }
+}
+
 /** The innermost element of type [T] covering [offset]. */
 inline fun <reified T : KtElement> KtFile.findElementOfTypeAt(offset: Int): T? =
     findElementAt(offset)?.getParentOfType<T>()

@@ -32,6 +32,7 @@ import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * `compileAidl` inside a real Android build: an app whose `src/main/aidl` holds a service interface, built

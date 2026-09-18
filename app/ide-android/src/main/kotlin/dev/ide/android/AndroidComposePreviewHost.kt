@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.key
@@ -51,6 +50,7 @@ import dev.ide.interp.PreviewSandboxPolicy
 import dev.ide.interp.SandboxCategory
 import dev.ide.interp.SandboxFinding
 import androidx.compose.ui.unit.sp
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.android.preview.ComposePreviewRemoteClient
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.LoweredComposePreview

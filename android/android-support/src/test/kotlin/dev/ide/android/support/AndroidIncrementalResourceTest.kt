@@ -18,6 +18,7 @@ import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * Regression for the "introduce a resource error, then revert, and the build is stuck" report. Builds an

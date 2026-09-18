@@ -32,9 +32,8 @@ import dev.ide.psi.IntellijPsiHost
  *
  * ## What it registers
  * - The app-level `PsiAugmentProvider.EP_NAME` extension `RecordAugmentProvider` (ONCE, process-wide).
- * - A minimal [PomModel] (a [TreeAspect]-backed transaction runner — the same shape
- *   `dev.ide.lang.kotlin.parse.KotlinPsiMutation` uses) on EACH resolution [Project], which the augment's
- *   light-member creation requires.
+ * - A minimal [PomModel] (a [TreeAspect]-backed transaction runner) on EACH resolution [Project], which the
+ *   augment's light-member creation requires.
  *
  * ## Capability-gated, with a graceful fallback
  * The whole thing is stood up ONCE and probed on a throwaway record ([verify]); if any piece is missing on this

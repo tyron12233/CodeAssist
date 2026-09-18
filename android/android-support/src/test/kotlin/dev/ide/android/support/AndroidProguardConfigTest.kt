@@ -23,6 +23,7 @@ import java.util.zip.ZipFile
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * End-to-end ProGuard/R8 configuration: a minify release build with both an inline keep rule

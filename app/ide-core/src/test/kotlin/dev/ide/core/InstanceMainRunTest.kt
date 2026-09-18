@@ -18,6 +18,7 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * End-to-end of running an INSTANCE `main` — a plain `class Test { fun main() {} }` with no static entry point.

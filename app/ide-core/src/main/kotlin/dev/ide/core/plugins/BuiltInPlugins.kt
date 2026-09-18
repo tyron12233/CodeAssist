@@ -59,7 +59,6 @@ import dev.ide.core.completion.UserLiveTemplateContributor
 import dev.ide.core.gradle.GradleBuildFileWriter
 import dev.ide.core.gradle.GradleModelImporter
 import dev.ide.core.gradle.GradleProjectImporter
-import dev.ide.core.project.JavaLibModuleType
 import dev.ide.core.services.AndroidResourceService
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
@@ -77,8 +76,8 @@ import dev.ide.core.templates.CalculatorSampleTemplate
 import dev.ide.core.templates.CodeAssistPluginTemplate
 import dev.ide.core.templates.JavaConsoleAppTemplate
 import dev.ide.core.templates.JavaLibraryTemplate
-import dev.ide.core.templates.KotlinConsoleAppTemplate
-import dev.ide.core.templates.KotlinLibraryTemplate
+import dev.ide.templates.JavaLibModuleType
+import dev.ide.templates.BUILT_IN_KOTLIN_TEMPLATES
 import dev.ide.core.templates.NotesSampleTemplate
 import dev.ide.core.templates.SwingAppTemplate
 import dev.ide.core.templates.SwingCanvasTemplate
@@ -427,8 +426,7 @@ private class KotlinSupportPlugin : Plugin {
         )
         reg.contributeVia { ext, pid ->
             val templates = ProjectTemplateRegistry(ext)
-            templates.register(KotlinConsoleAppTemplate, pid)
-            templates.register(KotlinLibraryTemplate, pid)
+            BUILT_IN_KOTLIN_TEMPLATES.forEach { templates.register(it, pid) }
         }
     }
 }

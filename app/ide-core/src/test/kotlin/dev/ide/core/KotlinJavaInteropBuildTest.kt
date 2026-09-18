@@ -30,12 +30,14 @@ import dev.ide.platform.impl.PlatformCore
 import dev.ide.testkit.TestJars
 import dev.ide.testkit.testEnv
 import dev.ide.testkit.writeSource
+import dev.ide.vfs.local.fileFor
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.nio.file.Path
 import java.util.jar.JarFile
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * End-to-end Kotlin/Java interop in the native build: one module

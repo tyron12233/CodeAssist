@@ -5,8 +5,8 @@ import dev.ide.index.Hit
 import dev.ide.index.IndexExtension
 import dev.ide.index.IndexOrigin
 import dev.ide.index.MatchingMode
-import dev.ide.kotlin.classfile.FileSource
-import dev.ide.kotlin.classfile.openFile
+import dev.ide.platform.FileSource
+import dev.ide.platform.openFile
 import dev.ide.platform.ByteArrayDataReader
 import dev.ide.platform.DataReader
 

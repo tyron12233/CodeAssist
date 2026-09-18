@@ -1,48 +1,15 @@
 package dev.ide.core.templates
 
-import dev.ide.model.BuildSystemId
-import dev.ide.model.ContentRole
-import dev.ide.model.DependencyScope
-import dev.ide.model.SourceSetTemplate
 import dev.ide.model.template.ProjectScaffold
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateArgs
 import dev.ide.model.template.TemplateCategory
 import dev.ide.model.template.TemplateId
 import dev.ide.model.template.TemplateParameter
+import dev.ide.templates.TemplateSupport
 
-/** Shared helpers for the built-in Java templates. */
-internal object JavaTemplateSupport {
-    /** "com.example.app" → "com/example/app". */
-    fun pkgPath(pkg: String): String = pkg.replace('.', '/')
-
-    /** A `main` source set rooted at `src/main/java`. */
-    fun mainSources() =
-        SourceSetTemplate("main", DependencyScope.IMPLEMENTATION, mapOf("src/main/java" to setOf(ContentRole.SOURCE)))
-
-    /** Add a single-module project ([moduleName] of [typeId]) and return after committing the model. */
-    fun singleModule(scaffold: ProjectScaffold, projectName: String, moduleName: String, typeId: String) {
-        scaffold.workspace.beginModification().apply {
-            addProject(projectName, BuildSystemId.NATIVE, scaffold.rootDir)
-            commit()
-        }
-        scaffold.workspace.projects.first { it.name == projectName }.beginModification().apply {
-            addModule(moduleName, scaffold.moduleType(typeId)).apply {
-                languageLevel = scaffold.languageLevel
-                addSourceSet(mainSources())
-            }
-            commit()
-        }
-    }
-
-    /** A safe PascalCase Java identifier derived from a free-form project name (fallback "App"). */
-    fun typeName(raw: String): String {
-        val cleaned = raw.split(Regex("[^A-Za-z0-9]+")).filter { it.isNotEmpty() }
-            .joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
-        val candidate = cleaned.ifEmpty { "App" }
-        return if (candidate.first().isDigit()) "App$candidate" else candidate
-    }
-}
+/** The Java source-dir convention, and where all three Java-flavoured templates put their sources. */
+internal const val JAVA_SOURCES = "src/main/java"
 
 /**
  * A runnable Java console app: one `app` module (java-lib) with a `Main` class that has a
@@ -58,10 +25,10 @@ object JavaConsoleAppTemplate : ProjectTemplate {
     override fun parameters(): List<TemplateParameter> = emptyList()
 
     override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
-        JavaTemplateSupport.singleModule(scaffold, args.name, "app", "java-lib")
+        TemplateSupport.singleModule(scaffold, args.name, "app", "java-lib", JAVA_SOURCES)
         val pkg = args.packageName
         scaffold.writeText(
-            "app/src/main/java/${JavaTemplateSupport.pkgPath(pkg)}/Main.java",
+            "app/src/main/java/${TemplateSupport.pkgPath(pkg)}/Main.java",
             """
             package $pkg;
 
@@ -86,11 +53,11 @@ object JavaLibraryTemplate : ProjectTemplate {
     override fun parameters(): List<TemplateParameter> = emptyList()
 
     override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
-        JavaTemplateSupport.singleModule(scaffold, args.name, "lib", "java-lib")
+        TemplateSupport.singleModule(scaffold, args.name, "lib", "java-lib", JAVA_SOURCES)
         val pkg = args.packageName
-        val type = JavaTemplateSupport.typeName(args.name)
+        val type = TemplateSupport.typeName(args.name)
         scaffold.writeText(
-            "lib/src/main/java/${JavaTemplateSupport.pkgPath(pkg)}/$type.java",
+            "lib/src/main/java/${TemplateSupport.pkgPath(pkg)}/$type.java",
             """
             package $pkg;
 

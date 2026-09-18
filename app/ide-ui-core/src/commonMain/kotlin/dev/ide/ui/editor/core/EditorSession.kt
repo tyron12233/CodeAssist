@@ -202,6 +202,15 @@ class EditorSession(
     /** Set by the platform text-input node while an IME session is active. */
     var imeListener: ImeListener? = null
 
+    /**
+     * The handle that raises and dismisses the soft keyboard for this buffer.
+     *
+     * Owned by the session rather than remembered inside the editor composable so that the chrome AROUND the
+     * editor can reach it — the keyboard accessory bar is a sibling of the editor, not a child, and on a host
+     * with no system back it is the only thing that can put the keyboard away.
+     */
+    val ime: EditorImeHandle = EditorImeHandle()
+
     interface ImeListener {
         /** Selection and/or composition changed (no text edit) — push `InputMethodManager.updateSelection`. */
         fun onStateChanged()

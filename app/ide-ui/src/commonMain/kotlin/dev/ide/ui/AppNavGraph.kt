@@ -3,7 +3,6 @@ package dev.ide.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,6 +20,7 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.VcsService
 import dev.ide.ui.components.BetaInfo
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.ext.ScreenContext

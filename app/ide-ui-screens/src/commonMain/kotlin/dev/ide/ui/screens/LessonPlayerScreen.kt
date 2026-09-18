@@ -32,7 +32,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,6 +58,7 @@ import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiExerciseResult
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiLessonStep
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.CodeSample
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.entrancePop

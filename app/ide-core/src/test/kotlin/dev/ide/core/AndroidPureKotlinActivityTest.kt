@@ -28,6 +28,7 @@ import dev.ide.model.impl.ProjectModel
 import dev.ide.testkit.TestJars
 import dev.ide.testkit.testEnv
 import dev.ide.testkit.writeSource
+import dev.ide.vfs.local.fileFor
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
@@ -35,6 +36,7 @@ import java.nio.file.Path
 import java.util.zip.ZipFile
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * Reproduces the Compose-template shape: a **pure-Kotlin** android-app whose entry `MainActivity` is a

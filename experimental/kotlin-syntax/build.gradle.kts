@@ -14,9 +14,10 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // compiler's accessor names. That makes the port checkable rather than merely plausible: the tests diff our
 // token stream and our tree against the real compiler's, over this repository's own sources.
 //
-// NOTHING depends on this module. CI runs its jvmTest by name (a multiplatform module has no `test` task, so
-// the aggregate `./gradlew test` walks past it); the iOS suites need a Mac and run locally. See
-// docs/kotlin-syntax.md for the state of play and what is not covered yet.
+// `:lang-kotlin` DEPENDS ON THIS: it is the editor's parser, and the IntelliJ PSI parse is gone from that path.
+// The module stays under `experimental` because its iOS half is still unproven in an app, not because nothing
+// uses it. CI runs its jvmTest by name (a multiplatform module has no `test` task, so the aggregate
+// `./gradlew test` walks past it); the iOS suites need a Mac and run locally. See docs/kotlin-syntax.md.
 //
 // Multiplatform with an iOS target from the first commit, on purpose: whether `commonMain` is portable is
 // unanswerable until a non-JVM target actually compiles it, and a dependency that quietly arrives through

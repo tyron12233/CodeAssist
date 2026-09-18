@@ -51,6 +51,8 @@ kotlin {
             // strip in components, the block surface in the editor), so expose it once from the bottom.
             api(compose.preview)
             implementation(libs.kotlinx.coroutines.core)
+            // The process-wide IO dispatcher `ioDispatcher` delegates to on every target.
+            implementation(project(":model-api"))
         }
 
         // RopeTest drives the editor's text rope through its internal structure (node depth, rebalancing),

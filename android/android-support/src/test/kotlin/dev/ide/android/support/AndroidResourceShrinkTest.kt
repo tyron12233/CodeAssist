@@ -22,6 +22,7 @@ import java.util.zip.ZipFile
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * `shrinkResources` drops resources unreachable from the (shrunken) code. A referenced raw resource must

@@ -24,6 +24,7 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * `assembleAar` for an `android-lib` target packages a spec-faithful `.aar`: `classes.jar` of the library's

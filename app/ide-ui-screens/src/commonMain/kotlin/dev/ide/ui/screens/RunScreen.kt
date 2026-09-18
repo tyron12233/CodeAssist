@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,6 +61,7 @@ import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.Chip
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.copy

@@ -105,6 +105,11 @@ class KotlinType(
     /** This type's JVM descriptor, or null when it has none because it is a type parameter. */
     fun descriptor(): String? = jvmName?.let(JvmDescriptors::of)
 
+    /** The same type, nullable. The type table stores `T` once and marks a range of ids as `T?`. */
+    fun asNullable(): KotlinType =
+        if (isNullable) this
+        else KotlinType(classifier, arguments, true, jvmName, flags, annotations, isTypeParameter, typeParameterId, typeParameterName)
+
     override fun toString(): String = render()
 }
 
@@ -270,6 +275,7 @@ object KotlinMetadata {
 
     // metadata.proto, `message Class`
     private const val CLASS_FLAGS = 1
+    private const val CLASS_SUPERTYPE_ID = 2
     private const val CLASS_FQ_NAME = 3
     private const val CLASS_COMPANION_OBJECT_NAME = 4
     private const val CLASS_SUPERTYPE = 6
@@ -280,6 +286,15 @@ object KotlinMetadata {
     private const val CLASS_TYPE_ALIAS = 11
     private const val CLASS_ENUM_ENTRY = 13
     private const val CLASS_SEALED_SUBCLASS_FQ_NAME = 16
+
+    /**
+     * `Class.type_table` and `Package.type_table`, which share a number.
+     *
+     * It is written AFTER the members that reference it — protobuf orders fields by number — so it cannot be
+     * picked up by the same forward pass that decodes them. It gets its own pre-pass, like the type-parameter
+     * names do, and for the same reason.
+     */
+    private const val TYPE_TABLE = 30
 
     /** `Class.flags` when the field is absent: `public final class`, no annotations. */
     private const val CLASS_FLAGS_DEFAULT = 6
@@ -321,6 +336,29 @@ object KotlinMetadata {
     private const val RECEIVER_TYPE = 5
     private const val VALUE_PARAMETER = 6
 
+    /**
+     * The table-referenced twins of `return_type` and `receiver_type`.
+     *
+     * Different numbers on a Function than on a Property, and on a Property they collide with numbers that
+     * mean something else on a Function (9 is a Function's `flags`), so they are dispatched by kind exactly
+     * as field 6 already is.
+     */
+    private const val FUNCTION_RETURN_TYPE_ID = 7
+    private const val FUNCTION_RECEIVER_TYPE_ID = 8
+    private const val PROPERTY_RETURN_TYPE_ID = 9
+    private const val PROPERTY_RECEIVER_TYPE_ID = 10
+    private const val TYPE_ALIAS_EXPANDED_TYPE_ID = 7
+
+    /**
+     * A `TypeAlias` renumbers everything.
+     *
+     * Its type parameters are field 3 where a function's are 4, and fields 3, 4 and 5 hold a type parameter,
+     * the underlying type and an id where a function holds a return type, its type parameters and a receiver.
+     * So every one of those has to be dispatched by kind, the way field 6 already was — reading a `Type` as
+     * a `TypeParameter` does not fail, it desynchronises the reader and throws somewhere else entirely.
+     */
+    private const val TYPE_ALIAS_TYPE_PARAMETER = 3
+
     // `message Constructor`: no name and no return type, and its parameters are on a different number.
     private const val CONSTRUCTOR_VALUE_PARAMETER = 2
 
@@ -329,6 +367,8 @@ object KotlinMetadata {
     private const val PARAM_NAME = 2
     private const val PARAM_TYPE = 3
     private const val PARAM_VARARG_ELEMENT_TYPE = 4
+    private const val PARAM_TYPE_ID = 5
+    private const val PARAM_VARARG_ELEMENT_TYPE_ID = 6
 
     // `message EnumEntry`
     private const val ENUM_ENTRY_NAME = 1
@@ -352,6 +392,7 @@ object KotlinMetadata {
     // `message Type.Argument`. The projection is an enum, and STAR means "no type is written at all".
     private const val ARGUMENT_PROJECTION = 1
     private const val ARGUMENT_TYPE = 2
+    private const val ARGUMENT_TYPE_ID = 3
     private const val PROJECTION_STAR = 3
 
     // `message TypeParameter`
@@ -359,6 +400,7 @@ object KotlinMetadata {
     private const val TYPE_PARAM_NAME = 2
     private const val TYPE_PARAM_VARIANCE = 4
     private const val TYPE_PARAM_UPPER_BOUND = 5
+    private const val TYPE_PARAM_UPPER_BOUND_ID = 6
 
     // `message Class` / `message Function` both declare their own type parameters, on different numbers.
     private const val CLASS_TYPE_PARAMETER = 5
@@ -431,7 +473,7 @@ object KotlinMetadata {
     fun readMultiFileParts(annotation: KotlinMetadataAnnotation): List<String>? =
         if (annotation.kind == KIND_MULTIFILE_CLASS) annotation.data1.toList() else null
 
-    private fun readClass(message: ByteArray, names: JvmNameResolver): KotlinClassInfo {
+    internal fun readClass(message: ByteArray, names: NameResolver): KotlinClassInfo {
         var name: String? = null
         var flags = CLASS_FLAGS_DEFAULT
         var companionObjectName: String? = null
@@ -447,6 +489,11 @@ object KotlinMetadata {
         val scope = HashMap<Int, String>()
         registerTypeParameterNames(message, CLASS_TYPE_PARAMETER, names, scope)
         val typeParameters = ArrayList<KotlinTypeParameter>()
+        // Same shape, same reason: the table is written after everything that indexes into it.
+        val table = readTypeTable(message)
+        // A supertype may be an id instead of a type, and the ids arrive packed and out of band from the
+        // inline ones. Collected separately so the inline ones keep their position.
+        val supertypeIds = ArrayList<Int>()
 
         val reader = ProtoReader(message)
         reader.forEachField { number, _ ->
@@ -467,12 +514,17 @@ object KotlinMetadata {
                 }
 
                 CLASS_TYPE_PARAMETER -> {
-                    typeParameters.add(readTypeParameter(reader.readMessage(), names, scope))
+                    typeParameters.add(readTypeParameter(reader.readMessage(), names, scope, table))
                     true
                 }
 
                 CLASS_SUPERTYPE -> {
-                    supertypes.add(readType(reader.readMessage(), names, scope))
+                    supertypes.add(readType(reader.readMessage(), names, scope, table))
+                    true
+                }
+
+                CLASS_SUPERTYPE_ID -> {
+                    for (id in reader.readPackedInts()) supertypeIds.add(id)
                     true
                 }
 
@@ -491,17 +543,18 @@ object KotlinMetadata {
                     true
                 }
 
-                CLASS_FUNCTION -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.FUNCTION, scope)
-                CLASS_PROPERTY -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.PROPERTY, scope)
-                CLASS_TYPE_ALIAS -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.TYPE_ALIAS, scope)
+                CLASS_FUNCTION -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.FUNCTION, scope, table)
+                CLASS_PROPERTY -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.PROPERTY, scope, table)
+                CLASS_TYPE_ALIAS -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.TYPE_ALIAS, scope, table)
                 CLASS_CONSTRUCTOR -> {
-                    declarations.add(readConstructor(reader.readMessage(), names, scope))
+                    declarations.add(readConstructor(reader.readMessage(), names, scope, table))
                     true
                 }
 
                 else -> false
             }
         }
+        for (id in supertypeIds) table.resolve(id, names, scope)?.let(supertypes::add)
         return KotlinClassInfo(
             name = name,
             declarations = declarations,
@@ -516,6 +569,31 @@ object KotlinMetadata {
     }
 
     /**
+     * The type-table pass.
+     *
+     * Reads ONLY field 30 out of [message]. A class or package writes its table last, so this is a second
+     * walk rather than a branch in the main one.
+     */
+    private fun readTypeTable(message: ByteArray): TypeTable {
+        var table = TypeTable.EMPTY
+        val reader = ProtoReader(message)
+        reader.forEachField { number, _ ->
+            if (number != TYPE_TABLE) return@forEachField false
+            table = TypeTable.read(reader.readBytes())
+            true
+        }
+        return table
+    }
+
+    /** Decode one `Type` message. Public so [TypeTable] can decode an entry it is asked for. */
+    internal fun readTypeMessage(
+        bytes: ByteArray,
+        names: NameResolver,
+        scope: Map<Int, String>,
+        table: TypeTable,
+    ): KotlinType = readType(ProtoReader(bytes), names, scope, table)
+
+    /**
      * The id-to-name pass.
      *
      * Reads ONLY [field]'s id and name out of [message], leaving bounds and everything else alone, so that a
@@ -524,7 +602,7 @@ object KotlinMetadata {
     private fun registerTypeParameterNames(
         message: ByteArray,
         field: Int,
-        names: JvmNameResolver,
+        names: NameResolver,
         into: MutableMap<Int, String>,
     ) {
         val reader = ProtoReader(message)
@@ -545,7 +623,7 @@ object KotlinMetadata {
         }
     }
 
-    private fun readEnumEntry(reader: ProtoReader, names: JvmNameResolver): String? {
+    private fun readEnumEntry(reader: ProtoReader, names: NameResolver): String? {
         var nameId = -1
         reader.forEachField { number, _ ->
             if (number == ENUM_ENTRY_NAME) {
@@ -558,14 +636,15 @@ object KotlinMetadata {
         return if (nameId >= 0) names.getString(nameId) else null
     }
 
-    private fun readPackage(message: ByteArray, names: JvmNameResolver): KotlinClassInfo {
+    internal fun readPackage(message: ByteArray, names: NameResolver): KotlinClassInfo {
         val declarations = ArrayList<KotlinDeclaration>()
+        val table = readTypeTable(message)
         val reader = ProtoReader(message)
         reader.forEachField { number, _ ->
             when (number) {
-                PACKAGE_FUNCTION -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.FUNCTION, emptyMap())
-                PACKAGE_PROPERTY -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.PROPERTY, emptyMap())
-                PACKAGE_TYPE_ALIAS -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.TYPE_ALIAS, emptyMap())
+                PACKAGE_FUNCTION -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.FUNCTION, emptyMap(), table)
+                PACKAGE_PROPERTY -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.PROPERTY, emptyMap(), table)
+                PACKAGE_TYPE_ALIAS -> declarations.addDeclaration(reader, names, KotlinDeclaration.Kind.TYPE_ALIAS, emptyMap(), table)
                 else -> false
             }
         }
@@ -580,8 +659,9 @@ object KotlinMetadata {
      */
     private fun readConstructor(
         reader: ProtoReader,
-        names: JvmNameResolver,
+        names: NameResolver,
         scope: Map<Int, String>,
+        table: TypeTable,
     ): KotlinDeclaration {
         var flags = CONSTRUCTOR_FLAGS_DEFAULT
         val parameters = ArrayList<KotlinParameter>()
@@ -590,7 +670,7 @@ object KotlinMetadata {
         reader.forEachField { number, _ ->
             when (number) {
                 OLD_FLAGS -> { flags = reader.readInt(); true }
-                CONSTRUCTOR_VALUE_PARAMETER -> { parameters.add(readParameter(reader.readMessage(), names, scope)); true }
+                CONSTRUCTOR_VALUE_PARAMETER -> { parameters.add(readParameter(reader.readMessage(), names, scope, table)); true }
                 EXTENSION_SIGNATURE -> { signature = readMethodSignature(reader.readMessage(), names); true }
                 else -> false
             }
@@ -616,15 +696,21 @@ object KotlinMetadata {
     /** Reads one nested declaration message. Returns true, having consumed the field. */
     private fun MutableList<KotlinDeclaration>.addDeclaration(
         reader: ProtoReader,
-        names: JvmNameResolver,
+        names: NameResolver,
         kind: KotlinDeclaration.Kind,
         outerTypeParameters: Map<Int, String>,
+        table: TypeTable,
     ): Boolean {
         val message = reader.readBytes()
         // The declaration's OWN parameters shadow and extend the class's, so start from the outer scope,
         // and register every one of them before any type is decoded.
         val scope = HashMap(outerTypeParameters)
-        registerTypeParameterNames(message, FUNCTION_TYPE_PARAMETER, names, scope)
+        registerTypeParameterNames(
+            message,
+            if (kind == KotlinDeclaration.Kind.TYPE_ALIAS) TYPE_ALIAS_TYPE_PARAMETER else FUNCTION_TYPE_PARAMETER,
+            names,
+            scope,
+        )
 
         val nested = ProtoReader(message)
         val newFlagsField = when (kind) {
@@ -632,6 +718,23 @@ object KotlinMetadata {
             KotlinDeclaration.Kind.PROPERTY -> PROPERTY_FLAGS
             else -> -1
         }
+        // The `*_type_id` twins of the three type fields, by kind. -1 where the kind has none, which no
+        // field number can equal, so the branch is simply never taken.
+        val returnTypeIdField = when (kind) {
+            KotlinDeclaration.Kind.FUNCTION -> FUNCTION_RETURN_TYPE_ID
+            KotlinDeclaration.Kind.PROPERTY -> PROPERTY_RETURN_TYPE_ID
+            else -> -1
+        }
+        val receiverTypeIdField = when (kind) {
+            KotlinDeclaration.Kind.FUNCTION -> FUNCTION_RECEIVER_TYPE_ID
+            KotlinDeclaration.Kind.PROPERTY -> PROPERTY_RECEIVER_TYPE_ID
+            else -> -1
+        }
+        val isTypeAlias = kind == KotlinDeclaration.Kind.TYPE_ALIAS
+        val expandedTypeIdField = if (isTypeAlias) TYPE_ALIAS_EXPANDED_TYPE_ID else -1
+        val typeParameterField = if (isTypeAlias) TYPE_ALIAS_TYPE_PARAMETER else FUNCTION_TYPE_PARAMETER
+        val returnTypeField = if (isTypeAlias) -1 else RETURN_TYPE
+        val receiverTypeField = if (isTypeAlias) -1 else RECEIVER_TYPE
         var newFlags: Int? = null
         var oldFlags: Int? = null
         var nameId = -1
@@ -648,25 +751,28 @@ object KotlinMetadata {
                 newFlagsField -> { newFlags = nested.readInt(); true }
                 OLD_FLAGS -> { oldFlags = nested.readInt(); true }
                 NAME -> { nameId = nested.readInt(); true }
-                FUNCTION_TYPE_PARAMETER -> {
-                    typeParameters.add(readTypeParameter(nested.readMessage(), names, scope))
+                typeParameterField -> {
+                    typeParameters.add(readTypeParameter(nested.readMessage(), names, scope, table))
                     true
                 }
 
-                RETURN_TYPE -> { returnType = readType(nested.readMessage(), names, scope); true }
-                RECEIVER_TYPE -> { receiverType = readType(nested.readMessage(), names, scope); true }
+                returnTypeField -> { returnType = readType(nested.readMessage(), names, scope, table); true }
+                receiverTypeField -> { receiverType = readType(nested.readMessage(), names, scope, table); true }
+                returnTypeIdField -> { returnType = table.resolve(nested.readInt(), names, scope) ?: returnType; true }
+                receiverTypeIdField -> { receiverType = table.resolve(nested.readInt(), names, scope) ?: receiverType; true }
+                expandedTypeIdField -> { expandedType = table.resolve(nested.readInt(), names, scope) ?: expandedType; true }
                 // Field 6 means three different things. On a Function it is `value_parameter`, on a Property
                 // the SETTER's parameter, and on a TypeAlias the expanded type. Reading it the same way for
                 // all three puts a setter's argument into a property's parameter list and a type where a
                 // parameter was expected.
                 VALUE_PARAMETER -> when (kind) {
                     KotlinDeclaration.Kind.FUNCTION -> {
-                        parameters.add(readParameter(nested.readMessage(), names, scope))
+                        parameters.add(readParameter(nested.readMessage(), names, scope, table))
                         true
                     }
 
                     KotlinDeclaration.Kind.TYPE_ALIAS -> {
-                        expandedType = readType(nested.readMessage(), names, scope)
+                        expandedType = readType(nested.readMessage(), names, scope, table)
                         true
                     }
 
@@ -733,8 +839,9 @@ object KotlinMetadata {
      */
     private fun readTypeParameter(
         reader: ProtoReader,
-        names: JvmNameResolver,
+        names: NameResolver,
         scope: Map<Int, String>,
+        table: TypeTable,
     ): KotlinTypeParameter {
         var id = -1
         var nameId = -1
@@ -750,7 +857,12 @@ object KotlinMetadata {
                 }
 
                 TYPE_PARAM_UPPER_BOUND -> {
-                    upperBounds.add(readType(reader.readMessage(), names, scope))
+                    upperBounds.add(readType(reader.readMessage(), names, scope, table))
+                    true
+                }
+
+                TYPE_PARAM_UPPER_BOUND_ID -> {
+                    for (id in reader.readPackedInts()) table.resolve(id, names, scope)?.let(upperBounds::add)
                     true
                 }
 
@@ -767,8 +879,9 @@ object KotlinMetadata {
 
     private fun readParameter(
         reader: ProtoReader,
-        names: JvmNameResolver,
+        names: NameResolver,
         scope: Map<Int, String>,
+        table: TypeTable,
     ): KotlinParameter {
         var flags = 0
         var nameId = -1
@@ -778,9 +891,15 @@ object KotlinMetadata {
             when (number) {
                 PARAM_FLAGS -> { flags = reader.readInt(); true }
                 PARAM_NAME -> { nameId = reader.readInt(); true }
-                PARAM_TYPE -> { type = readType(reader.readMessage(), names, scope); true }
+                PARAM_TYPE -> { type = readType(reader.readMessage(), names, scope, table); true }
+                PARAM_TYPE_ID -> { type = table.resolve(reader.readInt(), names, scope) ?: type; true }
                 PARAM_VARARG_ELEMENT_TYPE -> {
-                    varargElementType = readType(reader.readMessage(), names, scope)
+                    varargElementType = readType(reader.readMessage(), names, scope, table)
+                    true
+                }
+
+                PARAM_VARARG_ELEMENT_TYPE_ID -> {
+                    varargElementType = table.resolve(reader.readInt(), names, scope) ?: varargElementType
                     true
                 }
 
@@ -804,7 +923,12 @@ object KotlinMetadata {
      * perfectly reasonable type that happens to be a different one, the sort of difference only an oracle
      * finds. So each candidate is collected and the precedence is applied deliberately.
      */
-    private fun readType(reader: ProtoReader, names: JvmNameResolver, scope: Map<Int, String>): KotlinType {
+    private fun readType(
+        reader: ProtoReader,
+        names: NameResolver,
+        scope: Map<Int, String>,
+        table: TypeTable,
+    ): KotlinType {
         var className: String? = null
         var classNameRaw: String? = null
         var aliasName: String? = null
@@ -834,7 +958,7 @@ object KotlinMetadata {
                 TYPE_PARAMETER_ID -> { parameterId = reader.readInt(); true }
                 TYPE_PARAMETER_NAME -> { parameterName = names.getString(reader.readInt()); true }
                 TYPE_NULLABLE -> { nullable = reader.readInt() != 0; true }
-                TYPE_ARGUMENT -> { arguments.add(readArgument(reader.readMessage(), names, scope)); true }
+                TYPE_ARGUMENT -> { arguments.add(readArgument(reader.readMessage(), names, scope, table)); true }
                 else -> false
             }
         }
@@ -868,15 +992,17 @@ object KotlinMetadata {
      */
     private fun readArgument(
         reader: ProtoReader,
-        names: JvmNameResolver,
+        names: NameResolver,
         scope: Map<Int, String>,
+        table: TypeTable,
     ): KotlinTypeArgument {
         var projection = KotlinVariance.INVARIANT.number
         var type: KotlinType? = null
         reader.forEachField { number, _ ->
             when (number) {
                 ARGUMENT_PROJECTION -> { projection = reader.readInt(); true }
-                ARGUMENT_TYPE -> { type = readType(reader.readMessage(), names, scope); true }
+                ARGUMENT_TYPE -> { type = readType(reader.readMessage(), names, scope, table); true }
+                ARGUMENT_TYPE_ID -> { type = table.resolve(reader.readInt(), names, scope) ?: type; true }
                 else -> false
             }
         }
@@ -888,7 +1014,7 @@ object KotlinMetadata {
      * An annotation's class, as the string table spells it: slashes between packages, dots between nested
      * names. That is the form a caller compares against, so it is not turned into a display name here.
      */
-    private fun readAnnotationClassName(reader: ProtoReader, names: JvmNameResolver): String? {
+    private fun readAnnotationClassName(reader: ProtoReader, names: NameResolver): String? {
         var id = -1
         reader.forEachField { number, _ ->
             if (number == ANNOTATION_ID) {
@@ -906,7 +1032,7 @@ object KotlinMetadata {
      * optional: the name is omitted when it matches the Kotlin one, and the descriptor when it is derivable.
      * So this returns the parts, and the caller supplies what is missing.
      */
-    private fun readMethodSignature(reader: ProtoReader, names: JvmNameResolver): JvmMemberSignature {
+    private fun readMethodSignature(reader: ProtoReader, names: NameResolver): JvmMemberSignature {
         var name: String? = null
         var descriptor: String? = null
         reader.forEachField { number, _ ->
@@ -934,7 +1060,7 @@ object KotlinMetadata {
      */
     private fun resolveMethodSignature(
         declared: JvmMemberSignature?,
-        names: JvmNameResolver,
+        names: NameResolver,
         fallbackName: String,
         parameterTypes: List<KotlinType?>,
         returnDescriptor: String?,
@@ -958,7 +1084,7 @@ object KotlinMetadata {
      */
     private fun readPropertySignatures(
         reader: ProtoReader,
-        names: JvmNameResolver,
+        names: NameResolver,
         propertyName: String,
         returnType: KotlinType?,
     ): KotlinPropertySignatures {

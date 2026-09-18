@@ -27,6 +27,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * Covers the on-device build wiring added for mobile assembly: [AndroidSdk.forDevice] (native tools

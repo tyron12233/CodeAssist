@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,6 +69,7 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.text.TextRange
+import dev.ide.ui.components.CircularProgressIndicator
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 

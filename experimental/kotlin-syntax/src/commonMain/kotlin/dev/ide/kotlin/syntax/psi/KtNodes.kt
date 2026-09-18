@@ -1,6 +1,8 @@
 package dev.ide.kotlin.syntax.psi
 
 import org.jetbrains.kotlin.kmp.lexer.KtTokens
+import org.jetbrains.kotlin.kmp.lexer.KDocTokens
+import org.jetbrains.kotlin.kmp.parser.KDocParseNodes
 import org.jetbrains.kotlin.kmp.parser.KtNodeTypes
 import org.jetbrains.kotlin.kmp.tree.LightNode
 
@@ -137,6 +139,13 @@ class KtContainerNodeForControlStructureBody internal constructor(
 
 internal fun createAddedPsi(session: KtTreeSession, node: LightNode): KtElement? =
     when (session.tree.getType(node)) {
+        // Doc-comment structure. These only ever appear in a doc comment's OWN tree (see KDoc.kt); in a file's
+        // tree the whole comment is a single DOC_COMMENT token.
+        KDocParseNodes.KDOC_SECTION -> KDocSection(session, node)
+        KDocParseNodes.KDOC_TAG -> KDocTag(session, node)
+        KDocParseNodes.KDOC_NAME -> KDocName(session, node)
+        KDocTokens.MARKDOWN_LINK -> KDocLink(session, node)
+
         KtNodeTypes.VALUE_ARGUMENT_NAME -> KtValueArgumentName(session, node)
         KtNodeTypes.ANNOTATION -> KtAnnotation(session, node)
         KtNodeTypes.ANNOTATION_TARGET -> KtAnnotationUseSiteTarget(session, node)

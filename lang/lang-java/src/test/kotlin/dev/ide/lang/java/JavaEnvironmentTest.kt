@@ -15,6 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import dev.ide.vfs.local.fileFor
 
 /**
  * Step 1–2 verification: the per-module [JavaEnvironment] resolves across project source files (via the

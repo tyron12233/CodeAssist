@@ -21,6 +21,7 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * The editor-facing half of AIDL support: the light classes an `.aidl` file will generate, contributed

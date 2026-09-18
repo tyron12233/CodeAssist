@@ -31,6 +31,12 @@ kotlin {
     iosArm64()
 
     sourceSets {
+        commonMain.dependencies {
+            // EngineCancellation installs its token as a coroutine context element on the JVM, so the
+            // primitive has to be nameable from common code even though only the JVM actual uses that path.
+            api(libs.kotlinx.coroutines.core)
+        }
+
         commonTest.dependencies {
             implementation(kotlin("test"))
         }

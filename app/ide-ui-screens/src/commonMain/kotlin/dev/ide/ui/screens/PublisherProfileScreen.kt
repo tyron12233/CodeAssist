@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,6 +34,7 @@ import dev.ide.ui.backend.UiPublisherProfile
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.components.Eyebrow
 import dev.ide.ui.components.FollowButton
+import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.StatFigure
 import dev.ide.ui.components.formatStars
 import dev.ide.ui.generated.resources.Res

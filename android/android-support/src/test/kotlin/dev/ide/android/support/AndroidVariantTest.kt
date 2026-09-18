@@ -13,6 +13,7 @@ import dev.ide.model.impl.ProjectModelStore
 import dev.ide.testkit.testEnv
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import dev.ide.model.impl.open
 
 class AndroidVariantTest {
 

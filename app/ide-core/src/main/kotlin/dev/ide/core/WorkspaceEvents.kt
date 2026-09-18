@@ -18,6 +18,7 @@ import dev.ide.vfs.FileMoved
 import dev.ide.vfs.VfsEvent
 import dev.ide.vfs.VfsListener
 import dev.ide.vfs.VfsTopics
+import dev.ide.vfs.local.fileFor
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.concurrent.atomic.AtomicLong

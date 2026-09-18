@@ -30,7 +30,6 @@ import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -78,6 +77,7 @@ import dev.ide.ui.backend.UiInsertionTarget
 import dev.ide.ui.backend.UiVectorGroup
 import dev.ide.ui.backend.UiVectorNode
 import dev.ide.ui.backend.UiVectorPath
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.editor.preview.decodeImageBytes
 import dev.ide.ui.editor.preview.drawCheckerboard

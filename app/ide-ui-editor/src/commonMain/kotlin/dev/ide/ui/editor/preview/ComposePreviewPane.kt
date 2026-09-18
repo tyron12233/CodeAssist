@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -43,6 +42,7 @@ import dev.ide.ui.ComposePreviewHost
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.components.CaDropdownMenu
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.loading
 import dev.ide.ui.generated.resources.preview_choose_preview

@@ -1,6 +1,7 @@
 package dev.ide.core
 
 import dev.ide.core.project.ProjectManager
+import dev.ide.model.impl.rootPath
 import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking

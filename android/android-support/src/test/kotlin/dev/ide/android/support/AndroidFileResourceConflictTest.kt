@@ -21,6 +21,7 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * End-to-end guard for the reported failure: a launcher icon present as BOTH `drawable/ic_launcher.png` and

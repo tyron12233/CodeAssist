@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -22,6 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiSignInPhase
+import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.PrimaryActionButton
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.generated.resources.Res

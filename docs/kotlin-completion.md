@@ -299,6 +299,66 @@ in-memory scan no longer happens in the wired (IDE) configuration; extension com
 empty while the index is still building (the same graceful-degrade contract as type-name completion).
 Verified by `KotlinCallableIndexTest`.
 
+## Where the code lives: the `commonMain` / `jvmMain` split
+
+`:lang-kotlin` is a Kotlin Multiplatform module, and the source-set boundary is the architecture rather
+than a packaging detail. Everything described above — parse, the symbol table, resolution, inference, flow
+analysis, completion, diagnostics, highlighting, folding, formatting — is `commonMain`, about 25,000 lines,
+and it compiles for `jvm`, `iosArm64` and `iosSimulatorArm64`. What stays in `jvmMain` is what names a real
+build or a real JVM:
+
+| `jvmMain` | why |
+|---|---|
+| `compile/` | drives the in-process K2 compiler |
+| `build/` | the `compileKotlin` build task |
+| `interp/` | the preview lowering, which feeds the on-device interpreter |
+| `analysis/` (the providers) | `:analysis-api`, which is typed by the project model |
+| `synthetic/KotlinSyntheticClassProvider` | asked about a `Module` of a `Workspace` |
+| `KotlinSourceAnalyzer`, `KotlinLanguageBackend` | the SPI adapters: they bind the editor to a `CompilationContext` |
+
+`KotlinSourceAnalyzer` is an adapter and little else. Navigation (go-to declaration / implementation / type /
+super), quick documentation and the import, implement-members and suspend-modifier quick fixes were members
+of it until it turned out that not one of them names a `CompilationContext`: they read a parse and ask the
+symbol service, both of which build for every target. They live in **`KotlinEditorFeatures`** (`commonMain`)
+now, and the analyzer keeps the entry points, delegating. A host supplies the four things the features cannot
+know: its per-file parse cache, the two freshness hooks (the cross-file overlay and the focal source, without
+which navigation only reaches saved code) and the diagnostics pass a quick fix is offered for.
+
+
+The rule is not "what happens to be portable" but **what names a project**. A language backend's editor half
+is a function from text and a classpath to symbols; only the adapter around it knows what a module is. The
+SPI was split the same way, so the half a backend's editor implements (`SourceAnalyzer`, the DOM, the
+completion and resolve model, `IndexQueries`) can be named from common code while `LanguageBackend`,
+`CompilationContext` and `IndexService` stay with the build.
+
+Four seams are `expect`/`actual`, and each is a real difference rather than a spelling one:
+
+- **`bundledStdlibJarPath`** — the JVM and ART hosts carry `kotlin-stdlib.jar` as a classpath resource and
+  extract it on demand, because the host runtime's own stdlib is a dex on device and no reader can open it.
+  There is no such resource on iOS, so the stdlib arrives as an ordinary declared classpath entry.
+- **`KotlinOptIn.scan`** (in `:lang-kotlin-index`) — the only decoder that needs annotation VALUES, since a
+  `@RequiresOptIn` marker is defined by its level. `:kotlin-classfile` reads annotation descriptors and skips
+  values, so the scan keeps its ASM implementation and the opt-in diagnostic is a JVM/ART feature. It answers
+  null elsewhere, which the caller already treats as "nothing decided".
+- **`isResourceExhaustion`** — the JVM has `VirtualMachineError`; Kotlin/Native traps on stack exhaustion and
+  never delivers a `Throwable`. The distinction matters because a failure that is the RUN's, not the code's,
+  must not be memoized.
+- **`ThreadLocalValue`** and **`ConcurrentMap`** (in `:model-api`) — the JVM actuals ARE `ThreadLocal` and
+  `ConcurrentHashMap`, so the editor's hot caches keep their lock-free reads and nothing about JVM cost
+  changes. Kotlin/Native has neither, so those are a lock-guarded map and a per-thread map keyed on the
+  holder.
+
+`BuiltinsReader` is the one piece that was ported rather than moved: `.kotlin_builtins` used to be decoded
+with the compiler's generated protobuf readers, and now goes through `:kotlin-classfile`. It is checked by a
+differential (`BuiltinsPortOracleTest`) that keeps the old implementation verbatim and compares every shape,
+member, signature and flag: 135 built-in types, 835 members and 16 intrinsics across the stdlib's eight
+fragments decode identically.
+
+`KotlinEditorOffTheJvmTest` runs on both the JVM and the iOS simulator
+(`./gradlew :lang-kotlin:iosSimulatorArm64Test`): it writes a two-file project to disk, walks it, resolves a
+type declared in the other file, completes its members after a `.`, and decodes a real `.kotlin_builtins`
+fragment. Compiling for a target says nothing about whether any of that actually runs there.
+
 ## Compilation
 
 Editor analysis is independent of code generation. Kotlin-to-bytecode compilation for the build is a

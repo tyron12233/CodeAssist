@@ -1,5 +1,7 @@
 package dev.ide.kotlin.classfile
 
+import dev.ide.platform.openFile
+
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull

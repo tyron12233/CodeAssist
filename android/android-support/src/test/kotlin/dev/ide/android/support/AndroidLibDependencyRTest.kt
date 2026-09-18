@@ -30,6 +30,8 @@ import java.util.zip.ZipOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
+import dev.ide.vfs.local.fileFor
 
 /**
  * A library module reading ANOTHER library module's resources. With non-transitive R classes an `android-lib`

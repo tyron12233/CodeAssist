@@ -285,7 +285,7 @@ fun BusyOverlay(visible: Boolean, label: String) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
                 ) {
-                    androidx.compose.material3.CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     androidx.compose.material3.Text(
                         label,
                         color = MaterialTheme.colorScheme.onSurface,

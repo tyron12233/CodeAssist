@@ -209,7 +209,16 @@ class KtBinaryExpression internal constructor(session: KtTreeSession, node: Ligh
 class KtIsExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
     val leftHandSide: KtExpression? get() = children.firstOrNull() as? KtExpression
     val typeReference: KtTypeReference? get() = firstChildOfType()
-    val isNegated: Boolean get() = hasChild(KtTokens.NOT_IS)
+
+    /**
+     * `!is` rather than `is`.
+     *
+     * The operator is NOT a direct child: the parser wraps it in an OPERATION_REFERENCE, so looking for a
+     * `NOT_IS` child answers false for every negated check, and a guard like `if (a !is Dog) return` reads as
+     * its own opposite. Upstream asks the operation reference the same way.
+     */
+    val isNegated: Boolean
+        get() = firstChildOfType<KtOperationReferenceExpression>()?.operationSignTokenType == KtTokens.NOT_IS
 }
 
 /** `a as B` / `a as? B`, mirroring `KtBinaryExpressionWithTypeRHS`. */
@@ -380,12 +389,18 @@ class KtWhenConditionWithExpression internal constructor(session: KtTreeSession,
 class KtWhenConditionInRange internal constructor(session: KtTreeSession, node: LightNode) : KtWhenCondition(session, node) {
     val rangeExpression: KtExpression?
         get() = childrenOfType<KtExpression>().lastOrNull { it !is KtOperationReferenceExpression }
-    val isNegated: Boolean get() = hasChild(KtTokens.NOT_IN)
+
+    /** `!in` rather than `in`; see [KtIsExpression.isNegated] for why the operator is not a direct child. */
+    val isNegated: Boolean
+        get() = firstChildOfType<KtOperationReferenceExpression>()?.operationSignTokenType == KtTokens.NOT_IN
 }
 
 class KtWhenConditionIsPattern internal constructor(session: KtTreeSession, node: LightNode) : KtWhenCondition(session, node) {
     val typeReference: KtTypeReference? get() = firstChildOfType()
-    val isNegated: Boolean get() = hasChild(KtTokens.NOT_IS)
+
+    /** `!is` rather than `is`; see [KtIsExpression.isNegated] for why the operator is not a direct child. */
+    val isNegated: Boolean get() = hasChild(KtTokens.NOT_IS) ||
+        firstChildOfType<KtOperationReferenceExpression>()?.operationSignTokenType == KtTokens.NOT_IS
 }
 
 class KtTryExpression internal constructor(session: KtTreeSession, node: LightNode) : KtExpression(session, node) {
@@ -418,7 +433,16 @@ abstract class KtLoopExpression internal constructor(session: KtTreeSession, nod
 
 class KtForExpression internal constructor(session: KtTreeSession, node: LightNode) : KtLoopExpression(session, node) {
     val loopParameter: KtParameter? get() = firstChildOfType()
-    val destructuringDeclaration: KtDestructuringDeclaration? get() = firstChildOfType()
+
+    /**
+     * `(k, v)` in `for ((k, v) in m)`.
+     *
+     * Through the loop parameter, not a direct child: the parser puts the destructuring INSIDE a
+     * VALUE_PARAMETER, so a direct-child lookup answers null and a destructured loop variable is invisible,
+     * which is how both entries lost their highlighting. Upstream reads it off the loop parameter too.
+     */
+    val destructuringDeclaration: KtDestructuringDeclaration?
+        get() = loopParameter?.destructuringDeclaration
     val loopRange: KtExpression? get() = child(KtNodeTypes.LOOP_RANGE)?.firstChildOfType()
     override val body: KtExpression? get() = child(KtNodeTypes.BODY)?.firstChildOfType()
 }

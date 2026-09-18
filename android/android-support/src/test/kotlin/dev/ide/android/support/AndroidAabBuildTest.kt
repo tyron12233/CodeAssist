@@ -25,6 +25,7 @@ import java.nio.file.Path
 import java.util.zip.ZipFile
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * Drives [AndroidBuildSystem] to a signed Android App Bundle (`.aab`) with the real toolchain: aapt2 proto

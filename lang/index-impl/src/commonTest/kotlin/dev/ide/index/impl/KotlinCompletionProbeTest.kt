@@ -27,9 +27,9 @@ import kotlin.test.assertTrue
  * agreeing, and the only way to find out is to run it.
  *
  * It is NOT the editor's completion. There is no caret, no scope, no resolution, no ranking against the
- * surrounding code — that lives in `:lang-kotlin`, which is still JVM-only. This is the DATA path under it:
- * given a prefix, what does the classpath offer. Everything a completion list is built from, and none of the
- * building.
+ * surrounding code — that lives in `:lang-kotlin`, and runs on every target too (see
+ * `KotlinEditorOffTheJvmTest`). This is the DATA path under it: given a prefix, what does the classpath
+ * offer. Everything a completion list is built from, and none of the building.
  */
 class KotlinCompletionProbeTest {
 

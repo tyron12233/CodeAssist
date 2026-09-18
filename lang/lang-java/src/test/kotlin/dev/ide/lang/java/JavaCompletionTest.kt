@@ -19,6 +19,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import dev.ide.vfs.local.fileFor
 
 /** Step-4 verification: member / name / type completion through the [JavaCompletion] contributor. */
 class JavaCompletionTest {

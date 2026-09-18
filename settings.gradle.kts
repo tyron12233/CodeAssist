@@ -130,6 +130,9 @@ include(
     // The platform-free core of the SPI: the symbol model, the DOM, VirtualFile and ContentHash.
     // Multiplatform, because a model that cannot be named from common code cannot be built there.
     ":model-api",
+    // The built-in project templates. In the framework rather than the host because a template names no
+    // platform (a model transaction and a file write), and the iOS app needs the same ones.
+    ":project-templates",
     // Reading a classpath with no JVM: jars, `.class` files and the Kotlin metadata inside them. Graduated
     // out of `experimental` when :lang-kotlin-index started decoding through it instead of through ASM,
     // kotlin-metadata-jvm and java.util.zip, which is what it was written to replace.
@@ -209,7 +212,7 @@ val layers = mapOf(
     // The framework's foundation: services, the virtual file system, the project/module model.
     "platform" to listOf(
         "model-api", "platform-core", "platform-json", "vfs-api", "project-model-api",
-        "project-model-impl",
+        "project-model-impl", "project-templates",
     ),
     // Everything that reads source: the language SPI, indexes, analysis, the per-language backends,
     // the compiler/PSI hosts they parse against, and the block (projectional) editor over them.

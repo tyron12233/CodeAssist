@@ -26,6 +26,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
+import dev.ide.vfs.local.fileFor
 
 /**
  * Proves a custom-view attribute from an external AAR resolves through aapt2. The regression: a Maven

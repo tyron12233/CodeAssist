@@ -21,6 +21,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * The synthetic `R` an Android module resolves must emit as compilable Java — specifically its nested

@@ -68,6 +68,20 @@ object CaIcons {
     val caretRight = build("caret-right", f("M10 7l5 5-5 5z"))
     val caretDown = build("caret-down", f("M7 10l5 5 5-5z"))
     val close = build("close", s("M6 6l12 12M18 6L6 18"))
+
+    /**
+     * Dismiss the soft keyboard: a keyboard with a chevron pointing down out of it.
+     *
+     * The keys are drawn as three short strokes rather than individual rects — at the 18dp the symbol bar
+     * renders icons at, separate keycaps turn into a grey smudge, while three dashes still read as a keyboard.
+     */
+    val keyboardHide = build(
+        "keyboard-hide",
+        roundRect(3f, 4f, 18f, 11f, 2f),
+        s("M7 8h2M11 8h2M15 8h2"),
+        s("M7.5 11.5h9"),
+        s("M9 18l3 3 3-3"),
+    )
     val check = build("check", s("M5 12.5l4.5 4.5L19 6.5"))
     val plus = build("plus", s("M12 5v14M5 12h14"))
     val minus = build("minus", s("M5 12h14"))

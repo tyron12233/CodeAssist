@@ -82,7 +82,6 @@ import dev.ide.core.perf.MEM_SAMPLE_INTERVAL_MS
 import dev.ide.core.perf.MemSample
 import dev.ide.core.perf.PeakHeap
 import dev.ide.core.project.SampleProject
-import dev.ide.core.project.ScaffoldImpl
 import dev.ide.core.sdk.SdkManagerService
 import dev.ide.core.sdk.SwingApiStubs
 import dev.ide.core.services.AndroidResourceService
@@ -109,8 +108,6 @@ import dev.ide.core.sync.UnrecognizedProjectMarker
 import dev.ide.core.templates.CalculatorSampleTemplate
 import dev.ide.core.templates.JavaConsoleAppTemplate
 import dev.ide.core.templates.JavaLibraryTemplate
-import dev.ide.core.templates.KotlinConsoleAppTemplate
-import dev.ide.core.templates.KotlinLibraryTemplate
 import dev.ide.core.templates.NotesSampleTemplate
 import dev.ide.core.templates.WeatherSampleTemplate
 import dev.ide.decompiler.Decompiler
@@ -213,6 +210,8 @@ import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
 import dev.ide.model.FacetCodecRegistry
+import dev.ide.model.impl.StoreScaffold
+import dev.ide.model.impl.rootPath
 import dev.ide.plugin.editor.EditorDecorationContext
 import dev.ide.plugin.editor.EditorDecorations
 import dev.ide.plugin.impl.EditorDecorationCollector
@@ -223,6 +222,7 @@ import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
 import dev.ide.model.LibraryRef
 import dev.ide.model.MavenClasspath
+import dev.ide.model.dedupeJarsForAndroidDex
 import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
@@ -278,6 +278,7 @@ import dev.ide.ui.backend.IndexWorkState
 import dev.ide.ui.backend.IndexerUiStat
 import dev.ide.ui.backend.PreviewProgress
 import dev.ide.vfs.VirtualFile
+import dev.ide.vfs.local.fileFor
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -303,6 +304,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import dev.ide.model.impl.open
 
 /**
  * The UI-agnostic façade that wires the whole framework together: platform-core (extension registry,
@@ -3435,7 +3437,7 @@ class IdeServices private constructor(
         // the SAME way the build does — an external lib desugars against the external set alone. A single combined
         // universe re-keys the cache tag below API 26 (or with core-library desugaring), so the build's buckets are
         // missed and the gate never flips after a successful prepare build.
-        fun androidDexJars(paths: List<Path>) = MavenClasspath.dedupeForAndroidDex(
+        fun androidDexJars(paths: List<Path>) = dedupeJarsForAndroidDex(
             paths.filter { Files.exists(it) && it.toString().endsWith(".jar") }.distinct()
         )
 
@@ -3999,7 +4001,7 @@ class IdeServices private constructor(
             // same library at two versions, and the bundled kotlin-stdlib (a `.platform/…` path) collides with a
             // Maven kotlin-stdlib the project resolves — either makes D8 fail with "Type … is defined multiple
             // times". (KMP `-android`/`-jvm` no longer collide here: the resolver selects one variant up front.)
-            val deps = MavenClasspath.dedupeForAndroidDex(
+            val deps = dedupeJarsForAndroidDex(
                 modules().flatMap { m ->
                     runCatching {
                         ModuleCompilationContext.create(
@@ -4456,7 +4458,7 @@ class IdeServices private constructor(
          * returning, so this leaks nothing.
          */
         fun seedDemo(root: Path) {
-            if (ModelPersistence.exists(root)) return
+            if (ModelPersistence.exists(root.toString())) return
             Files.createDirectories(root)
             val env = ApplicationEnvironment()
             val (platform, store) = openStore(root, env)
@@ -4615,7 +4617,7 @@ class IdeServices private constructor(
             val template = ProjectTemplateRegistry(platform.extensions).byId(TemplateId(templateId))
                 ?: error("Unknown project template '$templateId'")
             val templateArgs = TemplateArgs(args)
-            template.generate(ScaffoldImpl(store, languageLevel), templateArgs)
+            template.generate(StoreScaffold(store, languageLevel), templateArgs)
             store.save()
             val services = IdeServices(
                 platform,

@@ -28,11 +28,13 @@ import dev.ide.model.impl.ProjectModel
 import dev.ide.testkit.TestJars
 import dev.ide.testkit.testEnv
 import dev.ide.testkit.writeSource
+import dev.ide.vfs.local.fileFor
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * The Android pipeline with a mixed Kotlin/Java app: `compileKotlin` (K2, against `android.jar` as the boot

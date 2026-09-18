@@ -33,6 +33,8 @@ kotlin {
             // The Ui* DTOs this maps onto. `api`, because every function here returns one.
             api(project(":ide-ui-api"))
             implementation(libs.kotlinx.coroutines.core)
+            // The process-wide IO dispatcher `storeIo` delegates to on iOS.
+            implementation(project(":model-api"))
         }
 
         commonTest.dependencies {

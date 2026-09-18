@@ -3,24 +3,15 @@ package dev.ide.core.project
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
-import dev.ide.model.FacetTemplate
 import dev.ide.model.LanguageLevel
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
 import dev.ide.model.ModuleType
 import dev.ide.model.SourceSetTemplate
 import dev.ide.model.impl.ProjectModelStore
+import dev.ide.model.impl.rootPath
 import java.nio.file.Files
 import kotlin.io.path.writeText
-
-/** The Java module type the demo uses (real ones ship in a `java-support` plugin). */
-object JavaLibModuleType : ModuleType {
-    override val id = "java-lib"
-    override val displayName = "Java Library"
-    override fun defaultSourceSets(): List<SourceSetTemplate> = emptyList()
-    override fun defaultFacets(): List<FacetTemplate> = emptyList()
-    override fun supportedBuildSystems(): Set<BuildSystemId> = setOf(BuildSystemId.NATIVE)
-}
 
 /**
  * Generates a small multi-module Java project for testing the IDE: `app → util → core` (api-exported),

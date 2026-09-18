@@ -33,6 +33,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * Build-at-scale regression suite (opt-in: `./gradlew :jvm-build:regressionTest`).

@@ -30,6 +30,8 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
+import dev.ide.vfs.local.fileFor
 
 /**
  * Proves the native Android pipeline is library-aware. The app depends on a plain JAR and an AAR; the

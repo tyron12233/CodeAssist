@@ -41,7 +41,7 @@ class CrossPackageSameNameDispatchTest {
             fun both(): Int = BookmarkButton(isBookmarked = false, onClick = {}) * 10 + other()
         """.trimIndent()
         dir.writeSource("Use.kt", entry, trim = false)
-        val service = KotlinSymbolService(listOf(DiskFile(dir)), listOf(stdlibJarPath()))
+        val service = KotlinSymbolService(listOf(DiskFile(dir)), listOf(stdlibJarPath().toString()))
         val kt = KotlinParserHost.parse("Use.kt", entry)
         val model = KotlinPreviewLowering(service).crossFileModel(KotlinParsedFile(kt, DiskFile(dir.resolve("Use.kt")), 0))
         val interp = Interpreter(model.program, classes = model.classes)

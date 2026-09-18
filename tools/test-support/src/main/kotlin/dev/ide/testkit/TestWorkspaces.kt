@@ -8,6 +8,7 @@ import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.SourceSetTemplate
 import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
+import dev.ide.model.impl.open
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
 import java.nio.file.Path

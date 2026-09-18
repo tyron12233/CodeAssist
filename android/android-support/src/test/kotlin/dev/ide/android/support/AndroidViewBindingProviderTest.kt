@@ -17,6 +17,7 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * The editor-facing ViewBinding provider: gated on `buildFeatures { viewBinding }`, it surfaces one synthetic

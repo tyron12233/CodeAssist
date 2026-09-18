@@ -5,6 +5,7 @@ import dev.ide.core.IdeServices
 import dev.ide.core.LoweredComposePreview
 import dev.ide.build.RunCapture
 import dev.ide.lang.hints.InlayHintKind
+import dev.ide.model.impl.rootPath
 import dev.ide.ui.backend.LearnService
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiExerciseResult

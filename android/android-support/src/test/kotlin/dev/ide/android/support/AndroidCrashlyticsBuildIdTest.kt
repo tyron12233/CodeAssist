@@ -30,6 +30,8 @@ import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
+import dev.ide.vfs.local.fileFor
 
 /**
  * Crashlytics needs a *Gradle-plugin half* CodeAssist has to supply itself: its runtime reads a build-id

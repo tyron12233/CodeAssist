@@ -15,6 +15,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.ide.vfs.local.fileFor
 
 /** Step-3 vertical slice: resolution/typing/structure/scope through the [JavaSourceAnalyzer] SPI. */
 class JavaResolutionTest {

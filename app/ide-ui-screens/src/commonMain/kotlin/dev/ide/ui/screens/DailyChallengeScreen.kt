@@ -27,7 +27,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +44,7 @@ import dev.ide.ui.backend.UiChallengeDay
 import dev.ide.ui.backend.UiChallengeHistoryEntry
 import dev.ide.ui.backend.UiChallengeRank
 import dev.ide.ui.components.AdSlot
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.platform.nowMillis
 import dev.ide.ui.theme.Ca

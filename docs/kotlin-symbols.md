@@ -97,7 +97,12 @@ one, this fails and says why.
 ## What this says about the port
 
 Both halves of `:lang-kotlin-index`'s symbol layer port with no loss: the rules move across unchanged, and
-the only structural difference is that ASM's push API becomes a pull walk. What remains is not decoding.
+the only structural difference is that ASM's push API becomes a pull walk. What remained was not decoding:
 `:language-api`'s `TypeRef` / `SymbolKind` / `Modifier` and `:index-api`'s `IndexExtension` are the model all
-of this would be read INTO, and both are JVM-only modules; making them reachable from common code is a change
-to production structure.
+of this is read INTO, and both were JVM-only modules.
+
+**That is now done.** The symbol model and the half of the index SPI an extension implements moved to
+`:model-api`, `:language-api` split into the SPI a backend's editor implements and the SPI that binds it to a
+build, and `:lang-kotlin-index` and `:lang-kotlin` are both multiplatform — see the split in
+[kotlin-completion.md](kotlin-completion.md). This module stays as the probe that proved it was possible, and
+as the differential that says the rewrite still agrees with ASM.

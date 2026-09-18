@@ -1,0 +1,37 @@
+package dev.ide.model.impl
+
+import dev.ide.testkit.withTempDir
+import java.nio.file.Files
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+class CrashSafeWriteTest {
+
+    @Test
+    fun writesOverwritesAndLeavesNoTempFiles() {
+        withTempDir("crashsafe") { dir ->
+            val target = dir.resolve("nested/workspace.json")
+            CrashSafeWriter.write(target.toString(), "v1")
+            assertEquals("v1", Files.readString(target))
+
+            CrashSafeWriter.write(target.toString(), "v2") // overwrite must be atomic-replace
+            assertEquals("v2", Files.readString(target))
+
+            val leftovers = Files.list(target.parent).use { s ->
+                s.filter { it.fileName.toString().contains(".tmp.") }.toList()
+            }
+            assertTrue(leftovers.isEmpty(), "leftover temp files: $leftovers")
+        }
+    }
+
+    @Test
+    fun createsMissingParentDirectories() {
+        withTempDir("crashsafe2") { dir ->
+            val target = dir.resolve("a/b/c.toml")
+            CrashSafeWriter.write(target.toString(), "hi")
+            assertTrue(Files.exists(target))
+            assertEquals("hi", Files.readString(target))
+        }
+    }
+}

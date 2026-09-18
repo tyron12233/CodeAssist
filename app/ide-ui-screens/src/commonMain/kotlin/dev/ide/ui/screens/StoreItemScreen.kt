@@ -70,6 +70,7 @@ import dev.ide.ui.backend.UiStoreItemKind
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.CodeMotifColors
 import dev.ide.ui.components.Eyebrow
+import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.MonoChip
 import dev.ide.ui.components.PillChip
 import dev.ide.ui.components.PrimaryActionButton
@@ -114,7 +115,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.ImageBitmap

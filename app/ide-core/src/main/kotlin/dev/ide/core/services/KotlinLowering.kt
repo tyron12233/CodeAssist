@@ -14,6 +14,7 @@ import dev.ide.lang.kotlin.interp.reachableSourceFunctions
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.model.Module
 import dev.ide.vfs.VirtualFile
+import dev.ide.vfs.local.fileFor
 import java.nio.file.Paths
 
 /**

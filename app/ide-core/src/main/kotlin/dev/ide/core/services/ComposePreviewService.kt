@@ -10,7 +10,9 @@ import dev.ide.lang.kotlin.KotlinSourceAnalyzer
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
 import dev.ide.model.Module
+import dev.ide.model.impl.rootPath
 import dev.ide.vfs.VirtualFile
+import dev.ide.vfs.local.fileFor
 import java.nio.file.Path
 
 /**

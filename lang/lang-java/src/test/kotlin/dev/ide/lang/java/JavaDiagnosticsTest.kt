@@ -12,6 +12,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.vfs.local.fileFor
 
 /** Step-B verification: resolution-derived semantic diagnostics (unresolved references), the gap that made a
  *  lang-java editor flip a diagnostics regression. Surfaced via `JavaParsedFile.diagnostics` — the channel the

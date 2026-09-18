@@ -3,11 +3,7 @@
 package dev.ide.platform.log
 
 import kotlinx.cinterop.ExperimentalForeignApi
-import platform.Foundation.NSDate
 import platform.Foundation.NSThread
-import platform.Foundation.timeIntervalSince1970
-
-internal actual fun currentTimeMillis(): Long = (NSDate().timeIntervalSince1970 * 1000).toLong()
 
 /**
  * The thread's own name where it has one, and its role otherwise.

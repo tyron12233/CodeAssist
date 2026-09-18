@@ -19,6 +19,7 @@ import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * A `minifyEnabled` release build dexes via the R8 path: the DAG runs `minifyReleaseWithR8` (replacing the

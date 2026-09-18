@@ -1,0 +1,3340 @@
+package dev.ide.lang.kotlin.interp
+
+import dev.ide.kotlin.syntax.psi.KtArrayAccessExpression
+import dev.ide.kotlin.syntax.psi.KtBinaryExpression
+import dev.ide.kotlin.syntax.psi.KtBinaryExpressionWithTypeRHS
+import dev.ide.kotlin.syntax.psi.KtBlockExpression
+import dev.ide.kotlin.syntax.psi.KtBreakExpression
+import dev.ide.kotlin.syntax.psi.KtCallExpression
+import dev.ide.kotlin.syntax.psi.KtCallableReferenceExpression
+import dev.ide.kotlin.syntax.psi.KtClass
+import dev.ide.kotlin.syntax.psi.KtClassLiteralExpression
+import dev.ide.kotlin.syntax.psi.KtClassOrObject
+import dev.ide.kotlin.syntax.psi.KtConstantExpression
+import dev.ide.kotlin.syntax.psi.KtContinueExpression
+import dev.ide.kotlin.syntax.psi.KtDeclaration
+import dev.ide.kotlin.syntax.psi.KtDelegatedSuperTypeEntry
+import dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration
+import dev.ide.kotlin.syntax.psi.KtDoWhileExpression
+import dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression
+import dev.ide.kotlin.syntax.psi.KtElement
+import dev.ide.kotlin.syntax.psi.KtEnumEntry
+import dev.ide.kotlin.syntax.psi.KtEscapeStringTemplateEntry
+import dev.ide.kotlin.syntax.psi.KtExpression
+import dev.ide.kotlin.syntax.psi.KtFile
+import dev.ide.kotlin.syntax.psi.KtForExpression
+import dev.ide.kotlin.syntax.psi.KtIfExpression
+import dev.ide.kotlin.syntax.psi.KtIsExpression
+import dev.ide.kotlin.syntax.psi.KtLabeledExpression
+import dev.ide.kotlin.syntax.psi.KtLambdaArgument
+import dev.ide.kotlin.syntax.psi.KtLambdaExpression
+import dev.ide.kotlin.syntax.psi.KtLiteralStringTemplateEntry
+import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
+import dev.ide.kotlin.syntax.psi.KtNamedFunction
+import dev.ide.kotlin.syntax.psi.KtObjectDeclaration
+import dev.ide.kotlin.syntax.psi.KtObjectLiteralExpression
+import dev.ide.kotlin.syntax.psi.KtParameter
+import dev.ide.kotlin.syntax.psi.KtParenthesizedExpression
+import dev.ide.kotlin.syntax.psi.KtPostfixExpression
+import dev.ide.kotlin.syntax.psi.KtPrefixExpression
+import dev.ide.kotlin.syntax.psi.KtProperty
+import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
+import dev.ide.kotlin.syntax.psi.KtReturnExpression
+import dev.ide.kotlin.syntax.psi.KtSafeQualifiedExpression
+import dev.ide.kotlin.syntax.psi.KtSecondaryConstructor
+import dev.ide.kotlin.syntax.psi.KtStringTemplateExpression
+import dev.ide.kotlin.syntax.psi.KtSuperExpression
+import dev.ide.kotlin.syntax.psi.KtSuperTypeCallEntry
+import dev.ide.kotlin.syntax.psi.KtThisExpression
+import dev.ide.kotlin.syntax.psi.KtThrowExpression
+import dev.ide.kotlin.syntax.psi.KtTokens
+import dev.ide.kotlin.syntax.psi.KtTryExpression
+import dev.ide.kotlin.syntax.psi.KtUnaryExpression
+import dev.ide.kotlin.syntax.psi.KtValueArgument
+import dev.ide.kotlin.syntax.psi.KtWhenConditionInRange
+import dev.ide.kotlin.syntax.psi.KtWhenConditionIsPattern
+import dev.ide.kotlin.syntax.psi.KtWhenConditionWithExpression
+import dev.ide.kotlin.syntax.psi.KtWhenEntry
+import dev.ide.kotlin.syntax.psi.KtWhenExpression
+import dev.ide.kotlin.syntax.psi.KtWhileExpression
+import dev.ide.kotlin.syntax.psi.KtWhileExpressionBase
+import dev.ide.kotlin.syntax.psi.collectDescendantsOfType
+import dev.ide.lang.kotlin.parse.KotlinParsedFile
+import dev.ide.lang.kotlin.resolve.*
+import dev.ide.lang.kotlin.symbols.DefaultImports
+import dev.ide.lang.kotlin.symbols.FileContext
+import dev.ide.lang.kotlin.symbols.KotlinSymbol
+import dev.ide.lang.kotlin.symbols.KotlinSymbolService
+import dev.ide.lang.kotlin.symbols.KotlinType
+import dev.ide.lang.resolve.Modifier
+import dev.ide.lang.resolve.SymbolKind
+
+/**
+ * Lowers a Kotlin function body to a [ResolvedTree] (see `docs/compose-interpreter.md`) — the **sound**
+ * resolution the interpreter needs, kept totally separate from the editor's best-effort `KotlinResolver`
+ * (which this reuses only for type inference and candidate enumeration).
+ *
+ * Skeleton scope (v0): constants, locals/params, `if`, `return`, local `val`/`var`, blocks, member &
+ * top-level calls with **exact** callee selection (single candidate, or a unique arg-type match — an
+ * ambiguous overload is rejected, never guessed), property reads, the `+ - * / %` operator conventions
+ * desugared to calls, and `=` assignment. Everything else lowers to [RNode.Unsupported] with a reason, so
+ * the contract stays total. Each gap is also recorded as a [LoweringDiagnostic].
+ *
+ * Known stubs (intentional, for follow-up): exact JVM owner/descriptor for binary callees
+ * ([ResolvedCallable.Library.descriptorPrecise] = false), `@Composable` detection, smart-casts, string
+ * templates, `when`, loops, lambdas, and full type-directed overload resolution.
+ */
+class KotlinTreeResolver(
+    private val ktFile: KtFile,
+    parsed: KotlinParsedFile,
+    private val service: KotlinSymbolService,
+    /** Memo caches shared with the rest of the keystroke (the analyzer's diagnostics resolver), so the lowerer
+     *  reuses inference/overload work already done for this snapshot instead of recomputing it cold. Null → a
+     *  private cache (the standalone case, e.g. tests). See [dev.ide.lang.kotlin.resolve.KotlinResolverCaches]. */
+    caches: dev.ide.lang.kotlin.resolve.KotlinResolverCaches? = null,
+) {
+    private val resolver =
+        if (caches != null) KotlinResolver(ktFile, parsed, service, caches) else KotlinResolver(ktFile, parsed, service)
+
+    private val scopes = ArrayDeque<MutableMap<String, Binding>>()
+    private var slotCounter = 0
+    private val diagnostics = ArrayList<LoweringDiagnostic>()
+
+    /** Anonymous-object literals (`object : Foo { … }`) discovered while lowering function/member bodies. Each
+     *  is materialized as its own synthesized [ResolvedClass] (name `<anonymous>$N`) and appended to the file's
+     *  class list by [lowerClasses], so the interpreter can construct it. Populated by [objectLiteralNode]. */
+    private val anonymousClasses = ArrayList<ResolvedClass>()
+    private var anonCounter = 0
+
+    /** High-water mark into the anonymous-class list, so a per-declaration lowering (the lazy preview cache)
+     *  can attribute the anonymous classes [anonymousClassesSince] a declaration's lowering synthesized — they
+     *  must travel WITH that declaration into the preview model, or its `object : Foo {}` constructor call has
+     *  no class to build. */
+    fun anonymousClassMark(): Int = anonymousClasses.size
+
+    /** The anonymous classes synthesized since [mark] (see [anonymousClassMark]). */
+    fun anonymousClassesSince(mark: Int): List<ResolvedClass> =
+        if (anonymousClasses.size <= mark) emptyList() else ArrayList(anonymousClasses.subList(mark, anonymousClasses.size))
+
+    /** The implicit `this` receivers of the enclosing receiver-lambdas (`RowScope.() -> Unit` content slots),
+     *  each bound to the slot the scope instance arrives in at runtime — so a member extension of the scope
+     *  (`RowScope.weight`) can dispatch onto it, and a bare extension call can use it as its extension receiver. */
+    /** [label] is the name a `this@label` can use to target this receiver: for a receiver lambda, the callee it
+     *  is an argument to (`SharedTransitionLayout { }` → "SharedTransitionLayout") or an explicit `label@ { }`;
+     *  for an extension function/property receiver, the declaration's name. Null when none applies. */
+    private data class ReceiverScope(val slot: SlotId, val type: KotlinType, val label: String? = null)
+    private val receiverScopes = ArrayDeque<ReceiverScope>()
+
+    /** A member function's signature (arity + parameter names), used to synthesize a [ResolvedCallable.Source]
+     *  for a bare/`this`-qualified call to a member of the enclosing class. */
+    private data class MethodSig(val arity: Int, val paramNames: List<String>)
+
+    /** The class whose body is being lowered — so a bare member access (`id`, `compute()`) and an explicit
+     *  `this`/`this.member` resolve against it. [thisSlot] is the slot the receiver object is bound to at
+     *  runtime (always slot 0; the receiver is allocated before any param). */
+    private data class ClassContext(
+        val thisSlot: SlotId,
+        val fqn: String,
+        val propertyNames: Set<String>,
+        val methods: Map<String, List<MethodSig>>,
+    )
+    private val classStack = ArrayDeque<ClassContext>()
+
+    /** The type-parameter names of the function currently being lowered (`fun <reified T> foo()` → `["T"]`).
+     *  A `T::class` / `x is T` / `x as T` in the body references one of these; a nested call `bar<T>()` passing
+     *  `T` as a type argument is a passthrough re-bound from the caller's frame. Reset per top-level lowering
+     *  ([reset]); set in [lowerFunction]. Reified type params are the only ones that can appear in `is`/`as`/
+     *  `::class`, so this set is effectively "the reified params in scope." */
+    private var currentTypeParams: List<String> = emptyList()
+
+    private fun thisRef(ctx: ClassContext, e: KtElement? = null): RNode =
+        RNode.Name(Binding.Local(ctx.thisSlot, "this", mutable = false), e?.let { span(it) } ?: SourceSpan(0, 0))
+
+    private fun isThisReceiver(node: RNode?, ctx: ClassContext?): Boolean =
+        ctx != null && node is RNode.Name && (node.binding as? Binding.Local)?.slot == ctx.thisSlot
+
+    /** A lightweight index of the file's source types, so a member call on a source-typed receiver the editor
+     *  resolver can't resolve — a synthesized data-class member (`toString`/`copy`/`componentN`), a companion
+     *  member reached through the class name, or an enum-entry member — still lowers to a [DispatchKind.MEMBER]
+     *  [ResolvedCallable.Source] for the interpreter. */
+    private data class FileClassInfo(
+        val fqn: String,
+        val simpleName: String,
+        val flavor: ClassFlavor,
+        val isData: Boolean,
+        val propertyNames: Set<String>,
+        val methodArities: Set<String>,
+        val companionMethodArities: Set<String>,
+        val enumEntryNames: Set<String>,
+        /** Direct supertype simple names (keys into the file-class index for inherited-member walks). */
+        val supertypeSimpleNames: List<String>,
+        /** The primary constructor's value-parameter count (0 for a no-arg / primaryless class) — the arity of a
+         *  `::Type` constructor reference. */
+        val primaryArity: Int = 0,
+        /** File context of the declaring file, for resolving this type's supertype simple names cross-file. Null
+         *  for a same-file entry (its supertypes resolve against the file being lowered, [resolver.fileContext]);
+         *  set for a whole-project entry synthesized by [crossFileClassInfo] (resolve against ITS own file). */
+        val ctx: FileContext? = null,
+    ) {
+        /** Whether `name(arity args)` is a member declared directly on this type (or a companion member via the
+         *  class name, an enum static, or a data-class generated member) — NOT counting inherited ones, which
+         *  the resolver checks via [acceptsSourceMember]. */
+        fun declaresOrSynthesizes(name: String, arity: Int): Boolean {
+            if ("$name/$arity" in methodArities || "$name/$arity" in companionMethodArities) return true
+            if (flavor == ClassFlavor.ENUM && ((name == "values" && arity == 0) || (name == "valueOf" && arity == 1))) return true
+            if (!isData) return false
+            return (name == "toString" && arity == 0) || (name == "hashCode" && arity == 0) ||
+                (name == "equals" && arity == 1) || name == "copy" ||
+                (arity == 0 && Regex("component\\d+").matches(name))
+        }
+    }
+
+    private val fileClasses: Map<String, FileClassInfo> by lazy { buildFileClassIndex() }
+
+    private fun buildFileClassIndex(): Map<String, FileClassInfo> {
+        val out = LinkedHashMap<String, FileClassInfo>()
+        fun visit(decl: KtClassOrObject) {
+            if (decl is KtEnumEntry) return
+            val simple = decl.name
+            val ktClass = decl as? KtClass
+            val flavor = when {
+                decl is KtObjectDeclaration && decl.isCompanion() -> ClassFlavor.COMPANION
+                decl is KtObjectDeclaration -> ClassFlavor.OBJECT
+                ktClass?.isEnum() == true -> ClassFlavor.ENUM
+                ktClass?.isInterface() == true -> ClassFlavor.INTERFACE
+                else -> ClassFlavor.CLASS
+            }
+            if (simple != null) {
+                fun arities(c: KtClassOrObject) = c.declarations.filterIsInstance<KtNamedFunction>()
+                    .mapNotNull { f -> f.name?.let { "$it/${f.valueParameters.size}" } }.toSet()
+                val props = buildSet {
+                    decl.primaryConstructorParameters.filter { it.hasValOrVar() }.forEach { it.name?.let(::add) }
+                    decl.declarations.filterIsInstance<KtProperty>().forEach { it.name?.let(::add) }
+                }
+                val companion = decl.declarations.filterIsInstance<KtObjectDeclaration>().firstOrNull { it.isCompanion() }
+                val entries = if (flavor == ClassFlavor.ENUM)
+                    decl.declarations.filterIsInstance<KtEnumEntry>().mapNotNull { it.name }.toSet() else emptySet()
+                val supers = decl.superTypeListEntries.mapNotNull {
+                    it.typeReference?.text?.substringBefore('<')?.trim()?.substringAfterLast('.')?.takeIf { s -> s.isNotEmpty() }
+                }
+                out[simple] = FileClassInfo(
+                    qualifiedNameOf(simple, decl), simple, flavor, decl.isData(),
+                    props, arities(decl), companion?.let { arities(it) } ?: emptySet(), entries, supers,
+                    primaryArity = decl.primaryConstructorParameters.size,
+                )
+            }
+            decl.declarations.filterIsInstance<KtClassOrObject>().forEach { visit(it) }
+        }
+        ktFile.declarations.filterIsInstance<KtClassOrObject>().forEach { visit(it) }
+        return out
+    }
+
+    /** Whether `name(arity)` is callable on an instance of [info] — declared/synthesized on it OR inherited
+     *  from a source supertype (so a subclass call to an inherited method lowers to a source MEMBER call). */
+    private fun acceptsSourceMember(info: FileClassInfo, name: String, arity: Int, seen: MutableSet<String> = HashSet()): Boolean {
+        if (!seen.add(info.simpleName)) return false
+        if (info.declaresOrSynthesizes(name, arity)) return true
+        return info.supertypeSimpleNames.any { sup -> supertypeInfo(sup, info)?.let { acceptsSourceMember(it, name, arity, seen) } == true }
+    }
+
+    /** The property names and method signatures an instance of [info] exposes including those inherited from
+     *  source supertypes — the members a method body can reference by bare name / implicit `this`. */
+    private fun inheritedMembers(info: FileClassInfo, seen: MutableSet<String> = HashSet()): Pair<Set<String>, Map<String, List<MethodSig>>> {
+        if (!seen.add(info.simpleName)) return emptySet<String>() to emptyMap()
+        val props = info.propertyNames.toMutableSet()
+        val methods = HashMap<String, MutableList<MethodSig>>()
+        info.methodArities.forEach { key ->
+            val name = key.substringBeforeLast('/'); val arity = key.substringAfterLast('/').toIntOrNull() ?: 0
+            methods.getOrPut(name) { ArrayList() }.add(MethodSig(arity, emptyList()))
+        }
+        for (sup in info.supertypeSimpleNames) {
+            val si = supertypeInfo(sup, info) ?: continue
+            val (sp, sm) = inheritedMembers(si, seen)
+            props += sp
+            sm.forEach { (n, sigs) -> methods.getOrPut(n) { ArrayList() }.addAll(sigs) }
+        }
+        return props to methods
+    }
+
+    /** A [FileClassInfo] for a WHOLE-PROJECT source class not in this file's index — a cross-file receiver type
+     *  or supertype (via [KotlinSymbolService.sourceClass]). The source index already carries a `data class`'s
+     *  synthesized `copy`/`componentN` in the raw members, so member recovery sees them. Null for a non-source
+     *  (library/unknown) fqn — those keep the reflective path. */
+    private fun crossFileClassInfo(fqn: String): FileClassInfo? {
+        val rc = runCatching { service.sourceClass(fqn) }.getOrNull() ?: return null
+        val flavor = when {
+            rc.isCompanion -> ClassFlavor.COMPANION
+            rc.isObject -> ClassFlavor.OBJECT
+            rc.isEnum -> ClassFlavor.ENUM
+            rc.isInterface -> ClassFlavor.INTERFACE
+            else -> ClassFlavor.CLASS
+        }
+        val own = rc.members.filter { it.receiverText == null } // members ON the type, not extensions
+        val supers = rc.superTypeTexts.mapNotNull {
+            it.substringBefore('<').trim().substringAfterLast('.').takeIf { s -> s.isNotEmpty() }
+        }
+        // A data class: the index synthesizes `copy` with `returnText` == the class fqn, so its presence marks
+        // one — enabling the `equals`/`hashCode`/`toString` synthesized-member fallback in `declaresOrSynthesizes`.
+        val isData = own.any { it.isFunction && it.name == "copy" && it.returnText == rc.fqn }
+        val companionArities = rc.companionObjectName?.let { cn ->
+            runCatching { service.sourceClass("${rc.fqn}.$cn") }.getOrNull()
+                ?.members?.filter { it.isFunction && it.receiverText == null }?.map { "${it.name}/${it.paramTexts.size}" }?.toSet()
+        }.orEmpty()
+        return FileClassInfo(
+            fqn = rc.fqn, simpleName = rc.simpleName, flavor = flavor, isData = isData,
+            propertyNames = own.filterNot { it.isFunction }.map { it.name }.toSet(),
+            methodArities = own.filter { it.isFunction }.map { "${it.name}/${it.paramTexts.size}" }.toSet(),
+            companionMethodArities = companionArities, enumEntryNames = rc.enumEntries.toSet(),
+            supertypeSimpleNames = supers, primaryArity = rc.constructors.firstOrNull()?.paramTexts?.size ?: 0,
+            ctx = rc.ctx,
+        )
+    }
+
+    /** The [FileClassInfo] for a direct supertype [sup] of [from]: this file's index first (fast, buffer-fresh),
+     *  else the whole-project source class it resolves to in [from]'s file context — so an inherited-member walk
+     *  follows a superclass declared in ANOTHER file. Null for a library/unknown supertype. */
+    private fun supertypeInfo(sup: String, from: FileClassInfo): FileClassInfo? {
+        fileClasses[sup]?.let { return it }
+        val fqn = runCatching { service.resolveTypeName(sup, from.ctx ?: resolver.fileContext) }.getOrNull() ?: return null
+        return crossFileClassInfo(fqn)
+    }
+
+    /** The source type of [recvExpr]: its inferred type, a bare type-name (object/companion holder), or the
+     *  enum behind a `Enum.ENTRY` qualifier. Null when the receiver isn't a known source type. */
+    private fun sourceClassOfReceiver(recvExpr: KtExpression?): FileClassInfo? {
+        if (recvExpr == null) return null
+        runCatching { resolver.inferType(recvExpr)?.qualifiedName }.getOrNull()?.let { fqn ->
+            (fileClasses.values.firstOrNull { it.fqn == fqn } ?: fileClasses[fqn.substringAfterLast('.')])?.let { return it }
+            // The receiver's source type is declared in another file (e.g. a `data class` whose `.copy(...)` the
+            // editor resolver didn't surface) — resolve it whole-project so the member dispatches as SOURCE.
+            crossFileClassInfo(fqn)?.let { return it }
+        }
+        (recvExpr as? KtNameReferenceExpression)?.getReferencedName()?.let { name ->
+            fileClasses[name]?.let { return it }
+            // A bare cross-file TYPE name used as a receiver (`Foo.create()` where `Foo` is in another file) —
+            // resolve it whole-project so a cross-file companion / static-style member dispatches as SOURCE.
+            runCatching { service.resolveTypeName(name, resolver.fileContext) }.getOrNull()?.let { crossFileClassInfo(it) }?.let { return it }
+        }
+        if (recvExpr is KtDotQualifiedExpression) {
+            val base = (recvExpr.receiverExpression as? KtNameReferenceExpression)?.getReferencedName()
+            val sel = (recvExpr.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()
+            base?.let { fileClasses[it] }?.takeIf { it.flavor == ClassFlavor.ENUM && sel in it.enumEntryNames }?.let { return it }
+        }
+        return null
+    }
+
+    /** A read of the innermost in-scope receiver whose type is (a subtype of) [fqn] — the scope instance to
+     *  dispatch a member extension on, or to use as a bare extension call's receiver. Null when none matches. */
+    private fun findScopeReceiver(fqn: String): RNode? {
+        fun scopeNode(rs: ReceiverScope) =
+            RNode.Name(Binding.Local(rs.slot, rs.type.qualifiedName.substringAfterLast('.'), mutable = false), SourceSpan(0, 0))
+        for (i in receiverScopes.indices.reversed()) {
+            val rs = receiverScopes[i]
+            val matches = rs.type.qualifiedName == fqn ||
+                runCatching { service.supertypesOf(rs.type.qualifiedName).any { (it as? KotlinType)?.qualifiedName == fqn } }.getOrDefault(false)
+            if (matches) return scopeNode(rs)
+        }
+        // Fallback for an UNQUALIFIED declaring name (the resolver records some builtin/mapped-type members like
+        // `MutableList.add` by simple name): match a scope by simple name, so `apply { add(x) }` /
+        // `buildList { add(x) }` dispatch the member ON the scope instance instead of a receiver-less TOP_LEVEL
+        // call (which would try to load a class literally named `MutableList`). Only for a dotless name, so the
+        // normal fully-qualified path is unchanged.
+        if ('.' !in fqn) {
+            for (i in receiverScopes.indices.reversed()) {
+                val rs = receiverScopes[i]
+                if (rs.type.qualifiedName.substringAfterLast('.') == fqn) return scopeNode(rs)
+            }
+        }
+        return null
+    }
+
+    /** Lower the first top-level function in the file (test convenience). */
+    fun lowerFirstFunction(): ResolvedFunction? =
+        ktFile.declarations.filterIsInstance<KtNamedFunction>().firstOrNull()?.let { lowerFunction(it) }
+
+    fun lowerFunction(fn: KtNamedFunction): ResolvedFunction {
+        reset(fn.textRange.startOffset)
+        currentTypeParams = fn.typeParameters.mapNotNull { it.name }
+        scopes.addLast(HashMap())
+        // An EXTENSION function binds its receiver to slot 0 (like a member's `this`) and registers it as an
+        // implicit receiver scope, so `this` and bare-member access in the body resolve to it — and the
+        // interpreter binds the actual receiver value to that slot on an EXTENSION-dispatch call. Without this a
+        // project-source top-level extension had no receiver slot, and the interpreter fell through to the
+        // reflective dispatcher (which can't reflect an uncompiled source function → "extension has no owner").
+        val recvType = fn.receiverTypeReference?.text?.let { service.typeFromText(it, resolver.fileContext) }
+        val receiverSlot = if (fn.receiverTypeReference != null) newSlot() else null // slot 0 when present
+        var pushedReceiver = false
+        if (receiverSlot != null && recvType != null) {
+            receiverScopes.addLast(ReceiverScope(receiverSlot, recvType, fn.name)); pushedReceiver = true
+        }
+        val params = loweredValueParams(fn.valueParameters)
+        val body = when {
+            fn.hasBlockBody() -> fn.bodyBlockExpression?.let { lowerBlock(it) } ?: emptyBlock(fn)
+            else -> fn.bodyExpression?.let { lower(it) } ?: unsupported("empty body", fn)
+        }
+        if (pushedReceiver) receiverScopes.removeLast()
+        scopes.removeLast()
+        return ResolvedFunction(fn.name ?: "<anonymous>", params, body, diagnostics.toList(), receiverSlot = receiverSlot, returnsUnit = returnsUnit(fn))
+    }
+
+    /** Lower a function's value parameters: bind each (so the body and each default may reference the others),
+     *  then capture each parameter's default-value expression so a call that omits a defaulted argument
+     *  (`Greeting("x")` for `fun Greeting(name: String, modifier: Modifier = Modifier)`) can fill it at call
+     *  time. All parameters are bound BEFORE any default lowers so a default may reference a sibling; a default
+     *  that doesn't lower cleanly is dropped (its diagnostics rolled back), so an unused, un-interpretable
+     *  default never blocks the whole function. */
+    private fun loweredValueParams(valueParameters: List<KtParameter>): List<RParam> {
+        val bound = valueParameters.map { p ->
+            val slot = newSlot()
+            val name = p.name ?: "_"
+            bind(name, Binding.Param(slot, name))
+            Triple(slot, name, p)
+        }
+        return bound.map { (slot, name, p) ->
+            RParam(slot, name, service.typeFromText(p.typeReference?.text, resolver.fileContext),
+                default = p.defaultValue?.let { lowerParamDefault(it) }, vararg = p.isVarArg)
+        }
+    }
+
+    /** Lower a parameter default, returning null (and rolling back any diagnostics it produced) when it can't
+     *  lower cleanly — an omitted argument then falls back to `null`, exactly as before defaults were modeled,
+     *  rather than marking the whole function incomplete over a default the call may never use. */
+    private fun lowerParamDefault(expr: KtExpression): RNode? {
+        val before = diagnostics.size
+        val node = lower(expr)
+        if (diagnostics.size > before) {
+            while (diagnostics.size > before) diagnostics.removeAt(diagnostics.size - 1)
+            return null
+        }
+        return node
+    }
+
+    /** Lower a top-level `val`/`var` (`private val XColor = Color(0xFF…)`) as a synthetic zero-arg getter
+     *  keyed `name/0`. A SOURCE top-level property has no compiled `…Kt` facade to reflect, so a read of it
+     *  ([nameNode]) lowers to a TOP_LEVEL call of this. Its body is the initializer (or, for a computed
+     *  top-level property, the getter body). Non-extension only — an extension property needs its receiver. */
+    fun lowerTopLevelProperty(prop: KtProperty): ResolvedFunction {
+        reset(prop.textRange.startOffset)
+        scopes.addLast(HashMap())
+        // An EXTENSION property (`val Boxed.doubled get() = v * 2`) binds its receiver like an extension function
+        // (slot 0 + an implicit receiver scope), so `this`/bare-member access in the getter resolves to it; the
+        // interpreter binds the actual receiver on an EXTENSION-dispatch read (see [propertyGet]). A source
+        // extension property has no compiled `…Kt` facade, so this synthetic getter IS its implementation.
+        val recvType = prop.receiverTypeReference?.text?.let { service.typeFromText(it, resolver.fileContext) }
+        val receiverSlot = if (prop.receiverTypeReference != null) newSlot() else null // slot 0 when present
+        var pushedReceiver = false
+        if (receiverSlot != null && recvType != null) {
+            receiverScopes.addLast(ReceiverScope(receiverSlot, recvType, prop.name)); pushedReceiver = true
+        }
+        val getter = prop.getter
+        val body = when {
+            prop.initializer != null -> lower(prop.initializer!!)
+            getter?.hasBlockBody() == true -> getter.bodyBlockExpression?.let { lowerBlock(it) } ?: emptyBlock(prop)
+            getter?.bodyExpression != null -> lower(getter.bodyExpression!!)
+            else -> unsupported("top-level property without a value", prop)
+        }
+        if (pushedReceiver) receiverScopes.removeLast()
+        scopes.removeLast()
+        // A property with a plain backing field (no custom get/set) holds STORAGE the interpreter must back so
+        // object identity + writes are preserved (real Kotlin: a `<clinit>`-initialized static field). A `var`
+        // is mutable (writes persist, reads see them — the icon lazy-cache idiom); a `val` is a single instance
+        // evaluated once and cached (matters for `val LocalX = staticCompositionLocalOf { … }`, where a fresh
+        // instance per read would break `provides`/`.current` identity). A custom accessor computes, so it stays
+        // re-evaluated per read. An EXTENSION property always has a getter (no backing field), so it's excluded.
+        val plainBackingField = prop.getter == null && prop.setter == null
+        val mutableBackingField = prop.isVar && plainBackingField
+        val singletonBackingField = !prop.isVar && plainBackingField
+        return ResolvedFunction(
+            prop.name ?: "<anonymous>", emptyList(), body, diagnostics.toList(),
+            receiverSlot = receiverSlot, mutableBackingField = mutableBackingField,
+            singletonBackingField = singletonBackingField,
+        )
+    }
+
+    /** Whether [fn] returns `Unit` — a block body with no explicit return type, or one declared `: Unit`. An
+     *  expression body without an explicit type is treated as non-Unit (unknown), conservatively keeping it out
+     *  of the Compose restartable/skippable path (a value-returning composable must always re-run). */
+    private fun returnsUnit(fn: KtNamedFunction): Boolean =
+        when (fn.typeReference?.text?.trim()) {
+            null -> fn.hasBlockBody()
+            "Unit", "kotlin.Unit" -> true
+            else -> false
+        }
+
+    // --- source class / object / enum lowering ---
+
+    /** Lower every class/object/enum in the file (recursing into nested types), so the interpreter can
+     *  materialize project-source instances rather than reflecting bytecode that doesn't exist yet. */
+    fun lowerClasses(): List<ResolvedClass> {
+        val out = ArrayList<ResolvedClass>()
+        fun rec(decls: List<KtDeclaration>) {
+            decls.filterIsInstance<KtClassOrObject>().filter { it !is KtEnumEntry }.forEach { c ->
+                lowerClass(c)?.let { out.add(it) }
+                rec(c.declarations)
+            }
+        }
+        rec(ktFile.declarations)
+        // Anonymous object literals (`object : Foo { }`) found while lowering function/member bodies are
+        // materialized as their own classes. The function pass runs before this in the pipeline, and lowering
+        // the classes above lowers their member bodies, so [anonymousClasses] holds every one by now.
+        return out + anonymousClasses.distinctBy { it.fqn }
+    }
+
+    /**
+     * Lower a class/object declaration to a [ResolvedClass]. For an ANONYMOUS object literal ([anonFqn] set),
+     * [captures] are the enclosing locals/params the literal references — each becomes a synthesized `val`
+     * property (a leading primary-constructor parameter), so a member body reads the captured value through the
+     * object's field map (no interpreter capture-plumbing needed); the construct call passes their values.
+     */
+    private fun lowerClass(
+        decl: KtClassOrObject,
+        anonFqn: String? = null,
+        anonSimpleName: String? = null,
+        captures: List<Pair<String, Binding>> = emptyList(),
+    ): ResolvedClass? {
+        val simpleName = decl.name ?: anonSimpleName ?: return null
+        val ktClass = decl as? KtClass
+        val flavor = when {
+            // An object LITERAL is a fresh instance per evaluation (a class), not a singleton `object`.
+            anonFqn != null -> ClassFlavor.CLASS
+            decl is KtObjectDeclaration && decl.isCompanion() -> ClassFlavor.COMPANION
+            decl is KtObjectDeclaration -> ClassFlavor.OBJECT
+            ktClass?.isEnum() == true -> ClassFlavor.ENUM
+            ktClass?.isInterface() == true -> ClassFlavor.INTERFACE
+            else -> ClassFlavor.CLASS
+        }
+        val fqn = anonFqn ?: qualifiedNameOf(simpleName, decl)
+        val primaryKtParams = decl.primaryConstructorParameters
+        val bodyProps = decl.declarations.filterIsInstance<KtProperty>()
+        // Computed body properties (`val isDraw get() = …`): no backing field, lowered as zero-arg getter
+        // methods (`name/0`) the interpreter invokes on a read (see Interpreter.readSourceProperty).
+        val computedProps = bodyProps.filter {
+            it.initializer == null && it.delegateExpression == null &&
+                (it.getter?.bodyExpression != null || it.getter?.bodyBlockExpression != null)
+        }
+        val memberFns = decl.declarations.filterIsInstance<KtNamedFunction>().filter { it.name != null }
+        val ownPropertyNames = buildSet {
+            primaryKtParams.filter { it.hasValOrVar() }.forEach { it.name?.let(::add) }
+            bodyProps.forEach { it.name?.let(::add) }
+        }
+        val ownMethodSigs = memberFns.groupBy { it.name!! }
+            .mapValues { (_, fns) -> fns.map { MethodSig(it.valueParameters.size, it.valueParameters.map { p -> p.name ?: "_" }) } }
+        // Merge in members inherited from source supertypes so a method body can reference them by bare name /
+        // implicit `this` (the receiver instance dispatches them virtually at run time).
+        val inhProps = HashSet<String>()
+        val inhMethods = HashMap<String, MutableList<MethodSig>>()
+        fileClasses[simpleName]?.let { self ->
+            self.supertypeSimpleNames.forEach { sup ->
+                // Resolve the supertype whole-project, so a base class declared in ANOTHER file contributes its
+                // members to `this`/bare-name/`super.prop` visibility inside this subclass's method bodies.
+                supertypeInfo(sup, self)?.let { si ->
+                    val (p, m) = inheritedMembers(si)
+                    inhProps += p
+                    m.forEach { (n, sigs) -> inhMethods.getOrPut(n) { ArrayList() }.addAll(sigs) }
+                }
+            }
+        }
+        // Captured enclosing locals become synthesized `val` properties, so a member body reads them by bare name.
+        val propertyNames = ownPropertyNames + inhProps + captures.map { it.first }
+        val methodSigs = (ownMethodSigs.keys + inhMethods.keys).associateWith { name ->
+            ownMethodSigs[name].orEmpty() + inhMethods[name].orEmpty()
+        }
+        val ctx = ClassContext(SlotId(0), fqn, propertyNames, methodSigs)
+
+        // Member functions first — each resets the shared slot/diagnostic state and is self-contained. An
+        // abstract/bodyless member isn't lowered (it has no implementation to run — a concrete override or an
+        // interface default supplies one, found via the supertype walk); it stays in [methodSigs] so a sibling
+        // body can still call it by name.
+        val methods = buildMap {
+            memberFns.filter { it.bodyBlockExpression != null || it.bodyExpression != null }.forEach { fn ->
+                val rf = lowerMemberFunction(fn, ctx)
+                put("${rf.name}/${rf.params.size}", rf)
+            }
+            // Each computed `val`/`var` getter becomes a `name/0` method (read-only; the setter, if any, is not modeled).
+            computedProps.forEach { p ->
+                val rf = lowerComputedProperty(p, ctx)
+                put("${rf.name}/0", rf)
+            }
+        }
+
+        // Then the constructor/init pass in one fresh scope; its leftover diagnostics are the class's own.
+        reset(decl.textRange.startOffset)
+        scopes.addLast(HashMap())
+        classStack.addLast(ctx)
+        val thisSlot = newSlot() // slot 0 — equals ctx.thisSlot
+        // Leading synthesized `val` properties for the captured enclosing locals (anonymous object only). The
+        // construct call passes their values positionally; `construct` stores each into the object's field map.
+        val captureParams = captures.map { (name, _) ->
+            val slot = newSlot()
+            bind(name, Binding.Param(slot, name)) // visible to initializers/init blocks
+            RClassParam(slot, name, type = null, isProperty = true, mutable = false, default = null)
+        }
+        val primaryParams = captureParams + primaryKtParams.map { p ->
+            val slot = newSlot()
+            val name = p.name ?: "_"
+            bind(name, Binding.Param(slot, name)) // visible to initializers and init blocks
+            RClassParam(
+                slot, name, service.typeFromText(p.typeReference?.text, resolver.fileContext),
+                isProperty = p.hasValOrVar(), mutable = p.isMutable, default = p.defaultValue?.let { lower(it) },
+            )
+        }
+        // The superclass primary-constructor invocation (`: A(x)`), lowered with the ctor params in scope so its
+        // args can reference them. Interfaces (no call entry) aren't constructed — only the one call entry.
+        val superCall = decl.superTypeListEntries.filterIsInstance<KtSuperTypeCallEntry>().firstOrNull()?.let { entry ->
+            val name = entry.typeReference?.text?.substringBefore('<')?.trim()?.takeIf { it.isNotEmpty() }
+            name?.let {
+                val superFqn = runCatching { service.resolveTypeName(it, resolver.fileContext) }.getOrNull() ?: it
+                val args = entry.valueArguments.mapNotNull { va ->
+                    (va as? KtValueArgument)?.getArgumentExpression()?.let { e -> RArg(lower(e), va.getArgumentName()?.asName?.identifier) }
+                }
+                SuperCall(superFqn, args)
+            }
+        }
+        val enumEntries = if (flavor == ClassFlavor.ENUM) lowerEnumEntries(decl) else emptyList()
+        // Body-property initializers + init blocks, interleaved in source order.
+        val steps = ArrayList<Pair<Int, RNode>>()
+        val delegatedProps = LinkedHashMap<String, String>() // .value-delegated property name → hidden delegate-object field
+        val conventionDelegatedProps = LinkedHashMap<String, String>() // getValue/setValue-delegated → hidden field
+        for (prop in bodyProps) {
+            val pname = prop.name ?: continue
+            val offset = prop.textRange.startOffset
+            val init = prop.initializer
+            val delegate = prop.delegateExpression
+            val field = Binding.Property(pname, fqn, backingField = false)
+            when {
+                init != null ->
+                    steps += offset to RNode.PropertySet(thisRef(ctx, prop), field, lower(init), span(prop))
+                // `var x by mutableStateOf(v)` — store the DELEGATE OBJECT in a hidden `x$delegate` field;
+                // reads/writes of `x` route through the delegate's `.value` (see Interpreter), so a write hits
+                // the real `MutableState.setValue()` and drives recomposition — the member form of a delegated
+                // local. A non-`.value` delegate exposing a member getValue/setValue operator uses the general
+                // convention instead (its read/write calls the operator with `this` and the property).
+                delegate != null -> {
+                    val missing = runCatching { resolver.missingDelegateOperators(prop) }.getOrDefault(emptyList())
+                    val delegateField = "$pname\$delegate"
+                    fun storeDelegate(): RNode {
+                        val d = lower(delegate)
+                        return if (d is RNode.Unsupported) d
+                        else RNode.PropertySet(thisRef(ctx, prop), Binding.Property(delegateField, fqn, backingField = false), d, span(prop))
+                    }
+                    val step: RNode = when {
+                        missing.isNotEmpty() ->
+                            unsupported("property delegate operator(s) ${missing.joinToString(", ")} not in scope (import them)", prop)
+                        delegateValueProperty(delegate) != null ->
+                            storeDelegate().also { if (it !is RNode.Unsupported) delegatedProps[pname] = delegateField }
+                        runCatching { resolver.delegateHasMemberConvention(prop) }.getOrDefault(false) ->
+                            storeDelegate().also { if (it !is RNode.Unsupported) conventionDelegatedProps[pname] = delegateField }
+                        else ->
+                            unsupported("property delegate is not a `.value` delegate (State/Lazy) and has no member getValue/setValue operator", prop)
+                    }
+                    steps += offset to step
+                }
+                // A computed getter (lowered as a method above) or an abstract/bodyless member has no init step.
+                else -> {}
+            }
+        }
+        for (anon in decl.getAnonymousInitializers()) {
+            val body = anon.body ?: continue
+            steps += anon.textRange.startOffset to lower(body)
+        }
+        // `class C : I by expr` — store each delegate object in a hidden field (initialized BEFORE property
+        // initializers/init blocks, as Kotlin does) and record the interface so an un-overridden member forwards
+        // to the delegate at dispatch time (see Interpreter). The delegate expression is lowered in the ctor
+        // scope, so it can reference a primary-constructor parameter (`C(d: I) : I by d`).
+        val interfaceDelegates = ArrayList<InterfaceDelegate>()
+        val delegateSteps = ArrayList<RNode>()
+        decl.superTypeListEntries.filterIsInstance<KtDelegatedSuperTypeEntry>().forEachIndexed { i, entry ->
+            val ifaceName = entry.typeReference?.text?.substringBefore('<')?.trim()?.takeIf { it.isNotEmpty() }
+            val delegateExpr = entry.delegateExpression
+            if (ifaceName != null && delegateExpr != null) {
+                val ifaceFqn = runCatching { service.resolveTypeName(ifaceName, resolver.fileContext) }.getOrNull() ?: ifaceName
+                val fieldName = "\$delegate\$$i"
+                val d = lower(delegateExpr)
+                delegateSteps += if (d is RNode.Unsupported) d
+                else RNode.PropertySet(thisRef(ctx), Binding.Property(fieldName, fqn, backingField = false), d, span(entry))
+                if (d !is RNode.Unsupported) interfaceDelegates += InterfaceDelegate(ifaceFqn, fieldName)
+            }
+        }
+        val initSteps = delegateSteps + steps.sortedBy { it.first }.map { it.second }
+        // Secondary constructors — lowered in their own scopes (`this` stays ctx.thisSlot; their value params
+        // get fresh slots). The call site selects primary vs. secondary by arity (see the interpreter).
+        val hasPrimary = decl.primaryConstructor != null || primaryKtParams.isNotEmpty()
+        val secondaryCtors = decl.secondaryConstructors.map { lowerSecondaryCtor(it, ctx, hasPrimary) }
+        val supertypes = decl.superTypeListEntries.mapNotNull { ste ->
+            val name = ste.typeReference?.text?.substringBefore('<')?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            runCatching { service.resolveTypeName(name, resolver.fileContext) }.getOrNull() ?: name
+        }
+        val classDiags = diagnostics.toList()
+        classStack.removeLast()
+        scopes.removeLast()
+
+        return ResolvedClass(
+            fqn = fqn, simpleName = simpleName, flavor = flavor,
+            isData = decl.isData(), isSealed = ktClass?.isSealed() == true,
+            isAbstract = decl.modifierList?.text?.contains("abstract") == true,
+            primaryParams = primaryParams, initSteps = initSteps, methods = methods,
+            receiverSlot = thisSlot, supertypes = supertypes, superCall = superCall, enumEntries = enumEntries,
+            diagnostics = classDiags, delegatedProperties = delegatedProps,
+            conventionDelegatedProperties = conventionDelegatedProps, secondaryCtors = secondaryCtors,
+            interfaceDelegates = interfaceDelegates,
+        )
+    }
+
+    /**
+     * An anonymous object literal (`object : Foo { … }`) — a fresh instance of a synthesized class per
+     * evaluation. Its body's references to enclosing locals/params are CAPTURED as synthesized `val` properties
+     * (see [lowerClass]); the returned node is a constructor call that passes those captured values, so a member
+     * of the object reads them through the instance's field map at run time.
+     *
+     * Because [lowerClass] resets the shared lowering state (it's written for the top-level class pass), the
+     * enclosing function's scopes/slots/diagnostics are saved and restored around it. Anonymous objects whose
+     * supertype is a LIBRARY interface invoked by library code (e.g. `object : NestedScrollConnection` handed to
+     * `Modifier.nestedScroll`) still construct here, but the library can't call back into the interpreted object
+     * without a proxy — that path degrades rather than rendering (a tracked boundary).
+     */
+    private fun objectLiteralNode(e: KtObjectLiteralExpression): RNode {
+        // Nullable because the parser is error-tolerant: `object` with nothing after it is a literal with no
+        // declaration. PSI typed this non-null and would have thrown here on the same input.
+        val decl = e.objectDeclaration ?: return unsupported("object literal without a body", e)
+        // Free enclosing locals/params the literal body references. Over-capturing a name also bound inside the
+        // object is harmless — a member's own local shadows the captured field (nameNode resolves locals first).
+        val captures = LinkedHashMap<String, Binding>()
+        for (ref in decl.collectDescendantsOfType<KtNameReferenceExpression>()) {
+            val name = ref.getReferencedName()
+            if (name in captures) continue
+            when (val b = resolveLocal(name)) {
+                is Binding.Local, is Binding.Param -> captures[name] = b
+                else -> {} // a delegated local, member, or unresolved name isn't captured by value
+            }
+        }
+        val captureList = captures.entries.map { it.key to it.value }
+        val simpleName = "<no name provided>"
+        val fqn = "${classStack.lastOrNull()?.fqn ?: "<file>"}\$anon\$${anonCounter++}"
+
+        // lowerClass RESETS scopes/slots/diagnostics (it targets the top-level pass); save + restore the
+        // enclosing function's lowering state around it so the rest of the enclosing body still lowers.
+        val savedScopes = ArrayList(scopes)
+        val savedSlot = slotCounter
+        val savedClassStack = ArrayList(classStack)
+        val savedReceivers = ArrayList(receiverScopes)
+        val savedDiags = ArrayList(diagnostics)
+        val savedUnitStart = currentUnitStart
+        val savedTypeParams = currentTypeParams
+        val cls = lowerClass(decl, anonFqn = fqn, anonSimpleName = simpleName, captures = captureList)
+        scopes.clear(); scopes.addAll(savedScopes)
+        slotCounter = savedSlot
+        classStack.clear(); classStack.addAll(savedClassStack)
+        receiverScopes.clear(); receiverScopes.addAll(savedReceivers)
+        diagnostics.clear(); diagnostics.addAll(savedDiags)
+        currentUnitStart = savedUnitStart
+        currentTypeParams = savedTypeParams
+
+        cls ?: return unsupported("anonymous object", e)
+        anonymousClasses += cls
+        val callee = ResolvedCallable.Source(simpleName, "$fqn/${captureList.size}", captureList.map { it.first }, isConstructor = true)
+        val args = captureList.map { RArg(RNode.Name(it.second, span(e))) }
+        return RNode.Call(callee, DispatchKind.CONSTRUCTOR, receiver = null, args = args, callSiteKey = csk(e.textRange.startOffset), source = span(e))
+    }
+
+    /**
+     * Lower a secondary constructor (`constructor(…) : this(…)/super(…) { … }`). Its value params get fresh
+     * slots; `this` + members resolve through the pushed [ctx] (already on the classStack). The delegation call
+     * and body are lowered with the ctor params in scope. Delegation is [SecondaryCtor.delegatesToThis] for an
+     * explicit `this(…)` (or an implicit one when the class has a primary constructor); `super(…)` / no primary
+     * → false. Diagnostics are captured as the delta this lowering produced.
+     */
+    private fun lowerSecondaryCtor(sc: KtSecondaryConstructor, ctx: ClassContext, hasPrimary: Boolean): SecondaryCtor {
+        val before = diagnostics.size
+        scopes.addLast(HashMap())
+        val params = loweredValueParams(sc.valueParameters)
+        val deleg = sc.getDelegationCall()
+        val delegatesToThis = deleg.isCallToThis || (deleg.isImplicit && hasPrimary)
+        val delegationArgs = deleg.valueArguments.mapNotNull { va ->
+            (va as? KtValueArgument)?.getArgumentExpression()?.let { RArg(lower(it), va.getArgumentName()?.asName?.identifier) }
+        }
+        val body = sc.bodyBlockExpression?.let { lowerBlock(it) } ?: emptyBlock(sc)
+        scopes.removeLast()
+        return SecondaryCtor(params, delegatesToThis, delegationArgs, body, diagnostics.subList(before, diagnostics.size).toList())
+    }
+
+    /** Lower a class member function: a receiver slot (slot 0) is allocated first so `this`/implicit-member
+     *  access binds to it, then the value parameters, then the body — all with [ctx] active. */
+    private fun lowerMemberFunction(fn: KtNamedFunction, ctx: ClassContext): ResolvedFunction {
+        reset(fn.textRange.startOffset)
+        // The member's OWN type parameters (a `reified T`), so `x is T` / `T::class` in the body lower as reified
+        // nodes re-bound from the call frame — mirroring `lowerFunction`. Without this a reified member is erased.
+        currentTypeParams = fn.typeParameters.mapNotNull { it.name }
+        scopes.addLast(HashMap())
+        classStack.addLast(ctx)
+        val thisSlot = newSlot() // slot 0
+        val params = loweredValueParams(fn.valueParameters)
+        val body = when {
+            fn.hasBlockBody() -> fn.bodyBlockExpression?.let { lowerBlock(it) } ?: emptyBlock(fn)
+            else -> fn.bodyExpression?.let { lower(it) } ?: unsupported("empty body", fn)
+        }
+        classStack.removeLast()
+        scopes.removeLast()
+        return ResolvedFunction(fn.name ?: "<anonymous>", params, body, diagnostics.toList(), receiverSlot = thisSlot, returnsUnit = returnsUnit(fn))
+    }
+
+    /** Lower a computed property's getter (`val isDraw get() = …`) as a zero-arg member function keyed
+     *  `name/0`; a read of the property routes to it (the interpreter invokes it when there's no backing field). */
+    private fun lowerComputedProperty(prop: KtProperty, ctx: ClassContext): ResolvedFunction {
+        reset(prop.textRange.startOffset)
+        scopes.addLast(HashMap())
+        classStack.addLast(ctx)
+        val thisSlot = newSlot() // slot 0
+        val getter = prop.getter
+        val body = when {
+            getter?.hasBlockBody() == true -> getter.bodyBlockExpression?.let { lowerBlock(it) } ?: emptyBlock(prop)
+            else -> getter?.bodyExpression?.let { lower(it) } ?: unsupported("computed property without a getter body", prop)
+        }
+        classStack.removeLast()
+        scopes.removeLast()
+        return ResolvedFunction(prop.name ?: "<anonymous>", emptyList(), body, diagnostics.toList(), receiverSlot = thisSlot)
+    }
+
+    private fun lowerEnumEntries(decl: KtClassOrObject): List<REnumEntry> =
+        decl.declarations.filterIsInstance<KtEnumEntry>().mapIndexed { i, e ->
+            val callArgs = e.superTypeListEntries.filterIsInstance<KtSuperTypeCallEntry>().firstOrNull()?.valueArguments
+                ?: e.initializerList?.initializers?.filterIsInstance<KtSuperTypeCallEntry>()?.firstOrNull()?.valueArguments
+                ?: emptyList()
+            val args = callArgs.mapNotNull { va ->
+                (va as? KtValueArgument)?.getArgumentExpression()?.let { RArg(lower(it), va.getArgumentName()?.asName?.identifier) }
+            }
+            REnumEntry(e.name ?: "", i, args)
+        }
+
+    /** The fully-qualified name of [decl]: the file package + any enclosing class names + [simpleName]. */
+    private fun qualifiedNameOf(simpleName: String, decl: KtClassOrObject): String {
+        val enclosing = generateSequence(decl.parent) { it.parent }
+            .filterIsInstance<KtClassOrObject>().mapNotNull { it.name }.toList().asReversed()
+        val pkg = resolver.fileContext.packageName.takeUnless { it.isBlank() }
+        val segments = listOfNotNull(pkg) + enclosing + simpleName
+        return segments.joinToString(".")
+    }
+
+    /** Lower a single expression (test convenience; uses a fresh scope). */
+    fun lower(e: KtExpression): RNode = when (e) {
+        is KtParenthesizedExpression -> e.expression?.let { lower(it) } ?: unsupported("empty parens", e)
+        is KtConstantExpression -> constNode(e)
+        is KtStringTemplateExpression -> stringNode(e)
+        is KtNameReferenceExpression -> nameNode(e)
+        is KtObjectLiteralExpression -> objectLiteralNode(e)
+        is KtDotQualifiedExpression -> qualifiedNode(e)
+        is KtSafeQualifiedExpression -> safeCallNode(e)
+        is KtCallExpression -> callNode(e, receiverNode = null)
+        is KtIfExpression -> ifNode(e)
+        is KtIsExpression -> isNode(e)
+        is KtTryExpression -> tryNode(e)
+        is KtThrowExpression -> RNode.Throw(e.thrownExpression?.let { lower(it) } ?: return unsupported("throw without value", e), span(e))
+        // `break` / `continue`, with an optional target label (`break@outer`) carried to the interpreter.
+        is KtBreakExpression -> RNode.Break(span(e), e.getLabelName())
+        is KtContinueExpression -> RNode.Continue(span(e), e.getLabelName())
+        is KtDestructuringDeclaration -> destructuringNode(e)
+        // `return@label` belongs to the lambda that carries that label; a bare `return` belongs to the
+        // enclosing function and stays non-local through any lambda in between.
+        is KtReturnExpression ->
+            RNode.Return(e.returnedExpression?.let { lower(it) }, span(e), e.getTargetLabel()?.getReferencedName())
+        is KtBinaryExpression -> binaryNode(e)
+        is KtBinaryExpressionWithTypeRHS -> castNode(e)
+        is KtClassLiteralExpression -> classLiteralNode(e, asJava = false)
+        is KtCallableReferenceExpression -> callableRefNode(e)
+        is KtArrayAccessExpression -> arrayAccessNode(e)
+        is KtPostfixExpression -> incDecNode(e)
+        is KtPrefixExpression -> incDecNode(e)
+        is KtWhileExpression -> whileNode(e, doWhile = false)
+        is KtDoWhileExpression -> whileNode(e, doWhile = true)
+        is KtForExpression -> forNode(e)
+        is KtLabeledExpression -> labeledNode(e)
+        is KtWhenExpression -> whenNode(e)
+        is KtLambdaExpression -> lambdaNode(e)
+        is KtBlockExpression -> lowerBlock(e)
+        is KtProperty -> localVarNode(e)
+        is KtNamedFunction -> localFunctionNode(e)
+        is KtThisExpression -> {
+            // Bare `this` binds to the innermost lambda-receiver scope if one is active, else the enclosing class's
+            // implicit receiver (both arrive as a slot-bound value the interpreter reads from its env). A LABELED
+            // `this@Label` targets the receiver whose scope carries that label — NOT necessarily the innermost:
+            // `SharedTransitionLayout { AnimatedVisibility { … this@SharedTransitionLayout … } }` must resolve to
+            // the OUTER SharedTransitionScope, not the inner AnimatedVisibilityScope. Matching by label fixes the
+            // shared-element scopes (`with(this@SharedTransitionLayout) { Modifier.sharedBounds(…) }`); when no
+            // scope carries the label we fall back to the innermost (the prior behaviour, so nothing regresses).
+            // With neither in scope there is no receiver value to read — a clean lowering gap (skipped under
+            // gap-tolerant preview) beats emitting a node that aborts at runtime.
+            val labelName = e.getLabelName()
+            val rs = labelName?.let { ln -> receiverScopes.lastOrNull { it.label == ln } } ?: receiverScopes.lastOrNull()
+            val ctx = classStack.lastOrNull()
+            when {
+                rs != null -> RNode.Name(Binding.Local(rs.slot, "this", mutable = false), span(e))
+                ctx != null -> thisRef(ctx, e)
+                else -> unsupported("`this` with no receiver in scope (not inside a class member, extension, or receiver lambda)", e)
+            }
+        }
+        else -> unsupported(e::class.simpleName ?: "expression", e)
+    }
+
+    // --- expressions ---
+
+    private fun constNode(e: KtConstantExpression): RNode {
+        val t = e.text.trim()
+        val (value, fqn) = when {
+            t == "true" -> true to "kotlin.Boolean"
+            t == "false" -> false to "kotlin.Boolean"
+            t == "null" -> return RNode.Const(null, null, span(e))
+            t.startsWith("'") -> parseChar(t) to "kotlin.Char"
+            else -> parseNumber(t) ?: (null to "kotlin.Int")
+        }
+        return if (value == null) unsupported("unparseable literal `$t`", e)
+        else RNode.Const(value, service.typeByFqn(fqn), span(e))
+    }
+
+    /** Parse a Kotlin numeric literal → (boxed value, type FQN). Handles hex (`0xFFD32F2F`, a `Color(Long)`
+     *  argument) / binary (`0b1010`) prefixes, digit separators (`1_000`), the `u`/`U` (unsigned) and `L`
+     *  (long) suffixes, and floats (`1.5`, `1e5`, `1.5f`). An integer literal that overflows `Int` widens to
+     *  `Long` — matching Kotlin, so a 32-bit ARGB hex like `0xFFD32F2F` types as `Long`. Null when unparseable. */
+    private fun parseNumber(raw: String): Pair<Any, String>? {
+        val t = raw.replace("_", "")
+        val lower = t.lowercase()
+        // Hex / binary INTEGER literal — radix-prefixed, so its a-f / e digits are NOT a float exponent/suffix.
+        if (lower.startsWith("0x") || lower.startsWith("0b")) {
+            val radix = if (lower[1] == 'x') 16 else 2
+            var body = t.substring(2)
+            val isLong = body.endsWith("L") || body.endsWith("l")
+            if (isLong) body = body.dropLast(1)
+            if (body.endsWith("u") || body.endsWith("U")) body = body.dropLast(1) // model UInt/ULong as Int/Long
+            val asLong = body.toLongOrNull(radix) ?: body.toULongOrNull(radix)?.toLong() ?: return null
+            return integerValue(asLong, isLong)
+        }
+        // Float / Double — a fractional point, a decimal exponent, or an f/F suffix.
+        if ('.' in t || 'e' in lower || t.endsWith("f") || t.endsWith("F")) {
+            return if (t.endsWith("f") || t.endsWith("F")) t.dropLast(1).toFloatOrNull()?.let { it to "kotlin.Float" }
+            else t.toDoubleOrNull()?.let { it to "kotlin.Double" }
+        }
+        // Decimal integer.
+        var body = t
+        val isLong = body.endsWith("L") || body.endsWith("l")
+        if (isLong) body = body.dropLast(1)
+        if (body.endsWith("u") || body.endsWith("U")) body = body.dropLast(1)
+        val asLong = body.toLongOrNull() ?: return null
+        return integerValue(asLong, isLong)
+    }
+
+    /** An integer literal's boxed value + type: `Long` when an `L` suffix is present or the value doesn't fit
+     *  `Int` (Kotlin's auto-widening), else `Int`. */
+    private fun integerValue(value: Long, isLong: Boolean): Pair<Any, String> =
+        if (isLong || value !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) value to "kotlin.Long"
+        else value.toInt() to "kotlin.Int"
+
+    private fun stringNode(e: KtStringTemplateExpression): RNode {
+        val entries = e.entries
+        if (entries.isEmpty()) return RNode.Const("", strType, span(e))
+        if (entries.size == 1 && entries[0] is KtLiteralStringTemplateEntry)
+            return RNode.Const((entries[0] as KtLiteralStringTemplateEntry).text, strType, span(e))
+        // Interpolation → concat: literal/escape parts are constants, `$x` / `${expr}` parts are the lowered
+        // expression (stringified at runtime by the interpreter).
+        val parts = entries.map { entry ->
+            when (entry) {
+                is KtLiteralStringTemplateEntry -> RNode.Const(entry.text, strType, span(entry))
+                is KtEscapeStringTemplateEntry -> RNode.Const(entry.unescapedValue, strType, span(entry))
+                else -> entry.expression?.let { lower(it) } ?: return unsupported("empty template entry", e)
+            }
+        }
+        return RNode.StringConcat(parts, span(e))
+    }
+
+    /**
+     * `when` → a nested `if`/`else` chain. A subject (`when (x) { … }`) is evaluated once into a temp local
+     * and each branch compares against it (`==`, `is T`, or `in range`); a subjectless `when { … }` uses the
+     * branch conditions directly.
+     */
+    private fun whenNode(e: KtWhenExpression): RNode {
+        val span = span(e)
+        val branches = e.entries.filter { !it.isElse }
+        val elseBody = e.entries.firstOrNull { it.isElse }?.expression?.let { lower(it) }
+
+        val subject = e.subjectExpression
+        val subjectSlot = if (subject != null) newSlot() else null
+        fun subjectRef() = RNode.Name(Binding.Local(subjectSlot!!, "\$subject", mutable = false), span)
+        // `when (x) { is T -> x.member }` smart-casts the subject `x` to `T` in that branch (when `x` is a
+        // simple name; the body references it by name, not the synthetic `$subject` local the condition uses).
+        val subjName = (subject as? KtNameReferenceExpression)?.getReferencedName()
+        // `when (this) { is T -> member }` smart-casts the implicit RECEIVER instead of a named local, so it
+        // narrows the receiver scope rather than the name-keyed narrowing stack.
+        val thisSubject = isBareThis(subject)
+
+        var chain: RNode? = elseBody
+        for (entry in branches.asReversed()) {
+            val cond = whenCondition(entry, subject != null, ::subjectRef, span)
+            val narrow = if (subjName != null) whenEntryNarrowing(entry, subjName) else emptyMap()
+            val narrowThis = if (thisSubject) whenEntryThisNarrowing(entry) else null
+            val body = withNarrowing(narrow) {
+                withNarrowedReceiver(narrowThis) { entry.expression?.let { lower(it) } ?: emptyBlock(entry) }
+            }
+            chain = RNode.If(cond, body, chain, span)
+        }
+        val result = chain ?: elseBody ?: unsupported("empty when", e)
+        return if (subjectSlot != null) {
+            RNode.Block(listOf(RNode.LocalVar(subjectSlot, "\$subject", false, lower(subject!!), span), result), isExpression = true, span)
+        } else {
+            result
+        }
+    }
+
+    /** The subject narrowing for a `when` branch: `{subjName → T}` when the branch's SOLE condition is a
+     *  positive `is T` (a mixed `is A, is B` comma branch doesn't smart-cast), else empty. */
+    private fun whenEntryNarrowing(entry: KtWhenEntry, subjName: String): Map<String, KotlinType> {
+        val c = entry.conditions.singleOrNull() as? KtWhenConditionIsPattern ?: return emptyMap()
+        return if (c.isNegated) emptyMap() else narrowingTo(subjName, c.typeReference?.text)
+    }
+
+    /** [whenEntryNarrowing] for a `when (this)`: the type the branch narrows the implicit receiver to, under
+     *  the same single-positive-`is` rule (a comma branch does not smart-cast). */
+    private fun whenEntryThisNarrowing(entry: KtWhenEntry): KotlinType? {
+        val c = entry.conditions.singleOrNull() as? KtWhenConditionIsPattern ?: return null
+        return if (c.isNegated) null else typeOfIsTarget(c.typeReference?.text)
+    }
+
+    /** A branch's condition as a boolean, OR-ing its comma-separated parts (`if (a) true else b`). Each part is
+     *  `subject == value` (or the bare expression, subjectless), `subject is T`, or `subject in range`. */
+    private fun whenCondition(entry: KtWhenEntry, hasSubject: Boolean, subjectRef: () -> RNode, span: SourceSpan): RNode {
+        val parts = entry.conditions.map { c ->
+            when (c) {
+                is KtWhenConditionWithExpression -> {
+                    val value = c.expression ?: return unsupported("empty when condition", entry)
+                    if (hasSubject)
+                        RNode.Call(synthOperator("eq"), DispatchKind.OPERATOR, subjectRef(), listOf(RArg(lower(value))), csk(span.start), span)
+                    else lower(value)
+                }
+                is KtWhenConditionIsPattern -> {
+                    val typeText = c.typeReference?.text?.substringBefore('<')?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: return unsupported("`is` without a type", entry)
+                    val fqn = runCatching { service.resolveTypeName(typeText, resolver.fileContext) }.getOrNull() ?: typeText
+                    RNode.TypeCheck(subjectRef(), fqn, c.isNegated, span)
+                }
+                is KtWhenConditionInRange -> {
+                    val range = c.rangeExpression ?: return unsupported("`in` without a range", entry)
+                    val contains = RNode.Call(synthMember("contains"), DispatchKind.MEMBER, lower(range), listOf(RArg(subjectRef())), csk(span.start), span)
+                    if (c.isNegated) negate(contains, span) else contains
+                }
+                else -> return unsupported("when condition ${c::class.simpleName}", entry)
+            }
+        }
+        return parts.reduceRightOrNull { p, acc -> RNode.If(p, RNode.Const(true, boolType, span), acc, span) }
+            ?: RNode.Const(false, boolType, span)
+    }
+
+    /** Boolean negation as `if (x) false else true` (no dedicated node needed). */
+    private fun negate(value: RNode, span: SourceSpan): RNode =
+        RNode.If(value, RNode.Const(false, boolType, span), RNode.Const(true, boolType, span), span)
+
+    private fun nameNode(e: KtNameReferenceExpression): RNode {
+        val name = e.getReferencedName()
+        resolveLocal(name)?.let { binding ->
+            // A `by`-delegated local reads as `delegate.value` — the slot holds the delegate object.
+            if (binding is Binding.DelegatedLocal) {
+                return RNode.PropertyGet(delegateRef(binding, e), binding.valueProperty, span(e))
+            }
+            return RNode.Name(binding, span(e))
+        }
+        // A bare member property of an active receiver scope (`with(x) { someProp }`, `apply { prop }`): resolve
+        // it against the innermost lambda-receiver whose type ACTUALLY declares it, reading through that scope's
+        // `this` slot. (A bare member CALL is handled by callNode's implicit-receiver path; this is the property
+        // read.) The member-existence gate is essential: `propertyBinding` has a best-effort fallback that binds
+        // ANY name, which for a BARE name would shadow a top-level object/type (`MaterialTheme`/`Color` used
+        // inside a `Column {}`/`buildAnnotatedString {}` scope) with a bogus property read on the scope.
+        for (i in receiverScopes.indices.reversed()) {
+            val rs = receiverScopes[i]
+            // A SOURCE extension property in scope on this receiver — `with(density) { cardWidthWithPaddingPx }`,
+            // or a `Density.() -> Float` lambda body reading a file-level `val Density.cardWidthWithPaddingPx`
+            // (Jetsnack's `offsetGradientBackground(width = { 6 * cardWidthWithPaddingPx })`). Its getter is
+            // interpreted (no compiled facade), so lower it as a source EXTENSION call on the scope's `this`,
+            // mirroring the enclosing-class path below. `propertyBinding` (used just below for a MEMBER or a
+            // reflected LIBRARY extension) would mis-bind a source extension to a non-existent facade getter.
+            sourceExtensionProperty(name, rs.type)?.let { sym ->
+                return RNode.Call(
+                    toCallable(sym), DispatchKind.EXTENSION,
+                    RNode.Name(Binding.Local(rs.slot, "this", mutable = false), span(e)),
+                    emptyList(), csk(e.textRange.startOffset), span(e),
+                )
+            }
+            val declaresIt = runCatching {
+                service.membersForCompletion(rs.type.qualifiedName, rs.type.typeArguments, name)
+                    .any { it.name == name && it.kind == SymbolKind.FIELD && (!it.isExtension || extensionInScope(it)) }
+            }.getOrDefault(false)
+            if (declaresIt) propertyBinding(name, rs.type)?.let {
+                return RNode.PropertyGet(RNode.Name(Binding.Local(rs.slot, "this", mutable = false), span(e)), it, span(e))
+            }
+        }
+        // A bare member property of the enclosing class (`id` inside one of `Project`'s methods) reads through
+        // the implicit `this` receiver.
+        classStack.lastOrNull()?.let { ctx ->
+            if (name in ctx.propertyNames)
+                return RNode.PropertyGet(thisRef(ctx, e), Binding.Property(name, ctx.fqn, backingField = false), span(e))
+        }
+        // A bare companion-member read (`SIZE` inside the class whose `companion object` declares `const val
+        // SIZE`): companion members are in scope unqualified within the class, so resolve it through the
+        // companion singleton — otherwise it falls through and is mis-read as a type/object reference that then
+        // fails at render ("a project-source object isn't available").
+        for (ctx in classStack.asReversed()) {
+            val companionFqn = "${ctx.fqn}.Companion"
+            val isCompanionMember = runCatching {
+                service.membersForCompletion(companionFqn, emptyList(), name)
+                    .any { it.name == name && it.kind == SymbolKind.FIELD }
+            }.getOrDefault(false)
+            if (isCompanionMember) {
+                return RNode.PropertyGet(
+                    RNode.Name(Binding.ObjectRef(companionFqn, "Companion"), span(e)),
+                    Binding.Property(name, companionFqn, backingField = false), span(e),
+                )
+            }
+        }
+        // A bare INHERITED member property, or an in-scope EXTENSION property, on the enclosing class's implicit
+        // `this` — e.g. `viewModelScope` (`val ViewModel.viewModelScope`, a library extension) inside a
+        // `class VM : ViewModel()`. The `name in ctx.propertyNames` check above sees only the class's OWN
+        // declared properties; an inherited/extension property needs a receiver-typed lookup against the class
+        // type (its supertype chain + extension index). Placed BEFORE the top-level-property fallback so an
+        // extension is read as `this.<ext>` (with the receiver its getter needs), not as a receiver-less
+        // top-level property (which would reflect the facade getter with no argument and fail).
+        classStack.lastOrNull()?.let { ctx ->
+            val classType = service.typeByFqn(ctx.fqn)
+            val hasProp = runCatching {
+                service.membersForCompletion(ctx.fqn, emptyList(), name)
+                    .any { it.name == name && it.kind == SymbolKind.FIELD && (!it.isExtension || extensionInScope(it)) }
+            }.getOrDefault(false)
+            if (hasProp) {
+                // A SOURCE extension property has no compiled facade getter — interpret its getter via a source
+                // EXTENSION call (receiver = `this`), mirroring [propertyGet].
+                sourceExtensionProperty(name, classType)?.let { sym ->
+                    return RNode.Call(toCallable(sym), DispatchKind.EXTENSION, thisRef(ctx, e), emptyList(), csk(e.textRange.startOffset), span(e))
+                }
+                propertyBinding(name, classType)?.let {
+                    return RNode.PropertyGet(thisRef(ctx, e), it, span(e))
+                }
+            }
+        }
+        // A bare top-level property (`PI`) reads as a property get with no receiver. Member properties of an
+        // enclosing class without an explicit receiver are not yet modeled → Unsupported (sound, not guessed).
+        val prop = service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.FIELD }
+        if (prop != null) {
+            // A SOURCE top-level `val`/`var` (`private val XColor = Color(…)`) has no compiled `…Kt` facade to
+            // reflect — it is lowered as a synthetic zero-arg getter `name/0` in the program (see
+            // KotlinPreviewLowering); read it as a TOP_LEVEL source call so the interpreter runs its initializer.
+            if (prop.origin.fromSource && !prop.isExtension) {
+                return RNode.Call(toCallable(prop), DispatchKind.TOP_LEVEL, null, emptyList(), csk(e.textRange.startOffset), span(e))
+            }
+            // A LIBRARY top-level property's getter is a STATIC method on its `…Kt` file facade
+            // (`getLocalTextStyle()`), so the binding records the facade (not the package) as the reflect owner.
+            return RNode.PropertyGet(null, Binding.Property(name, prop.declaringClassFqn ?: prop.packageName, backingField = false), span(e))
+        }
+        // A bare type name used as a VALUE is its singleton: an `object` (its `INSTANCE`) or a type with a
+        // companion (`Modifier` → `Modifier.Companion`, the empty modifier; `Color` for `Color.Red`). The
+        // interpreter materializes it reflectively from the runtime class. Gate on the resolved FQN actually
+        // being a TYPE: `resolveTypeName` also returns the FQN of a non-type explicit import (an extension
+        // property like `androidx.lifecycle.viewModelScope`), which must NOT be lowered as an object reference —
+        // that produces a hard "cannot load object" crash at render instead of a skippable gap.
+        val typeFqn = runCatching { service.resolveTypeName(name, resolver.fileContext) }.getOrNull()
+        if (typeFqn != null && runCatching { service.isKnownType(typeFqn) }.getOrDefault(false)) {
+            return RNode.Name(Binding.ObjectRef(typeFqn, name), span(e))
+        }
+        // A bare ENUM ENTRY referenced from inside the enum's own body (`this == Small`, `when (x) { Small -> }`,
+        // a companion/member method returning `Medium`): the entries are in scope unqualified within the enum
+        // class. Resolve it like the qualified `EnumFqn.entry` — a read of the static entry member off the enum
+        // type reference. (Jetsnack's Glance widgets hit this: "in Companion: unresolved name Small/Medium/Large".)
+        for (ctx in classStack.asReversed()) {
+            // The enclosing enum is either this context itself or, inside the enum's own `companion object`
+            // (fqn `<Enum>.Companion`), the parent — whose entries are still in scope unqualified. `fileClasses`
+            // is keyed by SIMPLE name, so match the entry whose fqn is the candidate's.
+            for (enumFqn in listOf(ctx.fqn, ctx.fqn.removeSuffix(".Companion")).distinct()) {
+                val info = fileClasses[enumFqn.substringAfterLast('.')]?.takeIf { it.fqn == enumFqn }
+                if (info != null && info.flavor == ClassFlavor.ENUM && name in info.enumEntryNames) {
+                    val enumRef = RNode.Name(Binding.ObjectRef(enumFqn, info.simpleName), span(e))
+                    return RNode.PropertyGet(enumRef, Binding.Property(name, enumFqn, backingField = false), span(e))
+                }
+            }
+        }
+        // A bare read of a member an `import` brought in through an object or companion
+        // (`import …KeyEventType.Companion.KeyUp` → `KeyUp`, `import …Dp.Companion.Unspecified`). Lowers to the
+        // same nodes the qualified spelling (`KeyEventType.KeyUp`) already produces: the singleton, then the
+        // property read off it.
+        importedSingletonOwner(name)?.let { owner ->
+            propertyBinding(name, service.typeByFqn(owner))?.let {
+                return RNode.PropertyGet(singletonRef(owner, e), it, span(e))
+            }
+        }
+        return unsupported("unresolved name `$name`", e)
+    }
+
+    /** Whether [expr] is a PACKAGE qualifier (`kotlin.math`, `kotlinx.coroutines.flow`) — a pure chain of name
+     *  references that is neither a value (no inferred type) nor a type reference. The receiver of a
+     *  fully-qualified top-level call. */
+    private fun isPackageReceiver(expr: KtExpression): Boolean {
+        if (!isDottedNameChain(expr)) return false
+        if (runCatching { resolver.inferType(expr) }.getOrNull() != null) return false
+        return !runCatching { resolver.isTypeReceiver(expr) }.getOrDefault(false)
+    }
+
+    private fun isDottedNameChain(expr: KtExpression): Boolean = when (expr) {
+        is KtNameReferenceExpression -> true
+        is KtDotQualifiedExpression ->
+            expr.selectorExpression is KtNameReferenceExpression && isDottedNameChain(expr.receiverExpression)
+        else -> false
+    }
+
+    private fun qualifiedNode(e: KtDotQualifiedExpression): RNode {
+        if (e.receiverExpression is KtSuperExpression) return superNode(e)
+        // `X::class.java` / `expr::class.java` — the compiler lowers `::class.java` straight to the JVM class
+        // constant, so fold the `.java` selector into the class literal (yielding a `Class` not a `KClass`)
+        // rather than lowering `X::class` to a KClass and then modeling `KClass.java` at eval.
+        val recvExpr = e.receiverExpression
+        val sel0 = e.selectorExpression
+        if (recvExpr is KtClassLiteralExpression && sel0 is KtNameReferenceExpression &&
+            (sel0.getReferencedName() == "java" || sel0.getReferencedName() == "javaObjectType")
+        ) return classLiteralNode(recvExpr, asJava = true)
+        // A qualified reference that itself denotes a TYPE or `object` singleton (not a value): lower it
+        // straight to the singleton so a trailing selector reads a static/companion member or a further
+        // nested type. Without this, a fully-qualified reference recurses into its package segments
+        // (`androidx.compose.material.icons.Icons.Default.Remove` -> the leading `androidx` resolves to
+        // nothing), and a nested type is misread as a property on the OUTER type's companion
+        // (`LineHeightStyle.Alignment` -> "no readable property Alignment on LineHeightStyle$Companion").
+        typeOrObjectRef(e)?.let { return it }
+        // A fully-qualified TOP-LEVEL function call (`kotlin.math.abs(x)`, `kotlinx.coroutines.delay(200)`): the
+        // receiver is a PACKAGE, so lowering it as a value fails with "unresolved name `kotlin`". Route the call
+        // to the top-level path — `chooseCallee` resolves the function by its package FQN (see the FQN branch in
+        // `computeCallTargets`). Gated to a package receiver (not a value/type), so `obj.foo()` / `Type.staticFoo()`
+        // still lower normally, and only when the function actually resolves (else fall through to the located error).
+        (sel0 as? KtCallExpression)?.let { sel ->
+            if (isPackageReceiver(recvExpr) && runCatching { chooseCallee(sel) }.getOrNull() != null) {
+                return callNode(sel, receiverNode = null, receiverExpr = null)
+            }
+        }
+        val receiver = lower(e.receiverExpression)
+        if (receiver is RNode.Unsupported) return receiver
+        return when (val sel = e.selectorExpression) {
+            is KtCallExpression -> callNode(sel, receiver, e.receiverExpression)
+            is KtNameReferenceExpression -> propertyGet(sel.getReferencedName(), receiver, e.receiverExpression, e)
+            else -> unsupported("qualified selector ${sel?.let { it::class.simpleName }}", e)
+        }
+    }
+
+    /**
+     * If [e] denotes a TYPE or `object` singleton rather than a value, a reference to that singleton (so a
+     * trailing selector on it reads a static/companion member or a nested type). Covers a nested type reached
+     * through a resolved outer (`LineHeightStyle.Alignment`, `Outer.Inner`) and a fully-qualified non-object
+     * type (`java.util.Locale`) via [KotlinResolver.typeDenotationFqn], PLUS a nested SINGLETON through that
+     * same outer (`PathFillType.Companion`) and a fully-qualified type or `object` by its own source text
+     * (`androidx.compose.material.icons.Icons`), both of which `typeDenotationFqn` intentionally rejects for
+     * singletons. Null for a value chain (`Icons.Default`, `Color.Red`, `foo().bar`), which then
+     * lowers as an ordinary receiver + property/call.
+     */
+    private fun typeOrObjectRef(e: KtDotQualifiedExpression): RNode? {
+        val sel = (e.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+        runCatching { resolver.typeDenotationFqn(e) }.getOrNull()?.let {
+            return RNode.Name(Binding.ObjectRef(it, sel), span(e))
+        }
+        // A nested SINGLETON reached through a resolved outer (`PathFillType.Companion`, a named
+        // `Duration.Companion`, `Outer.Factory`). `typeDenotationFqn` rejects those on purpose - an explicitly
+        // spelled companion is an INSTANCE, and the editor must offer its members as instance members - but the
+        // singleton is exactly what a reference here should denote. Without this the receiver lowers as a VALUE,
+        // where a bare type name already denotes its companion, and the trailing selector then reads a property
+        // of the companion it IS: "no readable property `Companion` on ...PathFillType$Companion", which is the
+        // whole `path(...)` of a generated icon (`pathFillType = PathFillType.Companion.NonZero`).
+        val outerFqn = runCatching { resolver.typeDenotationFqn(e.receiverExpression) }.getOrNull()
+        if (outerFqn != null) {
+            val nested = "$outerFqn.$sel"
+            if (runCatching { service.isKnownType(nested) }.getOrDefault(false)) {
+                return RNode.Name(Binding.ObjectRef(nested, sel), span(e))
+            }
+        }
+        if (sel.firstOrNull()?.isUpperCase() == true) {
+            val text = e.text
+            if (runCatching { service.isKnownType(text) }.getOrDefault(false)) {
+                return RNode.Name(Binding.ObjectRef(text, sel), span(e))
+            }
+        }
+        return null
+    }
+
+    /**
+     * `Foo::class` (a type literal) or `expr::class` (an instance literal). A receiver that denotes a TYPE
+     * lowers to a [RNode.ClassLiteral] carrying the resolved FQN plus its loadable supertype FQNs (a
+     * project-source type isn't compiled at preview time, so a reflectable supertype stands in for it); any
+     * other receiver is a value whose runtime class is taken. [asJava] is set by [qualifiedNode] when the
+     * `.java` selector is applied.
+     */
+    private fun classLiteralNode(e: KtClassLiteralExpression, asJava: Boolean): RNode {
+        val recvExpr = e.receiverExpression ?: return unsupported("class literal without a receiver", e)
+        // `T::class` for a reified type parameter T: carry the param name so the interpreter resolves the bound
+        // concrete type from the call frame (the erased `T` has no loadable class of its own).
+        val recvText = recvExpr.text.substringBefore('<').trim()
+        if (recvText in currentTypeParams) {
+            return RNode.ClassLiteral(receiver = null, typeCandidates = emptyList(), asJava = asJava, source = span(e), reifiedParam = recvText)
+        }
+        val typeFqn = runCatching { resolver.typeDenotationFqn(recvExpr) }.getOrNull()
+        if (typeFqn != null) {
+            return RNode.ClassLiteral(receiver = null, typeCandidates = classLoadCandidates(typeFqn), asJava = asJava, source = span(e))
+        }
+        // An instance class literal `expr::class` — the runtime class of the evaluated receiver (also the path
+        // for a bare `object` reference, whose singleton materializes and gives its class).
+        val recv = lower(recvExpr)
+        if (recv is RNode.Unsupported) return recv
+        return RNode.ClassLiteral(receiver = recv, typeCandidates = emptyList(), asJava = asJava, source = span(e))
+    }
+
+    /** [fqn] followed by its transitive supertype FQNs (bounded) — the ordered candidates the interpreter tries
+     *  to load at eval. A mapped Kotlin type (`kotlin.String`, `kotlin.collections.List`) has no `.class` under
+     *  its Kotlin FQN, so its JVM type (`java.lang.String`, `java.util.List`) is listed first; a project-source
+     *  class (uncompiled at preview time) has no loadable class of its own, so its nearest reflectable supertype
+     *  stands in. */
+    private fun classLoadCandidates(fqn: String): List<String> {
+        val candidates = LinkedHashSet<String>()
+        val visited = HashSet<String>()
+        fun add(f: String, depth: Int) {
+            if (depth > 6 || !visited.add(f)) return
+            dev.ide.lang.kotlin.symbols.Builtins.javaTypeFor(f)?.let { candidates += it } // JVM form preferred
+            candidates += f
+            runCatching { service.supertypesOf(f) }.getOrNull()?.forEach { st ->
+                (st as? KotlinType)?.qualifiedName?.let { add(it, depth + 1) }
+            }
+        }
+        add(fqn, 0)
+        return candidates.toList()
+    }
+
+    /**
+     * `super.foo(args)` / `super.prop` — same instance, superclass implementation. The receiver is the
+     * enclosing class's `this` (so a source-superclass method runs on the right object); the call carries
+     * [DispatchKind.SUPER] and the lexical class FQN so the interpreter starts the method lookup at the
+     * supertypes, skipping this class's own override. A super call to a binary superclass (`super.onCreate`)
+     * has no source body — the interpreter no-ops it; the point here is that lowering produces no diagnostic,
+     * so an unrelated overriding member (a `MainActivity.onCreate`) doesn't block the file's previews.
+     */
+    private fun superNode(e: KtDotQualifiedExpression): RNode {
+        val ctx = classStack.lastOrNull() ?: return unsupported("`super` outside a class body", e)
+        val receiver = thisRef(ctx, e)
+        return when (val sel = e.selectorExpression) {
+            is KtCallExpression -> {
+                val name = (sel.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+                    ?: return unsupported("super call without a simple name", e)
+                val arity = sel.valueArguments.size
+                val callee = ResolvedCallable.Source(name, "${ctx.fqn}.$name/$arity", emptyList(), isConstructor = false)
+                RNode.Call(callee, DispatchKind.SUPER, receiver, lowerArgs(sel), csk(sel.textRange.startOffset), span(e))
+            }
+            // `super.prop` reads the inherited/overridden property off the same instance.
+            is KtNameReferenceExpression ->
+                if (sel.getReferencedName() in ctx.propertyNames)
+                    RNode.PropertyGet(receiver, Binding.Property(sel.getReferencedName(), ctx.fqn, backingField = false), span(e))
+                else unsupported("super property `${sel.getReferencedName()}` (not a known member)", e)
+            else -> unsupported("super selector ${sel?.let { it::class.simpleName }}", e)
+        }
+    }
+
+    /** Resolve `receiverNode.name` to a property read. `this.member` of the enclosing class resolves against
+     *  the class context; otherwise the receiver's (best-effort) inferred type drives the binding. */
+    private fun propertyGet(name: String, receiverNode: RNode, receiverExpr: KtExpression, e: KtElement): RNode {
+        val ctx = classStack.lastOrNull()
+        if (isThisReceiver(receiverNode, ctx) && name in ctx!!.propertyNames) {
+            return RNode.PropertyGet(receiverNode, Binding.Property(name, ctx.fqn, backingField = false), span(e))
+        }
+        // Inference is best-effort and can throw on a deep chain; degrade to null (→ Unsupported with a reason)
+        // instead of letting the throw crash the whole function's lowering.
+        val inferred = runCatching { resolver.inferType(receiverExpr) }.getOrNull()
+        // `WindowInsets.navigationBars` — a bare class name used as a VALUE is its companion object, so the
+        // read resolves against `Foo.Companion`, not `Foo`. Only when the class itself declares nothing by
+        // that name, so a real member always wins.
+        val recvType = companionLookupType(name, receiverNode, inferred) ?: inferred
+        // A SOURCE extension property (`val Boxed.doubled get() = …`) has no compiled facade getter to reflect —
+        // interpret its synthetic getter via a source EXTENSION call (its receiver is [receiverNode]), mirroring
+        // how a source extension FUNCTION dispatches.
+        sourceExtensionProperty(name, recvType)?.let { sym ->
+            return RNode.Call(toCallable(sym), DispatchKind.EXTENSION, receiverNode, emptyList(), csk(e.textRange.startOffset), span(e))
+        }
+        return propertyBinding(name, recvType)?.let { RNode.PropertyGet(receiverNode, it, span(e)) }
+            ?: unsupported("unresolved property `$name` (extension not imported)", e)
+    }
+
+    /** A SOURCE extension property `val Recv.name` in scope on [recvType] — its getter is interpreted (there's no
+     *  compiled facade). Null for a member property, a library extension property (reflected), or one not imported. */
+    private fun sourceExtensionProperty(name: String, recvType: KotlinType?): KotlinSymbol? {
+        val rt = recvType ?: return null
+        return runCatching {
+            service.membersForCompletion(rt.qualifiedName, rt.typeArguments, name)
+                .firstOrNull { it.name == name && it.kind == SymbolKind.FIELD && it.isExtension && it.origin.fromSource && extensionInScope(it) }
+        }.getOrNull()
+    }
+
+    /** `receiver?.selector` → `receiver.let { tmp -> if (tmp != null) tmp.selector else null }`, lowered with a
+     *  temp local so the receiver is evaluated once. */
+    private fun safeCallNode(e: KtSafeQualifiedExpression): RNode {
+        val recv = lower(e.receiverExpression)
+        if (recv is RNode.Unsupported) return recv
+        val span = span(e)
+        val tmpSlot = newSlot()
+        val tmpRef = { RNode.Name(Binding.Local(tmpSlot, "\$sc", mutable = false), span) }
+        val selected = when (val sel = e.selectorExpression) {
+            is KtCallExpression -> callNode(sel, tmpRef(), e.receiverExpression)
+            is KtNameReferenceExpression -> propertyGet(sel.getReferencedName(), tmpRef(), e.receiverExpression, e)
+            else -> return unsupported("safe-call selector ${sel?.let { it::class.simpleName }}", e)
+        }
+        if (selected is RNode.Unsupported) return selected
+        val cond = RNode.Call(synthOperator("ne"), DispatchKind.OPERATOR, tmpRef(), listOf(RArg(RNode.Const(null, null, span))), csk(span.start), span)
+        val ifNode = RNode.If(cond, selected, RNode.Const(null, null, span), span)
+        return RNode.Block(listOf(RNode.LocalVar(tmpSlot, "\$sc", mutable = false, recv, span), ifNode), isExpression = true, span)
+    }
+
+    private fun isNode(e: KtIsExpression): RNode {
+        val subject = e.leftHandSide ?: return unsupported("`is` without a subject", e)
+        val value = lower(subject)
+        if (value is RNode.Unsupported) return value
+        val typeText = e.typeReference?.text?.substringBefore('<')?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return unsupported("`is` without a type", e)
+        // `x is T` for a reified type parameter T: carry the param name so the interpreter substitutes the
+        // bound concrete type at runtime (the erased `T` would otherwise never match).
+        val reified = typeText.takeIf { it in currentTypeParams }
+        val fqn = runCatching { service.resolveTypeName(typeText, resolver.fileContext) }.getOrNull() ?: typeText
+        return RNode.TypeCheck(value, fqn, e.isNegated, span(e), reifiedParam = reified)
+    }
+
+    /** `value as T` / `value as? T` — a runtime cast. The target type's generic args are stripped (the JVM
+     *  check is erased anyway) and a trailing `?` records target-nullability so an unsafe `as T?` accepts null. */
+    private fun castNode(e: KtBinaryExpressionWithTypeRHS): RNode {
+        val subject = e.left ?: return unsupported("cast without a subject", e)
+        val value = lower(subject)
+        if (value is RNode.Unsupported) return value
+        val rawType = e.right?.text?.trim()?.takeIf { it.isNotEmpty() } ?: return unsupported("cast without a type", e)
+        val nullable = rawType.endsWith("?")
+        val typeText = rawType.removeSuffix("?").substringBefore('<').trim()
+        // `x as T` for a reified type parameter T: carry the param name so the interpreter substitutes the bound
+        // concrete type at runtime rather than trusting the un-resolvable `T`.
+        val reified = typeText.takeIf { it in currentTypeParams }
+        val fqn = runCatching { service.resolveTypeName(typeText, resolver.fileContext) }.getOrNull() ?: typeText
+        val safe = e.operationReference.getReferencedNameElementType() == KtTokens.AS_SAFE
+        return RNode.Cast(value, fqn, safe, nullable, span(e), reifiedParam = reified)
+    }
+
+    /**
+     * A callable reference (`::foo`, `obj::method`) — desugared to a synthesized lambda that forwards its
+     * arguments to the target, reusing the normal call machinery. Covers a top-level function reference and a
+     * BOUND member reference on a value receiver (the common `onClick = vm::handle` / `::doThing` callbacks);
+     * an unbound `Type::method` / static / constructor / property reference stays an honest boundary.
+     */
+    private fun callableRefNode(e: KtCallableReferenceExpression): RNode {
+        val span = span(e)
+        val name = e.callableReference?.getReferencedName()
+            ?: return unsupported("callable reference without a name", e)
+        val receiverExpr = e.receiverExpression
+        if (receiverExpr == null) {
+            // `::localFn` — a local function is ALREADY a closure held in a slot, so the reference IS that value:
+            // no forwarding lambda is needed (and none could be built — there is no compiled target to dispatch
+            // into). Checked before the top-level lookup because a local shadows a same-named top-level function.
+            if (localFunctionsInScope(e, e.textRange.startOffset, name).any { it.receiverTypeReference == null }) {
+                resolveLocal(name)?.let { return RNode.Name(it, span) }
+            }
+            // `::foo` — a top-level function, else `::Type` — a constructor reference.
+            service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.METHOD }?.let {
+                return synthRefLambda(toCallable(it), DispatchKind.TOP_LEVEL, receiverNode = null, arity = it.paramTypes.size, span = span)
+            }
+            constructorRefLambda(name, span)?.let { return it }
+            return unsupported("callable reference `::$name` (unresolved)", e)
+        }
+        // A bare receiver name that denotes a TYPE (not a local/value in scope) is an UNBOUND member/property
+        // reference (`String::length`, `Widget::render`): the receiver becomes the synthesized lambda's first
+        // parameter. Checked before the bound path because a type name can still `inferType` (to its companion).
+        val bareName = (receiverExpr as? KtNameReferenceExpression)?.getReferencedName()
+        if (bareName != null && resolveLocal(bareName) == null) {
+            unboundRefLambda(bareName, name, span)?.let { return it }
+        }
+        val recvType = runCatching { resolver.inferType(receiverExpr) }.getOrNull()
+            ?: return unsupported("callable reference `${receiverExpr.text}::$name` (unbound or untyped receiver)", e)
+        // `expr::method` — a BOUND reference on a value receiver, evaluated once into a captured temp.
+        val sym = service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, name)
+            .firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && !it.isExtension }
+            ?: return unsupported("callable reference `${receiverExpr.text}::$name` (no such member)", e)
+        val recvNode = lower(receiverExpr)
+        if (recvNode is RNode.Unsupported) return recvNode
+        val tmpSlot = newSlot()
+        val ref = RNode.Name(Binding.Local(tmpSlot, "\$ref", mutable = false), span)
+        val lambda = synthRefLambda(toCallable(sym), DispatchKind.MEMBER, ref, arity = sym.paramTypes.size, span = span)
+        return RNode.Block(listOf(RNode.LocalVar(tmpSlot, "\$ref", mutable = false, recvNode, span), lambda), isExpression = true, span)
+    }
+
+    /** `::Type` — a constructor reference lowered to `{ p0, … -> Type(p0, …) }`. Resolves the type + its
+     *  constructor (source or library) so the synthesized `CONSTRUCTOR` call materializes an instance. Null when
+     *  the name isn't a constructible type. */
+    private fun constructorRefLambda(name: String, span: SourceSpan): RNode? {
+        // A source class in this file — mirror the constructor callee the normal `Type(...)` call builds.
+        fileClasses[name]?.takeIf { it.flavor == ClassFlavor.CLASS }?.let { sc ->
+            val callee = ResolvedCallable.Source(name, "${sc.fqn}/${sc.primaryArity}", emptyList(), isConstructor = true)
+            return synthRefLambda(callee, DispatchKind.CONSTRUCTOR, receiverNode = null, arity = sc.primaryArity, span = span)
+        }
+        val fqn = runCatching { service.resolveTypeName(name, resolver.fileContext) }.getOrNull() ?: return null
+        // A whole-project SOURCE class declared in another file (the fast path above is current-file only) —
+        // mirror its `Type(...)` constructor callee, INCLUDING a class with an implicit constructor (where
+        // `constructorsOf` returns nothing), which would otherwise fall through and be dropped as unresolved.
+        if (service.isSourceClass(fqn) && !service.isObject(fqn)) {
+            val arity = runCatching { service.sourceClass(fqn) }.getOrNull()?.constructors?.firstOrNull()?.paramTexts?.size ?: 0
+            val callee = ResolvedCallable.Source(name, "$fqn/$arity", emptyList(), isConstructor = true)
+            return synthRefLambda(callee, DispatchKind.CONSTRUCTOR, receiverNode = null, arity = arity, span = span)
+        }
+        // A library class.
+        val ctor = runCatching { service.constructorsOf(fqn) }.getOrDefault(emptyList()).firstOrNull() ?: return null
+        return synthRefLambda(toCallable(ctor), DispatchKind.CONSTRUCTOR, receiverNode = null, arity = ctor.paramTypes.size, span = span)
+    }
+
+    /** `Type::member` — an UNBOUND reference: the receiver is the synthesized lambda's FIRST parameter. A method
+     *  `Type::m` → `{ recv, p1… -> recv.m(p1…) }`; a property `Type::p` → `{ recv -> recv.p }`. Null when the
+     *  name isn't a type or has no such member. */
+    private fun unboundRefLambda(typeName: String, member: String, span: SourceSpan): RNode? {
+        val fqn = runCatching { service.resolveTypeName(typeName, resolver.fileContext) }.getOrNull() ?: return null
+        val members = runCatching { service.membersForCompletion(fqn, emptyList(), member) }.getOrDefault(emptyList())
+            .filter { it.name == member }
+        val recvSlot = newSlot()
+        val recvRef = RNode.Name(Binding.Local(recvSlot, "\$recv", mutable = false), span)
+        // A real member method, else an in-scope extension function (`String::uppercase` → `StringsKt.uppercase`);
+        // prefer the zero-value-parameter overload (the shape a `Type::name` reference denotes).
+        val memberMethod = members.filter { it.kind == SymbolKind.METHOD && !it.isExtension }.minByOrNull { it.paramTypes.size }
+        val extMethod = memberMethod ?: runCatching { service.extensionsFor(fqn, emptyList(), member) }.getOrDefault(emptyList())
+            .filter { it.name == member && it.kind == SymbolKind.METHOD && extensionInScope(it) }.minByOrNull { it.paramTypes.size }
+        (memberMethod?.let { it to DispatchKind.MEMBER } ?: extMethod?.let { it to DispatchKind.EXTENSION })?.let { (m, dispatch) ->
+            val argSlots = (0 until m.paramTypes.size).map { newSlot() }
+            val params = listOf(RParam(recvSlot, "\$recv", null)) + argSlots.mapIndexed { i, s -> RParam(s, "p$i", null) }
+            val argRefs = argSlots.map { RArg(RNode.Name(Binding.Local(it, "p", mutable = false), span)) }
+            val call = RNode.Call(toCallable(m), dispatch, recvRef, argRefs, csk(span.start), span)
+            return RNode.Lambda(params, call, captures = emptyList(), source = span)
+        }
+        members.firstOrNull { it.kind == SymbolKind.FIELD }?.let {
+            val get = RNode.PropertyGet(recvRef, Binding.Property(member, fqn, backingField = false), span)
+            return RNode.Lambda(listOf(RParam(recvSlot, "\$recv", null)), get, captures = emptyList(), source = span)
+        }
+        return null
+    }
+
+    /** Build `{ p0, … -> callee(p0, …) }` for a callable reference of the given [arity] — a normal lambda the
+     *  interpreter runs as a [Closure], so library/source dispatch and lambda proxying are all reused. */
+    private fun synthRefLambda(callee: ResolvedCallable, dispatch: DispatchKind, receiverNode: RNode?, arity: Int, span: SourceSpan): RNode {
+        val slots = (0 until arity).map { newSlot() }
+        val params = slots.mapIndexed { i, slot -> RParam(slot, "p$i", null) }
+        val argRefs = slots.map { RArg(RNode.Name(Binding.Local(it, "p", mutable = false), span)) }
+        val call = RNode.Call(callee, dispatch, receiverNode, argRefs, csk(span.start), span)
+        return RNode.Lambda(params, call, captures = emptyList(), source = span)
+    }
+
+    private fun tryNode(e: KtTryExpression): RNode {
+        val body = lowerBlock(e.tryBlock)
+        val catches = e.catchClauses.map { cc ->
+            scopes.addLast(HashMap())
+            val param = cc.catchParameter
+            val slot = newSlot()
+            val name = param?.name ?: "e"
+            bind(name, Binding.Local(slot, name, mutable = false))
+            val typeFqn = param?.typeReference?.text?.substringBefore('<')?.trim()?.takeIf { it.isNotEmpty() }
+                ?.let { runCatching { service.resolveTypeName(it, resolver.fileContext) }.getOrNull() ?: it }
+            val cbody = cc.catchBody?.let { lower(it) } ?: emptyBlock(cc)
+            scopes.removeLast()
+            RCatch(slot, name, typeFqn, cbody)
+        }
+        val finallyBlock = e.finallyBlock?.finalExpression?.let { lowerBlock(it) }
+        return RNode.Try(body, catches, finallyBlock, span(e))
+    }
+
+    /** `val (a, b) = e` → a temp local holding `e`, then a local per entry reading `tmp.componentN()`. */
+    private fun destructuringNode(e: KtDestructuringDeclaration): RNode {
+        val init = e.initializer ?: return unsupported("destructuring without initializer", e)
+        val initNode = lower(init)
+        if (initNode is RNode.Unsupported) return initNode
+        val span = span(e)
+        val tmpSlot = newSlot()
+        val statements = ArrayList<RNode>()
+        statements += RNode.LocalVar(tmpSlot, "\$destr", mutable = false, initNode, span)
+        e.entries.forEachIndexed { i, entry ->
+            val name = entry.name ?: "_"
+            val slot = newSlot()
+            val tmpRef = RNode.Name(Binding.Local(tmpSlot, "\$destr", mutable = false), span(entry))
+            val comp = RNode.Call(synthMember("component${i + 1}"), DispatchKind.MEMBER, tmpRef, emptyList(), csk(span(entry).start), span(entry))
+            bind(name, Binding.Local(slot, name, mutable = false))
+            statements += RNode.LocalVar(slot, name, mutable = false, comp, span(entry))
+        }
+        return RNode.Block(statements, isExpression = false, span)
+    }
+
+    /**
+     * Resolve a `receiver.name` property read to a [Binding.Property]. An **extension** property (`Int.dp`,
+     * `Modifier.fillMaxSize` value props) compiles to a static getter on a `…Kt` facade with the receiver as
+     * the first argument, so we record the facade in `ownerFqn` and flag `isExtension` — the interpreter then
+     * reflects `DpKt.getDp(int)` instead of looking for a (non-existent) `getDp()` on `java.lang.Integer`.
+     * A plain member property keeps the receiver type as `ownerFqn` (informational) and an instance getter.
+     */
+    private fun propertyBinding(name: String, recvType: KotlinType?): Binding.Property? {
+        val candidates = recvType?.let { rt ->
+            runCatching {
+                service.membersForCompletion(rt.qualifiedName, rt.typeArguments, name)
+                    .filter { it.name == name && it.kind == SymbolKind.FIELD }
+            }.getOrNull()
+        }.orEmpty()
+        // A plain member property wins over an extension of the same name (Kotlin's member-first rule).
+        if (candidates.any { !it.isExtension }) {
+            return Binding.Property(name, recvType?.qualifiedName, backingField = false, isExtension = false)
+        }
+        candidates.firstOrNull { it.isExtension }?.let { ext ->
+            // An extension property reads only when it is actually in scope. `16.dp`/`14.sp` without
+            // `import androidx.compose.ui.unit.{dp,sp}` does NOT compile, so the sound lowering is
+            // Unsupported (null) — never a fabricated getter on the receiver.
+            if (!extensionInScope(ext)) return null
+            return Binding.Property(name, ext.declaringClassFqn ?: ext.packageName, backingField = false, isExtension = true)
+        }
+        // No candidate at all → best-effort plain member binding (e.g. an as-yet-unindexed member).
+        return Binding.Property(name, recvType?.qualifiedName, backingField = false, isExtension = false)
+    }
+
+    /**
+     * The type a qualified read resolves against when the receiver is a bare CLASS NAME: `Foo.bar` where `Foo`
+     * names a class evaluates `Foo` to its COMPANION object, so a member — or an EXTENSION — declared on
+     * `Foo.Companion` is what `bar` means. Compose declares every window-inset accessor exactly that way
+     * (`val WindowInsets.Companion.navigationBars: WindowInsets @Composable get()`), and without this the read
+     * bound as a plain member of `WindowInsets` and failed at render with "no readable property".
+     *
+     * Null (keep the inferred type) unless the receiver really is a class/object reference AND the class
+     * declares nothing by that name AND the companion does — so a genuine member never loses to a companion
+     * extension, and an INSTANCE receiver is never given access to one.
+     */
+    private fun companionLookupType(name: String, receiverNode: RNode, recvType: KotlinType?): KotlinType? {
+        val fqn = ((receiverNode as? RNode.Name)?.binding as? Binding.ObjectRef)?.fqn ?: return null
+        if (declaresProperty(name, recvType)) return null
+        return service.typeByFqn("$fqn.Companion").takeIf { declaresProperty(name, it) }
+    }
+
+    /** Whether [type] has a property named [name] (its own, inherited, or an extension in scope on it). */
+    private fun declaresProperty(name: String, type: KotlinType?): Boolean =
+        type != null && runCatching {
+            service.membersForCompletion(type.qualifiedName, type.typeArguments, name)
+                .any { it.name == name && it.kind == SymbolKind.FIELD }
+        }.getOrDefault(false)
+
+    /**
+     * The function VALUE a call's callee names, for Kotlin's invoke convention: `tab.content()` where
+     * `content` is a `val content: @Composable () -> Unit`, or the same read off an implicit `this`. Null when
+     * the callee names no such property — then the call really is unresolved.
+     *
+     * `x.invoke(…)` is the explicit spelling of the same convention, and resolves to the receiver itself.
+     *
+     * For a PROJECT-SOURCE receiver the property's declared type isn't available here (the file-class index
+     * carries names, not types), so the test is structural instead: a property of that name with no method of
+     * that name AND arity. Kotlin has exactly one reading for that call — read the property, invoke the value —
+     * so the reading is unambiguous even without the type. A LIBRARY receiver has its symbol, so there the
+     * property's type must actually be functional.
+     */
+    private fun functionValueNode(call: KtCallExpression, receiverNode: RNode?, receiverExpr: KtExpression?): RNode? {
+        val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+        val arity = call.valueArguments.size
+        if (name == "invoke") {
+            // A literal method named `invoke` would have resolved above (this runs only after every named-callee
+            // path declined), so the operator convention is the one reading left — accept it unless the receiver
+            // is KNOWN not to be functional. An un-inferable receiver (a source class's property, whose declared
+            // type this pass can't see) still lowers, and a genuinely non-callable value then fails at render
+            // with what it actually is instead of a bare "unresolved call `invoke`".
+            val rt = receiverExpr?.let { runCatching { resolver.inferType(it) }.getOrNull() }
+            return receiverNode?.takeIf { rt == null || isFunctionType(rt) }
+        }
+        if (receiverNode != null) {
+            sourceClassOfReceiver(receiverExpr)?.let { srcCls ->
+                val (props, methods) = inheritedMembers(srcCls)
+                if (name !in props || methods[name]?.any { it.arity == arity } == true) return null
+                return RNode.PropertyGet(receiverNode, Binding.Property(name, srcCls.fqn, backingField = false), span(call))
+            }
+            val rt = receiverExpr?.let { runCatching { resolver.inferType(it) }.getOrNull() } ?: return null
+            val prop = runCatching {
+                service.membersForCompletion(rt.qualifiedName, rt.typeArguments, name)
+                    .firstOrNull { it.name == name && it.kind == SymbolKind.FIELD && !it.isExtension }
+            }.getOrNull() ?: return null
+            if (!isFunctionType(prop.type as? KotlinType ?: return null)) return null
+            return propertyBinding(name, rt)?.let { RNode.PropertyGet(receiverNode, it, span(call)) }
+        }
+        // A bare `content()` inside the class that holds the slot — the same read off the implicit `this`.
+        val ctx = classStack.lastOrNull() ?: return null
+        if (name !in ctx.propertyNames) return null
+        return RNode.PropertyGet(thisRef(ctx, call), Binding.Property(name, ctx.fqn, backingField = false), span(call))
+    }
+
+    /**
+     * The `object`/companion singleton an `import` uses to bring [name] into scope by its simple name —
+     * `import androidx.compose.material3.CardDefaults.cardColors` (an object's member),
+     * `import androidx.compose.ui.input.key.KeyEventType.Companion.KeyUp` (a companion's) — or null when no
+     * import does. That member takes no dispatch receiver in SOURCE, but its JVM method/field is an instance
+     * one on the singleton, so the lowering has to supply the singleton the source omits.
+     *
+     * Returns the CONTAINER, not the resolved symbol's declaring class: an inherited member's declaring class
+     * is a supertype, and it is the singleton that has to be materialized. Mirrors
+     * [KotlinResolver.importedSingletonMembers], which is what put the member in scope for the resolver.
+     */
+    private fun importedSingletonOwner(name: String): String? {
+        for (imp in resolver.fileContext.imports) {
+            if (imp.alias != null) continue
+            if (!imp.isStar && imp.fqn.substringAfterLast('.') != name) continue
+            val container = if (imp.isStar) imp.fqn else imp.fqn.substringBeforeLast('.', "")
+            if (container.isEmpty()) continue
+            if (container.substringAfterLast('.').firstOrNull()?.isUpperCase() != true) continue
+            if (runCatching { service.isSingletonObject(container) }.getOrDefault(false)) return container
+            // `import Foo.bar` where `Foo` is a CLASS: the member comes off its companion, and the companion
+            // is the singleton to dispatch on.
+            runCatching { service.companionObjectFqn(container) }.getOrNull()?.let { return it }
+        }
+        return null
+    }
+
+    /** A reference to the singleton [fqn] — the receiver an imported singleton member needs. */
+    private fun singletonRef(fqn: String, at: KtElement): RNode =
+        RNode.Name(Binding.ObjectRef(fqn, fqn.substringAfterLast('.')), span(at))
+
+    /**
+     * Whether the extension [sym] is actually in scope here — Kotlin resolves an extension only when it is
+     * imported (explicitly or via a star/default import) or declared in the file's own package. Without this
+     * gate the resolver binds `16.dp` even when `androidx.compose.ui.unit.dp` was never imported, and the
+     * interpreter then reflects a getter the program cannot legally call. No package info → don't guess a
+     * rejection (allow).
+     */
+    private fun extensionInScope(sym: KotlinSymbol): Boolean {
+        val pkg = sym.packageName ?: sym.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null } ?: return true
+        val ctx = resolver.fileContext
+        if (pkg == ctx.packageName || DefaultImports.isDefaultImported(pkg)) return true
+        return ctx.imports.any { imp ->
+            if (imp.isStar) imp.packageName == pkg else imp.fqn == "$pkg.${sym.name}"
+        }
+    }
+
+    private fun lowerArgs(call: KtCallExpression): List<RArg> = call.valueArguments.map { va ->
+        val expr = va.getArgumentExpression() ?: return@map RArg(unsupported("empty argument", call))
+        // A `KtLambdaArgument` is a trailing lambda (written outside the parens) — it binds to the LAST value
+        // parameter. A lambda inside the parens (named or positional) is an ordinary `KtValueArgument`.
+        RArg(lower(expr), va.getArgumentName()?.asName?.identifier, va.getSpreadElement() != null, va is KtLambdaArgument)
+    }
+
+    private fun callNode(call: KtCallExpression, receiverNode: RNode?, receiverExpr: KtExpression? = null): RNode {
+        // Invoking a function value held by a local/param (`fn(x)`, `callback()`): a bare call whose callee name
+        // is a local in scope is an `invoke` on that value, not a named-function call (a local shadows a
+        // same-named function). The interpreter calls an interpreted lambda directly, or `invoke()`s a JVM one.
+        val bareCalleeName = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+        if (receiverNode == null && bareCalleeName != null) {
+            resolveLocal(bareCalleeName)?.let { binding ->
+                val recv = if (binding is Binding.DelegatedLocal) RNode.PropertyGet(delegateRef(binding, call), binding.valueProperty, span(call))
+                else RNode.Name(binding, span(call))
+                return RNode.Call(synthMember("invoke"), DispatchKind.INVOKE, recv, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+            }
+        }
+        // A LOCAL EXTENSION function called on its receiver (`fun String.twice()` … then `"ab".twice()`). It lives
+        // in a local slot like any other local function — there is no compiled facade to dispatch into — so this
+        // is an `invoke` on that value with the receiver passed as the LEADING argument, filling the receiver
+        // slot [localFunctionNode] reserves. Guarded by the PSI so only a genuine local extension takes this path.
+        if (receiverNode != null && bareCalleeName != null &&
+            localFunctionsInScope(call, call.textRange.startOffset, bareCalleeName).any { it.receiverTypeReference != null }
+        ) {
+            resolveLocal(bareCalleeName)?.let { binding ->
+                val fnValue = RNode.Name(binding, span(call))
+                val args = listOf(RArg(receiverNode)) + lowerArgs(call)
+                return RNode.Call(synthMember("invoke"), DispatchKind.INVOKE, fnValue, args, csk(call.textRange.startOffset), span(call))
+            }
+        }
+        checkNamedArguments(call)
+        // A coroutine suspend intrinsic the interpreter models (`delay`/`yield`/`withContext`/`coroutineScope`/
+        // …). These frequently DON'T resolve to a clean Call: `delay`'s overloads are ambiguous across coroutines
+        // artifacts (→ Unsupported → skipped → a `while { delay(); … }` timer busy-loops), and even when they
+        // resolve their owner may be the package rather than a facade the interpreter keys on. Canonicalize a
+        // genuine kotlinx.coroutines intrinsic to a kotlinx.coroutines-owned Call so the interpreter runs it
+        // (`delay` = an interruptible sleep, the scoping ones just run their block) under the coroutine bridge.
+        // Gated on a real kotlinx.coroutines candidate so a same-named user function isn't hijacked.
+        if (receiverNode == null && bareCalleeName in COROUTINE_INTRINSICS) {
+            coroutineIntrinsicOwner(call, bareCalleeName!!)?.let { owner ->
+                val callee = ResolvedCallable.Library(
+                    displayName = bareCalleeName, ownerFqn = owner, methodName = bareCalleeName,
+                    paramTypes = List(call.valueArguments.size) { null }, isStatic = true, isConstructor = false, isInline = false,
+                )
+                return RNode.Call(callee, DispatchKind.TOP_LEVEL, null, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+            }
+        }
+        // `flow.collect { action }` / `collectLatest` — the collect extension is `inline` (no JVM method → it
+        // lowers to Unsupported → gets skipped), so canonicalize a genuine `kotlinx.coroutines.flow` collect to a
+        // dispatchable MEMBER Call the interpreter routes to the coroutine bridge (a blocking collect on the
+        // bridge thread). Gated on a real flow-package candidate so a same-named user method isn't hijacked.
+        if (receiverNode != null && bareCalleeName in FLOW_COLLECT_NAMES && call.valueArguments.size == 1 && isFlowCollectCall(call, bareCalleeName!!)) {
+            val callee = ResolvedCallable.Library(
+                displayName = bareCalleeName, ownerFqn = "kotlinx.coroutines.flow.FlowKt", methodName = bareCalleeName,
+                paramTypes = listOf(null), isStatic = false, isConstructor = false, isInline = false,
+            )
+            return RNode.Call(callee, DispatchKind.MEMBER, receiverNode, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+        }
+        // `iterable.forEach { }` / `forEachIndexed { }` — the Kotlin stdlib inline extension. On device its
+        // overload resolution contends against `java.lang.Iterable.forEach(Consumer)` (a Java 8 default MEMBER,
+        // present on API 24+): a trailing lambda's type is un-inferable so both look applicable, and the call
+        // lowers either to Unsupported (a false "unresolved/ambiguous call") or to the Java member (MEMBER on
+        // `java.lang.Iterable`). BOTH bypass the `forEach` inline intrinsic (the interpreter's `evalInlineIntrinsic`
+        // only fires for a CollectionsKt-owned EXTENSION), so a `Column { list.forEach { Row { } } }` runs the loop
+        // in a library frame and its child composables never render. Canonicalize a genuine kotlin.collections
+        // `forEach`/`forEachIndexed` (CollectionsKt for List/Set/Iterable, ArraysKt for arrays) to a
+        // CollectionsKt-owned EXTENSION Call so the interpreter runs it as an intrinsic (the loop body composes
+        // into the ambient composition). Gated on a real kotlin.collections candidate so a same-named user
+        // extension isn't hijacked; Map.forEach (MapsKt, a destructuring `(k, v)` lambda) is intentionally left
+        // to normal resolution.
+        if (receiverNode != null && bareCalleeName in COLLECTION_FOREACH_NAMES && call.valueArguments.size == 1 &&
+            isCollectionForEachCall(call, bareCalleeName!!)
+        ) {
+            val callee = ResolvedCallable.Library(
+                displayName = bareCalleeName, ownerFqn = "kotlin.collections.CollectionsKt", methodName = bareCalleeName,
+                paramTypes = listOf(null), isStatic = false, isConstructor = false, isInline = true,
+            )
+            return RNode.Call(callee, DispatchKind.EXTENSION, receiverNode, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+        }
+        // A generic call whose type arguments can't be inferred (`mutableStateOf()` with no value argument) is
+        // invalid Kotlin — the editor flags `kt.cannotInferType`. The arity fallback in `chooseCallee` would
+        // still pick the callee and lower a malformed (under-applied) call that crashes the run reflectively;
+        // surface the honest reason instead so the preview names the gap rather than dying opaquely.
+        val uninferable = runCatching { resolver.uninferableTypeParameters(call) }.getOrDefault(emptyList())
+        if (uninferable.isNotEmpty()) {
+            val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: "?"
+            return unsupported("not enough information to infer type variable ${uninferable.joinToString(", ")} for `$name`", call)
+        }
+        // A call that omits a REQUIRED argument (`Button { }` — no `onClick`) doesn't compile. The arity
+        // fallback in `chooseCallee` would still pick the overload and lower a call with a null stand-in for the
+        // missing parameter, which then RUNS in the preview as if valid. Reject it with the honest reason so the
+        // preview reports the gap instead of silently rendering invalid code. Sound across overloads (backs off
+        // unless every candidate is missing a required parameter; see `missingRequiredArgument`).
+        runCatching { resolver.missingRequiredArgument(call) }.getOrNull()?.let { missing ->
+            val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: "?"
+            return unsupported("no value passed for required parameter $missing of `$name`", call)
+        }
+        // A bare or `this`-qualified call to a member of the enclosing class dispatches on `this` — resolve it
+        // against the class context directly (the editor resolver doesn't model source implicit receivers).
+        val ctx = classStack.lastOrNull()
+        if (ctx != null && (receiverNode == null || isThisReceiver(receiverNode, ctx))) {
+            val callName = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+            val arity = call.valueArguments.size
+            val sig = callName?.let { ctx.methods[it] }?.firstOrNull { it.arity == arity }
+            if (callName != null && sig != null) {
+                val callee = ResolvedCallable.Source(
+                    displayName = callName, declId = "${ctx.fqn}.$callName/$arity",
+                    paramNames = sig.paramNames, isConstructor = false,
+                )
+                return RNode.Call(callee, DispatchKind.MEMBER, thisRef(ctx, call), lowerArgs(call), csk(call.textRange.startOffset), span(call))
+            }
+        }
+        val chosen = chooseCallee(call)
+        if (chosen == null) {
+            // The editor resolver couldn't resolve it; if the receiver is a known source type and the member is
+            // one the interpreter can run/synthesize, dispatch it on the source instance.
+            val callName = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+            val arity = call.valueArguments.size
+            val srcCls = if (receiverNode != null) sourceClassOfReceiver(receiverExpr) else null
+            if (callName != null && srcCls != null && acceptsSourceMember(srcCls, callName, arity)) {
+                // Carry a reified inline MEMBER's type-parameter names + explicit type arguments so the interpreter
+                // threads reified bindings into the body (else `x is T` there is erased). A non-generic member
+                // yields empty lists, so this is a no-op for the common case.
+                val member = runCatching { service.sourceClass(srcCls.fqn) }.getOrNull()
+                    ?.members?.firstOrNull { it.name == callName && it.receiverText == null && it.paramTexts.size == arity }
+                val typeParams = member?.typeParameterNames.orEmpty()
+                val typeArgs = if (typeParams.isEmpty()) emptyList() else explicitTypeArgs(call, typeParams)
+                val callee = ResolvedCallable.Source(callName, "${srcCls.fqn}.$callName/$arity", emptyList(), isConstructor = false, typeParameterNames = typeParams)
+                return RNode.Call(callee, DispatchKind.MEMBER, receiverNode, lowerArgs(call), csk(call.textRange.startOffset), span(call), typeArguments = typeArgs)
+            }
+            // A qualified call `Type.Nested(args)` on a TYPE receiver whose selector is a NESTED CLASS is a
+            // CONSTRUCTOR of that nested class (`GridCells.Fixed(2)`) — not a member of the outer type, so
+            // chooseCallee finds no candidate. Recover it from the receiver's `ObjectRef` (a bare type used as a
+            // value lowers to one): a source nested class in this file builds a SourceObject; a library nested
+            // class is reflected (its JVM name joins outer+nested with `$`, not `.`).
+            val outerFqn = ((receiverNode as? RNode.Name)?.binding as? Binding.ObjectRef)?.fqn
+            if (callName != null && outerFqn != null && callName.first().isUpperCase()) {
+                val nestedDotted = "$outerFqn.$callName"
+                // A nested SOURCE class builds a SourceObject — same-file via the live [fileClasses] index (fresh
+                // for the buffer being edited), OR any WHOLE-PROJECT source class: a sealed interface's subtype
+                // usually lives in a DIFFERENT file than the @Preview, so it's absent from fileClasses. The
+                // cross-file merge pulls the nested type's declaring file in (`expandPreviewModel` → the source
+                // callee's simple name). Only a genuine LIBRARY nested class is reflected (its `$` JVM name).
+                val sameFileNested = fileClasses[callName]?.takeIf { it.fqn == nestedDotted && it.flavor == ClassFlavor.CLASS }
+                if (sameFileNested != null || (service.isSourceClass(nestedDotted) && !service.isObject(nestedDotted))) {
+                    val callee = ResolvedCallable.Source(callName, "$nestedDotted/$arity", emptyList(), isConstructor = true)
+                    return RNode.Call(callee, DispatchKind.CONSTRUCTOR, null, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+                }
+                if (service.isKnownType(nestedDotted) && !service.isObject(nestedDotted)) {
+                    val ctor = ResolvedCallable.Library(callName, "$outerFqn\$$callName", "<init>", List(arity) { null }, isStatic = false, isConstructor = true, isInline = false)
+                    return RNode.Call(ctor, DispatchKind.CONSTRUCTOR, null, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+                }
+            }
+            // A bare capitalized call the editor resolver didn't surface a constructor for. A source class
+            // (e.g. one with an implicit no-arg constructor) builds a [SourceObject]; otherwise a stdlib/library
+            // type (`IllegalArgumentException("x")`) is instantiated reflectively.
+            if (receiverNode == null && callName != null && callName.first().isUpperCase()) {
+                fileClasses[callName]?.takeIf { it.flavor == ClassFlavor.CLASS }?.let { sc ->
+                    val callee = ResolvedCallable.Source(callName, "${sc.fqn}/$arity", emptyList(), isConstructor = true)
+                    return RNode.Call(callee, DispatchKind.CONSTRUCTOR, null, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+                }
+                runCatching { service.resolveTypeName(callName, resolver.fileContext) }.getOrNull()?.let { typeFqn ->
+                    // A cross-file source class the same-file [fileClasses] fast path above missed (e.g. a bare,
+                    // imported sealed subtype `Title(...)` whose declaration lives in another file): build a
+                    // SourceObject, NOT a reflective instance — the type isn't compiled at preview time, so
+                    // `Class.forName` would fail with "cannot load class `<dotted fqn>`".
+                    if (service.isSourceClass(typeFqn) && !service.isObject(typeFqn)) {
+                        val callee = ResolvedCallable.Source(callName, "$typeFqn/$arity", emptyList(), isConstructor = true)
+                        return RNode.Call(callee, DispatchKind.CONSTRUCTOR, null, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+                    }
+                    // A name that resolves to a type the runtime CANNOT instantiate — an `interface`, or an
+                    // `abstract`/`sealed` class — and that a top-level FACTORY function of the same name RETURNS
+                    // is a call to that factory, however the overload resolution above tied out. Compose ships a
+                    // family of these: `FontFamily(vararg Font)` over the sealed `FontFamily`, `PaddingValues(all:
+                    // Dp)` over the `PaddingValues` interface. Fabricating the constructor instead is what
+                    // rendered `FontFamily(Font(googleFont = …))` as `InstantiationException: Can't instantiate
+                    // abstract class …FontFamily` mid-composition. The reflective dispatcher re-resolves the
+                    // overload from the ACTUAL argument values, so picking by arity here is enough. A
+                    // non-instantiable name WITHOUT such a factory keeps the constructor path: that is how a
+                    // `fun interface` SAM constructor (`BoundsTransform { _, _ -> … }`) is encoded, and the
+                    // interpreter realizes it as a proxy over the single abstract method.
+                    if (service.isNonInstantiableType(typeFqn) == true) {
+                        val factories = runCatching { service.topLevelByName(callName) }.getOrDefault(emptyList())
+                            .filter {
+                                it.kind == SymbolKind.METHOD && !it.origin.fromSource &&
+                                    it.declaringClassFqn != null &&
+                                    (it.type as? KotlinType)?.qualifiedName == typeFqn
+                            }
+                        val byArity = factories.filter { it.paramTypes.size == arity || it.varargParamIndex in 0..arity }
+                            .ifEmpty { factories.filter { it.paramTypes.size >= arity } }
+                        byArity.firstOrNull()?.let { factory ->
+                            return RNode.Call(
+                                toCallable(factory), DispatchKind.TOP_LEVEL, null, lowerArgs(call),
+                                csk(call.textRange.startOffset), span(call),
+                            )
+                        }
+                    }
+                    // Only fabricate a reflective constructor when there's POSITIVE evidence the name is a
+                    // constructible type: a known/loadable type, or a name being THROWN
+                    // (`throw IllegalArgumentException("x")` — a stdlib exception the resolver couldn't qualify,
+                    // loaded via `java.lang` at runtime). An unresolved capitalized call without those is almost
+                    // always a library FUNCTION not on the index (a Compose composable like `Text`/`SuggestionChip`);
+                    // fabricating a `Text()` constructor crashes the running composition with "cannot load class".
+                    // (Do NOT treat a dotted [typeFqn] as evidence: `resolveTypeName` import-qualifies a bare
+                    // function name too, e.g. `Text` -> `androidx.compose.material3.Text`, so dots prove nothing.)
+                    val constructible = service.isKnownType(typeFqn) || call.parent is KtThrowExpression
+                    if (constructible) {
+                        val ctor = ResolvedCallable.Library(callName, typeFqn, "<init>", List(arity) { null }, isStatic = false, isConstructor = true, isInline = false)
+                        return RNode.Call(ctor, DispatchKind.CONSTRUCTOR, null, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+                    }
+                }
+            }
+            // Kotlin's INVOKE CONVENTION on a property of function type: `tab.content()` where `content` is a
+            // `val content: @Composable () -> Unit` reads the property and invokes the function value. There is
+            // no function named `content`, which is why nothing above resolved it. A class holding composable
+            // slots this way is a common Compose idiom (JetNews's `TabContent(section, content)`), and the same
+            // shape covers a plain `holder.onClick()`. Reached only after every named-callee path declined, so a
+            // real member function of that name still wins, as Kotlin requires.
+            functionValueNode(call, receiverNode, receiverExpr)?.let { fnValue ->
+                return RNode.Call(synthMember("invoke"), DispatchKind.INVOKE, fnValue, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+            }
+            return unsupported(callDiagnostic(call), call)
+        }
+        val args = lowerArgs(call)
+        val key = csk(call.textRange.startOffset)
+        val callee = toCallable(chosen)
+        val typeArgs = resolveCallTypeArgs(call, chosen)
+        if (chosen.isExtension) {
+            // A MEMBER extension of an in-scope receiver scope (`RowScope.weight`, declared inside `RowScope`)
+            // dispatches ON that scope instance, with the explicit/implicit `Modifier` as its extension receiver
+            // — `scopeMemberExtensions` is what surfaced it, so the scope IS in scope here.
+            val dispatchScope = chosen.declaringClassFqn?.let { findScopeReceiver(it) }
+            if (dispatchScope != null) {
+                val extReceiver = receiverNode ?: chosen.receiverTypeFqn?.let { findScopeReceiver(it) }
+                if (extReceiver != null) {
+                    return RNode.Call(callee, DispatchKind.MEMBER_EXTENSION, extReceiver, args, key, span(call), dispatchReceiver = dispatchScope, typeArguments = typeArgs)
+                }
+            }
+            // A bare extension call resolves against an implicit receiver (`itemsIndexed(...)` on the
+            // `LazyListScope` the `LazyColumn { }` lambda provides) — that scope is the extension receiver.
+            if (receiverNode == null) {
+                chosen.receiverTypeFqn?.let { findScopeReceiver(it) }?.let { extReceiver ->
+                    return RNode.Call(callee, DispatchKind.EXTENSION, extReceiver, args, key, span(call), typeArguments = typeArgs)
+                }
+            }
+            return RNode.Call(callee, DispatchKind.EXTENSION, receiverNode, args, key, span(call), typeArguments = typeArgs)
+        }
+        // A bare call to a MEMBER of an in-scope implicit receiver — `item`/`items(count, …)` are MEMBERS of
+        // the `LazyListScope` interface a `LazyColumn { }` lambda provides (NOT extensions), so they dispatch
+        // ON that scope instance. Without this they fall to TOP_LEVEL with a null receiver, and the member's
+        // `$default` synthetic gets a null `$this` → `item$default(null, …)` NPE. (A genuine top-level call's
+        // declaring class is a `…Kt` facade, never an in-scope receiver, so it stays TOP_LEVEL.)
+        if (receiverNode == null && chosen.kind == SymbolKind.METHOD) {
+            chosen.declaringClassFqn?.let { findScopeReceiver(it) }?.let { scope ->
+                return RNode.Call(callee, DispatchKind.MEMBER, scope, args, key, span(call), typeArguments = typeArgs)
+            }
+            // A bare call to a member an `import` brought in through an `object`/companion
+            // (`import …CardDefaults.cardColors` → `cardColors()`, `import …PullToRefreshDefaults.Indicator` →
+            // `Indicator(…)`). Source omits the receiver; the JVM method is an instance one on the singleton,
+            // so dispatch it there rather than falling to a receiver-less TOP_LEVEL call.
+            bareCalleeName?.let { n -> importedSingletonOwner(n) }?.let { owner ->
+                return RNode.Call(callee, DispatchKind.MEMBER, singletonRef(owner, call), args, key, span(call), typeArguments = typeArgs)
+            }
+        }
+        val dispatch = when {
+            chosen.kind == SymbolKind.CONSTRUCTOR -> DispatchKind.CONSTRUCTOR
+            receiverNode != null -> DispatchKind.MEMBER
+            else -> DispatchKind.TOP_LEVEL
+        }
+        return RNode.Call(callee, dispatch, receiverNode, args, key, span(call), typeArguments = typeArgs)
+    }
+
+    /**
+     * Resolve a generic call's type arguments positionally with [chosen]'s type parameters, for
+     * [RNode.Call.typeArguments]. Explicit args (`serializer<Foo>()`, `composable<Route>()`) and inferred ones
+     * both flow through [inferTypeArguments]. An argument that is itself an enclosing reified type parameter
+     * (`bar<T>()` inside `fun <reified T> foo()`) becomes a [RTypeArg.typeParamRef] re-bound at interpret time;
+     * a concrete type gets its [classLoadCandidates] so `T::class` can materialize a reflectable stand-in.
+     */
+    /** Lower a call's EXPLICIT `<...>` type arguments positionally against [names] — the reified case used by the
+     *  cross-file member recovery, which has no resolved symbol to drive [resolveCallTypeArgs]'s inference. */
+    private fun explicitTypeArgs(call: KtCallExpression, names: List<String>): List<RTypeArg> {
+        val explicit = call.typeArgumentList?.arguments ?: return emptyList()
+        return names.mapIndexed { i, _ ->
+            val t = explicit.getOrNull(i)?.typeReference?.text?.let { service.typeFromText(it, resolver.fileContext) }
+            when {
+                t == null -> RTypeArg(fqn = null)
+                t.qualifiedName in currentTypeParams -> RTypeArg(fqn = null, typeParamRef = t.qualifiedName)
+                t.isTypeParameter -> RTypeArg(fqn = null)
+                else -> RTypeArg(fqn = t.qualifiedName, loadCandidates = classLoadCandidates(t.qualifiedName))
+            }
+        }
+    }
+
+    private fun resolveCallTypeArgs(call: KtCallExpression, chosen: KotlinSymbol): List<RTypeArg> {
+        val names = chosen.typeParameters
+        if (names.isEmpty()) return emptyList()
+        // Resolve each type parameter to a concrete type: explicit `<...>` positionally (Kotlin does no
+        // argument inference when they're spelled out), else fall back to argument inference.
+        val byName = HashMap<String, KotlinType>()
+        val explicit = call.typeArgumentList?.arguments
+        if (!explicit.isNullOrEmpty()) {
+            names.forEachIndexed { i, n ->
+                explicit.getOrNull(i)?.typeReference?.text
+                    ?.let { service.typeFromText(it, resolver.fileContext) }?.let { byName[n] = it }
+            }
+        } else {
+            runCatching { resolver.inferTypeArguments(chosen, call) }.getOrNull()
+                ?.forEach { (n, tr) -> (tr as? KotlinType)?.let { byName[n] = it } }
+        }
+        if (byName.isEmpty()) return emptyList()
+        return names.map { n ->
+            val t = byName[n]
+            when {
+                t == null -> RTypeArg(fqn = null)
+                // An enclosing function's own type parameter passed through (`inner<T>()` inside `foo<T>()`):
+                // re-bound from the caller's frame at interpret time. Matched by name (a bare `T` may not carry
+                // `isTypeParameter` through `typeFromText`).
+                t.qualifiedName in currentTypeParams -> RTypeArg(fqn = null, typeParamRef = t.qualifiedName)
+                t.isTypeParameter -> RTypeArg(fqn = null) // some other unbound type variable — can't resolve
+                else -> RTypeArg(fqn = t.qualifiedName, loadCandidates = classLoadCandidates(t.qualifiedName))
+            }
+        }
+    }
+
+    /**
+     * A field-debuggable reason for an unresolved/ambiguous call: the callee name, how many candidates the
+     * resolver found (`candidates=0` ⇒ nothing in scope / not on the indexed classpath; a positive count that
+     * still didn't narrow ⇒ a genuine ambiguity or arg-type mismatch), and — for a `recv.foo()` call — the
+     * inferred receiver type (`recv=…`, absent when it couldn't be inferred). Surfaced through the preview's
+     * lowering diagnostics so a device failure names the exact gap instead of a bare "unresolved".
+     */
+    private fun callDiagnostic(call: KtCallExpression): String {
+        val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: "?"
+        val n = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList()).size
+        val recv = (call.parent as? KtDotQualifiedExpression)?.takeIf { it.selectorExpression === call }
+            ?.let { runCatching { resolver.inferType(it.receiverExpression)?.qualifiedName }.getOrNull() }
+        return "unresolved/ambiguous call `$name` (candidates=$n${recv?.let { ", recv=$it" } ?: ""})"
+    }
+
+    private fun ifNode(e: KtIfExpression): RNode {
+        val condExpr = e.condition ?: return unsupported("if without condition", e)
+        val cond = lower(condExpr)
+        // Smart-cast: `if (x is T) { x.member }` resolves `x`'s members against `T` in the then-branch (and the
+        // else-branch of an `if (x !is T)`). The condition is lowered first, unnarrowed.
+        val then = e.then?.let {
+            withNarrowing(conditionNarrowings(condExpr, whenTrue = true)) {
+                withNarrowedReceiver(conditionThisNarrowing(condExpr, whenTrue = true)) { lower(it) }
+            }
+        } ?: return unsupported("if without body", e)
+        val otherwise = e.`else`?.let {
+            withNarrowing(conditionNarrowings(condExpr, whenTrue = false)) {
+                withNarrowedReceiver(conditionThisNarrowing(condExpr, whenTrue = false)) { lower(it) }
+            }
+        }
+        return RNode.If(cond, then, otherwise, span(e))
+    }
+
+    /** Run [block] with a smart-cast narrowing scope active on the resolver (so member/property resolution
+     *  inside sees the narrowed types), balanced on exit. A no-op for an empty narrowing. */
+    private inline fun <R> withNarrowing(narrowed: Map<String, KotlinType>, block: () -> R): R {
+        if (narrowed.isEmpty()) return block()
+        resolver.pushNarrowing(narrowed)
+        try { return block() } finally { resolver.popNarrowing() }
+    }
+
+    /** The smart-cast narrowings (`name → type`) that hold when [cond] is [whenTrue]: an `x is T` on a simple
+     *  name narrows `x` to `T`; `&&` conjoins both sides' true-narrowings, `||` both sides' false-narrowings; a
+     *  `!is` (or the false branch) flips which side narrows. Only simple-name receivers narrow — sound for code
+     *  that compiles, since the interpreter dispatches on the runtime class regardless. */
+    private fun conditionNarrowings(cond: KtExpression?, whenTrue: Boolean): Map<String, KotlinType> =
+        when (val c = unwrapParens(cond)) {
+            is KtIsExpression -> {
+                val name = (c.leftHandSide as? KtNameReferenceExpression)?.getReferencedName()
+                if (name != null && whenTrue != c.isNegated) narrowingTo(name, c.typeReference?.text) else emptyMap()
+            }
+            is KtBinaryExpression -> when (c.operationToken) {
+                KtTokens.ANDAND -> if (whenTrue) conditionNarrowings(c.left, true) + conditionNarrowings(c.right, true) else emptyMap()
+                KtTokens.OROR -> if (!whenTrue) conditionNarrowings(c.left, false) + conditionNarrowings(c.right, false) else emptyMap()
+                else -> emptyMap()
+            }
+            else -> emptyMap()
+        }
+
+    /** Narrow [name] to the (generic-erased, non-null) classifier named by [typeText]; empty if it won't resolve. */
+    private fun narrowingTo(name: String, typeText: String?): Map<String, KotlinType> {
+        val t = typeOfIsTarget(typeText) ?: return emptyMap()
+        return mapOf(name to t)
+    }
+
+    /** The classifier an `is T` narrows to: generic args erased, made non-null. Null when [typeText] is absent
+     *  or won't resolve. Shared by the name-keyed [narrowingTo] and the `this`-keyed [conditionThisNarrowing]
+     *  so the two cannot disagree about what a cast target means. */
+    private fun typeOfIsTarget(typeText: String?): KotlinType? {
+        val text = typeText?.substringBefore('<')?.removeSuffix("?")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return runCatching { service.typeFromText(text, resolver.fileContext) }.getOrNull()
+    }
+
+    /** Whether [e] is a bare, unlabeled `this` — the only subject that narrows the implicit receiver. A
+     *  `this@Outer` names a specific entry in the receiver stack, which this narrowing does not track. */
+    private fun isBareThis(e: KtExpression?): Boolean {
+        val t = unwrapParens(e) as? KtThisExpression ?: return false
+        return t.getLabelName() == null
+    }
+
+    /** The type an `is` check written against `this` narrows the implicit receiver to when [cond] is
+     *  [whenTrue]. The `this`-subject mirror of [conditionNarrowings], which can only key declared names. */
+    private fun conditionThisNarrowing(cond: KtExpression?, whenTrue: Boolean): KotlinType? =
+        when (val c = unwrapParens(cond)) {
+            is KtIsExpression ->
+                if (isBareThis(c.leftHandSide) && whenTrue != c.isNegated) typeOfIsTarget(c.typeReference?.text) else null
+            is KtBinaryExpression -> when (c.operationToken) {
+                KtTokens.ANDAND -> if (whenTrue) conditionThisNarrowing(c.left, true) ?: conditionThisNarrowing(c.right, true) else null
+                KtTokens.OROR -> if (!whenTrue) conditionThisNarrowing(c.left, false) ?: conditionThisNarrowing(c.right, false) else null
+                else -> null
+            }
+            else -> null
+        }
+
+    /**
+     * Run [block] with the innermost receiver scope's TYPE replaced by [narrowed] — the lowering's half of a
+     * `this` smart cast (`when (this) { is Circle -> segments }`). The slot is untouched: the runtime value is
+     * the same object, only the type that bare members resolve against is narrower. A no-op when nothing
+     * narrows or no receiver is in scope.
+     *
+     * The editor reaches the same answer through `computeImplicitReceiversAt`; a bare member CALL already
+     * routes through that shared resolver, but a bare property READ resolves against this stack, so without
+     * this the two disagree and the preview refuses a function the editor shows as clean.
+     */
+    private inline fun <R> withNarrowedReceiver(narrowed: KotlinType?, block: () -> R): R {
+        val outer = receiverScopes.lastOrNull()
+        if (narrowed == null || outer == null) return block()
+        receiverScopes.removeLast()
+        receiverScopes.addLast(outer.copy(type = narrowed))
+        try {
+            return block()
+        } finally {
+            receiverScopes.removeLast()
+            receiverScopes.addLast(outer)
+        }
+    }
+
+    private fun unwrapParens(e: KtExpression?): KtExpression? =
+        if (e is KtParenthesizedExpression) unwrapParens(e.expression) else e
+
+    private fun binaryNode(e: KtBinaryExpression): RNode {
+        val left = e.left ?: return unsupported("binary without lhs", e)
+        val right = e.right ?: return unsupported("binary without rhs", e)
+        val token = e.operationToken
+        if (token == KtTokens.EQ) {
+            // Indexed assignment (`xs[i] = v`, the `set` operator) lowers to the receiver's `set(index…, value)`
+            // member — the write mirror of [arrayAccessNode]'s `get`.
+            if (left is KtArrayAccessExpression) return indexedSetNode(left, right, e)
+            // The LHS is a local/param (`i = …` → Assign) or a property (`count.value = …`, a `MutableState`, or a
+            // `by`-delegated local — both already lowered to a PropertyGet → write through its setter via PropertySet).
+            return when (val lhs = lower(left)) {
+                is RNode.Unsupported -> lhs
+                is RNode.PropertyGet -> RNode.PropertySet(lhs.receiver, lhs.binding, lower(right), span(e))
+                else -> RNode.Assign(lhs, lower(right), span(e))
+            }
+        }
+        // Augmented assignment (`count += 1`, `list += item`, `total -= n`).
+        AUGMENTED[token]?.let { op ->
+            val read = lower(left)
+            if (read is RNode.Unsupported) return read
+            val rhs = lower(right)
+            if (rhs is RNode.Unsupported) return rhs
+            val key = csk(e.textRange.startOffset)
+            val leftType = runCatching { resolver.inferType(left) }.getOrNull()
+            // In-place assign operator (`plusAssign`/`minusAssign`/…): Kotlin PREFERS it when the receiver defines
+            // one — a MutableList/Set/Map/Collection does (`MutableCollection.plusAssign`, a stdlib EXTENSION), and
+            // it's the ONLY legal form for a `val` collection (a read-modify-write can't reassign a `val`). Dispatch
+            // it directly (the interpreter mutates the real collection in place); falls through to the
+            // read-modify-write when no `*Assign` applies (numbers/strings/state — `count += 1`, `text += "!"`).
+            ASSIGN_OP[token]?.let { assignOp -> operatorCall(assignOp, leftType, read, rhs, key, span(e))?.let { return it } }
+            // Read-modify-write `a = a.op(b)` — an Assign for a local/param, a PropertySet for a property (a member,
+            // a `by`-delegated `MutableState`, `count.value`) so the write drives recomposition. The `op` is a
+            // resolved `plus`/`minus`/… (a `var list: List += x` uses the stdlib `Collection.plus` EXTENSION; a
+            // numeric/user member uses its own), or the intrinsic synthetic OPERATOR for an unknown/String left type
+            // (mirrors the arithmetic path). Mirrors the `++`/`--` path in [incDecNode].
+            val combined = if (leftType == null || (op == "plus" && leftType.qualifiedName == "kotlin.String")) null
+            else operatorCall(op, leftType, read, rhs, key, span(e))
+            val rmw = combined ?: RNode.Call(synthOperator(op), DispatchKind.OPERATOR, read, listOf(RArg(rhs)), key, span(e))
+            return when (read) {
+                is RNode.Name -> RNode.Assign(read, rmw, span(e))
+                is RNode.PropertyGet -> RNode.PropertySet(read.receiver, read.binding, rmw, span(e))
+                else -> unsupported("augmented-assignment target", e)
+            }
+        }
+        // `a && b` / `a || b` → a short-circuiting `if` (the RHS isn't evaluated when the LHS already decides
+        // the result). The RHS is lowered under the LHS's smart-cast narrowing, so `x is T && x.member` and
+        // `x !is T || x.member` resolve `x`'s `T`-members in the RHS.
+        if (token == KtTokens.ANDAND || token == KtTokens.OROR) {
+            val span = span(e)
+            val lhs = lower(left)
+            val and = token == KtTokens.ANDAND
+            val rhs = withNarrowing(conditionNarrowings(left, whenTrue = and)) {
+                withNarrowedReceiver(conditionThisNarrowing(left, whenTrue = and)) { lower(right) }
+            }
+            return if (and) RNode.If(lhs, rhs, RNode.Const(false, boolType, span), span)
+            else RNode.If(lhs, RNode.Const(true, boolType, span), rhs, span)
+        }
+        val key = csk(e.textRange.startOffset)
+        // `a ?: b` → `a.let { t -> if (t != null) t else b }`, lowered with a temp local (evaluate `a` once).
+        if (token == KtTokens.ELVIS) {
+            val span = span(e)
+            val tmpSlot = newSlot()
+            val tmpRef = { RNode.Name(Binding.Local(tmpSlot, "\$elvis", mutable = false), span) }
+            val cond = RNode.Call(synthOperator("ne"), DispatchKind.OPERATOR, tmpRef(), listOf(RArg(RNode.Const(null, null, span))), key, span)
+            val ifNode = RNode.If(cond, tmpRef(), lower(right), span)
+            return RNode.Block(listOf(RNode.LocalVar(tmpSlot, "\$elvis", mutable = false, lower(left), span), ifNode), isExpression = true, span)
+        }
+        // `a in c` / `a !in c` → `c.contains(a)`. A `k in map` uses `containsKey` (Kotlin's `Map.contains` is an
+        // @InlineOnly extension → `containsKey`, and `java.util.Map` has no `contains`); a user `operator fun
+        // contains` EXTENSION dispatches as an extension; everything else is the receiver's `contains` member
+        // (List/Set/String/range), invoked reflectively by the runtime value.
+        if (token == KtTokens.IN_KEYWORD || token == KtTokens.NOT_IN) {
+            val lowRight = lower(right)
+            val lowLeft = lower(left)
+            val recvType = runCatching { resolver.inferType(right) }.getOrNull()
+            val contains: RNode = run {
+                // A `contains` MEMBER (List/Set/String/range) is the common case — the reflective synthetic-member
+                // default handles it. Only when the receiver has NO such member do the map/extension forms apply.
+                if (recvType != null) {
+                    val fqn = recvType.qualifiedName; val ta = recvType.typeArguments
+                    val hasContainsMember = service.membersNamed(fqn, ta, "contains").any { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+                    if (!hasContainsMember) {
+                        if (service.membersNamed(fqn, ta, "containsKey").any { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 })
+                            return@run RNode.Call(synthMember("containsKey"), DispatchKind.MEMBER, lowRight, listOf(RArg(lowLeft)), key, span(e))
+                        service.extensionsFor(fqn, ta, "contains")
+                            .firstOrNull { it.name == "contains" && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 && extensionInScope(it) }
+                            ?.let { return@run RNode.Call(toCallable(it), DispatchKind.EXTENSION, lowRight, listOf(RArg(lowLeft)), key, span(e)) }
+                    }
+                }
+                RNode.Call(synthMember("contains"), DispatchKind.MEMBER, lowRight, listOf(RArg(lowLeft)), key, span(e))
+            }
+            return if (token == KtTokens.NOT_IN) negate(contains, span(e)) else contains
+        }
+        // `a..b` → a range. The integral/char element types have a modeled range CONSTRUCTED directly (their
+        // member `rangeTo` is a primitive member the reflective interpreter can't invoke); every other element
+        // type — `Float`/`Double` (`ClosedFloatingPointRange`, e.g. a Slider's `valueRange = 0f..50f`) or a user
+        // `Comparable` — resolves through its in-scope `rangeTo` EXTENSION (`RangesKt.rangeTo(a, b)`), which is
+        // how Kotlin declares those.
+        if (token == KtTokens.RANGE) {
+            val lt = runCatching { resolver.inferType(left) }.getOrNull()
+            val lowLeft = lower(left)
+            val lowRight = lower(right)
+            fun rangeCtor(fqn: String) = RNode.Call(
+                ResolvedCallable.Library(fqn.substringAfterLast('.'), fqn, "<init>", listOf(null, null), isStatic = false, isConstructor = true, isInline = false),
+                DispatchKind.CONSTRUCTOR, null, listOf(RArg(lowLeft), RArg(lowRight)), key, span(e),
+            )
+            when (lt?.qualifiedName) {
+                null, "kotlin.Int" -> return rangeCtor("kotlin.ranges.IntRange") // null = the common `0..n`
+                "kotlin.Long" -> return rangeCtor("kotlin.ranges.LongRange")
+                "kotlin.Char" -> return rangeCtor("kotlin.ranges.CharRange")
+            }
+            val elem = lt!!.qualifiedName
+            service.extensionsFor(elem, lt.typeArguments, "rangeTo")
+                .firstOrNull { it.name == "rangeTo" && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 && extensionInScope(it) }
+                ?.let { return RNode.Call(toCallable(it), DispatchKind.EXTENSION, lowLeft, listOf(RArg(lowRight)), key, span(e)) }
+            service.membersNamed(elem, lt.typeArguments, "rangeTo")
+                .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 && it.declaringClassFqn != null }
+                ?.let { return RNode.Call(toCallable(it), DispatchKind.MEMBER, lowLeft, listOf(RArg(lowRight)), key, span(e)) }
+            return unsupported("range over $elem", e)
+        }
+        // Comparison / equality desugar to an OPERATOR call the interpreter evaluates intrinsically (the
+        // callee is synthetic — these need no library method to invoke).
+        (COMPARISON[token] ?: EQUALITY[token])?.let { op ->
+            return RNode.Call(
+                synthOperator(op), DispatchKind.OPERATOR, lower(left), listOf(RArg(lower(right))), key, span(e),
+            )
+        }
+        // An infix function call (`a to b`, `1 shl 2`, `x downTo y`): the operation token is an IDENTIFIER and
+        // the operation reference is the function name. It desugars to `a.name(b)` — a member or an in-scope
+        // extension of the left operand's type.
+        if (token == KtTokens.IDENTIFIER) return infixNode(e, left, right, key)
+        val convention = ARITHMETIC[token] ?: return unsupported("operator ${e.operationReference.text}", e)
+        val leftType = resolver.inferType(left)
+        // String concatenation (no `String.plus` member is reliably in the index), or an UNKNOWN left type
+        // (e.g. an enum-entry property like `Color.RED.name`): lower to a synthetic OPERATOR call the
+        // interpreter resolves at run time by the actual value — numeric arithmetic or string concat — rather
+        // than rejecting it here.
+        if (leftType == null || (token == KtTokens.PLUS && leftType.qualifiedName == "kotlin.String")) {
+            return RNode.Call(
+                synthOperator(convention), DispatchKind.OPERATOR, lower(left), listOf(RArg(lower(right))),
+                csk(e.textRange.startOffset), span(e),
+            )
+        }
+        // Member-first (`Int.plus`, `BigDecimal.plus`): a single-param MEMBER operator → an OPERATOR call on the
+        // receiver. Failing that, an in-scope single-param EXTENSION operator (`List.plus`/`Set.plus`/`Map.plus`
+        // are stdlib `Collection<T>.plus(T)` extensions, NOT members) → an EXTENSION call (a static facade method
+        // taking the receiver first). Mirrors [infixNode]; without the extension branch a `list + x` would be
+        // dispatched as a non-existent instance `plus` on the collection.
+        val leftFqn = leftType.qualifiedName
+        // The operator's OVERLOAD is chosen by the right operand's type: `list + list` is `Collection<T>.plus(
+        // elements: Iterable<T>)`, `list + x` is `plus(element: T)`: taking the first single-param candidate
+        // handed JetNews's `listOf(highlightedPost) + recommendedPosts` the ELEMENT overload, nesting the second
+        // list as one element (`find { it.id == … }` then read `id` on a List).
+        val rightType = runCatching { resolver.inferType(right) }.getOrNull()
+        service.membersNamed(leftFqn, leftType.typeArguments, convention)
+            .filter { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+            .let { pickOperatorOverload(it, rightType) }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.OPERATOR, lower(left), listOf(RArg(lower(right))), key, span(e)) }
+        service.extensionsFor(leftFqn, leftType.typeArguments, convention)
+            .filter { it.name == convention && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 && extensionInScope(it) }
+            .let { pickOperatorOverload(it, rightType) }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.EXTENSION, lower(left), listOf(RArg(lower(right))), key, span(e)) }
+        return unsupported("no `$convention` on $leftFqn", e)
+    }
+
+    /** Among single-parameter operator [candidates], the one whose parameter accepts [argType] most
+     *  specifically: a candidate with a CONCRETE parameter type the argument is assignable to beats one whose
+     *  parameter is a bare type parameter (which accepts anything, like `plus(element: T)`), and an exact type match
+     *  beats a supertype. With no argument type (or one candidate) the first candidate stands, as before. */
+    private fun pickOperatorOverload(candidates: List<KotlinSymbol>, argType: KotlinType?): KotlinSymbol? {
+        if (candidates.size <= 1 || argType == null) return candidates.firstOrNull()
+        fun param(c: KotlinSymbol) = c.paramTypes.firstOrNull() as? KotlinType
+        val accepting = candidates.filter { c ->
+            val pt = param(c) ?: return@filter true
+            pt.isTypeParameter || runCatching { pt.isAssignableFrom(argType) }.getOrDefault(false)
+        }
+        val concrete = accepting.filter { c -> param(c)?.isTypeParameter == false }
+        return concrete.firstOrNull { param(it)?.qualifiedName == argType.qualifiedName }
+            ?: concrete.firstOrNull()
+            ?: accepting.firstOrNull()
+            ?: candidates.first()
+    }
+
+    /**
+     * `a NAME b` — an infix function call. Kotlin parses it as a binary expression whose operation token is an
+     * IDENTIFIER; it means exactly `a.NAME(b)`. The callee is a single-parameter MEMBER of the left operand's
+     * type (Kotlin's member-first rule) or, failing that, an in-scope single-parameter EXTENSION on it
+     * (`1 to 2`, `0 until n`, `n downTo 1`, `x shl 2` — `to`/`until`/`downTo` are stdlib extensions, the bit
+     * ops are `Int`/`Long` members). The receiver type must be known and the function must resolve, else an
+     * honest Unsupported — we never fabricate a callee for an infix we can't bind (soundness, like every other
+     * call path here). A source-declared infix member resolves through `membersNamed` like any other member.
+     */
+    private fun infixNode(e: KtBinaryExpression, left: KtExpression, right: KtExpression, key: CallSiteKey): RNode {
+        val name = e.operationReference.getReferencedName()
+        val leftType = runCatching { resolver.inferType(left) }.getOrNull()
+            ?: return unsupported("infix `$name` on an unknown receiver type", e)
+        val recv = lower(left)
+        if (recv is RNode.Unsupported) return recv
+        val args = listOf(RArg(lower(right)))
+        // Member-first: a single-param method named [name] declared on (or inherited by) the left type.
+        service.membersNamed(leftType.qualifiedName, leftType.typeArguments, name)
+            .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.MEMBER, recv, args, key, span(e)) }
+        // Else an in-scope extension on the left type (imported or default-imported, like `to`/`until`).
+        service.extensionsFor(leftType.qualifiedName, leftType.typeArguments, name)
+            .firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 && extensionInScope(it) }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.EXTENSION, recv, args, key, span(e)) }
+        return unsupported("unresolved infix function `$name` on ${leftType.qualifiedName}", e)
+    }
+
+    /**
+     * `xs[i]` → a MEMBER call of the receiver's `get(index…)` operator (`items[selectedItem]` →
+     * `items.get(selectedItem)`). The receiver type drives callee selection (the indexed-access operator is a
+     * plain member the interpreter invokes reflectively). Indexed *assignment* (`xs[i] = v`, the `set` operator)
+     * is handled (rejected) in [binaryNode]; here we only read. Unknown receiver type / no matching `get` → Unsupported.
+     */
+    private fun arrayAccessNode(e: KtArrayAccessExpression): RNode {
+        val arrayExpr = e.arrayExpression ?: return unsupported("indexed access without an array expression", e)
+        val receiver = lower(arrayExpr)
+        if (receiver is RNode.Unsupported) return receiver
+        val recvType = runCatching { resolver.inferType(arrayExpr) }.getOrNull()
+            ?: return unsupported("indexed access on an unknown type", e)
+        val indices = e.indexExpressions
+        val args = indices.map { RArg(lower(it)) }
+        val key = csk(e.textRange.startOffset)
+        // A MEMBER `get` (List/Map/array) — a plain member invoked reflectively on the runtime receiver.
+        service.membersNamed(recvType.qualifiedName, recvType.typeArguments, "get")
+            .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == indices.size }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.MEMBER, receiver, args, key, span(e)) }
+        // An in-scope `operator fun get` EXTENSION (a user `Grid[i]`) — a static facade call, receiver first.
+        service.extensionsFor(recvType.qualifiedName, recvType.typeArguments, "get")
+            .firstOrNull { it.name == "get" && it.kind == SymbolKind.METHOD && it.paramTypes.size == indices.size && extensionInScope(it) }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.EXTENSION, receiver, args, key, span(e)) }
+        return unsupported("no `get` operator (arity ${indices.size}) on ${recvType.qualifiedName}", e)
+    }
+
+    /**
+     * `xs[i] = v` → a MEMBER call of the receiver's `set(index…, value)` operator (`cells[index] = current` →
+     * `cells.set(index, current)`). The write mirror of [arrayAccessNode]: the receiver type drives callee
+     * selection and `set` takes the index expression(s) with the value as its LAST argument (arity =
+     * indices + 1). Unknown receiver type / no matching `set` → Unsupported.
+     */
+    private fun indexedSetNode(lhs: KtArrayAccessExpression, valueExpr: KtExpression, e: KtBinaryExpression): RNode {
+        val arrayExpr = lhs.arrayExpression ?: return unsupported("indexed assignment without an array expression", e)
+        val receiver = lower(arrayExpr)
+        if (receiver is RNode.Unsupported) return receiver
+        val recvType = runCatching { resolver.inferType(arrayExpr) }.getOrNull()
+            ?: return unsupported("indexed assignment on an unknown type", e)
+        val indices = lhs.indexExpressions
+        val args = indices.map { RArg(lower(it)) } + RArg(lower(valueExpr))
+        val key = csk(e.textRange.startOffset)
+        // A MEMBER `set` (List.set, array set) — invoked reflectively on the runtime receiver.
+        service.membersNamed(recvType.qualifiedName, recvType.typeArguments, "set")
+            .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == indices.size + 1 }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.MEMBER, receiver, args, key, span(e)) }
+        // `map[k] = v` → `put(k, v)`: `MutableMap.set` is an @InlineOnly extension (no JVM method) that inlines to
+        // `put`, so route a single-index set to the real `put` member.
+        if (indices.size == 1 && service.membersNamed(recvType.qualifiedName, recvType.typeArguments, "put")
+                .any { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 2 }
+        ) return RNode.Call(synthMember("put"), DispatchKind.MEMBER, receiver, args, key, span(e))
+        // An in-scope `operator fun set` EXTENSION (a user grid `cells[i] = v`).
+        service.extensionsFor(recvType.qualifiedName, recvType.typeArguments, "set")
+            .firstOrNull { it.name == "set" && it.kind == SymbolKind.METHOD && it.paramTypes.size == indices.size + 1 && extensionInScope(it) }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.EXTENSION, receiver, args, key, span(e)) }
+        return unsupported("no `set` operator (arity ${indices.size + 1}) on ${recvType.qualifiedName}", e)
+    }
+
+    /**
+     * The modeled unary expressions:
+     * - `t++`/`++t`/`t--`/`--t` → a read-modify-write of `t` — a local/param (`i++` → `i = i + 1`, an
+     *   [RNode.Assign]) or a property (`count.value++` → an [RNode.PropertySet], covering a `MutableState`),
+     *   using the intrinsic numeric `plus`/`minus`. Statement-position result only.
+     * - `x!!` → [RNode.NotNull] (NPE if null).
+     * - `!x` → `if (x) false else true`; unary `-x` → `0 - x` (the intrinsic numeric operator); unary `+x` → x.
+     */
+    private fun incDecNode(e: KtUnaryExpression): RNode {
+        val base = e.baseExpression ?: return unsupported("unary without operand", e)
+        val span = span(e)
+        when (e.operationToken) {
+            KtTokens.EXCLEXCL -> {
+                val v = lower(base); if (v is RNode.Unsupported) return v
+                return RNode.NotNull(v, span)
+            }
+            KtTokens.EXCL -> {
+                val v = lower(base); if (v is RNode.Unsupported) return v
+                return negate(v, span)
+            }
+            KtTokens.MINUS -> {
+                val v = lower(base); if (v is RNode.Unsupported) return v
+                val zero = RNode.Const(0, service.typeByFqn("kotlin.Int"), span)
+                return RNode.Call(synthOperator("minus"), DispatchKind.OPERATOR, zero, listOf(RArg(v)), csk(span.start), span)
+            }
+            KtTokens.PLUS -> return lower(base) // unary plus is identity
+        }
+        val op = when (e.operationToken) {
+            KtTokens.PLUSPLUS -> "plus"
+            KtTokens.MINUSMINUS -> "minus"
+            else -> return unsupported("unary operator ${e.operationReference.text}", e)
+        }
+        val read = lower(base)
+        if (read is RNode.Unsupported) return read
+        val one = RNode.Const(1, service.typeByFqn("kotlin.Int"), span)
+        val bumped = RNode.Call(synthOperator(op), DispatchKind.OPERATOR, read, listOf(RArg(one)), csk(span.start), span)
+        return when (read) {
+            is RNode.Name -> RNode.Assign(read, bumped, span)
+            is RNode.PropertyGet -> RNode.PropertySet(read.receiver, read.binding, bumped, span)
+            else -> unsupported("increment/decrement target", e)
+        }
+    }
+
+    private fun synthOperator(name: String) = ResolvedCallable.Library(
+        displayName = name, ownerFqn = null, methodName = name, paramTypes = emptyList(),
+        isStatic = false, isConstructor = false, isInline = false,
+    )
+
+    /** Resolve `receiver.<convention>(arg)` as a single-parameter operator on [receiverType]: a MEMBER (member-first,
+     *  OPERATOR dispatch) or an in-scope stdlib/user EXTENSION (`Collection.plus`, `MutableCollection.plusAssign`).
+     *  Null when neither resolves — the caller falls back (a synthetic numeric/string OPERATOR, or an honest gap).
+     *  Shared by the arithmetic and augmented-assignment lowering. The interpreter re-resolves the concrete overload
+     *  from the runtime argument, so picking any single-parameter candidate suffices. */
+    private fun operatorCall(convention: String, receiverType: KotlinType?, receiver: RNode, arg: RNode, key: CallSiteKey, span: SourceSpan): RNode.Call? {
+        val fqn = receiverType?.qualifiedName ?: return null
+        service.membersNamed(fqn, receiverType.typeArguments, convention)
+            .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.OPERATOR, receiver, listOf(RArg(arg)), key, span) }
+        service.extensionsFor(fqn, receiverType.typeArguments, convention)
+            .firstOrNull { it.name == convention && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 && extensionInScope(it) }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.EXTENSION, receiver, listOf(RArg(arg)), key, span) }
+        return null
+    }
+
+    /** A synthetic MEMBER callee invoked reflectively on its runtime receiver by name (`contains`, `componentN`)
+     *  — or routed to the interpreter's source-member dispatch when the receiver is a [SourceObject]. */
+    private fun synthMember(name: String) = ResolvedCallable.Library(
+        displayName = name, ownerFqn = null, methodName = name, paramTypes = emptyList(),
+        isStatic = false, isConstructor = false, isInline = false,
+    )
+
+    /** A labeled expression (`loop@ while(…)` / `outer@ for(…)`). A label on a loop is carried onto the loop
+     *  node so a matching `break@loop`/`continue@loop` targets it; a label on any other expression (a lambda or
+     *  block, used for labeled `return@`) is transparent — the base is lowered unchanged. */
+    private fun labeledNode(e: KtLabeledExpression): RNode {
+        val label = e.getLabelName()
+        return when (val base = e.baseExpression) {
+            is KtWhileExpression -> whileNode(base, doWhile = false, label = label)
+            is KtDoWhileExpression -> whileNode(base, doWhile = true, label = label)
+            is KtForExpression -> forNode(base, label = label)
+            null -> unsupported("empty labeled expression", e)
+            else -> lower(base)
+        }
+    }
+
+    private fun whileNode(e: KtWhileExpressionBase, doWhile: Boolean, label: String? = null): RNode {
+        val cond = e.condition?.let { lower(it) } ?: return unsupported("while without condition", e)
+        val body = e.body?.let { lower(it) } ?: emptyBlock(e)
+        return RNode.While(cond, body, doWhile, span(e), label)
+    }
+
+    private fun forNode(e: KtForExpression, label: String? = null): RNode {
+        val lp = e.loopParameter ?: return unsupported("for without a loop variable", e)
+        val iterable = e.loopRange?.let { lower(it) } ?: return unsupported("for without an iterable", e)
+        if (iterable is RNode.Unsupported) return iterable
+        scopes.addLast(HashMap())
+        val slot = newSlot()
+        val destructuring = lp.destructuringDeclaration
+        val name = if (destructuring != null) "\$destr" else (lp.name ?: "_")
+        // A destructuring loop variable (`for ((k, v) in map)`): the element binds to the loop slot, then a
+        // local per entry reading `element.componentN()` is prepended to the body so `k`/`v` are in scope
+        // (mirroring [destructuringNode] and the lambda-parameter destructuring). Without this the entries never
+        // bind and every use resolves as an unknown name. A `Map` element is a `Map.Entry` (`component1/2` →
+        // key/value); a `List` element's `componentN` is `get(n-1)` — both @InlineOnly, modeled by the interpreter.
+        val prelude = ArrayList<RNode>()
+        if (destructuring != null) {
+            destructuring.entries.forEachIndexed { i, entry ->
+                val entryName = entry.name ?: "_"
+                val entrySlot = newSlot()
+                val tmpRef = RNode.Name(Binding.Local(slot, name, mutable = false), span(entry))
+                val comp = RNode.Call(synthMember("component${i + 1}"), DispatchKind.MEMBER, tmpRef, emptyList(), csk(span(entry).start), span(entry))
+                bind(entryName, Binding.Local(entrySlot, entryName, mutable = false))
+                prelude += RNode.LocalVar(entrySlot, entryName, mutable = false, comp, span(entry))
+            }
+        } else {
+            bind(name, Binding.Local(slot, name, mutable = false))
+        }
+        val lowered = e.body?.let { lower(it) } ?: emptyBlock(e)
+        scopes.removeLast()
+        val body = when {
+            prelude.isEmpty() -> lowered
+            lowered is RNode.Block -> RNode.Block(prelude + lowered.statements, lowered.isExpression, lowered.source)
+            else -> RNode.Block(prelude + lowered, isExpression = false, span(e))
+        }
+        // The iterator/hasNext/next conventions are reflected on the runtime value by the interpreter.
+        return RNode.ForEach(RParam(slot, name, service.typeFromText(lp.typeReference?.text, resolver.fileContext)), iterable, null, null, null, body, span(e), label)
+    }
+
+    private fun localVarNode(p: KtProperty): RNode {
+        val name = p.name ?: "_"
+        val slot = newSlot()
+        val delegate = p.delegateExpression
+        if (delegate != null) {
+            // `val/var x by <delegate>` requires the delegate's `getValue` (and `setValue` for a `var`)
+            // operator to be in scope — for Compose's `MutableState` these are extensions in
+            // `androidx.compose.runtime` (`val text by remember { mutableStateOf(0) }` needs `import
+            // androidx.compose.runtime.getValue`). Without it the code doesn't compile, so the preview must
+            // surface the gap rather than silently read `.value` (which the interpreter could do regardless).
+            val missingOps = runCatching { resolver.missingDelegateOperators(p) }.getOrDefault(emptyList())
+            if (missingOps.isNotEmpty()) {
+                return unsupported("property delegate operator(s) ${missingOps.joinToString(", ")} not in scope (import them)", p)
+            }
+            // The slot holds the DELEGATE object. A State/MutableState/Lazy delegate reads/writes through its
+            // `.value` (the fast-path); any other delegate with a MEMBER getValue/setValue operator (a project
+            // delegate class, `Delegates.observable`, …) uses the general convention, handled by the interpreter.
+            val valueProperty = delegateValueProperty(delegate)
+            if (valueProperty != null) {
+                val delegateNode = lower(delegate)
+                if (delegateNode is RNode.Unsupported) return delegateNode
+                bind(name, Binding.DelegatedLocal(slot, name, p.isVar, valueProperty)) // AFTER the delegate is lowered
+                return RNode.LocalVar(slot, name, p.isVar, delegateNode, span(p))
+            }
+            if (runCatching { resolver.delegateHasMemberConvention(p) }.getOrDefault(false)) {
+                val delegateNode = lower(delegate)
+                if (delegateNode is RNode.Unsupported) return delegateNode
+                bind(name, Binding.DelegatedConvention(slot, name, p.isVar, name)) // AFTER the delegate is lowered
+                return RNode.LocalVar(slot, name, p.isVar, delegateNode, span(p))
+            }
+            return unsupported("property delegate is not a `.value` delegate (State/Lazy) and has no member getValue/setValue operator", p)
+        }
+        val initializer = p.initializer?.let { lower(it) }
+        bind(name, Binding.Local(slot, name, p.isVar)) // registered AFTER the initializer is lowered
+        return RNode.LocalVar(slot, name, p.isVar, initializer, span(p))
+    }
+
+    /**
+     * A local function declaration inside a block (`fun helper(x: Int): Int = x * 2`). Lowered as a local slot
+     * bound to a closure — an [RNode.Lambda] flagged `isLocalFunction` so the interpreter treats a `return` in
+     * its body as LOCAL (not a non-local return from the enclosing function). The name is bound in the enclosing
+     * block scope BEFORE the body is lowered, so the function can call itself (recursion resolves through the
+     * invoke-on-local path in [callNode]); the body + params are lowered in a fresh pushed scope, exactly like a
+     * lambda. Parameters go through [loweredValueParams], so declared DEFAULTS and a `vararg` are carried on the
+     * [RParam]s and honoured at call time exactly as a top-level function's are. An EXTENSION local
+     * (`fun String.twice()`) binds its receiver to a leading slot and pushes a receiver scope, so `this` and
+     * bare-member access in the body resolve to it. Not modeled: a forward reference to a sibling local function
+     * declared later in the same block — which Kotlin rejects too (a backward reference / self-recursion works).
+     */
+    private fun localFunctionNode(fn: KtNamedFunction): RNode {
+        val name = fn.name ?: return unsupported("local function without a name", fn)
+        val slot = newSlot()
+        // Bind the name in the ENCLOSING scope first so the body (recursion) and later statements resolve it.
+        bind(name, Binding.Local(slot, name, mutable = false))
+        scopes.addLast(HashMap())
+        // An extension local's receiver takes the FIRST slot, matching the extension-dispatch convention the
+        // caller uses (the receiver value is passed as the head of the argument list — see [callNode]).
+        val recvType = fn.receiverTypeReference?.text?.let { service.typeFromText(it, resolver.fileContext) }
+        val receiverSlot = if (fn.receiverTypeReference != null) newSlot() else null
+        var pushedReceiver = false
+        if (receiverSlot != null && recvType != null) {
+            receiverScopes.addLast(ReceiverScope(receiverSlot, recvType, fn.name)); pushedReceiver = true
+        }
+        val valueParams = loweredValueParams(fn.valueParameters)
+        val params = if (receiverSlot != null)
+            listOf(RParam(receiverSlot, "<this>", recvType)) + valueParams else valueParams
+        val body = fn.bodyBlockExpression?.let { lowerBlock(it) }
+            ?: fn.bodyExpression?.let { lower(it) }
+            ?: emptyBlock(fn)
+        if (pushedReceiver) receiverScopes.removeLast()
+        scopes.removeLast()
+        val lambda = RNode.Lambda(params, body, captures = emptyList(), source = span(fn), isLocalFunction = true)
+        return RNode.LocalVar(slot, name, mutable = false, lambda, span(fn))
+    }
+
+    /** The `.value` property a `by`-delegate is read/written through, or null if the delegate's type exposes
+     *  no `value` member — i.e. it is not a State/MutableState/Lazy-style delegate (the only delegates whose
+     *  `getValue`/`setValue` convention forwards to `.value`). Requiring an actual `value` member keeps this
+     *  sound: a `Delegates.observable`/`notNull` delegate (no `.value`) correctly falls through to Unsupported. */
+    private fun delegateValueProperty(delegate: KtExpression): Binding.Property? {
+        val dt = delegateType(delegate) ?: return null
+        if (!hasValueMember(dt)) return null
+        return Binding.Property("value", dt.qualifiedName, backingField = false)
+    }
+
+    /**
+     * The delegate expression's type. `remember { … }` / `rememberSaveable { … }` return their trailing
+     * lambda's value UNCHANGED, so when the direct inference doesn't yield a `.value` (State/MutableState/Lazy)
+     * type — inferring the library generic's return THROUGH the lambda can miss on a bytecode `remember` — fall
+     * back to the type of the lambda's last expression (`mutableStateOf(0)` -> `MutableState<Int>`, a direct
+     * call that infers reliably). This is what makes `var count by remember { mutableStateOf(0) }` resolve.
+     */
+    private fun delegateType(delegate: KtExpression): KotlinType? {
+        val direct = runCatching { resolver.inferType(delegate) }.getOrNull()
+        if (direct != null && hasValueMember(direct)) return direct
+        rememberLambdaBody(delegate)?.let { body ->
+            runCatching { resolver.inferType(body) }.getOrNull()?.let { return it }
+        }
+        return direct
+    }
+
+    private fun hasValueMember(dt: KotlinType): Boolean = runCatching {
+        service.membersForCompletion(dt.qualifiedName, dt.typeArguments, "value")
+            .any { it.name == "value" && it.kind == SymbolKind.FIELD }
+    }.getOrDefault(false)
+
+    /** The last expression of a `remember { … }` / `rememberSaveable { … }` trailing-lambda body (the value
+     *  the call returns unchanged), or null when the delegate is not such a call. */
+    private fun rememberLambdaBody(delegate: KtExpression): KtExpression? {
+        val call = delegate as? KtCallExpression ?: return null
+        val callee = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+        if (callee != "remember" && callee != "rememberSaveable") return null
+        val lambda = call.lambdaArguments.lastOrNull()?.getLambdaExpression() ?: return null
+        return lambda.bodyExpression?.statements?.lastOrNull()
+    }
+
+    /** The label a `this@X` can use to refer to [e]'s receiver: an explicit `label@ { }`, else the implicit
+     *  label = the name of the function the lambda is an argument to (`SharedTransitionLayout { }` →
+     *  "SharedTransitionLayout"). Null when neither applies (so `this` there stays innermost-scoped). */
+    private fun lambdaLabel(e: KtLambdaExpression): String? {
+        (e.parent as? KtLabeledExpression)?.getLabelName()?.let { return it }
+        val call = generateSequence<KtElement>(e.parent) { it.parent }
+            .takeWhile { it !is KtNamedFunction && (it === e.parent || it !is KtLambdaExpression) }
+            .firstOrNull { it is KtCallExpression } as? KtCallExpression
+        return (call?.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+    }
+
+    private fun lambdaNode(e: KtLambdaExpression): RNode {
+        scopes.addLast(HashMap())
+        // A receiver lambda's implicit `this` arrives as the lambda's LEADING argument at runtime (the Compose
+        // bridge / a plain proxy passes the scope first), BEFORE any explicit value parameters. So a receiver
+        // lambda binds a leading `<this>` slot whether or not it also declares value params — e.g. `itemsIndexed`'s
+        // `LazyItemScope.(index, item) -> Unit` gives `[<this>, index, item]`, so `{ i, todo -> }` binds `todo` to
+        // the ITEM (arg 2), not the index (arg 1). Missing the receiver shifts every explicit param by one.
+        val receiverType = runCatching { resolver.lambdaReceiverType(e) }.getOrNull()
+        var pushedReceiver = false
+        // Reads emitted for a destructuring parameter (`{ (_, name, _) -> }`), prepended to the body so the
+        // entries are in scope when it runs.
+        val prelude = ArrayList<RNode>()
+        val params = buildList {
+            if (receiverType != null) {
+                val slot = newSlot()
+                receiverScopes.addLast(ReceiverScope(slot, receiverType, lambdaLabel(e))); pushedReceiver = true
+                add(RParam(slot, "<this>", receiverType))
+            }
+            if (e.valueParameters.isNotEmpty()) {
+                e.valueParameters.forEach { p ->
+                    val destructuring = p.destructuringDeclaration
+                    if (destructuring != null) {
+                        // A destructuring lambda parameter (`forEach { (_, name, _) -> }`): bind the whole
+                        // argument to a temp slot, then a local per entry reading `tmp.componentN()` (mirroring
+                        // [destructuringNode]). Without this the entries never bind, so a use of `name` falls
+                        // back to a bare `ObjectRef` and the interpreter fails at render with "cannot load name".
+                        val paramSlot = newSlot()
+                        add(RParam(paramSlot, "\$destr", service.typeFromText(p.typeReference?.text, resolver.fileContext)))
+                        destructuring.entries.forEachIndexed { i, entry ->
+                            val entryName = entry.name ?: "_"
+                            val entrySlot = newSlot()
+                            val tmpRef = RNode.Name(Binding.Local(paramSlot, "\$destr", mutable = false), span(entry))
+                            val comp = RNode.Call(synthMember("component${i + 1}"), DispatchKind.MEMBER, tmpRef, emptyList(), csk(span(entry).start), span(entry))
+                            bind(entryName, Binding.Local(entrySlot, entryName, mutable = false))
+                            prelude += RNode.LocalVar(entrySlot, entryName, mutable = false, comp, span(entry))
+                        }
+                    } else {
+                        val slot = newSlot()
+                        val name = p.name ?: "_"
+                        bind(name, Binding.Local(slot, name, mutable = false))
+                        add(RParam(slot, name, service.typeFromText(p.typeReference?.text, resolver.fileContext)))
+                    }
+                }
+            } else if (receiverType == null) {
+                // A receiver-LESS lambda with no explicit params: the implicit `it` (harmless when unused, e.g. a
+                // plain `() -> R`). No shape lookup needed — bind unconditionally, as before.
+                val slot = newSlot()
+                bind("it", Binding.Local(slot, "it", mutable = false))
+                add(RParam(slot, "it", null))
+            } else {
+                // A RECEIVER lambda with no explicit params. Kotlin's implicit `it` exists when the expected
+                // functional type has exactly ONE value parameter — e.g. `LazyItemScope.(index: Int) -> Unit`
+                // written `items(n) { Text("Item: $it") }`, whose `it` is the index bound AFTER the `<this>`
+                // receiver. Previously `it` was synthesized only for a receiver-LESS lambda, so a bare `it` here
+                // was "unresolved name `it`". Bind it only when the shape confirms a single value parameter (a
+                // `ColumnScope.() -> Unit` has none — no `it`; a two-param shape needs explicit params). The
+                // enclosing callee is already resolved+cached from the receiver lookup, so this is cheap.
+                val valueParamTypes = runCatching { resolver.expectedLambdaShape(e)?.parameterTypes }.getOrNull()
+                if (valueParamTypes?.size == 1) {
+                    val slot = newSlot()
+                    bind("it", Binding.Local(slot, "it", mutable = false))
+                    add(RParam(slot, "it", valueParamTypes.single() as? KotlinType))
+                }
+            }
+        }
+        val lowered = e.bodyExpression?.let { lowerBlock(it) } ?: emptyBlock(e)
+        val body = when {
+            prelude.isEmpty() -> lowered
+            lowered is RNode.Block -> RNode.Block(prelude + lowered.statements, lowered.isExpression, lowered.source)
+            else -> RNode.Block(prelude + lowered, isExpression = true, span(e))
+        }
+        if (pushedReceiver) receiverScopes.removeLast()
+        scopes.removeLast()
+        return RNode.Lambda(params, body, captures = emptyList(), source = span(e), label = lambdaLabel(e))
+    }
+
+    private fun lowerBlock(block: KtBlockExpression): RNode {
+        scopes.addLast(HashMap())
+        val statements = block.statements.map { lower(it) }
+        scopes.removeLast()
+        return RNode.Block(statements, isExpression = false, span(block))
+    }
+
+    // --- callee selection (sound: never guess between live overloads) ---
+
+    /** The owner (declaring facade, else package) of a genuine coroutine/frame suspend intrinsic candidate for
+     *  [name] on [call] — from `kotlinx.coroutines` (delay/yield/withContext/…) or `androidx.compose.runtime`
+     *  (withFrameNanos/withFrameMillis) — or null when none matches (so a same-named user function isn't
+     *  canonicalized to the interpreter intrinsic). Any such prefixed owner makes the interpreter's gate fire. */
+    private fun coroutineIntrinsicOwner(call: KtCallExpression, name: String): String? {
+        val intrinsicPkgs = listOf("kotlinx.coroutines", "androidx.compose.runtime")
+        val targets = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+        targets.firstNotNullOfOrNull { s ->
+            if (s.name != name) return@firstNotNullOfOrNull null
+            when {
+                intrinsicPkgs.any { s.declaringClassFqn?.startsWith(it) == true } -> s.declaringClassFqn
+                s.packageName in intrinsicPkgs -> s.packageName
+                else -> null
+            }
+        }?.let { return it }
+        // Fallback for a not-yet-indexed classpath. `callTargets` can't enumerate `delay` until the coroutines jar
+        // is indexed, so a `delay(200)` in a preview fails as `candidates=0` while the workspace index is still
+        // partial (a common first-open / finished-but-partial state). An EXPLICIT or star import of the name from a
+        // coroutine/frame package proves intent — a user function named `delay` wouldn't be imported from
+        // kotlinx.coroutines — so canonicalize on the import when resolution found NOTHING (only then, so a
+        // genuinely-resolved same-named user function is never hijacked).
+        if (targets.isNotEmpty()) return null
+        return intrinsicPkgs.firstOrNull { pkg ->
+            ktFile.importDirectives.any { imp ->
+                val fq = imp.importedFqName?.asString()
+                fq == "$pkg.$name" || (imp.isAllUnder && fq == pkg)
+            }
+        }
+    }
+
+    /** Whether [call] (named [name]) is a genuine `kotlinx.coroutines.flow` `collect`/`collectLatest` — a
+     *  candidate whose package or declaring facade is in the flow package. Gates canonicalizing the flow-collect
+     *  bridge so a same-named user method isn't hijacked. */
+    private fun isFlowCollectCall(call: KtCallExpression, name: String): Boolean =
+        runCatching { resolver.callTargets(call) }.getOrDefault(emptyList()).any { s ->
+            s.name == name && (s.packageName == "kotlinx.coroutines.flow" || s.declaringClassFqn?.startsWith("kotlinx.coroutines.flow") == true)
+        }
+
+    /** Whether [call] resolves to the Kotlin stdlib `forEach`/`forEachIndexed` inline extension over a
+     *  collection/array (`CollectionsKt` for List/Set/Iterable, `ArraysKt` for arrays) — the gate for
+     *  canonicalizing it to the interpreter's inline intrinsic. `MapsKt` is deliberately excluded (its entry
+     *  lambda is usually destructured). Gated on a genuine kotlin.collections candidate so a same-named user
+     *  extension isn't hijacked. */
+    private fun isCollectionForEachCall(call: KtCallExpression, name: String): Boolean =
+        runCatching { resolver.callTargets(call) }.getOrDefault(emptyList()).any { s ->
+            s.name == name &&
+                (s.declaringClassFqn == "kotlin.collections.CollectionsKt" || s.declaringClassFqn == "kotlin.collections.ArraysKt")
+        }
+
+    private fun chooseCallee(call: KtCallExpression): KotlinSymbol? {
+        val raw = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+        if (raw.isEmpty()) return null
+        // A TOP-LEVEL extension (`fun String.getSize()`, carrying its declaring package) resolves only when
+        // it is actually in scope — imported, same-package, or default-imported. `callTargets` surfaces the
+        // receiver type's extensions UNFILTERED (via `membersForCompletion`), which otherwise lets an
+        // out-of-scope or wrong-receiver stdlib false positive (`kotlin.jvm.internal.PrimitiveSpreadBuilder`'s
+        // `getSize`, keyed on `kotlin.Any`) win the overload tie-break over the real source extension — or
+        // resolve at all where nothing legal exists. Member-extensions (`packageName == null`; resolved via
+        // their in-scope receiver, e.g. `RowScope.weight`) are NOT import-gated and pass through unchanged.
+        val inScope = raw.filter {
+            !it.isExtension || it.packageName == null || extensionInScope(it) ||
+                // A MEMBER extension whose declaring class is an ACTIVE receiver scope — `Dp.toPx()` inside a
+                // `Density.() -> Float` lambda or a `val Density.cardWidthWithPaddingPx` getter (Jetsnack's
+                // gradient). The editor resolver surfaces such a candidate with its declaring PACKAGE set (not
+                // null) and doesn't import-gate it to the implicit receiver, so `extensionInScope` drops it and
+                // the call ties out. It IS in scope precisely when an in-scope receiver is (a subtype of) its
+                // declaring class — the same `findScopeReceiver` condition the MEMBER_EXTENSION dispatch relies
+                // on. (In a `with(receiver){}` block the resolver ALSO emits a `packageName == null` copy that
+                // already survives; this admits the equivalent one for a receiver-lambda / ext-property getter.)
+                (it.declaringClassFqn?.let { fqn -> findScopeReceiver(fqn) != null } == true)
+        }
+        // Fast path: the overwhelmingly common call resolves to a single (or zero) candidate. Return it without
+        // building the signature-dedup key (a per-candidate string + param-type list) or running the
+        // type-directed tie-break ladder below (and the inference it drives). Behaviour-preserving: with one
+        // candidate every `ifEmpty` fallback in the ladder yields that same candidate anyway.
+        if (inScope.size <= 1) return inScope.firstOrNull()
+        // Dedup by SIGNATURE (kind + name + param types), IGNORING the declaring owner. A method with the
+        // same signature from different owners is the same call shape: an override surfacing from both the
+        // class and its supertype (`SnapshotStateList.add` + `MutableList.add`), the same callable present
+        // twice (a stdlib jar on the classpath AND bundled), or a member extension declared on the same
+        // receiver by sibling scopes (`RowScope.weight` + `ColumnScope.weight`, both on `Modifier`). Keying
+        // on the owner left these as distinct candidates that could never narrow → a false ambiguity.
+        // The vararg index IS part of the key: `listOf(element: T)` and `listOf(vararg elements: T)` both
+        // decode to params `[T]`, so without it the dedup would merge them and DROP the vararg overload —
+        // leaving `listOf("a", "b")` (which only the vararg accepts) unresolvable.
+        // The same source overload can surface TWICE: once from the live source model with its parameter types,
+        // once from a symbol source that carries no types (every `paramTypes` slot null). The untyped copy is
+        // unfalsifiable (`argsBindable` treats a null parameter type as "accepts"), so it survives every
+        // type-directed rung and wins ties its typed twin correctly loses: JetNews's `PostScreen(post, false, {},
+        // false, {})` ran the untyped copy of the FIVE-param overload (whose typed twin can't take `false` for a
+        // function param). Drop an all-null copy whenever a typed sibling of the same name/arity/vararg exists.
+        val typedWhereKnown = inScope.filter { c ->
+            val untyped = c.paramTypes.isNotEmpty() && c.paramTypes.all { it == null }
+            !untyped || inScope.none { o ->
+                o !== c && o.kind == c.kind && o.name == c.name && o.varargParamIndex == c.varargParamIndex &&
+                    o.paramTypes.size == c.paramTypes.size && o.paramTypes.any { it != null }
+            }
+        }
+        val candidates = typedWhereKnown
+            .distinctBy { c -> c.kind.toString() + "/" + c.name + "/" + c.varargParamIndex + "/" + c.paramTypes.map { (it as? KotlinType)?.qualifiedName } }
+        if (candidates.isEmpty()) return null
+        if (candidates.size == 1) return candidates.single()
+        val valueArgs = call.valueArguments
+        val argCount = valueArgs.size
+        // A named argument (or an omitted default) means the source args don't line up 1:1 with the leading
+        // declared params, so arity and type matching bind each arg to its DECLARED position by name first.
+        val hasNamed = valueArgs.any { it.getArgumentName() != null }
+        // A vararg callee accepts any arg count from its fixed-param count up — `mutableStateListOf("a","b")`
+        // binds both strings to the one `vararg` param, so it matches even though `argCount != paramCount`.
+        fun acceptsVararg(c: KotlinSymbol) = c.varargParamIndex in 0..argCount
+        val byArity = if (hasNamed) {
+            val usedNames = valueArgs.mapNotNull { it.getArgumentName()?.asName?.identifier }.toSet()
+            candidates.filter { c -> (c.paramNames.size >= argCount && usedNames.all { it in c.paramNames }) || acceptsVararg(c) }
+                .ifEmpty { candidates.filter { it.paramTypes.size >= argCount } }
+                .ifEmpty { candidates }
+        } else {
+            val exactArity = candidates.filter { it.paramTypes.size == argCount || it.paramNames.size == argCount || acceptsVararg(it) }
+            // Normally an exact-arity candidate wins. But if NO exact-arity candidate accepts the arguments while
+            // a DEFAULTED overload with more params does, that overload is the real target: `Animatable(0.4f)`
+            // must reach `Animatable(Float, Float = …)` (2 params, one defaulted) — the only exact-arity candidate
+            // `Animatable(Color)` can't take a Float. Add such defaulted-more-params overloads (required params
+            // satisfied) only in that case, so the common exact-arity resolution is unchanged; the type/required
+            // tie-break below then discards the non-binding exact candidate. Falls back so a call never fails.
+            if (exactArity.none { argsBindable(it, valueArgs, exact = false) }) {
+                (exactArity + candidates.filter { it.paramTypes.size > argCount && requiredParamsSatisfied(it, valueArgs) })
+                    .ifEmpty { candidates.filter { it.paramTypes.isEmpty() && argCount == 0 } }
+                    .ifEmpty { candidates }
+            } else {
+                exactArity
+            }
+        }
+        if (byArity.size == 1) return byArity.single()
+        // Tie-break by argument types: keep candidates whose params accept the (inferred) argument types,
+        // each arg compared against the param it binds to (named → by name, positional → by position).
+        // Then drop overloads with an UNBOUND non-defaulted parameter (Kotlin applicability): Material3's
+        // clickable `Card(onClick, …)`/`Button(onClick, …)` would otherwise win the positional most-complete
+        // tie-break over the plain `Card { }`, leaving its required `onClick` null → a spuriously-clickable
+        // preview node that NPEs on tap. Backs off to the unfiltered set if that would leave nothing (defaults
+        // unknown for every candidate — Java bytecode / old cache), so a rejection is never guessed.
+        val typed = byArity.filter { c -> argsBindable(c, valueArgs, exact = false) }
+            .let { t -> t.filter { requiredParamsSatisfied(it, valueArgs) }.ifEmpty { t } }
+            // Kotlin resolves members and extensions in separate scopes: an APPLICABLE member shadows a same-named
+            // extension, which is never chosen while a member fits. `list.addAll/removeAll/retainAll(other)` on a
+            // MutableList is the canonical case — the `MutableCollection` member takes `Collection<E>` while the
+            // `CollectionsKt` extension takes `Iterable<T>`, and a List argument binds to BOTH, so the type/size/
+            // concreteness rungs below can't separate them and the call ties out to "unresolved/ambiguous". Prefer
+            // the member here, mirroring the editor resolver's `receiverSpecificity` (a non-extension outranks any
+            // extension). Only narrows a mixed set; an extension-only applicable set (the member's args don't bind,
+            // e.g. `list.map { }`) is left untouched by `ifEmpty`, and an all-member set is unchanged.
+            .let { t -> t.filter { !it.isExtension }.ifEmpty { t } }
+            // A `{ … }` argument binds to a function-typed parameter (`() -> T`, `Density.() -> Float`), never to a
+            // plain `Float`/`Int` — but a bare lambda has no inferable type, so [argsBindable] can't tell the two
+            // apart and both overloads survive. Prefer the overload whose parameter at each lambda-argument
+            // position is a function type. Disambiguates `offsetGradientBackground(width: Float)` vs
+            // `(width: Density.() -> Float)` called with `width = { … }`. Falls back to the whole set when none
+            // qualifies (a lambda SAM-converted to a Java functional interface — no function-typed overload).
+            .let { t -> preferFunctionParamsForLambdaArgs(t, valueArgs) }
+        typed.singleOrNull()?.let { return it }
+        // `typed` empties when no candidate's args bind — but for a BINARY (library) member overload set this is
+        // usually the Java/Kotlin type-name divide, not a real no-match: a Java parameter is a JVM FQN
+        // (`java.lang.String`) while the argument is a Kotlin type (`kotlin.String`), so `argsBindable` rejects
+        // every overload of `Intent.putExtra(String, …)`. Defer such a set to the RUNTIME dispatcher (which
+        // re-resolves the overload by the actual argument values) instead of tying out to "unresolved/ambiguous".
+        if (typed.isEmpty()) return deferToRuntimeMember(byArity)
+        // More than one applicable overload. Prefer the MOST SPECIFIC: candidates whose parameter types
+        // EXACTLY match the (known) argument types (so `f(String)` wins over `f(Any)` for a String argument).
+        val exact = typed.filter { c -> argsBindable(c, valueArgs, exact = true) }
+        exact.singleOrNull()?.let { return it }
+        // Kotlin's most-specific-overload rule by SUBTYPING — the `exact` rung above only catches an EXACT param
+        // match, but specificity also orders overloads whose params are subtype-related: `show(Collection)` beats
+        // `show(Iterable)` for a `List` argument (both bind, neither is exactly `List`). Among the FIXED-arity
+        // applicable candidates keep the unique maximal one — the candidate no other is strictly more specific than
+        // (each of its parameters is the other's type or a subtype). Mirrors the editor resolver's
+        // `paramMoreSpecific` (`KotlinCallResolution.kt`), which uses the same subtype relation. Restricted to
+        // non-vararg candidates so the fixed-arity-beats-vararg rung below still owns the vararg tie; a
+        // type-parameter parameter makes the pair non-comparable (paramMoreSpecific returns false), so a generic
+        // `listOf(T)`/`listOf(vararg T)` set isn't touched. Backs off (no return) unless it narrows to exactly one,
+        // so the size/concreteness rungs still run and a genuine incomparable tie is never guessed.
+        val fixedTyped = typed.filter { it.varargParamIndex < 0 }
+        fixedTyped.filter { a -> fixedTyped.none { b -> b !== a && resolver.paramMoreSpecific(b, a) } }
+            .singleOrNull()?.let { return it }
+        // Kotlin specificity: a FIXED-arity overload whose parameter count EXACTLY matches the supplied args is
+        // more specific than a vararg overload that merely absorbs them with zero varargs. `remember { }` is
+        // `remember(calculation)`, NOT `remember(vararg keys, calculation)` — the latter would leave `keys`
+        // unfilled (a null array passed to the runtime → `remember` NPEs on `keys.length`). Prefer a unique such
+        // candidate before the size-based shim tie-break (a positional call only — a named call is handled below).
+        if (!hasNamed) {
+            (exact.ifEmpty { typed }).filter { it.varargParamIndex < 0 && it.paramTypes.size == argCount }
+                .singleOrNull()?.let { return it }
+        }
+        // Still tied. For a NAMED-argument call prefer the SMALLEST applicable overload: the user named
+        // specific parameters, and a larger overload usually just adds REQUIRED params they didn't mean — e.g.
+        // Material3's `Card`/`Button` have a clickable overload whose extra leading `onClick` has no default, so
+        // picking it would pass null for a non-null parameter. For a purely positional call keep the most
+        // COMPLETE overload (binary-compat shim disambiguation, as `Material3.Text` keeps). Either way require
+        // uniqueness — a genuine tie is rejected, never guessed.
+        val pool = exact.ifEmpty { typed }
+        val targetSize = if (hasNamed) pool.minOf { it.paramTypes.size } else pool.maxOf { it.paramTypes.size }
+        val sized = pool.filter { it.paramTypes.size == targetSize }
+        sized.singleOrNull()?.let { return it }
+        // Still tied. A common cause is the SAME method surfacing from an override AND its supertype where the
+        // supertype copy has less-resolved (null / type-parameter) parameter types — e.g. a `SnapshotStateList`
+        // override of `add(String)` alongside the Kotlin built-in `MutableList.add(<unresolved>)`. They can't
+        // dedup by signature (`String` ≠ null) and a null/`T` parameter "accepts" any argument, so neither wins
+        // the type checks. Prefer the candidate whose parameters are the MOST concrete (fewest null / type-param
+        // slots) — the real override — requiring uniqueness so a genuine tie is still rejected.
+        fun concreteness(c: KotlinSymbol) = c.paramTypes.count { p -> (p as? KotlinType)?.isTypeParameter == false }
+        val maxConcrete = sized.maxOfOrNull { concreteness(it) } ?: return null
+        val mostConcrete = sized.filter { concreteness(it) == maxConcrete }
+        mostConcrete.singleOrNull()?.let { return it }
+        // Still tied, but the candidates may be INDISTINGUISHABLE FOR THIS CALL: every SUPPLIED argument binds
+        // to a parameter of the same type in all of them — they differ only in parameters the call doesn't
+        // supply (which take their defaults), so either renders identically. Pick the smallest deterministically.
+        // (`SuggestionChip` has two overloads differing only in a defaulted param the user didn't pass — a
+        // genuine overload set like `Icon(ImageVector)` vs `Icon(Painter)` is already narrowed by argument type
+        // above, since the supplied arg binds to DIFFERENT types and `boundParamsAgree` would be false.)
+        if (mostConcrete.size > 1 && mostConcrete.all { boundParamsAgree(it, mostConcrete.first(), valueArgs) }) {
+            return mostConcrete.minByOrNull { it.paramTypes.size }
+        }
+        // Still tied. If every remaining candidate is the SAME callable surfacing from different sources or with
+        // differently-erased parameters — same kind/name/arity/vararg, and each parameter slot pairwise
+        // compatible (equal qualified names, or one side an unresolved type-parameter) — it is not a genuine
+        // overload set (a generic stdlib `listOf(vararg T)` decoded as `Array<T>` in one source and `T` in
+        // another, say). Pick the first deterministically. A genuine overload set — a slot with two DIFFERENT
+        // concrete types (`Icon(ImageVector)` vs `Icon(Painter)`) — is NOT collapsed, so it stays rejected as
+        // ambiguous until argument types narrow it.
+        return mostConcrete.takeIf { pool2 -> pool2.all { sameCallableShape(it, pool2.first()) } }?.first()
+            ?: deferToRuntimeMember(byArity)
+    }
+
+    /**
+     * A tie among BINARY (library) overloads of the SAME method on the SAME owner that static resolution can't
+     * narrow — typically a Java overload set (`Intent.putExtra(String, String)` / `(String, CharSequence)` /
+     * `(String, Serializable)`) whose parameter types are JVM FQNs the argument's Kotlin type doesn't line up
+     * with, or an overload set with no most-specific member. Every candidate shares owner + name, so the runtime
+     * reflective dispatcher re-resolves the overload from the ACTUAL argument values (it looks a member up by
+     * name + arg types and ignores the callee's declared parameter types). Return one deterministically and defer,
+     * rather than failing the whole preview with an "unresolved/ambiguous call". Gated so a source / extension /
+     * mixed-owner set — which the interpreter CANNOT re-resolve reflectively — is still rejected as before.
+     */
+    private fun deferToRuntimeMember(candidates: List<KotlinSymbol>): KotlinSymbol? {
+        if (candidates.size < 2) return null
+        val first = candidates.first()
+        if (first.kind != SymbolKind.METHOD) return null
+        val owner = first.declaringClassFqn ?: return null
+        // Defer a homogeneous BINARY overload set on ONE owner to the runtime dispatcher, which re-resolves the
+        // overload from the ACTUAL argument values. This covers a plain member set (`Intent.putExtra(String, …)`)
+        // AND a LIBRARY extension set on a single facade (`kotlin.text.StringsKt.contains`/`isBlank`, whose 9
+        // `contains` / 2 `isBlank` overloads share the `StringsKt` facade): the interpreter invokes such an
+        // extension statically with the receiver as arg 0, so it re-resolves reflectively just the same. Without
+        // this, a statically-ambiguous stdlib String extension (`recv.contains(x)`) fails the WHOLE preview with
+        // "unresolved/ambiguous call". A SOURCE callable (interpreted — needs the exact declaration) or a
+        // mixed-owner set can't be re-resolved this way, so it stays rejected. All candidates must agree on
+        // extension-ness so an odd member/extension mix (which the interpreter would dispatch differently) isn't
+        // silently collapsed to one shape.
+        val homogeneous = candidates.all {
+            !it.origin.fromSource && it.kind == SymbolKind.METHOD &&
+                it.name == first.name && it.declaringClassFqn == owner && it.isExtension == first.isExtension
+        }
+        return if (homogeneous) first else null
+    }
+
+    /** Whether [a] and [b] bind every SUPPLIED argument to a parameter of a compatible type — so the call site
+     *  can't distinguish them (they differ only in parameters this call doesn't supply). Each arg's bound
+     *  parameter (named → by name, positional/trailing-lambda → by position) is compared by qualified name, with
+     *  a null / type-parameter slot treated as compatible. Used to collapse defaulted-param-only overload pairs
+     *  (Material3's two `SuggestionChip`s) WITHOUT collapsing a genuine overload set (whose supplied arg binds to
+     *  different concrete types, making this false). */
+    private fun boundParamsAgree(a: KotlinSymbol, b: KotlinSymbol, valueArgs: List<KtValueArgument>): Boolean {
+        val ia = bindIndices(a, valueArgs) ?: return false
+        val ib = bindIndices(b, valueArgs) ?: return false
+        return valueArgs.indices.all { i ->
+            val pa = a.paramTypes.getOrNull(ia[i]) as? KotlinType
+            val pb = b.paramTypes.getOrNull(ib[i]) as? KotlinType
+            pa == null || pb == null || pa.isTypeParameter || pb.isTypeParameter || pa.qualifiedName == pb.qualifiedName
+        }
+    }
+
+    /** Whether two candidates are the same callable shape (so they may be collapsed rather than read as an
+     *  ambiguity): same kind, name, parameter count and vararg position, with each parameter slot pairwise
+     *  compatible — equal qualified names, or at least one side an unresolved type-parameter / unknown type. */
+    private fun sameCallableShape(a: KotlinSymbol, b: KotlinSymbol): Boolean {
+        if (a.kind != b.kind || a.name != b.name) return false
+        if (a.paramTypes.size != b.paramTypes.size) return false
+        if (a.varargParamIndex != b.varargParamIndex) return false
+        return a.paramTypes.indices.all { i ->
+            val pa = a.paramTypes[i] as? KotlinType
+            val pb = b.paramTypes[i] as? KotlinType
+            pa == null || pb == null || pa.isTypeParameter || pb.isTypeParameter || pa.qualifiedName == pb.qualifiedName
+        }
+    }
+
+    /** The declared parameter index each value argument binds to: a named arg by its name, a trailing lambda to
+     *  the last parameter (Kotlin's trailing-lambda rule), the rest filled left-to-right. Null if a named arg
+     *  doesn't match any declared parameter name (so the candidate can't accept this call). */
+    private fun bindIndices(callee: KotlinSymbol, valueArgs: List<KtValueArgument>): IntArray? {
+        val names = callee.paramNames
+        val paramCount = maxOf(callee.paramTypes.size, names.size)
+        val vararg = callee.varargParamIndex
+        val trailingLambda = valueArgs.lastOrNull() is KtLambdaArgument
+        val result = IntArray(valueArgs.size)
+        var nextPositional = 0
+        for ((i, va) in valueArgs.withIndex()) {
+            val name = va.getArgumentName()?.asName?.identifier
+            val idx = when {
+                name != null -> names.indexOf(name).also { if (it < 0) return null }
+                trailingLambda && i == valueArgs.lastIndex -> paramCount - 1
+                // Once positional binding reaches the vararg parameter, every remaining positional arg binds to
+                // it (a vararg absorbs the tail); `nextPositional` stops advancing.
+                vararg in 0..nextPositional -> vararg
+                else -> nextPositional++
+            }
+            if (idx !in 0 until paramCount) return null
+            result[i] = idx
+        }
+        return result
+    }
+
+    /** Whether every declared parameter the call does NOT supply is optional — defaulted, the vararg, or (for a
+     *  suspend/composable callee) a synthetic trailing param the ABI fills — Kotlin's applicability rule. An
+     *  overload with an UNBOUND, non-defaulted value parameter is not a candidate for this call (e.g. Material3's
+     *  clickable `Card(onClick, …)` for a plain `Card { }`: its required `onClick` is unfilled). Backs off
+     *  (returns true) when defaults are UNKNOWN (`paramHasDefault` empty — Java bytecode / an old cache), so a
+     *  rejection is never guessed. */
+    private fun requiredParamsSatisfied(callee: KotlinSymbol, valueArgs: List<KtValueArgument>): Boolean {
+        val defaults = callee.paramHasDefault
+        if (defaults.isEmpty()) return true // unknown → never guess a rejection
+        val bound = bindIndices(callee, valueArgs) ?: return false
+        val boundSet = bound.toHashSet()
+        return defaults.indices.all { i ->
+            i in boundSet || i == callee.varargParamIndex || defaults[i]
+        }
+    }
+
+    /** Whether every (inferred) argument type is assignable to — or, when [exact], equal to — the type of the
+     *  parameter it binds to. Unknown arg/param types don't disqualify (we never guess a rejection). */
+    /** Whether [e] is a lambda / anonymous-function argument (`{ … }` or `fun(x) = …`) — the arg forms that bind
+     *  to a function-typed parameter and cannot bind to a plain value type. */
+    private fun isLambdaArg(e: KtExpression?): Boolean = when (e) {
+        is KtLambdaExpression -> true
+        is KtNamedFunction -> e.name == null
+        is KtLabeledExpression -> isLambdaArg(e.baseExpression)
+        else -> false
+    }
+
+    /** Whether [t] is a function type — `kotlin.FunctionN`, a suspend function type, or a receiver/extension
+     *  function type (`Density.() -> Float`) — the only parameter kind a bare lambda argument binds to. */
+    private fun isFunctionType(t: KotlinType): Boolean =
+        t.isExtensionFunctionType ||
+            t.qualifiedName.startsWith("kotlin.Function") ||
+            t.qualifiedName.startsWith("kotlin.coroutines.SuspendFunction")
+
+    /** Among applicable overloads [cands], prefer those whose parameter at each LAMBDA-argument position is a
+     *  function type — so `f(width = { … })` picks the `Density.() -> Float` overload over the `Float` one. Falls
+     *  back to [cands] unchanged when the call has no lambda args or no candidate qualifies (never rejects the
+     *  only option — e.g. a lambda SAM-converted to a Java functional interface). */
+    private fun preferFunctionParamsForLambdaArgs(cands: List<KotlinSymbol>, valueArgs: List<KtValueArgument>): List<KotlinSymbol> {
+        val lambdaIdx = valueArgs.indices.filter { isLambdaArg(valueArgs[it].getArgumentExpression()) }
+        if (lambdaIdx.isEmpty() || cands.size <= 1) return cands
+        return cands.filter { c ->
+            val idxs = bindIndices(c, valueArgs) ?: return@filter false
+            lambdaIdx.all { i ->
+                val pt = c.paramTypes.getOrNull(idxs[i]) as? KotlinType
+                pt == null || pt.isTypeParameter || isFunctionType(pt)
+            }
+        }.ifEmpty { cands }
+    }
+
+    private fun argsBindable(callee: KotlinSymbol, valueArgs: List<KtValueArgument>, exact: Boolean): Boolean {
+        val indices = bindIndices(callee, valueArgs) ?: return false
+        return valueArgs.indices.all { i ->
+            // Inference is best-effort and on a deep chain can throw (a resolver gap); a throw must not crash the
+            // whole function's lowering — degrade to "couldn't infer this arg" (null), which never disqualifies.
+            val at = runCatching { valueArgs[i].getArgumentExpression()?.let(resolver::inferType) }.getOrNull()
+            val pt = callee.paramTypes.getOrNull(indices[i]) as? KotlinType
+            // A plain value of a KNOWN non-function type (`false`, a `Post`) can never bind to a function-typed
+            // parameter: `isAssignableFrom` is unreliable for `kotlin.FunctionN` classifiers and defaulted to
+            // "accepts", so JetNews's `PostScreen(post, false, {}, false, {})` stayed applicable to the exact-arity
+            // overload whose 4th parameter is `onToggleFavorite: () -> Unit` and ran its body with a `Post`.
+            if (at != null && pt != null && !exact && isFunctionType(pt) && !pt.isTypeParameter &&
+                !isFunctionType(at) && !at.isTypeParameter && !isLambdaArg(valueArgs[i].getArgumentExpression())
+            ) return@all false
+            // An argument whose inferred type is a bare TYPE PARAMETER (`(x as Result.Success).data`: the raw cast
+            // leaves `data: T`) has an unknown actual type: it must not disqualify (nor select) a candidate, exactly
+            // like an uninferred argument, else JetNews's `PostScreen(post, …)` matched NO overload and tied out.
+            at == null || at.isTypeParameter || pt == null ||
+                if (exact) pt.qualifiedName == at.qualifiedName
+                // A type-parameter parameter (`listOf(element: T)`) accepts ANY argument — but `isAssignableFrom`
+                // on a bare `T` classifier always says no (no supertype chain reaches "T"), which would
+                // disqualify every generic overload the moment the argument type IS inferred. So a single-element
+                // `listOf(x)` (where both `listOf(element: T)` and `listOf(vararg: T)` match arity) ties out to
+                // Unsupported as soon as `x` has a known type (e.g. a project data class). Treat `T` as a wildcard
+                // here; the fixed-arity-vs-vararg preference below still picks the element overload.
+                else pt.isTypeParameter || runCatching { pt.isAssignableFrom(at) }.getOrDefault(true)
+        }
+    }
+
+    private fun toCallable(sym: KotlinSymbol): ResolvedCallable {
+        val isCtor = sym.kind == SymbolKind.CONSTRUCTOR
+        if (sym.origin.fromSource) {
+            val owner = sym.owner?.name ?: sym.packageName ?: ""
+            return ResolvedCallable.Source(
+                displayName = sym.name,
+                declId = "$owner.${sym.name}/${sym.paramTypes.size}",
+                paramNames = sym.paramNames,
+                isConstructor = isCtor,
+                isComposable = sym.isComposable,
+                typeParameterNames = sym.typeParameters,
+                isSuspend = sym.isSuspend,
+            )
+        }
+        val ownerFqn = sym.declaringClassFqn ?: sym.packageName ?: sym.owner?.name
+        return ResolvedCallable.Library(
+            displayName = sym.name,
+            ownerFqn = ownerFqn,
+            methodName = if (isCtor) "<init>" else sym.name,
+            paramTypes = sym.paramTypes.map { it as? KotlinType },
+            isStatic = Modifier.STATIC in sym.modifiers,
+            isConstructor = isCtor,
+            isInline = sym.isInline,
+            isComposable = sym.isComposable,
+            descriptorPrecise = sym.declaringClassFqn != null,
+            paramNames = sym.paramNames,
+            varargParamIndex = sym.varargParamIndex,
+            typeParameterNames = sym.typeParameters,
+            isSuspend = sym.isSuspend,
+        )
+    }
+
+    // --- helpers ---
+
+    private val strType get() = service.typeByFqn("kotlin.String")
+    private val boolType get() = service.typeByFqn("kotlin.Boolean")
+
+    /** The coroutine/frame suspend functions the interpreter models as intrinsics (see [coroutineIntrinsicOwner]
+     *  and the interpreter's `evalInlineIntrinsic`) — canonicalized to a coroutines/compose-runtime-owned Call so
+     *  they run even when overload resolution is ambiguous or their owner isn't a facade. */
+    private val COROUTINE_INTRINSICS = setOf(
+        "delay", "yield", "withContext", "coroutineScope", "supervisorScope", "ensureActive",
+        "withFrameNanos", "withFrameMillis",
+    )
+
+    /** `Flow.collect { }` terminal operators (inline extensions) the coroutine bridge drives. */
+    private val FLOW_COLLECT_NAMES = setOf("collect", "collectLatest")
+
+    /** The collection/array iteration inline HOFs the interpreter models as intrinsics (`evalInlineIntrinsic`)
+     *  — canonicalized to a CollectionsKt-owned EXTENSION Call so a composable-emitting loop body renders. */
+    private val COLLECTION_FOREACH_NAMES = setOf("forEach", "forEachIndexed")
+
+    private val ARITHMETIC = mapOf(
+        KtTokens.PLUS to "plus", KtTokens.MINUS to "minus", KtTokens.MUL to "times",
+        KtTokens.DIV to "div", KtTokens.PERC to "rem",
+    )
+    /** Augmented-assignment tokens → the arithmetic operator of the read-modify-write they desugar to. */
+    private val AUGMENTED = mapOf(
+        KtTokens.PLUSEQ to "plus", KtTokens.MINUSEQ to "minus", KtTokens.MULTEQ to "times",
+        KtTokens.DIVEQ to "div", KtTokens.PERCEQ to "rem",
+    )
+    /** Augmented-assignment tokens → the IN-PLACE assign operator Kotlin prefers when the receiver defines one (a
+     *  MutableList/Set/Map/Collection does — `MutableCollection.plusAssign`). Tried before the [AUGMENTED]
+     *  read-modify-write, and the only legal form for a `val` collection. */
+    private val ASSIGN_OP = mapOf(
+        KtTokens.PLUSEQ to "plusAssign", KtTokens.MINUSEQ to "minusAssign", KtTokens.MULTEQ to "timesAssign",
+        KtTokens.DIVEQ to "divAssign", KtTokens.PERCEQ to "remAssign",
+    )
+    private val COMPARISON = mapOf(
+        KtTokens.LT to "lt", KtTokens.GT to "gt", KtTokens.LTEQ to "le", KtTokens.GTEQ to "ge",
+    )
+    private val EQUALITY = mapOf(
+        KtTokens.EQEQ to "eq", KtTokens.EXCLEQ to "ne",
+        KtTokens.EQEQEQ to "refeq", KtTokens.EXCLEQEQEQ to "refne", // `===` / `!==` referential identity
+    )
+
+    private fun parseChar(t: String): Char? {
+        val inner = t.removePrefix("'").removeSuffix("'")
+        return when {
+            inner.length == 1 -> inner[0]
+            inner == "\\n" -> '\n'; inner == "\\t" -> '\t'; inner == "\\r" -> '\r'
+            inner == "\\'" -> '\''; inner == "\\\\" -> '\\'
+            else -> null
+        }
+    }
+
+    /** A read of the delegate object held in [b]'s slot — the receiver of its `.value` get/set. */
+    private fun delegateRef(b: Binding.DelegatedLocal, e: KtElement): RNode =
+        RNode.Name(Binding.Local(b.slot, b.name, b.mutable), span(e))
+
+    private fun newSlot(): SlotId = SlotId(slotCounter++)
+    private fun bind(name: String, binding: Binding) { scopes.last()[name] = binding }
+    private fun resolveLocal(name: String): Binding? {
+        for (i in scopes.indices.reversed()) scopes[i][name]?.let { return it }
+        return null
+    }
+
+    /**
+     * Record a lowering diagnostic for any NAMED argument whose name matches no parameter of any function the
+     * [call] could resolve to (`colors(containerColor = …)` — a typo / wrong-version parameter). Without this the
+     * dispatcher's [reorderNamedArgs] silently bails to POSITIONAL binding, producing a quietly-wrong render; the
+     * diagnostic makes the preview report the bad parameter instead (it blocks the render, like any lowering gap).
+     * Mirrors the editor's conservative `KotlinSourceAnalyzer.unknownNamedArguments` over the same `callTargets`
+     * overload union: it backs off entirely when the target is uncertain — a member call whose receiver can't be
+     * typed, a callee that resolves to nothing, or any candidate whose parameter names were stripped/synthetic —
+     * so a valid preview is never blocked.
+     */
+    private fun checkNamedArguments(call: KtCallExpression) {
+        val named = call.valueArguments.mapNotNull { it.getArgumentName() }
+        if (named.isEmpty()) return
+        // A member call we can't type → the target is unknown; don't risk a false positive.
+        val parent = call.parent
+        if (parent is KtQualifiedExpression && parent.selectorExpression === call &&
+            runCatching { resolver.inferType(parent.receiverExpression) }.getOrNull() == null
+        ) return
+        val targets = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+        if (targets.isEmpty()) return
+        // A target whose parameter NAMES are unavailable (count mismatch / synthetic / blank) makes the check
+        // unsound: the actually-resolved overload's names may be unknowable. Skip the whole call then.
+        if (targets.any { t ->
+                t.paramTypes.isNotEmpty() &&
+                    (t.paramNames.size != t.paramTypes.size || t.paramNames.any { it.isEmpty() || isSyntheticParamName(it) })
+            }
+        ) return
+        val known = targets.flatMapTo(HashSet()) { it.paramNames.filter { n -> n.isNotEmpty() } }
+        for (argName in named) {
+            val id = argName.asName.identifier
+            if (id in known) continue
+            val at = span(argName.referenceExpression)
+            diagnostics += LoweringDiagnostic("Cannot find a parameter with this name: $id (at ${ktFile.name}:${lineColOf(at.start)})", at)
+        }
+    }
+
+    /** ASM surfaces stripped Java parameters as `p0`, `p1`, … — useless as named arguments and not validatable. */
+    private fun isSyntheticParamName(n: String): Boolean = n.length >= 2 && n[0] == 'p' && n.drop(1).all { it.isDigit() }
+
+    private fun unsupported(reason: String, e: KtElement): RNode.Unsupported {
+        val span = span(e)
+        // Attach the source location so a preview error is LOCATABLE — the reason flows unchanged to both the
+        // lowering diagnostics and the runtime `Unsupported` throw, so the user sees "… at File.kt:42:9" instead
+        // of a bare "unresolved call `toSet`". Computed here (the lowerer has the PSI/text); the offset already
+        // rides on the span for callers that want to jump to it.
+        val located = "$reason (at ${ktFile.name}:${lineColOf(span.start)})"
+        diagnostics += LoweringDiagnostic(located, span)
+        return RNode.Unsupported(located, e.text.take(80), span)
+    }
+
+    private fun emptyBlock(e: KtElement) = RNode.Block(emptyList(), isExpression = false, span(e))
+    private fun span(e: KtElement): SourceSpan = SourceSpan(e.textRange.startOffset, e.textRange.endOffset)
+
+    /** The full file text, for [lineColOf] — read once (diagnostics are rare, but a large file's text needn't be
+     *  re-fetched per gap). */
+    private val fileText: String by lazy { ktFile.text }
+
+    /** `line:column` (both 1-based) of a source [offset] in [fileText] — the human-locatable position of a
+     *  lowering gap, so a preview error points at the exact construct. `?` if the offset is out of range. */
+    private fun lineColOf(offset: Int): String {
+        val text = fileText
+        if (offset < 0 || offset > text.length) return "?"
+        var line = 1
+        var col = 1
+        var i = 0
+        while (i < offset) {
+            if (text[i] == '\n') { line++; col = 1 } else col++
+            i++
+        }
+        return "$line:$col"
+    }
+
+    /** The source start offset of the lowering unit (function / property / class) currently being lowered —
+     *  the base for EDIT-STABLE call-site keys. */
+    private var currentUnitStart = 0
+
+    /**
+     * A Compose group key for a call at absolute source [offset], made relative to the enclosing lowering unit
+     * ([currentUnitStart]). Editing one function shifts every offset AFTER it, which would re-key every call and
+     * force the Compose runtime to discard and rebuild the whole preview (losing state); a FUNCTION-RELATIVE key
+     * is unchanged when OTHER functions are edited, so the runtime reuses those groups' slots (their `remember`/
+     * state survives the edit — the basis of incremental "live edit" re-rendering). Relative keys stay distinct
+     * WITHIN a unit (offsets there are distinct), and cross-unit collisions are harmless — each unit's calls sit
+     * in their own Compose group scope.
+     */
+    private fun csk(offset: Int): CallSiteKey = CallSiteKey(offset - currentUnitStart)
+
+    private fun reset(unitStart: Int = 0) { scopes.clear(); slotCounter = 0; diagnostics.clear(); currentUnitStart = unitStart; currentTypeParams = emptyList() }
+}

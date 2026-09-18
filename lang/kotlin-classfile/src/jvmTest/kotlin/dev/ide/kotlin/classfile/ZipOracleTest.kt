@@ -1,5 +1,7 @@
 package dev.ide.kotlin.classfile
 
+import dev.ide.platform.ByteArraySource
+
 import java.io.File
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry as JvmZipEntry

@@ -23,6 +23,7 @@ import dev.ide.testkit.testEnv
 import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.fail
+import dev.ide.model.impl.open
 
 /**
  * Regression for issue #993: the default demo (`app android-app → feature android-lib → core java-lib`)

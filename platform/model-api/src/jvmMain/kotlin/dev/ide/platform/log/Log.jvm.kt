@@ -1,7 +1,5 @@
 package dev.ide.platform.log
 
-internal actual fun currentTimeMillis(): Long = System.currentTimeMillis()
-
 internal actual fun currentThreadName(): String = Thread.currentThread().name
 
 internal actual fun defaultLogSink(): LogSink? = ConsoleLogSink()

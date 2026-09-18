@@ -1,6 +1,7 @@
 package dev.ide.interp.impl
 
 import dev.ide.interp.api.LoweredProgram
+import dev.ide.kotlin.syntax.psi.KtNamedFunction
 import dev.ide.lang.kotlin.interp.KotlinTreeResolver
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
@@ -8,7 +9,6 @@ import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.testkit.DiskVirtualFile
 import dev.ide.testkit.TestJars
 import dev.ide.testkit.writeSource
-import org.jetbrains.kotlin.psi.KtNamedFunction
 import java.nio.file.Files
 
 /**
@@ -22,7 +22,7 @@ import java.nio.file.Files
 fun loweredProgram(code: String, entry: String): LoweredProgram {
     val dir = Files.createTempDirectory("interp-impl-test")
     dir.writeSource("Prog.kt", code, trim = false)
-    val service = KotlinSymbolService(listOf(DiskVirtualFile(dir)), listOf(TestJars.kotlinStdlib()))
+    val service = KotlinSymbolService(listOf(DiskVirtualFile(dir)), listOf(TestJars.kotlinStdlib().toString()))
     val kt = KotlinParserHost.parse("Prog.kt", code)
     val parsed = KotlinParsedFile(kt, DiskVirtualFile(dir.resolve("Prog.kt")), 0)
     val resolver = KotlinTreeResolver(kt, parsed, service)

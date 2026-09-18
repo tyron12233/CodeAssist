@@ -30,12 +30,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -72,6 +70,8 @@ import dev.ide.ui.backend.UiExportModule
 import dev.ide.ui.backend.UiImportPreview
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.components.AndroidTag
+import dev.ide.ui.components.CircularProgressIndicator
+import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.projectColor
 import dev.ide.ui.components.CenteredDialog
 import dev.ide.ui.components.ExpressiveScaffold

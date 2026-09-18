@@ -11,6 +11,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.vfs.local.fileFor
 
 /**
  * Unresolved-reference diagnostics inside Java annotations: an unknown annotation type and an unresolved

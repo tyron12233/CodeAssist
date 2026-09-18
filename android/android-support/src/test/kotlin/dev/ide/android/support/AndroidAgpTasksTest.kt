@@ -29,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * The build DAG carries AGP-style per-module tasks: a library has `compileJava`, `processResources`,

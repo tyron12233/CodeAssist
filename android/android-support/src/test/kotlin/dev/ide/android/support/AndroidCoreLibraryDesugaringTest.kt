@@ -26,6 +26,7 @@ import java.nio.file.Paths
 import java.util.zip.ZipFile
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * Core-library desugaring: an app using `java.time` at minSdk 21 (below java.time's native API 26) must get

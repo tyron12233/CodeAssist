@@ -19,6 +19,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.ide.vfs.local.fileFor
 
 /** Step-5 verification: folding, semantic highlight, signature help, inlay hints. */
 class JavaServicesTest {

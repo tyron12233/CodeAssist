@@ -85,7 +85,7 @@ object GradleProjectExport {
 
     /** [render], keeping the project root the files are relative to (the zip needs to walk it). */
     private fun renderAt(projectDir: Path): Pair<Path, Rendered> {
-        val workspace = ModelPersistence.load(projectDir)
+        val workspace = ModelPersistence.load(projectDir.toString())
         val project = workspace.projects.firstOrNull() ?: error("No project in ${projectDir.fileName}")
         val root = projectRoot(projectDir, project)
         val libraries = (workspace.libraries + project.libraries).associateBy { it.name }

@@ -30,6 +30,7 @@ import dev.ide.ui.backend.CustomizationActions
 import dev.ide.ui.backend.UiSymbolKey
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.symbolbar_customize
+import dev.ide.ui.generated.resources.symbolbar_hide_keyboard
 import dev.ide.ui.generated.resources.symbolbar_next_problem
 import dev.ide.ui.icons.CaIcons
 import org.jetbrains.compose.resources.stringResource
@@ -57,6 +58,11 @@ internal fun EditorSymbolBar(
     showDiagnosticJump: Boolean = false,
     /** Opens the Symbols & Macros editor. Null hides the trailing customize (gear) key. */
     onCustomize: (() -> Unit)? = null,
+    /**
+     * Dismisses the soft keyboard. Null hides the key, which is right on a host whose system back already
+     * does it (Android): there the key would be a redundant slot on a bar where every slot is scarce.
+     */
+    onHideKeyboard: (() -> Unit)? = null,
 ) {
     val separator = MaterialTheme.colorScheme.outlineVariant // captured for the draw lambda (can't read the theme inside drawBehind)
     val pinned = symbols.filter { it.pinned }
@@ -89,6 +95,16 @@ internal fun EditorSymbolBar(
         if (onCustomize != null) {
             Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
             IconKey(CaIcons.gear, stringResource(Res.string.symbolbar_customize), onClick = onCustomize)
+        }
+        // Trailing dismiss key, outside the scroll so it cannot be scrolled away — on a host with no system
+        // back it is the only way out of the keyboard, and one you have to hunt for is no way out.
+        if (onHideKeyboard != null) {
+            Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
+            IconKey(
+                CaIcons.keyboardHide,
+                stringResource(Res.string.symbolbar_hide_keyboard),
+                onClick = onHideKeyboard,
+            )
         }
     }
 }

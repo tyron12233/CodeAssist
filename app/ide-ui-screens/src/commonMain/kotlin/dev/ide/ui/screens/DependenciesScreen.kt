@@ -42,7 +42,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -50,7 +49,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TooltipBox
@@ -86,9 +84,11 @@ import dev.ide.ui.backend.UiDependencyNode
 import dev.ide.ui.backend.UiModuleDeps
 import dev.ide.ui.components.BottomSheet
 import dev.ide.ui.components.Chip
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.DropdownOverlay
 import dev.ide.ui.components.CaDropdownMenu
 import dev.ide.ui.components.IconButtonCa
+import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.components.entranceSlideUp
 import dev.ide.ui.icons.CaIcons

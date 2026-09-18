@@ -80,6 +80,7 @@ import dev.ide.ui.generated.resources.edchrome_settings_and_tools
 import dev.ide.ui.generated.resources.search
 import dev.ide.ui.generated.resources.structure_title
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.platform.hasSystemBack
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.platform.verticalResizeCursor
 import dev.ide.ui.theme.Motion
@@ -470,6 +471,9 @@ internal fun CompactLayout(
                             onAction = { id -> dispatchSymbolAction(state, id) },
                             showDiagnosticJump = state.active?.session?.diagnostics?.isNotEmpty() == true,
                             // No gear here — the Symbols & Macros editor lives in Settings ▸ Symbols & Macros.
+                            // The dismiss key only where the platform offers no way out of the keyboard
+                            // itself; Android's back already does it. See [hasSystemBack].
+                            onHideKeyboard = if (hasSystemBack) null else ({ state.active?.session?.ime?.hide() }),
                         )
                     }
                     // Reserve the dock's collapsed-bar slot so the editor column isn't hidden behind it.

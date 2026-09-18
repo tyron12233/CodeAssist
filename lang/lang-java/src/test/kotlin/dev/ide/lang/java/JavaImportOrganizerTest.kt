@@ -12,6 +12,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import dev.ide.vfs.local.fileFor
 
 /**
  * Java auto-import placement ([JavaImportEdits.planImport]) and the "Optimize Imports" command

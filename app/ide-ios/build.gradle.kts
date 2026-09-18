@@ -87,9 +87,27 @@ kotlin {
             implementation(project(":store-impl"))
             implementation(project(":store-bridge"))
             // Kotlin syntax analysis that needs no JVM: the compiler's own parser, vendored and built for
-            // this target. It backs the outline and code folding below; completion and diagnostics still
-            // need the symbol layer, which has not crossed.
+            // this target. It backs the outline and code folding.
             implementation(project(":kotlin-syntax"))
+            // ...and the analysis above it: the symbol table, the resolver, the inference subset and the
+            // completion contributor, all the same code the desktop and Android hosts run. What does NOT
+            // come with it is `KotlinSourceAnalyzer`, the adapter binding that half to a build — this host
+            // has none, so `IosKotlinAnalysis` drives the symbol service directly.
+            implementation(project(":lang-kotlin"))
+            // The library half of that analysis: a classpath has to come from somewhere, and on this host
+            // there is no bundled jar to extract, so it is fetched. Same resolver the Dependencies screen
+            // runs everywhere else.
+            implementation(project(":deps-api"))
+            implementation(project(":deps-impl"))
+            // ...and that classpath as an INDEX. The jars answer a type by name; only an index answers a
+            // NAME by prefix, which is what completion and the unresolved checks are made of.
+            implementation(project(":index-impl"))
+            // The project model, and the templates that author one. A project created here is the same
+            // project the desktop and Android hosts create: `.platform/workspace.json` + `module.toml`,
+            // written by the same templates through the same scaffold.
+            implementation(project(":project-model-api"))
+            implementation(project(":project-model-impl"))
+            implementation(project(":project-templates"))
         }
     }
 }

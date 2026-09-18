@@ -23,11 +23,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.ExpressiveScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -43,6 +42,7 @@ import dev.ide.ui.backend.UiSdkDownload
 import dev.ide.ui.backend.UiSdkPackage
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.IconButtonCa
+import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.pressScale
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.back

@@ -41,7 +41,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
@@ -93,6 +92,7 @@ import dev.ide.ui.backend.UiSourceSetInfo
 import dev.ide.ui.components.AddSourceRootDialog
 import dev.ide.ui.components.AddSourceRootRequest
 import dev.ide.ui.components.Chip
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.DropdownOverlay
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface

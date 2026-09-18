@@ -26,6 +26,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * Exercises [IdeServices.runAndCapture] — the compile + run + stdout-capture seam the Learn exercise checker

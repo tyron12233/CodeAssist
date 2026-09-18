@@ -40,11 +40,22 @@
 	<true/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Projects live in the app's Documents container (an iOS app cannot open an arbitrary folder), and
+	     these two keys are the only thing that makes that directory reachable from outside the app: the
+	     Files app and Finder file sharing list it, so a project made on the phone can be copied to a Mac and
+	     a folder of sources can be dropped in. Without them the container is private, and with no zip writer
+	     and no Git on this host there is no other way in or out. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<!-- `arm64`, not the template's `armv7`: the framework is linked for arm64 only, so declaring a 32-bit
+	     requirement described a build that does not exist. -->
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
-		<string>armv7</string>
+		<string>arm64</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>

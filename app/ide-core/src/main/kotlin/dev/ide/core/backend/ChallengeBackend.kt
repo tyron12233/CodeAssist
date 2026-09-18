@@ -2,6 +2,7 @@ package dev.ide.core.backend
 
 import dev.ide.core.BackendContext
 import dev.ide.core.IdeServices
+import dev.ide.model.impl.rootPath
 import dev.ide.platform.JsonReader
 import dev.ide.store.DailyChallengeService
 import dev.ide.store.DailyLanguage

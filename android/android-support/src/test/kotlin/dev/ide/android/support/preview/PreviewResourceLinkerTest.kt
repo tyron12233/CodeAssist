@@ -36,6 +36,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * Drives [PreviewResourceLinker] over a real built `android-app`: builds once with the native toolchain

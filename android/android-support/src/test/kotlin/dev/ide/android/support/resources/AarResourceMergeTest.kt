@@ -16,6 +16,8 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
+import dev.ide.vfs.local.fileFor
 
 /**
  * AAR resource merge: the dependency resolver explodes an `.aar`'s `res/` beside its `classes.jar`, so a

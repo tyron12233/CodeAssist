@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -45,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiStoreCategory
 import dev.ide.ui.backend.UiStoreItem
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.PillChip
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.store_no_results

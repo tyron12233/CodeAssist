@@ -1,5 +1,7 @@
 package dev.ide.interp
 
+import dev.ide.kotlin.syntax.psi.KtNamedFunction
+import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.lang.kotlin.interp.KotlinTreeResolver
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
@@ -9,8 +11,6 @@ import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.testkit.DiskVirtualFile
 import dev.ide.testkit.TestJars
 import dev.ide.testkit.writeSource
-import org.jetbrains.kotlin.psi.KtNamedFunction
-import org.jetbrains.kotlin.psi.KtProperty
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -37,7 +37,7 @@ fun lowerProgram(code: String): Map<String, ResolvedFunction> = lowerProgramFull
 /** Lower every top-level function (keyed `"name/arity"`) AND every source class/object/enum in [code]. */
 fun lowerProgramFull(code: String): Pair<Map<String, ResolvedFunction>, List<ResolvedClass>> {
     val dir = tempProject(code)
-    val service = KotlinSymbolService(listOf(DiskFile(dir)), listOf(stdlibJarPath()))
+    val service = KotlinSymbolService(listOf(DiskFile(dir)), listOf(stdlibJarPath().toString()))
     val kt = KotlinParserHost.parse("Prog.kt", code)
     val parsed = KotlinParsedFile(kt, DiskFile(dir.resolve("Prog.kt")), 0)
     val resolver = KotlinTreeResolver(kt, parsed, service)

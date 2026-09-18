@@ -25,6 +25,7 @@ import dev.ide.testkit.writeSource
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * Locks the **graph shape** of Kotlin compilation in the Java build system, without running the real

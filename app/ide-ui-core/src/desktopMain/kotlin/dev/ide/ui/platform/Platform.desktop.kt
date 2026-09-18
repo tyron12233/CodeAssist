@@ -5,6 +5,9 @@ import kotlinx.coroutines.Dispatchers
 
 actual val isMobilePlatform: Boolean = false
 
+// Window chrome, not a back gesture. Nothing here raises a soft keyboard either.
+actual val hasSystemBack: Boolean = false
+
 actual val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 
 actual fun nowMillis(): Long = System.currentTimeMillis()

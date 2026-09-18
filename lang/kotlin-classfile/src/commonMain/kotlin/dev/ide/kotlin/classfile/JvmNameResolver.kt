@@ -18,7 +18,11 @@ package dev.ide.kotlin.classfile
  *  * [PREDEFINED_STRINGS] is indexed BY POSITION, so its order is part of the format. It is reproduced here
  *    verbatim, including the two entries spelled with a dot.
  */
-class JvmNameResolver(private val strings: Array<String>, records: List<Record>, private val localNames: Set<Int>) {
+class JvmNameResolver(
+    private val strings: Array<String>,
+    records: List<Record>,
+    private val localNames: Set<Int>,
+) : NameResolver {
 
     /** One string-table instruction. Field numbers are from `jvm_metadata.proto`, `StringTableTypes.Record`. */
     class Record(
@@ -37,7 +41,7 @@ class JvmNameResolver(private val strings: Array<String>, records: List<Record>,
     fun isLocalClassName(index: Int): Boolean = index in localNames
 
     /** The string at [index], built as its record instructs. */
-    fun getString(index: Int): String {
+    override fun getString(index: Int): String {
         val record = expanded.getOrNull(index)
             ?: return strings.getOrNull(index) ?: ""
 
@@ -74,7 +78,7 @@ class JvmNameResolver(private val strings: Array<String>, records: List<Record>,
      * what `local_name` in the string table exists to record. Dropping it is not cosmetic: two different
      * classes then answer to one name.
      */
-    fun getClassName(index: Int): String {
+    override fun getClassName(index: Int): String {
         val name = getString(index).replace('/', '.')
         return if (isLocalClassName(index)) ".$name" else name
     }

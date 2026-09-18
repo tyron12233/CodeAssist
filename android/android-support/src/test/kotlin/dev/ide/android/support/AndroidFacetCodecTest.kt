@@ -8,6 +8,7 @@ import dev.ide.platform.impl.PlatformCore
 import dev.ide.testkit.testEnv
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import dev.ide.model.impl.open
 
 class AndroidFacetCodecTest {
 

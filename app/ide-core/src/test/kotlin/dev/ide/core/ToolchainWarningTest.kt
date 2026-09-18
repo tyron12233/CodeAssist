@@ -9,6 +9,7 @@ import dev.ide.model.LibraryRef
 import dev.ide.model.ModuleId
 import dev.ide.testkit.TestJars
 import dev.ide.testkit.withTempDir
+import dev.ide.vfs.local.fileFor
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals

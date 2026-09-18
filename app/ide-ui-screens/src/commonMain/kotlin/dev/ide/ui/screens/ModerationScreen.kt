@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -48,6 +47,7 @@ import dev.ide.ui.backend.UiPendingSubmission
 import dev.ide.ui.backend.UiReportedContent
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.Eyebrow
+import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.PillChip
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.*

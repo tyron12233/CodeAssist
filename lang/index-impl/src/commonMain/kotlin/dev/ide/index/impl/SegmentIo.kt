@@ -1,7 +1,7 @@
 package dev.ide.index.impl
 
-import dev.ide.kotlin.classfile.FileSink
-import dev.ide.kotlin.classfile.FileSource
+import dev.ide.platform.FileSink
+import dev.ide.platform.FileSource
 import dev.ide.platform.ByteArrayDataReader
 import dev.ide.platform.ByteArrayDataWriter
 import dev.ide.platform.DataReader

@@ -18,6 +18,7 @@ import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * A `proguard-rules.pro` referenced by a `minifyEnabled` build type but created only AFTER a first build is

@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.IdeUiState
 import dev.ide.ui.backend.UiCompatibilityInfo
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.IconButtonCa

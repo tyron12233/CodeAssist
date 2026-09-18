@@ -18,6 +18,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * The persistent "couldn't be resolved" banner must appear the instant a project with a known-bad dependency

@@ -1,5 +1,8 @@
 package dev.ide.kotlin.classfile
 
+import dev.ide.platform.ByteArraySource
+import dev.ide.platform.ByteSource
+
 /**
  * One entry in an archive, as the central directory describes it.
  *

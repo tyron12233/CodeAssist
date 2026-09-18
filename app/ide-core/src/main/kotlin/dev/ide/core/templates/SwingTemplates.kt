@@ -6,6 +6,7 @@ import dev.ide.model.template.TemplateArgs
 import dev.ide.model.template.TemplateCategory
 import dev.ide.model.template.TemplateId
 import dev.ide.model.template.TemplateParameter
+import dev.ide.templates.TemplateSupport
 
 /**
  * Create-Project templates for Java desktop UI programs.
@@ -22,9 +23,9 @@ import dev.ide.model.template.TemplateParameter
 internal object SwingTemplateSupport {
     /** Every Swing template writes one runnable class into a single `app` module. */
     fun swingApp(scaffold: ProjectScaffold, args: TemplateArgs, className: String, source: String) {
-        JavaTemplateSupport.singleModule(scaffold, args.name, "app", "java-lib")
+        TemplateSupport.singleModule(scaffold, args.name, "app", "java-lib", JAVA_SOURCES)
         scaffold.writeText(
-            "app/src/main/java/${JavaTemplateSupport.pkgPath(args.packageName)}/$className.java",
+            "app/src/main/java/${TemplateSupport.pkgPath(args.packageName)}/$className.java",
             source,
         )
     }

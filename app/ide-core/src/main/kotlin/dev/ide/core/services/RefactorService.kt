@@ -10,6 +10,7 @@ import dev.ide.lang.jdt.JdtSourceAnalyzer
 import dev.ide.lang.jdt.rename.JdtRename
 import dev.ide.lang.java.JavaSourceAnalyzer
 import dev.ide.model.Module
+import dev.ide.vfs.local.fileFor
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.readText

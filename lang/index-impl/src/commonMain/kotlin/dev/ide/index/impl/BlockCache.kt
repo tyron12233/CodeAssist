@@ -1,8 +1,8 @@
 package dev.ide.index.impl
 
-import dev.ide.kotlin.classfile.FileSource
+import dev.ide.platform.FileSource
 import dev.ide.platform.Lock
-import dev.ide.kotlin.classfile.openFile
+import dev.ide.platform.openFile
 
 /** Thrown when a block is asked for from a segment that has been closed or invalidated. */
 internal class SegmentClosedException : RuntimeException("segment closed")

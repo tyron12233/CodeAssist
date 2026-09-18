@@ -1,14 +1,14 @@
 package dev.ide.lang.kotlin.symbols
 
-import dev.ide.kotlin.classfile.FileSource
+import dev.ide.platform.FileSource
 import dev.ide.platform.Lock
 import dev.ide.kotlin.classfile.ZipArchive
-import dev.ide.kotlin.classfile.createDirectories
-import dev.ide.kotlin.classfile.deleteFile
-import dev.ide.kotlin.classfile.fileInfo
-import dev.ide.kotlin.classfile.openFile
-import dev.ide.kotlin.classfile.readFile
-import dev.ide.kotlin.classfile.writeFileAtomically
+import dev.ide.platform.createDirectories
+import dev.ide.platform.deleteFile
+import dev.ide.platform.fileInfo
+import dev.ide.platform.openFile
+import dev.ide.platform.readFile
+import dev.ide.platform.writeFileAtomically
 import dev.ide.platform.ByteArrayDataReader
 import dev.ide.platform.ByteArrayDataWriter
 import dev.ide.platform.DataReader

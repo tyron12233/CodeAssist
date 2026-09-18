@@ -5,6 +5,7 @@ import dev.ide.android.support.tools.AarMetadata
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.DependencyScope
 import dev.ide.model.MavenClasspath
+import dev.ide.model.dedupeJarsForAndroidDex
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
@@ -133,8 +134,8 @@ object AndroidLibraries {
         // else the file name) so it recognises the bundled jar as `kotlin-stdlib` and keeps the newest — the
         // same collapse the layout-preview classpaths already do. Distinct artifacts pass through untouched.
         return ResolvedLibraries(
-            MavenClasspath.dedupeForAndroidDex(compileJars.distinct()),
-            MavenClasspath.dedupeForAndroidDex(dexJars.distinct()),
+            dedupeJarsForAndroidDex(compileJars.distinct()),
+            dedupeJarsForAndroidDex(dexJars.distinct()),
             resDirs.distinct(), assetsDirs.distinct(),
             jniLibDirs.distinct(), aidlDirs.distinct(), aarPackages.distinct(), consumerProguardFiles.distinct(),
             aarManifests.distinct(), aarMetadata.distinct(), aarSymbols.distinct(),

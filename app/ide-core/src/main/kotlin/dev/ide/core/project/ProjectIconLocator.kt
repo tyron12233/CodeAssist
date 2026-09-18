@@ -18,7 +18,7 @@ internal object ProjectIconLocator {
 
     /** The launcher icon for the project rooted at [projectDir], or null. */
     fun locate(projectDir: Path): LauncherIcon? {
-        val workspace = runCatching { ModelPersistence.load(projectDir) }.getOrNull() ?: return null
+        val workspace = runCatching { ModelPersistence.load(projectDir.toString()) }.getOrNull() ?: return null
         val project = workspace.projects.firstOrNull() ?: return null
         val projectRoot = projectDir.resolve(project.rootRelPath)
 

@@ -4,6 +4,7 @@ import com.intellij.platform.syntax.SyntaxElementType
 import org.jetbrains.kotlin.kmp.lexer.KtTokens
 import org.jetbrains.kotlin.kmp.parser.KtNodeTypes
 import org.jetbrains.kotlin.kmp.tree.LightNode
+import org.jetbrains.kotlin.kmp.utils.SyntaxElementTypesWithIds
 
 /**
  * The typed view of the parse tree, mirroring `org.jetbrains.kotlin.psi.KtElement` and its subclasses.
@@ -32,17 +33,55 @@ open class KtElement internal constructor(
 
     override val text: String get() = session.tree.getText(node).toString()
 
-    override val textOffset: Int get() = session.tree.getStartOffset(node)
+    override val textOffset: Int get() = session.tree.getStartOffset(node) + session.baseOffset
 
-    override val textLength: Int get() = session.tree.getEndOffset(node) - textOffset
+    override val textLength: Int
+        get() = session.tree.getEndOffset(node) - session.tree.getStartOffset(node)
 
     override val textRange: TextRange
-        get() = TextRange(session.tree.getStartOffset(node), session.tree.getEndOffset(node))
+        get() = TextRange(
+            session.tree.getStartOffset(node) + session.baseOffset,
+            session.tree.getEndOffset(node) + session.baseOffset,
+        )
 
     override val parent: KtElement? get() = session.tree.getParent(node)?.let { session.psi(it) }
 
-    /** Children, trivia excluded. */
-    override val children: List<KtElement> get() = session.childrenOf(node).map { session.psi(it) }
+    /**
+     * Children, trivia excluded, computed once per element.
+     *
+     * Cached because this is THE hot path: every accessor on every subclass is a filter over it, and so is
+     * every ancestor walk and every descendant walk. Recomputing it allocated two lists per call (the
+     * filtered nodes, then the wrappers), which measured as a 14x allocation regression on member-access
+     * completion against the PSI implementation, where children were a linked list that allocated nothing.
+     *
+     * Bounded by the tree, not by traffic: the session already keeps one wrapper per node, so this adds one
+     * list per node that anything actually looked at.
+     */
+    override val children: List<KtElement>
+        get() = childCache ?: session.childrenOf(node).map { session.psi(it) }.also { childCache = it }
+
+    private var childCache: List<KtElement>? = null
+
+    /**
+     * Children INCLUDING whitespace and comments, which [children] leaves out.
+     *
+     * Almost nothing wants these: an accessor asking for "the declarations" would have to filter them back out
+     * every time, which is why [children] drops them. A caret query does want them, because a comment is
+     * somewhere the caret can be, and asking what is at an offset through the trivia-free view answers with
+     * whatever ENCLOSES the comment instead of the comment.
+     */
+    val childrenWithTrivia: List<KtElement> get() = session.tree.getChildren(node).map { session.psi(it) }
+
+    /**
+     * The doc-comment tokens directly under this element, and empty for almost every element there is.
+     *
+     * The emptiness is the point: a consumer that wants doc comments has to look through [childrenWithTrivia],
+     * and doing that per node on a hot walk materialises a list for every node in the file to find the handful
+     * that carry one. `findChildByType` answers the common case without allocating anything.
+     */
+    val docCommentChildren: List<KtElement>
+        get() = if (!hasChild(KtTokens.DOC_COMMENT)) emptyList()
+        else childrenWithTrivia.filter { it.elementType == KtTokens.DOC_COMMENT }
 
     val firstChild: KtElement? get() = children.firstOrNull()
 
@@ -59,6 +98,39 @@ open class KtElement internal constructor(
         if (index < 0) return null
         return siblings.getOrNull(index + step)?.let { session.psi(it) }
     }
+
+    /**
+     * A single token rather than a composite.
+     *
+     * Worth having because PSI answered this by TYPE: a leaf was a `LeafPsiElement` and only composites
+     * implemented `KtElement`, so `x is KtElement` meant "not a token". Here everything in the tree is a
+     * [KtElement], so a consumer that wants only composites (projecting the tree into a neutral DOM, say) has
+     * to ask, and the version that did not ask silently represented every keyword and brace as a node.
+     */
+    val isToken: Boolean get() = session.tree.isToken(node)
+
+    /**
+     * Semantically ONE token, whether the tree stores it as a leaf or as a collapsed marker.
+     *
+     * `marker.collapse(type)` yields a leaf in PSI but a composite wrapping its tokens here, and the parser
+     * runs it over every modifier keyword and over the operators the new lexer leaves in pieces: `!!` is
+     * `(EXCLEXCL EXCL EXCL)`, and so are `?:` and `?.`. A collapsed marker is recognisable without a list,
+     * because nothing else is a composite NAMED AFTER A TOKEN KIND holding only tokens, and
+     * `KtTokens.getElementTypeId` answers whether a kind is one of its own.
+     *
+     * A consumer projecting the tree (the neutral DOM) wants these to be leaves: representing `open`, `!!`
+     * and every annotation keyword as nodes of their own is the difference between a DOM of the code's shapes
+     * and one with a node per keystroke.
+     */
+    val isTokenLike: Boolean
+        get() = isToken || (
+            KtTokens.getElementTypeId(elementType) != SyntaxElementTypesWithIds.NO_ID &&
+                children.isNotEmpty() && children.all { it.isToken }
+            )
+
+    /** A region the parser could not read: the error marker it recovered at, if this is one. */
+    val isErrorElement: Boolean
+        get() = elementType == com.intellij.platform.syntax.element.SyntaxTokenTypes.ERROR_ELEMENT
 
     /** The file this element belongs to. */
     override val containingKtFile: KtFile get() = session.file
@@ -149,11 +221,22 @@ abstract class KtNamedDeclaration internal constructor(session: KtTreeSession, n
         get() {
             val own = name ?: return null
             val segments = mutableListOf(own)
-            var owner = (this as KtDeclaration).containingClassOrObject
-            while (owner != null) {
-                segments += owner.name ?: return null
-                owner = owner.containingClassOrObject
+            // Walk the REAL parent chain rather than hopping containing classes. Only a class body or a
+            // class/object may stand between a declaration and its file. Anything else (a function body, an
+            // initializer, a property's initializer) makes the declaration LOCAL, and a local declaration has
+            // no qualified name. Hopping `containingClassOrObject` cannot see that: it answers null both for a
+            // top-level declaration and for one nested inside a function, so a local class came out with a
+            // package-qualified name that nothing else in the IDE agrees exists.
+            var current: KtElement? = parent
+            while (current != null && current !is KtFile) {
+                when (current) {
+                    is KtClassBody -> Unit
+                    is KtClassOrObject -> segments += current.name ?: return null
+                    else -> return null
+                }
+                current = current.parent
             }
+            if (current == null) return null
             val packageName = containingKtFile.packageFqName
             if (!packageName.isRoot) segments += packageName.asString()
             return FqName(segments.asReversed().joinToString("."))
@@ -255,8 +338,14 @@ class KtImportDirective internal constructor(session: KtTreeSession, node: Light
 
     val alias: KtImportAlias? get() = firstChildOfType()
 
-    /** The name this import introduces: the alias if there is one, otherwise the last name part. */
-    val aliasName: String? get() = alias?.name ?: importedFqName?.shortName()?.asString()
+    /**
+     * The alias in `import a.b.C as D`, or null when there is none.
+     *
+     * Null rather than the short name, which is what upstream answers and what every caller assumes: they all
+     * spell it `aliasName ?: fqn.shortName()`. Falling back here instead made every plain import look aliased,
+     * and the import organizer duly rewrote `import a.A` as `import a.A as A`.
+     */
+    val aliasName: String? get() = alias?.name
 }
 
 class KtImportAlias internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node) {
@@ -274,7 +363,7 @@ abstract class KtClassOrObject internal constructor(session: KtTreeSession, node
 
     val body: KtClassBody? get() = firstChildOfType()
 
-    /** Members declared in the body. An enum's entries are NOT included; they are [KtClass.enumEntries]. */
+    /** Members declared in the body, enum entries included (they are declarations, as upstream has them). */
     val declarations: List<KtDeclaration> get() = body?.declarations.orEmpty()
 
     val primaryConstructor: KtPrimaryConstructor? get() = firstChildOfType()
@@ -295,6 +384,12 @@ abstract class KtClassOrObject internal constructor(session: KtTreeSession, node
     override val typeConstraints: List<KtTypeConstraint> get() = typeConstraintList?.constraints.orEmpty()
 
     val primaryConstructorParameters: List<KtParameter> get() = primaryConstructor?.valueParameters.orEmpty()
+
+    /**
+     * Declared `data`. Here rather than on [KtClass] because that is where PSI puts it, and a caller holding a
+     * [KtClassOrObject] asks without narrowing first. An object cannot be `data`, so it answers false.
+     */
+    fun isData(): Boolean = hasModifier(KtTokens.DATA_MODIFIER)
 
     /**
      * True only when the constructor is WRITTEN.
@@ -328,8 +423,6 @@ open class KtClass internal constructor(session: KtTreeSession, node: LightNode)
 
     fun isAnnotation(): Boolean = hasModifier(KtTokens.ANNOTATION_MODIFIER)
 
-    fun isData(): Boolean = hasModifier(KtTokens.DATA_MODIFIER)
-
     fun isSealed(): Boolean = hasModifier(KtTokens.SEALED_MODIFIER)
 
     fun isInner(): Boolean = hasModifier(KtTokens.INNER_MODIFIER)
@@ -344,13 +437,30 @@ class KtObjectDeclaration internal constructor(session: KtTreeSession, node: Lig
     /** A companion object has the `companion` modifier and usually no name. */
     fun isCompanion(): Boolean = hasModifier(KtTokens.COMPANION_MODIFIER)
 
+    /**
+     * `companion object { }` is named `Companion`, which is how it is addressed and how upstream reports it.
+     *
+     * Without this an unnamed companion has no name, so it has no [fqName] either, and everything keyed on a
+     * companion's qualified name (importing through it, resolving `Outer.member`, its extensions) misses.
+     */
+    override val name: String?
+        get() = super.name ?: if (isCompanion()) "Companion" else null
+
     fun isObjectLiteral(): Boolean = parent is KtObjectLiteralExpression
 
     val objectKeyword: KtElement? get() = child(KtTokens.OBJECT_KEYWORD)
 }
 
 class KtClassBody internal constructor(session: KtTreeSession, node: LightNode) : KtElement(session, node) {
-    val declarations: List<KtDeclaration> get() = childrenOfType<KtDeclaration>().filter { it !is KtEnumEntry }
+    /**
+     * Every declaration in the body, an enum's ENTRIES included.
+     *
+     * A `KtEnumEntry` is a declaration upstream and is returned here for the same reason: the backend finds an
+     * enum's constants by walking declarations, so filtering them out left every enum with no constants, and
+     * `E.A` unresolved everywhere it appeared. [KtClass.enumEntries] is the typed filter for callers that want
+     * only the entries.
+     */
+    val declarations: List<KtDeclaration> get() = childrenOfType()
     val properties: List<KtProperty> get() = childrenOfType()
     val functions: List<KtNamedFunction> get() = childrenOfType()
     val lBrace: KtElement? get() = child(KtTokens.LBRACE)
@@ -412,7 +522,7 @@ class KtSuperTypeList internal constructor(session: KtTreeSession, node: LightNo
 
 abstract class KtSuperTypeListEntry internal constructor(session: KtTreeSession, node: LightNode) :
     KtElement(session, node) {
-    val typeReference: KtTypeReference? get() = firstChildOfType()
+    open val typeReference: KtTypeReference? get() = firstChildOfType()
 }
 
 class KtSuperTypeEntry internal constructor(session: KtTreeSession, node: LightNode) :
@@ -422,6 +532,17 @@ class KtSuperTypeCallEntry internal constructor(session: KtTreeSession, node: Li
     KtSuperTypeListEntry(session, node) {
     val valueArgumentList: KtValueArgumentList? get() = firstChildOfType()
     val valueArguments: List<KtValueArgument> get() = valueArgumentList?.arguments.orEmpty()
+
+    val calleeExpression: KtConstructorCalleeExpression? get() = firstChildOfType()
+
+    /**
+     * `Base()` in `class Child : Base()`.
+     *
+     * A called supertype wraps its type in a CONSTRUCTOR_CALLEE, so the type reference is a grandchild here
+     * where a plain `KtSuperTypeEntry` has it as a direct child. Inheriting the base's direct-child lookup
+     * silently returns null for every supertype that is CONSTRUCTED, which is every superclass.
+     */
+    override val typeReference: KtTypeReference? get() = calleeExpression?.typeReference
 }
 
 class KtDelegatedSuperTypeEntry internal constructor(session: KtTreeSession, node: LightNode) :
@@ -502,6 +623,17 @@ class KtPropertyAccessor internal constructor(session: KtTreeSession, node: Ligh
     val isGetter: Boolean get() = hasChild(KtTokens.GET_KEYWORD)
 
     val isSetter: Boolean get() = !isGetter
+
+    /** The accessor's own declared return type, as in `get(): Int = …`. */
+    val typeReference: KtTypeReference? get() = firstChildOfType()
+
+    /**
+     * The property this accessor belongs to.
+     *
+     * Nullable where PSI declared it non-null: an accessor only ever appears under a property in well-formed
+     * code, but the parser is error-tolerant and a caller reading half-typed text can hold one that is not.
+     */
+    val property: KtProperty? get() = parent as? KtProperty
 
     override val bodyExpression: KtExpression? get() = childrenOfType<KtExpression>().lastOrNull()
 

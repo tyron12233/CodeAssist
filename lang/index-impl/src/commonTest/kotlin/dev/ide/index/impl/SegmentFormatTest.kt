@@ -1,7 +1,7 @@
 package dev.ide.index.impl
 
-import dev.ide.kotlin.classfile.deleteFile
-import dev.ide.kotlin.classfile.readFile
+import dev.ide.platform.deleteFile
+import dev.ide.platform.readFile
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test

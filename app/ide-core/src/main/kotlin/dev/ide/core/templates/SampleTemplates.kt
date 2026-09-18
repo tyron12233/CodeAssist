@@ -6,6 +6,7 @@ import dev.ide.model.template.TemplateArgs
 import dev.ide.model.template.TemplateCategory
 import dev.ide.model.template.TemplateId
 import dev.ide.model.template.TemplateParameter
+import dev.ide.templates.TemplateSupport
 
 /**
  * Built-in **sample projects** — complete, documented, runnable example apps (not bare starters). Each one
@@ -52,7 +53,7 @@ object CalculatorSampleTemplate : ProjectTemplate {
     override fun parameters(): List<TemplateParameter> = emptyList()
 
     override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
-        JavaTemplateSupport.singleModule(scaffold, args.name, "app", "java-lib")
+        TemplateSupport.singleModule(scaffold, args.name, "app", "java-lib", JAVA_SOURCES)
         SampleSupport.copyFiles(
             scaffold, "calculator",
             listOf(
@@ -75,7 +76,7 @@ object NotesSampleTemplate : ProjectTemplate {
     override fun parameters(): List<TemplateParameter> = emptyList()
 
     override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
-        KotlinTemplateSupport.singleModule(scaffold, args.name, "app", "java-lib")
+        TemplateSupport.singleModule(scaffold, args.name, "app", "java-lib", "src/main/kotlin")
         SampleSupport.copyFiles(
             scaffold, "notes",
             listOf(
@@ -98,7 +99,7 @@ object WeatherSampleTemplate : ProjectTemplate {
     override fun parameters(): List<TemplateParameter> = emptyList()
 
     override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
-        KotlinTemplateSupport.singleModule(scaffold, args.name, "app", "java-lib")
+        TemplateSupport.singleModule(scaffold, args.name, "app", "java-lib", "src/main/kotlin")
         SampleSupport.copyFiles(
             scaffold, "weather",
             listOf(

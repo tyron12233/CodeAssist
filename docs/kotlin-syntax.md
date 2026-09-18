@@ -1,7 +1,8 @@
 # kotlin-syntax (experimental)
 
 The Kotlin compiler's own multiplatform parser, vendored and built for iOS, with a parity suite that checks it
-against the PSI parser this IDE actually ships. Nothing depends on it.
+against the PSI parser this IDE used to ship. **`:lang-kotlin` now parses through it**: the editor backend no
+longer builds IntelliJ PSI at all.
 
 ## What changed, and why it matters
 
@@ -301,11 +302,9 @@ Three details worth keeping:
 
 ## Not done yet
 
-- Nothing in `:lang-kotlin` actually depends on this; the probe is a copy, not a wiring. The vocabulary gap
-  is closed, so the remaining known cost for a real migration is the `.isX()` call sites that need their
-  parentheses removed, which the compiler finds for you, and splitting out the 597 lines in three files that
-  drive the K2 compiler itself and stay JVM-only.
-- KDoc parsing is vendored but unexercised.
+- `IncrementalKotlinParse` is written and NOT wired: `:lang-kotlin` full-parses on every keystroke. That is
+  what the removed PSI subtree reparse used to avoid, and it shows up as the one latency regression in the
+  table below (member-access-editing, +24%).
 - The 55 baselined divergences are unexamined individually; they are known to be dominated by `BAD_CHARACTER`
   handling, but nobody has read them one at a time.
 

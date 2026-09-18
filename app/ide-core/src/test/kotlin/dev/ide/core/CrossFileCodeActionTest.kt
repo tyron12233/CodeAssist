@@ -14,6 +14,7 @@ import dev.ide.platform.PluginId
 import dev.ide.testkit.withTempDir
 import dev.ide.vfs.local.LocalFileSystem
 import dev.ide.vfs.VirtualFile
+import dev.ide.vfs.local.fileFor
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals

@@ -4,11 +4,11 @@ import dev.ide.index.Externalizer
 import dev.ide.index.IndexExtension
 import dev.ide.index.IndexOrigin
 import dev.ide.index.MatchingMode
-import dev.ide.kotlin.classfile.createDirectories
-import dev.ide.kotlin.classfile.deleteFile
-import dev.ide.kotlin.classfile.moveFile
-import dev.ide.kotlin.classfile.openFile
-import dev.ide.kotlin.classfile.openFileForWrite
+import dev.ide.platform.createDirectories
+import dev.ide.platform.deleteFile
+import dev.ide.platform.moveFile
+import dev.ide.platform.openFile
+import dev.ide.platform.openFileForWrite
 import dev.ide.platform.DataWriter
 
 /**

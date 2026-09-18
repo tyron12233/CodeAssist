@@ -24,6 +24,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import dev.ide.model.impl.open
 
 /**
  * The Dependencies pane loads its graph from a `LaunchedEffect`, so its resolve is cancelled every time the

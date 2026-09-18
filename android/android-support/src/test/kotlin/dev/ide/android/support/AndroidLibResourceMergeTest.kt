@@ -22,6 +22,7 @@ import java.nio.file.Files
 import java.util.zip.ZipFile
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * Proves resource merging across modules: an `android-app` depends on an `android-lib` module (`liba`)

@@ -16,6 +16,7 @@ import dev.ide.lang.jdt.formatting.JdtFormattingService
 import dev.ide.lang.kotlin.KotlinFormatter
 import dev.ide.lang.resolve.QuickDocInfo
 import dev.ide.lang.resolve.StructureItem
+import dev.ide.vfs.local.fileFor
 import java.nio.file.Path
 
 /**

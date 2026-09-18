@@ -6,32 +6,10 @@ import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
 
-/**
- * The opt-in markers on a class, read straight from bytecode with ASM.
- *
- * Left behind when the rest of the decoding moved to `:kotlin-classfile` and `commonMain`, and the reason is
- * specific: this is the only reader here that needs annotation VALUES rather than annotation names, because
- * a `@RequiresOptIn` marker declares a LEVEL, and the portable class-file reader collects descriptors and
- * skips values.
- *
- * So it keeps its ASM implementation, on the JVM, and the opt-in diagnostic stays a desktop and Android
- * feature until either the portable reader decodes annotation values or the diagnostic does without a level.
- * `KotlinSymbolService` is the caller.
- */
-object KotlinOptIn {
+internal actual fun scanOptIn(classBytes: ByteArray): KotlinOptIn.OptInScan? = AsmOptIn.scan(classBytes)
 
-    /** The opt-in-relevant annotation facts read from one class's bytecode. */
-    class OptInScan(
-        /** Annotation FQNs on the class declaration itself (a type's own markers, e.g. `@ExperimentalFoo class Bar`). */
-        val classAnnotations: List<String>,
-        /** Method name → the annotation FQNs present on EVERY method of that name (the intersection across
-         *  overloads). A marker is thus attributed to a name only when all its overloads carry it — sound: an
-         *  opt-in usage is never over-reported for an overload set where only some members are experimental. */
-        val methodAnnotations: Map<String, List<String>>,
-        /** When THIS class is a `@kotlin.RequiresOptIn` marker annotation, its declared level (`"ERROR"` /
-         *  `"WARNING"`, default `"ERROR"`); null when the class is not a marker. */
-        val requiresOptInLevel: String?,
-    )
+/** The JVM half of [KotlinOptIn]: ASM, which reads annotation values. */
+private object AsmOptIn {
 
     private const val REQUIRES_OPT_IN_DESC = "Lkotlin/RequiresOptIn;"
 
@@ -42,7 +20,7 @@ object KotlinOptIn {
      * on demand (no `@Metadata` decode needed; the annotations aren't reliably in the metadata blob). Null when
      * the bytes can't be read.
      */
-    fun scan(classBytes: ByteArray): OptInScan? {
+    fun scan(classBytes: ByteArray): KotlinOptIn.OptInScan? {
         val reader = runCatching { ClassReader(classBytes) }.getOrNull() ?: return null
         val classAnnos = ArrayList<String>()
         var markerLevel: String? = null
@@ -82,7 +60,7 @@ object KotlinOptIn {
         val methodAnnos = perMethod.mapValues { (_, overloads) ->
             overloads.reduce { acc, s -> acc.apply { retainAll(s) } }.toList()
         }.filterValues { it.isNotEmpty() }
-        return OptInScan(
+        return KotlinOptIn.OptInScan(
             classAnnotations = classAnnos,
             methodAnnotations = methodAnnos,
             requiresOptInLevel = if (isMarker) (markerLevel ?: "ERROR") else null,

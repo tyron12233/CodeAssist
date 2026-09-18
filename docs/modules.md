@@ -43,7 +43,7 @@ platform-core            no domain knowledge; depended on by all
        └─ project-model-api
             ├─ build-api
             └─ language-api
-deps-api    → project-model-api
+deps-api    → model-api
 index-api   → language-api
 analysis-api → language-api, index-api
 block-api    → language-api
@@ -63,7 +63,7 @@ ide-android (Android launcher) → ide-core
 | `project-model-api` | `dev.ide.model`, `.graph`, `.sync` | Workspace/Project/Module/SourceSet/ContentRoot, order entries + scopes (all open, so a plugin's language can name its own roles/platform/packaging/level/scopes), classpath snapshots, library/SDK tables, module types, variants, facets + their codecs, the registries that resolve all of those, transactions, the project/module graphs, file-icon SPI, the foreign-build-system sync SPI (`ProjectImporter` → `ExternalProjectModel`, `BuildFileWriter`), and the two promoted slices a plugin can resolve: `ModuleSources` + `MODULE_SOURCES` (source sets and source roots) and `ModuleResources` + `MODULE_RESOURCES` (generate a file into a content root of any `ContentRole` and have the IDE see it, plus the Android resource model). |
 | `build-api` | `dev.ide.build` | `BuildSystem` SPI; the generic incremental task engine contracts (`Task`/`TaskInputs`/`TaskOutputs`/`TaskGraph`/`TaskExecutor`); the contribution seams (`BuildPlugin`, `RunTaskProvider`/`RunAction`); `BuildControl` + `BUILD_CONTROL`, the narrowed slice of the engine's build service a plugin can resolve. |
 | `language-api` | `dev.ide.lang`, `.dom`, `.incremental`, `.resolve`, `.completion` | `LanguageBackend` SPI, source analyzer/compiler contracts, the backend-neutral DOM, incremental parsing, symbol/scope/type resolution, code completion, and a module's analysis inputs (`CompilationContext`, the model binding that builds one, and the `CompilationContextProvider` a plugin supplies its own with). |
-| `deps-api` | `dev.ide.deps` | Dependency resolution SPI (Maven coordinates → jars/aars, conflict policy). |
+| `deps-api` | `dev.ide.deps` | Dependency resolution SPI (Maven coordinates → jars/aars, conflict policy). Multiplatform. |
 | `vcs-api` | `dev.ide.vcs` | Version-control SPI: the repository/branch/commit/status model, the `VcsProvider` extension point, and the account/credential/forge ports sign-in is built on. Published to Maven Central as part of the plugin SPI, so a plugin can contribute a version-control provider. |
 | `agent-api` | `dev.ide.agent` | Coding-agent SPI: the tools an agent can call, the workspace it reads and edits, and the provider-neutral LLM interface behind them. Published to Maven Central as part of the plugin SPI, so a plugin can contribute agent tools or an LLM provider. |
 | `index-api` | `dev.ide.index` | Indexing SPI: index extensions, index service, shared value types; `SymbolSearch` + `SYMBOL_SEARCH`, the resolvable symbol/member lookup over them. |
@@ -79,12 +79,13 @@ ide-android (Android launcher) → ide-core
 |---|---|
 | `platform-core` (impl) | Extension registry, message bus, model read/write lock, activity/progress engine. |
 | `project-model-impl` | Model objects, modifiable-model transactions, `module.toml` load/save, crash-safe writes, the graph + classpath assembly. |
+| `project-templates` | The built-in Kotlin project templates and the scaffolding helpers they share. Multiplatform: a template is a model transaction and a file write, so the iOS host creates projects from the same ones the desktop and Android hosts do. Templates that name a toolchain stay with the host that has it (Swing and plugin templates in `ide-core`, Android in `android-support`). |
 | `build-engine` | The incremental task engine (fingerprints, persistent cache, bounded-parallel executor) and the native Java build system. |
 | `index-impl` | The indexing engine: disk-backed segments for static (SDK/library) indices, in-memory incremental data for source. |
 | `analysis-impl` | The analysis engine behind `analysis-api` (analyzers, the compiler as a diagnostic provider, profiles, suppression, debounce/cancellation). |
 | `block-impl` | The block projection engine and the Java block mapping. |
 | `plugin-impl` | The plugin engine: `PluginManager` (topological load, per-plugin unload, fault-tolerant load for plugins the IDE did not write), `PluginCatalog` (enable/disable/dependencies over any manifest set), `ExternalPluginLoader` (compatibility gates + entry-point instantiation), and `ActionManager`. |
-| `deps-impl` | The dependency resolver implementation. |
+| `deps-impl` | The dependency resolver implementation. Multiplatform: the POM reader, the transitive walk and the Maven-layout cache are common code, and only the socket (`DepsHttp`) and the `.aar` reader are per-platform. |
 | `vcs-impl` | The Git engine: a JGit-backed working copy (status, staging, commit, branches, diff, stash, fetch/pull/push, clone), the GitHub REST + device-flow client, and the encrypted account store. |
 
 ## Language backends

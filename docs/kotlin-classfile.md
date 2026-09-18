@@ -188,8 +188,9 @@ CP437 rather than UTF-8 (every jar writes ASCII, where the two agree). Encryptio
 later: an archive needing either is not a classpath entry this can index, and pretending otherwise would be
 worse than returning null.
 
-What this does NOT yet do is BE an index. Everything a classpath is made of can now be read on either
-platform, but `:lang-kotlin-index` still owns the symbol model it reads them INTO, which means
-`:language-api`'s `TypeRef` / `SymbolKind` / `Modifier` and `:index-api`'s `IndexExtension`, both of them
-JVM-only modules. Directory walking is also still `java.nio.file`, though after `openFile` that is one more
-`expect` rather than a decision.
+This is now what the editor actually reads with. `:lang-kotlin-index` decodes the classpath through this
+module rather than through ASM, kotlin-metadata-jvm and `java.util.zip`; `:lang-kotlin`'s `BuiltinsReader`
+decodes `.kotlin_builtins` through `KotlinBuiltins` rather than through the compiler's generated protobuf
+readers; and directory walking is the `expect`/`actual` file system here rather than `java.nio.file`. Both
+modules build for iOS, and the Kotlin editor on top of them runs there — see
+[kotlin-completion.md](kotlin-completion.md).

@@ -3,6 +3,8 @@
 // See LICENSE-EXCEPTION: a plugin linking against this file may use any license.
 package dev.ide.platform.log
 
+import dev.ide.platform.epochMillis
+
 import dev.ide.platform.Lock
 
 /** Severity of a [LogRecord], ordered DEBUG < INFO < WARN < ERROR (compare by [ordinal]). */
@@ -96,7 +98,7 @@ object Log {
 
     internal fun dispatch(level: LogLevel, tag: String, message: String, throwable: Throwable?, source: String? = null) {
         if (level.ordinal < minLevel.ordinal) return
-        val record = LogRecord(level, tag, message, throwable, currentTimeMillis(), currentThreadName(), source)
+        val record = LogRecord(level, tag, message, throwable, epochMillis(), currentThreadName(), source)
         // Read once: the list is replaced, never mutated, so a dispatch cannot see a half-updated set of
         // sinks and does not have to hold the lock while a sink runs.
         for (sink in sinks) runCatching { sink.log(record) }
@@ -117,9 +119,6 @@ class RingBufferSink(private val capacity: Int) : LogSink {
 
     fun snapshot(): List<LogRecord> = lock.withLock { buffer.toList() }
 }
-
-/** Milliseconds since the epoch, which is what a [LogRecord] is stamped with. */
-internal expect fun currentTimeMillis(): Long
 
 /** The running thread's name, for attributing a record to the work that produced it. */
 internal expect fun currentThreadName(): String

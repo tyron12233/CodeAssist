@@ -14,6 +14,8 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
+import dev.ide.vfs.local.fileFor
 
 /**
  * Regression for the D8 "Duplicate class 'kotlin.collections.ArraysUtilJVM'" build failure: the IDE injects
@@ -21,7 +23,7 @@ import kotlin.test.assertTrue
  * collides with any `kotlin-stdlib` the project resolves through Maven (directly or transitively) — two copies
  * of the same classes on the dex input. `resolveVersionConflicts` (applied by `module.classpath()`) can't
  * collapse them because the bundled jar carries no Maven coordinate, so both used to reach `dexJars`.
- * `AndroidLibraries.resolve` now runs the dex/compile sets through `MavenClasspath.dedupeForAndroidDex`, which
+ * `AndroidLibraries.resolve` now runs the dex/compile sets through `dedupeJarsForAndroidDex`, which
  * keys off the file name too — so exactly one `kotlin-stdlib` survives (the newest), and D8 sees no duplicate.
  */
 class AndroidStdlibDedupTest {

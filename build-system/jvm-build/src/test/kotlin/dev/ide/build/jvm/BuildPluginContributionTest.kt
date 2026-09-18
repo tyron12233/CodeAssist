@@ -41,6 +41,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
+import dev.ide.model.impl.open
 
 /**
  * A plugin contributes build logic to the native Java graph through [BuildContext.plugins]: its task is

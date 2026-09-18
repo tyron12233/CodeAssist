@@ -31,6 +31,8 @@ import java.util.zip.ZipOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
+import dev.ide.vfs.local.fileFor
 
 /**
  * The ahead-of-build library dex warm ([AndroidBuildSystem.warmLibraryDexCache]): dexing a project's external

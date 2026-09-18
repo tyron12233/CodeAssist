@@ -20,6 +20,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * dexBuilder archives the project per class file: editing one class re-dexes only it, leaving the

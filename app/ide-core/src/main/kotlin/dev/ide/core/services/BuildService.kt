@@ -66,6 +66,7 @@ import dev.ide.model.LibraryRef
 import dev.ide.model.Module
 import dev.ide.model.event.ProjectModelListener
 import dev.ide.model.event.ProjectModelTopics
+import dev.ide.model.impl.rootPath
 import dev.ide.model.module
 import dev.ide.platform.Disposable
 import dev.ide.platform.MessageBusConnection

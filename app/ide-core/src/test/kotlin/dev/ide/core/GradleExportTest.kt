@@ -37,6 +37,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * The Gradle export: a native project rendered into build scripts a real Gradle build can read. The last

@@ -289,9 +289,9 @@ class ProjectManager private constructor(
         val dirs = Files.newDirectoryStream(projectsRoot).use { it.toList() }
         val prefs = loadPrefs()
         return dirs
-            .filter { Files.isDirectory(it) && ModelPersistence.exists(it) }
+            .filter { Files.isDirectory(it) && ModelPersistence.exists(it.toString()) }
             .map { dir ->
-                val proj = runCatching { ModelPersistence.load(dir) }.getOrNull()?.projects?.firstOrNull()
+                val proj = runCatching { ModelPersistence.load(dir.toString()) }.getOrNull()?.projects?.firstOrNull()
                 ProjectSummary(
                     proj?.name ?: dir.fileName.toString(),
                     dir.toString(),
@@ -355,7 +355,7 @@ class ProjectManager private constructor(
         scratchEngines[key]?.let { return it }
         val dir = homeDir.resolve(".scratch").resolve(key)
         val services =
-            if (ModelPersistence.exists(dir)) open(dir.toString())
+            if (ModelPersistence.exists(dir.toString())) open(dir.toString())
             else IdeServices.createProjectAt(
                 dir, templateId, mapOf(TemplateArgs.NAME to key) + args, sdk(), languageLevel,
                 sharedCachesRoot = homeDir, env = env,
@@ -377,7 +377,7 @@ class ProjectManager private constructor(
      */
     fun inspectFolder(dir: Path): ImportableKind = when {
         !Files.isDirectory(dir) -> ImportableKind.NONE
-        ModelPersistence.exists(dir) -> ImportableKind.CODE_ASSIST
+        ModelPersistence.exists(dir.toString()) -> ImportableKind.CODE_ASSIST
         ProjectSyncService.importerFor(env.platform.extensions, dir) != null -> ImportableKind.EXTERNAL
         else -> ImportableKind.NONE
     }
@@ -389,7 +389,7 @@ class ProjectManager private constructor(
         // in from another device, restored from a backup, or orphaned when its parent app data went) could
         // not be brought back at all. Copied like every other import, since [list] only surfaces direct
         // children of [projectsRoot].
-        if (ModelPersistence.exists(sourceDir)) {
+        if (ModelPersistence.exists(sourceDir.toString())) {
             val here = sourceDir.toAbsolutePath().normalize()
             // Already in place (an orphan whose model failed to load once): open it rather than clone it.
             if (here.parent == projectsRoot.toAbsolutePath().normalize()) return open(here.toString())
@@ -433,7 +433,7 @@ class ProjectManager private constructor(
         }
         // Packaged by CodeAssist (the usual case, since submissions are zipped by the IDE): the model
         // travelled with it and there is nothing to translate.
-        if (ModelPersistence.exists(here)) return true
+        if (ModelPersistence.exists(here.toString())) return true
         return runCatching {
             IdeServices.importExternalProjectAt(here, sdk(), languageLevel, env)
         }.getOrDefault(false)
@@ -591,7 +591,7 @@ class ProjectManager private constructor(
      */
     internal fun exportGradleProject(rootPath: String): GradleProjectExport.Outcome {
         val projectDir = Paths.get(rootPath)
-        val name = runCatching { ModelPersistence.load(projectDir) }.getOrNull()?.projects?.firstOrNull()?.name
+        val name = runCatching { ModelPersistence.load(projectDir.toString()) }.getOrNull()?.projects?.firstOrNull()?.name
             ?: projectDir.fileName?.toString().orEmpty()
         val folder = slug(name).ifEmpty { "project" }
         val exportsDir = homeDir.resolve("exports").also { Files.createDirectories(it) }
@@ -608,7 +608,7 @@ class ProjectManager private constructor(
      */
     internal fun exportPlan(rootPath: String): ExportPlan? {
         val projectDir = Paths.get(rootPath)
-        val project = runCatching { ModelPersistence.load(projectDir) }.getOrNull()?.projects?.firstOrNull() ?: return null
+        val project = runCatching { ModelPersistence.load(projectDir.toString()) }.getOrNull()?.projects?.firstOrNull() ?: return null
         val specs = moduleSpecs(project)
         val measured = ProjectPackaging.measure(projectDir, specs).associateBy { it.name }
         val byId = project.modules.associate { it.id to it.name }
@@ -660,7 +660,7 @@ class ProjectManager private constructor(
         if (preview.manifest.format > CaprojFormat.FORMAT_VERSION) return null
         val name = projectName?.trim()?.takeIf { it.isNotEmpty() } ?: preview.manifest.name
         val dest = uniqueProjectDir(name)
-        val ok = runCatching { ProjectPackaging.unpack(archive, dest) }.isSuccess && ModelPersistence.exists(dest)
+        val ok = runCatching { ProjectPackaging.unpack(archive, dest) }.isSuccess && ModelPersistence.exists(dest.toString())
         if (!ok) { runCatching { deleteTree(dest) }; return null }
         if (name != preview.manifest.name) ProjectPackaging.renameProject(dest, name)
         return open(dest.toString())
@@ -672,7 +672,7 @@ class ProjectManager private constructor(
 
     /** Project-derived package metadata: name, module list, and Android app namespace read cheaply from the model. */
     private fun exportMeta(projectDir: Path): ProjectPackaging.ExportMeta {
-        val project = runCatching { ModelPersistence.load(projectDir) }.getOrNull()?.projects?.firstOrNull()
+        val project = runCatching { ModelPersistence.load(projectDir.toString()) }.getOrNull()?.projects?.firstOrNull()
         val androidFacets = project?.modules?.mapNotNull { m ->
             m.facets.firstOrNull { it.tomlTable == AndroidFacetCodec.tomlTable }?.let { AndroidFacetCodec.decode(it.values) }
         } ?: emptyList()
@@ -730,7 +730,7 @@ class ProjectManager private constructor(
         var imported = 0
         for (legacy in legacyDataDirs) {
             // Current-format workspaces (e.g. this app's earlier internal-storage projects): copy verbatim.
-            for (src in legacyProjectDirs(legacy) { ModelPersistence.exists(it) }) {
+            for (src in legacyProjectDirs(legacy) { ModelPersistence.exists(it.toString()) }) {
                 val dest = uniqueProjectDir(src.fileName.toString())
                 if (runCatching { copyTree(src, dest) }.isSuccess) imported++
                 else runCatching { deleteTree(dest) } // drop a half-copied directory

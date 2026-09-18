@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +31,7 @@ import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiChallengeBoard
 import dev.ide.ui.components.AdSlot
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Symbol

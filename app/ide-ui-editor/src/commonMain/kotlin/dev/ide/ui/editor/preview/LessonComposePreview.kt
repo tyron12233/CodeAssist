@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,6 +37,7 @@ import dev.ide.ui.backend.EditorService
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.components.CodeSample
 import dev.ide.ui.editor.CodeEditor
 import dev.ide.ui.editor.CodeLanguage

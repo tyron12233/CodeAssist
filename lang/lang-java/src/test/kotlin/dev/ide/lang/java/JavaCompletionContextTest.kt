@@ -18,6 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import dev.ide.vfs.local.fileFor
 
 /**
  * Context-awareness of Java completion: scope-gated keywords (return/break/continue only where legal, modifiers

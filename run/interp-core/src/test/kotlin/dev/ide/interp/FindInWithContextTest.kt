@@ -54,7 +54,7 @@ class FindInWithContextTest {
         // kotlinx.coroutines must be on the symbol service's classpath for `runBlocking`/`withContext` to resolve.
         val dir = tempProject(code)
         val coroutines = TestJars.containing("kotlinx/coroutines/BuildersKt.class")
-        val service = KotlinSymbolService(listOf(DiskFile(dir)), listOf(stdlibJarPath(), coroutines))
+        val service = KotlinSymbolService(listOf(DiskFile(dir)), listOf(stdlibJarPath().toString(), coroutines.toString()))
         val kt = KotlinParserHost.parse("Prog.kt", code)
         val parsed = KotlinParsedFile(kt, DiskFile(dir.resolve("Prog.kt")), 0)
         val model = KotlinPreviewLowering(service).crossFileModel(parsed)

@@ -25,6 +25,7 @@ import java.nio.file.Path
 import java.util.zip.ZipFile
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * Drives the native [AndroidBuildSystem] over a one-module `android-app` model and produces a signed APK

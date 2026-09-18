@@ -2,7 +2,7 @@ package dev.ide.index.impl
 
 import dev.ide.index.Hit
 import dev.ide.index.IndexOrigin
-import dev.ide.kotlin.classfile.writeFileAtomically
+import dev.ide.platform.writeFileAtomically
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test

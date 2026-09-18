@@ -69,7 +69,10 @@ class KtPsiFacadeTest {
         val parsed = file("package a.b\n\nimport c.D\nimport e.F as G\n\nclass H\nfun i() {}\nval j = 1")
         assertEquals("a.b", parsed.packageFqName.asString())
         assertEquals(listOf("c.D", "e.F"), parsed.importDirectives.map { it.importedFqName?.asString() })
-        assertEquals(listOf("D", "G"), parsed.importDirectives.map { it.aliasName })
+        // Null for an unaliased import, as upstream answers. This asserted the short name, which is what an
+        // earlier `aliasName` fell back to; every caller writes `aliasName ?: fqn.shortName()`, so falling back
+        // here made every plain import look aliased and the import organizer rewrote `import a.A as A`.
+        assertEquals(listOf(null, "G"), parsed.importDirectives.map { it.aliasName })
         assertEquals(3, parsed.declarations.size)
     }
 

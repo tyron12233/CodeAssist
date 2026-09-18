@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -37,6 +36,7 @@ import dev.ide.ui.backend.UiPackagedProject
 import dev.ide.ui.backend.UiPublishedItem
 import dev.ide.ui.backend.UiSubmissionDraft
 import dev.ide.ui.components.Eyebrow
+import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.PillChip
 import dev.ide.ui.components.PrimaryActionButton
 import dev.ide.ui.icons.CaIcons

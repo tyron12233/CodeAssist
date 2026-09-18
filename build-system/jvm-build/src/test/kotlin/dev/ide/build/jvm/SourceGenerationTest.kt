@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * The generic source-generation seam ([SourceGenerator] -> `generateSources` -> compile): a generator emits

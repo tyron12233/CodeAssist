@@ -12,6 +12,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import dev.ide.vfs.local.fileFor
 
 /**
  * The `@Override`-on-a-non-override check against a COMPILED (decompiled `Cls`) library hierarchy — the real

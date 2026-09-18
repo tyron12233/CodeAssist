@@ -7,6 +7,7 @@ import dev.ide.lang.kotlin.NavKind
 import dev.ide.lang.kotlin.NavTarget
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
 import dev.ide.lang.kotlin.interp.PreviewInfo
+import dev.ide.vfs.local.fileFor
 import java.nio.file.Path
 import java.nio.file.Paths
 

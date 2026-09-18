@@ -26,6 +26,7 @@ import kotlinx.coroutines.runBlocking
 import java.util.zip.ZipFile
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.ide.model.impl.open
 
 /**
  * `minSdk < 21` is mono-/legacy-multidex: AGP collapses the per-scope merges into one `mergeDex`

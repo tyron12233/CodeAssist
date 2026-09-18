@@ -38,6 +38,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import dev.ide.model.impl.open
 
 /**
  * Native build + the console-app run task: builds `app → util → core` (api-exported) via the native

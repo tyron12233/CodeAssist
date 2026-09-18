@@ -17,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import dev.ide.vfs.local.fileFor
 
 /**
  * Bare-name completion has to see every declaration form Java lets you write, not just parameters and

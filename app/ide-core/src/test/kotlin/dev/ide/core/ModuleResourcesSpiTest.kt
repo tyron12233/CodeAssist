@@ -8,6 +8,7 @@ import dev.ide.model.Module
 import dev.ide.model.ResourceConflict
 import dev.ide.model.ResourceFilter
 import dev.ide.model.ResourceWrite
+import dev.ide.vfs.local.fileFor
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory

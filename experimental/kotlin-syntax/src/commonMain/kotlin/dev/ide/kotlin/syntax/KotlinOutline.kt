@@ -98,7 +98,11 @@ object KotlinOutline {
             is KtObjectDeclaration -> {
                 // A companion object usually has no name of its own, and "companion" is what a reader expects
                 // to see in an outline rather than a blank row.
-                name = element.name ?: if (element.isCompanion()) "companion" else return null
+                // Asked BEFORE `name`, which now answers "Companion" for an unnamed companion the way upstream
+                // does. That is the right answer for anything keyed on the name; it is the wrong row in an
+                // outline, where the reader is looking at source that says `companion object`.
+                name = if (element.isCompanion() && element.nameIdentifier == null) "companion"
+                else element.name ?: return null
                 kind = "class"
                 detail = null
             }

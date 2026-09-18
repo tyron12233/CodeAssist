@@ -12,7 +12,7 @@ import java.util.Collections
 
 /**
  * First-cut incremental parser: [reparse] re-parses the whole file. IntelliJ PSI supports true incremental
- * reparse (reusing unchanged subtrees, as [dev.ide.lang.kotlin.parse.KotlinPsiMutation] does for Kotlin); that
+ * reparse (reusing unchanged subtrees); that
  * is a later optimization. A full re-parse of a single Java file is inexpensive relative to resolution, so this
  * is correct and adequate to land the backend.
  *

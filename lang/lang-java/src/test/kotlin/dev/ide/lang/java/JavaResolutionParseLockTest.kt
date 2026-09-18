@@ -18,6 +18,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import dev.ide.vfs.local.fileFor
 
 /**
  * ART-safety pin: every Java editor path that RESOLVES (`resolve()`/`getType()`/`facade.findClass`) must hold
