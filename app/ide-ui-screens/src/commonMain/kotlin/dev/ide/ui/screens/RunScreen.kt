@@ -237,7 +237,7 @@ private fun ProblemRow(d: BuildDiagnosticUi, onOpen: (BuildDiagnosticUi) -> Unit
         val color = if (d.severity == UiSeverity.Error) MaterialTheme.colorScheme.error else if (d.severity == UiSeverity.Warning) Ide.colors.warning else MaterialTheme.colorScheme.primary
         Icon(if (d.severity == UiSeverity.Error) CaIcons.error else if (d.severity == UiSeverity.Warning) CaIcons.warning else CaIcons.info, null, Modifier.size(14.dp).padding(top = 1.dp), tint = color)
         Text(d.message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        if (d.file != null) Text(d.file!!.substringAfterLast('/').substringAfterLast('\\') + (if (d.line > 0) ":${d.line}" else ""), color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
+        d.file?.let { f -> Text(f.substringAfterLast('/').substringAfterLast('\\') + (if (d.line > 0) ":${d.line}" else ""), color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
     }
 }
 
