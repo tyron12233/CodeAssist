@@ -3079,9 +3079,10 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         return out
     }
 
-    /** Whether [arg] DEFINITELY violates the upper [bound]: a base-type violation provable only for a final arg
-     *  (complete supertype closure), or a nullable arg under a non-nullable bound. Unknown/type-parameter/
-     *  non-final-unrelated cases back off (return false) so this never false-positives. */
+    /** Whether [arg] DEFINITELY violates the upper [bound]: a base-type violation provable when [arg]'s
+     *  supertype closure is completely known ([KotlinSymbolService.supertypeClosureKnown]), or a nullable arg
+     *  under a non-nullable bound. A type-parameter argument, an unknown classifier, or a classpath type
+     *  whose chain may still be indexing backs off (return false) so this never false-positives. */
     private fun boundViolated(arg: KotlinType, bound: KotlinType): Boolean {
         if (arg.isTypeParameter || bound.isTypeParameter) return false
         if (!service.isKnownType(arg.qualifiedName) || !service.isKnownType(bound.qualifiedName)) return false
@@ -3101,7 +3102,11 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (bound.isAssignableFrom(arg)) return true
         if (an in NUMERIC_RANK && bn in NUMERIC_SUPERTYPES) return true
         if (service.supertypesOf(an).any { (Builtins.kotlinTypeFor(it.qualifiedName) ?: it.qualifiedName) == bn }) return true
-        return if (comparisonFinal(arg)) false else null // a final arg's closure is complete → definitely not within
+        // Not within the bound as far as we can see -- but "not seen" is only "not a subtype" when the
+        // closure we searched was COMPLETE. Finality was the old proxy for that, and it was the wrong
+        // question: `Number` is not final, yet its hierarchy is known exactly, so `Test<Number>` where
+        // `Test<K : CharSequence>` went unreported while the identical `Test<Int>` was flagged.
+        return if (service.supertypeClosureKnown(arg.qualifiedName) || comparisonFinal(arg)) false else null
     }
 
     /** Fixed arities of the builtin collection/array types (their type parameters aren't surfaced by the shape

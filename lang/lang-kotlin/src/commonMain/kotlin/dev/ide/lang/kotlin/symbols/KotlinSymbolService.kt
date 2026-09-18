@@ -3385,6 +3385,37 @@ class KotlinSymbolService(
      *  otherwise be a false positive). Same-file aliases are also checked against the live buffer at the call site. */
     fun isProjectTypeAlias(simpleName: String): Boolean = simpleName in model().typeAliasNames
 
+    /**
+     * Whether [fqnRaw]'s supertype closure is completely known — so "X is NOT a subtype of Y" can be
+     * concluded, rather than merely not proven.
+     *
+     * The distinction matters because a partially-indexed classpath yields a SHORT chain, and reading a
+     * short chain as a complete one turns every not-yet-indexed supertype into a false diagnostic. Three
+     * cases are trustworthy:
+     * - `kotlin.Any`, which has no supertypes by definition;
+     * - anything in [Builtins]' table, which is compiled in and complete regardless of index state;
+     * - a PROJECT SOURCE class whose every declared supertype resolves, recursively. Half-typed code
+     *   (`class Foo : Ba`) fails to resolve and so backs off, which is what it should do.
+     *
+     * A classpath type that is neither builtin nor source answers false: its chain comes from the type-shape
+     * index, which is legitimately incomplete while that index builds (see [kotlinSupertypesMemo]).
+     */
+    fun supertypeClosureKnown(fqnRaw: String): Boolean = closureKnown(fqnRaw, HashSet())
+
+    private fun closureKnown(fqnRaw: String, visited: MutableSet<String>): Boolean {
+        val fqn = Builtins.kotlinTypeFor(fqnRaw) ?: fqnRaw
+        if (!visited.add(fqn)) return true // a cycle: the chain above is already being proven
+        if (fqn == "kotlin.Any") return true
+        if (Builtins.builtinSupertypes(fqn).isNotEmpty()) return true
+        val declared = model().classByFqn[fqn] ?: return false
+        for (text in declared.superTypeTexts) {
+            val resolved = resolveTypeName(text, declared.ctx)
+            if (resolved == null) return false
+            if (!closureKnown(resolved, visited)) return false
+        }
+        return true
+    }
+
     // --- raw -> neutral symbol ---
 
     private fun toSymbol(
