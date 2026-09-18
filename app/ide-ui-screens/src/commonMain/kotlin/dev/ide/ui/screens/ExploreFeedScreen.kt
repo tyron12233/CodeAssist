@@ -624,7 +624,7 @@ private fun LazyListScope.shelfSection(
 private fun ShelfHeader(section: UiFeedSection.Shelf) {
     if (section.eyebrow != null) {
         Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 26.dp)) {
-            Eyebrow(section.eyebrow!!)
+            section.eyebrow?.let { Eyebrow(it) }
         }
         SectionHeaderTight(section.title.orEmpty(), section.subtitle)
     } else {
