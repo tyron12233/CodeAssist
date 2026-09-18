@@ -177,6 +177,18 @@ class KotlinSymbolService(
     private val inferredBodyTypeMemo = ConcurrentMap<RawCallable, Holder<KotlinType>>()
     private val inferringBody = ThreadLocalValue { HashSet<RawCallable>() }
 
+    /**
+     * How deep [inferReturnFromBody] may nest before it answers "unknown" instead of recursing further.
+     *
+     * Measured, not chosen: 32 still overflowed the test JVM's stack on a 200-property object, 12 and 4 did
+     * not. One level is not one frame -- it spans member enumeration, symbol construction, scope resolution
+     * and a PSI walk, twenty-odd frames before the next level starts -- and the editor's own stack is smaller
+     * than a test JVM's on Android. A declaration whose type depends on a chain of twelve other inferred
+     * declarations is not a thing real code does; a file with a hundred INDEPENDENT ones is, and that case
+     * never nests at all.
+     */
+    private val MAX_BODY_INFERENCE_DEPTH = 12
+
     // FQNs of source classes with a member whose type is currently being inferred ([inferReturnFromBody]), as a
     // per-thread reference count (a member inference nests into its class's other members). While a class is in
     // here, enumerating ITS OWN members ([ownAndInheritedCached]) sees the in-flight member come back
@@ -3605,7 +3617,21 @@ class KotlinSymbolService(
         }
         inferredBodyTypeMemo[rc]?.let { return it.value }
         val guard = inferringBody.get()
+        // The guard set's SIZE is the current nesting depth, so the cycle break and the depth cap read off the
+        // same structure.
+        //
+        // The cycle break alone is not enough, and the shape that proved it is ordinary: an `object` holding a
+        // hundred `val x = build(…)` properties. Typing ONE of them resolves `build`, which walks the file
+        // scope, which enumerates the object's members, which types the next property, which resolves `build`
+        // again. Every step is a DIFFERENT callable, so nothing is re-entrant and the guard never fires; the
+        // descent is as deep as the file has properties, and each level costs a dozen frames plus a PSI walk.
+        // `CaIcons.kt` in this repository overflowed the stack on it -- the analysis runs on every keystroke,
+        // so that is a dead editor pane, and on ART a swallowed overflow can take the process with it.
+        //
+        // Past the cap the answer is "unknown", which is what the re-entrant case already returns and what
+        // every check is built to back off from. See [MAX_BODY_INFERENCE_DEPTH] for where the number is from.
         if (!guard.add(rc)) return null // re-entrant (self/mutual recursion) → break the cycle, don't cache
+        if (guard.size > MAX_BODY_INFERENCE_DEPTH) { guard.remove(rc); return null }
         // Mark this member's owner in-flight so enumerating that class's OWN members ([ownAndInheritedCached])
         // doesn't pin a partial list in which this member is re-entrant-null (the generic-delegate case).
         if (ownerFqn != null) pushInferringOwner(ownerFqn)

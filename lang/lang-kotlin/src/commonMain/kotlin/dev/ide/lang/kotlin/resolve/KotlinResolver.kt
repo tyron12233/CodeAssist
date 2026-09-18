@@ -6,6 +6,7 @@ import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
 import dev.ide.kotlin.syntax.psi.KtParenthesizedExpression
+import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.findElementAt
 import dev.ide.kotlin.syntax.psi.parents
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
@@ -79,6 +80,16 @@ class KotlinResolverCaches {
      * one parse snapshot a symbol is a pure function of its declaration, so it is built once.
      */
     val localSymbols = HashMap<KtElement, KotlinSymbol>()
+
+    /**
+     * Same-file properties whose initializer is being typed right now — the re-entrancy guard for
+     * [dev.ide.lang.kotlin.resolve.sameFileProperty], and its DEPTH, which is the set's size.
+     *
+     * Shared across the resolvers one keystroke builds over a snapshot, which is the scope the recursion
+     * actually spans: typing a property resolves the call in its initializer, which walks the file scope,
+     * which types the NEXT property, which resolves its call, and so on.
+     */
+    val inferringSameFileProperty = HashSet<KtProperty>()
 }
 
 /**

@@ -1040,8 +1040,7 @@ internal fun KotlinResolver.sameFileProperty(p: KtProperty, ownerFqn: String?): 
         // resolved with [ownerFqn] as the enclosing class, so a member typed as a NESTED class of the owner
         // (`var pending: Plan?` inside `class Game { private class Plan }`) resolves by simple name.
         type = retText?.let { service.typeFromText(it, fileContext, ownerFqn) }
-            ?: inferType(p.initializer)
-            ?: p.delegateExpression?.let(::delegatedValueType),
+            ?: inferredSameFilePropertyType(p),
         owner = ownerFqn?.let {
             KotlinSymbol(
                 it.substringAfterLast('.'),
@@ -1055,6 +1054,44 @@ internal fun KotlinResolver.sameFileProperty(p: KtProperty, ownerFqn: String?): 
         declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
     )
 }
+
+/**
+ * The type of a same-file property that declares none — inferred from its initializer, or from a `by`
+ * delegate's `value` — with a guard against typing it through itself or through a chain of its neighbours.
+ *
+ * A property with no declared type is typed by RESOLVING its initializer, and resolving anything walks the
+ * file scope, which types the file's other properties, each of which resolves ITS initializer. Nothing in
+ * that loop repeats a declaration, so a plain re-entrancy check never fires: the descent is as deep as the
+ * file has such properties, and an `object` of a hundred `val x = build(…)` lines overflowed the stack on it
+ * -- `CaIcons.kt` in this repository, found by sweeping the checkers over the repository's own sources. The
+ * analysis runs on every keystroke, so that is a dead editor pane, and on ART a swallowed StackOverflowError
+ * can take the process with it.
+ *
+ * Past the cap the answer is "unknown", which every check is built to back off from. A property whose type
+ * depends on a chain of [MAX_SAME_FILE_PROPERTY_DEPTH] others is not a thing real code does; a file with a
+ * hundred INDEPENDENT ones is, and that one never nests at all.
+ */
+private fun KotlinResolver.inferredSameFilePropertyType(p: KtProperty): KotlinType? {
+    val guard = caches.inferringSameFileProperty
+    if (!guard.add(p)) return null
+    if (guard.size > MAX_SAME_FILE_PROPERTY_DEPTH) {
+        guard.remove(p)
+        return null
+    }
+    return try {
+        inferType(p.initializer) ?: p.delegateExpression?.let(::delegatedValueType)
+    } finally {
+        guard.remove(p)
+    }
+}
+
+/**
+ * How deep [inferredSameFilePropertyType] may nest before it answers "unknown" instead of recursing.
+ *
+ * Matches [dev.ide.lang.kotlin.symbols.KotlinSymbolService]'s body-inference cap, which the same chain
+ * alternates with, and is measured the same way: 32 still overflowed, 12 did not.
+ */
+private const val MAX_SAME_FILE_PROPERTY_DEPTH = 12
 
 internal fun KotlinResolver.sameFileType(c: KtClassOrObject): KotlinSymbol {
     val cls = c as? KtClass
