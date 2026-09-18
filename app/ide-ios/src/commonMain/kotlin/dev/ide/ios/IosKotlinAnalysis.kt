@@ -14,6 +14,7 @@ import dev.ide.lang.hints.InlayHint
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.kotlin.IncrementalSemanticAnalysis
+import dev.ide.lang.kotlin.InheritorMarker
 import dev.ide.lang.kotlin.KotlinDiagnosticCodes
 import dev.ide.lang.kotlin.KotlinEditorFeatures
 import dev.ide.lang.kotlin.KotlinFormatter
@@ -402,6 +403,24 @@ internal class IosKotlinAnalysis(
         updateDocument(path, text)
         return highlighting.highlight(parsed(path, text).file)
     }
+
+    /**
+     * Gutter "implementations" markers: one per inheritable type in the buffer that actually has subtypes.
+     *
+     * Go to Implementation already worked here (it runs through [KotlinEditorFeatures.navigationTargets]) the
+     * moment the subtype relation had an answer for project types; the MARKERS are the other half, the part
+     * that tells a reader there is something to go to before they think to ask.
+     */
+    fun inheritorMarkers(path: String, text: String): List<InheritorMarker>? {
+        if (!isKotlin(path)) return null
+        updateDocument(path, text)
+        parsed(path, text)
+        return features.inheritorMarkers(IosVirtualFile(path))
+    }
+
+    /** Where an inheritor named by a marker target is declared, for the click. Null for a classpath-only
+     *  inheritor: there is no source here to open, and no decompiler on this host to make one. */
+    fun implementationLocation(fqn: String): Pair<VirtualFile, Int>? = features.declarationLocation(fqn)
 
     /** Parameter info for the call around [offset], or null when the caret is not inside a resolvable call. */
     suspend fun signatureHelp(path: String, text: String, offset: Int): SignatureHelp? {

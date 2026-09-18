@@ -26,6 +26,8 @@ import dev.ide.ui.backend.UiDefinition
 import dev.ide.ui.backend.UiDepKind
 import dev.ide.ui.backend.UiDepModule
 import dev.ide.ui.backend.UiDependencyNode
+import dev.ide.ui.backend.UiInheritorMarker
+import dev.ide.ui.backend.UiInheritorTarget
 import dev.ide.ui.backend.UiModuleDeps
 import dev.ide.ui.backend.UiModuleRef
 import dev.ide.ui.backend.UiNavKind
@@ -89,6 +91,8 @@ import kotlinx.coroutines.withContext
  *    library in completion without reopening the project.
  *  * Find-in-files and go-to-symbol over the open project, both by walking it rather than indexing it. See
  *    [IosSearch] for why that is the right shape here and not a shortcut.
+ *  * Go to Implementation and its gutter markers, off a subtype relation derived from the module's own source
+ *    model rather than from a workspace index this host does not have.
  */
 class IosBackend(
     /**
@@ -533,6 +537,27 @@ class IosBackend(
             analysis.inlayHints(path, text, startOffset, endOffset).orEmpty().map { it.toUi() }
         }
     }
+
+    /**
+     * Gutter markers for a type that has implementations, and the click that follows one.
+     *
+     * Both were empty here for every PROJECT type, because the subtype relation came only from an index and
+     * the only index on this host is over the classpath jars. It now also comes from the module's own source
+     * model, which this host has had all along.
+     */
+    override suspend fun inheritorMarkers(path: String, text: String): List<UiInheritorMarker> {
+        if (!path.isKotlin()) return emptyList()
+        return withAnalysis(emptyList()) { analysis ->
+            analysis.inheritorMarkers(path, text).orEmpty().map { m ->
+                UiInheritorMarker(m.offset, m.isInterface, m.targets.map { UiInheritorTarget(it.fqn, it.kind) })
+            }
+        }
+    }
+
+    override suspend fun implementationLocationOf(contextPath: String, fqn: String): UiDefinition? =
+        withAnalysis(null) { analysis ->
+            analysis.implementationLocation(fqn)?.let { (file, offset) -> UiDefinition(file.path, offset) }
+        }
 
     /**
      * Type-aware coloring for the buffer.

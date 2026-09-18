@@ -1239,6 +1239,41 @@ class IosBackendTest {
         )
     }
 
+    /**
+     * A type with implementations gets a gutter marker, and following one lands on the subclass.
+     *
+     * Both were empty here for every PROJECT type. The subtype relation was read only out of an index, and
+     * the only index on this host is over the classpath jars -- the workspace indexer is 1,400 lines of
+     * `java.nio.file` / `java.lang.module` / `java.util.concurrent` that does not port. What it would have
+     * told us, the module's own source model already knew.
+     */
+    @Test
+    fun aTypeWithImplementationsGetsAMarkerThatLeadsToTheSubclass() = runTest {
+        val created = backend.createProject(template, mapOf("name" to "Marks", "packageName" to "demo"))
+        val projectRoot = assertNotNull(created.rootPath, created.message)
+        val shapes = IosFiles.join(projectRoot, "app/src/main/kotlin/demo/Shapes.kt")
+        val text = "package demo\n\ninterface Shape\n\nclass Square : Shape\n\nclass Circle : Shape\n"
+        IosFiles.writeText(shapes, text)
+        assertTrue(backend.openProject(projectRoot))
+
+        val marker = backend.inheritorMarkers(shapes, text).singleOrNull()
+        val found = assertNotNull(marker, "only `Shape` is inheritable; a final class is not")
+        assertEquals(text.indexOf("Shape"), found.offset, "anchored on the interface's own name")
+        assertTrue(found.isInterface)
+        assertEquals(
+            setOf("demo.Square", "demo.Circle"),
+            found.targets.map { it.fqn }.toSet(),
+            "both implementations, whichever order the model walked them in",
+        )
+
+        val target = assertNotNull(
+            backend.implementationLocationOf(shapes, "demo.Square"),
+            "following the marker opens the subclass",
+        )
+        assertEquals(shapes, target.path)
+        assertEquals(text.indexOf("Square"), target.offset)
+    }
+
     /** Parameter info for the call the caret is inside, resolved across files like the coloring is. */
     @Test
     fun parameterInfoNamesTheParameterTheCaretIsIn() = runTest {
