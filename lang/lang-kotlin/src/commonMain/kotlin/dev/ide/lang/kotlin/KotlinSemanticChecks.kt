@@ -761,8 +761,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 }
                 is KtNamedFunction -> {
                     val name = d.name
+                    // `vararg` is PART of the signature, not decoration on it: `maxOf(a: Int, b: Int)` and
+                    // `maxOf(a: Int, vararg other: Int)` are two legal overloads, and a key built from the
+                    // parameter TYPES alone collapses them into one and reports both as conflicting. The
+                    // stdlib's generated `_Comparisons.kt` pairs every numeric `minOf`/`maxOf` that way.
                     if (d.nameIdentifier != null && name != null)
-                        record("F:${d.receiverTypeReference?.text ?: ""}:$name(${d.valueParameters.joinToString(",") { it.typeReference?.text ?: "?" }})", d)
+                        record("F:${d.receiverTypeReference?.text ?: ""}:$name(${d.valueParameters.joinToString(",") { p -> (if (p.isVarArg) "vararg " else "") + (p.typeReference?.text ?: "?") }})", d)
                 }
                 else -> {} // classes/objects/enum entries: not handled here
             }
