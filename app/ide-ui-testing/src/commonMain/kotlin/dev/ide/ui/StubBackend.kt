@@ -74,6 +74,9 @@ open class StubBackend : IdeBackend,
 
     // BuildService (abstract)
     override val buildState: StateFlow<BuildState> = MutableStateFlow(BuildState())
+    // No build here, and saying so is the point: `runBuild` below is empty, so a host that inherits this
+    // and leaves it that way would otherwise show a Run button that silently does nothing.
+    override fun supported(): Boolean = false
     override fun runBuild() {}
     override fun stopBuild() {}
 }

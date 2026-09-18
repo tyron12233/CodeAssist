@@ -158,6 +158,8 @@ fun BuildConsole(
     onStop: () -> Unit,
     onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Whether the host can build; false hides Run rather than offering a button that does nothing. */
+    canRun: Boolean = true,
     onOpenDiagnostic: (BuildDiagnosticUi) -> Unit = {},
     /** Backend for plugin BOTTOM tool-window tabs; null hides them (e.g. backends/tests without one). */
     backend: IdeBackend? = null,
@@ -185,7 +187,7 @@ fun BuildConsole(
     }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Header(buildState, errors, warnings, tab, activePluginTab != null, onRun, onStop, onCollapse)
+        Header(buildState, errors, warnings, tab, activePluginTab != null, canRun, onRun, onStop, onCollapse)
         if (indexStatus.building) IndexingSection(indexStatus)
         buildState.banner?.let { FirstBuildBanner(it) }
         if (running) RunningStrip(buildState.steps)
@@ -255,6 +257,7 @@ private fun Header(
     warnings: Int,
     tab: BuildTab,
     pluginActive: Boolean,
+    canRun: Boolean,
     onRun: () -> Unit,
     onStop: () -> Unit,
     onCollapse: () -> Unit
@@ -303,7 +306,7 @@ private fun Header(
             iconSize = 16,
             tint = MaterialTheme.colorScheme.error
         )
-        else IconButtonCa(
+        else if (canRun) IconButtonCa(
             CaIcons.play,
             stringResource(Res.string.run),
             onRun,

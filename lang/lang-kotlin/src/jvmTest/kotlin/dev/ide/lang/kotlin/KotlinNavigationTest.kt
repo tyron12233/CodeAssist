@@ -57,6 +57,51 @@ class KotlinNavigationTest {
         assertEquals(clean.indexOf("shout"), targets[0].offset, "points at the `shout` declaration")
     }
 
+    /**
+     * An enum CONSTANT through the type now RESOLVES, but does not yet navigate — and that is asserted
+     * rather than left to be discovered.
+     *
+     * Completion has listed these since it was written (`enumConstantsOf`); resolution never consulted it,
+     * so the same offset that offered `LARGE` reported it unresolved. It resolves now (the analysis-parity
+     * digest records it as `ENUM_CONSTANT LARGE`), but the symbol carries no declaration node and no owning
+     * type FQN, so `declarationTargets` has nothing to turn into a location. Whoever gives it one should
+     * see THIS test fail, and replace the emptiness below with the constant's own offset.
+     */
+    @Test
+    fun anEnumConstantResolvesButHasNoNavigableDeclarationYet() {
+        val code = "package demo\nenum class Kind { SMALL, LARGE }\nfun caller() { val k = Kind.LA|RGE }"
+        val targets = nav("UseEnumConstant.kt", code, NavKind.DECLARATION)
+        assertTrue(targets.isEmpty(), "an enum constant has no navigable declaration yet; got $targets")
+    }
+
+    /** A COMPANION member reached through the type, for the same reason. */
+    @Test
+    fun declarationJumpsToACompanionFunction() {
+        val code = "package demo\nclass Counter { companion object { fun zero(): Int = 0 } }\n" +
+            "fun caller() { val c = Counter.ze|ro() }"
+        val clean = code.replace("|", "")
+        val targets = nav("UseCompanion.kt", code, NavKind.DECLARATION)
+        assertTrue(targets.isNotEmpty(), "a companion member resolves; got $targets")
+        assertEquals(clean.indexOf("fun zero") + 4, targets[0].offset, "points at the `zero` declaration")
+    }
+
+    /**
+     * A name in a TYPE position denotes the type, even when something in scope answers to it too.
+     *
+     * `String` has a `String(chars)` factory function in the stdlib, and asking the scope first resolved the
+     * return type of `fun f(): String` to THAT -- so hover and go-to on an ordinary type annotation landed
+     * on a function.
+     */
+    @Test
+    fun aNameInTypePositionResolvesToTheTypeNotASameNamedFunction() {
+        val code = "package demo\nclass Holder\nfun Holder(seed: Int): Holder = Holder()\n" +
+            "fun caller(): Hol|der = Holder(1)"
+        val clean = code.replace("|", "")
+        val targets = nav("UseTypePosition.kt", code, NavKind.DECLARATION)
+        assertTrue(targets.isNotEmpty(), "a type reference resolves; got $targets")
+        assertEquals(clean.indexOf("class Holder") + 6, targets[0].offset, "points at the CLASS, not the factory")
+    }
+
     @Test
     fun declarationJumpsToALocalVal() {
         val code = "package demo\nfun caller() { val name = 1\nprintln(na|me) }"

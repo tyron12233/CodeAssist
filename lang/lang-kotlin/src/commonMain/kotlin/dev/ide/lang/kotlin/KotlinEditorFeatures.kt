@@ -735,13 +735,19 @@ class KotlinEditorFeatures(
         val sym: Symbol? = if (qualified != null) {
             // A bare type-parameter receiver (`t.member` where `t: T`, `<T : Bound>`) navigates to the member of
             // the parameter's upper bound; a normal receiver is unchanged (see receiverForMembers).
-            val member = resolver.inferType(qualified.receiverExpression)
+            val receiverType = resolver.inferType(qualified.receiverExpression)
                 ?.let { resolver.receiverForMembers(it, qualified.receiverExpression.textRange.startOffset) }
+            val member = receiverType
                 ?.let { recv -> service.membersNamed(recv.qualifiedName, recv.typeArguments, name).firstOrNull() }
             // A member wins over an extension of the same name, as it does at the call site; but an
             // extension IS reachable through a dot, so a miss falls through to the scope rather than
             // reporting the reference unresolved.
-            member ?: inScope()
+            member ?: receiverType?.let { staticMemberOn(it.qualifiedName, name) } ?: inScope()
+        } else if (psi.getParentOfType<KtUserType>(strict = true) != null) {
+            // The caret is inside a TYPE reference, so the name denotes a type even where something else in
+            // scope answers to it. Asking the scope first resolved the `String` in `fun f(): String` to the
+            // `String(chars)` FACTORY FUNCTION, and every hover and go-to followed it there.
+            typeNamed(name, resolver) ?: inScope()
         } else {
             inScope() ?: typeNamed(name, resolver)
         }
@@ -759,6 +765,25 @@ class KotlinEditorFeatures(
      * name `Text` resolved to `android.jar`'s `org.w3c.dom.Text`, and every go-to navigation, hover and quick doc
      * followed it there.
      */
+    /**
+     * A member reached STATICALLY, through the type rather than through a value of it.
+     *
+     * `membersNamed` answers a type's INSTANCE members, and the three things a dot on a type name reaches
+     * are none of them: an enum's constants (`Kind.UNKNOWN`), the members of its companion
+     * (`Counter.zero()`), and its nested types (`Outer.Nested`). Completion has consulted all three since
+     * it was written, which is why `Kind.` listed the entries while go-to-definition on the very same
+     * offset reported them unresolved.
+     *
+     * Deliberately not gated on the receiver BEING a type: a value receiver simply has no enum constants
+     * and no companion, so the extra lookups answer nothing and cost a miss each, and this only runs after
+     * the instance-member lookup has already failed.
+     */
+    private fun staticMemberOn(typeFqn: String, name: String): KotlinSymbol? =
+        service.enumConstantsOf(typeFqn).firstOrNull { it.name == name }
+            ?: service.companionMembersFor(typeFqn, name).firstOrNull { it.name == name }
+            ?: service.companionObjectSymbol(typeFqn)?.takeIf { it.name == name }
+            ?: service.nestedTypesOf(typeFqn, name).firstOrNull { it.name == name }
+
     private fun typeNamed(name: String, resolver: KotlinResolver): KotlinSymbol? {
         val fqn = service.resolveTypeName(name, resolver.fileContext)
             ?.takeIf { service.isKnownType(it) } ?: return null

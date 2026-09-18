@@ -6,15 +6,15 @@ file Flow.kt
     [190] Kind -> ENUM Kind
     [208] shape -> PARAMETER shape
     [225] Kind -> ENUM Kind
-    [230] UNKNOWN -> <unresolved>
+    [230] UNKNOWN -> ENUM_CONSTANT UNKNOWN
     [242] shape -> PARAMETER shape
     [248] isBig -> METHOD isBig
     [259] Kind -> ENUM Kind
-    [264] LARGE -> <unresolved>
+    [264] LARGE -> ENUM_CONSTANT LARGE
     [282] Kind -> ENUM Kind
-    [287] SMALL -> <unresolved>
+    [287] SMALL -> ENUM_CONSTANT SMALL
     [319] Any -> CLASS Any
-    [326] String -> METHOD String
+    [326] String -> CLASS String
     [343] value -> PARAMETER value
     [352] Circle -> CLASS Circle
     [478] value -> PARAMETER value
@@ -25,7 +25,7 @@ file Flow.kt
     [558] width -> FIELD width
     [567] value -> PARAMETER value
     [573] height -> FIELD height
-    [593] String -> METHOD String
+    [593] String -> CLASS String
     [603] value -> PARAMETER value
     [609] uppercase -> METHOD uppercase
     [632] Int -> CLASS Int
@@ -33,9 +33,9 @@ file Flow.kt
     [651] toString -> METHOD toString
     [704] value -> PARAMETER value
     [710] toString -> METHOD toString
-    [752] List -> METHOD List
+    [752] List -> CLASS List
     [757] Shape -> CLASS Shape
-    [766] String -> METHOD String
+    [766] String -> CLASS String
     [798] shapes -> PARAMETER shapes
     [805] partition -> METHOD partition
     [817] it -> PARAMETER it
@@ -57,9 +57,9 @@ file Flow.kt
     [1046] appendLine -> METHOD appendLine
     [1057] shape -> PARAMETER shape
     [1063] describe -> METHOD describe
-    [1120] List -> METHOD List
+    [1120] List -> CLASS List
     [1125] Shape -> CLASS Shape
-    [1134] String -> METHOD String
+    [1134] String -> CLASS String
     [1148] shapes -> PARAMETER shapes
     [1155] firstOrNull -> METHOD firstOrNull
     [1169] it -> PARAMETER it
@@ -100,14 +100,14 @@ file Members.kt
   references
     [8] parity -> <unresolved>
     [166] mutableMapOf -> METHOD mutableMapOf
-    [179] String -> METHOD String
+    [179] String -> CLASS String
     [187] Shape -> CLASS Shape
     [216] Shape -> CLASS Shape
     [225] known -> FIELD known
     [231] shape -> PARAMETER shape
     [237] name -> FIELD name
     [245] shape -> PARAMETER shape
-    [271] String -> METHOD String
+    [271] String -> CLASS String
     [280] Shape -> CLASS Shape
     [289] known -> FIELD known
     [295] name -> PARAMETER name
@@ -135,15 +135,15 @@ file Members.kt
     [729] Named -> INTERFACE Named
     [738] Named -> INTERFACE Named
     [747] delegate -> FIELD delegate
-    [780] List -> METHOD List
-    [798] List -> METHOD List
+    [780] List -> CLASS List
+    [798] List -> CLASS List
     [803] T -> <unresolved>
     [808] filterIsInstance -> METHOD filterIsInstance
     [825] T -> <unresolved>
     [854] Map -> CLASS Map
-    [858] String -> METHOD String
+    [858] String -> CLASS String
     [866] Shape -> CLASS Shape
-    [892] List -> METHOD List
+    [892] List -> CLASS List
     [897] Shape -> CLASS Shape
     [906] ShapeTable -> <unresolved>
     [919] shapes -> PARAMETER shapes
@@ -155,10 +155,10 @@ file Members.kt
     [1011] shape -> PARAMETER shape
     [1017] area -> METHOD area
     [1035] base -> LOCAL_VARIABLE base
-    [1066] List -> METHOD List
+    [1066] List -> CLASS List
     [1071] Shape -> CLASS Shape
     [1099] Counter -> CLASS Counter
-    [1107] zero -> <unresolved>
+    [1107] zero -> METHOD zero
     [1131] counter -> LOCAL_VARIABLE counter
     [1159] table -> METHOD table
     [1165] shapes -> PARAMETER shapes
@@ -209,9 +209,9 @@ file Shapes.kt
     [23] kotlin -> <unresolved>
     [30] math -> <unresolved>
     [35] max -> METHOD max
-    [168] String -> METHOD String
+    [168] String -> CLASS String
     [203] Double -> CLASS Double
-    [235] String -> METHOD String
+    [235] String -> CLASS String
     [246] name -> FIELD name
     [261] area -> METHOD area
     [303] Double -> CLASS Double
@@ -219,7 +219,7 @@ file Shapes.kt
     [356] Double -> CLASS Double
     [375] radius -> FIELD radius
     [384] radius -> FIELD radius
-    [420] String -> METHOD String
+    [420] String -> CLASS String
     [429] super -> <unresolved>
     [435] describe -> METHOD describe
     [454] radius -> FIELD radius
@@ -233,14 +233,14 @@ file Shapes.kt
     [620] max -> METHOD max
     [624] width -> FIELD width
     [631] height -> FIELD height
-    [681] String -> METHOD String
-    [705] String -> METHOD String
+    [681] String -> CLASS String
+    [705] String -> CLASS String
     [723] displayName -> FIELD displayName
     [753] Shape -> CLASS Shape
-    [779] List -> METHOD List
+    [779] List -> CLASS List
     [784] T -> <unresolved>
     [790] Named -> INTERFACE Named
-    [828] String -> METHOD String
+    [828] String -> CLASS String
     [853] items -> FIELD items
     [859] size -> FIELD size
     [886] T -> <unresolved>
@@ -253,8 +253,8 @@ file Shapes.kt
     [960] sumOf -> METHOD sumOf
     [968] it -> PARAMETER it
     [971] area -> METHOD area
-    [998] List -> METHOD List
-    [1003] String -> METHOD String
+    [998] List -> CLASS List
+    [1003] String -> CLASS String
     [1013] items -> FIELD items
     [1019] map -> METHOD map
     [1025] it -> PARAMETER it
@@ -263,7 +263,7 @@ file Shapes.kt
     [1051] Shape -> CLASS Shape
     [1066] Boolean -> CLASS Boolean
     [1076] area -> METHOD area
-    [1100] Iterable -> METHOD Iterable
+    [1100] Iterable -> CLASS Iterable
     [1109] T -> <unresolved>
     [1128] T -> <unresolved>
     [1152] iterator -> METHOD iterator

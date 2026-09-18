@@ -343,6 +343,19 @@ interface BuildService {
     fun runTask(id: String) {}
 
     /** Run the default task (the plain Run button). */
+    /**
+     * Whether this host can build and run at all. False hides every run affordance.
+     *
+     * Defaults to true, because a build is what an IDE does and every host that implements [runBuild]
+     * would otherwise have to remember to say so. A host that cannot build says so by overriding --
+     * [dev.ide.ui.StubBackend] does, and the iOS host inherits it. Mirrors `VcsService.supported()`.
+     *
+     * It exists because the alternative is worse than a missing feature: the Run button called [runBuild]
+     * unconditionally, and a host whose implementation is empty answered by doing nothing at all, with no
+     * error and no explanation.
+     */
+    fun supported(): Boolean = true
+
     fun runBuild()
 
     /** Cancel an in-progress build/run. */
