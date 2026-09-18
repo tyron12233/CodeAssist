@@ -548,7 +548,7 @@ private fun DetailHero(
                                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                             ) {
                                 Text(
-                                    item.author!!,
+                                    item.author ?: "",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = pair.onContainer.copy(alpha = 0.9f),
                                 )
