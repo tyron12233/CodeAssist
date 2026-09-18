@@ -2276,16 +2276,7 @@ class IdeServices private constructor(
      */
     fun expandSelection(file: Path, text: String, selStart: Int, selEnd: Int): TextRange? {
         val parsed = parse(file, text) ?: return null
-        val lo = minOf(selStart, selEnd).coerceIn(0, text.length)
-        val hi = maxOf(selStart, selEnd).coerceIn(0, text.length)
-        var node: dev.ide.lang.dom.DomNode? = parsed.nodeAt(lo)
-        while (node != null) {
-            val r = node.range
-            // Encloses the whole selection AND is strictly wider on at least one side.
-            if (r.start <= lo && r.end >= hi && (r.start < lo || r.end > hi)) return r
-            node = node.parent
-        }
-        return null
+        return dev.ide.lang.dom.expandSelection(parsed, selStart, selEnd, text.length)
     }
 
     // ---- analysis (diagnostics) ----

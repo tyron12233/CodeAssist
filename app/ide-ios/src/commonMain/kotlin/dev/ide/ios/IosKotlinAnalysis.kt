@@ -7,6 +7,7 @@ import dev.ide.lang.completion.complete
 import dev.ide.index.impl.ClasspathIndex
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.dom.expandSelection
 import dev.ide.lang.formatting.FormatStyle
 import dev.ide.lang.hints.InlayHint
 import dev.ide.lang.incremental.DocumentEdit
@@ -298,6 +299,18 @@ internal class IosKotlinAnalysis(
      * through a decompiler that is JVM-only. Offering one here would open a tab that cannot be filled.
      */
     private fun isOpenable(target: NavTarget): Boolean = !target.file.path.startsWith("library://")
+
+    /**
+     * Expand Selection: the smallest syntactic range that strictly encloses the current one.
+     *
+     * The walk itself is language-neutral and lives on the DOM (`dev.ide.lang.dom.expandSelection`); all
+     * this host supplies is the parse, which it already has.
+     */
+    fun expandSelection(path: String, text: String, selStart: Int, selEnd: Int): TextRange? {
+        if (!isKotlin(path)) return null
+        updateDocument(path, text)
+        return expandSelection(parsed(path, text), selStart, selEnd, text.length)
+    }
 
     /** Quick documentation for the symbol at [offset], or null when nothing there is documented. */
     fun quickDoc(path: String, text: String, offset: Int): QuickDocInfo? {

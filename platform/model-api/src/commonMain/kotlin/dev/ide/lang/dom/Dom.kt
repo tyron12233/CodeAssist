@@ -80,3 +80,26 @@ data class Diagnostic(
 )
 
 enum class Severity { ERROR, WARNING, INFO, HINT }
+
+/**
+ * The smallest syntactic range that strictly encloses `[selStart, selEnd)` — one press of Expand Selection.
+ *
+ * Language-neutral by construction: it walks the DOM from the caret outward and takes the first ancestor
+ * that is wider than what is already selected, so it works for any backend that produces a [ParsedFile].
+ * "Strictly wider on at least one side" is what makes repeated presses terminate at the file rather than
+ * returning the same range forever.
+ *
+ * It lives here rather than in a host because it needs a parse and nothing else. Keeping it in the JVM
+ * host's service layer was the only reason the iOS editor could not expand a selection.
+ */
+fun expandSelection(parsed: ParsedFile, selStart: Int, selEnd: Int, textLength: Int): TextRange? {
+    val lo = minOf(selStart, selEnd).coerceIn(0, textLength)
+    val hi = maxOf(selStart, selEnd).coerceIn(0, textLength)
+    var node: DomNode? = parsed.nodeAt(lo)
+    while (node != null) {
+        val r = node.range
+        if (r.start <= lo && r.end >= hi && (r.start < lo || r.end > hi)) return r
+        node = node.parent
+    }
+    return null
+}

@@ -522,6 +522,36 @@ class IosBackendTest {
         assertTrue(applied.contains("import demo.util.formatValue"), applied)
     }
 
+    /**
+     * Expand Selection, one press at a time.
+     *
+     * The walk is the DOM's, shared with the other hosts; what this proves is that the iOS editor is wired
+     * to it at all — it answered nothing here until the walk moved off the JVM host's service layer.
+     */
+    @Test
+    fun expandSelectionGrowsToTheEnclosingSyntax() = runTest {
+        val projectRoot = openTwoFileProject()
+        val path = IosFiles.join(projectRoot, "src/Use.kt")
+        val text = "package demo\n\nfun use(): Int {\n    return 1 + 2\n}\n"
+        val caret = text.indexOf("1 + 2")
+
+        val first = assertNotNull(backend.editor.expandSelection(path, text, caret, caret), "a caret expands")
+        assertTrue(first.end > first.start, "to a real range: $first")
+
+        // Each press encloses the last, and the walk terminates rather than returning the same range.
+        val second = assertNotNull(backend.editor.expandSelection(path, text, first.start, first.end))
+        assertTrue(
+            second.start <= first.start && second.end >= first.end && second != first,
+            "the second press is strictly wider: $first then $second",
+        )
+    }
+
+    @Test
+    fun expandSelectionIsSilentOnAFileThisHostDoesNotAnalyze() = runTest {
+        openTwoFileProject()
+        assertNull(backend.editor.expandSelection("/p/Thing.java", "class Thing {}", 6, 6))
+    }
+
     @Test
     fun aNonKotlinFileOffersNoActionsAndNoDocumentation() = runTest {
         openTwoFileProject()

@@ -33,6 +33,7 @@ import dev.ide.ui.backend.UiNavOption
 import dev.ide.ui.backend.UiNavTarget
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiRepository
+import dev.ide.ui.backend.UiTextRange
 import dev.ide.ui.backend.UiVersionConflict
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.incremental.DocumentEdit
@@ -575,6 +576,11 @@ class IosBackend(
             k.navigationOptions(path, text, offset).map { (kind, targets) ->
                 UiNavOption(kind.toUi(), targets.map { it.toUi() })
             }
+        }
+
+    override suspend fun expandSelection(path: String, text: String, selStart: Int, selEnd: Int): UiTextRange? =
+        withAnalysis(null) { k ->
+            k.expandSelection(path, text, selStart, selEnd)?.let { UiTextRange(it.start, it.end) }
         }
 
     override suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? =
