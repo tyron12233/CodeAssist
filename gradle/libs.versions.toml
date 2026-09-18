@@ -1,5 +1,5 @@
 [versions]
-kotlin = "2.4.0"
+kotlin = "2.4.20"
 # The unshaded compiler (`-for-ide` artifacts) and the IntelliJ platform version it is built against (Kotlin
 # 2.4.0's gradle.properties pins versions.intellijSdk to the same 251.27812.49). This pair must move together,
 # and matches what KSP2 main pins. Consumed by :kotlin-compiler-deps. Served from packages.jetbrains.team
