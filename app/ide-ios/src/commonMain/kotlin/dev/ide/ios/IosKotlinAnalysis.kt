@@ -9,6 +9,7 @@ import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.dom.expandSelection
 import dev.ide.lang.formatting.FormatStyle
+import dev.ide.lang.highlight.SemanticToken
 import dev.ide.lang.hints.InlayHint
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.lang.incremental.DocumentSnapshot
@@ -20,6 +21,7 @@ import dev.ide.lang.kotlin.KotlinImportFix
 import dev.ide.lang.kotlin.KotlinImportOrganizer
 import dev.ide.lang.kotlin.KotlinInlayHintService
 import dev.ide.lang.kotlin.KotlinLanguage
+import dev.ide.lang.kotlin.KotlinSemanticHighlighter
 import dev.ide.lang.kotlin.KotlinSignatureHelpService
 import dev.ide.lang.kotlin.NavKind
 import dev.ide.lang.kotlin.NavTarget
@@ -182,15 +184,29 @@ internal class IosKotlinAnalysis(
     // Android hosts run. `KotlinSourceAnalyzer` wires these on the JVM out of a build's CompilationContext;
     // here they are wired out of the symbol service directly, which is everything they actually need.
     //
-    // NOT here: `KotlinSemanticHighlighter`, the type-aware coloring. It is portable code and it builds for
-    // this target, but REFERENCING it fails the link: Kotlin/Native 2.4.0's `CastsOptimization` recurses until
-    // its own stack overflows on that class, and the depth is cumulative across several of its functions
-    // rather than caused by any one of them (bisected: gutting `enclosingClassMemberProperty`,
-    // `topLevelPropertyInFile`, `classifyCallableRef` and `isTypeParameterInScope` together links, and no
-    // smaller subset does). Fixing it means restructuring the JVM hosts' hot highlight path against a compiler
-    // bug, which is its own task. Until then the editor here keeps the lexer's coloring.
     private val inlays by lazy {
         KotlinInlayHintService(parsedFor = { lastByFile[it.path] }, resolverFor = ::resolverFor)
+    }
+
+    /**
+     * Type-aware coloring, the same `KotlinSemanticHighlighter` the JVM hosts run.
+     *
+     * This was the one editor pass this host could not offer, and for a compiler reason rather than a
+     * portability one: merely REFERENCING the class failed the Kotlin/Native link, because 2.4.0's
+     * `CastsOptimization` recursed until its own stack overflowed on it. Kotlin 2.4.20 fixes that pass, so
+     * the class links like any other and nothing about the highlighter itself had to change.
+     *
+     * [refresh] is a no-op here on purpose: the host re-asks per keystroke rather than being pushed at, so
+     * there is no subscriber for an invalidation to wake. The external stamp is the real freshness input --
+     * a reference in this file colors against a symbol another tab may have just edited.
+     */
+    private val highlighting by lazy {
+        KotlinSemanticHighlighter(
+            parsedFor = { lastByFile[it.path] },
+            resolverFor = ::resolverFor,
+            refresh = { },
+            externalStampFor = { service.externalContentStamp(it) },
+        )
     }
 
     /**
@@ -374,6 +390,17 @@ internal class IosKotlinAnalysis(
         updateDocument(path, text)
         val parsed = parsed(path, text)
         return inlays.hints(parsed.file, TextRange(start, end))
+    }
+
+    /**
+     * Type-aware coloring for the buffer: what each identifier actually IS, replacing the lexer's guess by
+     * shape (a Capitalized word is a type, a word before `(` is a call). Whole-file rather than windowed like
+     * the hints, because the highlighter caches per top-level declaration and re-colors only what changed.
+     */
+    suspend fun semanticTokens(path: String, text: String): List<SemanticToken>? {
+        if (!isKotlin(path)) return null
+        updateDocument(path, text)
+        return highlighting.highlight(parsed(path, text).file)
     }
 
     /** Parameter info for the call around [offset], or null when the caret is not inside a resolvable call. */

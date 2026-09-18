@@ -6,9 +6,11 @@ import dev.ide.deps.impl.ArtifactFetcher
 import dev.ide.ios.store.IosPreferences
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.TreeViewMode
+import dev.ide.ui.backend.UiHighlightModifier
 import dev.ide.ui.backend.UiInlayKind
 import dev.ide.ui.backend.UiNavKind
 import dev.ide.ui.backend.UiSearchOptions
+import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.backend.UiTextEdit
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -1159,6 +1161,7 @@ class IosBackendTest {
         val text = "class Thing { int x = 1; }"
 
         assertEquals(emptyList(), backend.hintsAt(java, text, 0, text.length))
+        assertEquals(emptyList(), backend.semanticTokens(java, text))
         assertNull(backend.signatureHelp(java, text, text.length))
         assertEquals(emptyList(), backend.formatDocument(java, text))
         assertEquals(emptyList(), backend.optimizeImports(java, text))
@@ -1191,6 +1194,48 @@ class IosBackendTest {
             emptyList(),
             backend.hintsAt(file, text, 0, declaration),
             "a window that stops before the declaration must not carry its hint",
+        )
+    }
+
+    /**
+     * Coloring says what an identifier IS, which is the part the lexer can only guess at.
+     *
+     * This pass was the last one missing on this host, and for a compiler reason rather than a portability
+     * one: referencing `KotlinSemanticHighlighter` at all overflowed Kotlin/Native 2.4.0's
+     * `CastsOptimization` at link time. Kotlin 2.4.20 fixes that pass and the class links untouched.
+     *
+     * What it buys over the lexical layer is exactly what shape cannot tell you. `Greeter("w")` looks like a
+     * type followed by a paren; it is a CONSTRUCTOR call, and knowing that at all means having resolved a
+     * class declared in another file. `greet` is a METHOD though it sits where any call sits. And `g` is the
+     * same five-pixel word in both lines, but the first is its DECLARATION and the second is not.
+     *
+     * `println` is deliberately not asserted: there is no library classpath in this fixture, so it does not
+     * resolve and is simply omitted -- which is the contract, since an omitted range keeps the lexer's color.
+     */
+    @Test
+    fun coloringTellsAConstructorFromATypeAndADeclarationFromAUse() = runTest {
+        val projectRoot = openTwoFileProject()
+        val file = IosFiles.join(projectRoot, "src/Color.kt")
+        val text = "package demo\n\nfun use() {\n    val g = Greeter(\"w\")\n    println(g.greet())\n}\n"
+
+        val tokens = backend.semanticTokens(file, text)
+
+        fun tokenAt(name: String, from: Int = 0): UiSemanticToken? {
+            val at = text.indexOf(name, from)
+            return tokens.firstOrNull { it.startOffset == at && it.endOffset == at + name.length }
+        }
+        assertEquals("constructor", tokenAt("Greeter")?.kind, "resolved across files; got $tokens")
+        assertEquals("method", tokenAt("greet")?.kind, "a member of Greeter, not a standalone function")
+
+        val declaration = assertNotNull(tokenAt("g", text.indexOf("val g") + 4), "the local's declaration")
+        assertEquals("localVariable", declaration.kind)
+        assertTrue(UiHighlightModifier.Declaration in declaration.modifiers, "got ${declaration.modifiers}")
+
+        val use = assertNotNull(tokenAt("g", text.indexOf("println")), "the local's use")
+        assertEquals("localVariable", use.kind)
+        assertTrue(
+            UiHighlightModifier.Declaration !in use.modifiers,
+            "the same word, and the second one defines nothing; got ${use.modifiers}",
         )
     }
 

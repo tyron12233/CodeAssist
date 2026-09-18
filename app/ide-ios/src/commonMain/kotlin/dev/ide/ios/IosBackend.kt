@@ -33,6 +33,7 @@ import dev.ide.ui.backend.UiNavOption
 import dev.ide.ui.backend.UiNavTarget
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiRepository
+import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.backend.UiTextRange
 import dev.ide.ui.backend.UiVersionConflict
 import dev.ide.lang.dom.Severity
@@ -79,9 +80,9 @@ import kotlinx.coroutines.withContext
  *    vendored and built for this target.
  *  * Completion and diagnostics from `:lang-kotlin`'s editor half, which is the SAME symbol table, resolver
  *    and inference the desktop and Android hosts run. See [IosKotlinAnalysis].
- *  * Inlay hints, parameter info, Reformat and Optimize Imports off that same half. Type-aware COLORING is
- *    the one editor pass still missing, and for a compiler reason rather than a portability one; the comment
- *    in [IosKotlinAnalysis] says which.
+ *  * Inlay hints, parameter info, type-aware COLORING, Reformat and Optimize Imports off that same half.
+ *    Coloring was the last pass missing here, and for a compiler reason rather than a portability one --
+ *    see [IosKotlinAnalysis.highlighting].
  *  * A library classpath, resolved from Maven by `:deps-impl` and indexed by `:index-impl`, so library types
  *    and callables are not merely resolvable but discoverable. See [IosDependencies].
  *  * Dependency management over that same resolver: declare, remove, search, pick a version, and see the new
@@ -530,6 +531,19 @@ class IosBackend(
         if (!path.isKotlin()) return emptyList()
         return withAnalysis(emptyList()) { analysis ->
             analysis.inlayHints(path, text, startOffset, endOffset).orEmpty().map { it.toUi() }
+        }
+    }
+
+    /**
+     * Type-aware coloring for the buffer.
+     *
+     * Empty rather than null on a miss, and that matters: the UI overlays these on the lexical spans, so an
+     * empty list means "nothing to add, keep what the lexer said" rather than "clear the colors".
+     */
+    override suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> {
+        if (!path.isKotlin()) return emptyList()
+        return withAnalysis(emptyList()) { analysis ->
+            analysis.semanticTokens(path, text).orEmpty().map { it.toUi() }
         }
     }
 

@@ -1,5 +1,7 @@
 package dev.ide.ios
 
+import dev.ide.lang.highlight.HighlightModifier
+import dev.ide.lang.highlight.SemanticToken
 import dev.ide.lang.hints.InlayHint
 import dev.ide.lang.hints.InlayHintKind
 import dev.ide.lang.incremental.DocumentEdit
@@ -7,12 +9,14 @@ import dev.ide.lang.kotlin.NavKind
 import dev.ide.lang.kotlin.NavTarget
 import dev.ide.lang.resolve.QuickDocInfo
 import dev.ide.lang.signature.SignatureHelp
+import dev.ide.ui.backend.UiHighlightModifier
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiInlayKind
 import dev.ide.ui.backend.UiInlayPart
 import dev.ide.ui.backend.UiNavKind
 import dev.ide.ui.backend.UiNavTarget
 import dev.ide.ui.backend.UiQuickDoc
+import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.backend.UiSignature
 import dev.ide.ui.backend.UiSignatureHelp
 import dev.ide.ui.backend.UiSignatureParam
@@ -62,6 +66,22 @@ internal fun SignatureHelp.toUi(): UiSignatureHelp = UiSignatureHelp(
  * The two spell a replacement differently and the conversion is the whole point: the engine carries an offset
  * plus the length of what it replaces, the UI a `[start, end)` range.
  */
+internal fun SemanticToken.toUi(): UiSemanticToken =
+    UiSemanticToken(range.start, range.end, kind.id, modifiers.mapTo(LinkedHashSet()) { it.toUi() })
+
+/** Exhaustive on purpose: a new modifier should fail to compile here rather than silently lose its styling. */
+internal fun HighlightModifier.toUi(): UiHighlightModifier = when (this) {
+    HighlightModifier.DECLARATION -> UiHighlightModifier.Declaration
+    HighlightModifier.STATIC -> UiHighlightModifier.Static
+    HighlightModifier.ABSTRACT -> UiHighlightModifier.Abstract
+    HighlightModifier.DEPRECATED -> UiHighlightModifier.Deprecated
+    HighlightModifier.READONLY -> UiHighlightModifier.Readonly
+    HighlightModifier.MUTABLE -> UiHighlightModifier.Mutable
+    HighlightModifier.EXTENSION -> UiHighlightModifier.Extension
+    HighlightModifier.COMPOSABLE -> UiHighlightModifier.Composable
+    HighlightModifier.SUSPEND -> UiHighlightModifier.Suspend
+}
+
 internal fun DocumentEdit.toUi(): UiTextEdit = UiTextEdit(offset, offset + oldLength, newText.toString())
 
 /** A navigation destination as the UI names it. */
