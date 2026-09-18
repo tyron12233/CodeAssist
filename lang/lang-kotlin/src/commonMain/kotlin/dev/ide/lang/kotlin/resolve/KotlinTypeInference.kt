@@ -365,6 +365,7 @@ internal fun KotlinResolver.superType(expr: KtSuperExpression): KotlinType? {
 
 internal fun KotlinResolver.constType(e: KtConstantExpression): KotlinType? {
     val t = e.text.trim()
+    val unsigned = unsignedSuffix(t)
     return service.typeByFqn(
         when {
             t == "true" || t == "false" -> "kotlin.Boolean"
@@ -374,6 +375,11 @@ internal fun KotlinResolver.constType(e: KtConstantExpression): KotlinType? {
             // value that overflows Int widens to Long (so a 32-bit ARGB hex like `0xFFD32F2F` types as Long
             // → the `Color(Long)` overload, not `Color(Int)`/Double).
             t.startsWith("0x", true) || t.startsWith("0b", true) -> hexBinType(t)
+            // The UNSIGNED suffix, and it has to be read before the plain `L` branch below, because `3uL` ends
+            // with `L` too: reading only that made it a `Long`, and `val n: ULong = 3uL` was then a type
+            // mismatch against the literal's own spelling. `3u` was no better -- it fell through to the decimal
+            // branch, where `"3u".toLongOrNull()` is null, and defaulted to `Int`.
+            unsigned != null -> unsigned
             t.endsWith("L") || t.endsWith("l") -> "kotlin.Long"
             t.endsWith("f") || t.endsWith("F") -> "kotlin.Float"
             '.' in t || 'e' in t || 'E' in t -> "kotlin.Double"
@@ -384,15 +390,54 @@ internal fun KotlinResolver.constType(e: KtConstantExpression): KotlinType? {
     )
 }
 
-/** The type of a hex/binary integer literal — `Long` with an `L` suffix or when the value overflows `Int`. */
+/** The type of a hex/binary integer literal — `Long` with an `L` suffix or when the value overflows `Int`,
+ *  and the unsigned pair of those with a `u` suffix. */
 internal fun KotlinResolver.hexBinType(raw: String): String {
     val radix = if (raw[1].lowercaseChar() == 'x') 16 else 2
-    var body = raw.substring(2).replace("_", "")
-    val isLong = body.endsWith("L") || body.endsWith("l")
-    if (isLong) body = body.dropLast(1)
-    if (body.endsWith("u") || body.endsWith("U")) body = body.dropLast(1)
-    val v = body.toLongOrNull(radix) ?: body.toULongOrNull(radix)?.toLong() ?: return "kotlin.Int"
+    val (body, unsigned, isLong) = intSuffixes(raw.substring(2))
+    val u = body.toULongOrNull(radix) ?: return if (unsigned) "kotlin.UInt" else "kotlin.Int"
+    if (unsigned) {
+        // An unsigned literal widens at UInt's ceiling, not at Int's: `0xFFFFFFFFu` is a `UInt`, and only
+        // something past that is a `ULong`. Reusing the signed range here is how `0xFFu` typed as `Int`.
+        return if (isLong || u > UInt.MAX_VALUE.toULong()) "kotlin.ULong" else "kotlin.UInt"
+    }
+    val v = u.toLong()
     return if (isLong || v !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) "kotlin.Long" else "kotlin.Int"
+}
+
+/**
+ * The type of a DECIMAL integer literal carrying the unsigned suffix, or null when it carries none.
+ *
+ * Kotlin narrows an unsigned literal to `UByte`/`UShort` from the expected type; this model does not carry an
+ * expected type, so it stops at `UInt`/`ULong` — the same place a signed literal stops at `Int`/`Long`.
+ */
+private fun unsignedSuffix(raw: String): String? {
+    val (body, unsigned, isLong) = intSuffixes(raw)
+    if (!unsigned) return null
+    val u = body.toULongOrNull() ?: return "kotlin.UInt"
+    return if (isLong || u > UInt.MAX_VALUE.toULong()) "kotlin.ULong" else "kotlin.UInt"
+}
+
+/**
+ * An integer literal split into its digits and its type suffixes: `(body, unsigned, long)`.
+ *
+ * `u`/`U` and `L` are read in either order. Kotlin only spells the combined form `1uL`/`1UL`, so the other
+ * order cannot reach a well-formed file; accepting it costs nothing and means the reader does not have to
+ * trust the lexer's ordering to see that this is right. Underscores are separators, not digits.
+ */
+private fun intSuffixes(raw: String): Triple<String, Boolean, Boolean> {
+    var body = raw.replace("_", "")
+    var unsigned = false
+    var long = false
+    while (body.isNotEmpty()) {
+        when (body.last()) {
+            'u', 'U' -> if (unsigned) return Triple(body, unsigned, long) else unsigned = true
+            'L', 'l' -> if (long) return Triple(body, unsigned, long) else long = true
+            else -> return Triple(body, unsigned, long)
+        }
+        body = body.dropLast(1)
+    }
+    return Triple(body, unsigned, long)
 }
 
 internal fun KotlinResolver.typeOfQualified(q: KtQualifiedExpression): KotlinType? {
