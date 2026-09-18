@@ -42,8 +42,8 @@ file Flow.kt
     [820] isBig -> METHOD isBig
     [847] big -> LOCAL_VARIABLE big
     [851] joinToString -> METHOD joinToString
-    [864] prefix -> <unresolved>
-    [878] postfix -> <unresolved>
+    [864] prefix -> PARAMETER prefix
+    [878] postfix -> PARAMETER postfix
     [895] it -> PARAMETER it
     [898] name -> FIELD name
     [916] buildString -> METHOD buildString
@@ -137,15 +137,15 @@ file Members.kt
     [747] delegate -> FIELD delegate
     [780] List -> CLASS List
     [798] List -> CLASS List
-    [803] T -> <unresolved>
+    [803] T -> TYPE_PARAMETER T
     [808] filterIsInstance -> METHOD filterIsInstance
-    [825] T -> <unresolved>
+    [825] T -> TYPE_PARAMETER T
     [854] Map -> CLASS Map
     [858] String -> CLASS String
     [866] Shape -> CLASS Shape
     [892] List -> CLASS List
     [897] Shape -> CLASS Shape
-    [906] ShapeTable -> <unresolved>
+    [906] ShapeTable -> CLASS ShapeTable
     [919] shapes -> PARAMETER shapes
     [926] associateBy -> METHOD associateBy
     [940] it -> PARAMETER it
@@ -238,12 +238,12 @@ file Shapes.kt
     [723] displayName -> FIELD displayName
     [753] Shape -> CLASS Shape
     [779] List -> CLASS List
-    [784] T -> <unresolved>
+    [784] T -> TYPE_PARAMETER T
     [790] Named -> INTERFACE Named
     [828] String -> CLASS String
     [853] items -> FIELD items
     [859] size -> FIELD size
-    [886] T -> <unresolved>
+    [886] T -> TYPE_PARAMETER T
     [891] items -> FIELD items
     [897] maxByOrNull -> METHOD maxByOrNull
     [911] it -> PARAMETER it
@@ -264,8 +264,8 @@ file Shapes.kt
     [1066] Boolean -> CLASS Boolean
     [1076] area -> METHOD area
     [1100] Iterable -> CLASS Iterable
-    [1109] T -> <unresolved>
-    [1128] T -> <unresolved>
+    [1109] T -> TYPE_PARAMETER T
+    [1128] T -> TYPE_PARAMETER T
     [1152] iterator -> METHOD iterator
     [1172] iterator -> LOCAL_VARIABLE iterator
     [1181] hasNext -> METHOD hasNext

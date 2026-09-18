@@ -58,20 +58,30 @@ class KotlinNavigationTest {
     }
 
     /**
-     * An enum CONSTANT through the type now RESOLVES, but does not yet navigate — and that is asserted
-     * rather than left to be discovered.
+     * References that RESOLVE but have nowhere to navigate to — asserted, not left to be discovered.
      *
-     * Completion has listed these since it was written (`enumConstantsOf`); resolution never consulted it,
-     * so the same offset that offered `LARGE` reported it unresolved. It resolves now (the analysis-parity
-     * digest records it as `ENUM_CONSTANT LARGE`), but the symbol carries no declaration node and no owning
-     * type FQN, so `declarationTargets` has nothing to turn into a location. Whoever gives it one should
-     * see THIS test fail, and replace the emptiness below with the constant's own offset.
+     * Each of these was unresolved until the analysis-parity digest surfaced it, and each resolves now (the
+     * digest records the kind). What none of them has is a location: an enum constant and a project
+     * typealias carry no declaration node and no owning type, and a type parameter is not represented in the
+     * neutral DOM at all — `nodeAt` walks past it to the file, so a target built from it would send
+     * Ctrl-click to line 1, which is worse than going nowhere.
+     *
+     * Whoever gives one of them a location should see THIS fail, and replace its entry with the offset.
      */
     @Test
-    fun anEnumConstantResolvesButHasNoNavigableDeclarationYet() {
-        val code = "package demo\nenum class Kind { SMALL, LARGE }\nfun caller() { val k = Kind.LA|RGE }"
-        val targets = nav("UseEnumConstant.kt", code, NavKind.DECLARATION)
-        assertTrue(targets.isEmpty(), "an enum constant has no navigable declaration yet; got $targets")
+    fun theseResolveButHaveNoNavigableDeclarationYet() {
+        val cases = listOf(
+            "an enum constant" to
+                "package demo\nenum class Kind { SMALL, LARGE }\nfun caller() { val k = Kind.LA|RGE }",
+            "a type parameter" to
+                "package demo\nclass Box<T> { fun first(items: List<|T>): T = items[0] }",
+            "a project typealias" to
+                "package demo\nclass Shape\ntypealias Table = Map<String, Shape>\nfun caller(): Tab|le? = null",
+        )
+        for ((what, code) in cases) {
+            val targets = nav("UseNoNav.kt", code, NavKind.DECLARATION)
+            assertTrue(targets.isEmpty(), "$what has no navigable declaration yet; got $targets")
+        }
     }
 
     /** A COMPANION member reached through the type, for the same reason. */

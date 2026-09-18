@@ -18,6 +18,7 @@ import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtSecondaryConstructor
 import dev.ide.kotlin.syntax.psi.KtTokens
+import dev.ide.kotlin.syntax.psi.KtTypeParameterListOwner
 import dev.ide.kotlin.syntax.psi.KtUserType
 import dev.ide.kotlin.syntax.psi.KtValueArgument
 import dev.ide.kotlin.syntax.psi.collectDescendantsOfType
@@ -747,9 +748,13 @@ class KotlinEditorFeatures(
             // The caret is inside a TYPE reference, so the name denotes a type even where something else in
             // scope answers to it. Asking the scope first resolved the `String` in `fun f(): String` to the
             // `String(chars)` FACTORY FUNCTION, and every hover and go-to followed it there.
-            typeNamed(name, resolver) ?: inScope()
+            //
+            // A type PARAMETER comes first among types: `class Box<T>` makes `T` mean the parameter inside
+            // that class even where a class `T` exists, which is exactly what shadowing means.
+            typeParameterInScope(psi, name) ?: typeNamed(name, resolver) ?: projectTypeAlias(name)
+                ?: inScope()
         } else {
-            inScope() ?: typeNamed(name, resolver)
+            namedArgumentParameter(psi, name, parsed) ?: inScope() ?: typeNamed(name, resolver)
         }
         return sym?.let { ResolveResult.Resolved(it) } ?: ResolveResult.Unresolved
     }
@@ -765,6 +770,64 @@ class KotlinEditorFeatures(
      * name `Text` resolved to `android.jar`'s `org.w3c.dom.Text`, and every go-to navigation, hover and quick doc
      * followed it there.
      */
+    /**
+     * The type parameter [name] refers to, declared by an enclosing function, class or property.
+     *
+     * A type parameter is not in any scope the symbol model knows: it is not a classifier and not a value,
+     * so every `T` in `class Box<T>(items: List<T>)` read as unresolved. The declaration is right there in
+     * the tree, and walking out to it is what the semantic highlighter already does to colour these.
+     *
+     * The innermost owner wins, which is what shadowing means for `fun <T> …` inside `class C<T>`.
+     */
+    private fun typeParameterInScope(from: KtElement, name: String): KotlinSymbol? {
+        var owner = from.getParentOfType<KtTypeParameterListOwner>(strict = true)
+        while (owner != null) {
+            if (owner.typeParameters.any { it.name == name }) {
+                // No declaration node, deliberately. A `KtTypeParameter` is not represented in the neutral
+                // DOM, so `nodeAt` walks past it to the FILE -- and a navigation target built from that
+                // points at offset 0, which sends Ctrl-click to line 1. Resolving without a location is the
+                // honest answer; giving it one means representing the declaration, not guessing a node.
+                return KotlinSymbol(name = name, kind = SymbolKind.TYPE_PARAMETER)
+            }
+            owner = owner.getParentOfType<KtTypeParameterListOwner>(strict = true)
+        }
+        return null
+    }
+
+    /**
+     * A `typealias` declared in project source, which the symbol model knows about but does not resolve.
+     *
+     * The model resolves CLASSES; an alias is a name for a type expression, so `typealias ShapeTable =
+     * Map<String, Shape>` leaves `ShapeTable` resolving to nothing even though the unresolved-type
+     * diagnostic already backs off on exactly these (see [KotlinSymbolService.isProjectTypeAlias]). Reported
+     * as a CLASS: it is what the name denotes to a reader, and there is no alias kind in the neutral model.
+     */
+    private fun projectTypeAlias(name: String): KotlinSymbol? =
+        if (service.isProjectTypeAlias(name)) KotlinSymbol(name, SymbolKind.CLASS) else null
+
+    /**
+     * The parameter a NAMED ARGUMENT names: the `prefix` in `joinToString(prefix = "[")`.
+     *
+     * Its label is a name reference like any other, so it was resolved against the scope — where there is of
+     * course no `prefix` — and reported unresolved in the middle of a perfectly ordinary call. What it
+     * actually refers to is a parameter of the callee, so the callee is resolved first and its parameter
+     * names are consulted. Navigation does not follow (a library parameter has no declaration here), but the
+     * reference stops reading as an error.
+     */
+    private fun namedArgumentParameter(psi: KtNameReferenceExpression, name: String, parsed: KotlinParsedFile): KotlinSymbol? {
+        val argument = psi.getParentOfType<KtValueArgument>(strict = true) ?: return null
+        if (argument.getArgumentName()?.text?.trim() != name) return null
+        val call = argument.getParentOfType<KtCallExpression>(strict = true) ?: return null
+        val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
+        // Resolve the callee the way any other reference is resolved, rather than asking the scope: the
+        // commonest named-argument call is on a RECEIVER (`list.joinToString(prefix = "[")`), and its callee
+        // is found through the receiver's members, which the scope knows nothing about.
+        val target = (resolve(parsed.nodeAt(callee.textRange.startOffset)) as? ResolveResult.Resolved)
+            ?.symbol as? KotlinSymbol ?: return null
+        // The callee must actually declare the name, or this is a typo and the diagnostic should say so.
+        return if (name in target.paramNames) KotlinSymbol(name, SymbolKind.PARAMETER, owner = target) else null
+    }
+
     /**
      * A member reached STATICALLY, through the type rather than through a value of it.
      *
