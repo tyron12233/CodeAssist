@@ -89,6 +89,7 @@ import dev.ide.lang.kotlin.parse.hasAncestor
 import dev.ide.lang.kotlin.parse.inTypeReference
 import dev.ide.lang.kotlin.parse.unwrapParen
 import dev.ide.lang.kotlin.resolve.*
+import dev.ide.lang.kotlin.resolve.enclosingClassFqnOf
 import dev.ide.lang.kotlin.symbols.Builtins
 import dev.ide.lang.kotlin.symbols.DefaultImports
 import dev.ide.lang.kotlin.symbols.FileContext
@@ -493,7 +494,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         // same verdict as when it ran last; only the order changed.
         if (runCatching { resolver.callTargets(call) }.getOrDefault(emptyList()).any { it.kind == SymbolKind.METHOD }) return null
         val name = callee.getReferencedName()
-        val fqn = service.resolveTypeName(name, resolver.fileContext) ?: return null
+        // WITH the enclosing class: a nested type is reached by its simple name from inside its owner, and
+        // dropping that argument sends the lookup straight past it to whatever else answers to the name. The
+        // stdlib's `UByteArray` -- which declares a nested `class Iterator` and calls `Iterator(storage)` --
+        // was told it could not instantiate an interface, because `kotlin.collections.Iterator` is what the
+        // file-level lookup found.
+        val fqn = service.resolveTypeName(name, resolver.fileContext, enclosingClassFqnOf(callee)) ?: return null
         if (service.isNonInstantiableType(fqn) != true) return null
         if (service.typeHasCompanionObject(fqn)) return null
         // SAM conversion: `Runnable { … }`, `Comparator(::cmp)`, `OnClickListener { … }` build a functional-
