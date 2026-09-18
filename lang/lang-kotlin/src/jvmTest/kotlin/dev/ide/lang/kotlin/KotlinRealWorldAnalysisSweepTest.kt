@@ -23,10 +23,19 @@ import kotlin.test.assertTrue
  *
  *     ./gradlew :lang-kotlin:jvmTest --tests '*RealWorldAnalysisSweep*' -Dkt.externalCorpus=<kotlin checkout>
  *
- * NOTE on what is and is not withheld: the sweep analyzes the files WITHOUT the stdlib's own classpath, so
- * the unresolved-reference checks gate themselves off (see `IncrementalSemanticAnalysis.resolveReady`). What
- * still runs is every structural and flow check — overrides, modifiers, `when` exhaustiveness, val
- * reassignment, bounds — which is exactly the population that can false-positive without an index.
+ * WHAT THE CLASSPATH IS. The kotlin-stdlib jar and nothing else — no JDK, no android.jar. So every
+ * `java.lang` name a file uses (`Exception`, `IllegalArgumentException`, `Thread`) is genuinely not there to
+ * find, and `kt.unresolved` measures the harness rather than the checker. It is reported, because a real
+ * false positive would show up in it, but it is kept out of the headline count, which is about the
+ * STRUCTURAL and flow checks — the population that can go wrong without an index at all.
+ *
+ * WHICH FILES COUNT. The classpath is the RELEASED JVM stdlib jar, so only the source sets that jar actually
+ * describes can be held to it: `common`, `src`, `jvm`, `jdk7`, `jdk8`, `unsigned`. The JS, wasm and native
+ * sets declare types the JVM jar has never heard of (`JsAny`, `ExperimentalWasmJsInterop`) and members with
+ * no bodies that only a builtins compilation accepts, so an "unresolved reference" there says nothing about
+ * the checker. Every file is still SWEPT — the crash gate wants the breadth — but the headline number and the
+ * per-code tally come from the checkable half, and the rest is reported separately so the split stays visible
+ * rather than quietly inflating both.
  */
 class KotlinRealWorldAnalysisSweepTest {
 
@@ -43,6 +52,8 @@ class KotlinRealWorldAnalysisSweepTest {
             .toList()
         assertTrue(files.size > 500, "expected the stdlib sources, found ${files.size}")
 
+        // The source sets the released JVM stdlib jar on this analyzer's classpath actually describes.
+        val jvmCheckable = setOf("common", "src", "jvm", "jdk7", "jdk8", "unsigned")
         val byCode = HashMap<String, Int>()
         // Up to three DISTINCT messages per code. One sample names the category; three show whether the hits
         // are one repeated shape (usually a single missing rule) or a scatter of unrelated ones.
@@ -54,6 +65,9 @@ class KotlinRealWorldAnalysisSweepTest {
         val byCodeFiles = HashMap<String, MutableMap<String, Int>>()
         var crashed = 0
         var withErrors = 0
+        var checkable = 0
+        var otherTargets = 0
+        var otherTargetsWithErrors = 0
         for (file in files) {
             val text = runCatching { file.readText().replace("\r\n", "\n") }.getOrNull() ?: continue
             val relative = file.relativeTo(stdlib).path.replace(File.separatorChar, '/')
@@ -71,8 +85,14 @@ class KotlinRealWorldAnalysisSweepTest {
             val errors = diagnostics.filter {
                 it.severity == Severity.ERROR && it.code != KotlinDiagnosticCodes.SYNTAX
             }
+            if (relative.substringBefore('/') !in jvmCheckable) {
+                otherTargets++
+                if (errors.isNotEmpty()) otherTargetsWithErrors++
+                continue
+            }
+            checkable++
             if (errors.isEmpty()) continue
-            withErrors++
+            if (errors.any { it.code !in CLASSPATH_BOUND }) withErrors++
             for (d in errors) {
                 val code = d.code ?: "<none>"
                 byCode.merge(code, 1, Int::plus)
@@ -81,7 +101,12 @@ class KotlinRealWorldAnalysisSweepTest {
             }
         }
 
-        println("stdlib sweep: ${files.size - withErrors}/${files.size} files clean, $crashed crashed")
+        println(
+            "stdlib sweep: ${checkable - withErrors}/$checkable JVM-checkable files clean of structural " +
+                "errors, $crashed crashed"
+        )
+        println("  (not counted: $otherTargetsWithErrors/$otherTargets JS/wasm/native files report something " +
+            "against a JVM classpath that does not describe them)")
         byCode.entries.sortedByDescending { it.value }.forEach { (code, n) ->
             val spread = byCodeFiles[code].orEmpty()
             println("  $n x $code  (across ${spread.size} files)")
@@ -90,11 +115,19 @@ class KotlinRealWorldAnalysisSweepTest {
                 .forEach { (f, c) -> println("      $c in $f") }
         }
 
+        byCode.keys.filter { it in CLASSPATH_BOUND }.forEach {
+            println("  ^ $it is classpath-bound: this harness has the stdlib jar and no JDK, so a `java.lang`")
+            println("    name has nothing to resolve to. Not counted above.")
+        }
+
         // Nothing may THROW: the analysis runs on every keystroke, and an exception is a dead editor pane.
         assertTrue(crashed == 0, "the analysis threw on $crashed of ${files.size} stdlib files")
     }
 
     companion object {
+        /** Codes whose count here is about the harness's classpath, not about the checker. See the class doc. */
+        private val CLASSPATH_BOUND = setOf(KotlinDiagnosticCodes.UNRESOLVED)
+
         val srcDir = tempProject(mapOf("Seed.kt" to "package demo\n"))
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))
     }
