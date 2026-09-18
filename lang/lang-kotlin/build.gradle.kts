@@ -208,6 +208,16 @@ tasks.named<Test>("jvmTest") {
     // Forwarded explicitly, because a `-D` on the command line reaches the GRADLE JVM and the tests run in
     // a forked one -- the same trap :kotlin-syntax's baseline flag documents.
     System.getProperty("kt.updateDigest")?.let { systemProperty("kt.updateDigest", it) }
+    // An external Kotlin checkout for the real-world analysis sweep (opt-in; self-skips without it).
+    System.getProperty("kt.externalCorpus")?.let {
+        systemProperty("kt.externalCorpus", it)
+        // The sweep's OUTPUT is the whole point of running it, and a test task swallows stdout by default --
+        // asking for the sweep and getting a silent BUILD SUCCESSFUL reads as "no findings" when it actually
+        // means "you never saw them". Re-running is likewise not optional: the task is UP-TO-DATE from the
+        // previous build, so without this the second sweep of a session prints nothing at all.
+        testLogging { showStandardStreams = true }
+        outputs.upToDateWhen { false }
+    }
 }
 
 val jvmTestCompilation = kotlin.jvm().compilations.getByName("test")
