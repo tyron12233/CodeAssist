@@ -1,6 +1,7 @@
 package dev.ide.lang.kotlin.resolve
 
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
+import dev.ide.kotlin.syntax.psi.KtBinaryExpressionWithTypeRHS
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
 import dev.ide.kotlin.syntax.psi.KtBreakExpression
 import dev.ide.kotlin.syntax.psi.KtContinueExpression
@@ -196,9 +197,18 @@ internal fun KotlinResolver.whenSubjectName(whenExpr: KtWhenExpression): String?
     return smartCastSubjectKey(whenExpr.subjectExpression)
 }
 
-/** The narrowing in effect for [name] after a preceding early-exit guard in [block]: `if (name !is T) return`
- *  makes `name` a `T` for the rest of the block. [fromChild] is the statement on the path to the use site;
- *  only statements before it are guards. The last applicable guard wins. */
+/**
+ * The narrowing a preceding STATEMENT in [block] leaves in effect for [name]. [fromChild] is the statement on
+ * the path to the use site; only statements before it count, and the last applicable one wins.
+ *
+ * Two shapes do it:
+ *  - an early-exit guard, `if (name !is T) return`, which makes `name` a `T` for the rest of the block;
+ *  - a bare cast statement, `name as T`, which does the same because the cast throws when it does not hold.
+ *    That is how a checker lambda opens (`KotlinChecker(KtProperty::class) { psi -> psi as KtProperty; … }`)
+ *    and without it every later use of `psi` was still the parameter's declared type: 20+ of this module's
+ *    `kt.typeMismatch` hits were one file's dispatch table saying `KtElement but KtProperty was expected`.
+ *    `as?` is excluded -- it yields null instead of throwing, so it guarantees nothing.
+ */
 internal fun KotlinResolver.earlyExitNarrowing(
     block: KtBlockExpression,
     fromChild: KtElement?,
@@ -207,6 +217,14 @@ internal fun KotlinResolver.earlyExitNarrowing(
     var result: KotlinType? = null
     for (st in block.statements) {
         if (st === fromChild) break
+        if (st is KtBinaryExpressionWithTypeRHS) {
+            if (st.operationReference.getReferencedNameElementType() == KtTokens.AS_KEYWORD &&
+                smartCastSubjectKey(st.left) == name
+            ) {
+                typeFromIsTarget(st.right)?.let { result = it }
+            }
+            continue
+        }
         val guard = st as? KtIfExpression ?: continue
         if (guard.`else` != null) continue                // a fall-through `else` isn't an early exit
         if (!branchAlwaysJumps(guard.then)) continue       // the then must transfer control out
