@@ -247,13 +247,31 @@ class KotlinRealWorldAnalysisSweepTest {
         val srcDir = tempProject(mapOf("Seed.kt" to "package demo\n"))
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))
 
-        /** The jars this test JVM runs against — exactly `:lang-kotlin`'s own compile+test classpath. */
+        /**
+         * The jars this test JVM runs against — exactly `:lang-kotlin`'s own compile+test classpath, PLUS the
+         * JDK.
+         *
+         * The JDK has to be added because `java.class.path` stopped carrying it in Java 9: the platform
+         * classes live in the runtime image, which is neither a jar nor a class directory, so a classpath
+         * assembled from this property has no `java.lang.StringBuilder` and no `java.util.Map`. Without it
+         * every JDK member in the module reads as an unresolved reference -- `sb.append(t, 0, 1)` and
+         * `map.putIfAbsent(k, v)` were both reported, and both are perfectly good Kotlin. See
+         * [TestJars.jdkBaseJar] for how it is packed back into a readable shape.
+         */
         private val moduleClasspath: List<java.nio.file.Path> =
             System.getProperty("java.class.path").orEmpty()
                 .split(File.pathSeparatorChar)
                 .filter { it.endsWith(".jar") }
                 .map { java.nio.file.Paths.get(it) }
-                .filter { java.nio.file.Files.isRegularFile(it) }
+                .filter { java.nio.file.Files.isRegularFile(it) } +
+                listOfNotNull(
+                    dev.ide.testkit.TestJars.jdkBaseJar(
+                        java.nio.file.Paths.get(
+                            System.getProperty("kt.repoRoot").orEmpty(),
+                            "lang/lang-kotlin/build/tmp/sweep-jdk",
+                        ),
+                    ),
+                )
 
         /**
          * LAZY, and that is not a style choice: standing a symbol service up over these 68 jars costs
