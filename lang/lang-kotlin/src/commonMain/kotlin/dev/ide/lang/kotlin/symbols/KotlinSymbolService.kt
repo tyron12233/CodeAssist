@@ -830,6 +830,34 @@ class KotlinSymbolService(
     private val ALIAS_EXPAND_LIMIT = 8
 
     /**
+     * Whether [s] is a NULLABLE function type — `((A) -> B)?`, the whole thing parenthesized and then made
+     * nullable — as opposed to a plain function type whose RESULT is nullable.
+     *
+     * The test used to be `endsWith("?") && startsWith("(")`, which is true of every function type that has
+     * a parameter list and a nullable result. `(String) -> Parsed?` was therefore read as a nullable function
+     * type, and stripping the outer parentheses that were never there mangled it to `String) -> Parsed`,
+     * losing the member's type entirely. Any call through such a member then resolved to nothing: 473
+     * unresolved references over 170 files in the module sweep began here.
+     *
+     * The real question is whether the opening parenthesis closes the whole expression, just before the `?`.
+     * Anything unbalanced answers false, so an unparsable type falls through to plain-type parsing as before.
+     */
+    private fun isNullableFunctionType(s: String): Boolean {
+        if (!s.endsWith("?") || !s.startsWith("(")) return false
+        var depth = 0
+        for (i in 0..s.length - 2) {
+            when (s[i]) {
+                '(' -> depth++
+                ')' -> {
+                    depth--
+                    if (depth == 0) return i == s.length - 2
+                }
+            }
+        }
+        return false
+    }
+
+    /**
      * Parse a Kotlin function type from source text into a `kotlin.FunctionN` (the shape resolution expects).
      * Handles a leading `suspend` / `@Composable` (and any other `@Anno`) prefix, an optional extension
      * receiver (`Receiver.(params) -> R`, possibly generic), value parameters, the result type, and an outer
@@ -837,8 +865,7 @@ class KotlinSymbolService(
      */
     private fun functionTypeFromText(text: String, ctx: FileContext?, enclosingClassFqn: String? = null): KotlinType? {
         var s = text.trim()
-        val nullable =
-            s.endsWith("?") && s.startsWith("(") // only a fully-parenthesized `(…)?` is a nullable fn type
+        val nullable = isNullableFunctionType(s)
         if (nullable) s = s.removeSuffix("?").trim().removePrefix("(").removeSuffix(")").trim()
         // Strip leading annotations (`@Composable`, `@ExtensionFunctionType`, …), noting `@Composable`. Only an
         // `(…)` IMMEDIATELY following the name is annotation arguments (`@Anno(x)`); a space before it (`@Composable
