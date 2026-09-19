@@ -353,29 +353,70 @@ internal class KotlinVarNullFlow(private val resolver: KotlinResolver) {
         rec(root)
     }
 
-    /** Exclude a var written inside a loop body or a closure — a back-edge or captured write could invalidate a
-     *  narrowing, so it is not effectively immutable. */
+    /**
+     * Exclude a var written inside a loop body or a closure — a back-edge or captured write could invalidate a
+     * narrowing, so it is not effectively immutable.
+     *
+     * EXCEPT when every loop that writes it is a `while` whose own condition proves it non-null. Then the back
+     * edge cannot invalidate anything, because the condition is re-evaluated before each iteration and
+     * [flowNull] already seeds the body with `refine(cond, true)`: the state at body entry is the same on every
+     * iteration, so no fixpoint is needed. Walking a parent/sibling chain is written that way
+     * (`while (n != null) { …; n = n.parent }`) and it is how this module traverses PSI throughout, which is
+     * why one blunt exclusion produced 93 `kt.unsafeNullable` hits over 32 files.
+     *
+     * A `do`/`for` loop gets no such reprieve: their bodies run before (or without) any re-check, so a write in
+     * the body really can be observed by the next iteration. Nor does a nested loop that is not itself guarded,
+     * nor `++`/`--`, nor any write captured by a closure.
+     */
     private fun markLoopOrClosureAssigned(
         root: KtElement,
         all: Set<KtProperty>,
         excluded: MutableSet<KtProperty>
     ) {
-        fun rec(p: KtElement, inside: Boolean) {
-            val here =
-                inside || p is KtLoopExpression || p is KtFunctionLiteral || p is KtNamedFunction
-            if (here && p is KtBinaryExpression && (p.operationToken == KtTokens.EQ || p.operationToken in COMPOUND_ASSIGN)) {
-                boundVarIn(p.left, all)?.let { excluded.add(it) }
+        fun rec(p: KtElement, loops: List<KtLoopExpression>, inClosure: Boolean) {
+            val here = if (p !== root && p is KtLoopExpression) loops + p else loops
+            val closure = inClosure || p is KtFunctionLiteral || p is KtNamedFunction
+            if (p is KtBinaryExpression && (p.operationToken == KtTokens.EQ || p.operationToken in COMPOUND_ASSIGN)) {
+                boundVarIn(p.left, all)?.let { v ->
+                    if (closure || here.any { !whileGuardsNonNull(it, v, all) }) excluded.add(v)
+                }
             }
-            if (here && p is KtPostfixExpression && p.operationToken in INCDEC) boundVarIn(
-                p.baseExpression,
-                all
-            )?.let { excluded.add(it) }
+            if (p is KtPostfixExpression && p.operationToken in INCDEC) {
+                boundVarIn(p.baseExpression, all)?.let { v ->
+                    if (closure || here.isNotEmpty()) excluded.add(v)
+                }
+            }
             var c = p.firstChild
             while (c != null) {
-                rec(c, if (p === root) inside else here); c = c.nextSibling
+                rec(c, here, closure); c = c.nextSibling
             }
         }
-        rec(root, false)
+        rec(root, emptyList(), false)
+    }
+
+    /** Whether [loop] is a `while` whose condition proves [v] non-null on entry to every iteration. */
+    private fun whileGuardsNonNull(loop: KtLoopExpression, v: KtProperty, all: Set<KtProperty>): Boolean =
+        loop is KtWhileExpression && condProvesNonNull(loop.condition, v, all)
+
+    /** Whether [cond] being true proves [v] non-null: `v != null`, or a `&&` with such a conjunct. */
+    private fun condProvesNonNull(cond: KtExpression?, v: KtProperty, all: Set<KtProperty>): Boolean {
+        val c = unwrap(cond) as? KtBinaryExpression ?: return false
+        return when (c.operationToken) {
+            KtTokens.EXCLEQ -> {
+                val l = unwrap(c.left)
+                val r = unwrap(c.right)
+                when {
+                    isNullLit(r) -> boundVarIn(l, all) === v
+                    isNullLit(l) -> boundVarIn(r, all) === v
+                    else -> false
+                }
+            }
+
+            KtTokens.ANDAND ->
+                condProvesNonNull(c.left, v, all) || condProvesNonNull(c.right, v, all)
+
+            else -> false
+        }
     }
 
     private fun boundVar(ref: KtExpression?): KtProperty? =
