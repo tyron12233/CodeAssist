@@ -56,6 +56,22 @@ class ClasspathReader(
     // Insertion order IS the recency order here, maintained by removing and re-putting on access, because
     // common Kotlin's LinkedHashMap has no access-ordered mode to inherit from.
     private val zips = LinkedHashMap<String, OpenJar>()
+
+    /** Package directories per jar, learned on its first open and KEPT when its handle is evicted — the
+     *  miss filter that stops [readEntry] reopening every container. See [withZip]. */
+    private val packageDirs = HashMap<String, Set<String>>()
+
+    /**
+     * Each container paired with whether it is a DIRECTORY, decided once.
+     *
+     * [readEntry] asked `fileInfo(c)` per container per lookup — a stat syscall for every entry on the
+     * classpath, every time a type is probed, to re-answer a question that cannot change while a reader is
+     * alive. On a 68-entry classpath that is 68 syscalls to look up one class, and `isKnownType` runs per
+     * member access. Classified lazily so construction stays cheap.
+     */
+    private val containerKinds: List<Pair<String, Boolean>> by lazy {
+        containers.map { it to (fileInfo(it)?.isDirectory == true) }
+    }
     private val zipLock = Lock()
 
     // Guarded rather than concurrent maps: common Kotlin has no ConcurrentHashMap, and the analysis calls
@@ -73,10 +89,25 @@ class ClasspathReader(
      * runs while the LRU lock is held, so the handle it reads can never be the one a concurrent caller
      * evicts and closes. Returns null when the jar can't be opened (the block may also return null).
      */
-    private fun <T> withZip(path: String, block: (ZipArchive) -> T?): T? = zipLock.withLock {
+    private fun <T> withZip(path: String, pkg: String, block: (ZipArchive) -> T?): T? = zipLock.withLock {
+        // The handle LRU holds [MAX_OPEN_ZIPS]; a real classpath is bigger than that, and [readEntry] asks
+        // EVERY container for every lookup. So a lookup that misses -- which is what `isKnownType` asks on
+        // the editor's hot path, per member access -- evicted and reopened the jars past the bound, and each
+        // reopen re-parses the whole central directory into a hash map. Measured on a 68-jar classpath: a
+        // single analysis pass spent minutes in `ZipArchive.<init>`, never reaching the files it was meant
+        // to check.
+        //
+        // The package directories survive eviction, so after a jar has been opened ONCE, a miss against it
+        // is a set lookup. Packages, not entry names: a jar has hundreds of the former and tens of thousands
+        // of the latter, and the question a lookup asks ("could this jar hold `androidx/compose/ui/Foo`?")
+        // is answered by the directory alone.
+        packageDirs[path]?.let { if (pkg !in it) return@withLock null }
         val jar = zips.remove(path) ?: openJar(path)
         if (jar == null) return@withLock null
         zips[path] = jar
+        if (path !in packageDirs) {
+            packageDirs[path] = jar.archive.entries.mapTo(HashSet()) { it.name.substringBeforeLast('/', "") }
+        }
         while (zips.size > MAX_OPEN_ZIPS) {
             val eldest = zips.keys.firstOrNull() ?: break
             zips.remove(eldest)?.source?.close()
@@ -110,12 +141,12 @@ class ClasspathReader(
     }
 
     private fun readEntry(rel: String): ByteArray? {
-        for (c in containers) {
-            if (fileInfo(c)?.isDirectory == true) {
+        for ((c, isDir) in containerKinds) {
+            if (isDir) {
                 val f = "$c/$rel"
                 if (fileInfo(f)?.isDirectory == false) readFile(f)?.let { return it }
             } else {
-                val bytes = withZip(c) { archive ->
+                val bytes = withZip(c, rel.substringBeforeLast('/', "")) { archive ->
                     val entry = archive.entry(rel) ?: return@withZip null
                     archive.read(entry)
                 }
