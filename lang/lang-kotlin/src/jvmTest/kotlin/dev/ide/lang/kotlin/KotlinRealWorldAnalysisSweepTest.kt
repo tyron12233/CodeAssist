@@ -172,7 +172,7 @@ class KotlinRealWorldAnalysisSweepTest {
             val errors = diagnostics.filter {
                 it.severity == Severity.ERROR && it.code != KotlinDiagnosticCodes.SYNTAX
             }
-            report.record(relative, errors, counted = counts(relative))
+            report.record(relative, text, errors, counted = counts(relative))
         }
         return report
     }
@@ -196,6 +196,16 @@ class KotlinRealWorldAnalysisSweepTest {
          *  are one repeated shape (usually a single missing rule) or a scatter of unrelated ones. */
         private val samples = HashMap<String, MutableSet<String>>()
 
+        /** The source LINE a diagnostic landed on, trimmed. The message alone names a CATEGORY; judging
+         *  whether a hit is a real false positive or a corpus artefact means seeing the code that produced
+         *  it, and hunting it down by hand is the slowest step in working a bucket. */
+        private fun sourceLineAt(text: String, offset: Int): String {
+            if (offset !in text.indices) return "<offset $offset outside the file>"
+            val start = text.lastIndexOf('\n', offset).let { if (it < 0) 0 else it + 1 }
+            val end = text.indexOf('\n', offset).let { if (it < 0) text.length else it }
+            return text.substring(start, end).trim().take(160)
+        }
+
         /** Per code, how the hits are spread over files. A count alone cannot tell a real false positive from
          *  a corpus artefact: 3,546 "property must be initialized" all landing in the JS builtins is one
          *  quirk, whereas the same count spread over 400 ordinary files is a bug every user would hit. */
@@ -207,7 +217,7 @@ class KotlinRealWorldAnalysisSweepTest {
             crashes[relative] = "${cause::class.simpleName}: ${cause.message?.take(160)}"
         }
 
-        fun record(relative: String, errors: List<Diagnostic>, counted: Boolean) {
+        fun record(relative: String, text: String, errors: List<Diagnostic>, counted: Boolean) {
             if (!counted) {
                 skipped++
                 if (errors.isNotEmpty()) skippedWithErrors++
@@ -220,7 +230,9 @@ class KotlinRealWorldAnalysisSweepTest {
                 val code = d.code ?: "<none>"
                 byCode.merge(code, 1, Int::plus)
                 byCodeFiles.getOrPut(code) { HashMap() }.merge(relative, 1, Int::plus)
-                samples.getOrPut(code) { LinkedHashSet() }.let { if (it.size < 3) it += "$relative: ${d.message}" }
+                samples.getOrPut(code) { LinkedHashSet() }.let {
+                    if (it.size < 3) it += "$relative: ${d.message}\n        | ${sourceLineAt(text, d.range.start)}"
+                }
             }
         }
 

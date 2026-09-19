@@ -3191,10 +3191,23 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (!service.isKnownType(arg.qualifiedName) || !service.isKnownType(bound.qualifiedName)) return false
         return when (typeWithinBound(arg, bound)) {
             false -> true                                        // base type is definitely not within (final arg)
-            true -> !bound.nullable && arg.nullable              // base ok, but nullable arg can't satisfy a non-null bound
+            true -> !bound.nullable && arg.nullable && boundConstrainsNullability(bound)
             null -> false                                        // undecidable → back off
         }
     }
+
+    /**
+     * Whether a satisfied [bound] still rules out a NULLABLE argument.
+     *
+     * `java.lang.Object` does not. It is what a Java type parameter's erased, implicit bound decodes to, and
+     * Kotlin reads a Java `<T>` as `T : Any!` — flexible, constraining nothing. `List<KotlinType?>` and
+     * `List<TypeRef?>` are ordinary Kotlin that the sweep reported 19 times across 14 files, because
+     * `kotlin.collections.List`'s parameter bound is read off the `java.util.List` shape.
+     *
+     * A Kotlin `T : Any` is a different declaration that means what it says, so `Box<String?>` where
+     * `class Box<T : Any>` stays flagged: that one decodes as `kotlin.Any`, not `java.lang.Object`.
+     */
+    private fun boundConstrainsNullability(bound: KotlinType): Boolean = bound.qualifiedName != "java.lang.Object"
 
     /** Whether [arg]'s base type is within [bound]: true (definitely), false (definitely not — only for a final
      *  arg whose supertype closure is complete), or null (undecidable). */
