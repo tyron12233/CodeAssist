@@ -1278,13 +1278,44 @@ class KotlinSymbolService(
      *  the two disagree → a false "SolidColor but Color expected" mismatch. Gated exactly like
      *  [ownAndInheritedCached]/`classpathTypeExists`; the memo is also cleared on a build start (see
      *  [classpathCacheUsable]), which the ready-only gate below previously left it out of. */
+    /**
+     * FQNs whose supertype walk is already running on this thread.
+     *
+     * [resolveTypeNameUncached]'s nested-type probe asks for the supertypes of the very class it is resolving
+     * a supertype OF: `sealed interface Plan { object Full : Plan }` resolves `Plan` with `Full` as the
+     * enclosing class, and the probe then wants `Full`'s supertypes. A re-entrant `getOrPut` on the memo
+     * throws `IllegalStateException: Recursive update`, which surfaced as `Plan.Full` not being a `Plan` at
+     * all -- every `return Plan.Full` from a function declared to return `Plan` was a type mismatch.
+     *
+     * Answering EMPTY there is right, not merely safe: the probe asks whether a SUPERTYPE of this class
+     * declares `Plan`, and the chain it would need is the one being computed. The owner walk then strips a
+     * segment and finds the enclosing `Plan` directly, which is the correct answer. A TOP-LEVEL sealed family
+     * never hit this, because its name is not a nested one and the probe is skipped -- which is why only a
+     * hierarchy nested in a class or object lost its supertypes.
+     */
+    private val supertypeWalkInProgress = ThreadLocalValue { HashSet<String>() }
+
     private fun kotlinSupertypesMemo(fqn: String): List<String> {
         val memo = if (model().classByFqn.containsKey(fqn)) sourceSupertypeMemo else {
             val idx = index
             if (idx != null && !classpathCacheUsable(idx)) return kotlinSupertypes(fqn, HashSet())
             classpathSupertypeMemo
         }
-        return memo.getOrPut(fqn) { kotlinSupertypes(fqn, HashSet()) }
+        memo[fqn]?.let { return it }
+        val running = supertypeWalkInProgress.get()
+        if (!running.add(fqn)) return emptyList()
+        // Computed OUTSIDE the map, then stored. `getOrPut` is `computeIfAbsent`, and this walk re-enters the
+        // same memo for a DIFFERENT key (a supertype's own supertypes), which `ConcurrentHashMap` rejects with
+        // "Recursive update" the moment the nested insert triggers a resize -- an exception thrown out of the
+        // analysis, which is a dead editor pane. Racing threads may both compute; the walk is a pure function
+        // of the model, so the loser's result is identical.
+        val computed = try {
+            kotlinSupertypes(fqn, HashSet())
+        } finally {
+            running.remove(fqn)
+        }
+        memo[fqn] = computed
+        return computed
     }
 
     /**
@@ -1366,7 +1397,7 @@ class KotlinSymbolService(
             // A compiler plugin's generated INSTANCE members (a future Parcelize provider's writeToParcel/…), for
             // the same reason: the parse-only model never runs the plugin. Cheap — gated on the class's annotations.
             val syntheticPlugin = syntheticInstanceMembers(rc)
-            val inherited = rc.superTypeTexts.mapNotNull { resolveTypeName(it, rc.ctx) }
+            val inherited = rc.superTypeTexts.mapNotNull { resolveTypeName(it, rc.ctx, rc.fqn) }
                 .flatMap { ownAndInherited(it, emptyList(), visited) }
             // …and the supertypes the compiler adds that source never writes down ([implicitSupertypes]).
             // LAST, so an explicit supertype's override (or the class's own member) is found before the
@@ -2379,11 +2410,13 @@ class KotlinSymbolService(
         val direct = LinkedHashSet<String>()
         Builtins.builtinSupertypes(fqn).forEach { direct += it }
         builtinShape(fqn)?.supertypes?.forEach { (it as? KotlinType)?.let { k -> direct += k.qualifiedName } }
-        model().classByFqn[fqn]?.superTypeTexts?.forEach { t ->
-            resolveTypeName(
-                t,
-                model().classByFqn[fqn]!!.ctx
-            )?.let { direct += it }
+        model().classByFqn[fqn]?.let { rc ->
+            // The enclosing class is the SCOPE the supertype was written in: `sealed interface Plan { object
+            // Full : Plan }` names `Plan` by its simple name from inside `Plan` itself, which only resolves by
+            // walking the owner chain. A TOP-LEVEL hierarchy hid this -- the same-package fallback found it --
+            // so only a sealed family nested in an object or class lost its supertype, and with it every
+            // `return Plan.Full` from a function declared to return `Plan`.
+            rc.superTypeTexts.forEach { t -> resolveTypeName(t, rc.ctx, rc.fqn)?.let { direct += it } }
         }
         // Classpath supertypes (@Metadata Kotlin AND plain Java bytecode) via the type-shape index, or a live
         // decode when no index is wired — null in dumb mode, so the chain is empty until the index is ready.
@@ -3218,7 +3251,7 @@ class KotlinSymbolService(
             val out = ArrayList<String>()
             for (rc in m.classByFqn.values) {
                 if (rc.fqn == fqn) continue
-                if (rc.superTypeTexts.any { superHeadFqn(it, rc.ctx) == fqn }) out += rc.fqn
+                if (rc.superTypeTexts.any { superHeadFqn(it, rc.ctx, rc.fqn) == fqn }) out += rc.fqn
             }
             return out
         }
@@ -3362,9 +3395,9 @@ class KotlinSymbolService(
     /** The resolved classifier FQN of a supertype-list entry's text (`State`, `State<T>`, `State()`,
      *  `pkg.State`); falls back to the raw head when it can't be resolved (so an already-qualified text still
      *  compares equal to a candidate FQN, and an unresolvable simple name just won't match → safe miss). */
-    private fun superHeadFqn(superText: String, ctx: FileContext?): String? {
+    private fun superHeadFqn(superText: String, ctx: FileContext?, enclosingClassFqn: String? = null): String? {
         val head = superText.substringBefore('<').substringBefore('(').trim()
-        return resolveTypeName(head, ctx) ?: head
+        return resolveTypeName(head, ctx, enclosingClassFqn) ?: head
     }
 
     /** Whether [fqn] is a Kotlin BINARY (`@Metadata`) class. Its constructors may have default arguments that
@@ -3411,7 +3444,7 @@ class KotlinSymbolService(
         return rc.superTypeTexts.any { text ->
             // A supertype text carries its constructor call and type arguments (`Adapter()`, `Comparator<Int>`).
             val name = text.substringBefore('<').substringBefore('(').trim()
-            if (name.isEmpty()) false else resolveTypeName(name, rc.ctx)?.let { !isKnownType(it) } ?: true
+            if (name.isEmpty()) false else resolveTypeName(name, rc.ctx, rc.fqn)?.let { !isKnownType(it) } ?: true
         }
     }
 
@@ -3545,7 +3578,7 @@ class KotlinSymbolService(
         if (Builtins.builtinSupertypes(fqn).isNotEmpty()) return true
         val declared = model().classByFqn[fqn] ?: return false
         for (text in declared.superTypeTexts) {
-            val resolved = resolveTypeName(text, declared.ctx)
+            val resolved = resolveTypeName(text, declared.ctx, declared.fqn)
             if (resolved == null) return false
             if (!closureKnown(resolved, visited)) return false
         }
