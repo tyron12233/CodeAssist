@@ -185,8 +185,11 @@ private fun KotlinResolver.importedSingletonExtensions(
         if (member != null && namePrefix.isNotEmpty() && !member.startsWith(namePrefix, ignoreCase = true)) continue
         val candidates =
             if (service.isSingletonObject(container)) service.membersForCompletion(container, emptyList(), member ?: namePrefix)
-            // Not a singleton itself: the import may still reach its COMPANION's member (`import Foo.bar`).
+            // Not a singleton itself: the import may still reach its COMPANION's member (`import Foo.bar`),
+            // or, for a Java container, its statics.
             else service.companionMembersFor(container, member ?: namePrefix)
+                .ifEmpty { service.membersForCompletion(container, emptyList(), member ?: namePrefix)
+                    .filter { Modifier.STATIC in it.modifiers } }
         candidates.asSequence()
             .filter { member == null || it.name == member }
             .filter { it.isExtension && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets }
@@ -200,7 +203,13 @@ private fun KotlinResolver.importedSingletonExtensions(
  * companion object: `import androidx.compose.material3.CardDefaults.cardColors` makes `cardColors()` a bare
  * call, `import androidx.compose.ui.input.key.KeyEventType.Companion.KeyUp` makes `KeyUp` a bare read. A
  * member of a singleton needs no dispatch receiver at the call site, which is exactly why Kotlin lets it be
- * imported; a member of a regular class can never be.
+ * imported; a member of a regular Kotlin class can never be.
+ *
+ * A JAVA class's STATICS are the third container, and the one the Kotlin side has no equivalent of:
+ * `import org.junit.jupiter.api.Assumptions.assumeTrue` makes `assumeTrue(…)` a bare call although
+ * `Assumptions` is neither an object nor has a companion. They need no dispatch receiver for the same reason
+ * the other two don't, so Kotlin imports them by simple name the same way. Only reached when the companion
+ * lookup came up empty, which is every Java container and no Kotlin one.
  *
  * The same rule as [importedSingletonExtensions], for the other half of it: there the import puts a member
  * EXTENSION on some receiver, here it puts a plain member in the bare-name scope. Both import spellings are
@@ -230,8 +239,11 @@ internal fun KotlinResolver.importedSingletonMembers(
         }
         val candidates =
             if (service.isSingletonObject(container)) service.membersForCompletion(container, emptyList(), member ?: namePrefix)
-            // Not a singleton itself: the import may still reach its COMPANION's member (`import Foo.bar`).
+            // Not a singleton itself: the import may still reach its COMPANION's member (`import Foo.bar`),
+            // or, for a Java container, its statics.
             else service.companionMembersFor(container, member ?: namePrefix)
+                .ifEmpty { service.membersForCompletion(container, emptyList(), member ?: namePrefix)
+                    .filter { Modifier.STATIC in it.modifiers } }
         for (c in candidates) {
             if (c.isExtension) continue // its sibling's business — it needs a receiver, not a bare name
             if (member != null && c.name != member) continue
