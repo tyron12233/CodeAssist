@@ -122,6 +122,30 @@ class KotlinRealWorldAnalysisSweepTest {
         val files = kotlinFilesUnder(module, skip = setOf("build", "iosMain", "iosTest"))
         assertTrue(files.size > 100, "expected this module's sources, found ${files.size}")
 
+        // `-Dkt.sweepOnly=<substring>` narrows the sweep to the matching files and prints EVERY error in
+        // them with its source line. Working a bucket means seeing the code behind a hit, and three samples
+        // per code across 335 files is not enough to tell a real false positive from a corpus artefact.
+        System.getProperty("kt.sweepOnly")?.let { only ->
+            val picked = files.filter { it.path.contains(only) }
+            assertTrue(picked.isNotEmpty(), "no file under $module matches '$only'")
+            for (file in picked) {
+                val relative = file.relativeTo(module).path.replace(File.separatorChar, '/')
+                val text = file.readText().replace("\r\n", "\n")
+                val doc = SnippetDoc(text, DiskFile(moduleSrcDir.resolve(relative)))
+                val errors = runBlocking {
+                    moduleAnalyzer.incrementalParser.parseFull(doc)
+                    moduleAnalyzer.analyze(doc.file).diagnostics
+                }.filter { it.severity == Severity.ERROR && it.code != KotlinDiagnosticCodes.SYNTAX }
+                println("  $relative: ${errors.size} errors")
+                for (d in errors) {
+                    val line = text.take(d.range.start).count { c -> c == '\n' } + 1
+                    println("    $line: [${d.code}] ${d.message}")
+                    println("       | ${text.lineSequence().elementAtOrNull(line - 1)?.trim()?.take(150)}")
+                }
+            }
+            return
+        }
+
         val report = sweep(files, module, moduleAnalyzer, classpathBound = emptySet(), docRoot = moduleSrcDir) { true }
 
         println(

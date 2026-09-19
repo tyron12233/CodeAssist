@@ -215,6 +215,9 @@ tasks.named<Test>("jvmTest") {
     val sweeping = System.getProperty("kt.sweep") != null || System.getProperty("kt.externalCorpus") != null
     if (System.getProperty("kt.sweep") != null) systemProperty("kt.repoRoot", rootDir.absolutePath)
     System.getProperty("kt.externalCorpus")?.let { systemProperty("kt.externalCorpus", it) }
+    // `-Dkt.sweepOnly=<path substring>` narrows the module sweep to matching files and dumps every error in
+    // them with its source line, for working one bucket. Forwarded for the same reason as the flags above.
+    System.getProperty("kt.sweepOnly")?.let { systemProperty("kt.sweepOnly", it) }
     if (sweeping) {
         // A sweep needs more heap than the fast gate's 1536m: it holds a whole corpus's source model, and the
         // module sweep stands a second one up over a 68-jar classpath in the same JVM. Measured: the full
