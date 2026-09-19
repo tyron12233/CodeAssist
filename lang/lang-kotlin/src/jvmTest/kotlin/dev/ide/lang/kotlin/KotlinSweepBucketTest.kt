@@ -116,6 +116,97 @@ class KotlinSweepBucketTest {
         )
     }
 
+    /**
+     * An `expect object`'s members carry no body, and an `object` is a `KtObjectDeclaration` -- the check
+     * tested `container is KtClass`, so every member of `expect object StoreFs` was told it needed one.
+     * Eighteen of those in a single multiplatform seam in this repository.
+     */
+    @Test
+    fun theMembersOfAnExpectObjectNeedNoBody() {
+        val diags = errors(
+            "ExpectObject.kt",
+            """
+            package demo
+            expect object Fs {
+                fun exists(path: String): Boolean
+                fun size(path: String): Long
+                val separator: String
+            }
+            """.trimIndent(),
+        )
+        assertTrue(diags.isEmpty(), "an `expect` declaration has no bodies; got ${diags.map { it.message }}")
+    }
+
+    /** A body IS still required where nothing excuses it. */
+    @Test
+    fun anOrdinaryObjectsMemberStillNeedsABody() {
+        val diags = errors(
+            "PlainObject.kt",
+            """
+            package demo
+            object Fs {
+                fun exists(path: String): Boolean
+            }
+            """.trimIndent(),
+        )
+        assertTrue(
+            diags.any { it.code == KotlinDiagnosticCodes.FUNCTION_NO_BODY },
+            "a concrete object's member needs a body; got ${diags.map { it.message }}",
+        )
+    }
+
+    /**
+     * An inline scope call runs its lambda exactly once, so a `return` inside it returns from the ENCLOSING
+     * function and the call cannot fall through.
+     */
+    @Test
+    fun aFunctionEndingInAScopeCallThatReturnsIsNotMissingAReturn() {
+        val diags = errors(
+            "ScopeReturn.kt",
+            """
+            package demo
+            class Holder {
+                private val lock = Any()
+                private var counts: MutableMap<String, Int>? = null
+                fun loaded(): MutableMap<String, Int> {
+                    counts?.let { return it }
+                    synchronized(lock) {
+                        val map = HashMap<String, Int>()
+                        counts = map
+                        return map
+                    }
+                }
+                fun viaRun(): Int = 0
+                fun viaRunBlock(): Int {
+                    run {
+                        return 1
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+        assertTrue(diags.isEmpty(), "both end in a scope call that returns; got ${diags.map { it.message }}")
+    }
+
+    /** A function that really can fall through is still flagged. */
+    @Test
+    fun aFunctionThatCanFallThroughIsStillFlagged() {
+        val diags = errors(
+            "FallsThrough.kt",
+            """
+            package demo
+            fun f(n: Int): Int {
+                if (n > 0) return 1
+                println(n)
+            }
+            """.trimIndent(),
+        )
+        assertTrue(
+            diags.any { it.code == KotlinDiagnosticCodes.MISSING_RETURN },
+            "the `if` has no else and the block ends without a return; got ${diags.map { it.message }}",
+        )
+    }
+
     companion object {
         val srcDir = tempProject(mapOf("Seed.kt" to "package demo\n"))
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))

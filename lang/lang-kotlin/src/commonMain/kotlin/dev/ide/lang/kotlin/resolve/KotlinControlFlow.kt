@@ -52,6 +52,12 @@ internal enum class Liveness { LIVE, DEAD, UNKNOWN }
 internal class KotlinControlFlow(private val resolver: KotlinResolver) {
 
     /** Whether control can complete [element] normally (fall through). See the class header for the contract. */
+    /** Scope calls with no receiver that invoke their lambda once, unconditionally. */
+    private val BARE_SCOPE_CALLS = setOf("run", "synchronized", "with", "runBlocking")
+
+    /** The same, called on a DOT receiver (`x.run { }`); `x?.run { }` is a different node and never matches. */
+    private val DOT_SCOPE_CALLS = setOf("run", "let", "also", "apply", "use")
+
     fun liveness(element: KtExpression?): Liveness = when (val e = unwrap(element)) {
         null -> Liveness.LIVE
         is KtReturnExpression, is KtThrowExpression, is KtBreakExpression, is KtContinueExpression -> Liveness.DEAD
@@ -135,8 +141,43 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
     /** A call is DEAD when it provably returns `Nothing` (`TODO()`/`error()`/`fail()`, or an inferred `Nothing`
      *  type); otherwise it completes normally → LIVE. (A bare call used as a statement does NOT satisfy a
      *  value-returning function's return requirement — that is exactly the missing-return we want to flag.) */
-    private fun callLiveness(e: KtExpression): Liveness =
-        if (isNothingReturning(e)) Liveness.DEAD else Liveness.LIVE
+    private fun callLiveness(e: KtExpression): Liveness {
+        if (isNothingReturning(e)) return Liveness.DEAD
+        // An inline SCOPE call runs its lambda exactly once and unconditionally, so a `return` inside that
+        // lambda is a non-local return from the enclosing function -- the call cannot fall through:
+        //
+        //     private fun loaded(): MutableMap<String, Int> {
+        //         counts?.let { return it }
+        //         synchronized(lock) { … ; return map }
+        //     }                                          // <- "a 'return' expression required"
+        //
+        // Both shapes in this repository are that one. No inference is involved (the note below explains why
+        // that matters here): a name match, then the lambda body's own liveness, which this pass walks anyway.
+        scopeCallLambdaBody(e)?.let { if (liveness(it) == Liveness.DEAD) return Liveness.DEAD }
+        return Liveness.LIVE
+    }
+
+    /**
+     * The lambda body of an inline scope call that is guaranteed to run exactly once — `run`/`synchronized`/
+     * `with`/`runBlocking` unqualified, or `run`/`let`/`also`/`apply`/`use` on a DOT receiver.
+     *
+     * A `?.` receiver is a [KtSafeQualifiedExpression], a different node, so the conditional form never
+     * reaches here. Anything else (a builder, a user function taking a lambda) is not known to invoke it and
+     * is left LIVE.
+     */
+    private fun scopeCallLambdaBody(e: KtExpression): KtExpression? {
+        val (call, qualified) = when (e) {
+            is KtCallExpression -> e to false
+            is KtDotQualifiedExpression -> (e.selectorExpression as? KtCallExpression ?: return null) to true
+            else -> return null
+        }
+        val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+        val known = if (qualified) name in DOT_SCOPE_CALLS else name in BARE_SCOPE_CALLS
+        if (!known) return null
+        val lambda = call.lambdaArguments.lastOrNull()?.getLambdaExpression()
+            ?: call.valueArguments.lastOrNull()?.getArgumentExpression() as? KtLambdaExpression
+        return lambda?.bodyExpression
+    }
 
     /** `x ?: <jump>` never falls through the elvis when the left is null (the RHS jumps); but the left may be
      *  non-null, so overall it still completes → LIVE. Only a top-level jump construct deadens (handled above).

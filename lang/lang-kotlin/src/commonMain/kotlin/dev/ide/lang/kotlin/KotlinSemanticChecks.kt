@@ -1061,15 +1061,38 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      * A member of an *abstract class* still needs a body unless it is itself `abstract`, so only the function's
      * own modifiers exempt it there.
      */
+    /**
+     * Whether [decl] or any declaration enclosing it is `expect` or `external` — the two forms whose members
+     * carry no body and no initializer because the implementation lives elsewhere.
+     *
+     * Walked over `KtClassOrObject`, not `KtClass`: an `object` is a `KtObjectDeclaration`, and
+     * `expect object Foo { fun bar(): Int }` is an ordinary multiplatform seam. Walked over the whole chain
+     * because `expect` propagates inward to nested declarations.
+     */
+    private fun declaredOrEnclosingExpectExternal(decl: KtDeclaration): Boolean {
+        if (decl.hasModifier(KtTokens.EXPECT_KEYWORD) || decl.hasModifier(KtTokens.EXTERNAL_KEYWORD)) return true
+        var node: KtElement? = decl.parent
+        while (node != null) {
+            if (node is KtClassOrObject &&
+                (node.hasModifier(KtTokens.EXPECT_KEYWORD) || node.hasModifier(KtTokens.EXTERNAL_KEYWORD))
+            ) return true
+            node = node.parent
+        }
+        return false
+    }
+
     private fun functionWithoutBody(fn: KtNamedFunction): Diagnostic? {
         if (fn.hasBody()) return null
         if (fn.hasModifier(KtTokens.ABSTRACT_KEYWORD) || fn.hasModifier(KtTokens.EXTERNAL_KEYWORD) ||
             fn.hasModifier(KtTokens.EXPECT_KEYWORD) || fn.hasModifier(KtTokens.ACTUAL_KEYWORD)
         ) return null
         val container = fn.getStrictParentOfType<KtClassOrObject>()
-        if (container is KtClass && (container.isInterface() || container.isAnnotation() ||
-                container.hasModifier(KtTokens.EXPECT_KEYWORD) || container.hasModifier(KtTokens.EXTERNAL_KEYWORD))
-        ) return null
+        if (container is KtClass && (container.isInterface() || container.isAnnotation())) return null
+        // `expect`/`external` on ANY enclosing declaration, and an OBJECT counts. This tested
+        // `container is KtClass`, so `expect object StoreFs { fun exists(path: String): Boolean }` -- a
+        // perfectly ordinary multiplatform seam -- had every one of its members reported as needing a body.
+        // `expect` also propagates INWARD, so a member of a nested declaration inherits it from any ancestor.
+        if (declaredOrEnclosingExpectExternal(fn)) return null
         val anchor = fn.nameIdentifier ?: return null
         val r = anchor.textRange
         return Diagnostic(
@@ -1432,9 +1455,11 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 val cls = owner.parent as? KtClassOrObject ?: return null
                 if (cls is KtClass &&
                     (cls.isInterface() || cls.hasModifier(KtTokens.ABSTRACT_KEYWORD) ||
-                        cls.hasModifier(KtTokens.SEALED_KEYWORD) || cls.hasModifier(KtTokens.EXPECT_KEYWORD) ||
-                        cls.hasModifier(KtTokens.EXTERNAL_KEYWORD))
+                        cls.hasModifier(KtTokens.SEALED_KEYWORD))
                 ) return null
+                // Same `expect object` blind spot as [functionWithoutBody]: an `expect` declaration's
+                // properties have no initializer by construction, and an `object` is not a `KtClass`.
+                if (declaredOrEnclosingExpectExternal(prop)) return null
                 // Deferred initialization in the constructor (`val x: Int; init { x = … }` or a secondary
                 // constructor body) is legal. Conservative: any assignment to the name in an init block or
                 // secondary constructor backs off (no full definite-assignment analysis), so a real "not on
