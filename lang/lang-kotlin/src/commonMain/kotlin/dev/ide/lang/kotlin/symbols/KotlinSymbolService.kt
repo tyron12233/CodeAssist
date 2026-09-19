@@ -3492,6 +3492,33 @@ class KotlinSymbolService(
     /** Whether [simpleName] is a `typealias` declared anywhere in the project source — the unresolved-TYPE
      *  diagnostic backs off on these (the source model resolves classes, not aliases, so an alias use would
      *  otherwise be a false positive). Same-file aliases are also checked against the live buffer at the call site. */
+    /**
+     * The FQN a non-generic project `typealias` names, or null.
+     *
+     * [typeFromText] expands an alias when it parses a TYPE, so `val f: DiskFile` always resolved. A
+     * CONSTRUCTOR call resolves its callee through [resolveTypeName], which names classifiers only, so
+     * `DiskFile(path)` where `typealias DiskFile = DiskVirtualFile` read as an unresolved reference from every
+     * file in the package except the one declaring the alias.
+     *
+     * Deliberately NOT folded into [resolveTypeName]: that would make every reference to an alias resolve to
+     * its target, and Go to Declaration on `Table` would land in the stdlib's `Map` rather than on the
+     * `typealias` line -- worse than the nothing it does today (see
+     * KotlinNavigationTest.theseResolveButHaveNoNavigableDeclarationYet, which is waiting for the alias to get
+     * a location of its own).
+     */
+    fun typeAliasTargetFqn(simpleName: String): String? {
+        if (aliasExpandDepth.get().value >= ALIAS_EXPAND_LIMIT) return null
+        val alias = model().typeAliasBySimpleName[simpleName]
+            ?.takeIf { it.typeParamCount == 0 && it.targetText.isNotBlank() } ?: return null
+        aliasExpandDepth.get().value++
+        return try {
+            val target = alias.targetText.substringBefore('<').removeSuffix("?").trim()
+            resolveTypeName(target, alias.ctx)?.takeIf { isKnownType(it) }
+        } finally {
+            aliasExpandDepth.get().value--
+        }
+    }
+
     fun isProjectTypeAlias(simpleName: String): Boolean = simpleName in model().typeAliasNames
 
     /**

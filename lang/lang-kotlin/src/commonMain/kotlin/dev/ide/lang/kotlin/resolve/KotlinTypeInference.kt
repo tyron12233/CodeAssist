@@ -508,6 +508,21 @@ internal fun KotlinResolver.typeOfCall(
 ): KotlinType? {
     val name =
         (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+    // A capitalized selector on an OBJECT receiver: `Codec.Writer(1)` where `object Codec { class Writer }`.
+    // An object IS its instance, so `inferType` gives the receiver a type and this reaches the member path --
+    // but an object is equally the namespace of its nested classifiers, and nothing named `Writer` is a member
+    // there, so the call constructs the nested type. Without this the call typed to nothing, and everything
+    // downstream backed off on the unknown type: the members resolved (those checks skip an unknown receiver)
+    // while `Codec.Writer(1).run { … }` established no implicit receiver and reported every name in the block
+    // unresolved. Gated on the nested type really existing AND no same-named member, so an ordinary member
+    // call -- including a factory method with a capitalized name -- is untouched.
+    if (receiverType != null && name.firstOrNull()?.isUpperCase() == true) {
+        val nested = "${receiverType.qualifiedName}.$name"
+        if (service.isKnownType(nested) &&
+            service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
+                .none { it.kind == SymbolKind.METHOD }
+        ) return constructorResultType(nested, call)
+    }
     // No receiver + Capitalized → a constructor call (the type itself, with its type parameters inferred
     // from the constructor arguments — `Box("s")` → Box<String>). A LOCAL class in scope (registered under a
     // synthetic FQN) is tried first, so `LocalClass()` in a function body types.
@@ -521,6 +536,9 @@ internal fun KotlinResolver.typeOfCall(
         // The enclosing class is passed so a NESTED type constructed by its simple name from inside the
         // enclosing body types as its own constructor result (`Level(21, "x")` inside
         // `object Api { data class Level(…) }`), matching the bare-name path in `typeOfName`.
+        // A project `typealias` constructed by its own name (`DiskFile(path)`) — resolved before the
+        // classifier lookup's verbatim fallback, which would hand back the alias name as if it were a type.
+        service.typeAliasTargetFqn(name)?.let { return constructorResultType(it, call) }
         service.resolveTypeName(name, fileContext, enclosingClassFqn(call.textRange.startOffset))?.let { typeFqn ->
             // A capitalized no-receiver call on a name that resolves to a TYPE is normally a constructor
             // (`Box("s")` → `Box<String>`). Two cases are NOT, and both route to a same-named top-level FACTORY

@@ -460,6 +460,17 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
             service.companionMembersFor(receiverType.qualifiedName, name)
                 .filter { it.name == name && it.kind == SymbolKind.METHOD }
         else emptyList()
+        // The nested type of an OBJECT receiver, when nothing named it is a member: `Codec.Writer(1)` where
+        // `object Codec { class Writer }` constructs the nested class. See the matching case in [typeOfCall].
+        if (members.isEmpty() && scopeExts.isEmpty() && companionMethods.isEmpty() &&
+            name.firstOrNull()?.isUpperCase() == true
+        ) {
+            val nested = "${receiverType.qualifiedName}.$name"
+            if (service.isKnownType(nested)) {
+                return service.constructorsOf(nested) +
+                    service.sourceClass(nested)?.constructors.orEmpty().map { sourceCtorSymbol(it, nested) }
+            }
+        }
         return members + scopeExts + companionMethods
     }
     val out = ArrayList<KotlinSymbol>()
@@ -487,6 +498,11 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
     // The enclosing class is passed so a NESTED type reached by its simple name from inside the enclosing body
     // yields its constructors (`Level(21, "x")` inside `object Api { data class Level(…) }`).
     if (name.firstOrNull()?.isUpperCase() == true) {
+        // A project `typealias` constructed by its own name (`DiskFile(path)`).
+        service.typeAliasTargetFqn(name)?.let { fqn ->
+            out += service.constructorsOf(fqn)
+            service.sourceClass(fqn)?.constructors?.forEach { rc -> out += sourceCtorSymbol(rc, fqn) }
+        }
         service.resolveTypeName(name, fileContext, enclosingClassFqn(call.textRange.startOffset))?.let { fqn ->
             out += service.constructorsOf(fqn)
             service.sourceClass(fqn)?.constructors?.forEach { rc ->

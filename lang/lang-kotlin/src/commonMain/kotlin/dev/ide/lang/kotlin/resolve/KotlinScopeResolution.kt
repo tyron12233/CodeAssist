@@ -648,6 +648,11 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
     // functions/properties AND classes/objects/typealiases (a same-file `object Foo` / `class Foo` is a
     // resolvable bare reference — `Foo()` / `Foo.bar` — before the index has caught up to the buffer).
     if (ktFile.declarations.any { it is KtNamedDeclaration && it.name == name }) return true
+    // A project `typealias` declared in ANOTHER file (`typealias DiskFile = DiskVirtualFile`, used as
+    // `DiskFile(path)` across the package). The same-file case is the live-buffer scan just above, which is
+    // why only the cross-file one read as unresolved. Suppression only, so a genuinely missing import of an
+    // alias under-reports rather than the reverse.
+    if (service.isProjectTypeAlias(name)) return true
     // Members of an ENCLOSING class of the live buffer — the symbol service indexes disk, not the file
     // being edited, so a same-file member (`field`, `helper()`) won't appear in membersOf() below.
     if (enclosingClassMembersContain(offset, name)) return true
@@ -874,7 +879,10 @@ fun KotlinResolver.constructorTypeFqn(name: String, offset: Int): String? {
     // constructor here, while the bare-name path (`typeOfName`) DID resolve it through the enclosing chain — so
     // the call fell through to the classifier-as-value type and [notCallable] reported "Expression 'Level' of
     // type Level cannot be invoked as a function".
-    return service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))?.takeIf { service.isKnownType(it) }
+    service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))
+        ?.takeIf { service.isKnownType(it) }?.let { return it }
+    // A project `typealias` constructed by its own name (`DiskFile(path)`). See [typeAliasTargetFqn].
+    return service.typeAliasTargetFqn(name)
 }
 
 fun KotlinResolver.enclosingClassFqn(offset: Int): String? = elementAt(offset)?.let { enclosingClassFqnOf(it) }
