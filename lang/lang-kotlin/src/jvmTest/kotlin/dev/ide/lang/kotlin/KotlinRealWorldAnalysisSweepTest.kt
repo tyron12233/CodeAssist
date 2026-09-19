@@ -95,6 +95,43 @@ class KotlinRealWorldAnalysisSweepTest {
         assertTrue(report.crashed == 0, "the analysis threw on ${report.crashed} of ${files.size} files")
     }
 
+    /**
+     * The third corpus: THIS module's own sources, against THIS module's REAL classpath.
+     *
+     * The other two sweeps carry the kotlin-stdlib jar and nothing else, which makes `kt.unresolved`
+     * meaningless and everything downstream of resolution meaningless with it -- a type mismatch or an
+     * argument count against a type we could not find says nothing. Handing the whole repository a real
+     * classpath does not work either: its 2,600 files span a hundred modules with different dependencies,
+     * and pointing one module's classpath at all of them was measured at over four minutes without
+     * finishing.
+     *
+     * One module, though, has an exactly correct classpath already: the one these tests run in. The test
+     * JVM's `java.class.path` IS `:lang-kotlin`'s test runtime classpath -- its dependencies as jars, its own
+     * output as directories -- so for files under `lang/lang-kotlin/src` every name they use is genuinely
+     * there to find. That makes this the only sweep whose RESOLUTION-dependent buckets mean anything, which
+     * is why `kt.unresolved` is counted here and excluded in the other two.
+     *
+     * `iosMain`/`iosTest` are left out: they compile against Kotlin/Native, which a JVM classpath has none of.
+     */
+    @Test
+    fun theCheckersReportNothingOnThisModulesOwnSourcesAgainstItsRealClasspath() {
+        val root = System.getProperty("kt.repoRoot")?.let(::File) ?: return
+        val module = File(root, "lang/lang-kotlin/src")
+        assertTrue(module.isDirectory, "expected this module's sources at $module")
+
+        val files = kotlinFilesUnder(module, skip = setOf("build", "iosMain", "iosTest"))
+        assertTrue(files.size > 100, "expected this module's sources, found ${files.size}")
+
+        val report = sweep(files, module, moduleAnalyzer, classpathBound = emptySet(), docRoot = moduleSrcDir) { true }
+
+        println(
+            "module sweep (real classpath): ${report.clean}/${report.counted} files clean, " +
+                "${report.crashed} crashed"
+        )
+        report.printCodes()
+        assertTrue(report.crashed == 0, "the analysis threw on ${report.crashed} of ${files.size} files")
+    }
+
     // ---- the sweep itself ----------------------------------------------------------------------------
 
     private fun kotlinFilesUnder(root: File, skip: Set<String>): List<File> =
@@ -109,8 +146,15 @@ class KotlinRealWorldAnalysisSweepTest {
      * number and the per-code tally are drawn from; the rest are still analyzed — the crash gate wants every
      * file — and reported only as a count.
      */
-    private fun sweep(files: List<File>, base: File, counts: (String) -> Boolean): Report {
-        val report = Report()
+    private fun sweep(
+        files: List<File>,
+        base: File,
+        with: KotlinSourceAnalyzer = analyzer,
+        classpathBound: Set<String> = CLASSPATH_BOUND,
+        docRoot: java.nio.file.Path = srcDir,
+        counts: (String) -> Boolean,
+    ): Report {
+        val report = Report(classpathBound)
         for (file in files) {
             val text = runCatching { file.readText().replace("\r\n", "\n") }.getOrNull() ?: continue
             // The RELATIVE path, not the base name. A real tree has many same-named files (`Array.kt`,
@@ -118,9 +162,9 @@ class KotlinRealWorldAnalysisSweepTest {
             // model merges their declarations, and the sweep then invents thousands of repeated-modifier and
             // conflicting-declaration reports that the checkers never actually produce.
             val relative = file.relativeTo(base).path.replace(File.separatorChar, '/')
-            val doc = SnippetDoc(text, DiskFile(srcDir.resolve(relative)))
+            val doc = SnippetDoc(text, DiskFile(docRoot.resolve(relative)))
             val diagnostics = runCatching {
-                runBlocking { analyzer.incrementalParser.parseFull(doc); analyzer.analyze(doc.file).diagnostics }
+                runBlocking { with.incrementalParser.parseFull(doc); with.analyze(doc.file).diagnostics }
             }.getOrElse { report.crash(relative, it); emptyList() }
 
             // Syntax errors are the parser's business and the `:kotlin-syntax` sweep already gates them; a
@@ -133,7 +177,7 @@ class KotlinRealWorldAnalysisSweepTest {
         return report
     }
 
-    private class Report {
+    private class Report(private val classpathBound: Set<String>) {
         /** The files the analysis THREW on, with what it threw. A count alone says the gate failed and
          *  nothing about where to look, and this gate is the one that matters most: the analysis runs on
          *  every keystroke, so an exception is a dead editor pane. */
@@ -171,7 +215,7 @@ class KotlinRealWorldAnalysisSweepTest {
             }
             this.counted++
             if (errors.isEmpty()) return
-            if (errors.any { it.code !in CLASSPATH_BOUND }) withErrors++
+            if (errors.any { it.code !in classpathBound }) withErrors++
             for (d in errors) {
                 val code = d.code ?: "<none>"
                 byCode.merge(code, 1, Int::plus)
@@ -189,7 +233,7 @@ class KotlinRealWorldAnalysisSweepTest {
                 spread.entries.sortedByDescending { it.value }.take(3)
                     .forEach { (f, c) -> println("      $c in $f") }
             }
-            byCode.keys.filter { it in CLASSPATH_BOUND }.forEach {
+            byCode.keys.filter { it in classpathBound }.forEach {
                 println("  ^ $it is classpath-bound: this harness holds the stdlib jar and nothing else, so a")
                 println("    `java.lang` (or Compose, or coroutines) name has nothing to resolve to. Not counted.")
             }
@@ -202,5 +246,45 @@ class KotlinRealWorldAnalysisSweepTest {
 
         val srcDir = tempProject(mapOf("Seed.kt" to "package demo\n"))
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))
+
+        /** The jars this test JVM runs against — exactly `:lang-kotlin`'s own compile+test classpath. */
+        private val moduleClasspath: List<java.nio.file.Path> =
+            System.getProperty("java.class.path").orEmpty()
+                .split(File.pathSeparatorChar)
+                .filter { it.endsWith(".jar") }
+                .map { java.nio.file.Paths.get(it) }
+                .filter { java.nio.file.Files.isRegularFile(it) }
+
+        /**
+         * LAZY, and that is not a style choice: standing a symbol service up over these 68 jars costs
+         * minutes, all of it before the first file is analyzed, and an eager `val` here made EVERY run of
+         * this class pay it -- including the repository sweep, which does not use it at all.
+         */
+        /**
+         * THIS module's real source root.
+         *
+         * The other two sweeps hand every file a path under the shared temp [srcDir], which is enough for
+         * them because they judge one file at a time and discard `kt.unresolved` wholesale. This sweep counts
+         * it, so the model has to be able to FIND the module: `SourceIndexBuilder.build` walks the source
+         * roots and reads each file off disk, so a root pointing at a temp directory that holds one seed file
+         * gives the analysis nothing to resolve a sibling declaration against. Rooted here, a reference to a
+         * class in the file next door resolves the way it does in the editor.
+         */
+        private val moduleSrcDir: java.nio.file.Path =
+            java.nio.file.Paths.get(System.getProperty("kt.repoRoot").orEmpty(), "lang/lang-kotlin/src")
+
+        val moduleAnalyzer: KotlinSourceAnalyzer by lazy {
+            KotlinSourceAnalyzer(fakeContext(moduleSrcDir, moduleClasspath)).apply {
+                // The extension scan of 68 jars is what this sweep costs, and without a cache directory it
+                // is paid IN FULL on every run -- measured at over nine minutes, before a single file is
+                // analyzed. `ClasspathReader` persists each jar's scan here content-keyed, which is what the
+                // product does through `analyzerFor`; the harness simply never passed one. Under the build
+                // directory so it survives between runs and is cleaned with everything else.
+                extensionCacheDir = java.nio.file.Paths.get(
+                    System.getProperty("kt.repoRoot").orEmpty(),
+                    "lang/lang-kotlin/build/tmp/sweep-extension-cache",
+                ).also { java.nio.file.Files.createDirectories(it) }
+            }
+        }
     }
 }

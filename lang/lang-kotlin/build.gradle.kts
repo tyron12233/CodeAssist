@@ -216,6 +216,11 @@ tasks.named<Test>("jvmTest") {
     if (System.getProperty("kt.sweep") != null) systemProperty("kt.repoRoot", rootDir.absolutePath)
     System.getProperty("kt.externalCorpus")?.let { systemProperty("kt.externalCorpus", it) }
     if (sweeping) {
+        // A sweep needs more heap than the fast gate's 1536m: it holds a whole corpus's source model, and the
+        // module sweep stands a second one up over a 68-jar classpath in the same JVM. Measured: the full
+        // suite with both sweeps died with "Java heap space" at 1536m and passes at 4g. Raised only when a
+        // sweep was asked for, so the ordinary gate keeps its smaller, faster fork.
+        maxHeapSize = "4g"
         // The sweep's OUTPUT is the whole point of running it, and a test task swallows stdout by default --
         // asking for the sweep and getting a silent BUILD SUCCESSFUL reads as "no findings" when it actually
         // means "you never saw them". Re-running is likewise not optional: the task is UP-TO-DATE from the
