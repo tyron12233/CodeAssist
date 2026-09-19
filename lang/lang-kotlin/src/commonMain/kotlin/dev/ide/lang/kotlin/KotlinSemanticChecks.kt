@@ -499,7 +499,20 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         // stdlib's `UByteArray` -- which declares a nested `class Iterator` and calls `Iterator(storage)` --
         // was told it could not instantiate an interface, because `kotlin.collections.Iterator` is what the
         // file-level lookup found.
-        val fqn = service.resolveTypeName(name, resolver.fileContext, enclosingClassFqnOf(callee)) ?: return null
+        // QUALIFIED first, when the call is one: `Field.Number(…)` names `Field`'s nested `Number`, and
+        // resolving only the selector sends the lookup to whatever else answers to `Number` -- here
+        // `kotlin.Number`, which is abstract, so a perfectly ordinary sealed hierarchy was told it could not
+        // be instantiated. A nested type whose simple name is a built-in's (`Number`, `Error`, `Function`)
+        // is exactly what a sealed UI/result hierarchy is made of.
+        val qualified = (call.parent as? KtQualifiedExpression)
+            ?.takeIf { it.selectorExpression === call }
+            ?.receiverExpression?.text?.trim()
+            ?.takeIf { it.isNotEmpty() && it.none { c -> c == '(' || c == ' ' } }
+            ?.let { "$it.$name" }
+        val fqn = qualified?.let { service.resolveTypeName(it, resolver.fileContext, enclosingClassFqnOf(callee)) }
+            ?.takeIf { service.isKnownType(it) }
+            ?: service.resolveTypeName(name, resolver.fileContext, enclosingClassFqnOf(callee))
+            ?: return null
         if (service.isNonInstantiableType(fqn) != true) return null
         if (service.typeHasCompanionObject(fqn)) return null
         // SAM conversion: `Runnable { … }`, `Comparator(::cmp)`, `OnClickListener { … }` build a functional-
@@ -862,6 +875,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
             else -> false
         }
         if (assignable) return null
+        // A COMPOUND assignment does not need an assignable target. `a += b` is `a.plusAssign(b)` whenever the
+        // left side's type declares that operator, and only falls back to `a = a + b` when it does not -- so
+        // `out.getOrPut(k) { HashSet() } += v`, which mutates the set the call returned, is ordinary Kotlin and
+        // was being reported as "Variable expected". Whether a `plusAssign` exists is a type question this
+        // check does not ask, so it backs off for everything but a LITERAL, which can never have one.
+        if (e.operationToken != KtTokens.EQ && lhs !is KtConstantExpression) return null
         val r = lhs.textRange
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Variable expected", KotlinDiagnosticCodes.VARIABLE_EXPECTED)
     }
@@ -1379,6 +1398,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         val t = tr?.text?.trim() ?: return false // no explicit annotation → could be a platform type → back off
         return !t.endsWith("?")
     }
+
+    /** Stdlib extensions whose declared receiver is NULLABLE, so calling them on a nullable value is legal.
+     *  See [unsafeNullableAccess] for why this is a name list and what would replace it. */
+    private val NULLABLE_RECEIVER_EXTENSIONS = setOf(
+        "isNullOrBlank", "isNullOrEmpty", "orEmpty", "toString", "toBoolean",
+    )
 
     private val UNUSED_PARAM_EXEMPT_MODIFIERS = listOf(
         // override / open / abstract → the signature is a contract (an overrider uses the params); operator has
@@ -2469,6 +2494,14 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         return out
     }
 
+    /** The simple name a qualified expression selects (`a.b` / `a.b()` → `b`), or null. */
+    private fun selectorName(expr: KtDotQualifiedExpression): String? =
+        when (val sel = expr.selectorExpression) {
+            is KtNameReferenceExpression -> sel.getReferencedName()
+            is KtCallExpression -> (sel.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+            else -> null
+        }
+
     /**
      * `recv.member` on a nullable receiver without `?.`/`!!` (`val s: String? = …; s.length`). Conservative:
      * smart-casts are not modeled, so if the receiver is a simple name with any null-guard in the enclosing
@@ -2478,6 +2511,18 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         val receiver = expr.receiverExpression
         val recvType = resolver.inferType(receiver) ?: return null
         if (!recvType.nullable) return null
+        // An extension DECLARED on a nullable receiver may be called on a nullable value -- that is the whole
+        // point of `fun CharSequence?.isNullOrBlank()`, and flagging it underlines the very guard a reader
+        // writes to make the next line safe:
+        //
+        //     if (doc.isNullOrBlank()) return     // <- "only safe (?.) calls are allowed"
+        //
+        // Matched by NAME, because the symbol model carries an extension's receiver as a bare FQN with no
+        // nullability: teaching it otherwise is a wire-format change ([KotlinSymbol.receiverTypeFqn] is
+        // externalized), and these are stdlib names whose receivers are fixed. Same trade as the
+        // `requireNotNull`/`check` list in the null-flow pass. A user-declared `fun Foo?.bar()` is still
+        // flagged -- a known gap, and the one the format change would close.
+        if (selectorName(expr) in NULLABLE_RECEIVER_EXTENSIONS) return null
         if (receiver is KtNameReferenceExpression) {
             // Flow is now the authority: `smartCastNonNull` precisely models the direct guards (if/else, early
             // exit, `&&`/`||`, elvis, `!!`, `require`, `is`, and — for a `var` — reassignment). Only forms it does

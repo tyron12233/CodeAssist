@@ -19,6 +19,7 @@ import dev.ide.kotlin.syntax.psi.KtParenthesizedExpression
 import dev.ide.kotlin.syntax.psi.KtPostfixExpression
 import dev.ide.kotlin.syntax.psi.KtPrefixExpression
 import dev.ide.kotlin.syntax.psi.KtProperty
+import dev.ide.kotlin.syntax.psi.KtSafeQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtThisExpression
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.KtWhileExpression
@@ -234,7 +235,31 @@ private fun KotlinResolver.condGuarantees(
         c.baseExpression, !whenTrue, matches
     ) else false
 
+    // `v.isNullOrBlank()` / `v.isNullOrEmpty()` returning FALSE implies `v != null`, which is what their
+    // `returns(false) implies (this != null)` contract says. Those two are the idiomatic null guard for a
+    // nullable string or collection, and without them the most ordinary shape there is --
+    //
+    //     if (doc.isNullOrBlank()) return
+    //     doc.lineSequence()          // <- "only safe (?.) calls are allowed on a nullable receiver"
+    //
+    // reported the line AFTER the guard. Matched by name on a qualified call, the same way the preconditions
+    // below are: reading the real contract needs the declaration, and these two are stdlib names whose meaning
+    // is fixed. A project function that shadows one of them would be believed here, which is the same trade
+    // `requireNotNull`/`check` already make.
+    is KtDotQualifiedExpression -> !whenTrue && isNullOrEmptyGuard(c, matches)
+
+    is KtSafeQualifiedExpression -> false
+
     else -> false
+}
+
+/** `v.isNullOrBlank()` / `v.isNullOrEmpty()` on the matched value — false implies non-null (their contract). */
+private fun isNullOrEmptyGuard(c: KtDotQualifiedExpression, matches: (KtExpression?) -> Boolean): Boolean {
+    val call = c.selectorExpression as? KtCallExpression ?: return false
+    if (call.valueArguments.isNotEmpty()) return false
+    val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+    if (name != "isNullOrBlank" && name != "isNullOrEmpty") return false
+    return matches(c.receiverExpression)
 }
 
 /** Whether [binary] is `v == null` / `v != null` (either operand order) for the matched value. */
