@@ -1042,7 +1042,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         val out = ArrayList<Diagnostic>()
         for (clause in t.catchClauses) {
             val typeRef = clause.catchParameter?.typeReference ?: continue
-            val type = service.typeFromText(typeRef.text.removeSuffix("?").trim(), resolver.fileContext)
+            val type = service.typeFromText(typeRef.text.removeSuffix("?").trim(), resolver.fileContext, enclosingClassFqnOf(typeRef))
             if (type == null || type.isTypeParameter || !service.isKnownType(type.qualifiedName)) continue
             if (seen.any { it.isAssignableFrom(type) }) {
                 val r = typeRef.textRange
@@ -1143,7 +1143,8 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      * (`if (c) return 1` with no `else`), which it couldn't because it backed off on the first `return`.
      */
     private fun missingReturn(fn: KtNamedFunction, resolver: KotlinResolver): Diagnostic? {
-        val declared = service.typeFromText(fn.typeReference?.text ?: return null, resolver.fileContext) ?: return null
+        val declared = service.typeFromText(fn.typeReference?.text ?: return null, resolver.fileContext, enclosingClassFqnOf(fn))
+            ?: return null
         if (declared.qualifiedName == "kotlin.Unit" || declared.qualifiedName == "kotlin.Nothing") return null
         if (declared.isTypeParameter || !service.isKnownType(declared.qualifiedName)) return null
         val body = fn.bodyBlockExpression ?: return null
@@ -1308,7 +1309,8 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
     private fun uselessIsCheck(e: KtIsExpression, resolver: KotlinResolver): Diagnostic? {
         val typeRef = e.typeReference ?: return null
         if (typeRef.text.contains('<')) return null // a parameterized target → unchecked, don't judge
-        val target = service.typeFromText(typeRef.text.removeSuffix("?").trim(), resolver.fileContext) ?: return null
+        val target = service.typeFromText(typeRef.text.removeSuffix("?").trim(), resolver.fileContext, enclosingClassFqnOf(typeRef))
+            ?: return null
         val operand = resolver.inferType(e.leftHandSide) ?: return null
         if (operand.isTypeParameter || target.isTypeParameter) return null
         if (!service.isKnownType(operand.qualifiedName) || !service.isKnownType(target.qualifiedName)) return null
@@ -1979,7 +1981,8 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         val match = ctors.singleOrNull { n in it.count { p -> !p.hasDefaultValue() }..it.size } ?: return null
         for ((i, arg) in call.valueArguments.withIndex()) {
             val expr = arg.getArgumentExpression() ?: continue
-            val pt = service.typeFromText(match.getOrNull(i)?.typeReference?.text, resolver.fileContext) ?: continue
+            val pt = service.typeFromText(match.getOrNull(i)?.typeReference?.text, resolver.fileContext, enclosingClassFqnOf(expr))
+                ?: continue
             val at = resolver.inferType(expr) ?: continue
             if (isMismatch(pt, at)) {
                 val r = expr.textRange
@@ -2633,7 +2636,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
 
     private fun typeMismatch(declaredText: String?, init: KtExpression?, resolver: KotlinResolver): Diagnostic? {
         if (declaredText == null || init == null) return null
-        val declared = service.typeFromText(declaredText, resolver.fileContext)
+        // The declared type is resolved in the SAME lexical scope as the initializer it is compared against.
+        // Without the enclosing class a nested type loses to a same-named built-in, so `fun rewrite(): Result?`
+        // inside `object KotlinPackageRewrite { class Result }` read as `kotlin.Result?` while the returned
+        // value inferred the nested one -- "inferred type is Result but Result? was expected", on both sides
+        // of the same name.
+        val declared = service.typeFromText(declaredText, resolver.fileContext, enclosingClassFqnOf(init))
         nullForNonNull(declared, init)?.let { return it }
         val actual = resolver.inferType(init)
         if (!isMismatch(declared, actual)) return null
@@ -2654,7 +2662,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         val declaredText = fn.typeReference?.text
         // A block body with no declared return type has the type Unit; returning a value from it is an error.
         if (declaredText == null) return unitReturnMismatch(value, actual)
-        val declared = service.typeFromText(declaredText, resolver.fileContext)
+        val declared = service.typeFromText(declaredText, resolver.fileContext, enclosingClassFqnOf(fn))
         if (declared?.qualifiedName == "kotlin.Unit") return unitReturnMismatch(value, actual)
         nullForNonNull(declared, value)?.let { return it }
         if (!isMismatch(declared, actual)) return null
@@ -2704,7 +2712,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                     KotlinDiagnosticCodes.DESTRUCTURING,
                 )
             } else {
-                val declared = e.typeReference?.text?.let { service.typeFromText(it, resolver.fileContext) }
+                val declared = e.typeReference?.text?.let { service.typeFromText(it, resolver.fileContext, enclosingClassFqnOf(e)) }
                 if (declared != null && isMismatch(declared, comp)) {
                     val r = (e.typeReference ?: e).textRange
                     out += mismatchDiagnostic(r.startOffset, r.endOffset, comp, declared)
@@ -2828,7 +2836,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
     private fun uselessCast(expr: KtBinaryExpressionWithTypeRHS, resolver: KotlinResolver): Diagnostic? {
         if (expr.operationReference.getReferencedNameElementType() != KtTokens.AS_KEYWORD) return null // skip `as?`
         val typeRef = expr.right ?: return null
-        val target = service.typeFromText(typeRef.text, resolver.fileContext) ?: return null
+        val target = service.typeFromText(typeRef.text, resolver.fileContext, enclosingClassFqnOf(typeRef)) ?: return null
         val actual = resolver.inferType(expr.left) ?: return null
         if (actual.isTypeParameter || target.isTypeParameter) return null
         if (!service.isKnownType(actual.qualifiedName) || !service.isKnownType(target.qualifiedName)) return null
@@ -2849,7 +2857,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (expr.operationReference.getReferencedNameElementType() != KtTokens.AS_KEYWORD) return null // skip `as?`
         val typeRef = expr.right ?: return null
         if (typeRef.text.trim().endsWith("?")) return null // `as T?` — a null value could satisfy it
-        val target = service.typeFromText(typeRef.text, resolver.fileContext) ?: return null
+        val target = service.typeFromText(typeRef.text, resolver.fileContext, enclosingClassFqnOf(typeRef)) ?: return null
         val actual = resolver.inferType(expr.left) ?: return null
         if (actual.isTypeParameter || target.isTypeParameter) return null
         if (actual.qualifiedName == target.qualifiedName) return null
@@ -3169,7 +3177,8 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
             if (proj.projectionKind == KtProjectionKind.STAR) return@forEachIndexed
             val bound = bounds.getOrNull(i) ?: return@forEachIndexed
             val argRef = proj.typeReference ?: return@forEachIndexed
-            val argType = service.typeFromText(argRef.text, resolver.fileContext) ?: return@forEachIndexed
+            val argType = service.typeFromText(argRef.text, resolver.fileContext, enclosingClassFqnOf(argRef))
+                ?: return@forEachIndexed
             if (boundViolated(argType, bound)) {
                 val r = argRef.textRange
                 out += Diagnostic(
