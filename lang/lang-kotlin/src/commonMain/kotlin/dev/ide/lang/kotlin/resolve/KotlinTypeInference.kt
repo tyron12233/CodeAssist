@@ -173,8 +173,8 @@ internal fun KotlinResolver.arithmeticOperatorReturn(
         service.membersNamed(leftType.qualifiedName, leftType.typeArguments, convention)
             .filter { it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
     if (candidates.isEmpty()) return null
-    val chosen = if (rightType == null) candidates.firstOrNull()
-    else candidates.firstOrNull { c ->
+    val applicable = if (rightType == null) candidates
+    else candidates.filter { c ->
         (c.paramTypes.first() as? KotlinType)?.let {
             paramAcceptsArg(
                 it,
@@ -182,7 +182,32 @@ internal fun KotlinResolver.arithmeticOperatorReturn(
             )
         } == true
     }
-    return chosen?.type as? KotlinType
+    return mostSpecificByReceiver(applicable, leftType)?.type as? KotlinType
+}
+
+/**
+ * The most specific of several applicable operator overloads, by their EXTENSION RECEIVER.
+ *
+ * The stdlib declares `minus`/`plus` on `Set<T>` AND on `Iterable<T>`, and both accept the same argument.
+ * Taking the first match made `setA - setB` a `List<T>`, so `(this - other) + (other - this)` stopped being a
+ * `Set` -- the shape a symmetric difference is written to preserve. Kotlin picks the most specific applicable
+ * overload, which is what this ranks: a MEMBER beats every extension, an extension on the left type itself
+ * beats one on a supertype, and otherwise the receiver that is narrower than the most alternatives wins.
+ */
+private fun KotlinResolver.mostSpecificByReceiver(
+    candidates: List<KotlinSymbol>,
+    leftType: KotlinType,
+): KotlinSymbol? {
+    if (candidates.size <= 1) return candidates.firstOrNull()
+    return candidates.maxByOrNull { c ->
+        val recv = c.receiverTypeFqn ?: return@maxByOrNull Int.MAX_VALUE // a member, not an extension
+        if (recv == leftType.qualifiedName) return@maxByOrNull Int.MAX_VALUE - 1
+        candidates.count { o ->
+            val other = o.receiverTypeFqn
+            o !== c && other != null && other != recv &&
+                service.typeByFqn(other).isAssignableFrom(service.typeByFqn(recv))
+        }
+    }
 }
 
 /** Canonicalize a JVM scalar/value type to its Kotlin classifier before comparing two types: a type read from

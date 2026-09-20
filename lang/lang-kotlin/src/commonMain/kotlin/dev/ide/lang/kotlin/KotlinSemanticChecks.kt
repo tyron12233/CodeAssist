@@ -2326,12 +2326,33 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         val left = expr.left ?: return null
         if (left !is KtNameReferenceExpression && left !is KtDotQualifiedExpression) return null
         val right = expr.right ?: return null
-        val declared = resolver.inferType(left) ?: return null
+        val declared = assignmentTargetType(left, resolver) ?: return null
         nullForNonNull(declared, right)?.let { return it }
         val actual = resolver.inferType(right) ?: return null
         if (!isMismatch(declared, actual)) return null
         val r = right.textRange
         return mismatchDiagnostic(r.startOffset, r.endOffset, actual, declared)
+    }
+
+    /**
+     * The DECLARED type of an assignment target, which is not the same as its type at the assignment.
+     *
+     * `inferType` applies smart casts, and a variable is routinely assigned inside a narrowing of itself:
+     * `var p = e.parent; while (p is Paren) { p = p.parent }` advances the walk by assigning the wider
+     * declared type back, which is legal Kotlin and simply ends the smart cast. Reading the narrowed type as
+     * the target's type made that read "inferred type is KtElement? but KtParenthesizedExpression was
+     * expected" -- a complaint about the only line that could ever terminate the loop.
+     *
+     * A local's declaration type is taken straight from its binding; anything else (a qualified property
+     * target) keeps the inferred type, since Kotlin does not smart-cast a mutable property anyway.
+     */
+    private fun assignmentTargetType(left: KtExpression, resolver: KotlinResolver): KotlinType? {
+        if (left is KtNameReferenceExpression) {
+            val name = left.getReferencedName()
+            resolver.localsAt(left.textRange.startOffset).firstOrNull { it.name == name }
+                ?.let { return it.type as? KotlinType }
+        }
+        return resolver.inferType(left)
     }
 
     /**
