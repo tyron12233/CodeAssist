@@ -136,7 +136,23 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         // function actually exists (otherwise the `ifEmpty` branch below already resolves the local), so the
         // common case stays on the plain index lookup.
         service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD }
-            .let { if (it.isNotEmpty() && localFunctionsInScope(call.textRange.startOffset, name).isNotEmpty()) emptyList() else it }
+            .let {
+                // A local function, and equally a MEMBER of the enclosing class, SHADOWS a same-named
+                // top-level one. This lookup runs BEFORE the scope walk that knows about members, so a
+                // top-level hit did not merely compete with the member -- it won outright, and an UNIMPORTED
+                // one that Kotlin cannot even see won too. On a classpath carrying the Kotlin compiler, a
+                // class with its own `private fun typeOf()` bound to `kotlin.reflect.typeOf` (whose result has
+                // no `qualifiedName`) and one with `private fun analyze(…)` bound to the Analysis API's
+                // `fun <R> analyze(…): R` -- the source of "not enough information to infer type variable R"
+                // on a call to a function with no type parameters.
+                //
+                // Dropped only when the name really is declared nearer. Filtering every out-of-scope
+                // top-level instead regressed seven tests: a bare `Text`/`Column` and a bare scope member
+                // resolve here without their import, and that leniency is load-bearing elsewhere.
+                val shadowed = localFunctionsInScope(call.textRange.startOffset, name).isNotEmpty() ||
+                    enclosingClassMembersContain(call.textRange.startOffset, name)
+                if (it.isNotEmpty() && shadowed) emptyList() else it
+            }
             .ifEmpty {
                 scopeSymbolsAt(
                     call.textRange.startOffset,

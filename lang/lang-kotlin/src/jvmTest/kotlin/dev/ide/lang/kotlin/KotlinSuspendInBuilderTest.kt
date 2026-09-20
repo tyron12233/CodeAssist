@@ -13,11 +13,12 @@ import kotlin.test.assertTrue
  * "Not enough information to infer type variable R" -- on a call to a function with an explicit return type
  * and no type parameters at all.
  *
- * NOT REPRODUCED. Four attempts, each closer to the real thing, all come back clean: a suspend call in
- * `runBlocking`, the builder's result used, a plain call for contrast, and finally this module's exact helper
- * shape with `kotlin-test` and the `dev.ide.lang.dom` jar on the classpath. Whatever triggers it belongs to
- * the full-module sweep rather than to the shape, so the bucket is left standing and these cases are kept as
- * the record of what is already correct. Anyone picking it up should start from the sweep, not from here.
+ * FOUND, and it was none of these. The trigger was the NAME: this module's classpath carries the Kotlin
+ * compiler, whose `org.jetbrains.kotlin.analysis.api.analyze` is `fun <R> analyze(…): R`, and callee
+ * resolution let that unimported top-level beat the class's own `private fun analyze(…)`. See
+ * [KotlinUnimportedTopLevelShadowTest]. These cases stay as the record of what was already correct -- and as
+ * the reminder that four reconstructions from outside the sweep all came back clean, while one probe file
+ * placed INSIDE it found the answer immediately.
  */
 class KotlinSuspendInBuilderTest {
 
