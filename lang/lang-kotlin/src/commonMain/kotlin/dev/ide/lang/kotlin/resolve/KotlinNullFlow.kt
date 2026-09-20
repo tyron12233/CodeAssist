@@ -263,10 +263,55 @@ private fun isNullOrEmptyGuard(c: KtDotQualifiedExpression, matches: (KtExpressi
 }
 
 /** Whether [binary] is `v == null` / `v != null` (either operand order) for the matched value. */
-private fun isNullCmp(binary: KtBinaryExpression, matches: (KtExpression?) -> Boolean): Boolean =
-    (matches(binary.left) && isNullLit(stripParens(binary.right))) || (matches(binary.right) && isNullLit(
-        stripParens(binary.left)
-    ))
+private fun KotlinResolver.isNullCmp(
+    binary: KtBinaryExpression,
+    matches: (KtExpression?) -> Boolean
+): Boolean {
+    val l = stripParens(binary.left)
+    val r = stripParens(binary.right)
+    val operand = when {
+        isNullLit(r) -> l
+        isNullLit(l) -> r
+        else -> return false
+    }
+    return matches(operand as? KtExpression) || safeCallResultOf(operand, matches)
+}
+
+/**
+ * Whether [operand] is a local holding the result of a SAFE-call chain rooted at the matched value, so that
+ * `operand != null` proves the value non-null.
+ *
+ * ```
+ * val enclosing = leaf?.getParentOfType<KtProperty>()
+ * if (enclosing != null) leaf.textRange          // `leaf` is non-null here
+ * ```
+ *
+ * A null `leaf` makes `enclosing` null, so the guard cannot pass with a null `leaf` -- which is why Kotlin
+ * smart-casts it and this module writes the shape freely. Restricted to an immutable local (`val`, no
+ * delegate) declared before the guard: a `var` could have been reassigned between the initializer and the
+ * check, and then the implication no longer holds.
+ */
+private fun KotlinResolver.safeCallResultOf(
+    operand: KtElement?,
+    matches: (KtExpression?) -> Boolean
+): Boolean {
+    val name = (operand as? KtNameReferenceExpression)?.getReferencedName() ?: return false
+    val offset = operand.textRange.startOffset
+    var node: KtElement? = operand.parent
+    while (node != null) {
+        if (node is KtBlockExpression) {
+            val local = node.statements.firstOrNull {
+                it is KtProperty && it.name == name && it.textRange.endOffset <= offset
+            } as? KtProperty
+            if (local != null) {
+                if (local.isVar || local.hasDelegate()) return false
+                return safeChainRootMatches(local.initializer, matches)
+            }
+        }
+        node = node.parent
+    }
+    return false
+}
 
 /** An early-exit guard preceding [fromChild] in [block] that leaves the matched value non-null for the rest of
  *  the block: `if (v == null) <jump>` / `if (v != null) {} else <jump>`, `v ?: <jump>`, `v!!`, `requireNotNull(v)`. */
