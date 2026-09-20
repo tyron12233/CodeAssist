@@ -1618,7 +1618,15 @@ class KotlinSymbolService(
         val fqn = Builtins.kotlinTypeFor(fqnRaw) ?: fqnRaw
         // Always include kotlin.Any: `T.let`/`also`/`run`/`apply`/… (unbounded type-param receiver) are keyed
         // there and apply to every instance, and a builtin supertype chain may not list Any explicitly.
-        val targets = (listOf(fqn, "kotlin.Any") + kotlinSupertypesMemo(fqn)).toHashSet()
+        // Plus the JVM type a Kotlin TYPEALIAS stands for. `kotlin.text.StringBuilder` is an alias for
+        // `java.lang.StringBuilder`, and the stdlib's extensions on it (`clear`, `setRange`) are keyed by the
+        // JVM name -- while a value declared `sb: StringBuilder` resolves to the ALIAS, whose supertype chain
+        // is `CharSequence`/`Any` and never mentions the JVM type. So the two sides were keyed under different
+        // names and `sb.clear()` read as an unresolved reference. `isNotEmpty` hid it: that one IS keyed under
+        // the alias, which is why the alias, inline-only declarations and the `set` prefix each looked
+        // innocent when tried on their own.
+        val aliased = listOfNotNull(Builtins.javaTypeFor(fqn))
+        val targets = (listOf(fqn, "kotlin.Any") + aliased + kotlinSupertypesMemo(fqn)).toHashSet()
         val m = PrefixMatcher(namePrefix)
         fun matches(name: String) = when {
             namePrefix.isEmpty() -> true

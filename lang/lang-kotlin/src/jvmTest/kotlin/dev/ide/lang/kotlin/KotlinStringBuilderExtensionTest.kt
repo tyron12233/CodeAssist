@@ -9,13 +9,34 @@ import kotlin.test.assertTrue
 /**
  * Extensions and members on `StringBuilder`, whose Kotlin name is a typealias for `java.lang.StringBuilder`.
  *
- * KNOWN GAP: `sb.setRange(start, end, value)` still reports an unresolved reference. It is one stdlib
- * function and one hit in the module sweep, and nothing general explains it -- source extensions named
- * `setSomething` resolve, `@kotlin.internal.InlineOnly` extensions such as `isNotEmpty`/`isNullOrEmpty`
- * resolve, `MutableList.set` resolves, and `appendRange` on this very receiver resolves. Left alone
- * deliberately; the cases below are what pin the surrounding behaviour so a future fix has a boundary.
+ * `kotlin.text.StringBuilder` is an ALIAS for `java.lang.StringBuilder`, and the stdlib keys its extensions
+ * under either name: `clear`/`setRange` under the JVM type, `isNotEmpty` under the alias. A value declared
+ * `sb: StringBuilder` resolves to the alias, whose supertype chain is `CharSequence`/`Any` and never mentions
+ * the JVM type -- so half these extensions were unreachable and half were not.
+ *
+ * That split is what made every single-cause hypothesis look disproven: `isNotEmpty` is inline-only AND on an
+ * aliased receiver and resolved fine, `appendRange` resolved, a source extension named `setSomething`
+ * resolved. Each fact was true; the cause was which NAME the stdlib happened to key each one under.
  */
 class KotlinStringBuilderExtensionTest {
+
+    @Test
+    fun clearResolves() = clean(
+        """
+        fun f(sb: StringBuilder) {
+            sb.clear()
+        }
+        """,
+    )
+
+    @Test
+    fun setRangeResolves() = clean(
+        """
+        fun f(sb: StringBuilder) {
+            sb.setRange(0, 1, "x")
+        }
+        """,
+    )
 
     @Test
     fun appendRangeResolves() = clean(
