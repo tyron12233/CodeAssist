@@ -290,6 +290,9 @@ private fun KotlinResolver.earlyExitGuarded(
             }
 
             isElvisJump(st, matches) -> return true
+            // The same guard written as a local's initializer: `val t = x?.y ?: return`. Opening a function
+            // that way is the idiom this module uses to take a nullable parameter and get on with it.
+            st is KtProperty && st.initializer?.let { isElvisJump(it, matches) } == true -> return true
             isNotNullAssertStatement(st, matches) -> return true
             isNotNullPrecondition(st, matches) -> return true
         }
@@ -302,7 +305,28 @@ private fun KotlinResolver.isElvisJump(
     st: KtExpression, matches: (KtExpression?) -> Boolean
 ): Boolean {
     val e = stripParens(st) as? KtBinaryExpression ?: return false
-    return e.operationToken == KtTokens.ELVIS && matches(e.left) && branchAlwaysJumps(e.right)
+    return e.operationToken == KtTokens.ELVIS && safeChainRootMatches(e.left, matches) &&
+        branchAlwaysJumps(e.right)
+}
+
+/**
+ * Whether [expr] is the matched value, or a chain of SAFE calls rooted at it (`x?.y?.z`).
+ *
+ * `x?.y?.z ?: return` proves `x` non-null past it for the same reason `x ?: return` does: a null `x` makes
+ * the whole chain null, so the jump would have been taken. `val text = leaf?.containingFile?.text ?: return`
+ * opens several functions in this module and left every later use of `leaf` reported as a nullable receiver.
+ *
+ * Only the ROOT is claimed. The intermediate links are non-null too, but they are access PATHS rather than
+ * names, matched by text elsewhere with a `.` where the chain writes `?.`, so claiming them here would not
+ * match anyway.
+ */
+private fun safeChainRootMatches(expr: KtElement?, matches: (KtExpression?) -> Boolean): Boolean {
+    var cur: KtElement? = stripParens(expr)
+    while (cur != null) {
+        if (matches(cur as? KtExpression)) return true
+        cur = (cur as? KtSafeQualifiedExpression)?.let { stripParens(it.receiverExpression) }
+    }
+    return false
 }
 
 /** `v!!` used at the top of statement [st] (`v!!`, `v!!.foo`, `v!!()`), which throws when null. */

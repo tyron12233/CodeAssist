@@ -3,6 +3,7 @@ package dev.ide.lang.kotlin.resolve
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtBinaryExpressionWithTypeRHS
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
+import dev.ide.kotlin.syntax.psi.KtCallExpression
 import dev.ide.kotlin.syntax.psi.KtBreakExpression
 import dev.ide.kotlin.syntax.psi.KtContinueExpression
 import dev.ide.kotlin.syntax.psi.KtElement
@@ -241,6 +242,9 @@ internal fun KotlinResolver.branchAlwaysJumps(branch: KtExpression?): Boolean =
     when (val b = branch) {
         is KtReturnExpression, is KtThrowExpression, is KtBreakExpression, is KtContinueExpression -> true
         is KtBlockExpression -> branchAlwaysJumps(b.statements.lastOrNull())
+        // A call typed `Nothing` never returns either, and `?: error("…")` / `?: TODO()` is how half of
+        // Kotlin spells an early exit. Checked LAST, so the syntactic cases above never pay for an inference.
+        is KtCallExpression -> inferType(b)?.qualifiedName == "kotlin.Nothing"
         else -> false
     }
 
