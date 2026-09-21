@@ -1,4 +1,4 @@
-package dev.ide.core.build
+package dev.ide.deps.impl
 
 import dev.ide.deps.ResolvedArtifact
 import dev.ide.model.Coordinate
@@ -24,7 +24,7 @@ private typealias ArtifactId = Triple<String, String, String>
  * `group:name` when more than one of its Maven classifiers was declared (`gdx-platform`, once per ABI), and
  * each declaration must end up owning the artifact it actually named.
  */
-internal object DependencyPartition {
+object DependencyPartition {
 
     private val ResolvedArtifact.ga: Ga get() = coordinate.group to coordinate.name
     private val ResolvedArtifact.artifactId: ArtifactId
