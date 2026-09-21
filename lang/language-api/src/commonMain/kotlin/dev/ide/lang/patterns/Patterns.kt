@@ -2,6 +2,8 @@ package dev.ide.lang.patterns
 
 import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.NodeKind
+import dev.ide.lang.dom.argumentNodes
+import dev.ide.lang.dom.calleeName
 
 /**
  * A composable, IntelliJ-`ElementPattern`-style matcher. A [CompletionContributor] (and any other
@@ -64,6 +66,42 @@ class DomNodePattern internal constructor() : ObjectPattern<DomNode, DomNodePatt
 
     /** Free-form extra condition. */
     fun where(cond: (DomNode) -> Boolean): DomNodePattern = withCondition(cond)
+
+    // --- calls -------------------------------------------------------------
+    //
+    // A call's shape is the one place the backends still differ after the neutral ARGUMENT_LIST: Kotlin
+    // wraps each argument in an ARGUMENT node and Java does not. These four absorb that, so a pattern
+    // about a call is written once. See [dev.ide.lang.dom.argumentNodes].
+
+    /**
+     * The node is a call whose callee is SPELLED [name]: `Color(…)`, `graphics.Color(…)`, `Color<Int>(…)`
+     * and Java's `new Color(…)` all match `withCalleeNamed("Color")`.
+     *
+     * A name, not a symbol. Two different `Color`s in scope are indistinguishable here, which is the
+     * point: this is the cheap gate to run over every call in a file before resolving the few that pass.
+     */
+    fun withCalleeNamed(name: String): DomNodePattern = withCondition { it.calleeName() == name }
+
+    /** Some argument of this call matches [argument], whichever shape the backend's tree has. */
+    fun withArgument(argument: ElementPattern<DomNode>): DomNodePattern =
+        withCondition { n -> n.argumentNodes().any { argument.accepts(it) } }
+
+    /** The argument of this call at [index] (0-based) matches [argument]; no match when there are fewer. */
+    fun withArgumentAt(index: Int, argument: ElementPattern<DomNode>): DomNodePattern =
+        withCondition { n -> argument.accepts(n.argumentNodes().getOrNull(index)) }
+
+    /**
+     * This node IS an argument of a call matching [call] — the inverse of [withArgument], for a pattern
+     * whose subject is the argument (a completion position, a literal to decorate).
+     *
+     * Climbs through Kotlin's [NodeKind.ARGUMENT] wrapper when there is one, so the same pattern holds on
+     * a Java tree where the argument hangs off the list directly.
+     */
+    fun asArgumentOf(call: ElementPattern<DomNode>): DomNodePattern = withCondition { n ->
+        var up = n.parent
+        if (up != null && up.kind == NodeKind.ARGUMENT) up = up.parent
+        up != null && up.kind == NodeKind.ARGUMENT_LIST && call.accepts(up.parent)
+    }
 }
 
 /** Factory for [DomNode] patterns. */
@@ -75,7 +113,35 @@ object DomPatterns {
     fun memberAccess(): DomNodePattern = node(NodeKind.MEMBER_ACCESS)
     fun call(): DomNodePattern = node(NodeKind.METHOD_CALL)
     fun typeRef(): DomNodePattern = node(NodeKind.TYPE_REF)
+
+    /** A non-string constant: a number, a boolean, a char, `null`. Strings are [stringLiteral]. */
     fun literal(): DomNodePattern = node(NodeKind.LITERAL)
+
+    /** A string literal in any language: Java's `"x"` and text blocks, Kotlin's `"x"` and `"""…"""`. */
+    fun stringLiteral(): DomNodePattern = node(NodeKind.STRING_LITERAL)
+
+    /** Any constant, string or not. */
+    fun anyLiteral(): DomNodePattern = node().withKind(setOf(NodeKind.LITERAL, NodeKind.STRING_LITERAL))
+
+    /** The `(…)` of a call. */
+    fun argumentList(): DomNodePattern = node(NodeKind.ARGUMENT_LIST)
+
+    /** Java's `new Foo(…)`, Kotlin's `: Base(…)`. A Kotlin `Foo()` is a [call] — see [invocation]. */
+    fun constructorCall(): DomNodePattern = node(NodeKind.CONSTRUCTOR_CALL)
+
+    /**
+     * Anything being invoked: a [call] or a [constructorCall].
+     *
+     * The kind that "calling `Foo(...)`" maps to is a property of the LANGUAGE, not of the code: Java's
+     * `new Foo()` is a constructor call and Kotlin's `Foo()` is a method call, because only resolution can
+     * tell a Kotlin constructor from a function. A pattern that means "is something being invoked here"
+     * wants both, and getting that wrong is silent.
+     */
+    fun invocation(): DomNodePattern =
+        node().withKind(setOf(NodeKind.METHOD_CALL, NodeKind.CONSTRUCTOR_CALL))
+
+    /** An [invocation] whose callee is spelled [name]. The one-liner most call patterns want. */
+    fun invocation(name: String): DomNodePattern = invocation().withCalleeNamed(name)
 
     /** Matches any non-null node — the default "applies everywhere" pattern. */
     fun anyNode(): ElementPattern<DomNode> = ElementPattern { it != null }

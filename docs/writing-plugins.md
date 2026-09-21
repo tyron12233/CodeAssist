@@ -1431,10 +1431,19 @@ Two extra pieces of context arrive for these places:
 - `ActionContext.documentText`: the live buffer, including unsaved changes. Compute edits against exactly
   this string; the host applies them to the same buffer, so offsets cannot drift.
 
-Node kinds are the open string set the engine's DOM uses (`class_decl`, `method_decl`, `block`,
-`method_call`, `literal`, and language-specific ids such as Kotlin's `kt.lambda`). Gate an action with
-`isVisible` so it is listed only where it applies: a popup the user opened to fix one thing should not
-fill up with actions that do not.
+Node kinds are the open string set the engine's DOM uses. Name them through the published constants
+rather than typing the strings: `NodeKind` (in `dev.ide.lang.dom`, `:model-api`) carries the neutral set,
+and `KotlinNodeKinds` / `JavaNodeKinds` / `XmlNodeKinds` sit beside it with the language-specific ids. A
+mistyped `NodeKind("kt.lamda")` compiles, registers and matches nothing, for ever, with no error anywhere
+— which is the whole reason the constants are exported and pinned by the SPI baseline.
+
+```kotlin
+visible = { it.caret?.nodeKind == NodeKind.METHOD_CALL.id }
+visible = { it.caret?.isInside(KotlinNodeKinds.LAMBDA.id) == true }
+```
+
+Gate an action with `isVisible` so it is listed only where it applies: a popup the user opened to fix one
+thing should not fill up with actions that do not.
 
 ```kotlin
 reg.register(

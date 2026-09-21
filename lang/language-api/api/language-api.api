@@ -965,9 +965,13 @@ dev/ide/lang/patterns/DomNodePattern
 	kind class
 	super dev/ide/lang/patterns/ObjectPattern
 	ctor ()V
+	method asArgumentOf(Ldev/ide/lang/patterns/ElementPattern;)Ldev/ide/lang/patterns/DomNodePattern;
 	method inside(Ldev/ide/lang/patterns/ElementPattern;)Ldev/ide/lang/patterns/DomNodePattern;
 	method inside-InuGyfI(Ljava/lang/String;)Ldev/ide/lang/patterns/DomNodePattern;
 	method where(Lkotlin/jvm/functions/Function1;)Ldev/ide/lang/patterns/DomNodePattern;
+	method withArgument(Ldev/ide/lang/patterns/ElementPattern;)Ldev/ide/lang/patterns/DomNodePattern;
+	method withArgumentAt(ILdev/ide/lang/patterns/ElementPattern;)Ldev/ide/lang/patterns/DomNodePattern;
+	method withCalleeNamed(Ljava/lang/String;)Ldev/ide/lang/patterns/DomNodePattern;
 	method withChild(Ldev/ide/lang/patterns/ElementPattern;)Ldev/ide/lang/patterns/DomNodePattern;
 	method withKind(Ljava/util/Set;)Ldev/ide/lang/patterns/DomNodePattern;
 	method withKind-InuGyfI(Ljava/lang/String;)Ldev/ide/lang/patterns/DomNodePattern;
@@ -980,13 +984,19 @@ dev/ide/lang/patterns/DomPatterns
 	kind class
 	super java/lang/Object
 	field static INSTANCE Ldev/ide/lang/patterns/DomPatterns;
+	method anyLiteral()Ldev/ide/lang/patterns/DomNodePattern;
 	method anyNode()Ldev/ide/lang/patterns/ElementPattern;
+	method argumentList()Ldev/ide/lang/patterns/DomNodePattern;
 	method call()Ldev/ide/lang/patterns/DomNodePattern;
+	method constructorCall()Ldev/ide/lang/patterns/DomNodePattern;
+	method invocation()Ldev/ide/lang/patterns/DomNodePattern;
+	method invocation(Ljava/lang/String;)Ldev/ide/lang/patterns/DomNodePattern;
 	method literal()Ldev/ide/lang/patterns/DomNodePattern;
 	method memberAccess()Ldev/ide/lang/patterns/DomNodePattern;
 	method nameRef()Ldev/ide/lang/patterns/DomNodePattern;
 	method node()Ldev/ide/lang/patterns/DomNodePattern;
 	method node-InuGyfI(Ljava/lang/String;)Ldev/ide/lang/patterns/DomNodePattern;
+	method stringLiteral()Ldev/ide/lang/patterns/DomNodePattern;
 	method typeRef()Ldev/ide/lang/patterns/DomNodePattern;
 dev/ide/lang/patterns/ElementPattern
 	kind interface

@@ -21,8 +21,10 @@ package dev.ide.plugin.action
  * @property languageId the language of the file the caret is in (`"java"`, `"kotlin"`, `"xml"`, …), or null
  *   when the file has no language backend.
  * @property nodeKind the kind id of the innermost tree node containing [offset], from the same open string
- *   set the DOM uses (`"method_call"`, `"class_decl"`, `"literal"`, and language-specific ids beyond those).
- *   Empty when the file could not be parsed at all.
+ *   set the DOM uses. Compare it against `dev.ide.lang.dom.NodeKind`'s constants and the per-language
+ *   `KotlinNodeKinds` / `JavaNodeKinds` / `XmlNodeKinds` beside them (`NodeKind.METHOD_CALL.id`) rather
+ *   than a literal: a mistyped id matches nothing and reports nothing. Empty when the file could not be
+ *   parsed at all.
  * @property nodeStart the innermost node's start offset.
  * @property nodeEnd the innermost node's end offset, exclusive.
  * @property nodeText the source text the innermost node covers. Capped at [MAX_NODE_TEXT] characters so a
