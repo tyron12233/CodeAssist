@@ -22,6 +22,13 @@ object DefaultImports {
         // JVM-platform default imports
         "java.lang",
         "kotlin.jvm",
+        // The stdlib's jdk7/jdk8 additions. `AutoCloseable.use` -- the one that makes `Files.walk(dir).use { }`
+        // work on a `Stream`, which is AutoCloseable but not Closeable -- is compiled into
+        // `kotlin.jdk7.AutoCloseableKt`, so the symbol carries package `kotlin.jdk7`. Kotlin resolves it with
+        // no import, and treating the package as out of scope left every such call reported as unresolved
+        // while the `Closeable` overload in `kotlin.io` resolved fine.
+        "kotlin.jdk7",
+        "kotlin.jdk8",
     )
 
     /** True if [packageFqn] is brought in by a Kotlin default import (so a simple name from it resolves). */
