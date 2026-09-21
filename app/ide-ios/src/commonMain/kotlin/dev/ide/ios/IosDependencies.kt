@@ -9,43 +9,48 @@ import dev.ide.deps.impl.HttpArtifactFetcher
 import dev.ide.deps.impl.MavenDependencyResolver
 import dev.ide.deps.impl.ResolverCache
 import dev.ide.model.Coordinate
+import dev.ide.model.Module
+import dev.ide.model.bridge.DependencyModelBridge
+import dev.ide.model.impl.ProjectModelStore
 import dev.ide.platform.ProgressReporter
 import dev.ide.platform.log.Log
 
 /**
- * What a project on this host depends on, and where its library classes come from.
+ * Resolving this host's dependencies: the network half of dependency management, over the model half.
  *
- * Those are one question here, not two. The other hosts keep declarations in the project model (`module.toml`
- * via `ProjectModelStore`) and ship `kotlin-stdlib.jar` as a classpath RESOURCE to extract; this host has
- * neither a project model nor a resource to extract, so both answers come from the same place: a file listing
- * declarations, and the Maven resolver that turns them into jars.
+ * **The declarations live in the project model**, exactly as they do on the desktop and Android hosts: one
+ * `LibraryDependency` per declared coordinate in the module's `module.toml`, and the resolved closure
+ * attached to a library in `.platform/libraries.json`. Reading and writing those is
+ * [DependencyModelBridge]'s, shared with every other host; what is here is what this host does differently,
+ * which is where a jar comes from and what the standard library counts as.
  *
- * **The declaration file.** `.platform/dependencies`, one `scope group:name:version` per line. A deliberately
- * dull format: read and written by this class alone, fixable by hand in the editor when something goes wrong,
- * and carrying exactly what the resolver needs and nothing else. When this host grows a real project model
- * these move into it, and this file becomes a migration.
+ * They used to live in a flat `.platform/dependencies` file, written when this host had no model to put them
+ * in. That file is migrated on open (see [IosProjectModel]) and a project's dependencies now mean the same
+ * thing on every host that opens it.
  *
- * **The standard library is the HOST's dependency, not the user's.** Every Kotlin file depends on it and a
- * project whose editor cannot resolve `List` is not worth opening, so it joins every resolution whether or
- * not anything declared it — but it is deliberately kept out of [declared]. A user who declared nothing has
- * declared nothing, and showing the stdlib as their declaration would put a row on the Dependencies screen
- * whose remove button has to refuse, silently, for the editor's sake. It appears in the resolved graph
- * instead, where its version is still visible and nothing pretends it can be taken away. A project that DOES
- * declare `kotlin-stdlib` overrides the version, which is the one case where the user should win.
+ * **The standard library is the HOST's dependency, not the user's,** and is deliberately NOT in the model.
+ * Every Kotlin file depends on it and a project whose editor cannot resolve `List` is not worth opening, so
+ * it joins the analysis classpath whether or not anything declared it. Declaring it into `module.toml`
+ * instead would write this host's Kotlin version into a project the other hosts already answer for with
+ * their own bundled stdlib, and would put a row on the Dependencies screen whose remove button has to
+ * refuse. It is a [hostClasspath] entry, where its version is still visible and nothing pretends it can be
+ * taken away. A project that DOES declare `kotlin-stdlib` overrides it, which is the one case where the user
+ * should win.
  *
  * **The cache IS the offline repository.** [ResolverCache] lays artifacts out in Maven's own directory
  * layout, so a coordinate already downloaded resolves with no network at all: the fetch happens once per
  * project, adding a second dependency re-downloads nothing, and every later open is a directory check.
  *
  * **What a classpath buys, precisely.** A jar makes library code RESOLVABLE: a type resolves by FQN or
- * through an explicit `import`, and its members come back from the jar. What makes it DISCOVERABLE — a bare
- * simple name through a default wildcard import, or `println` offered by name — is a lookup from a name to
- * the things that could satisfy it, which is what an index is. `IosKotlinAnalysis` builds one over these
- * jars; without it the jars would resolve what you name and offer nothing.
+ * through an explicit `import`, and its members come back from the jar. What makes it DISCOVERABLE, a bare
+ * simple name through a default wildcard import or `println` offered by name, is a lookup from a name to the
+ * things that could satisfy it, which is what an index is. `IosKotlinAnalysis` builds one over these jars;
+ * without it the jars would resolve what you name and offer nothing.
  *
- * Nothing here is required for the editor to start. [cachedJars] answers from disk and never touches the
- * network, so completion is available the instant a project opens; [resolve] improves it when it succeeds and
- * is ignored when it does not (a phone with no signal is the ordinary case, not an error).
+ * Nothing here is required for the editor to start. [classpathJars] answers from the model and the disk and
+ * never touches the network, so completion is available the instant a project opens; [resolveInto] improves
+ * it when it succeeds and is ignored when it does not (a phone with no signal is the ordinary case, not an
+ * error).
  *
  * [fetcher] is the module's one I/O seam, injected for the reason the resolver injects it: a test drives the
  * whole path against a fixture and never opens a socket.
@@ -56,117 +61,98 @@ internal class IosDependencies(
 ) {
 
     private val cache = ResolverCache(projectRoot)
-    private val file = IosFiles.join(projectRoot, DECLARATIONS)
 
-    /** A declared dependency: a coordinate, and the configuration it was declared on. */
-    data class Declaration(val coordinate: Coordinate, val scope: String)
+    /** The model operations, over whichever store the host hands in. */
+    private fun model(store: ProjectModelStore) = DependencyModelBridge(store)
 
-    // ---- declarations -------------------------------------------------------------------------------
+    // ---- the classpath ------------------------------------------------------------------------------
 
     /**
-     * What the user declared, in declaration order. Empty for a project nobody has added anything to.
+     * Every library jar the open project can see, plus the host's own.
      *
-     * Lines that do not parse are skipped rather than failing the read: this file is hand-editable, and one
-     * bad line must not cost a user the rest of their dependencies.
+     * The UNION across modules, not one module's classpath, because the analysis on this host indexes the
+     * whole project as one source model: there is no per-module compilation to keep classpaths apart for,
+     * and splitting them would mean a file resolving differently depending on which module claimed it.
      */
-    fun declared(): List<Declaration> =
-        if (!IosFiles.exists(file)) emptyList() else IosFiles.readText(file)
-            .lineSequence()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() && !it.startsWith("#") }
-            .mapNotNull { line ->
-                val scope = line.substringBefore(' ', DEFAULT_SCOPE).ifBlank { DEFAULT_SCOPE }
-                val rest = line.substringAfter(' ', line).trim()
-                Coordinate.parseOrNull(rest)?.let { Declaration(it, scope) }
-            }
-            .toList()
+    fun classpathJars(store: ProjectModelStore?): List<String> {
+        if (store == null) return hostClasspath()
+        val bridge = model(store)
+        return (hostClasspath(declaresStdlib(bridge, store)) + bridge.workspaceClasspath()).distinct()
+    }
 
     /**
-     * Everything to resolve: what the user declared, plus the standard library.
+     * The jars this HOST puts on every classpath: the Kotlin standard library, when nothing declared one.
      *
-     * The stdlib goes first so it is fetched first — on a slow connection that is the one artifact whose
-     * absence is felt — and is dropped when the project declares that artifact itself, so a user pinning a
-     * different Kotlin version gets the version they asked for rather than two.
+     * Answered from the cache alone. A first open with no signal therefore has no stdlib and says so through
+     * the editor rather than through an error, and the next open with signal has one.
      */
-    fun resolutionSet(): List<Coordinate> {
-        val userDeclared = declared().map { it.coordinate }
-        return if (userDeclared.any { it.isSameArtifactAs(STDLIB) }) userDeclared
-        else listOf(STDLIB) + userDeclared
-    }
+    fun hostClasspath(declaresStdlib: Boolean = false): List<String> =
+        if (declaresStdlib) emptyList()
+        else listOfNotNull(cache.fileFor(cache.relativePath(STDLIB, "jar")).takeIf { IosFiles.exists(it) })
 
-    /** Declare [coordinate] on [scope]. False when this `group:name` is already declared. */
-    fun add(coordinate: Coordinate, scope: String = DEFAULT_SCOPE): Boolean {
-        val current = declared()
-        if (current.any { it.coordinate.isSameArtifactAs(coordinate) }) return false
-        write(current + Declaration(coordinate, scope))
-        return true
-    }
-
-    /**
-     * Undeclare [coordinate], matched on `group:name`: the version is not part of the identity a user removes
-     * by, and the row they tapped may carry a version conflict resolution picked rather than the one declared.
-     */
-    fun remove(coordinate: Coordinate): Boolean {
-        val current = declared()
-        val kept = current.filterNot { it.coordinate.isSameArtifactAs(coordinate) }
-        if (kept.size == current.size) return false
-        write(kept)
-        return true
-    }
-
-    private fun write(declarations: List<Declaration>) {
-        IosFiles.parentOf(file)?.let { IosFiles.mkdirs(it) }
-        IosFiles.writeText(
-            file,
-            buildString {
-                append("# CodeAssist dependencies: one `scope group:name:version` per line.\n")
-                for (d in declarations) append(d.scope).append(' ').append(d.coordinate).append('\n')
-            },
-        )
-    }
+    /** True when some module declares the standard library itself, so the host must not add its own. */
+    private fun declaresStdlib(bridge: DependencyModelBridge, store: ProjectModelStore): Boolean =
+        store.workspace.projects.flatMap { it.modules }.any { module ->
+            bridge.declared(module).any { it.coordinate.group == STDLIB.group && it.coordinate.name == STDLIB.name }
+        }
 
     // ---- resolution ---------------------------------------------------------------------------------
 
     /**
-     * The jars already on disk for what is declared. No network, so it is safe on the completion path.
+     * Resolve everything [module] declares as ONE graph and attach the result to the model.
      *
-     * Read back from the resolver's cache rather than remembered in a side file: the cache is the record, and
-     * a jar that is present is usable whether this process put it there or a previous one did. A declared
-     * coordinate with nothing cached simply contributes nothing, which is what an unresolved dependency
-     * should cost.
+     * One graph rather than one resolve per declaration, because that is what makes conflict resolution mean
+     * anything: a single version per `group:name` across the whole closure, and a transitive that only a
+     * superseded version pulled in is pruned, exactly as Gradle and Maven produce.
+     *
+     * The host's stdlib is resolved alongside it and attached to NOTHING: it is not a declaration, so it
+     * gets no library and no row, only a jar in the cache that [hostClasspath] finds.
+     *
+     * Null when resolution fails outright, which leaves the previous libraries intact: an offline open must
+     * not empty a classpath that was correct yesterday.
      */
-    fun cachedJars(): List<String> = resolutionSet().mapNotNull { coordinate ->
-        cache.fileFor(cache.relativePath(coordinate, "jar")).takeIf { IosFiles.exists(it) }
+    suspend fun resolveInto(
+        store: ProjectModelStore,
+        module: Module,
+        progress: ProgressReporter = SilentProgress,
+    ): ResolutionResult? {
+        val bridge = model(store)
+        val declarations = bridge.declared(module)
+        val wantsStdlib = declarations.none { it.coordinate.group == STDLIB.group && it.coordinate.name == STDLIB.name }
+        val roots = (if (wantsStdlib) listOf(STDLIB) else emptyList()) + declarations.map { it.coordinate }
+        if (roots.isEmpty()) return null
+        val exclusions = declarations.filter { it.exclusions.isNotEmpty() }
+            .associate { it.coordinate to it.exclusions }
+        val result = runCatching {
+            resolver().resolve(roots, REPOSITORIES, ConflictPolicy.NEWEST, progress, exclusions = exclusions)
+        }.onFailure {
+            log.warn("resolve failed for $projectRoot: ${it.message}")
+        }.getOrNull() ?: return null
+
+        bridge.attach(module, result)
+        if (result.unresolved.isNotEmpty()) {
+            log.warn("classpath incomplete for ${module.name}: ${result.unresolved.joinToString()}")
+        }
+        return result
     }
 
     /**
-     * Resolve every declaration, downloading what is missing, and return the full graph.
+     * Resolve every module of the open project if anything it declares is missing, then report the jars.
      *
-     * Suspends and may go to the network. A failure is logged and returns null: the caller carries on with
-     * whatever [cachedJars] holds.
+     * The cheap path is the common one: with everything attached and cached this is a handful of `stat`
+     * calls and no resolver at all, which is what makes it safe to call on every project open.
      */
-    suspend fun resolve(progress: ProgressReporter = SilentProgress): ResolutionResult? =
-        runCatching {
-            resolver().resolve(resolutionSet(), REPOSITORIES, ConflictPolicy.NEWEST, progress)
-        }.onFailure {
-            log.warn("resolve failed for $projectRoot: ${it.message}")
-        }.getOrNull()
-
-    /**
-     * Resolve if anything declared is not cached yet, then report the jars on disk.
-     *
-     * The cheap path is the common one: with everything cached this is a handful of `stat` calls and no
-     * resolver at all, which is what makes it safe to call on every project open.
-     */
-    suspend fun ensure(): List<String> {
-        val wanted = resolutionSet()
-        val already = cachedJars()
-        if (already.size == wanted.size) return already
-        val result = resolve() ?: return already
-        if (result.unresolved.isNotEmpty()) {
-            log.warn("classpath incomplete for $projectRoot: ${result.unresolved.joinToString()}")
-        }
-        return cachedJars()
+    suspend fun ensure(store: ProjectModelStore?): List<String> {
+        if (store == null) return emptyList()
+        val bridge = model(store)
+        val modules = store.workspace.projects.flatMap { it.modules }
+        // A declaration with no library behind it has never resolved here, and a missing host stdlib is the
+        // first open of a project on a device that has not fetched one. Either is a reason to resolve;
+        // neither is a reason to fail.
+        val missingLibrary = modules.any { !bridge.fullyAttached(it) }
+        val missingStdlib = !declaresStdlib(bridge, store) && hostClasspath().isEmpty()
+        if (missingLibrary || missingStdlib) for (module in modules) resolveInto(store, module)
+        return classpathJars(store)
     }
 
     // ---- the picker ---------------------------------------------------------------------------------
@@ -201,7 +187,7 @@ internal class IosDependencies(
      *
      * A confirmed 404 is remembered for a week, which is what stops every open re-probing the `-sources.jar`
      * most libraries never publish. It also means an artifact that was genuinely missing and has since been
-     * published stays missing until the TTL expires — so an explicit Retry has to clear it, or the button
+     * published stays missing until the TTL expires, so an explicit Retry has to clear it, or the button
      * does nothing for the one case a user presses it in. Positive results are untouched: a released POM is
      * immutable, so this costs only the re-probe of what really was not found.
      */
@@ -218,11 +204,6 @@ internal class IosDependencies(
 
     companion object {
         private val log = Log.logger("ios-deps")
-
-        private const val DECLARATIONS = ".platform/dependencies"
-
-        /** Gradle's default configuration name, and the only one this host has a use for yet. */
-        const val DEFAULT_SCOPE = "implementation"
 
         /**
          * The Kotlin version this IDE's editor targets.
@@ -241,9 +222,5 @@ internal class IosDependencies(
             // so a project that wants one cannot resolve it without this repository.
             Repository("Google", "https://dl.google.com/dl/android/maven2"),
         )
-
-        /** Two coordinates naming the same artifact, whatever versions they carry. */
-        private fun Coordinate.isSameArtifactAs(other: Coordinate) =
-            group == other.group && name == other.name
     }
 }

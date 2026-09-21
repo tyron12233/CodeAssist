@@ -69,6 +69,9 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test) // the project/file operations are suspend functions
+            // Crc32, so a test can build a real `.aar` in memory and publish it to the fixture repository.
+            // The same archive reader the AAR exploder and every jar read on this platform already go through.
+            implementation(project(":kotlin-classfile"))
         }
 
         commonMain.dependencies {
@@ -108,6 +111,11 @@ kotlin {
             implementation(project(":project-model-api"))
             implementation(project(":project-model-impl"))
             implementation(project(":project-templates"))
+            // The model mapped onto the UI's module/dependency contracts: the same reading of a module and
+            // the same writing of an edit the desktop and Android hosts do, so a setting saved here means
+            // what it means there. What stays in this host is where a jar comes from and what the standard
+            // library counts as.
+            implementation(project(":model-bridge"))
         }
     }
 }

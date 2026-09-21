@@ -7,6 +7,11 @@ import dev.ide.ios.store.StoreConfig
 import dev.ide.deps.ArtifactKind
 import dev.ide.lang.kotlin.NavKind
 import dev.ide.model.Coordinate
+import dev.ide.model.Exclusion
+import dev.ide.model.bridge.DependencyModelBridge
+import dev.ide.model.bridge.ModuleConfigBridge
+import dev.ide.model.impl.ProjectModelStore
+import dev.ide.model.sanitizeCoordinate
 import dev.ide.platform.ConcurrentMap
 import dev.ide.platform.ProgressReporter
 import dev.ide.ui.StubBackend
@@ -22,20 +27,25 @@ import dev.ide.ui.backend.UiArtifactHit
 import dev.ide.ui.backend.UiArtifactSearch
 import dev.ide.ui.backend.UiCachedVersion
 import dev.ide.ui.backend.UiCompletionResult
+import dev.ide.ui.backend.UiConfigResult
 import dev.ide.ui.backend.UiDefinition
 import dev.ide.ui.backend.UiDepKind
 import dev.ide.ui.backend.UiDepModule
 import dev.ide.ui.backend.UiDependencyNode
 import dev.ide.ui.backend.UiInheritorMarker
 import dev.ide.ui.backend.UiInheritorTarget
+import dev.ide.ui.backend.UiModuleConfig
+import dev.ide.ui.backend.UiModuleConfigEdit
 import dev.ide.ui.backend.UiModuleDeps
 import dev.ide.ui.backend.UiModuleRef
+import dev.ide.ui.backend.UiModuleTypeOption
 import dev.ide.ui.backend.UiNavKind
 import dev.ide.ui.backend.UiNavOption
 import dev.ide.ui.backend.UiNavTarget
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiRepository
 import dev.ide.ui.backend.UiSemanticToken
+import dev.ide.ui.backend.UiSourceRootRole
 import dev.ide.ui.backend.UiTextRange
 import dev.ide.ui.backend.UiVersionConflict
 import dev.ide.lang.dom.Severity
@@ -71,9 +81,8 @@ import kotlinx.coroutines.withContext
  * has no answer for keeps the empty/`Unsupported` behaviour the UI already renders around, and this class is
  * only the part that is genuinely implemented. What that leaves out is now a short list, and one theme runs
  * through it: **there is no build here.** Compilation, running, signing, packaging and the SDK manager all
- * bottom out in JVM code (the Kotlin compiler, JDT, ASM, D8) with no Kotlin/Native counterpart, and the
- * project model that would describe a build has not crossed either — so module settings, source sets and
- * facets stay unanswered, and a project here is a directory of Kotlin files rather than a module graph.
+ * bottom out in JVM code (the Kotlin compiler, JDT, ASM, D8) with no Kotlin/Native counterpart, so what is
+ * missing is everything a build would tell you, not everything a project is.
  *
  * What DOES work is the editor, end to end:
  *
@@ -87,8 +96,13 @@ import kotlinx.coroutines.withContext
  *    see [IosKotlinAnalysis.highlighting].
  *  * A library classpath, resolved from Maven by `:deps-impl` and indexed by `:index-impl`, so library types
  *    and callables are not merely resolvable but discoverable. See [IosDependencies].
- *  * Dependency management over that same resolver: declare, remove, search, pick a version, and see the new
- *    library in completion without reopening the project.
+ *  * Dependency management over that same resolver, PER MODULE and through the project model: a declaration
+ *    is written to the module's own `module.toml`, so a dependency added on a phone is the dependency the
+ *    desktop and Android hosts read. The new library reaches completion without reopening the project.
+ *  * Module settings on that same model: type, language level, source sets and facet panels, read and
+ *    written through [dev.ide.model.bridge.ModuleConfigBridge], which is the code :ide-core runs. A facet
+ *    this host has no codec for (an Android project authored elsewhere) still renders and still
+ *    round-trips.
  *  * Find-in-files and go-to-symbol over the open project, both by walking it rather than indexing it. See
  *    [IosSearch] for why that is the right shape here and not a shortcut.
  *  * Go to Implementation and its gutter markers, off a subtype relation derived from the module's own source
@@ -122,7 +136,7 @@ class IosBackend(
      * Project creation and the project model behind it: the built-in templates, and what a created project
      * records about itself. See [IosProjects] for why the store is opened per operation rather than held.
      */
-    private val projectModel = IosProjects()
+    private val projectModel = IosProjectModel()
 
     /**
      * The Projects Store: browse, install, sign in, review, moderate.
@@ -225,8 +239,21 @@ class IosBackend(
 
     override fun readFile(path: String): String = IosFiles.readText(path)
 
-    override fun moduleNameForFile(path: String): String? =
-        active?.takeIf { path.startsWith(it.rootPath) }?.name
+    /**
+     * The module a file belongs to, by the module directory that contains it.
+     *
+     * Longest directory first, because a module rooted at the project (which is what an adopted folder
+     * gets) contains every other module's files too, and the innermost one is the owner. Falls back to the
+     * project's name for a path under no module at all, which is what a file beside the source roots is.
+     */
+    override fun moduleNameForFile(path: String): String? {
+        val project = active?.takeIf { path.startsWith(it.rootPath) } ?: return null
+        return projectModel.modules()
+            .filter { path.startsWith(it.dir.path.trimEnd('/') + "/") }
+            .maxByOrNull { it.dir.path.length }
+            ?.name
+            ?: project.name
+    }
 
     override fun createFile(dirPath: String, fileName: String, content: String): String? {
         val path = IosFiles.join(dirPath, fileName)
@@ -352,9 +379,9 @@ class IosBackend(
         }
         val root = active?.rootPath?.takeIf { it.isNotEmpty() } ?: return null
         kotlin?.let { return it }
-        // Built from whatever jars are ALREADY on disk — never a fetch, because this runs on the completion
+        // Built from whatever jars are ALREADY on disk, never a fetch, because this runs on the completion
         // path. `ensureClasspath` is what puts them there, and resets this so the next call picks them up.
-        val jars = dependenciesFor(root).cachedJars()
+        val jars = analysisClasspath()
         indexState.value = IndexUiStatus(
             building = true,
             message = "Indexing libraries",
@@ -383,6 +410,18 @@ class IosBackend(
             indexState.value = IndexUiStatus(message = "Indexed", fraction = 1.0)
         }
     }
+
+    /**
+     * The jars the analysis is built over: every module's resolved libraries, plus the host's own stdlib.
+     *
+     * Reads the model and the disk and never the network, which is what makes it safe on the completion
+     * path. Also what a test asserts a resolve actually produced, since the classpath is the only externally
+     * visible thing a download changes.
+     */
+    internal fun analysisClasspath(): List<String> =
+        active?.rootPath?.takeIf { it.isNotEmpty() }
+            ?.let { dependenciesFor(it).classpathJars(projectModel.storeFor(it)) }
+            .orEmpty()
 
     /**
      * Run [block] against the open project's analysis on the thread that owns it, or answer [fallback].
@@ -417,7 +456,9 @@ class IosBackend(
         // On the IO pool, not the caller's thread: opening a project is called from the UI, and `ensure`
         // downloads — through `NSURLSession` waited on with a semaphore, which blocks whatever thread it is
         // given. The same reason every store call moved off `Dispatchers.Default` on this platform.
-        val jars = withContext(ioDispatcher) { dependenciesFor(root).ensure() }
+        val jars = withContext(ioDispatcher) {
+            dependenciesFor(root).ensure(projectModel.open(root))
+        }
         if (jars.isNotEmpty()) resetAnalysis()
     }
 
@@ -751,7 +792,9 @@ class IosBackend(
         val generated = withContext(ioDispatcher) { projectModel.create(root, templateId, args) }
         generated.onFailure { e ->
             // Nothing half-written survives: a directory with a model the template did not finish writing
-            // opens as a damaged project, which is worse than not having created one.
+            // opens as a damaged project, which is worse than not having created one. The store goes first,
+            // or it would save the half-written model back over the deleted directory.
+            projectModel.close()
             IosFiles.delete(root)
             return UiProjectResult(false, e.message ?: "Could not create the project")
         }
@@ -762,10 +805,19 @@ class IosBackend(
         return UiProjectResult(true, "Created $rawName", root)
     }
 
+    /**
+     * Open a project: its model first, then its classpath.
+     *
+     * The model is opened here rather than lazily because everything else keys off it. Opening it also
+     * ADOPTS a folder that has none and MIGRATES this host's old flat declaration file (see
+     * [IosProjectModel.open]), so by the time the editor asks anything there is a module graph to answer
+     * from, whatever the folder looked like when it arrived.
+     */
     override suspend fun openProject(rootPath: String): Boolean {
         if (!IosFiles.isDirectory(rootPath)) return false
         resetAnalysis()
         active = projectInfo(rootPath)
+        withContext(ioDispatcher) { projectModel.reopen(rootPath) }
         ensureClasspath(rootPath)
         bumpProjects()
         return true
@@ -787,6 +839,9 @@ class IosBackend(
     }
 
     override suspend fun deleteProject(rootPath: String): Boolean {
+        // The model is closed BEFORE the directory goes: a store left open over a deleted root would save
+        // itself back into existence the next time anything touched it.
+        if (projectModel.storeFor(rootPath) != null) projectModel.close()
         if (!IosFiles.delete(rootPath)) return false
         if (active?.rootPath == rootPath) { resetAnalysis(); active = null }
         bumpProjects()
@@ -797,31 +852,90 @@ class IosBackend(
     // ---- ModuleService ------------------------------------------------------------------------------
 
     /**
-     * The open project, as the one module it is.
+     * The module configuration bridge over the open project's model, or null when no project is open.
      *
-     * A project here is a directory of Kotlin files with no build system, so there is nothing to enumerate:
-     * one module, named after the project. It exists because the Modules screen is the way into the
-     * Dependencies editor, and a backend that lists no modules leaves that editor unreachable regardless of
-     * what it can do.
-     *
-     * The rest of `ModuleService` stays unimplemented. Source sets, language level, facets, build features
-     * and packaging are all descriptions of a build, and this host does not have one; answering them with
-     * invented values would put an editor on screen whose Save button changes nothing.
+     * Every answer below is the model's, through the same [ModuleConfigBridge] the JVM host reads and writes
+     * with. What this host does NOT implement is the rest of `ModuleService`: build features, compiler
+     * plugins, packaging, keep-rule files and toolchain warnings are all descriptions of an Android BUILD,
+     * and this host has none. Those keep `StubBackend`'s "not supported" answers, which the screens already
+     * render an explanation around.
      */
+    private fun moduleConfig(): ModuleConfigBridge? = store()?.let { ModuleConfigBridge(it) }
+
     override fun configurableModules(): List<UiModuleRef> =
-        active?.let { listOf(UiModuleRef(editableModuleName(it), MODULE_TYPE_DISPLAY)) } ?: emptyList()
+        moduleConfig()?.configurableModules().orEmpty()
+
+    override suspend fun getModuleConfig(moduleName: String): UiModuleConfig? =
+        withContext(ioDispatcher) { moduleConfig()?.moduleConfig(moduleName) }
 
     /**
-     * What the Modules and Dependencies screens call the thing they edit.
+     * Save the language level and the facet tables.
      *
-     * ONE name, even for a project whose model has several modules, because [IosDependencies] keeps a
-     * single declaration file per project: there is one dependency set here, and listing a row per module
-     * would promise per-module editing this host does not have. The name comes from the model when it
-     * describes exactly one module (so the screen says `app`, as the tree does) and falls back to the
-     * project's own name for a folder with no model — which is what a project made by an older build is.
+     * The analysis is dropped afterwards because both inputs can change it: a language level decides what
+     * the parser accepts, and a facet table is what a project's own configuration is read out of.
      */
-    private fun editableModuleName(project: ProjectInfo): String =
-        projectModel.modules(project.rootPath).singleOrNull() ?: project.name
+    override suspend fun updateModuleConfig(moduleName: String, edit: UiModuleConfigEdit): UiConfigResult {
+        val bridge = moduleConfig() ?: return UiConfigResult(false, "Open a project first")
+        val result = withContext(ioDispatcher) { bridge.updateModuleConfig(moduleName, edit) }
+        if (result.success) resetAnalysis()
+        return result
+    }
+
+    override fun moduleSourceSets(moduleName: String): List<String> =
+        moduleConfig()?.moduleSourceSets(moduleName).orEmpty()
+
+    override fun addSourceRoot(
+        moduleName: String,
+        sourceSetName: String,
+        dirName: String,
+        role: UiSourceRootRole,
+    ): String? {
+        val created = moduleConfig()
+            ?.addSourceRoot(moduleName, sourceSetName, dirName, setOf(ModuleConfigBridge.roleOf(role)))
+        // The directory is new on disk as well as in the model, so the tree has to re-read, and the analysis
+        // walks the project for sources: a root it has never seen is one it is not indexing yet.
+        if (created != null) { bumpFs(); resetAnalysis() }
+        return created
+    }
+
+    override fun removeSourceRoot(moduleName: String, sourceSetName: String, rootPath: String): Boolean {
+        val removed = moduleConfig()?.removeSourceRoot(moduleName, sourceSetName, rootPath) ?: false
+        if (removed) resetAnalysis()
+        return removed
+    }
+
+    override fun addSourceSet(moduleName: String, name: String): Boolean =
+        moduleConfig()?.addSourceSet(moduleName, name) ?: false
+
+    /**
+     * What a NEW module here can be, which is narrower than what an opened one can be: the Android types
+     * are registered so a project that has one reads correctly (see [IosProjectModel]), and creating one
+     * would scaffold a module with no manifest that nothing on this host could build.
+     */
+    override fun availableModuleTypes(): List<UiModuleTypeOption> {
+        val creatable = projectModel.creatableTypeIds()
+        return moduleConfig()?.availableModuleTypes().orEmpty().filter { it.id in creatable }
+    }
+
+    override suspend fun createModule(
+        name: String,
+        typeId: String,
+        languageLevel: String?,
+        facetValues: Map<String, Map<String, Any?>>,
+    ): UiConfigResult {
+        val bridge = moduleConfig() ?: return UiConfigResult(false, "Open a project first")
+        val result = withContext(ioDispatcher) {
+            bridge.createModule(name, typeId, languageLevel, facetValues)
+        }
+        if (result.success) { bumpFs(); resetAnalysis() }
+        return result
+    }
+
+    override fun removeModule(name: String): Boolean {
+        val removed = moduleConfig()?.removeModule(name) ?: false
+        if (removed) { bumpFs(); resetAnalysis() }
+        return removed
+    }
 
     // ---- DependencyService --------------------------------------------------------------------------
 
@@ -829,43 +943,63 @@ class IosBackend(
 
     override val depsState: StateFlow<DepsResolveState> = depsProgress
 
-    /** The dependency store for the open project, or null when none is open. */
+    /** The resolver for the open project, or null when none is open. */
     private fun deps(): IosDependencies? =
         active?.rootPath?.takeIf { it.isNotEmpty() }?.let { dependenciesFor(it) }
 
+    /** The open project's model store, or null. Never opens one; [openProject] does that. */
+    private fun store(): ProjectModelStore? =
+        active?.rootPath?.takeIf { it.isNotEmpty() }?.let { projectModel.storeFor(it) }
+
+    /** The model's dependency operations for the open project, or null. */
+    private fun depsModel(): DependencyModelBridge? = store()?.let { DependencyModelBridge(it) }
+
+    /**
+     * Every module of the open project, each editable on its own.
+     *
+     * It used to be exactly one row whatever the model said, because declarations lived in a single file per
+     * project and a row per module would have promised per-module editing this host did not have. They live
+     * in `module.toml` now, so the promise is real: a two-module project made on a desktop is edited here
+     * one module at a time, as it is there.
+     */
     override fun dependencyModules(): List<UiDepModule> {
-        val deps = deps() ?: return emptyList()
-        val project = active ?: return emptyList()
-        return listOf(
+        val model = depsModel() ?: return emptyList()
+        return projectModel.modules().map { module ->
             UiDepModule(
-                name = editableModuleName(project),
+                name = module.name,
                 buildSystem = BUILD_SYSTEM,
-                // No Android module here, so an `.aar` has nothing to unpack into and nothing to merge its
+                // No Android build here, so an `.aar` has nothing to unpack into and nothing to merge its
                 // manifest or resources. Saying so keeps the picker from offering artifacts that would
                 // resolve and then contribute only their `classes.jar`.
                 acceptsAar = false,
-                dependencyCount = deps.declared().size,
-            ),
-        )
+                dependencyCount = module.dependencies.size,
+            )
+        }
     }
 
     /**
-     * The full dependency picture: what is declared, and the transitive closure resolution produced.
+     * The full dependency picture for one module: what it declares, and the closure resolution produced.
      *
      * Resolution runs here rather than being cached in a field because it is where the screen expects the
      * work to happen, and the second call is nearly free: everything already downloaded resolves out of the
      * on-disk Maven cache with no network at all.
      *
-     * When resolution fails entirely — no signal, most often — this still answers with the declared roots
+     * When resolution fails entirely (no signal, most often) this still answers with the declared roots
      * marked unresolved, which is the honest picture and the one that keeps the retry button meaningful. It
-     * is never null for the open project: a module that returns null renders as "no such module".
+     * is never null for a module of the open project: a module that returns null renders as "no such
+     * module".
      */
     override suspend fun moduleDependencies(moduleName: String): UiModuleDeps? {
         val deps = deps() ?: return null
-        val declarations = deps.declared()
+        val store = store() ?: return null
+        val model = DependencyModelBridge(store)
+        val module = projectModel.module(moduleName) ?: return null
+        val declarations = model.declared(module)
         val declaredByGa = declarations.associateBy { "${it.coordinate.group}:${it.coordinate.name}" }
 
-        val result = resolving { deps.resolve(it) }
+        // On the IO pool, not the caller's: the screen calls this from the UI thread, and a resolve blocks
+        // on `NSURLSession` waited on with a semaphore, which blocks whatever thread it is handed.
+        val result = withContext(ioDispatcher) { resolving { deps.resolveInto(store, module, it) } }
 
         val nodes = LinkedHashMap<String, UiDependencyNode>()
         val conflictedGas = result?.conflicts?.map { it.coordinate }?.toSet().orEmpty()
@@ -873,6 +1007,9 @@ class IosBackend(
         for (artifact in result?.resolved.orEmpty()) {
             val c = artifact.coordinate
             val ga = "${c.group}:${c.name}"
+            // The host's own stdlib rides along in the same resolve and is nobody's declaration. It stays in
+            // the graph, where its version is visible and nothing pretends it can be removed, and it is
+            // simply never marked `declared`.
             val declaration = declaredByGa[ga]
             nodes[c.toString()] = UiDependencyNode(
                 coordinate = c.toString(),
@@ -898,15 +1035,31 @@ class IosBackend(
                 kind = UiDepKind.Jar,
                 declared = true,
                 scope = d.scope,
+                exclusions = d.exclusions.map { it.toString() },
             )
         }
         for (node in declaredNodes) nodes.getOrPut(node.coordinate) { node }
+
+        // Module-on-module declarations carry no artifact, so they are roots and never graph nodes.
+        val moduleNodes = model.moduleDependencies(module).mapNotNull { entry ->
+            val target = projectModel.modules().firstOrNull { it.id == entry.target } ?: return@mapNotNull null
+            UiDependencyNode(
+                coordinate = target.name,
+                group = "",
+                name = target.name,
+                version = "",
+                kind = UiDepKind.Module,
+                declared = true,
+                scope = entry.scope.id,
+            )
+        }
+        for (node in moduleNodes) nodes.getOrPut(node.coordinate) { node }
 
         return UiModuleDeps(
             moduleName = moduleName,
             buildSystem = BUILD_SYSTEM,
             acceptsAar = false,
-            declared = declaredNodes,
+            declared = declaredNodes + moduleNodes,
             nodes = nodes.values.toList(),
             conflicts = result?.conflicts.orEmpty().map { UiVersionConflict(it.coordinate, it.requested, it.chosen) },
             unresolved = result?.unresolved.orEmpty().map { it.toString() },
@@ -917,18 +1070,23 @@ class IosBackend(
      * Re-attempt every declaration, forgetting what was recorded as absent first.
      *
      * The forgetting is the point. A confirmed 404 is negative-cached for a week, so without it Retry would
-     * skip the network entirely for exactly the artifacts the user is retrying — see
+     * skip the network entirely for exactly the artifacts the user is retrying, see
      * [IosDependencies.forgetAbsentArtifacts].
      */
     override suspend fun retryDependencyResolution() {
         val deps = deps() ?: return
+        val store = store() ?: return
         deps.forgetAbsentArtifacts()
-        resolving { deps.resolve(it) }
+        withContext(ioDispatcher) {
+            resolving { progress ->
+                projectModel.modules().forEach { module -> deps.resolveInto(store, module, progress) }
+            }
+        }
         resetAnalysis()
     }
 
     /**
-     * Declare [coordinate] and put it on the classpath.
+     * Declare [coordinate] on [moduleName] and put it on the classpath.
      *
      * The declaration is written first and the resolve follows, so a failed download leaves a dependency the
      * user can see and retry rather than one that silently did not happen. On success the analysis is
@@ -943,16 +1101,24 @@ class IosBackend(
         variant: String?,
     ): UiAddResult {
         val deps = deps() ?: return UiAddResult(false, "Open a project first")
-        val parsed = Coordinate.parseOrNull(coordinate)
+        val store = store() ?: return UiAddResult(false, "Open a project first")
+        val model = DependencyModelBridge(store)
+        val module = projectModel.module(moduleName)
+            ?: return UiAddResult(false, "No module '$moduleName'")
+        val project = projectModel.projectOf(module)
+            ?: return UiAddResult(false, "No project owns '$moduleName'")
+        val parsed = Coordinate.parseOrNull(sanitizeCoordinate(coordinate))
             ?: return UiAddResult(false, "\"$coordinate\" is not a group:name:version coordinate")
         if (parsed.version.isBlank()) {
             return UiAddResult(false, "${parsed.group}:${parsed.name} needs a version")
         }
-        if (!deps.add(parsed, scope)) {
-            return UiAddResult(false, "${parsed.group}:${parsed.name} is already a dependency")
+        val declared = withContext(ioDispatcher) {
+            model.declare(project, module, parsed, scope, exclusions.mapNotNull(Exclusion::parse), variant)
         }
+        if (!declared) return UiAddResult(false, "${parsed.group}:${parsed.name} is already a dependency")
 
-        val result = resolving { deps.resolve(it) }
+        val refreshed = projectModel.module(moduleName) ?: module
+        val result = withContext(ioDispatcher) { resolving { deps.resolveInto(store, refreshed, it) } }
         resetAnalysis()
 
         if (result == null) return UiAddResult(true, "Added $parsed, but it could not be downloaded")
@@ -962,10 +1128,33 @@ class IosBackend(
 
     /** Undeclare a dependency. The classpath shrinks on the next analysis, which is why this resets it. */
     override fun removeDependency(moduleName: String, coordinate: String): Boolean {
-        val deps = deps() ?: return false
-        val parsed = Coordinate.parseOrNull(coordinate) ?: return false
-        if (!deps.remove(parsed)) return false
-        resetAnalysis()
+        val store = store() ?: return false
+        val model = DependencyModelBridge(store)
+        val module = projectModel.module(moduleName) ?: return false
+        val project = projectModel.projectOf(module) ?: return false
+        val parsed = Coordinate.parseOrNull(coordinate)
+        val removed = if (parsed != null) model.undeclare(project, module, parsed)
+        else removeModuleDependency(project, module, coordinate)
+        if (removed) resetAnalysis()
+        return removed
+    }
+
+    /** A dependency row with no coordinate is a module-on-module one, named by the target module. */
+    private fun removeModuleDependency(
+        project: dev.ide.model.Project,
+        module: dev.ide.model.Module,
+        targetName: String,
+    ): Boolean {
+        val target = projectModel.module(targetName) ?: return false
+        val entries = module.dependencies.filterIsInstance<dev.ide.model.ModuleDependency>()
+            .filter { it.target == target.id }
+        if (entries.isEmpty()) return false
+        project.beginModification().apply {
+            val m = module(module.id)
+            entries.forEach { m.removeDependency(it) }
+            commit()
+        }
+        projectModel.save()
         return true
     }
 
@@ -981,6 +1170,39 @@ class IosBackend(
             ?: return UiAddResult(false, "\"$coordinate\" is not a coordinate")
         removeDependency(moduleName, coordinate)
         return addDependency(moduleName, parsed.copy(version = version).toString(), scope, exclusions)
+    }
+
+    /**
+     * Other modules [moduleName] may depend on.
+     *
+     * Answered from the model's own reachability check, so a choice that would close a cycle is not offered.
+     * A module dependency contributes no classpath here (nothing compiles, so there is no output to put on
+     * one), but it is what the project records and what the host that builds it will read.
+     */
+    override fun moduleDependencyTargets(moduleName: String): List<String> {
+        val model = depsModel() ?: return emptyList()
+        val module = projectModel.module(moduleName) ?: return emptyList()
+        return model.moduleDependencyTargets(module).map { it.name }
+    }
+
+    override suspend fun addModuleDependency(
+        moduleName: String,
+        targetModule: String,
+        scope: String,
+        variant: String?,
+    ): UiAddResult {
+        val store = store() ?: return UiAddResult(false, "Open a project first")
+        val model = DependencyModelBridge(store)
+        val module = projectModel.module(moduleName)
+            ?: return UiAddResult(false, "No module '$moduleName'")
+        val target = projectModel.module(targetModule)
+            ?: return UiAddResult(false, "No module '$targetModule'")
+        val project = projectModel.projectOf(module)
+            ?: return UiAddResult(false, "No project owns '$moduleName'")
+        val added = withContext(ioDispatcher) { model.declareModule(project, module, target, scope, variant) }
+        if (!added) return UiAddResult(false, "$moduleName already depends on $targetModule")
+        resetAnalysis()
+        return UiAddResult(true, "Added $targetModule")
     }
 
     /**
@@ -1017,9 +1239,9 @@ class IosBackend(
     }
 
     /**
-     * Where libraries resolve from. Both are built in and neither can be removed, because a user-added
-     * repository would have to persist somewhere and this host has no project model to persist it in — the
-     * same reason declarations live in a file of their own.
+     * Where libraries resolve from. Both are built in and neither can be removed: a user-added repository
+     * would have to persist per workspace, and the model's place for that (a project setting the resolver
+     * reads) is not wired on this host yet.
      */
     override fun repositories(): List<UiRepository> =
         IosDependencies.REPOSITORIES.map { UiRepository(it.name, it.url, builtin = true) }
@@ -1086,15 +1308,14 @@ class IosBackend(
     private fun projectInfo(root: String) = ProjectInfo(
         name = IosFiles.nameOf(root),
         rootPath = root,
-        moduleCount = projectModel.modules(root).size.coerceAtLeast(1),
+        moduleCount = projectModel.moduleNames(root).size.coerceAtLeast(1),
         lastOpened = IosFiles.modifiedMs(root),
     )
 
     private companion object {
         const val MAX_TREE_DEPTH = 12
 
-        /** What the one module this host has is called on screen, and the build system behind it: none. */
-        const val MODULE_TYPE_DISPLAY = "Kotlin"
+        /** The build system behind a module here: none, and the Dependencies screen says so. */
         const val BUILD_SYSTEM = "none"
 
         /** How much resolve chatter the editor's expandable log keeps. Bounded: it runs on a phone. */

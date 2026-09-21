@@ -279,9 +279,11 @@ class IosBackendTest {
     }
 
     @Test
-    fun moduleNameIsTheProjectForPathsInsideItAndNullOutside() = runTest {
+    fun moduleNameIsTheOwningModuleForPathsInsideItAndNullOutside() = runTest {
         val created = assertNotNull(backend.projects.createProject(template, mapOf("name" to "Mod")).rootPath)
-        assertEquals("Mod", backend.files.moduleNameForFile(mainKt(created)))
+        // The template's module, not the project: the model names one now, and a file under its directory
+        // belongs to it. It used to answer the project name because there was no module graph to ask.
+        assertEquals("app", backend.files.moduleNameForFile(mainKt(created)))
         assertNull(backend.files.moduleNameForFile("/elsewhere/Other.kt"))
     }
 
@@ -632,10 +634,10 @@ class IosBackendTest {
     @Test
     fun aCachedClasspathIsFoundWithNoNetwork() = runTest {
         val projectRoot = openTwoFileProject()
-        assertTrue(IosDependencies(projectRoot).cachedJars().isEmpty(), "nothing is cached for a fresh project")
+        assertTrue(IosDependencies(projectRoot).hostClasspath().isEmpty(), "nothing is cached for a fresh project")
 
         seedStdlib(projectRoot)
-        val cached = IosDependencies(projectRoot).cachedJars()
+        val cached = IosDependencies(projectRoot).hostClasspath()
 
         assertEquals(1, cached.size, "the seeded jar must be found at its Maven path")
         assertTrue(cached.single().endsWith("kotlin-stdlib-2.4.0.jar"), cached.single())
@@ -681,7 +683,7 @@ class IosBackendTest {
     @Test
     fun aProjectWithNoClasspathStillCompletesItsOwnCode() = runTest {
         val projectRoot = openTwoFileProject()
-        assertTrue(IosDependencies(projectRoot).cachedJars().isEmpty(), "nothing was seeded")
+        assertTrue(IosDependencies(projectRoot).hostClasspath().isEmpty(), "nothing was seeded")
 
         val text = "package demo\n\nfun use(): String {\n    val g = Greeter(\"w\")\n    return g.\n}\n"
         val names = backend.complete(IosFiles.join(projectRoot, "src/Use.kt"), text, text.indexOf("g.") + 2)
@@ -769,67 +771,6 @@ class IosBackendTest {
 
     // ---- dependencies: the Dependencies screen, and what it puts on the classpath --------------------
 
-    /**
-     * A fixture Maven repository, served at the REAL repository URLs this host resolves from.
-     *
-     * Serving Maven Central's own base rather than an invented one keeps [IosDependencies.REPOSITORIES]
-     * under test: a typo in a repository URL would make every one of these miss, which is exactly the
-     * failure a fixture at `https://fixture.invalid` would hide.
-     */
-    private class FixtureMaven : ArtifactFetcher {
-        private val byUrl = HashMap<String, ByteArray>()
-
-        /**
-         * Whether there is a network at all.
-         *
-         * False makes [fetch] THROW, which is what a real fetcher does when the socket fails — and is the
-         * distinction that matters here: a 404 returns null and is evidence the artifact does not exist (and
-         * is negative-cached for a week), while a dead socket is evidence of nothing and must not be.
-         */
-        var reachable: Boolean = true
-
-        override fun fetch(url: String): ByteArray? {
-            if (!reachable) throw IllegalStateException("The Internet connection appears to be offline")
-            return byUrl[url]
-        }
-
-        /** Publish `group:name:version`, optionally with the given jar bytes and transitive dependencies. */
-        fun publish(
-            group: String,
-            name: String,
-            version: String,
-            jar: ByteArray = "not-really-a-jar".encodeToByteArray(),
-            deps: List<Triple<String, String, String>> = emptyList(),
-        ) {
-            val rel = "${group.replace('.', '/')}/$name/$version/$name-$version"
-            byUrl["$CENTRAL/$rel.pom"] = buildString {
-                append("<?xml version=\"1.0\"?>\n<project>\n")
-                append("<groupId>$group</groupId><artifactId>$name</artifactId><version>$version</version>\n")
-                append("<packaging>jar</packaging>\n")
-                if (deps.isNotEmpty()) {
-                    append("<dependencies>\n")
-                    for ((g, a, v) in deps) {
-                        append("<dependency><groupId>$g</groupId><artifactId>$a</artifactId>")
-                        append("<version>$v</version></dependency>\n")
-                    }
-                    append("</dependencies>\n")
-                }
-                append("</project>\n")
-            }.encodeToByteArray()
-            byUrl["$CENTRAL/$rel.jar"] = jar
-        }
-
-        /** The real 2.6KB stdlib fixture, published where a real resolve would look for it. */
-        @OptIn(ExperimentalEncodingApi::class)
-        fun publishStdlib() = publish(
-            "org.jetbrains.kotlin", "kotlin-stdlib", "2.4.0", Base64.decode(StdlibFixture.JAR_BASE64),
-        )
-
-        private companion object {
-            const val CENTRAL = "https://repo1.maven.org/maven2"
-        }
-    }
-
     /** A backend resolving against [repo] instead of the network. */
     private fun backendOver(repo: ArtifactFetcher) =
         IosBackend(root, prefs).apply { dependenciesFor = { IosDependencies(it, repo) } }
@@ -857,7 +798,7 @@ class IosBackendTest {
         val projectRoot = openTwoFileProject()
         seedStdlib(projectRoot)
 
-        val deps = assertNotNull(backend.deps.moduleDependencies("Comp"))
+        val deps = assertNotNull(backend.deps.moduleDependencies("app"))
 
         assertEquals(emptyList(), deps.declared.map { it.coordinate }, "the user declared nothing")
         assertTrue(
@@ -881,10 +822,10 @@ class IosBackendTest {
             backend.createProject(template, mapOf("name" to "Dep", "packageName" to "demo")).rootPath,
         )
 
-        val added = backend.deps.addDependency("Dep", "com.example:widget:1.2.0", "implementation")
+        val added = backend.deps.addDependency("app", "com.example:widget:1.2.0", "implementation")
 
         assertTrue(added.success, added.message)
-        val deps = assertNotNull(backend.deps.moduleDependencies("Dep"))
+        val deps = assertNotNull(backend.deps.moduleDependencies("app"))
         assertEquals(listOf("com.example:widget:1.2.0"), deps.declared.map { it.coordinate })
         assertEquals("implementation", deps.declared.single().scope)
         assertTrue(
@@ -917,12 +858,12 @@ class IosBackendTest {
         val projectRoot = assertNotNull(
             first.createProject(template, mapOf("name" to "Keep", "packageName" to "demo")).rootPath,
         )
-        assertTrue(first.deps.addDependency("Keep", "com.example:widget:1.2.0", "api").success)
+        assertTrue(first.deps.addDependency("app", "com.example:widget:1.2.0", "api").success)
 
         val second = backendOver(repo)
         assertTrue(second.openProject(projectRoot))
 
-        val deps = assertNotNull(second.deps.moduleDependencies("Keep"))
+        val deps = assertNotNull(second.deps.moduleDependencies("app"))
         assertEquals(listOf("com.example:widget:1.2.0"), deps.declared.map { it.coordinate })
         assertEquals("api", deps.declared.single().scope, "the scope is persisted too")
     }
@@ -934,13 +875,13 @@ class IosBackendTest {
         repo.publish("com.example", "widget", "1.2.0")
         val backend = backendOver(repo)
         assertNotNull(backend.createProject(template, mapOf("name" to "Drop", "packageName" to "demo")).rootPath)
-        assertTrue(backend.deps.addDependency("Drop", "com.example:widget:1.2.0", "implementation").success)
+        assertTrue(backend.deps.addDependency("app", "com.example:widget:1.2.0", "implementation").success)
 
-        assertTrue(backend.deps.removeDependency("Drop", "com.example:widget:1.2.0"))
+        assertTrue(backend.deps.removeDependency("app", "com.example:widget:1.2.0"))
 
-        assertEquals(emptyList(), assertNotNull(backend.deps.moduleDependencies("Drop")).declared)
+        assertEquals(emptyList(), assertNotNull(backend.deps.moduleDependencies("app")).declared)
         assertFalse(
-            backend.deps.removeDependency("Drop", "com.example:widget:1.2.0"),
+            backend.deps.removeDependency("app", "com.example:widget:1.2.0"),
             "removing what is not declared reports so rather than pretending",
         )
     }
@@ -953,9 +894,9 @@ class IosBackendTest {
         repo.publish("com.example", "widget", "2.0.0")
         val backend = backendOver(repo)
         assertNotNull(backend.createProject(template, mapOf("name" to "Once", "packageName" to "demo")).rootPath)
-        assertTrue(backend.deps.addDependency("Once", "com.example:widget:1.2.0", "implementation").success)
+        assertTrue(backend.deps.addDependency("app", "com.example:widget:1.2.0", "implementation").success)
 
-        val again = backend.deps.addDependency("Once", "com.example:widget:2.0.0", "implementation")
+        val again = backend.deps.addDependency("app", "com.example:widget:2.0.0", "implementation")
 
         assertFalse(again.success, "a second version of one artifact is a change, not an addition")
         assertTrue("already a dependency" in again.message, again.message)
@@ -970,12 +911,12 @@ class IosBackendTest {
         repo.publish("com.example", "widget", "2.0.0")
         val backend = backendOver(repo)
         assertNotNull(backend.createProject(template, mapOf("name" to "Bump", "packageName" to "demo")).rootPath)
-        assertTrue(backend.deps.addDependency("Bump", "com.example:widget:1.2.0", "implementation").success)
+        assertTrue(backend.deps.addDependency("app", "com.example:widget:1.2.0", "implementation").success)
 
-        val updated = backend.deps.updateDependency("Bump", "com.example:widget:1.2.0", "2.0.0", "api", emptyList())
+        val updated = backend.deps.updateDependency("app", "com.example:widget:1.2.0", "2.0.0", "api", emptyList())
 
         assertTrue(updated.success, updated.message)
-        val declared = assertNotNull(backend.deps.moduleDependencies("Bump")).declared.single()
+        val declared = assertNotNull(backend.deps.moduleDependencies("app")).declared.single()
         assertEquals("com.example:widget:2.0.0", declared.coordinate)
         assertEquals("api", declared.scope)
     }
@@ -991,10 +932,10 @@ class IosBackendTest {
         val backend = backendOver(ArtifactFetcher { null })
         assertNotNull(backend.createProject(template, mapOf("name" to "Off", "packageName" to "demo")).rootPath)
 
-        val added = backend.deps.addDependency("Off", "com.example:widget:1.2.0", "implementation")
+        val added = backend.deps.addDependency("app", "com.example:widget:1.2.0", "implementation")
 
         assertTrue(added.success, "the declaration is the part that succeeded")
-        val deps = assertNotNull(backend.deps.moduleDependencies("Off"))
+        val deps = assertNotNull(backend.deps.moduleDependencies("app"))
         assertEquals(listOf("com.example:widget:1.2.0"), deps.declared.map { it.coordinate })
         assertTrue("com.example:widget:1.2.0" in deps.unresolved, "and it is reported unresolved: ${deps.unresolved}")
         assertTrue(deps.declared.single().declared, "it is still a declared root")
@@ -1005,11 +946,11 @@ class IosBackendTest {
         val backend = backendOver(ArtifactFetcher { null })
         assertNotNull(backend.createProject(template, mapOf("name" to "Bad", "packageName" to "demo")).rootPath)
 
-        val nonsense = backend.deps.addDependency("Bad", "not a coordinate", "implementation")
+        val nonsense = backend.deps.addDependency("app", "not a coordinate", "implementation")
         assertFalse(nonsense.success)
         assertTrue("coordinate" in nonsense.message, nonsense.message)
 
-        val versionless = backend.deps.addDependency("Bad", "com.example:widget", "implementation")
+        val versionless = backend.deps.addDependency("app", "com.example:widget", "implementation")
         assertFalse(versionless.success)
         assertTrue("needs a version" in versionless.message, versionless.message)
     }
@@ -1035,7 +976,7 @@ class IosBackendTest {
 
         assertTrue(backend.deps.deleteCachedVersion("org.jetbrains.kotlin", "kotlin-stdlib", "2.4.0"))
         assertEquals(emptyList(), backend.deps.cachedVersions("org.jetbrains.kotlin", "kotlin-stdlib"))
-        assertEquals(emptyList(), IosDependencies(projectRoot).cachedJars(), "and it leaves the classpath")
+        assertEquals(emptyList(), IosDependencies(projectRoot).hostClasspath(), "and it leaves the classpath")
     }
 
     /** With nothing reachable, the picker is told the index was unavailable rather than "no results". */
@@ -1099,17 +1040,17 @@ class IosBackendTest {
 
         // Nothing was reachable when the project opened, so there is no classpath and no index: the checks
         // withhold judgement rather than calling every library name unresolved.
-        assertEquals(emptyList(), IosDependencies(projectRoot).cachedJars())
+        assertEquals(emptyList(), IosDependencies(projectRoot).hostClasspath())
         assertTrue(backend.analyze(file, text).none { "println" in it.message })
 
         // The signal comes back, and a dependency is added through the screen.
         repo.publishStdlib()
         repo.publish("com.example", "widget", "1.2.0")
         repo.reachable = true
-        assertTrue(backend.deps.addDependency("Grow", "com.example:widget:1.2.0", "implementation").success)
+        assertTrue(backend.deps.addDependency("app", "com.example:widget:1.2.0", "implementation").success)
 
         assertTrue(
-            IosDependencies(projectRoot).cachedJars().any { it.endsWith("kotlin-stdlib-2.4.0.jar") },
+            IosDependencies(projectRoot).hostClasspath().any { it.endsWith("kotlin-stdlib-2.4.0.jar") },
             "the add resolved the whole set, not just the new coordinate",
         )
         val completed = backend.complete(file, text, text.indexOf("println") + 5)
@@ -1135,13 +1076,13 @@ class IosBackendTest {
             backend.createProject(template, mapOf("name" to "Retry", "packageName" to "demo")).rootPath,
         )
         // The repository genuinely did not carry it: a 404, recorded as a miss.
-        assertEquals(emptyList(), IosDependencies(projectRoot).cachedJars())
+        assertEquals(emptyList(), IosDependencies(projectRoot).hostClasspath())
 
         repo.publishStdlib()
         backend.deps.retryDependencyResolution()
 
         assertTrue(
-            IosDependencies(projectRoot).cachedJars().any { it.endsWith("kotlin-stdlib-2.4.0.jar") },
+            IosDependencies(projectRoot).hostClasspath().any { it.endsWith("kotlin-stdlib-2.4.0.jar") },
             "Retry must forget the miss, or it re-reads the negative cache and resolves nothing",
         )
     }
