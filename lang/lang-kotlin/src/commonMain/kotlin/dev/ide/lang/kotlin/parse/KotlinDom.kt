@@ -114,7 +114,7 @@ import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.kotlin.KotlinDiagnosticCodes
-import dev.ide.lang.kotlin.KotlinNodeKinds
+import dev.ide.lang.dom.KotlinNodeKinds
 import dev.ide.vfs.VirtualFile
 
 /**

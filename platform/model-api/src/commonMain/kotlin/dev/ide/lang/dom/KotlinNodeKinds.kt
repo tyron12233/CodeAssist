@@ -1,9 +1,12 @@
-package dev.ide.lang.kotlin
-
-import dev.ide.lang.dom.NodeKind
+package dev.ide.lang.dom
 
 /**
  * The Kotlin [NodeKind]s used by the neutral-DOM adapter.
+ *
+ * Published beside [NodeKind] rather than kept in `:lang-kotlin`, because these ids ARE the contract: a
+ * pattern, an analyzer's `interestedIn` set or a caret test names them, and the module that produces them
+ * is 25k lines a consumer has no other reason to link. Living here also puts them under the SPI's binary
+ * compatibility baseline, which is the guard the note below was asking for and never had.
  *
  * Where a Kotlin construct lines up with a language-neutral concept the DOM already names, the shared
  * [NodeKind] constant ([NodeKind.METHOD_CALL], [NodeKind.NAME_REF], etc.) is reused so cross-language editor

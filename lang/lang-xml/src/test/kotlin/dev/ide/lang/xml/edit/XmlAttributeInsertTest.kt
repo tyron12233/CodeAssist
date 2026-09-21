@@ -1,7 +1,7 @@
 package dev.ide.lang.xml.edit
 
 import dev.ide.lang.xml.XmlNode
-import dev.ide.lang.xml.XmlNodeKinds
+import dev.ide.lang.dom.XmlNodeKinds
 import dev.ide.lang.xml.parse
 import kotlin.test.Test
 import kotlin.test.assertEquals

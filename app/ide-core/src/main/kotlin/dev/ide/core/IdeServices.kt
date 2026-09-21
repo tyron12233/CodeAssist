@@ -199,7 +199,7 @@ import dev.ide.lang.synthetic.SyntheticClass
 import dev.ide.lang.synthetic.SyntheticClassContext
 import dev.ide.lang.xml.XmlLanguageBackend
 import dev.ide.lang.xml.XmlNode
-import dev.ide.lang.xml.XmlNodeKinds
+import dev.ide.lang.dom.XmlNodeKinds
 import dev.ide.lang.xml.XmlParsedFile
 import dev.ide.lang.xml.XmlSourceAnalyzer
 import dev.ide.lang.xml.completion.XmlCompletion

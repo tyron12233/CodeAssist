@@ -1,6 +1,7 @@
 package dev.ide.lang.xml
 
 import dev.ide.lang.dom.DomNode
+import dev.ide.lang.dom.XmlNodeKinds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

@@ -4,7 +4,7 @@ import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.xml.XmlNode
-import dev.ide.lang.xml.XmlNodeKinds
+import dev.ide.lang.dom.XmlNodeKinds
 import dev.ide.lang.xml.edit.XmlAttributeInsert
 
 /**

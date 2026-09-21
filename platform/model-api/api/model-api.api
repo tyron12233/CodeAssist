@@ -527,6 +527,118 @@ dev/ide/lang/dom/DomNode
 	method abstract getParent()Ldev/ide/lang/dom/DomNode;
 	method abstract getRange()Ldev/ide/lang/dom/TextRange;
 	method abstract text()Ljava/lang/CharSequence;
+dev/ide/lang/dom/JavaNodeKinds
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/lang/dom/JavaNodeKinds;
+	method getNEW_EXPR-Iaadglk()Ljava/lang/String;
+	method getOTHER-Iaadglk()Ljava/lang/String;
+dev/ide/lang/dom/KotlinNodeKinds
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/lang/dom/KotlinNodeKinds;
+	method getANNOTATED_EXPRESSION-Iaadglk()Ljava/lang/String;
+	method getANNOTATION_ENTRY-Iaadglk()Ljava/lang/String;
+	method getANNOTATION_GROUP-Iaadglk()Ljava/lang/String;
+	method getANNOTATION_USE_SITE-Iaadglk()Ljava/lang/String;
+	method getARGUMENT-Iaadglk()Ljava/lang/String;
+	method getARGUMENT_LIST-Iaadglk()Ljava/lang/String;
+	method getARGUMENT_NAME-Iaadglk()Ljava/lang/String;
+	method getARRAY_ACCESS-Iaadglk()Ljava/lang/String;
+	method getAS-Iaadglk()Ljava/lang/String;
+	method getBINARY-Iaadglk()Ljava/lang/String;
+	method getBLOCK-Iaadglk()Ljava/lang/String;
+	method getBREAK-Iaadglk()Ljava/lang/String;
+	method getCALLABLE_REFERENCE-Iaadglk()Ljava/lang/String;
+	method getCATCH-Iaadglk()Ljava/lang/String;
+	method getCLASS_BODY-Iaadglk()Ljava/lang/String;
+	method getCLASS_DECL-Iaadglk()Ljava/lang/String;
+	method getCLASS_LITERAL-Iaadglk()Ljava/lang/String;
+	method getCOLLECTION_LITERAL-Iaadglk()Ljava/lang/String;
+	method getCOMPILATION_UNIT-Iaadglk()Ljava/lang/String;
+	method getCONSTRUCTOR-Iaadglk()Ljava/lang/String;
+	method getCONSTRUCTOR_CALLEE-Iaadglk()Ljava/lang/String;
+	method getCONSTRUCTOR_DELEGATION_CALL-Iaadglk()Ljava/lang/String;
+	method getCONSTRUCTOR_DELEGATION_REF-Iaadglk()Ljava/lang/String;
+	method getCONTAINER-Iaadglk()Ljava/lang/String;
+	method getCONTEXT_RECEIVER_LIST-Iaadglk()Ljava/lang/String;
+	method getCONTINUE-Iaadglk()Ljava/lang/String;
+	method getCONTROL_BODY-Iaadglk()Ljava/lang/String;
+	method getDESTRUCTURING-Iaadglk()Ljava/lang/String;
+	method getDESTRUCTURING_ENTRY-Iaadglk()Ljava/lang/String;
+	method getDO_WHILE-Iaadglk()Ljava/lang/String;
+	method getERROR-Iaadglk()Ljava/lang/String;
+	method getFILE_ANNOTATION_LIST-Iaadglk()Ljava/lang/String;
+	method getFINALLY-Iaadglk()Ljava/lang/String;
+	method getFOR-Iaadglk()Ljava/lang/String;
+	method getFUNCTION_LITERAL-Iaadglk()Ljava/lang/String;
+	method getFUNCTION_TYPE-Iaadglk()Ljava/lang/String;
+	method getFUNCTION_TYPE_RECEIVER-Iaadglk()Ljava/lang/String;
+	method getIF-Iaadglk()Ljava/lang/String;
+	method getIMPORT_ALIAS-Iaadglk()Ljava/lang/String;
+	method getIMPORT_DECL-Iaadglk()Ljava/lang/String;
+	method getIMPORT_LIST-Iaadglk()Ljava/lang/String;
+	method getINIT-Iaadglk()Ljava/lang/String;
+	method getIS-Iaadglk()Ljava/lang/String;
+	method getKDOC_LINK-Iaadglk()Ljava/lang/String;
+	method getKDOC_NAME-Iaadglk()Ljava/lang/String;
+	method getLABELED_EXPRESSION-Iaadglk()Ljava/lang/String;
+	method getLABEL_REF-Iaadglk()Ljava/lang/String;
+	method getLAMBDA-Iaadglk()Ljava/lang/String;
+	method getLAMBDA_ARGUMENT-Iaadglk()Ljava/lang/String;
+	method getLITERAL-Iaadglk()Ljava/lang/String;
+	method getLOCAL_VAR-Iaadglk()Ljava/lang/String;
+	method getMEMBER_ACCESS-Iaadglk()Ljava/lang/String;
+	method getMETHOD_CALL-Iaadglk()Ljava/lang/String;
+	method getMETHOD_DECL-Iaadglk()Ljava/lang/String;
+	method getMISSING-Iaadglk()Ljava/lang/String;
+	method getMODIFIER_LIST-Iaadglk()Ljava/lang/String;
+	method getNAME_REF-Iaadglk()Ljava/lang/String;
+	method getNULLABLE_TYPE-Iaadglk()Ljava/lang/String;
+	method getOBJECT_DECL-Iaadglk()Ljava/lang/String;
+	method getOBJECT_LITERAL-Iaadglk()Ljava/lang/String;
+	method getOPERATOR-Iaadglk()Ljava/lang/String;
+	method getOTHER-Iaadglk()Ljava/lang/String;
+	method getPACKAGE_DECL-Iaadglk()Ljava/lang/String;
+	method getPARAMETER-Iaadglk()Ljava/lang/String;
+	method getPARAMETER_LIST-Iaadglk()Ljava/lang/String;
+	method getPARENTHESIZED-Iaadglk()Ljava/lang/String;
+	method getPOSTFIX-Iaadglk()Ljava/lang/String;
+	method getPREFIX-Iaadglk()Ljava/lang/String;
+	method getPROPERTY-Iaadglk()Ljava/lang/String;
+	method getPROPERTY_ACCESSOR-Iaadglk()Ljava/lang/String;
+	method getPROPERTY_DELEGATE-Iaadglk()Ljava/lang/String;
+	method getQUALIFIED-Iaadglk()Ljava/lang/String;
+	method getRETURN-Iaadglk()Ljava/lang/String;
+	method getSAFE_ACCESS-Iaadglk()Ljava/lang/String;
+	method getSTRING_INTERPOLATION_PREFIX-Iaadglk()Ljava/lang/String;
+	method getSTRING_TEMPLATE-Iaadglk()Ljava/lang/String;
+	method getSTRING_TEMPLATE_ENTRY-Iaadglk()Ljava/lang/String;
+	method getSTRING_TEMPLATE_INTERPOLATION-Iaadglk()Ljava/lang/String;
+	method getSUPER-Iaadglk()Ljava/lang/String;
+	method getSUPERTYPE_CALL-Iaadglk()Ljava/lang/String;
+	method getSUPERTYPE_DELEGATE-Iaadglk()Ljava/lang/String;
+	method getSUPERTYPE_ENTRY-Iaadglk()Ljava/lang/String;
+	method getSUPERTYPE_LIST-Iaadglk()Ljava/lang/String;
+	method getTHIS-Iaadglk()Ljava/lang/String;
+	method getTHROW-Iaadglk()Ljava/lang/String;
+	method getTRY-Iaadglk()Ljava/lang/String;
+	method getTYPEALIAS-Iaadglk()Ljava/lang/String;
+	method getTYPE_ARGUMENT_LIST-Iaadglk()Ljava/lang/String;
+	method getTYPE_CONSTRAINT-Iaadglk()Ljava/lang/String;
+	method getTYPE_CONSTRAINT_LIST-Iaadglk()Ljava/lang/String;
+	method getTYPE_PARAMETER-Iaadglk()Ljava/lang/String;
+	method getTYPE_PARAMETER_LIST-Iaadglk()Ljava/lang/String;
+	method getTYPE_PROJECTION-Iaadglk()Ljava/lang/String;
+	method getTYPE_REF-Iaadglk()Ljava/lang/String;
+	method getUSER_TYPE-Iaadglk()Ljava/lang/String;
+	method getWHEN-Iaadglk()Ljava/lang/String;
+	method getWHEN_CONDITION-Iaadglk()Ljava/lang/String;
+	method getWHEN_CONDITION_IN-Iaadglk()Ljava/lang/String;
+	method getWHEN_CONDITION_IS-Iaadglk()Ljava/lang/String;
+	method getWHEN_ENTRY-Iaadglk()Ljava/lang/String;
+	method getWHEN_ENTRY_GUARD-Iaadglk()Ljava/lang/String;
+	method getWHILE-Iaadglk()Ljava/lang/String;
 dev/ide/lang/dom/NodeKind
 	kind class
 	super java/lang/Object
@@ -594,6 +706,19 @@ dev/ide/lang/dom/TextRange
 	method intersects(Ldev/ide/lang/dom/TextRange;)Z
 	method static copy$default(Ldev/ide/lang/dom/TextRange;IIILjava/lang/Object;)Ldev/ide/lang/dom/TextRange;
 	method toString()Ljava/lang/String;
+dev/ide/lang/dom/XmlNodeKinds
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/lang/dom/XmlNodeKinds;
+	method getATTRIBUTE-Iaadglk()Ljava/lang/String;
+	method getATTR_VALUE-Iaadglk()Ljava/lang/String;
+	method getCDATA-Iaadglk()Ljava/lang/String;
+	method getCOMMENT-Iaadglk()Ljava/lang/String;
+	method getDOCTYPE-Iaadglk()Ljava/lang/String;
+	method getDOCUMENT-Iaadglk()Ljava/lang/String;
+	method getPROLOG-Iaadglk()Ljava/lang/String;
+	method getTAG-Iaadglk()Ljava/lang/String;
+	method getTEXT-Iaadglk()Ljava/lang/String;
 dev/ide/lang/resolve/DocFormat
 	kind enum
 	super java/lang/Enum

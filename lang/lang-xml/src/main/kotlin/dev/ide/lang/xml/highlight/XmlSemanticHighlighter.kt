@@ -7,7 +7,7 @@ import dev.ide.lang.highlight.HighlightKind
 import dev.ide.lang.highlight.SemanticHighlightService
 import dev.ide.lang.highlight.SemanticToken
 import dev.ide.lang.xml.XmlNode
-import dev.ide.lang.xml.XmlNodeKinds
+import dev.ide.lang.dom.XmlNodeKinds
 import dev.ide.platform.EngineCancellation
 import dev.ide.vfs.VirtualFile
 

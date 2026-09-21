@@ -8,7 +8,7 @@ import dev.ide.lang.hints.InlayHintKind
 import dev.ide.lang.hints.InlayHintPart
 import dev.ide.lang.hints.InlayHintService
 import dev.ide.lang.xml.XmlNode
-import dev.ide.lang.xml.XmlNodeKinds
+import dev.ide.lang.dom.XmlNodeKinds
 import dev.ide.platform.EngineCancellation
 import dev.ide.vfs.VirtualFile
 

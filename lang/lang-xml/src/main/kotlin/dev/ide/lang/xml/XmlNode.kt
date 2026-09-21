@@ -5,6 +5,7 @@ import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.NodeKind
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.dom.XmlNodeKinds
 import dev.ide.vfs.VirtualFile
 
 /**

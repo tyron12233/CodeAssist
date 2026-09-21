@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.lang.dom.KotlinNodeKinds
 import dev.ide.lang.dom.NodeKind
 import kotlin.test.Test
 import kotlin.test.assertEquals

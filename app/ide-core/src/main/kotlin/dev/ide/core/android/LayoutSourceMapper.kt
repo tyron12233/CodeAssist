@@ -1,7 +1,7 @@
 package dev.ide.core.android
 
 import dev.ide.lang.xml.XmlNode
-import dev.ide.lang.xml.XmlNodeKinds
+import dev.ide.lang.dom.XmlNodeKinds
 import dev.ide.lang.xml.XmlParsedFile
 import dev.ide.preview.PreviewViewNode
 import java.util.IdentityHashMap

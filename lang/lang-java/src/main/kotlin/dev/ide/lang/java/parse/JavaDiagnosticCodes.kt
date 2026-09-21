@@ -1,16 +1,5 @@
 package dev.ide.lang.java.parse
 
-import dev.ide.lang.dom.NodeKind
-
-/** Java-specific [NodeKind]s beyond the shared constants in [NodeKind.Companion]. */
-object JavaNodeKinds {
-    /** A `new Foo(...)` constructor call (the shared set has METHOD_CALL but no dedicated `new`). */
-    val NEW_EXPR = NodeKind("new_expr")
-
-    /** A represented Java element with no more specific neutral kind. */
-    val OTHER = NodeKind("java.other")
-}
-
 /** Diagnostic codes emitted by the Java backend, so quick-fixes can key off them. */
 object JavaDiagnosticCodes {
     const val SYNTAX = "java.syntax"

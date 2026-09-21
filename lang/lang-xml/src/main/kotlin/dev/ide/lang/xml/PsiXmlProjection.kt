@@ -24,6 +24,7 @@ import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.NodeKind
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.dom.XmlNodeKinds
 import dev.ide.lang.folding.FoldKind
 import dev.ide.lang.folding.FoldRegion
 import dev.ide.psi.IntellijPsiHost

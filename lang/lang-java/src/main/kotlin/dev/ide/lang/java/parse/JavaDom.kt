@@ -22,6 +22,7 @@ import com.intellij.psi.PsiTypeElement
 import com.intellij.psi.PsiVariable
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.DomNode
+import dev.ide.lang.dom.JavaNodeKinds
 import dev.ide.lang.dom.NodeKind
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.Severity
