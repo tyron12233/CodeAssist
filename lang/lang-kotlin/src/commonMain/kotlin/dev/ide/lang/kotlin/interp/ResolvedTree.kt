@@ -1,6 +1,8 @@
 package dev.ide.lang.kotlin.interp
 
 import dev.ide.lang.kotlin.symbols.KotlinType
+import dev.ide.platform.IdentitySet
+import kotlin.jvm.JvmInline
 
 /**
  * The resolver → interpreter contract (see `docs/compose-interpreter.md`). A [ResolvedTree] is the **total**
@@ -467,7 +469,7 @@ fun reachableSourceFunctions(
     entry: ResolvedFunction,
     program: Map<String, ResolvedFunction>,
     classes: List<ResolvedClass>,
-): Set<ResolvedFunction> = computeReachable(entry, program, classes).functions
+): Set<ResolvedFunction> = computeReachable(entry, program, classes).functions.toSet()
 
 /**
  * The source functions [entry] reaches that are NOT in [program] — code the lowering was supposed to supply
@@ -496,7 +498,9 @@ fun missingSourceCallees(
  *  plus the source callees it reaches that the program never supplied (see [missingSourceCallees]). */
 private class Reachable(
     val classes: Set<String>,
-    val functions: Set<ResolvedFunction>,
+    /** In traversal order, de-duplicated BY IDENTITY: within one lowering a function is one instance, and
+     *  hashing a lowered body structurally would walk its whole subtree. */
+    val functions: List<ResolvedFunction>,
     val missingCallees: Set<String>,
 )
 
@@ -512,14 +516,14 @@ private fun computeReachable(
     val reached = LinkedHashSet<String>()
     // The top-level program functions the entry reaches (the entry itself + every source callee), so a preview
     // that calls a broken same-file/cross-file composable is refused instead of crashing the render.
-    val reachedFns = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<ResolvedFunction, Boolean>())
+    val reachedFns = IdentitySet<ResolvedFunction>()
     reachedFns.add(entry)
     // Source callees the program doesn't carry — the interpreter would throw on them mid-render (see
     // [missingSourceCallees]).
     val missingCallees = LinkedHashSet<String>()
     // Bodies still to scan, de-duplicated by identity (a tree's structural hash would be costly and a function
     // is only ever the same object instance within one lowering).
-    val scanned = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<RNode, Boolean>())
+    val scanned = IdentitySet<RNode>()
     val work = ArrayDeque<RNode>()
     fun addBody(node: RNode?) { if (node != null && scanned.add(node)) work.add(node) }
 
@@ -577,7 +581,7 @@ private fun computeReachable(
             }
         }
     }
-    return Reachable(reached, reachedFns, missingCallees)
+    return Reachable(reached, reachedFns.toList(), missingCallees)
 }
 
 /** Direct child nodes, for traversal. */
@@ -724,7 +728,7 @@ fun PreviewDeclProvider.asLazy(): LazyPreviewDeclProvider = object : LazyPreview
 fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: LazyPreviewDeclProvider): PreviewModel {
     val program = LinkedHashMap<String, ResolvedFunction>(seed.program)
     val classesByFqn = LinkedHashMap<String, ResolvedClass>()
-    seed.classes.forEach { classesByFqn.putIfAbsent(it.fqn, it) }
+    seed.classes.forEach { c -> classesByFqn.getOrPut(c.fqn) { c } }
 
     val touchedPaths = hashSetOf(seed.path)
     val requestedTypes = HashSet<String>()
@@ -788,7 +792,7 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: LazyPrev
         if (file.path == seed.path || !admit(file)) return
         val matched = file.classesFor(name)
         if (matched.isEmpty()) return
-        matched.forEach { classesByFqn.putIfAbsent(it.fqn, it) }
+        matched.forEach { c -> classesByFqn.getOrPut(c.fqn) { c } }
         enqueueClass(matched.first())
     }
     /** Merge [fn] (from [file], under program key [key]) and scan its body. */
@@ -798,7 +802,8 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: LazyPrev
         // A function whose body holds an `object : Foo {}` literal synthesized a class for it:
         // merge + scan it with the function, or its constructor call has nothing to build.
         file.anonymousClassesFor(key).forEach { c ->
-            if (classesByFqn.putIfAbsent(c.fqn, c) == null) enqueueClass(c)
+            // `getOrPut` has no "was it absent" answer, and only a NEW class is worth enqueuing.
+            if (c.fqn !in classesByFqn) { classesByFqn[c.fqn] = c; enqueueClass(c) }
         }
     }
     /** Follow a top-level function call: [pkg] is the package the callee resolved to (from its `declId`), or
