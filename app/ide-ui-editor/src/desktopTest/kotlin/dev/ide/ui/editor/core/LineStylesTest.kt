@@ -106,7 +106,9 @@ class LineStylesTest {
         assertEquals(TokenType.KEYWORD, at("oneway"))
         assertEquals(TokenType.KEYWORD, at("void"))
         assertEquals(TokenType.KEYWORD, at("in "))
-        assertEquals(TokenType.KEYWORD, at("out "))
+        // `out` is in the shared modifier set, so it colours as one here too — a contributed language gets
+        // the finer classes from the same table the built-ins do.
+        assertEquals(TokenType.KEYWORD_MODIFIER, at("out "))
         assertEquals(TokenType.KEYWORD, at("inout"))
         assertEquals(TokenType.TYPE, at("Payload"), "a declared type colours as a type")
         assertEquals(TokenType.FUNC, at("send"), "a name before `(` colours as a call")
@@ -117,11 +119,99 @@ class LineStylesTest {
     /** AIDL block comments span lines, so the carried lexer state has to behave as it does for Java. */
     @Test
     fun aidlBlockCommentsCarryAcrossLines() {
+        // `/**` opens a DOC comment, and the carried state says which of the two it was so the
+        // continuation line colors as the same thing rather than reverting to an ordinary comment.
         val open = styleLine("/** Sends a payload.", LexState.CODE, CodeLanguage.Aidl)
-        assertEquals(LexState.BLOCK_COMMENT, open.exitState)
-        val close = styleLine(" */ oneway void send();", LexState.BLOCK_COMMENT, CodeLanguage.Aidl)
+        assertEquals(LexState.DOC_COMMENT, open.exitState)
+        val close = styleLine(" */ oneway void send();", LexState.DOC_COMMENT, CodeLanguage.Aidl)
         assertEquals(LexState.CODE, close.exitState)
-        assertEquals(TokenType.COMMENT, close.spans.first().type)
+        assertEquals(TokenType.DOC_COMMENT, close.spans.first().type)
+
+        val plain = styleLine("/* not a doc comment", LexState.CODE, CodeLanguage.Aidl)
+        assertEquals(LexState.BLOCK_COMMENT, plain.exitState)
+        assertEquals(TokenType.COMMENT, plain.spans.first().type)
+    }
+
+    /**
+     * The finer lexical classes. Each of these was previously folded into a neighbour, so no scheme could
+     * color it apart however it was written; the point of emitting them is that the distinction exists at
+     * all, and each still falls back to what it used to be.
+     */
+    @Test
+    fun punctuationSplitsIntoBracketsOperatorsAndSeparators() {
+        val line = "val xs = a[0] + f(b, c);"
+        fun at(col: Int) = typeAt(line, col, CodeLanguage.Kotlin)
+        assertEquals(TokenType.BRACKET, at(line.indexOf('[')))
+        assertEquals(TokenType.BRACKET, at(line.indexOf('(')))
+        assertEquals(TokenType.OPERATOR, at(line.indexOf('+')))
+        assertEquals(TokenType.OPERATOR, at(line.indexOf('=')))
+        assertEquals(TokenType.SEPARATOR, at(line.indexOf(',')))
+        assertEquals(TokenType.SEPARATOR, at(line.indexOf(';')))
+    }
+
+    @Test
+    fun charLiteralsAndRawStringsAreNotPlainStrings() {
+        assertEquals(TokenType.CHAR, typeAt("val c = 'x'", "val c = ".length, CodeLanguage.Kotlin))
+        assertEquals(TokenType.CHAR, typeAt("char c = 'x';", "char c = ".length, CodeLanguage.Java))
+        assertEquals(TokenType.STRING, typeAt("val s = \"x\"", "val s = ".length, CodeLanguage.Kotlin))
+        val raw = "val s = " + "\"".repeat(3) + "hi" + "\"".repeat(3)
+        assertEquals(TokenType.RAW_STRING, typeAt(raw, "val s = ".length, CodeLanguage.Kotlin))
+    }
+
+    @Test
+    fun anEmptyBlockCommentIsNotADocComment() {
+        // `/**` opens KDoc, but `/**/` is an empty ordinary comment that happens to start with the same
+        // three characters, and reading it as an unterminated doc comment would colour the rest of the file.
+        val empty = styleLine("/**/ val a = 1", LexState.CODE, CodeLanguage.Kotlin)
+        assertEquals(LexState.CODE, empty.exitState)
+        assertEquals(TokenType.COMMENT, empty.spans.first().type)
+        assertEquals(TokenType.DOC_COMMENT, styleLine("/** doc */", LexState.CODE, CodeLanguage.Kotlin).spans.first().type)
+    }
+
+    /**
+     * XML was emitting four token types for a whole markup grammar: the `<` rode along with the tag name,
+     * `>` was not colored at all, and a namespace prefix was part of the attribute it qualifies.
+     */
+    @Test
+    fun xmlSeparatesItsMarkupFromItsNames() {
+        val line = "<android:TextView app:layout_width=\"x\" />"
+        fun at(col: Int) = typeAt(line, col, CodeLanguage.Xml)
+        assertEquals(TokenType.TAG_DELIMITER, at(0), "the opening angle bracket")
+        assertEquals(TokenType.NAMESPACE, at(line.indexOf("android")))
+        assertEquals(TokenType.TAG_DELIMITER, at(line.indexOf(':')), "the colon between prefix and name")
+        assertEquals(TokenType.TYPE, at(line.indexOf("TextView")))
+        assertEquals(TokenType.NAMESPACE, at(line.indexOf("app:")))
+        assertEquals(TokenType.PROPERTY, at(line.indexOf("layout_width")))
+        assertEquals(TokenType.TAG_DELIMITER, at(line.indexOf("/>")), "a self-closing tag end")
+    }
+
+    @Test
+    fun xmlColorsEntitiesPrologsAndCdata() {
+        assertEquals(TokenType.ENTITY, typeAt("<a>Tom &amp; Jerry</a>", "<a>Tom ".length, CodeLanguage.Xml))
+        assertEquals(TokenType.PROLOG, typeAt("<?xml version=\"1.0\"?>", 0, CodeLanguage.Xml))
+        assertEquals(TokenType.PROLOG, typeAt("<!DOCTYPE html>", 0, CodeLanguage.Xml))
+        // A lone `&` that opens nothing is left alone rather than swallowing the rest of the line.
+        assertEquals(null, typeAt("<a>a & b</a>", "<a>a ".length, CodeLanguage.Xml))
+    }
+
+    @Test
+    fun xmlCdataCarriesAcrossLines() {
+        val open = styleLine("<d><![CDATA[ raw", LexState.CODE, CodeLanguage.Xml)
+        assertEquals(LexState.XML_CDATA, open.exitState)
+        val close = styleLine("more ]]></d>", LexState.XML_CDATA, CodeLanguage.Xml)
+        assertEquals(LexState.CODE, close.exitState)
+        assertEquals(TokenType.CDATA, close.spans.first().type)
+    }
+
+    @Test
+    fun markdownEmphasisIsColoredMarkersIncluded() {
+        val line = "a **bold** and *italic* run"
+        fun at(col: Int) = typeAt(line, col, CodeLanguage.Markdown)
+        assertEquals(TokenType.EMPHASIS, at(line.indexOf("**")))
+        assertEquals(TokenType.EMPHASIS, at(line.indexOf("*italic*")))
+        // An unpaired marker, and a `_` inside a word, must not swallow the rest of the line.
+        assertEquals(null, typeAt("2 * 3 = 6", 2, CodeLanguage.Markdown))
+        assertEquals(null, typeAt("snake_case_name here", "snake".length, CodeLanguage.Markdown))
     }
 
     @Test
@@ -130,8 +220,8 @@ class LineStylesTest {
         val line = "    println(\"I \${if (b) \"got\" else \"lost\"} focus.\")"
         // Anchor by content so the assertions survive if the leading indent changes.
         fun at(sub: String) = typeAt(line, line.indexOf(sub), CodeLanguage.Kotlin)
-        assertEquals(TokenType.KEYWORD, at("if ("), "`if` inside \${} should be a keyword")
-        assertEquals(TokenType.KEYWORD, at("else "), "`else` inside \${} should be a keyword")
+        assertEquals(TokenType.KEYWORD_CONTROL, at("if ("), "`if` inside \${} should be a control keyword")
+        assertEquals(TokenType.KEYWORD_CONTROL, at("else "), "`else` inside \${} should be a control keyword")
         assertEquals(TokenType.STRING, typeAt(line, line.indexOf("got"), CodeLanguage.Kotlin), "nested \"got\" should be a string")
         assertEquals(TokenType.STRING, typeAt(line, line.indexOf("lost"), CodeLanguage.Kotlin), "nested \"lost\" should be a string")
         assertEquals(TokenType.STRING, typeAt(line, line.indexOf("I \$"), CodeLanguage.Kotlin), "the outer literal `I ` is a string")
@@ -157,7 +247,7 @@ class LineStylesTest {
         styles.reset(doc)
         assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Kotlin)
         assertEquals(LexState.KT_RAW_STRING, styleLine(doc.lineText(0), LexState.CODE, CodeLanguage.Kotlin).exitState)
-        assertEquals(TokenType.STRING, LineSpanTypeAt(styles, 1, 0), "line 1 opens inside the raw string")
+        assertEquals(TokenType.RAW_STRING, LineSpanTypeAt(styles, 1, 0), "line 1 opens inside the raw string")
         // `trim` after the closing `"""` on line 1 is back to code.
         assertEquals(TokenType.FUNC, LineSpanTypeAt(styles, 1, doc.lineText(1).indexOf("trim")))
     }
@@ -165,16 +255,18 @@ class LineStylesTest {
     @Test
     fun kotlinKeywordsHighlightOutsideStrings() {
         assertEquals(TokenType.KEYWORD, typeAt("fun foo() {}", 0, CodeLanguage.Kotlin))
-        assertEquals(TokenType.KEYWORD, typeAt("when (x) {}", 0, CodeLanguage.Kotlin))
-        assertEquals(TokenType.KEYWORD, typeAt("if (a) b else c", 0, CodeLanguage.Kotlin))
-        assertEquals(TokenType.KEYWORD, typeAt("if (a) b else c", "if (a) b ".length, CodeLanguage.Kotlin))
+        // The words that branch are their own class now, so a scheme can colour control flow apart from
+        // the declaration keywords around it.
+        assertEquals(TokenType.KEYWORD_CONTROL, typeAt("when (x) {}", 0, CodeLanguage.Kotlin))
+        assertEquals(TokenType.KEYWORD_CONTROL, typeAt("if (a) b else c", 0, CodeLanguage.Kotlin))
+        assertEquals(TokenType.KEYWORD_CONTROL, typeAt("if (a) b else c", "if (a) b ".length, CodeLanguage.Kotlin))
     }
 
     @Test
     fun kotlinValueClassModifierIsAKeyword() {
         // `value` is a keyword only in `value class` (a soft keyword); as a plain identifier it stays uncolored.
         val decl = "value class Password(val v: String)"
-        assertEquals(TokenType.KEYWORD, typeAt(decl, 0, CodeLanguage.Kotlin), "`value` before `class` is a keyword")
+        assertEquals(TokenType.KEYWORD_MODIFIER, typeAt(decl, 0, CodeLanguage.Kotlin), "`value` before `class` is a modifier")
         assertEquals(TokenType.KEYWORD, typeAt(decl, decl.indexOf("class"), CodeLanguage.Kotlin), "`class` is a keyword")
         // A plain `value` identifier (a common name) must NOT be colored as a keyword.
         assertEquals(null, typeAt("val value = x.value", "val ".length, CodeLanguage.Kotlin), "`value` as an identifier is not a keyword")

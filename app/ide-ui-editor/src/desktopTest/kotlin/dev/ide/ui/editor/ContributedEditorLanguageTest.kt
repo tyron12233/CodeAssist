@@ -173,7 +173,11 @@ class ContributedEditorLanguageTest {
         withProfile(cpp()) {
             // Only the head of the line can start a directive; `#` here is the stringize operator.
             val styled = styleLine("const int x = a # b;", entryState = 0, language = languageFor("a.cpp"))
-            val keywords = styled.spans.filter { it.type == TokenType.KEYWORD }
+            // `const` is a modifier and `int` is not, so they land in different keyword classes — both
+            // still keywords, and a contributed language gets that split from the shared table.
+            val keywords = styled.spans.filter {
+                it.type == TokenType.KEYWORD || it.type == TokenType.KEYWORD_MODIFIER
+            }
             assertEquals(setOf("const", "int"), keywords.mapTo(HashSet()) { "const int x = a # b;".substring(it.start, it.end) })
         }
     }

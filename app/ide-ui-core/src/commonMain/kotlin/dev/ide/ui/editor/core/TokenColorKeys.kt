@@ -25,6 +25,11 @@ fun tokenColorKey(profile: EditorLanguageProfile, type: TokenType): String {
             TokenType.PROPERTY -> K.XML_ATTRIBUTE
             TokenType.STRING -> K.XML_VALUE
             TokenType.COMMENT -> K.XML_COMMENT
+            TokenType.TAG_DELIMITER -> K.XML_TAG_DELIMITER
+            TokenType.NAMESPACE -> K.XML_NAMESPACE
+            TokenType.ENTITY -> K.XML_ENTITY
+            TokenType.PROLOG -> K.XML_PROLOG
+            TokenType.CDATA -> K.XML_CDATA
             else -> genericTokenKey(type)
         }
         SyntaxFamily.MARKDOWN -> when (type) {
@@ -35,12 +40,20 @@ fun tokenColorKey(profile: EditorLanguageProfile, type: TokenType): String {
             TokenType.FUNC -> K.MD_LINK
             TokenType.PROPERTY -> K.MD_URL
             TokenType.PUNCT -> K.MD_RULE
+            TokenType.EMPHASIS -> K.MD_EMPHASIS
             else -> genericTokenKey(type)
         }
         else -> genericTokenKey(type)
     }
 }
 
+/**
+ * The language-neutral reading of a token type: what it means in a brace language, and the fallback for
+ * every family that does not claim it.
+ *
+ * The markup and Markdown types resolve here too, to the nearest general thing, so a family that emits one
+ * without claiming it is still colored rather than left at the default text color.
+ */
 private fun genericTokenKey(type: TokenType): String = when (type) {
     TokenType.KEYWORD -> K.KEYWORD
     TokenType.STRING -> K.STRING
@@ -51,4 +64,18 @@ private fun genericTokenKey(type: TokenType): String = when (type) {
     TokenType.TYPE -> K.TYPE
     TokenType.PUNCT -> K.PUNCTUATION
     TokenType.PROPERTY -> K.PROPERTY
+    TokenType.KEYWORD_CONTROL -> K.KEYWORD_CONTROL
+    TokenType.KEYWORD_MODIFIER -> K.KEYWORD_MODIFIER
+    TokenType.DOC_COMMENT -> K.COMMENT_DOC
+    TokenType.CHAR -> K.STRING_CHAR
+    TokenType.RAW_STRING -> K.STRING_RAW
+    TokenType.OPERATOR -> K.OPERATOR
+    TokenType.BRACKET -> K.BRACKET
+    TokenType.SEPARATOR -> K.SEPARATOR
+    TokenType.TAG_DELIMITER -> K.PUNCTUATION
+    TokenType.NAMESPACE -> K.NAMESPACE
+    TokenType.ENTITY -> K.CONSTANT
+    TokenType.PROLOG -> K.COMMENT
+    TokenType.CDATA -> K.STRING
+    TokenType.EMPHASIS -> K.TEXT
 }

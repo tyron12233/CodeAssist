@@ -8,6 +8,7 @@ import dev.ide.ui.theme.toSyntaxColors
 import dev.ide.ui.backend.UiHighlightModifier
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -46,6 +47,55 @@ class EditorColorSchemeTest {
         assertEquals(Color(0xFFA32FB0), light.keyword)
         assertEquals(Color(0xFF3F9C45), light.string)
         assertEquals(Color(0xFF1F8A77), light.composable)
+    }
+
+    @Test
+    fun theFinerClassesAddNothingVisibleUntilASchemeSeparatesThem() {
+        // Splitting keywords, punctuation, comments, strings and the semantic type/function kinds added
+        // two dozen attributes. Every one of them has to render as its parent in the shipped scheme, or
+        // the update changes the colour of code in front of people who asked for nothing.
+        for (isDark in listOf(true, false)) {
+            val colors = resolve(isDark = isDark)
+            for (attribute in ColorAttributes.all()) {
+                val parent = attribute.parent ?: continue
+                if (!attribute.defaultFor(isDark).isEmpty) continue // it declares its own look on purpose
+                assertEquals(
+                    colors.styleOf(parent),
+                    colors.styleOf(attribute.key),
+                    "${attribute.key} (dark=$isDark) must be indistinguishable from $parent by default",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun aPresetMaySeparateWhatTheDefaultLeavesAlone() {
+        // …and the presets are where the split pays off: Solarized really does colour control flow apart
+        // from the other keywords, which is the thing the default scheme cannot express before this.
+        val solarized = resolve(BuiltInColorSchemes.SOLARIZED)
+        assertNotEquals(solarized.colorOf(ColorKeys.KEYWORD), solarized.colorOf(ColorKeys.KEYWORD_CONTROL))
+        assertNotEquals(solarized.colorOf(ColorKeys.PUNCTUATION), solarized.colorOf(ColorKeys.OPERATOR))
+        // Brackets are not one of the ones it separates, so they stay with the rest of the punctuation.
+        assertEquals(solarized.colorOf(ColorKeys.PUNCTUATION), solarized.colorOf(ColorKeys.BRACKET))
+    }
+
+    @Test
+    fun theAnalyzersOwnDistinctionsReachDistinctAttributes() {
+        assertEquals(ColorKeys.TYPE_INTERFACE, semanticColorKey("interface"))
+        assertEquals(ColorKeys.TYPE_CLASS, semanticColorKey("class"))
+        assertEquals(ColorKeys.KOTLIN_OBJECT, semanticColorKey("object"))
+        assertEquals(ColorKeys.FUNCTION_MEMBER, semanticColorKey("method"))
+        assertEquals(ColorKeys.FUNCTION_TOP_LEVEL, semanticColorKey("function"))
+        assertEquals(ColorKeys.FUNCTION_CONSTRUCTOR, semanticColorKey("constructor"))
+        assertEquals(ColorKeys.PROPERTY_FIELD, semanticColorKey("field"))
+        assertEquals(ColorKeys.CONSTANT_ENUM, semanticColorKey("enumConstant"))
+
+        // A declaration is still emphasized whichever kind of callable it is.
+        val colors = resolve()
+        for (kind in listOf("method", "function", "constructor")) {
+            val declared = colors.semanticStyle(kind, setOf(UiHighlightModifier.Declaration))
+            assertEquals(true, declared?.bold, "a declared $kind should be emphasized")
+        }
     }
 
     @Test

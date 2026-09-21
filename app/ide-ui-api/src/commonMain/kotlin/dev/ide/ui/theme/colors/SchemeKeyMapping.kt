@@ -30,12 +30,21 @@ import dev.ide.ui.theme.colors.ColorKeys as K
  * shows through unchanged, which is always defensible because the lexer already ran.
  */
 fun semanticColorKey(kind: String): String? = when (kind) {
-    "class", "interface", "enum", "object" -> K.TYPE
+    // The analyzer already tells these apart; collapsing them here was throwing the distinction away.
+    // Each finer key inherits the coarse one, so nothing looks different until a scheme separates them.
+    "class" -> K.TYPE_CLASS
+    "interface" -> K.TYPE_INTERFACE
+    "enum" -> K.TYPE_ENUM
+    "object" -> K.KOTLIN_OBJECT
     "annotation" -> K.ANNOTATION
     "typeParameter" -> K.TYPE_PARAMETER
-    "method", "function", "constructor" -> K.FUNCTION
-    "property", "field" -> K.PROPERTY
-    "enumConstant", "constant" -> K.CONSTANT
+    "method" -> K.FUNCTION_MEMBER
+    "function" -> K.FUNCTION_TOP_LEVEL
+    "constructor" -> K.FUNCTION_CONSTRUCTOR
+    "property" -> K.PROPERTY
+    "field" -> K.PROPERTY_FIELD
+    "enumConstant" -> K.CONSTANT_ENUM
+    "constant" -> K.CONSTANT
     "parameter" -> K.VARIABLE_PARAMETER
     "localVariable" -> K.VARIABLE
     "label" -> K.LABEL
@@ -59,7 +68,7 @@ fun semanticColorKey(kind: String): String? = when (kind) {
 fun modifierColorKeys(baseKey: String, mods: Set<UiHighlightModifier>): List<String> {
     if (mods.isEmpty()) return emptyList()
     val keys = ArrayList<String>(3)
-    if (UiHighlightModifier.Declaration in mods && baseKey == K.FUNCTION) keys.add(K.FUNCTION_DECLARATION)
+    if (UiHighlightModifier.Declaration in mods && baseKey in FUNCTION_KEYS) keys.add(K.FUNCTION_DECLARATION)
     if (UiHighlightModifier.Extension in mods) keys.add(K.KOTLIN_EXTENSION)
     if (UiHighlightModifier.Composable in mods) keys.add(K.KOTLIN_COMPOSABLE)
     if (UiHighlightModifier.Suspend in mods) keys.add(K.KOTLIN_SUSPEND)
@@ -68,6 +77,9 @@ fun modifierColorKeys(baseKey: String, mods: Set<UiHighlightModifier>): List<Str
     if (UiHighlightModifier.Deprecated in mods) keys.add(K.MODIFIER_DEPRECATED)
     return keys
 }
+
+/** Every attribute a callable resolves to, for the declaration emphasis that applies to all of them. */
+private val FUNCTION_KEYS = setOf(K.FUNCTION, K.FUNCTION_MEMBER, K.FUNCTION_TOP_LEVEL, K.FUNCTION_CONSTRUCTOR)
 
 /**
  * The resolved style for a semantic token: its base attribute with every modifier attribute layered over

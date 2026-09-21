@@ -86,16 +86,18 @@ private fun parseSampleLine(line: String): List<SampleRun> {
 }
 
 /**
- * The first `]]` that closes a run rather than belonging to it.
+ * The `]]` that closes a run: the LAST one before the next run starts (or before the end of the line).
  *
- * A Markdown link's text really is `[the guide]`, so its run ends `...guide]]]` and taking the first `]]`
- * would eat the bracket the sample exists to show. Skipping a `]]` immediately followed by another `]`
- * resolves that the way a reader does, without a quoting rule in the markup.
+ * A run's own text can contain `]]` — a Markdown link's text really is `[the guide]`, and a CDATA section
+ * really does end `]]>` — so taking the first `]]` eats exactly the bracket the sample exists to show.
+ * Taking the last one inside the run's own region reads both correctly and needs no quoting rule, which
+ * matters because the one character that would have to be quoted, a backslash, is itself something these
+ * samples have to show (`\n` as a string escape).
  */
 private fun closingDelimiter(line: String, from: Int): Int {
-    var at = line.indexOf("]]", from)
-    while (at >= 0 && at + 2 < line.length && line[at + 2] == ']') at = line.indexOf("]]", at + 1)
-    return at
+    val nextRun = line.indexOf("[[", from).let { if (it < 0) line.length else it }
+    val at = line.lastIndexOf("]]", nextRun - 1)
+    return if (at >= from) at else -1
 }
 
 /** The samples the preview offers, in tab order. */
@@ -104,13 +106,13 @@ object ColorSchemeSamples {
     val KOTLIN = PreviewSample(
         id = "kotlin",
         title = "Kotlin",
-        currentLine = 7,
+        currentLine = 8,
         caretColumn = 34,
-        selectionLine = 9,
+        selectionLine = 10,
         selectionColumns = 8..25,
-        errorLine = 16,
+        errorLine = 43,
         errorColumns = 24..36,
-        warningLine = 20,
+        warningLine = 47,
         warningColumns = 4..9,
         markup = """
 [[comment|// Every construct the editor can color, in one file.]]
@@ -118,53 +120,83 @@ object ColorSchemeSamples {
 
 [[keyword|import]] [[namespace|androidx.compose.runtime.Composable]]
 
+[[comment.doc|/** Greets whoever is passed in, as many times as asked. */]]
 [[annotation|@Composable]]
-[[keyword|fun]] [[function.declaration|Greeting]]([[variable.parameter|name]]: [[type|String]], [[variable.parameter|times]]: [[type|Int]] = [[number|1]]) {
-    [[keyword|val]] [[variable|message]] = [[string|"Hello, ]][[string.template|${'$'}]][[variable|name]][[string|!]][[string.escape|\n]][[string|"]].[[function|trimEnd]]()
-    [[keyword|var]] [[kotlin.variable.mutable|shown]] = [[number|0]]
-    [[keyword|while]] ([[kotlin.variable.mutable|shown]] < [[variable.parameter|times]]) {
-        [[kotlin.function.composable|Text]]([[variable|message]], [[variable.parameter|color]] = [[type|Theme]].[[property|accent]])
-        [[kotlin.variable.mutable|shown]]++
-    }
-}
+[[keyword|fun]] [[function.topLevel+function.declaration|Greeting]][[punctuation.bracket|(]][[variable.parameter|name]][[punctuation.operator|:]] [[type.class|String]][[punctuation.separator|,]] [[variable.parameter|times]][[punctuation.operator|:]] [[type.class|Int]] [[punctuation.operator|=]] [[number|1]][[punctuation.bracket|)]] [[punctuation.bracket|{]]
+    [[keyword|val]] [[variable|message]] [[punctuation.operator|=]] [[string|"Hello, ]][[string.template|${'$'}]][[variable|name]][[string|!]][[string.escape|\n]][[string|"]][[punctuation.separator|.]][[function.member|trimEnd]][[punctuation.bracket|()]]
+    [[keyword|var]] [[kotlin.variable.mutable|shown]] [[punctuation.operator|=]] [[number|0]]
+    [[keyword.control|while]] [[punctuation.bracket|(]][[kotlin.variable.mutable|shown]] [[punctuation.operator|<]] [[variable.parameter|times]][[punctuation.bracket|)]] [[punctuation.bracket|{]]
+        [[kotlin.function.composable|Text]][[punctuation.bracket|(]][[variable|message]][[punctuation.separator|,]] [[variable.parameter|color]] [[punctuation.operator|=]] [[kotlin.type.object|Theme]][[punctuation.separator|.]][[property|accent]][[punctuation.bracket|)]]
+        [[kotlin.variable.mutable|shown]][[punctuation.operator|++]]
+    [[punctuation.bracket|}]]
+[[punctuation.bracket|}]]
 
-[[comment|/** Resolves the first match, or null once the budget runs out. */]]
-[[keyword|suspend]] [[keyword|fun]] <[[type.parameter|T]]> [[type|List]]<[[type.parameter|T]]>.[[kotlin.function.extension|firstMatching]]([[variable.parameter|budget]]: [[type|Int]] = [[constant|MAX_TRIES]]): [[type.parameter|T]]? {
-    [[label|scan@]] [[keyword|for]] ([[variable|item]] [[keyword|in]] [[keyword|this]]) {
-        [[keyword|if]] ([[kotlin.function.suspend|matches]]([[variable|item]], [[variable.parameter|budget]])) [[keyword|return@]][[label|scan]] [[variable|item]]
-    }
-    [[keyword|return]] [[keyword|null]]
-}
+[[keyword|interface]] [[type.interface|Greeter]] [[punctuation.bracket|{]]
+    [[keyword|fun]] [[function.member+function.declaration|greet]][[punctuation.bracket|(]][[variable.parameter|who]][[punctuation.operator|:]] [[type.class|String]][[punctuation.bracket|)]][[punctuation.operator|:]] [[type.class|String]]
+[[punctuation.bracket|}]]
 
-[[annotation|@Deprecated]]([[string|"Use Greeting instead"]])
-[[keyword|fun]] [[function.declaration+modifier.deprecated|greet]]() = [[type|Strings]].[[property+modifier.static|APP_NAME]]
+[[keyword|enum]] [[keyword|class]] [[type.enum|Tone]] [[punctuation.bracket|{]] [[constant.enum|Warm]][[punctuation.separator|,]] [[constant.enum|Formal]] [[punctuation.bracket|}]]
+
+[[keyword|object]] [[kotlin.type.object|Defaults]] [[punctuation.bracket|{]]
+    [[keyword.modifier|const]] [[keyword|val]] [[constant|MAX_TRIES]] [[punctuation.operator|=]] [[number|3]]
+    [[keyword|val]] [[property|tone]] [[punctuation.operator|=]] [[type.enum|Tone]][[punctuation.separator|.]][[constant.enum|Warm]]
+[[punctuation.bracket|}]]
+
+[[keyword|class]] [[type.class|Polite]][[punctuation.bracket|(]][[keyword.modifier|private]] [[keyword|val]] [[property|tone]][[punctuation.operator|:]] [[type.enum|Tone]][[punctuation.bracket|)]] [[punctuation.operator|:]] [[type.interface|Greeter]] [[punctuation.bracket|{]]
+    [[keyword.modifier|override]] [[keyword|fun]] [[function.member+function.declaration|greet]][[punctuation.bracket|(]][[variable.parameter|who]][[punctuation.operator|:]] [[type.class|String]][[punctuation.bracket|)]] [[punctuation.operator|=]] [[function.topLevel|buildString]] [[punctuation.bracket|{]]
+        [[function.member|append]][[punctuation.bracket|(]][[string.char|'>']][[punctuation.bracket|)]]
+        [[function.member|append]][[punctuation.bracket|(]][[string.raw|${'"'}${'"'}${'"'}]]
+[[string.raw|            Good day, ]][[string.template|${'$'}]][[variable.parameter|who]][[string.raw|.]]
+[[string.raw|        ${'"'}${'"'}${'"'}]][[punctuation.bracket|)]]
+    [[punctuation.bracket|}]]
+[[punctuation.bracket|}]]
+
+[[keyword|val]] [[property|polite]] [[punctuation.operator|=]] [[function.constructor|Polite]][[punctuation.bracket|(]][[type.enum|Tone]][[punctuation.separator|.]][[constant.enum|Formal]][[punctuation.bracket|)]]
+
+[[comment|// Until the analyzer answers, the lexer's own guesses show through: a capitalized word is a type,]]
+[[comment|// a name before a paren is a call. Those two are what every finer class above falls back to.]]
+[[keyword|val]] [[property|pending]] [[punctuation.operator|=]] [[type|Unresolved]][[punctuation.bracket|(]][[function|compute]][[punctuation.bracket|())]]
+
+[[comment.doc|/** Resolves the first match, or null once the budget runs out. */]]
+[[keyword.modifier|suspend]] [[keyword|fun]] [[punctuation.operator|<]][[type.parameter|T]][[punctuation.operator|>]] [[type.class|List]][[punctuation.operator|<]][[type.parameter|T]][[punctuation.operator|>]][[punctuation.separator|.]][[kotlin.function.extension+function.declaration|firstMatching]][[punctuation.bracket|(]][[variable.parameter|budget]][[punctuation.operator|:]] [[type.class|Int]][[punctuation.bracket|)]][[punctuation.operator|:]] [[type.parameter|T]][[punctuation.operator|?]] [[punctuation.bracket|{]]
+    [[label|scan@]] [[keyword.control|for]] [[punctuation.bracket|(]][[variable|item]] [[keyword|in]] [[keyword|this]][[punctuation.bracket|)]] [[punctuation.bracket|{]]
+        [[keyword.control|if]] [[punctuation.bracket|(]][[kotlin.function.suspend|matches]][[punctuation.bracket|(]][[variable|item]][[punctuation.separator|,]] [[variable.parameter|budget]][[punctuation.bracket|))]] [[keyword.control|return@]][[label|scan]] [[variable|item]]
+    [[punctuation.bracket|}]]
+    [[keyword.control|return]] [[keyword|null]]
+[[punctuation.bracket|}]]
+
+[[annotation|@Deprecated]][[punctuation.bracket|(]][[string|"Use Greeting instead"]][[punctuation.bracket|)]]
+[[keyword|fun]] [[function.topLevel+function.declaration+modifier.deprecated|greet]][[punctuation.bracket|()]] [[punctuation.operator|=]] [[type.class|Strings]][[punctuation.separator|.]][[property.field+modifier.static|APP_NAME]]
         """.trimIndent(),
     )
 
     val XML = PreviewSample(
         id = "xml",
         title = "XML",
-        currentLine = 5,
+        currentLine = 6,
         caretColumn = 36,
-        selectionLine = 6,
+        selectionLine = 7,
         selectionColumns = 8..34,
-        errorLine = 9,
+        errorLine = 10,
         errorColumns = 8..26,
-        warningLine = 3,
+        warningLine = 4,
         warningColumns = 4..21,
         markup = """
+[[xml.prolog|<?xml version="1.0" encoding="utf-8"?>]]
 [[xml.comment|<!-- A layout, coloring tags, attributes and references. -->]]
-<[[xml.tag|LinearLayout]] [[xml.namespace|xmlns:android]]=[[xml.value|"http://schemas.android.com/apk/res/android"]]
-    [[xml.namespace|android]]:[[xml.attribute|orientation]]=[[xml.value|"vertical"]]
-    [[xml.namespace|android]]:[[xml.attribute|layout_width]]=[[xml.value|"match_parent"]]>
+[[xml.tagDelimiter|<]][[xml.tag|LinearLayout]] [[xml.namespace|xmlns]][[xml.tagDelimiter|:]][[xml.attribute|android]]=[[xml.value|"http://schemas.android.com/apk/res/android"]]
+    [[xml.namespace|android]][[xml.tagDelimiter|:]][[xml.attribute|orientation]]=[[xml.value|"vertical"]]
+    [[xml.namespace|android]][[xml.tagDelimiter|:]][[xml.attribute|layout_width]]=[[xml.value|"match_parent"]][[xml.tagDelimiter|>]]
 
-    <[[xml.tag|TextView]] [[xml.namespace|android]]:[[xml.attribute|id]]=[[xml.value|"]][[xml.reference|@+id/title]][[xml.value|"]]
-        [[xml.namespace|android]]:[[xml.attribute|text]]=[[xml.value|"]][[xml.reference|@string/app_name]][[xml.value|"]]
-        [[xml.namespace|android]]:[[xml.attribute|textColor]]=[[xml.value|"]][[xml.reference|?attr/colorPrimary]][[xml.value|"]]
-        [[xml.namespace|android]]:[[xml.attribute|textSize]]=[[xml.value|"18sp"]]
-        [[xml.namespace|android]]:[[xml.attribute|padding]]=[[xml.value|"@dimen/gap"]] />
+    [[xml.tagDelimiter|<]][[xml.tag|TextView]] [[xml.namespace|android]][[xml.tagDelimiter|:]][[xml.attribute|id]]=[[xml.value|"]][[xml.reference|@+id/title]][[xml.value|"]]
+        [[xml.namespace|android]][[xml.tagDelimiter|:]][[xml.attribute|text]]=[[xml.value|"]][[xml.reference|@string/app_name]][[xml.value|"]]
+        [[xml.namespace|android]][[xml.tagDelimiter|:]][[xml.attribute|textColor]]=[[xml.value|"]][[xml.reference|?attr/colorPrimary]][[xml.value|"]]
+        [[xml.namespace|android]][[xml.tagDelimiter|:]][[xml.attribute|contentDescription]]=[[xml.value|"Tom ]][[xml.entity|&amp;]][[xml.value| Jerry"]]
+        [[xml.namespace|android]][[xml.tagDelimiter|:]][[xml.attribute|padding]]=[[xml.value|"@dimen/gap"]] [[xml.tagDelimiter|/>]]
 
-</[[xml.tag|LinearLayout]]>
+    [[xml.tagDelimiter|<]][[xml.tag|data]][[xml.tagDelimiter|>]][[xml.cdata|<![CDATA[ raw <b>markup</b> here ]]>]][[xml.tagDelimiter|</]][[xml.tag|data]][[xml.tagDelimiter|>]]
+
+[[xml.tagDelimiter|</]][[xml.tag|LinearLayout]][[xml.tagDelimiter|>]]
         """.trimIndent(),
     )
 
@@ -186,7 +218,7 @@ Ship the editor color scheme.
 
 [[markdown.heading|## Highlights]]
 
-[[markdown.listMarker|-]] Schemes carry a dark and a light variant.
+[[markdown.listMarker|-]] Schemes carry a [[markdown.emphasis|**dark**]] and a [[markdown.emphasis|*light*]] variant.
 [[markdown.listMarker|-]] Attributes fall back along a chain, so nothing is ever uncolored.
 [[markdown.listMarker|-]] Run [[markdown.code|`./gradlew test`]] before tagging.
 
@@ -194,7 +226,7 @@ Ship the editor color scheme.
 
 [[markdown.rule|---]]
 
-See [[markdown.link|[the guide]]][[markdown.url|(docs/color-schemes.md)]] for the file format.
+See [[markdown.link|[the guide]]][[markdown.url|(docs/editor-color-schemes.md)]] for the file format.
         """.trimIndent(),
     )
 

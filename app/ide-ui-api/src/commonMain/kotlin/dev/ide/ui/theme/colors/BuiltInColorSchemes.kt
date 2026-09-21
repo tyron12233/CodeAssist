@@ -33,6 +33,7 @@ object BuiltInColorSchemes {
             type = 0xFFA9B7C6, property = 0xFF9876AA, variable = 0xFFA9B7C6, constant = 0xFF9876AA,
             punctuation = 0xFFA9B7C6, label = 0xFFBBB529,
             composable = 0xFF6A8759, extension = 0xFFFFC66D, suspendFn = 0xFF9876AA, mutableVar = 0xFFA9B7C6,
+            docComment = 0xFF629755,
         ),
         light = variant(
             background = 0xFFFFFFFF, caret = 0xFF000000, selection = 0xFFA6D2FF, currentLine = 0xFFFCFAED,
@@ -42,6 +43,7 @@ object BuiltInColorSchemes {
             type = 0xFF080808, property = 0xFF871094, variable = 0xFF080808, constant = 0xFF871094,
             punctuation = 0xFF080808, label = 0xFF9E880D,
             composable = 0xFF067D17, extension = 0xFF00627A, suspendFn = 0xFF871094, mutableVar = 0xFF080808,
+            docComment = 0xFF3D7A3D,
         ),
     )
 
@@ -55,6 +57,7 @@ object BuiltInColorSchemes {
             property = 0xFF56B6C2, variable = 0xFFE06C75, constant = 0xFFD19A66, punctuation = 0xFFABB2BF,
             label = 0xFFE5C07B,
             composable = 0xFF56B6C2, extension = 0xFF61AFEF, suspendFn = 0xFFC678DD, mutableVar = 0xFFE06C75,
+            operator = 0xFF56B6C2, docComment = 0xFF7F848E,
         ),
         light = variant(
             background = 0xFFFAFAFA, caret = 0xFF526FFF, selection = 0xFFD7DAE0, currentLine = 0xFFF0F0F0,
@@ -64,6 +67,7 @@ object BuiltInColorSchemes {
             property = 0xFF0184BC, variable = 0xFFE45649, constant = 0xFF986801, punctuation = 0xFF383A42,
             label = 0xFFC18401,
             composable = 0xFF0184BC, extension = 0xFF4078F2, suspendFn = 0xFFA626A4, mutableVar = 0xFFE45649,
+            operator = 0xFF0184BC, docComment = 0xFF9CA0A4,
         ),
     )
 
@@ -77,6 +81,7 @@ object BuiltInColorSchemes {
             property = 0xFF2AA198, variable = 0xFFCB4B16, constant = 0xFFD33682, punctuation = 0xFF657B83,
             label = 0xFF6C71C4,
             composable = 0xFF859900, extension = 0xFF268BD2, suspendFn = 0xFF6C71C4, mutableVar = 0xFFCB4B16,
+            control = 0xFFCB4B16, operator = 0xFF2AA198, docComment = 0xFF657B83,
         ),
         light = variant(
             background = 0xFFFDF6E3, caret = 0xFF586E75, selection = 0xFFEEE8D5, currentLine = 0xFFEEE8D5,
@@ -86,6 +91,7 @@ object BuiltInColorSchemes {
             property = 0xFF2AA198, variable = 0xFFCB4B16, constant = 0xFFD33682, punctuation = 0xFF93A1A1,
             label = 0xFF6C71C4,
             composable = 0xFF859900, extension = 0xFF268BD2, suspendFn = 0xFF6C71C4, mutableVar = 0xFFCB4B16,
+            control = 0xFFCB4B16, operator = 0xFF2AA198, docComment = 0xFF839496,
         ),
     )
 
@@ -99,6 +105,7 @@ object BuiltInColorSchemes {
             property = 0xFF79C0FF, variable = 0xFFFFA657, constant = 0xFF79C0FF, punctuation = 0xFFC9D1D9,
             label = 0xFFFFA657,
             composable = 0xFF7EE787, extension = 0xFFD2A8FF, suspendFn = 0xFFFF7B72, mutableVar = 0xFFFFA657,
+            operator = 0xFFFF7B72, docComment = 0xFF8B949E,
         ),
         light = variant(
             background = 0xFFFFFFFF, caret = 0xFF0969DA, selection = 0xFFB6D6FD, currentLine = 0xFFF6F8FA,
@@ -108,6 +115,7 @@ object BuiltInColorSchemes {
             property = 0xFF0550AE, variable = 0xFF953800, constant = 0xFF0550AE, punctuation = 0xFF1F2328,
             label = 0xFF953800,
             composable = 0xFF1A7F37, extension = 0xFF8250DF, suspendFn = 0xFFCF222E, mutableVar = 0xFF953800,
+            operator = 0xFFCF222E, docComment = 0xFF6E7781,
         ),
     )
 
@@ -129,6 +137,12 @@ object BuiltInColorSchemes {
         function: Long, type: Long, property: Long, variable: Long, constant: Long, punctuation: Long,
         label: Long, composable: Long, extension: Long, suspendFn: Long, mutableVar: Long,
         keywordBold: Boolean = false,
+        /** Control words, where the palette sets them apart from other keywords. */
+        control: Long? = null,
+        /** Operators, where the palette sets them apart from brackets and separators. */
+        operator: Long? = null,
+        /** Doc comments, where the palette sets them apart from ordinary ones. */
+        docComment: Long? = null,
     ): Map<String, AttributeStyle> = buildMap {
         put(K.EDITOR_BACKGROUND, AttributeStyle.bg(Color(background)))
         put(K.EDITOR_CARET, AttributeStyle.fg(Color(caret)))
@@ -158,5 +172,10 @@ object BuiltInColorSchemes {
         // with the shipped one that the keyword color is what does that.
         put(K.STRING_TEMPLATE, AttributeStyle.fg(Color(keyword)))
         put(K.STRING_ESCAPE, AttributeStyle.fg(Color(number)))
+        // The finer classes, only where the palette being ported actually distinguishes them. A preset that
+        // says nothing leaves them inheriting, which is how the palette itself renders.
+        control?.let { put(K.KEYWORD_CONTROL, AttributeStyle.fg(Color(it))) }
+        operator?.let { put(K.OPERATOR, AttributeStyle.fg(Color(it))) }
+        docComment?.let { put(K.COMMENT_DOC, AttributeStyle(foreground = Color(it), italic = true)) }
     }
 }

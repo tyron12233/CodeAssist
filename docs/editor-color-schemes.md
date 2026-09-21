@@ -42,6 +42,19 @@ so the editor's per-line styling is a map lookup rather than a walk.
 Groups, in the order the editor shows them: **Code** (language-neutral), **Modifiers**, **Kotlin**, **XML**,
 **Markdown**, **Editor**, **Gutter**, **Diagnostics**.
 
+### A finer entry starts out invisible
+
+Most entries are a refinement of a coarser one: `keyword.control` under `keyword`, `type.interface` under
+`type`, `punctuation.operator` under `punctuation`. Those ship with **no color of their own**, so they
+render exactly as their parent until a scheme separates them. Adding one therefore changes nothing about
+how anyone's editor looks and everything about what they can change, which is the only way to keep adding
+them without repainting people's code on every update. `EditorColorSchemeTest` asserts it.
+
+The bundled presets do separate several, because the palettes they port genuinely distinguish them:
+Solarized colors control flow apart from other keywords and operators apart from brackets, One and GitHub
+color operators, and all four give doc comments their own tone. Picking a preset is how you see the
+granularity without setting it up yourself.
+
 ### Chrome attributes are theme-derived until pinned
 
 The caret, selection, current line, gutter and diagnostic colors track the active Material scheme — including
@@ -56,11 +69,32 @@ Both are written against the same `ColorKeys`, so they cannot disagree about wha
 
 **Lexical.** `tokenColorKey(profile, tokenType)` (beside the scanner, in `dev.ide.ui.editor.core`) maps a
 scanner token to an attribute *per `SyntaxFamily`* — a `TYPE` is a class name in a brace language and a tag
-name in XML. That is what gives XML and Markdown their own editable colors with no change to the scanners.
-A profile can override the mapping per token type through `EditorLanguageProfile.tokenColorKeys`.
+name in XML. That is what gives XML and Markdown their own editable colors. A profile can override the
+mapping per token type through `EditorLanguageProfile.tokenColorKeys`.
+
+`TokenType` is a set of lexical shapes rather than language concepts, because one set serves every scanner.
+Beyond the original nine it distinguishes:
+
+| Token type | Was folded into | Gives |
+| --- | --- | --- |
+| `KEYWORD_CONTROL`, `KEYWORD_MODIFIER` | `KEYWORD` | control flow and modifiers apart from the rest |
+| `DOC_COMMENT` | `COMMENT` | KDoc and Javadoc apart from ordinary comments |
+| `CHAR`, `RAW_STRING` | `STRING` | char literals and triple-quoted strings apart from strings |
+| `OPERATOR`, `BRACKET`, `SEPARATOR` | `PUNCT` | the symbols that compute, nest and separate |
+| `TAG_DELIMITER`, `NAMESPACE` | the tag/attribute name | `<`, `>`, `/>`, `:` and the `android` of `android:id` |
+| `ENTITY`, `PROLOG`, `CDATA` | nothing at all | `&amp;`, the XML prolog, `<!DOCTYPE`, CDATA sections |
+| `EMPHASIS` | nothing at all | Markdown bold and italic |
+
+The control/modifier split comes from one shared table (`CONTROL_WORDS`, `MODIFIER_WORDS`) applied to any
+word a profile already calls a keyword, so a contributed brace language gets it for free; a language that
+disagrees points `KEYWORD_CONTROL` back at `keyword` through `tokenColorKeys`.
 
 **Semantic.** `semanticColorKey(kind)` (in `SchemeKeyMapping`) maps an open highlight-SPI kind to a base
-attribute, and `modifierColorKeys` lists the attributes layered over it for a token's modifiers, in the
+attribute. The analyzer already tells `class` from `interface` from `enum` from `object`, a member function
+from a top-level one from a constructor, and a field from a property; the mapping keeps those apart instead
+of collapsing them, each inheriting the coarse attribute it used to be.
+
+`modifierColorKeys` lists the attributes layered over the base for a token's modifiers, in the
 editor's long-standing precedence order (suspend beats composable beats extension; `static` and
 `deprecated` only add a font style). A kind the shell does not ship is looked up in the registry under its
 own name, so a language can colour a construct the scanners cannot see by registering an attribute and
@@ -180,10 +214,11 @@ The token-type names are the scanner's: `KEYWORD`, `STRING`, `COMMENT`, `NUMBER`
 mapping the host would never consult, and a key nothing registered falls back to the family's own mapping —
 so a typo costs the custom color, never the coloring.
 
-**A token mapping can only separate what the scanner already separates.** A C preprocessor directive
-arrives as a `KEYWORD` like every other keyword, so no mapping can pull the two apart. That construct is
-the semantic layer's to colour: a `LanguageBackend` emits a highlight kind named after the attribute, and
-an unrecognized kind is looked up in the registry under its own name before being dropped.
+**A token mapping can only separate what the scanner already separates.** The scanners distinguish a good
+deal (see the table above), but a C preprocessor directive still arrives as a `KEYWORD` like every other
+keyword, so no mapping can pull those two apart. That construct is the semantic layer's to colour: a
+`LanguageBackend` emits a highlight kind named after the attribute, and an unrecognized kind is looked up
+in the registry under its own name before being dropped.
 
 ```kotlin
 ui.colorAttribute(ColorAttribute(key = "cpp.directive", title = "Preprocessor directive", group = "C/C++"))

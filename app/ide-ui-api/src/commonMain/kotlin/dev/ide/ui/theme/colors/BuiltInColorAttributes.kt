@@ -49,11 +49,31 @@ object ColorKeys {
     const val LABEL = "label"
     const val NAMESPACE = "namespace"
 
+    // ---- finer lexical classes; each falls back to the coarse one above ----
+    const val KEYWORD_CONTROL = "keyword.control"
+    const val COMMENT_DOC = "comment.doc"
+    const val STRING_CHAR = "string.char"
+    const val STRING_RAW = "string.raw"
+    const val OPERATOR = "punctuation.operator"
+    const val BRACKET = "punctuation.bracket"
+    const val SEPARATOR = "punctuation.separator"
+
+    // ---- finer semantic classes; the analyzer already told these apart ----
+    const val TYPE_CLASS = "type.class"
+    const val TYPE_INTERFACE = "type.interface"
+    const val TYPE_ENUM = "type.enum"
+    const val FUNCTION_MEMBER = "function.member"
+    const val FUNCTION_TOP_LEVEL = "function.topLevel"
+    const val FUNCTION_CONSTRUCTOR = "function.constructor"
+    const val PROPERTY_FIELD = "property.field"
+    const val CONSTANT_ENUM = "constant.enum"
+
     // ---- overlays: added to whatever the symbol already is ----
     const val MODIFIER_STATIC = "modifier.static"
     const val MODIFIER_DEPRECATED = "modifier.deprecated"
 
     // ---- Kotlin ----
+    const val KOTLIN_OBJECT = "kotlin.type.object"
     const val KOTLIN_EXTENSION = "kotlin.function.extension"
     const val KOTLIN_COMPOSABLE = "kotlin.function.composable"
     const val KOTLIN_SUSPEND = "kotlin.function.suspend"
@@ -64,6 +84,10 @@ object ColorKeys {
     const val XML_ATTRIBUTE = "xml.attribute"
     const val XML_VALUE = "xml.value"
     const val XML_COMMENT = "xml.comment"
+    const val XML_TAG_DELIMITER = "xml.tagDelimiter"
+    const val XML_ENTITY = "xml.entity"
+    const val XML_PROLOG = "xml.prolog"
+    const val XML_CDATA = "xml.cdata"
     const val XML_NAMESPACE = "xml.namespace"
     const val XML_REFERENCE = "xml.reference"
 
@@ -75,6 +99,7 @@ object ColorKeys {
     const val MD_LINK = "markdown.link"
     const val MD_URL = "markdown.url"
     const val MD_RULE = "markdown.rule"
+    const val MD_EMPHASIS = "markdown.emphasis"
 }
 
 /** Group ids, in the order the color scheme editor shows them. */
@@ -168,6 +193,25 @@ object BuiltInColorAttributes {
         add(code(ColorKeys.NAMESPACE, "Package / namespace", 18))
         add(code(ColorKeys.PUNCTUATION, "Punctuation", 19, dark = AttributeStyle.fg(Color(0xFF8B8D96)), light = AttributeStyle.fg(Color(0xFF6B6C73))))
 
+        // The finer classes below ship with NO color of their own, on purpose: each renders exactly as its
+        // parent until a scheme separates them, so adding them changes nothing about how anyone's editor
+        // looks and everything about what they can change. The shipped presets DO separate several.
+        add(code(ColorKeys.KEYWORD_CONTROL, "Control keyword", 20, parent = ColorKeys.KEYWORD))
+        add(code(ColorKeys.COMMENT_DOC, "Doc comment", 21, parent = ColorKeys.COMMENT))
+        add(code(ColorKeys.STRING_CHAR, "Character literal", 22, parent = ColorKeys.STRING))
+        add(code(ColorKeys.STRING_RAW, "Raw string", 23, parent = ColorKeys.STRING))
+        add(code(ColorKeys.OPERATOR, "Operator", 24, parent = ColorKeys.PUNCTUATION))
+        add(code(ColorKeys.BRACKET, "Braces and brackets", 25, parent = ColorKeys.PUNCTUATION))
+        add(code(ColorKeys.SEPARATOR, "Semicolon, comma, dot", 26, parent = ColorKeys.PUNCTUATION))
+        add(code(ColorKeys.TYPE_CLASS, "Class", 27, parent = ColorKeys.TYPE))
+        add(code(ColorKeys.TYPE_INTERFACE, "Interface", 28, parent = ColorKeys.TYPE))
+        add(code(ColorKeys.TYPE_ENUM, "Enum", 29, parent = ColorKeys.TYPE))
+        add(code(ColorKeys.FUNCTION_MEMBER, "Member function", 30, parent = ColorKeys.FUNCTION))
+        add(code(ColorKeys.FUNCTION_TOP_LEVEL, "Top-level function", 31, parent = ColorKeys.FUNCTION))
+        add(code(ColorKeys.FUNCTION_CONSTRUCTOR, "Constructor", 32, parent = ColorKeys.FUNCTION))
+        add(code(ColorKeys.PROPERTY_FIELD, "Field", 33, parent = ColorKeys.PROPERTY))
+        add(code(ColorKeys.CONSTANT_ENUM, "Enum constant", 34, parent = ColorKeys.CONSTANT))
+
         // ---- Modifiers (overlays) -------------------------------------------------------------------
         add(
             ColorAttribute(
@@ -185,6 +229,7 @@ object BuiltInColorAttributes {
         )
 
         // ---- Kotlin -----------------------------------------------------------------------------------
+        add(ColorAttribute(ColorKeys.KOTLIN_OBJECT, "Object declaration", ColorGroups.KOTLIN, ColorKeys.TYPE, order = -10))
         add(
             ColorAttribute(
                 ColorKeys.KOTLIN_EXTENSION, "Extension function", ColorGroups.KOTLIN, ColorKeys.FUNCTION,
@@ -225,6 +270,10 @@ object BuiltInColorAttributes {
         add(ColorAttribute(ColorKeys.XML_NAMESPACE, "Namespace prefix", ColorGroups.XML, ColorKeys.KEYWORD, order = 30))
         add(ColorAttribute(ColorKeys.XML_REFERENCE, "Resource reference", ColorGroups.XML, ColorKeys.CONSTANT, order = 40))
         add(ColorAttribute(ColorKeys.XML_COMMENT, "Comment", ColorGroups.XML, ColorKeys.COMMENT, order = 50))
+        add(ColorAttribute(ColorKeys.XML_TAG_DELIMITER, "Angle brackets and colon", ColorGroups.XML, ColorKeys.PUNCTUATION, order = 60))
+        add(ColorAttribute(ColorKeys.XML_ENTITY, "Entity reference", ColorGroups.XML, ColorKeys.CONSTANT, order = 70))
+        add(ColorAttribute(ColorKeys.XML_PROLOG, "Prolog and DOCTYPE", ColorGroups.XML, ColorKeys.COMMENT, order = 80))
+        add(ColorAttribute(ColorKeys.XML_CDATA, "CDATA section", ColorGroups.XML, ColorKeys.STRING, order = 90))
 
         // ---- Markdown ---------------------------------------------------------------------------------
         add(ColorAttribute(ColorKeys.MD_HEADING, "Heading", ColorGroups.MARKDOWN, ColorKeys.TYPE, order = 0))
@@ -234,6 +283,7 @@ object BuiltInColorAttributes {
         add(ColorAttribute(ColorKeys.MD_LINK, "Link text", ColorGroups.MARKDOWN, ColorKeys.FUNCTION, order = 40))
         add(ColorAttribute(ColorKeys.MD_URL, "Link target", ColorGroups.MARKDOWN, ColorKeys.PROPERTY, order = 50))
         add(ColorAttribute(ColorKeys.MD_RULE, "Thematic break", ColorGroups.MARKDOWN, ColorKeys.PUNCTUATION, order = 60))
+        add(ColorAttribute(ColorKeys.MD_EMPHASIS, "Bold and italic", ColorGroups.MARKDOWN, ColorKeys.TEXT, order = 70))
 
         // ---- Editor chrome ------------------------------------------------------------------------------
         add(chrome(ColorKeys.EDITOR_BACKGROUND, "Background", ColorGroups.GENERAL, 0, bg = true))

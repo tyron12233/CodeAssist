@@ -37,7 +37,7 @@ enum class TokenType {
     /** `private`, `open`, `override`, `suspend`, `static`, `final` — the words that qualify a declaration. */
     KEYWORD_MODIFIER,
 
-    /** `/** … *` + `/` — a doc comment, as distinct from an ordinary block comment. */
+    /** A doc comment (KDoc, Javadoc), as distinct from an ordinary block comment. */
     DOC_COMMENT,
 
     /** A character literal (`'c'`), which is not a string however much it looks like one. */
@@ -88,7 +88,7 @@ object LexState {
     const val KT_RAW_STRING = 3
     /** Inside a Markdown fenced code block (``` ``` ``` / `~~~`), which spans lines. */
     const val MD_FENCE = 4
-    /** Inside a `/** … *` + `/` doc comment. Distinct from [BLOCK_COMMENT] so the carried state remembers
+    /** Inside a doc comment (KDoc, Javadoc). Distinct from [BLOCK_COMMENT] so the carried state remembers
      *  which of the two a continuation line belongs to; they close on the same delimiter. */
     const val DOC_COMMENT = 5
     /** Inside a `<![CDATA[ … ]]>` section, which spans lines. */
@@ -156,13 +156,16 @@ private fun punctType(c: Char): TokenType = when {
  * language a plugin contributes with that family, so a contributed language gets the distinction for free.
  * A language that disagrees points `KEYWORD_CONTROL` back at the plain keyword attribute through its
  * profile's `tokenColorKeys`.
+ *
+ * Named `_WORDS` rather than `_KEYWORDS` because the smart-indent logic in this package already owns a
+ * `MODIFIER_KEYWORDS` of its own, for a different question (what may precede a declaration on a new line).
  */
-internal val CONTROL_KEYWORDS = setOf(
+internal val CONTROL_WORDS = setOf(
     "break", "case", "catch", "continue", "default", "do", "else", "finally", "for", "goto", "if", "return",
     "switch", "throw", "throws", "try", "when", "while", "yield",
 )
 
-internal val MODIFIER_KEYWORDS = setOf(
+internal val MODIFIER_WORDS = setOf(
     "abstract", "actual", "companion", "const", "crossinline", "expect", "external", "final", "infix",
     "inline", "inner", "internal", "lateinit", "native", "noinline", "open", "operator", "out", "override",
     "private", "protected", "public", "reified", "sealed", "static", "strictfp", "suspend", "synchronized",
@@ -171,8 +174,8 @@ internal val MODIFIER_KEYWORDS = setOf(
 
 /** A keyword's finer class, or [TokenType.KEYWORD] when it is neither a control word nor a modifier. */
 private fun keywordType(word: String): TokenType = when (word) {
-    in CONTROL_KEYWORDS -> TokenType.KEYWORD_CONTROL
-    in MODIFIER_KEYWORDS -> TokenType.KEYWORD_MODIFIER
+    in CONTROL_WORDS -> TokenType.KEYWORD_CONTROL
+    in MODIFIER_WORDS -> TokenType.KEYWORD_MODIFIER
     else -> TokenType.KEYWORD
 }
 
@@ -244,12 +247,19 @@ private fun styleMarkdownLine(line: String, entryState: Int): StyledLine {
         spans.add(LineSpan(indent, marker, TokenType.KEYWORD))
         i = marker
     }
-    // Inline: code spans and links.
+    // Inline: code spans, links, emphasis.
     while (i < n) {
         when (line[i]) {
             '`' -> {
                 val end = line.indexOf('`', i + 1)
                 if (end < 0) i++ else { spans.add(LineSpan(i, end + 1, TokenType.STRING)); i = end + 1 }
+            }
+            // `**bold**`, `*italic*`, `_italic_`. Left uncolored before on the reasoning that Preview shows
+            // the real formatting; but the marker pairs are syntax, and a scheme can now dim them or set
+            // the run bold, which is the thing Preview cannot do while you are editing the source.
+            '*', '_' -> {
+                val end = mdEmphasisEnd(line, i)
+                if (end < 0) i++ else { spans.add(LineSpan(i, end, TokenType.EMPHASIS)); i = end }
             }
             '[' -> {
                 val close = line.indexOf(']', i + 1)
@@ -266,6 +276,29 @@ private fun styleMarkdownLine(line: String, entryState: Int): StyledLine {
         }
     }
     return StyledLine(spans, LexState.CODE)
+}
+
+/**
+ * End (exclusive) of an emphasis run starting at [from], or -1 when the marker does not close on this line.
+ *
+ * A doubled marker is bold and a single one italic, and both have to close with the same marker, which is
+ * what keeps a lone `*` in prose from swallowing the rest of the line.
+ *
+ * `_` carries CommonMark's extra rule: it emphasizes only at a word boundary, because `snake_case_name` is
+ * one identifier and not an italic `case`. `*` has no such rule, in Markdown or here.
+ */
+private fun mdEmphasisEnd(line: String, from: Int): Int {
+    val marker = line[from]
+    val intraword = marker == '_' && from > 0 && (line[from - 1].isLetterOrDigit() || line[from - 1] == '_')
+    if (intraword) return -1
+    val double = from + 1 < line.length && line[from + 1] == marker
+    val open = if (double) from + 2 else from + 1
+    if (open >= line.length || line[open].isWhitespace()) return -1
+    val close = line.indexOf(if (double) "$marker$marker" else "$marker", open)
+    if (close < 0) return -1
+    val end = close + (if (double) 2 else 1)
+    if (marker == '_' && end < line.length && line[end].isLetterOrDigit()) return -1
+    return end
 }
 
 /** A thematic break: three or more `-`, `*`, or `_` with only spaces between (e.g. `---`, `***`, `_ _ _`). */
@@ -714,6 +747,15 @@ private fun styleXmlLine(line: String, entryState: Int): StyledLine {
             spans.add(LineSpan(0, close + 1, TokenType.STRING))
             i = close + 1
         }
+        LexState.XML_CDATA -> {
+            val close = line.indexOf("]]>")
+            if (close < 0) {
+                if (n > 0) spans.add(LineSpan(0, n, TokenType.CDATA))
+                return StyledLine(spans, LexState.XML_CDATA)
+            }
+            spans.add(LineSpan(0, close + 3, TokenType.CDATA))
+            i = close + 3
+        }
     }
     while (i < n) {
         val c = line[i]
@@ -727,11 +769,42 @@ private fun styleXmlLine(line: String, entryState: Int): StyledLine {
                 spans.add(LineSpan(i, close + 3, TokenType.COMMENT))
                 i = close + 3
             }
+            // `<![CDATA[ … ]]>`: delimiters and content alike, and it may run past the end of the line.
+            c == '<' && line.startsWith("<![CDATA[", i) -> {
+                val close = line.indexOf("]]>", startIndex = i + 9)
+                if (close < 0) {
+                    spans.add(LineSpan(i, n, TokenType.CDATA))
+                    return StyledLine(spans, LexState.XML_CDATA)
+                }
+                spans.add(LineSpan(i, close + 3, TokenType.CDATA))
+                i = close + 3
+            }
+            // A prolog or a declaration: `<?xml … ?>`, `<!DOCTYPE …>`. One run, because the inside of one
+            // is not the element grammar and pretending otherwise colors it wrongly.
+            c == '<' && i + 1 < n && (line[i + 1] == '?' || line[i + 1] == '!') -> {
+                val start = i
+                val close = if (line[i + 1] == '?') line.indexOf("?>", i + 2) else line.indexOf('>', i + 2)
+                i = if (close < 0) n else close + (if (line[start + 1] == '?') 2 else 1)
+                spans.add(LineSpan(start, i, TokenType.PROLOG))
+            }
             c == '<' -> {
-                val start = i; i++
-                if (i < n && (line[i] == '/' || line[i] == '?')) i++
-                while (i < n && (line[i].isLetterOrDigit() || line[i] == '_' || line[i] == '-' || line[i] == ':')) i++
-                spans.add(LineSpan(start, i, TokenType.TYPE))
+                // The delimiter and the name are separate runs: `<` is punctuation that happens to open a
+                // tag, and a scheme that colors markup structure apart from its names needs both.
+                val open = i; i++
+                if (i < n && line[i] == '/') i++
+                spans.add(LineSpan(open, i, TokenType.TAG_DELIMITER))
+                i = scanXmlName(line, i, spans, TokenType.TYPE)
+            }
+            // `>` and `/>` close what the run above opened, and were left uncolored entirely.
+            c == '>' -> { spans.add(LineSpan(i, i + 1, TokenType.TAG_DELIMITER)); i++ }
+            c == '/' && i + 1 < n && line[i + 1] == '>' -> {
+                spans.add(LineSpan(i, i + 2, TokenType.TAG_DELIMITER)); i += 2
+            }
+            // `&amp;` / `&#65;` — markup, not content, and invisible until now.
+            c == '&' -> {
+                val semi = line.indexOf(';', i + 1)
+                val end = if (semi in (i + 1)..(i + 12)) semi + 1 else -1
+                if (end < 0) i++ else { spans.add(LineSpan(i, end, TokenType.ENTITY)); i = end }
             }
             c == '"' -> {
                 val start = i; i++
@@ -745,14 +818,41 @@ private fun styleXmlLine(line: String, entryState: Int): StyledLine {
                 }
             }
             c.isLetter() -> {
-                val start = i; i++
-                while (i < n && (line[i].isLetterOrDigit() || line[i] == '_' || line[i] == '-' || line[i] == ':')) i++
-                var j = i
+                val start = i
+                var end = i
+                while (end < n && (line[end].isLetterOrDigit() || line[end] == '_' || line[end] == '-' || line[end] == ':')) end++
+                var j = end
                 while (j < n && line[j] == ' ') j++
-                if (j < n && line[j] == '=') spans.add(LineSpan(start, i, TokenType.PROPERTY))
+                // Only a name followed by `=` is an attribute; anything else here is element content.
+                if (j < n && line[j] == '=') scanXmlName(line, start, spans, TokenType.PROPERTY)
+                i = end
             }
             else -> i++
         }
     }
     return StyledLine(spans, LexState.CODE)
+}
+
+/**
+ * Emit a markup name from [start] as an optional namespace prefix plus a local name, and return the index
+ * past it.
+ *
+ * `android:id` was one run, so the prefix could not be colored apart from the name it qualifies — which is
+ * the distinction that makes an Android layout readable, since the prefix is the same on every line and the
+ * name is the part being read. The colon goes with the delimiters: it is punctuation between two names.
+ */
+private fun scanXmlName(line: String, start: Int, spans: MutableList<LineSpan>, nameType: TokenType): Int {
+    val n = line.length
+    var i = start
+    while (i < n && (line[i].isLetterOrDigit() || line[i] == '_' || line[i] == '-' || line[i] == ':')) i++
+    if (i == start) return i
+    val colon = line.lastIndexOf(':', i - 1).takeIf { it >= start }
+    if (colon == null || colon == start || colon == i - 1) {
+        spans.add(LineSpan(start, i, nameType))
+    } else {
+        spans.add(LineSpan(start, colon, TokenType.NAMESPACE))
+        spans.add(LineSpan(colon, colon + 1, TokenType.TAG_DELIMITER))
+        spans.add(LineSpan(colon + 1, i, nameType))
+    }
+    return i
 }
