@@ -38,6 +38,9 @@ and follow the links into each subsystem.
   indexing, diagnostics and quick-fixes, synthetic classes, build tasks, module types, and templates.
 - [kotlin-completion.md](kotlin-completion.md) — how on-device Kotlin completion works: parse-only PSI,
   the framework's own symbols/inference, and classpath metadata decoding.
+- [editor-color-schemes.md](editor-color-schemes.md) — the editor's user-editable color schemes: the
+  attribute registry and its fallback chain, how the lexical and semantic layers map onto it, the file
+  format, where schemes are stored, and how a language adds colors of its own.
 - [block-editing.md](block-editing.md) — how the projectional (block) editor projects the shared DOM and
   round-trips block edits back to byte-for-byte source.
 - [build-system.md](build-system.md) — the `BuildSystem` SPI, the incremental task engine, the native

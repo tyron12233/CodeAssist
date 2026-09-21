@@ -297,7 +297,20 @@ const val PLUGIN_API_VERSION: Int = 4
  * `VirtualFile`, `ContentHash`, the portable filesystem and `Coordinate`), which is where a plugin's imports
  * of those types now resolve from. `platform-core` keeps exposing them as an `api` dependency, so an import
  * that already compiled still does.
-
+ *
+ * And it opens the editor's colors, which became a user-editable scheme rather than a fixed palette in the
+ * same release. `dev.ide.plugin.ui.ColorAttribute` plus `UiRegistration.colorAttribute` add entries to that
+ * scheme, so a contributed language's own constructs get a color the user can set instead of borrowing a
+ * built-in's. `dev.ide.plugin.ui.EditorLanguage.tokenColorKeys` is the other half: it points a language's
+ * token types at those attributes, the way the host already reads a token type differently per
+ * [dev.ide.plugin.ui.SyntaxStyle] family. Declared as [PluginCapabilities.UI_COLOR_ATTRIBUTE], because
+ * registering under a key the IDE already uses replaces that entry's defaults and so changes how a built-in
+ * language looks. `docs/editor-color-schemes.md` is the guide.
+ *
+ * `tokenColorKeys` is a new constructor parameter on a class published at `2.10.0`, so `EditorLanguage`'s
+ * constructor descriptor changed with it — one more member on the list this bump already covers, and the
+ * reason it is safe to add here rather than in a later minor. `:spi-compat` named it; the baselines pin the
+ * shape being published.
  */
 const val PLUGIN_SPI_VERSION: String = "3.0.0"
 

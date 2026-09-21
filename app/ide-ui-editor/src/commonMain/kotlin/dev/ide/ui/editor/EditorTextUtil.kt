@@ -1,9 +1,9 @@
 package dev.ide.ui.editor
 
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontStyle
 import dev.ide.ui.editor.core.TokenType
-import dev.ide.ui.theme.SyntaxColors
+import dev.ide.ui.theme.colors.ResolvedColorScheme
+import dev.ide.ui.editor.core.tokenColorKey
 
 // Small pure helpers for the code editor (no Compose state): caret heuristics, the syntax→SpanStyle palette,
 // the zoom clamp, and code-point encoding. Extracted from CodeEditor.kt to keep it focused on the surface.
@@ -56,17 +56,20 @@ internal fun caretInsideXmlAttributeValue(chars: CharSequence, caret: Int): Bool
     return quote != null
 }
 
-internal fun paletteFor(syntax: SyntaxColors): Array<SpanStyle?> {
+/**
+ * The lexical palette for one language: [TokenType] ordinal to [SpanStyle], resolved from the active color
+ * scheme once per (scheme, language) rather than per line.
+ *
+ * It takes the language because a token type does not mean the same thing everywhere — the shared scanners
+ * emit a `TYPE` for a class name in Java and for a tag name in XML — so the scheme attribute a token maps
+ * to is a property of the language, not of the token (see `tokenColorKey`). That is what gives XML tags and
+ * Markdown headings their own user-editable colors with no change to the scanners themselves.
+ */
+internal fun paletteFor(colors: ResolvedColorScheme, language: CodeLanguage): Array<SpanStyle?> {
     val palette = arrayOfNulls<SpanStyle>(TokenType.entries.size)
-    palette[TokenType.KEYWORD.ordinal] = SpanStyle(color = syntax.keyword)
-    palette[TokenType.STRING.ordinal] = SpanStyle(color = syntax.string)
-    palette[TokenType.COMMENT.ordinal] = SpanStyle(color = syntax.comment, fontStyle = FontStyle.Italic)
-    palette[TokenType.NUMBER.ordinal] = SpanStyle(color = syntax.number)
-    palette[TokenType.ANNOTATION.ordinal] = SpanStyle(color = syntax.annotation)
-    palette[TokenType.FUNC.ordinal] = SpanStyle(color = syntax.func)
-    palette[TokenType.TYPE.ordinal] = SpanStyle(color = syntax.type)
-    palette[TokenType.PUNCT.ordinal] = SpanStyle(color = syntax.punctuation)
-    palette[TokenType.PROPERTY.ordinal] = SpanStyle(color = syntax.property)
+    for (type in TokenType.entries) {
+        palette[type.ordinal] = colors.spanStyleOf(tokenColorKey(language.profile, type))
+    }
     return palette
 }
 

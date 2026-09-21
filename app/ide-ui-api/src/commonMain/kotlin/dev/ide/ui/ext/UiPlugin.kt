@@ -3,6 +3,8 @@ package dev.ide.ui.ext
 import dev.ide.ui.icons.PluginFileIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
+import dev.ide.ui.theme.colors.ColorAttribute
+import dev.ide.ui.theme.colors.ColorAttributes
 
 /**
  * The single surface a UI plugin contributes its Compose-bearing UI through — unifying what used to be four
@@ -35,6 +37,17 @@ interface UiContributionScope {
     /** Teach the editor how to color, comment, and indent a language ([EditorLanguageProfile]). This is the
      *  text-level layer; a language wanting parsing and resolution also registers a `LanguageBackend`. */
     fun editorLanguage(profile: EditorLanguageProfile): Registration
+
+    /**
+     * Add a colorable thing to the editor's color model ([ColorAttribute]), so the user can set its color
+     * and font style in Settings and a scheme can carry it.
+     *
+     * A language contributes its own constructs here and points its token types at them through
+     * [EditorLanguageProfile.tokenColorKeys]. Because an attribute declares a `parent` and its own defaults,
+     * it looks right in every scheme — including one a user built before the attribute existed — and a
+     * scheme that recolors the parent moves it along until the user says otherwise.
+     */
+    fun colorAttribute(attribute: ColorAttribute): Registration
 
     /** Register the art AND the name mapping for a file type's icon ([TreeIcons] + [PluginFileIcons]). */
     fun fileIcon(iconId: String, suffixes: List<String>, icon: TreeIcon): Registration
@@ -109,6 +122,9 @@ object UiPluginHost {
 
         override fun editorLanguage(profile: EditorLanguageProfile): Registration =
             EditorLanguageRegistry.register(profile)
+
+        override fun colorAttribute(attribute: ColorAttribute): Registration =
+            ColorAttributes.register(attribute)
 
         override fun fileIcon(iconId: String, suffixes: List<String>, icon: TreeIcon): Registration {
             TreeIcons.register(iconId, icon)

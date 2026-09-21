@@ -15,6 +15,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.platform.dynamicColorSchemeOrNull
+import dev.ide.ui.theme.colors.AttributeStyle
+import dev.ide.ui.theme.colors.BuiltInColorSchemes
+import dev.ide.ui.theme.colors.ColorAttributes
+import dev.ide.ui.theme.colors.ColorKeys
+import dev.ide.ui.theme.colors.EditorColorScheme
+import dev.ide.ui.theme.colors.LocalEditorColors
+import dev.ide.ui.theme.colors.ResolvedColorScheme
+import dev.ide.ui.theme.colors.SchemeDefaults
 
 /**
  * The CodeAssist design system, now built on **Material 3 Expressive**. [CodeAssistTheme] installs a real
@@ -349,16 +357,67 @@ private fun CodeAssistColors.bridgedTo(scheme: ColorScheme): CodeAssistColors = 
     error = scheme.error,
 )
 
-/** Project the IDE-domain fields (unchanged by the bridge) into the [Ide] provider. */
-private fun CodeAssistColors.toIdeColors(): IdeColors = IdeColors(
+/**
+ * Project the IDE-domain fields (unchanged by the bridge) into the [Ide] provider, letting the active
+ * editor color scheme override the ones it speaks for.
+ *
+ * The scheme wins where it has an opinion and the theme shows through where it does not, which is what
+ * keeps an untouched install tracking the Material accent while Solarized brings its own paper. The syntax
+ * palette rides along unchanged: the caller already replaced it with the scheme's projection onto the
+ * classic eighteen fields (see [toSyntaxColors]), so every non-editor surface that colors code (sample
+ * cards, the Code Style preview, the block chips) follows the user's scheme without knowing schemes exist.
+ */
+private fun CodeAssistColors.toIdeColors(editor: ResolvedColorScheme): IdeColors = IdeColors(
     isDark = isDark,
-    editorBg = editorBg, consoleBg = consoleBg,
-    gutterText = gutterText, currentLine = currentLine, selection = selection,
-    success = success, run = run, warning = warning, info = info,
+    editorBg = editor.background(editorBg), consoleBg = consoleBg,
+    gutterText = editor.gutterText(gutterText),
+    currentLine = editor.currentLine(currentLine),
+    selection = editor.selection(selection),
+    success = success, run = run, warning = editor.warning(warning), info = editor.info(info),
     gitAdded = gitAdded, gitModified = gitModified, gitDeleted = gitDeleted, gitUntracked = gitUntracked,
     glassThin = glassThin, glassReg = glassReg, glassThick = glassThick,
     glassEdge = glassEdge, glassEdgeTop = glassEdgeTop, scrim = scrim,
     syntax = syntax, block = block,
+)
+
+/**
+ * The live theme's answer for every chrome attribute a scheme leaves unset.
+ *
+ * These are the expressions the editor draws with when nothing overrides them (`accent` for the caret,
+ * `accent` at 30% for the selection, `warning` at 28% for a search hit). Stating them as scheme values is
+ * what lets a scheme replace them one at a time, and what lets the scheme editor show an untouched entry as
+ * the color it actually renders rather than an empty swatch. The editor passes the same expressions as its
+ * own last-resort fallbacks, for the case where a composable renders outside [CodeAssistTheme].
+ */
+private fun CodeAssistColors.schemeDefaults(): SchemeDefaults = SchemeDefaults(
+    buildMap {
+        put(ColorKeys.EDITOR_BACKGROUND, AttributeStyle.bg(editorBg))
+        put(ColorKeys.EDITOR_CARET, AttributeStyle.fg(accent))
+        put(ColorKeys.EDITOR_SELECTION, AttributeStyle.bg(accent.copy(alpha = 0.30f)))
+        put(ColorKeys.EDITOR_CURRENT_LINE, AttributeStyle.bg(currentLine))
+        put(ColorKeys.EDITOR_INDENT_GUIDE, AttributeStyle.fg(hairline))
+        put(ColorKeys.EDITOR_FIND_MATCH, AttributeStyle.bg(warning.copy(alpha = 0.28f)))
+        put(ColorKeys.EDITOR_FIND_CURRENT, AttributeStyle.bg(accent.copy(alpha = 0.5f)))
+        put(ColorKeys.EDITOR_OCCURRENCE, AttributeStyle.bg(textSecondary.copy(alpha = 0.18f)))
+        put(ColorKeys.EDITOR_TEMPLATE_FIELD, AttributeStyle.bg(accent.copy(alpha = 0.16f)))
+        put(ColorKeys.EDITOR_COMPOSING, AttributeStyle.fg(textSecondary))
+        put(ColorKeys.EDITOR_INLAY_HINT, AttributeStyle.fg(textTertiary))
+        // A faint chip behind a fold's `...`: a low-alpha overlay, NOT `hairline.copy(alpha = …)`, which
+        // would replace the hairline's own alpha and paint a near-opaque box in dark mode.
+        put(
+            ColorKeys.EDITOR_FOLD_PLACEHOLDER,
+            AttributeStyle(
+                foreground = textTertiary,
+                background = if (isDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f),
+            ),
+        )
+        put(ColorKeys.GUTTER_TEXT, AttributeStyle.fg(gutterText))
+        put(ColorKeys.GUTTER_CURRENT, AttributeStyle.fg(textSecondary))
+        put(ColorKeys.GUTTER_BORDER, AttributeStyle.fg(separator))
+        put(ColorKeys.DIAGNOSTIC_ERROR, AttributeStyle.fg(error))
+        put(ColorKeys.DIAGNOSTIC_WARNING, AttributeStyle.fg(warning))
+        put(ColorKeys.DIAGNOSTIC_INFO, AttributeStyle.fg(info))
+    }
 )
 
 @Composable
@@ -373,6 +432,8 @@ fun CodeAssistTheme(
     useDynamic: Boolean = false,
     uiFont: FontFamily = FontFamily.SansSerif,
     codeFont: FontFamily = FontFamily.Monospace,
+    /** The user's editor color scheme. The shipped default overrides nothing, so it renders as the theme. */
+    editorColorScheme: EditorColorScheme = BuiltInColorSchemes.DEFAULT,
     content: @Composable () -> Unit,
 ) {
     // Precedence: an explicit custom seed wins; else wallpaper dynamic color IF the user opted into it; else
@@ -383,8 +444,25 @@ fun CodeAssistTheme(
     val scheme = fromSeed ?: (if (useDynamic) wallpaper else null) ?: fallback
 
     val base = remember(dark, accent) { caColors(dark, accent) }
-    val bridged = remember(base, scheme) { base.bridgedTo(scheme) }
-    val ide = remember(bridged) { bridged.toIdeColors() }
+    val bridgedBase = remember(base, scheme) { base.bridgedTo(scheme) }
+    // Resolving the scheme is a walk up every attribute's fallback chain, so it happens here, once per
+    // theme change, and never in the editor's draw path. The registry version is a key so attributes
+    // registered after the first composition are picked up on the next one rather than at the next launch.
+    val defaults = remember(bridgedBase) { bridgedBase.schemeDefaults() }
+    val editorColors = remember(editorColorScheme, dark, defaults, ColorAttributes.version) {
+        ResolvedColorScheme(editorColorScheme, dark, defaults)
+    }
+    val syntaxColors = remember(editorColors) { editorColors.toSyntaxColors() }
+    val bridged = remember(bridgedBase, editorColors, syntaxColors) {
+        bridgedBase.copy(
+            editorBg = editorColors.background(bridgedBase.editorBg),
+            currentLine = editorColors.currentLine(bridgedBase.currentLine),
+            selection = editorColors.selection(bridgedBase.selection),
+            gutterText = editorColors.gutterText(bridgedBase.gutterText),
+            syntax = syntaxColors,
+        )
+    }
+    val ide = remember(bridged, editorColors) { bridged.toIdeColors(editorColors) }
     val caType = remember(uiFont, codeFont) { CaTypography(uiFont, codeFont) }
     val typography = remember(uiFont) { expressiveTypography(uiFont) }
 
@@ -393,6 +471,7 @@ fun CodeAssistTheme(
             LocalCaColors provides bridged,
             LocalCaType provides caType,
             LocalIdeColors provides ide,
+            LocalEditorColors provides editorColors,
             content = content,
         )
     }

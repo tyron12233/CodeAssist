@@ -66,6 +66,7 @@ import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.rename_failed
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
+import dev.ide.ui.theme.Ide
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -217,6 +218,7 @@ private fun CodeEditorContent(
     onOtherFileEdits: suspend (Map<String, List<UiTextEdit>>) -> Unit = { },
 ) {
     val colors = Ca.colors
+    val editorColors = Ide.editorColors
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
     // The soft keyboard is raised only through this handle (on a deliberate tap) — never on focus alone.
@@ -232,7 +234,8 @@ private fun CodeEditorContent(
     val liveScale = rememberUpdatedState(zoom) // read inside the pinch gesture (pointerInput captures once)
 
     // ---- state holders: text metrics + render cache, viewport geometry, and per-tab interaction state ----
-    val renderState = rememberEditorRenderState(session, measurer, density, colors, typography, zoom, fontLigatures)
+    val renderState =
+        rememberEditorRenderState(session, measurer, density, colors, editorColors, typography, zoom, fontLigatures)
     val geometry = rememberEditorGeometry(session, renderState, editorIme, wordWrap, wrapIndent)
     val interaction = rememberEditorInteraction(session, geometry, wordWrap)
     val metrics = renderState.metrics
@@ -635,25 +638,29 @@ private fun CodeEditorContent(
     val diagByLine = remember(diagnostics, doc) { mapDiagnosticsToLines(diagnostics, doc) }
     // The draw palette depends only on the theme, so build it once per theme instead of allocating a fresh
     // EditorDrawColors (17 fields + the alpha-blended copies) on every drawBehind frame during a fling.
-    val drawColors = remember(colors) {
+    // Every field is the active color scheme's value where it has one and the theme's where it does not,
+    // so an untouched install keeps tracking the accent (Material You included) and a scheme that pins its
+    // own background/selection/gutter gets them. The scheme was resolved once at the theme, so this is a
+    // handful of map lookups, not a walk up any fallback chain.
+    val drawColors = remember(colors, editorColors) {
         EditorDrawColors(
-            background = colors.editorBg,
-            currentLine = colors.currentLine,
-            caret = colors.accent,
-            selection = colors.accent.copy(alpha = 0.30f),
-            gutterText = colors.gutterText,
-            gutterCurrent = colors.textSecondary,
-            gutterBorder = colors.separator,
-            error = colors.error,
-            warning = colors.warning,
-            info = colors.info,
+            background = editorColors.background(colors.editorBg),
+            currentLine = editorColors.currentLine(colors.currentLine),
+            caret = editorColors.caret(colors.accent),
+            selection = editorColors.selection(colors.accent.copy(alpha = 0.30f)),
+            gutterText = editorColors.gutterText(colors.gutterText),
+            gutterCurrent = editorColors.gutterCurrent(colors.textSecondary),
+            gutterBorder = editorColors.gutterBorder(colors.separator),
+            error = editorColors.error(colors.error),
+            warning = editorColors.warning(colors.warning),
+            info = editorColors.info(colors.info),
             muted = colors.textTertiary,
-            composing = colors.textSecondary,
-            indentGuide = colors.hairline,
-            findMatch = colors.warning.copy(alpha = 0.28f),
-            findCurrent = colors.accent.copy(alpha = 0.5f),
-            occurrence = colors.textSecondary.copy(alpha = 0.18f),
-            templateField = colors.accent.copy(alpha = 0.16f),
+            composing = editorColors.composing(colors.textSecondary),
+            indentGuide = editorColors.indentGuide(colors.hairline),
+            findMatch = editorColors.findMatch(colors.warning.copy(alpha = 0.28f)),
+            findCurrent = editorColors.findCurrent(colors.accent.copy(alpha = 0.5f)),
+            occurrence = editorColors.occurrence(colors.textSecondary.copy(alpha = 0.18f)),
+            templateField = editorColors.templateField(colors.accent.copy(alpha = 0.16f)),
         )
     }
     val bracketPair = remember(doc, editorSession.selection) {

@@ -2,6 +2,7 @@ package dev.ide.core
 
 import dev.ide.ui.LeftPanelId
 import dev.ide.ui.backend.VcsService
+import dev.ide.ui.theme.colors.ColorAttribute
 import dev.ide.ui.ext.EditorViewModeContribution
 import dev.ide.ui.ext.OverlayContribution
 import dev.ide.ui.ext.Registration
@@ -87,6 +88,8 @@ class VcsUiContributionTest {
             actions += action
             return Registration {}
         }
+
+        override fun colorAttribute(attribute: ColorAttribute): Registration = Registration {}
 
         override fun toolWindow(toolWindow: ToolWindowContribution): Registration {
             toolWindows += toolWindow

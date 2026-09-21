@@ -36,6 +36,7 @@ import dev.ide.ui.editor.core.MEASURER_CACHE_ENTRIES
 import dev.ide.ui.editor.core.SemSpan
 import dev.ide.ui.editor.folding.FoldModel
 import dev.ide.ui.theme.Ca
+import dev.ide.ui.theme.Ide
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.PictureRecorder
 import org.jetbrains.skia.Rect
@@ -439,8 +440,10 @@ class RenderFrameBenchmark {
         val measurer = rememberTextMeasurer(cacheSize = MEASURER_CACHE_ENTRIES)
         val density = LocalDensity.current
         val colors = Ca.colors
+        val editorColors = Ide.editorColors
         val typography = Ca.type
-        val render = rememberEditorRenderState(session, measurer, density, colors, typography, 1f, true)
+        val render =
+            rememberEditorRenderState(session, measurer, density, colors, editorColors, typography, 1f, true)
         Box(Modifier.fillMaxSize())
         val draw = EditorDrawColors(
             background = colors.editorBg, currentLine = colors.currentLine, caret = colors.accent,
@@ -462,7 +465,7 @@ class RenderFrameBenchmark {
                 )
             }
         }
-        val perLineSem = perLineSemanticSpans(semTokens, session.doc, colors.syntax)
+        val perLineSem = perLineSemanticSpans(semTokens, session.doc, editorColors)
         onReady(
             Captured(
                 render, measurer, LocalFontFamilyResolver.current,

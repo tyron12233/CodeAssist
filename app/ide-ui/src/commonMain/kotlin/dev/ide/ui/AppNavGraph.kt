@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +39,7 @@ import dev.ide.ui.screens.DailyChallengeScreen
 import dev.ide.ui.screens.StoreSignInSheet
 import dev.ide.ui.screens.SubmitProjectScreen
 import dev.ide.ui.screens.CodeStyleScreen
+import dev.ide.ui.screens.ColorSchemeScreen
 import dev.ide.ui.screens.CreateProjectScreen
 import dev.ide.ui.screens.EditorScreen
 import dev.ide.ui.screens.ExportProjectScreen
@@ -362,6 +364,36 @@ internal fun AppNavGraph(
                 onBack = { app.navigateTo(Screen.Hub) },
             )
 
+            // The editor color scheme. It needs no backend: schemes live on the app preference store, and
+            // the scheme it edits is the one the running theme is already rendering with, so every change
+            // repaints the app — including this screen's own preview — as it is made.
+            Screen.ColorScheme -> ColorSchemeScreen(
+                store = app.colorSchemes,
+                isDark = isDarkTheme(app.settings, isSystemInDarkTheme()),
+                onApply = app::applyColorScheme,
+                // A scheme is a file people hand to each other, so it goes in and out by file where the
+                // host has a picker and by clipboard everywhere (the screen always offers the clipboard).
+                onImportFile = if (fileActions.canPickFile) {
+                    { onJson ->
+                        fileActions.pickFile(listOf("json")) { path ->
+                            if (path != null) runCatching { state.backend.files.readFile(path) }.getOrNull()?.let(onJson)
+                        }
+                    }
+                } else {
+                    null
+                },
+                onExportFile = if (fileActions.canShare || fileActions.canExport) {
+                    { fileName, json ->
+                        state.backend.settings.writeSharedFile(fileName, json)?.let { path ->
+                            if (fileActions.canExport) fileActions.exportFile(path) else fileActions.share(path)
+                        }
+                    }
+                } else {
+                    null
+                },
+                onBack = { app.navigateTo(Screen.Hub) },
+            )
+
             Screen.EditorSymbols -> SymbolMacroEditorScreen(
                 state = state,
                 onBack = { app.navigateTo(Screen.Hub) },
@@ -443,6 +475,7 @@ internal fun AppNavGraph(
                 onBack = { app.navigateTo(app.hubReturn) },
                 onOpenGlobalSettings = { app.navigateTo(Screen.Settings) },
                 onOpenCodeStyle = { app.navigateTo(Screen.CodeStyle) },
+                onOpenColors = { app.navigateTo(Screen.ColorScheme) },
                 onOpenSymbols = { app.navigateTo(Screen.EditorSymbols) },
                 onOpenSdkManager = { app.navigateTo(Screen.SdkManager) },
                 onOpenKeystoreManager = app::openKeystoreManagerFromHub,

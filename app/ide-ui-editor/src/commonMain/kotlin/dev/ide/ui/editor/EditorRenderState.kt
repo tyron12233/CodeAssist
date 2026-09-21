@@ -9,7 +9,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
@@ -21,6 +20,7 @@ import dev.ide.ui.editor.core.InlayPiece
 import dev.ide.ui.editor.core.LineRenderCache
 import dev.ide.ui.theme.CaTypography
 import dev.ide.ui.theme.CodeAssistColors
+import dev.ide.ui.theme.colors.ResolvedColorScheme
 
 /**
  * The editor's text-metrics + per-line render state: the code/gutter [TextStyle]s, the measured
@@ -162,17 +162,17 @@ internal fun rememberEditorRenderState(
     measurer: TextMeasurer,
     density: Density,
     colors: CodeAssistColors,
+    editorColors: ResolvedColorScheme,
     typography: CaTypography,
     zoom: Float,
     fontLigatures: Boolean,
 ): EditorRenderState {
-    val syntax = colors.syntax
     val state = remember(session) { EditorRenderState(session) }
     state.measurer = measurer
 
     // Zoom scales the code + gutter text size; the metrics/render-cache below key on these styles, so a zoom
     // recomputes line metrics and re-shapes lines at the new size (the cache is rebuilt — expected on zoom).
-    val codeStyle = remember(syntax, typography, zoom, fontLigatures) {
+    val codeStyle = remember(editorColors, typography, zoom, fontLigatures) {
         // Drop the theme's explicit lineHeight: the editor stacks visual rows itself at `metrics.lineHeight`,
         // and an explicit lineHeight makes a soft-wrapped paragraph space its MIDDLE rows differently from its
         // (trimmed) first/last rows — non-uniform spacing that the row model can't track. Unspecified ⇒ the
@@ -181,7 +181,7 @@ internal fun rememberEditorRenderState(
         // the shaper enables by default — so OFF must disable them explicitly; ON leaves the defaults. They
         // keep the monospace advance, so column geometry (charWidth, caret, tap) is unaffected.
         typography.code.copy(
-            color = syntax.default,
+            color = editorColors.textColor,
             fontSize = typography.code.fontSize * zoom,
             lineHeight = TextUnit.Unspecified,
             fontFeatureSettings = if (fontLigatures) null else "liga off, calt off, clig off, dlig off",
@@ -216,7 +216,7 @@ internal fun rememberEditorRenderState(
             )
         }
     }
-    val palette = remember(syntax) { paletteFor(syntax) }
+    val palette = remember(editorColors, session.language) { paletteFor(editorColors, session.language) }
     state.palette = palette
     state.renderCache = remember(session, measurer, codeStyle, palette) {
         LineRenderCache(measurer, codeStyle, palette)
@@ -225,7 +225,7 @@ internal fun rememberEditorRenderState(
     // Inlay hints, semantic tokens, folds and @Preview markers are produced by the highlighting daemon and live
     // on the session (shifted in place between passes); the render cache re-shapes only the lines whose spans
     // actually changed (per-line stamp), so we push the current overlay maps to it each recomposition.
-    val inlayStyle = remember(colors) { SpanStyle(color = colors.textTertiary, fontStyle = FontStyle.Italic) }
+    val inlayStyle = remember(editorColors, colors) { editorColors.inlayHintStyle(colors.textTertiary) }
     // The language backend's hints and the plugin tier's are held separately on the session (each pass
     // replaces its own list wholesale), and are one map here because they render as one run of phantom text.
     val inlayHints = session.inlayHints
@@ -243,8 +243,8 @@ internal fun rememberEditorRenderState(
         }
     }
     state.renderCache.setInlays(perLineInlays, inlayStyle)
-    val perLineSemantic = remember(session.semanticTokens, session.doc, syntax) {
-        perLineSemanticSpans(session.semanticTokens, session.doc, syntax)
+    val perLineSemantic = remember(session.semanticTokens, session.doc, editorColors) {
+        perLineSemanticSpans(session.semanticTokens, session.doc, editorColors)
     }
     // A plugin's recoloring/strikethrough decorations layer OVER the semantic tokens (see mergeSpanLayers);
     // its geometric ones go to the canvas as `decoByLine` below.
@@ -256,11 +256,11 @@ internal fun rememberEditorRenderState(
         perLineDecorationSegs(session.textDecorations, session.doc, colors)
     }
 
-    val foldPlaceholderStyle = remember(colors) {
+    val foldPlaceholderStyle = remember(editorColors, colors) {
         // A faint chip behind `...` — a low-alpha overlay (NOT hairline.copy(alpha=…), which would replace the
         // hairline's alpha and paint a near-opaque white box in dark mode).
         val chipBg = if (colors.isDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
-        SpanStyle(color = colors.textTertiary, background = chipBg)
+        editorColors.foldPlaceholderStyle(colors.textTertiary, chipBg)
     }
     state.foldPlaceholderStyle = foldPlaceholderStyle
     state.compositeCache = remember(session.doc, session.foldModel, codeStyle, foldPlaceholderStyle, palette) {

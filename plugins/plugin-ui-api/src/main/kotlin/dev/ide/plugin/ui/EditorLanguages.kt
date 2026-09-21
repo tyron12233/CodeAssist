@@ -94,6 +94,23 @@ class EditorLanguage(
     val directivePrefix: String? = null,
 
     /**
+     * Point this language's token types at color-scheme attributes of its own, keyed by the token type's
+     * name: `"KEYWORD"`, `"STRING"`, `"COMMENT"`, `"NUMBER"`, `"ANNOTATION"`, `"FUNC"`, `"TYPE"`, `"PUNCT"`,
+     * `"PROPERTY"`.
+     *
+     * A [SyntaxStyle] family's token types are named for a brace language, and the host already reads them
+     * differently per family — a `TYPE` is a class name in C_FAMILY and a tag name in XML. This is the same
+     * move for a contributed language: register an attribute with [UiRegistration.colorAttribute] and name
+     * it here, and the construct the scanner was calling an annotation becomes the user-editable
+     * "Storage qualifier" instead of borrowing a built-in's color.
+     *
+     * Anything left out keeps the family's own mapping, so this is an override list, not a table to fill in.
+     * A name that is not one of the nine above is ignored, and a key nothing registered falls back to the
+     * family's mapping too, so a typo costs the custom color and never the coloring.
+     */
+    val tokenColorKeys: Map<String, String> = emptyMap(),
+
+    /**
      * Lowest wins when two profiles claim the same suffix. The IDE's own profiles sit at the default, so a
      * plugin that means to take a built-in language's coloring over must pass something lower, and one that
      * merely adds a language need not think about it.

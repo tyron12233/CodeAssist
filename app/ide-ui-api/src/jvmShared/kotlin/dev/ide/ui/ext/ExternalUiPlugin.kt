@@ -3,8 +3,11 @@ package dev.ide.ui.ext
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import dev.ide.ui.icons.TreeIcon
+import dev.ide.ui.theme.colors.AttributeStyle
+import dev.ide.ui.theme.colors.ColorAttribute
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.ServiceLookup
+import dev.ide.plugin.ui.ColorAttribute as ExternalColorAttribute
 import dev.ide.plugin.ui.Overlay
 import dev.ide.plugin.ui.EditorAnchor as ExternalAnchorPoint
 import dev.ide.plugin.ui.EditorLanguage as ExternalEditorLanguage
@@ -172,7 +175,24 @@ private class BridgedRegistration(
                 blockCommentOpen = language.blockCommentOpen,
                 blockCommentClose = language.blockCommentClose,
                 directivePrefix = language.directivePrefix,
+                // Filtered to the token types that exist, so a typo in a published plugin costs that one
+                // custom color instead of leaving a mapping the host will never consult and never mention.
+                tokenColorKeys = language.tokenColorKeys.filterKeys { it in TOKEN_TYPE_NAMES },
                 order = language.order,
+            ),
+        )
+        return UiHandle { registration.dispose() }
+    }
+
+    override fun colorAttribute(attribute: ExternalColorAttribute): UiHandle {
+        val registration = scope.colorAttribute(
+            ColorAttribute(
+                key = attribute.key,
+                title = attribute.title,
+                group = attribute.group,
+                parent = attribute.parent,
+                defaultDark = attribute.styleFor(attribute.darkColor),
+                defaultLight = attribute.styleFor(attribute.lightColor),
             ),
         )
         return UiHandle { registration.dispose() }
@@ -208,6 +228,29 @@ private class BridgedRegistration(
         return UiHandle { registration.dispose() }
     }
 }
+
+/**
+ * A published attribute's style for one variant.
+ *
+ * A font flag crosses the SPI as a plain `Boolean`, because a plugin author should not have to think in
+ * three states to say "bold". So `false` is carried as "no opinion" rather than as an explicit `false`:
+ * the host's model is tri-state, and writing the `false` a plugin never typed would BLOCK the flag from
+ * being inherited down the attribute's own parent chain. `true` is the only thing anyone actually said.
+ */
+private fun ExternalColorAttribute.styleFor(color: Long?): AttributeStyle = AttributeStyle(
+    foreground = color?.let { Color(it.toULong().toLong()) },
+    bold = bold.orNull(),
+    italic = italic.orNull(),
+    underline = underline.orNull(),
+    strikethrough = strikethrough.orNull(),
+)
+
+private fun Boolean.orNull(): Boolean? = if (this) true else null
+
+/** The token-type names a profile's `tokenColorKeys` may address; see `dev.ide.ui.editor.core.TokenType`. */
+private val TOKEN_TYPE_NAMES = setOf(
+    "KEYWORD", "STRING", "COMMENT", "NUMBER", "ANNOTATION", "FUNC", "TYPE", "PUNCT", "PROPERTY",
+)
 
 private fun ExternalSyntax.internal(): SyntaxFamily = when (this) {
     ExternalSyntax.C_FAMILY -> SyntaxFamily.C_FAMILY

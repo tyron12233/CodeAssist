@@ -1,6 +1,40 @@
 # The compiled surface of io.github.tyron12233:plugin-ui-api, pinned at SPI 3.0.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/plugin/ui/ColorAttribute
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;ZZZZ)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;ZZZZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getBold()Z
+	method getDarkColor()Ljava/lang/Long;
+	method getGroup()Ljava/lang/String;
+	method getItalic()Z
+	method getKey()Ljava/lang/String;
+	method getLightColor()Ljava/lang/Long;
+	method getParent()Ljava/lang/String;
+	method getStrikethrough()Z
+	method getTitle()Ljava/lang/String;
+	method getUnderline()Z
+dev/ide/plugin/ui/ColorAttributeKeys
+	kind class
+	super java/lang/Object
+	field static ANNOTATION Ljava/lang/String;
+	field static COMMENT Ljava/lang/String;
+	field static CONSTANT Ljava/lang/String;
+	field static FUNCTION Ljava/lang/String;
+	field static INSTANCE Ldev/ide/plugin/ui/ColorAttributeKeys;
+	field static KEYWORD Ljava/lang/String;
+	field static LABEL Ljava/lang/String;
+	field static NAMESPACE Ljava/lang/String;
+	field static NUMBER Ljava/lang/String;
+	field static PROPERTY Ljava/lang/String;
+	field static PUNCTUATION Ljava/lang/String;
+	field static STRING Ljava/lang/String;
+	field static STRING_ESCAPE Ljava/lang/String;
+	field static TEXT Ljava/lang/String;
+	field static TYPE Ljava/lang/String;
+	field static VARIABLE Ljava/lang/String;
 dev/ide/plugin/ui/EditorAnchor
 	kind interface
 dev/ide/plugin/ui/EditorAnchor$AboveLine
@@ -24,8 +58,8 @@ dev/ide/plugin/ui/EditorAnchor$AtOffset
 dev/ide/plugin/ui/EditorLanguage
 	kind class
 	super java/lang/Object
-	ctor (Ljava/lang/String;Ljava/util/List;Ldev/ide/plugin/ui/SyntaxStyle;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V
-	ctor (Ljava/lang/String;Ljava/util/List;Ldev/ide/plugin/ui/SyntaxStyle;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ljava/lang/String;Ljava/util/List;Ldev/ide/plugin/ui/SyntaxStyle;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;I)V
+	ctor (Ljava/lang/String;Ljava/util/List;Ldev/ide/plugin/ui/SyntaxStyle;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method getBlockCommentClose()Ljava/lang/String;
 	method getBlockCommentOpen()Ljava/lang/String;
 	method getDirectivePrefix()Ljava/lang/String;
@@ -35,6 +69,7 @@ dev/ide/plugin/ui/EditorLanguage
 	method getOrder()I
 	method getSuffixes()Ljava/util/List;
 	method getSyntax()Ldev/ide/plugin/ui/SyntaxStyle;
+	method getTokenColorKeys()Ljava/util/Map;
 dev/ide/plugin/ui/EditorLayer
 	kind class
 	super java/lang/Object
@@ -233,6 +268,7 @@ dev/ide/plugin/ui/UiPlugin
 	method abstract getId()Ljava/lang/String;
 dev/ide/plugin/ui/UiRegistration
 	kind interface
+	method abstract colorAttribute(Ldev/ide/plugin/ui/ColorAttribute;)Ldev/ide/plugin/ui/UiHandle;
 	method abstract editorLanguage(Ldev/ide/plugin/ui/EditorLanguage;)Ldev/ide/plugin/ui/UiHandle;
 	method abstract editorLayer(Ldev/ide/plugin/ui/EditorLayer;)Ldev/ide/plugin/ui/UiHandle;
 	method abstract editorPainter(Ldev/ide/plugin/ui/EditorPainter;)Ldev/ide/plugin/ui/UiHandle;

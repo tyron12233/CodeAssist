@@ -92,6 +92,16 @@ interface UiRegistration {
     fun editorLanguage(language: EditorLanguage): UiHandle
 
     /**
+     * Add a colorable thing to the editor's color model. See [ColorAttribute].
+     *
+     * The editor's colors are a user-editable scheme, and the set of entries in one is open. Register the
+     * constructs this plugin's language has that the shared scanners have no name for, and point the
+     * language's token types at them through [EditorLanguage.tokenColorKeys]; they then appear in
+     * Settings → Editor Colors under a group of this plugin's choosing.
+     */
+    fun colorAttribute(attribute: ColorAttribute): UiHandle
+
+    /**
      * Give a file type an icon, in the tree, on tabs and in breadcrumbs. See [FileIcon].
      *
      * A file type with no icon is not a neutral default: it is the generic grey document, the same one an

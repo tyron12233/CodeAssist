@@ -48,6 +48,17 @@ class EditorLanguageProfile(
      */
     val directivePrefix: String? = null,
 
+    /**
+     * Per-token-type color attributes, keyed by the editor's token-type name (`"KEYWORD"`, `"STRING"`, …).
+     *
+     * A language is colored by the shared scanner for its [syntax] family, and the family decides what each
+     * token type MEANS in scheme terms — a `TYPE` is a class name in a brace language and a tag name in XML.
+     * A language whose constructs deserve their own user-editable colors registers its attributes with
+     * `ColorAttributes` and points its token types at them here; anything left out falls back to the
+     * family's mapping, so this is an override list and not a table a profile has to fill in.
+     */
+    val tokenColorKeys: Map<String, String> = emptyMap(),
+
     /** Lowest wins when two profiles claim the same suffix, matching `FileTypeMapping.order`. */
     val order: Int = 1000,
 ) {

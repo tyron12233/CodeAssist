@@ -116,6 +116,16 @@ object PluginCapabilities {
     const val UI_EDITOR_LANGUAGE = "ui.editorLanguage"
 
     /**
+     * Adds entries to the editor's color scheme ([dev.ide.plugin.ui.ColorAttribute]).
+     *
+     * Declared by a plugin that gives its language's own constructs colors the user can set. Worth showing
+     * because registering an attribute under a key the IDE already uses replaces that entry's defaults, the
+     * same way a language profile may take a built-in suffix over: a user's own overrides still win, but the
+     * unmodified appearance of a built-in language is something a plugin can change. UI facet.
+     */
+    const val UI_COLOR_ATTRIBUTE = "ui.colorAttribute"
+
+    /**
      * Runs the code in the user's project, inside the IDE, on the interpreter.
      *
      * The one capability here that is about the user's own code rather than the IDE's surfaces, which is why
@@ -130,7 +140,7 @@ object PluginCapabilities {
     val KNOWN: Set<String> = linkedSetOf(
         UI_ACTION, UI_SETTINGS_PAGE, UI_EDITOR_ACTION, UI_KEY_BINDING,
         UI_TOOL_WINDOW, UI_SCREEN, UI_OVERLAY, UI_EDITOR_PREVIEW, UI_EDITOR_DECORATION,
-        UI_EDITOR_LAYER, UI_EDITOR_PAINTER, UI_EDITOR_LANGUAGE,
+        UI_EDITOR_LAYER, UI_EDITOR_PAINTER, UI_EDITOR_LANGUAGE, UI_COLOR_ATTRIBUTE,
         BUILD_TASK, BUILD_SOURCE_GENERATOR, BUILD_RUN_TASK,
         LANG_BACKEND, MODEL_MODULE_TYPE, MODEL_FACET,
         INTERP_RUN,
@@ -140,7 +150,7 @@ object PluginCapabilities {
     /** Capabilities only a [PluginManifest.uiEntryPoints] class can deliver: they are Compose contributions. */
     val NEEDS_UI_FACET: Set<String> = linkedSetOf(
         UI_TOOL_WINDOW, UI_SCREEN, UI_OVERLAY, UI_EDITOR_PREVIEW, UI_EDITOR_LAYER, UI_EDITOR_PAINTER,
-        UI_EDITOR_LANGUAGE,
+        UI_EDITOR_LANGUAGE, UI_COLOR_ATTRIBUTE,
     )
 
     /**

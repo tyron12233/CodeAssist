@@ -21,6 +21,8 @@ import dev.ide.ui.backend.UiAccent
 import dev.ide.ui.backend.UiImportPreview
 import dev.ide.ui.backend.UiInstallState
 import dev.ide.ui.backend.UiSettings
+import dev.ide.ui.theme.colors.ColorSchemeStore
+import dev.ide.ui.theme.colors.EditorColorScheme
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.platform.ioDispatcher
 import dev.ide.ui.screens.ModulesTab
@@ -97,6 +99,20 @@ class CodeAssistAppState(
     /** Persisted IDE settings driving the theme (and seeding the editor's live prefs). Re-read after the
      *  Settings screen writes, so appearance changes take effect immediately. */
     var settings: UiSettings by mutableStateOf(backend.settings.settings())
+        private set
+
+    /**
+     * The user's editor color schemes, kept on the app preference store.
+     *
+     * On [dev.ide.ui.backend.SettingsService.preference] rather than a service of its own because that is
+     * the one storage seam every host implements — including iOS, which answers nothing else on that
+     * interface — so schemes work the same on all three with no per-host code.
+     */
+    val colorSchemes: ColorSchemeStore =
+        ColorSchemeStore(backend.settings::preference, backend.settings::setPreference)
+
+    /** The scheme the editor renders with. Read by the theme; re-read whenever the scheme editor writes. */
+    var editorColorScheme: EditorColorScheme by mutableStateOf(colorSchemes.active())
         private set
 
     // ---- navigation ----
@@ -349,6 +365,18 @@ class CodeAssistAppState(
     /** Re-read the persisted settings after the Settings screen (or a quick toggle) wrote them. */
     fun reloadSettings() {
         settings = backend.settings.settings()
+    }
+
+    /** Re-read the active color scheme after the scheme editor saved or switched one. */
+    fun reloadColorScheme() {
+        editorColorScheme = colorSchemes.active()
+    }
+
+    /** Make [scheme] the active one, persisting both it (when it is the user's) and the choice. */
+    fun applyColorScheme(scheme: EditorColorScheme) {
+        if (!scheme.builtIn) colorSchemes.save(scheme)
+        colorSchemes.setActiveId(scheme.id)
+        editorColorScheme = scheme
     }
 
     /** Quick theme toggle: flip to the opposite of what is shown ([currentlyDark]), stepping out of "system"
@@ -965,7 +993,8 @@ class CodeAssistAppState(
             screen == Screen.KeystoreCreate || screen == Screen.KeystoreImport -> screen = Screen.KeystoreManager
             // The hub's sub-screens step back to the hub; the keystore manager honours its entry origin.
             screen == Screen.SdkManager || screen == Screen.Settings || screen == Screen.CodeStyle ||
-                screen == Screen.EditorSymbols || screen == Screen.Plugins || screen == Screen.Storage ->
+                screen == Screen.ColorScheme || screen == Screen.EditorSymbols ||
+                screen == Screen.Plugins || screen == Screen.Storage ->
                 screen = Screen.Hub
             screen == Screen.KeystoreManager -> screen = keystoreReturn
             screen == Screen.AppIconStudio -> screen = Screen.IconManager

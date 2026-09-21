@@ -126,6 +126,7 @@ fun CodeAssistApp(
         useDynamic = app.settings.accent == UiAccent.Dynamic,
         uiFont = uiFont,
         codeFont = resolvedCodeFont,
+        editorColorScheme = app.editorColorScheme,
     ) {
         // Route the system back gesture through in-app navigation instead of letting it close the app (#997).
         // Registered above the editor's own overlay handler, so an open sheet/dialog is closed first (the

@@ -26,6 +26,7 @@ dev/ide/plugin/PluginCapabilities
 	field static MODEL_MODULE_TYPE Ljava/lang/String;
 	field static NET Ljava/lang/String;
 	field static UI_ACTION Ljava/lang/String;
+	field static UI_COLOR_ATTRIBUTE Ljava/lang/String;
 	field static UI_EDITOR_ACTION Ljava/lang/String;
 	field static UI_EDITOR_DECORATION Ljava/lang/String;
 	field static UI_EDITOR_LANGUAGE Ljava/lang/String;

@@ -1500,6 +1500,17 @@ interface SettingsService {
     /** Persist an app-global preference. */
     fun setPreference(key: String, value: String) {}
 
+    /**
+     * Write [content] to a file named [fileName] somewhere the host can hand to the platform share/save
+     * flow, and return its path — or null when this host has nowhere to put it.
+     *
+     * Exists for small user-authored documents the IDE produces but does not keep in a project: an exported
+     * editor color scheme is the first. The caller passes the path to
+     * [dev.ide.ui.backend.FileActions.exportFile] or `share`; a null answer means the feature degrades to
+     * the clipboard rather than disappearing.
+     */
+    fun writeSharedFile(fileName: String, content: String): String? = null
+
     /** The built-in plugins for the Plugins settings screen (all, with enabled/essential state). */
     fun pluginCatalog(): List<UiPluginInfo> = emptyList()
 

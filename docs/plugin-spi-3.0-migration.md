@@ -128,6 +128,36 @@ val VFS_CHANGES = Topic("vfs.changes", VfsListener::class.java)   // still fine 
 but the compiled call changed from `NEW Topic` + `<init>` to a static call, so this one needs the recompile
 like the rest. Prefer the fan-out form in any code that might run off the JVM.
 
+### `EditorLanguage` gained a parameter
+
+`3.0.0` also **adds** to the SPI, and one addition lands inside a class published at `2.10.0`:
+`dev.ide.plugin.ui.EditorLanguage` gained a `tokenColorKeys` parameter. Source-compatible (it has a
+default), binary-incompatible (the constructor descriptor changed), which is the same shape as everything
+above and is covered by the same bump.
+
+```kotlin
+ui.colorAttribute(
+    ColorAttribute(
+        key = "glsl.qualifier", title = "Storage qualifier", group = "GLSL",
+        parent = ColorAttributeKeys.KEYWORD,
+        darkColor = 0xFF4EC9B0, lightColor = 0xFF267F6E, bold = true,
+    )
+)
+ui.editorLanguage(
+    EditorLanguage(
+        id = "glsl", suffixes = listOf(".glsl"),
+        tokenColorKeys = mapOf("ANNOTATION" to "glsl.qualifier"),   // new in 3.0.0
+    )
+)
+```
+
+The editor's colors became a user-editable scheme in this release, and these two calls are how a
+contributed language takes part in it: the attribute puts the construct in Settings → Editor Colors with a
+color and a font style the user can set, and the mapping points the scanner's output at it instead of at a
+built-in's "annotation". Declare `ui.colorAttribute` in the manifest's capabilities. Nothing is required —
+a language that registers neither is still colored by its `SyntaxStyle` family exactly as before.
+See `docs/editor-color-schemes.md`.
+
 ## 4. What happens if you do not migrate
 
 `ExternalPluginLoader` compares the manifest's `apiVersion` with the host's on strict equality, so a plugin
@@ -147,5 +177,6 @@ against `3.0.0` defeats that: the gate passes and the linkage error comes back.
 - [ ] Rebuilt against the new artifacts (not just re-declared).
 - [ ] `Externalizer` implementations take `DataWriter`/`DataReader`.
 - [ ] Anything that read `IndexInput.sourcePath` as a `Path` handles a `String`.
+- [ ] Any `EditorLanguage(...)` call recompiled (its constructor descriptor changed).
 - [ ] Installed on a build of the IDE that loads API `4`, and the plugin's row shows it enabled rather than
       refused.

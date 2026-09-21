@@ -5,6 +5,8 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import dev.ide.ui.theme.colors.LocalEditorColors
+import dev.ide.ui.theme.colors.ResolvedColorScheme
 
 /**
  * IDE-domain colors that have no Material role: the editor/console surfaces, gutter + current-line tints,
@@ -53,6 +55,11 @@ val LocalIdeColors = staticCompositionLocalOf<IdeColors> { error("CodeAssistThem
 object Ide {
     val colors: IdeColors
         @Composable @ReadOnlyComposable get() = LocalIdeColors.current
+
+    /** The active editor color scheme, resolved for the current theme mode: colors looked up by attribute
+     *  key, for the editor canvas and anything else that colors code by construct rather than by role. */
+    val editorColors: ResolvedColorScheme
+        @Composable @ReadOnlyComposable get() = LocalEditorColors.current
 
     /** Code (monospace) text styles + the resolved UI/code font families. */
     val type: CaTypography

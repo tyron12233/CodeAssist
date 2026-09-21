@@ -64,6 +64,7 @@ import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.cancel
 import dev.ide.ui.generated.resources.color_hue
 import dev.ide.ui.generated.resources.color_lightness
+import dev.ide.ui.generated.resources.color_opacity
 import dev.ide.ui.generated.resources.color_picker_title
 import dev.ide.ui.generated.resources.color_saturation
 import dev.ide.ui.generated.resources.save
@@ -420,14 +421,28 @@ private val PICKER_PRESETS = listOf(
     0xFFF9A825L, 0xFFC16A1CL, 0xFFE0533DL, 0xFFD81B60L, 0xFF7F52FFL, 0xFF3A6FE0L,
 )
 
+/**
+ * The shared HSL color picker.
+ *
+ * [allowAlpha] adds an opacity slider, for the colors that are fills rather than ink: an editor selection
+ * band or current-line tint is chosen as much by how much of the code it lets through as by its hue, and a
+ * picker that can only produce opaque colors cannot express one.
+ */
 @Composable
-internal fun ColorPickerDialog(visible: Boolean, initial: Long, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
+fun ColorPickerDialog(
+    visible: Boolean,
+    initial: Long,
+    onDismiss: () -> Unit,
+    allowAlpha: Boolean = false,
+    onPick: (Long) -> Unit,
+) {
     CenteredDialog(visible, onDismiss) {
         val start = remember(initial) { colorToHsl(Color(initial)) }
         var h by remember(initial) { mutableStateOf(start[0]) }
         var s by remember(initial) { mutableStateOf(start[1]) }
         var l by remember(initial) { mutableStateOf(start[2]) }
-        val current = hslToColor(h, s, l)
+        var a by remember(initial) { mutableStateOf(Color(initial).alpha) }
+        val current = hslToColor(h, s, l).copy(alpha = if (allowAlpha) a else 1f)
         Column(
             Modifier.widthIn(max = 360.dp).padding(horizontal = 24.dp)
                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.xl))
@@ -455,6 +470,7 @@ internal fun ColorPickerDialog(visible: Boolean, initial: Long, onDismiss: () ->
             PickerSlider(stringResource(Res.string.color_hue), h, 0f, 360f) { h = it }
             PickerSlider(stringResource(Res.string.color_saturation), s, 0f, 1f) { s = it }
             PickerSlider(stringResource(Res.string.color_lightness), l, 0f, 1f) { l = it }
+            if (allowAlpha) PickerSlider(stringResource(Res.string.color_opacity), a, 0f, 1f) { a = it }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text(stringResource(Res.string.cancel)) }
                 Button(onClick = { onPick(argbLong(current)) }, modifier = Modifier.weight(1f)) { Text(stringResource(Res.string.save)) }
@@ -507,10 +523,11 @@ private fun hslToColor(h: Float, s: Float, l: Float): Color {
 }
 
 private fun argbLong(c: Color): Long {
+    val a = (c.alpha * 255f).roundToInt().coerceIn(0, 255).toLong()
     val r = (c.red * 255f).roundToInt().toLong()
     val g = (c.green * 255f).roundToInt().toLong()
     val b = (c.blue * 255f).roundToInt().toLong()
-    return 0xFF000000L or (r shl 16) or (g shl 8) or b
+    return (a shl 24) or (r shl 16) or (g shl 8) or b
 }
 
 private fun hexOf(c: Color): String {

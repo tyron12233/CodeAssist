@@ -44,6 +44,21 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         ctx.manager?.setPreference(key, value)
     }
 
+    /**
+     * Under the storage root rather than the system temp directory: on Android a share/save hand-off reads
+     * the file back through the app's own FileProvider, which only exposes paths the app owns.
+     */
+    override fun writeSharedFile(fileName: String, content: String): String? {
+        val root = ctx.manager?.storageRoot ?: return null
+        return runCatching {
+            val dir = root.resolve("export")
+            java.nio.file.Files.createDirectories(dir)
+            val file = dir.resolve(fileName.substringAfterLast('/').ifBlank { "export.txt" })
+            java.nio.file.Files.writeString(file, content)
+            file.toString()
+        }.getOrNull()
+    }
+
     override fun pluginCatalog(): List<UiPluginInfo> {
         val manager = ctx.manager ?: return emptyList()
         val catalog = manager.env.pluginCatalog

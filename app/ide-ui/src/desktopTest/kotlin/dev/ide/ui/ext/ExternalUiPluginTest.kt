@@ -11,6 +11,7 @@ import dev.ide.plugin.ui.ToolWindow
 import dev.ide.plugin.ui.UiContext
 import dev.ide.plugin.ui.UiHandle
 import dev.ide.plugin.ui.UiRegistration
+import dev.ide.ui.theme.colors.ColorAttribute
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.ServiceLookup
 import dev.ide.ui.StubBackend
@@ -94,6 +95,59 @@ class ExternalUiPluginTest {
         assertEquals("#", contributed.directivePrefix)
         assertEquals(10, contributed.order)
         assertTrue(contributed.matches("main.cpp"), "the crossed profile must claim its own suffixes")
+    }
+
+    /**
+     * A color attribute crosses whole, and the token mapping that points a scanner's output at it comes
+     * with it.
+     *
+     * Together these are what stop a contributed language having to borrow: the shared scanners name their
+     * token types for a brace language, so without the mapping a GLSL storage qualifier arrives as somebody
+     * else's "annotation" and cannot be recolored on its own. The color conversion is asserted for the same
+     * reason the file icon's is: the SPI carries `0xAARRGGBB` as a `Long`, and the naive `Color(long)` reads
+     * those bytes as an sRGB pixel-format value instead.
+     */
+    @Test
+    fun colorAttributeAndItsTokenMappingAreCarriedOver() {
+        val facet = facet { ui ->
+            ui.colorAttribute(
+                dev.ide.plugin.ui.ColorAttribute(
+                    key = "glsl.qualifier",
+                    title = "Storage qualifier",
+                    group = "GLSL",
+                    parent = dev.ide.plugin.ui.ColorAttributeKeys.KEYWORD,
+                    darkColor = 0xFF4EC9B0,
+                    lightColor = 0xFF267F6E,
+                    bold = true,
+                ),
+            )
+            ui.editorLanguage(
+                dev.ide.plugin.ui.EditorLanguage(
+                    id = "glsl",
+                    suffixes = listOf(".glsl"),
+                    tokenColorKeys = mapOf("ANNOTATION" to "glsl.qualifier", "NOT_A_TOKEN" to "glsl.qualifier"),
+                ),
+            )
+        }
+        val scope = RecordingScope("com.example.glsl")
+
+        facet.asUiPlugin("com.example.glsl").contributeUi(scope)
+
+        val attribute = scope.colorAttributes.single()
+        assertEquals("glsl.qualifier", attribute.key)
+        assertEquals("Storage qualifier", attribute.title)
+        assertEquals("GLSL", attribute.group)
+        assertEquals("keyword", attribute.parent)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF4EC9B0), attribute.defaultDark.foreground)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF267F6E), attribute.defaultLight.foreground)
+        assertEquals(true, attribute.defaultDark.bold)
+        // A flag the plugin did not set must cross as "no opinion", not as an explicit false: the host's
+        // model is tri-state, and a false would stop the flag being inherited from `parent`.
+        assertNull(attribute.defaultDark.italic)
+
+        // A name that is not a token type is dropped rather than carried: the host would never consult it,
+        // and a mapping that silently does nothing is worse than one that is not there.
+        assertEquals(mapOf("ANNOTATION" to "glsl.qualifier"), scope.editorLanguages.single().tokenColorKeys)
     }
 
     /**
@@ -561,6 +615,7 @@ class ExternalUiPluginTest {
         val editorLayers = mutableListOf<EditorLayerContribution>()
         val editorPainters = mutableListOf<EditorPainterContribution>()
         val editorLanguages = mutableListOf<EditorLanguageProfile>()
+        val colorAttributes = mutableListOf<ColorAttribute>()
         val fileIcons = mutableListOf<Triple<String, List<String>, TreeIcon>>()
         var disposed = 0
             private set
@@ -576,6 +631,9 @@ class ExternalUiPluginTest {
         override fun treeIcon(iconId: String, icon: TreeIcon) = handle()
         override fun editorLanguage(profile: EditorLanguageProfile) =
             handle().also { editorLanguages += profile }
+
+        override fun colorAttribute(attribute: ColorAttribute) =
+            handle().also { colorAttributes += attribute }
 
         override fun fileIcon(iconId: String, suffixes: List<String>, icon: TreeIcon) =
             handle().also { fileIcons += Triple(iconId, suffixes, icon) }

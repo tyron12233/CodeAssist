@@ -20,4 +20,8 @@
 # at SPI 3.0.0 / PLUGIN_API_VERSION 4: the baselines above now pin the 3.0.0 surface, and a plugin built
 # against 2.10.0 is refused at the gate with the mismatch on its row rather than loading and throwing
 # NoSuchMethodError at its first call. docs/plugin-spi-3.0-migration.md is what a plugin author does about it.
-
+#
+# Retired with them, in the same release and covered by the same bump: EditorLanguage's two constructors.
+# Adding the `tokenColorKeys` parameter changed the primary's descriptor and its $default synthetic, and
+# there is no way to keep both while adding a defaulted parameter — a secondary constructor carrying the
+# old defaults is an overload ambiguity, and one without them does not reproduce the $default bridge.

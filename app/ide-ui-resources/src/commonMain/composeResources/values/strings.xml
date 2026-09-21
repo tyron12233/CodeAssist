@@ -215,6 +215,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="color_hue">Hue</string>
     <string name="color_saturation">Saturation</string>
     <string name="color_lightness">Lightness</string>
+    <string name="color_opacity">Opacity</string>
     <string name="delete">Delete</string>
     <string name="project_name">Project name</string>
     <string name="package_name">Package name</string>
@@ -1840,4 +1841,44 @@ We never collect your code, file or project names, which features you use, or an
         <item quantity="one">%1$d PROJECT</item>
         <item quantity="other">%1$d PROJECTS</item>
     </plurals>
+
+    <!-- Editor color scheme -->
+    <string name="colors_title">Editor Colors</string>
+    <string name="colors_scheme">Scheme</string>
+    <string name="colors_scheme_desc">The palette the editor renders code with</string>
+    <string name="colors_preview">Preview</string>
+    <string name="colors_preview_hint">Tap anything in the sample to jump to the entry that colors it.</string>
+    <string name="colors_builtin_notice">%1$s is built in. Your changes are saved to a copy.</string>
+    <string name="colors_editing_copy">Editing a copy: %1$s</string>
+    <string name="colors_duplicate">Duplicate</string>
+    <string name="colors_rename">Rename</string>
+    <string name="colors_delete">Delete scheme</string>
+    <string name="colors_delete_confirm">Delete %1$s? This cannot be undone.</string>
+    <string name="colors_reset">Reset all</string>
+    <string name="colors_import">Import</string>
+    <string name="colors_export">Export</string>
+    <string name="colors_copy">Copy JSON</string>
+    <string name="colors_copied">Scheme copied to the clipboard</string>
+    <string name="colors_paste">Paste JSON</string>
+    <string name="colors_paste_hint">Paste an exported scheme</string>
+    <string name="colors_import_failed">That is not a color scheme file</string>
+    <string name="colors_imported">Imported %1$s</string>
+    <string name="colors_scheme_name">Scheme name</string>
+    <string name="colors_foreground">Text color</string>
+    <string name="colors_background">Background</string>
+    <string name="colors_background_none">None</string>
+    <string name="colors_clear">Clear</string>
+    <string name="colors_bold">Bold</string>
+    <string name="colors_italic">Italic</string>
+    <string name="colors_underline">Underline</string>
+    <string name="colors_strikethrough">Strikethrough</string>
+    <string name="colors_inherit">Inherit from %1$s</string>
+    <string name="colors_inherit_desc">Follow the parent entry instead of this one's own default</string>
+    <string name="colors_inherited_from">Inherited from %1$s</string>
+    <string name="colors_customized">Customized</string>
+    <string name="colors_default">Default</string>
+    <string name="colors_overlay_note">Layered on top of whatever the symbol already is.</string>
+    <string name="colors_reset_entry">Reset this entry</string>
+    <string name="settings_colors">Editor Colors</string>
+    <string name="settings_colors_subtitle">Syntax colors, the editor surface, and the gutter</string>
 </resources>

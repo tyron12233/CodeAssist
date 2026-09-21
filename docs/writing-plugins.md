@@ -779,6 +779,46 @@ Declare it as `PluginCapabilities.UI_EDITOR_LANGUAGE`. Notes:
 - `order` decides who wins when two profiles claim a suffix, lowest first. The IDE's own sit at the default, so
   a profile that means to take over `.java` has to say so.
 
+#### Colors of its own
+
+A family's token types are named for a brace language, so anything the family has no name for arrives as
+somebody else's: a GLSL storage qualifier or a Dockerfile instruction comes through as an "annotation",
+indistinguishable from a real one and impossible for the user to recolor on its own. The editor's colors are
+a user-editable scheme and the set of entries in one is open, so register the construct and point the
+scanner's output at it:
+
+```kotlin
+ui.colorAttribute(
+    ColorAttribute(
+        key = "glsl.qualifier",                   // namespaced: a scheme records overrides against it
+        title = "Storage qualifier",
+        group = "GLSL",                           // its own section in Settings -> Editor Colors
+        parent = ColorAttributeKeys.KEYWORD,      // what it falls back to, field by field
+        darkColor = 0xFF4EC9B0, lightColor = 0xFF267F6E, bold = true,
+    )
+)
+ui.editorLanguage(
+    EditorLanguage(
+        id = "glsl",
+        suffixes = listOf(".glsl", ".frag", ".vert"),
+        keywords = GLSL_KEYWORDS,
+        tokenColorKeys = mapOf("ANNOTATION" to "glsl.qualifier"),
+    )
+)
+```
+
+Declare it as `PluginCapabilities.UI_COLOR_ATTRIBUTE`. Set both `darkColor` and `lightColor`, or neither: a
+dark-only default reads as a bug on a light theme. `parent` is worth filling in, because it is what makes a
+user who recolors `keyword` in their own scheme move your qualifier along with it without having heard of
+your language.
+
+`tokenColorKeys` can only separate what the scanner already separates. A C preprocessor directive arrives
+as a `KEYWORD` like every other keyword, so no mapping pulls those apart — that one belongs to the semantic
+layer, and a `LanguageBackend` reaches the same attribute by emitting a highlight kind named after it
+(`HighlightKind("cpp.directive")`). An unrecognised kind is looked up in the registry under its own name
+before being dropped, so the two halves need nothing wired between them. See
+[editor-color-schemes.md](editor-color-schemes.md) for the model.
+
 ---
 
 ### Mark up the editor without owning a language
@@ -1489,6 +1529,7 @@ interface UiContributionScope {
     fun tabDecoration(decoration: TabDecorationContribution): Registration
     fun treeIcon(iconId: String, icon: TreeIcon): Registration
     fun editorLanguage(profile: EditorLanguageProfile): Registration
+    fun colorAttribute(attribute: ColorAttribute): Registration
 }
 ```
 
@@ -1500,6 +1541,11 @@ add to the UI. Each method returns a `Registration` that the plugin's unload dis
 editor a language's keywords, comment markers, and lexical family, which gives it coloring, Toggle Comment,
 and brace-aware Enter. See [custom-language-support.md](custom-language-support.md) for the whole language
 surface.
+
+`colorAttribute` adds an entry to the editor's user-editable color scheme, so a construct the shared
+scanners have no name for gets a color and a font style of its own rather than borrowing a built-in's.
+Point the language's token types at it with `EditorLanguageProfile.tokenColorKeys`. See
+[editor-color-schemes.md](editor-color-schemes.md).
 
 ### 10.2 How a UI facet gets loaded
 
