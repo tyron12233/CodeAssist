@@ -27,6 +27,7 @@ import dev.ide.model.PlatformKind
 import dev.ide.model.SdkRef
 import dev.ide.model.SdkResolution
 import dev.ide.model.SourceSetTemplate
+import dev.ide.model.bridge.ModuleConfigBridge
 import dev.ide.model.module
 import dev.ide.ui.backend.UiBuildFeature
 import dev.ide.ui.backend.UiBuildFeatures
@@ -58,6 +59,20 @@ import java.nio.file.Paths
  */
 internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
 
+    /**
+     * The model half of every answer below, shared with the iOS host.
+     *
+     * Reading a module, writing an edit, adding a source root, creating and removing a module are the same
+     * operations wherever the IDE runs; what this class adds is everything a BUILD brings with it (build
+     * features, compiler plugins, packaging, keep rules, KSP toolchain warnings, a detected main class) and
+     * everything an engine has to do afterwards (invalidate analyzers, re-index). The split is exactly that
+     * line, so a fix to a model operation reaches all three hosts.
+     *
+     * Rebuilt per call because it closes over the store's CURRENT snapshot the same way the reads below do;
+     * the store itself is stable for the life of the engine.
+     */
+    private val model: ModuleConfigBridge get() = ModuleConfigBridge(ctx.store, setOf(PACKAGING_KEY))
+
     /** Starter body for a created `proguard-rules.pro` — comments only (the bundled defaults carry the
      *  framework keep rules); applied on top of them when the build type has `minifyEnabled = true`. */
     private val DEFAULT_PROGUARD_RULES: String = """
@@ -75,8 +90,7 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
     // ---- module configuration (the Module Settings editor) ----
 
     /** Modules whose configuration can be edited (the settings screen's switcher). */
-    fun configurableModules(): List<UiModuleRef> =
-        ctx.modules().map { UiModuleRef(it.name, it.type.displayName) }
+    fun configurableModules(): List<UiModuleRef> = model.configurableModules()
 
     /**
      * Read [moduleName]'s editable configuration: type, language level, source sets, and one facet panel
@@ -84,89 +98,34 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
      * codec-backed facet (Android, future ones) renders without bespoke UI.
      */
     fun getModuleConfig(moduleName: String): UiModuleConfig? {
+        val base = model.moduleConfig(moduleName) ?: return null
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return null
-        val facets = module.facets.all.mapNotNull { facet ->
-            val data = ctx.store.facetCodecs.encode(facet) ?: return@mapNotNull null
-            UiFacetConfig(
-                data.tomlTable,
-                titleCase(data.tomlTable),
-                // `packaging` is a nested table edited on its own tab (and is absent when default) — keep it out
-                // of the generic field list so it isn't rendered as a raw map here.
-                data.values.filterKeys { it != PACKAGING_KEY }.map { (k, v) -> configFieldFor(k, v) })
-        }
-        val runConfig = if (isConsoleRunModule(module)) {
-            val detected = MainClassDetection.detect(ctx, module).map { it.mainClass }
-            UiRunConfig(
+        // The one field the model cannot answer: which `main` this module would run. Detecting it needs the
+        // module's sources analyzed, and running it needs a JVM, so it is added here rather than shared.
+        if (!isConsoleRunModule(module)) return base
+        val detected = MainClassDetection.detect(ctx, module).map { it.mainClass }
+        return base.copy(
+            runConfig = UiRunConfig(
                 mainClass = ctx.mainClassOverride(module) ?: "",
                 detectedMainClasses = detected,
                 autoDetected = detected.firstOrNull(),
-            )
-        } else null
-        return UiModuleConfig(
-            name = module.name,
-            typeId = module.type.id,
-            typeDisplay = module.type.displayName,
-            languageLevel = module.languageLevel.name,
-            languageLevels = LanguageLevel.values().map { it.name },
-            outputDir = module.outputDir?.path.orEmpty(),
-            sourceSets = module.sourceSets.map { ss ->
-                UiSourceSetInfo(ss.name, ss.scope.name, ss.contentRoots.map { it.dir.path })
-            },
-            facets = facets,
-            runConfig = runConfig,
-            platformSdk = module.sdk?.name ?: "",
-            resolvedSdk = SdkResolution.sdkFor(ctx.store.workspace, module)?.name ?: "",
-            availableSdks = ctx.store.workspace.sdkTable.sdks.map {
-                UiSdkOption(it.name, "${it.name} · ${if (it.kind == PlatformKind.ANDROID) "Android" else "Java"}")
-            },
+            ),
         )
     }
 
     /** Persist [edit] (language level + facet values) to [moduleName] through a model transaction + save. */
     fun updateModuleConfig(moduleName: String, edit: UiModuleConfigEdit): UiConfigResult {
-        val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return UiConfigResult(
-            false, "No module '$moduleName'."
-        )
-        val project =
-            ctx.projectOf(module) ?: return UiConfigResult(false, "No project owns '$moduleName'.")
-        val newLevel =
-            edit.languageLevel?.let { runCatching { LanguageLevel.valueOf(it) }.getOrNull() }
-        if (edit.languageLevel != null && newLevel == null) return UiConfigResult(
-            false, "Unknown language level '${edit.languageLevel}'."
-        )
-        val facets = ArrayList<dev.ide.model.Facet>()
-        for ((table, values) in edit.facetValues) {
-            // Overlay the UI-sent values on the facet's current encoded values so keys the Settings tab does
-            // not render (e.g. the `packaging` block, edited on its own tab) survive a Settings save.
-            val existing = module.facets.all.firstNotNullOfOrNull { f ->
-                ctx.store.facetCodecs.encode(f)?.takeIf { it.tomlTable == table }?.values
-            } ?: emptyMap()
-            val merged = existing + values
-            val facet = ctx.store.facetCodecs.decode(FacetData(table, merged))
-                ?: return UiConfigResult(false, "No codec registered for facet '$table'.")
-            facets += facet
-        }
-        try {
-            project.beginModification().apply {
-                val mod = module(module.id)
-                if (newLevel != null) mod.languageLevel = newLevel
-                // null = leave unchanged; blank = clear the override (follow the module-type default);
-                // otherwise pin the named platform SDK. Drives which platform the module compiles against.
-                edit.platformSdk?.let { mod.sdk = it.ifBlank { null }?.let(::SdkRef) }
-                facets.forEach { mod.putFacet(it) }
-                commit()
-            }
-        } catch (e: Exception) {
-            return UiConfigResult(false, "Update failed: ${e.message}")
-        }
-        // The Run main-class override is a project preference (independent of the model transaction above);
+        val module = ctx.modules().firstOrNull { it.name == moduleName }
+            ?: return UiConfigResult(false, "No module '$moduleName'.")
+        val result = model.updateModuleConfig(moduleName, edit)
+        if (!result.success) return result
+        // The Run main-class override is a project PREFERENCE, independent of the model transaction above;
         // a non-null value sets it, blank clears it back to auto-detect.
         edit.mainClass?.let { ctx.setMainClassOverride(module, it) }
-        ctx.store.save()
         ctx.invalidateAnalyzers()       // language level + facets affect the compile classpath/source sets
         ctx.invalidateSyntheticClasses() // an Android facet change can move the R package
         ctx.resyncIndex()
-        return UiConfigResult(true, "Saved ${module.name}")
+        return result
     }
 
     /** The Android `buildFeatures` of [moduleName] as toggle descriptors, or null for a non-Android module.
@@ -667,22 +626,14 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
      * facet panels derived from the type's default facets (so an Android module surfaces namespace/SDK
      * fields). Fields are codec-derived, so a new facet type appears here without bespoke UI.
      */
-    fun availableModuleTypes(): List<UiModuleTypeOption> {
-        val levels = LanguageLevel.values().map { it.name }
-        return moduleTypeRegistry().all().map { type ->
-            val facets = type.defaultFacets().mapNotNull { tmpl ->
-                val codec = ctx.store.facetCodecs.codecFor(tmpl.key) ?: return@mapNotNull null
-                UiFacetConfig(
-                    codec.tomlTable,
-                    titleCase(codec.tomlTable),
-                    tmpl.defaults.map { (k, v) -> configFieldFor(k, v) })
-            }
-            UiModuleTypeOption(
-                id = type.id,
-                displayName = type.displayName,
-                languageLevels = levels,
-                defaultLanguageLevel = LanguageLevel.JAVA_17.name,
-                defaultFacets = facets,
+    fun availableModuleTypes(): List<UiModuleTypeOption> = model.availableModuleTypes { type ->
+        // A type's default facets are codec-described, so only a host with the codecs can prefill them.
+        type.defaultFacets().mapNotNull { tmpl ->
+            val codec = ctx.store.facetCodecs.codecFor(tmpl.key) ?: return@mapNotNull null
+            UiFacetConfig(
+                codec.tomlTable,
+                ModuleConfigBridge.titleCase(codec.tomlTable),
+                tmpl.defaults.map { (k, v) -> ModuleConfigBridge.fieldFor(k, v) },
             )
         }
     }
@@ -697,65 +648,14 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
         languageLevel: String?,
         facetValues: Map<String, Map<String, Any?>>
     ): UiConfigResult {
-        val moduleName = name.trim()
-        if (!isValidModuleName(moduleName)) return UiConfigResult(
-            false, "Invalid module name — start with a letter; use letters, digits, '-' or '_'."
-        )
-        if (ctx.modules().any { it.name == moduleName }) return UiConfigResult(
-            false, "A module named '$moduleName' already exists."
-        )
-        val type = moduleTypeRegistry().byId(typeId) ?: return UiConfigResult(
-            false, "Unknown module type '$typeId'."
-        )
-        val project = ctx.store.workspace.projects.firstOrNull() ?: return UiConfigResult(
-            false, "No project to add a module to."
-        )
-        val level = languageLevel?.let { runCatching { LanguageLevel.valueOf(it) }.getOrNull() }
-        if (languageLevel != null && level == null) return UiConfigResult(
-            false, "Unknown language level '$languageLevel'."
-        )
-        val facets = ArrayList<dev.ide.model.Facet>()
-        for ((table, values) in facetValues) {
-            val facet = ctx.store.facetCodecs.decode(FacetData(table, values))
-                ?: return UiConfigResult(false, "No codec registered for facet '$table'.")
-            facets += facet
-        }
-        try {
-            project.beginModification().apply {
-                val mod = addModule(moduleName, type)
-                if (level != null) mod.languageLevel = level
-                facets.forEach { mod.putFacet(it) }
-                // Types that contribute no default source sets (e.g. java-lib) still need somewhere to put
-                // code — give them a conventional `src/main/java` so the module is usable immediately.
-                if (type.defaultSourceSets().isEmpty()) {
-                    mod.addSourceSet(
-                        SourceSetTemplate(
-                            "main",
-                            DependencyScope.IMPLEMENTATION,
-                            mapOf("src/main/java" to setOf(ContentRole.SOURCE))
-                        )
-                    )
-                }
-                commit()
-            }
-        } catch (e: Exception) {
-            return UiConfigResult(false, "Couldn't create module: ${e.message}")
-        }
-        ctx.store.save()
-        // Lay down the primary source-set directories so the tree shows them immediately. Only the `main`
-        // source set is materialized — variant source sets (debug/release) and optional roots (a second
-        // language dir, assets/aidl) are left uncreated until the user actually adds code there, so a fresh
-        // module isn't cluttered with a dozen empty folders (they still resolve on demand via New ▸).
-        ctx.modules().firstOrNull { it.name == moduleName }?.let { created ->
-            val primarySets = created.sourceSets.filter { it.name == "main" }.ifEmpty { created.sourceSets }
-            primarySets.forEach { ss ->
-                materializedRoots(ss).forEach { cr -> runCatching { Files.createDirectories(Paths.get(cr.dir.path)) } }
-            }
-        }
+        // `src/main/java` rather than the bridge's Kotlin default: this host compiles Java, and its
+        // `JavaPlugin` registers a `compileKotlin` task for any `.kt` under the same root anyway.
+        val result = model.createModule(name, typeId, languageLevel, facetValues, fallbackSourceDir = "src/main/java")
+        if (!result.success) return result
         ctx.invalidateAnalyzers()
         ctx.invalidateSyntheticClasses()
         ctx.resyncIndex()
-        return UiConfigResult(true, "Created module '$moduleName'")
+        return result
     }
 
     /**
@@ -781,23 +681,7 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
      * dependency other modules declared on it. Refreshes analyzers/index.
      */
     fun removeModule(name: String): Boolean {
-        val module = ctx.modules().firstOrNull { it.name == name } ?: return false
-        val project = ctx.projectOf(module) ?: return false
-        val id = module.id
-        try {
-            project.beginModification().apply {
-                project.modules.forEach { other ->
-                    if (other.id != id) other.dependencies.filterIsInstance<ModuleDependency>()
-                        .filter { it.target == id }
-                        .forEach { module(other.id).removeDependency(it) }
-                }
-                removeModule(id)
-                commit()
-            }
-        } catch (e: Exception) {
-            return false
-        }
-        ctx.store.save()
+        if (!model.removeModule(name)) return false
         ctx.invalidateAnalyzers()
         ctx.invalidateSyntheticClasses()
         ctx.resyncIndex()
@@ -856,23 +740,13 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
         moduleName: String, sourceSetName: String, dir: Path, roles: Set<ContentRole>
     ): Path? {
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return null
-        val project = ctx.projectOf(module) ?: return null
         val moduleDir = ctx.moduleRoot(module) ?: return null
         val target = dir.toAbsolutePath().normalize()
         val relPath = runCatching {
             moduleDir.toAbsolutePath().normalize().relativize(target).toString()
         }.getOrNull()?.replace('\\', '/')?.takeIf { it.isNotEmpty() && !it.startsWith("..") }
             ?: return null
-        try {
-            project.beginModification().apply {
-                module(module.id).addContentRoot(sourceSetName, relPath, roles)
-                commit()
-            }
-        } catch (e: Exception) {
-            return null
-        }
-        ctx.store.save()
-        runCatching { Files.createDirectories(target) }
+        model.addSourceRootAt(moduleName, sourceSetName, relPath, roles) ?: return null
         ctx.invalidateAnalyzers()
         if (ContentRole.ANDROID_RES in roles) ctx.invalidateSyntheticClasses()
         ctx.resyncIndex()
@@ -882,42 +756,15 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
     /** Remove the content root at [dirRelPath] (relative to the module dir) from [sourceSetName] of
      *  [moduleName]. Model-only — the directory on disk is left untouched. Returns true on a model change. */
     override fun removeSourceRoot(moduleName: String, sourceSetName: String, dirRelPath: String): Boolean {
-        val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return false
-        val project = ctx.projectOf(module) ?: return false
-        try {
-            project.beginModification().apply {
-                module(module.id).removeContentRoot(sourceSetName, dirRelPath.replace('\\', '/'))
-                commit()
-            }
-        } catch (e: Exception) {
-            return false
-        }
-        ctx.store.save()
+        if (!model.removeSourceRoot(moduleName, sourceSetName, dirRelPath)) return false
         ctx.invalidateAnalyzers()
         ctx.resyncIndex()
         return true
     }
 
     /** Create an empty source set [name] on [moduleName] (returns false if it already exists). */
-    override fun addSourceSet(moduleName: String, name: String): Boolean {
-        val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return false
-        if (module.sourceSets.any { it.name == name }) return false
-        val project = ctx.projectOf(module) ?: return false
-        try {
-            project.beginModification().apply {
-                module(module.id).addSourceSet(
-                    SourceSetTemplate(
-                        name, DependencyScope.IMPLEMENTATION, emptyMap()
-                    )
-                )
-                commit()
-            }
-        } catch (e: Exception) {
-            return false
-        }
-        ctx.store.save()
-        return true
-    }
+    override fun addSourceSet(moduleName: String, name: String): Boolean =
+        model.addSourceSet(moduleName, name)
 
     /**
      * If [newDir] is a conventionally-named folder (`resources`/`java`/`kotlin`/`res`/`assets`/`aidl`)

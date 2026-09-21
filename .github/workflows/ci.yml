@@ -220,11 +220,16 @@ jobs:
         with:
           packages: "platform-tools platforms;android-36 platforms;android-36.1 build-tools;36.0.0"
 
-      - name: iOS host suites (ide-ios, ide-ui-core)
+      # :model-bridge rides along here rather than in the framework job above for the same reason
+      # :ide-ios does: it api-exposes :ide-ui-api's DTOs, so it is part of the shell set that CI_CORE_ONLY
+      # drops. Its suite is plain JVM (the logic is platform-neutral, and the iOS host's own tests drive the
+      # same classes on the simulator), and this is the one job that has the module at all.
+      - name: iOS host suites (ide-ios, ide-ui-core) + the shared model bridge
         env:
           CI_CORE_ONLY: "false"
         run: >-
           ./gradlew :ide-ios:iosSimulatorArm64Test :ide-ui-core:iosSimulatorArm64Test
+          :model-bridge:jvmTest
           --console=plain --stacktrace
 
       # Linking the `CodeAssistUi` framework the Xcode app embeds. This step was left out at first, on the

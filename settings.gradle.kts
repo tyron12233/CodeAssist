@@ -166,6 +166,10 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         // to the shells rather than the framework because it api-exposes :ide-ui-api's DTOs, and that module
         // is not in the core set: leaving it above makes the CI_CORE_ONLY build fail to CONFIGURE.
         ":store-bridge",
+        // The project model mapped onto the UI's module/dependency contracts, shared by every host. Here
+        // rather than in the framework for the same reason :store-bridge is: it api-exposes :ide-ui-api's
+        // DTOs, and that module is not in the core set.
+        ":model-bridge",
         ":ide-ui-resources", // the fonts/drawables/i18n strings the UI modules share, and the one `Res` class over them
         ":ide-ui-core", // theme + platform expect/actual + the editor document model + app state: what the UI layers share
         ":ide-ui-components", // the reusable widgets (+ the shared Markdown renderer and the ad slot)
@@ -246,7 +250,8 @@ val layers = mapOf(
     // The IDE itself: the Compose UI, its backend port, and the desktop/Android/iOS shells.
     "app" to listOf(
         "ide-ui-api", "ide-ui-resources", "ide-ui-core", "ide-ui-components", "ide-ui-editor",
-        "ide-ui-screens", "ide-ui-testing", "ide-ui", "ide-core", "ide-desktop", "ide-android", "ide-ios",
+        "ide-ui-screens", "ide-ui-testing", "ide-ui", "model-bridge", "ide-core", "ide-desktop",
+        "ide-android", "ide-ios",
         "build-cli",
     ),
     // Test-only harnesses, consumed via testImplementation.

@@ -17,7 +17,7 @@ android/       android-support, android-sdk-metadata, art-compat, layout-preview
 services/      deps-{api,impl}, vcs-{api,impl,ui}, store-{api,impl}, analytics-{api,impl},
                agent-{api,impl,mcp,ui}
 plugins/       plugin-{api,ui-api,bom,impl}
-app/           ide-ui{,-api}, ide-core, ide-desktop, ide-android
+app/           ide-ui{,-api}, model-bridge, ide-core, ide-desktop, ide-android, ide-ios
 tools/         test-support, bench-support
 ```
 
@@ -109,6 +109,7 @@ ide-android (Android launcher) → ide-core
 |---|---|
 | `ide-ui` | The reusable Compose Multiplatform UI (desktop + Android): theme, components, code editor with completion and inline diagnostics, file tree, block editor. Talks only to the `IdeBackend` port. |
 | `ide-core` | The shared engine → UI bridge: the `IdeServices` façade over the implementations, and `IdeServicesBackend` implementing `IdeBackend`. |
+| `model-bridge` | The project model mapped onto the UI's module contracts, shared by every host: reading a module's configuration, persisting an edit, source sets and roots, adding and removing modules, declaring dependencies and attaching a resolved closure to the library table. Multiplatform, because those are model operations rather than build ones: `ide-core` adds what a build brings (build features, compiler plugins, packaging, a detected main class) and the iOS host adds none of it. |
 | `vcs-ui` | The version-control Compose UI as a self-contained plugin: the Git tool window plus the branches, history, diff, sign-in, clone, and GitHub screens. |
 | `ide-desktop` | The JVM Compose launcher. |
 | `ide-android` | The Android Compose launcher; supplies the on-device ports (dex run, APK install/launch) and the installed-plugin source (`ApkPluginSource`: package-manager discovery, then a `PathClassLoader` over the plugin app's installed APK). |

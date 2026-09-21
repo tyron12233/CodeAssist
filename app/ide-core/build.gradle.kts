@@ -64,6 +64,9 @@ dependencies {
     // The transport-to-UI translation and the install path, shared with the iOS host (:ide-ios), which
     // orchestrates the same pieces its own way.
     implementation(project(":store-bridge"))
+    // The project model mapped onto the UI's module/dependency contracts, shared with the iOS host the same
+    // way: reading a module, writing an edit and creating one are model operations, not build ones.
+    implementation(project(":model-bridge"))
     implementation(project(":vfs-api"))
 
     implementation(libs.kotlinx.coroutines.core)
