@@ -136,6 +136,12 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         // function actually exists (otherwise the `ifEmpty` branch below already resolves the local), so the
         // common case stays on the plain index lookup.
         service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD }
+            // Among several same-named top-levels, PREFER the ones actually in scope. `synchronized(this)`
+            // bound to `kotlinx.coroutines.internal.synchronized` -- unimported, and reported as an
+            // experimental-API misuse -- instead of the default-imported `kotlin.synchronized`. This only
+            // REORDERS: when nothing is in scope the whole list is kept, so the leniency a bare `Text` /
+            // `Column` relies on is untouched, which is what filtering outright broke.
+            .let { cands -> cands.filter { topLevelInScope(it, fileContext) }.ifEmpty { cands } }
             .let {
                 // A local function, and equally a MEMBER of the enclosing class, SHADOWS a same-named
                 // top-level one. This lookup runs BEFORE the scope walk that knows about members, so a

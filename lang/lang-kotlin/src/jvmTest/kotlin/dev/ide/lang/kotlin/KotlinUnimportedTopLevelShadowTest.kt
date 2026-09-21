@@ -75,6 +75,24 @@ class KotlinUnimportedTopLevelShadowTest {
         """,
     )
 
+    /**
+     * With NO member in the way, an in-scope top-level still beats an out-of-scope one. `synchronized(this)`
+     * bound to `kotlinx.coroutines.internal.synchronized` rather than the default-imported
+     * `kotlin.synchronized`, and was then reported as an experimental-API misuse.
+     */
+    @Test
+    fun anInScopeTopLevelBeatsAnOutOfScopeOne() = clean(
+        """
+        package demo
+        fun use(): Int = sibling().length
+        fun sibling(): String = "x"
+        """,
+        other = """
+            package far.away
+            fun sibling(n: Int): Int = n
+        """,
+    )
+
     private fun clean(use: String, other: String) = runBlocking {
         val files = mapOf(
             "Use.kt" to use.trimIndent() + "\n",
