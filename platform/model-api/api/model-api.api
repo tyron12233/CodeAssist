@@ -1,0 +1,1191 @@
+# The compiled surface of io.github.tyron12233:model-api, pinned at SPI 3.0.0.
+# A plugin links against these by name and descriptor; see :spi-compat.
+# Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/index/AnnotatedExternalizer
+	kind class
+	super java/lang/Object
+	implements dev/ide/index/Externalizer
+	field static INSTANCE Ldev/ide/index/AnnotatedExternalizer;
+	method read(Ldev/ide/platform/DataReader;)Ldev/ide/index/AnnotatedValue;
+	method write(Ldev/ide/platform/DataWriter;Ldev/ide/index/AnnotatedValue;)V
+dev/ide/index/AnnotatedValue
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()I
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Ldev/ide/index/AnnotatedValue;
+	method equals(Ljava/lang/Object;)Z
+	method getAnnotation()Ljava/lang/String;
+	method getFileId()I
+	method getFqn()Ljava/lang/String;
+	method getKind()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/AnnotatedValue;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IILjava/lang/Object;)Ldev/ide/index/AnnotatedValue;
+	method toString()Ljava/lang/String;
+dev/ide/index/AnnotationIndex
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/index/AnnotationIndex;
+	method getALL()Ljava/util/List;
+	method getBINARY-MdtDh_0()Ljava/lang/String;
+	method getJAVA_SOURCE-MdtDh_0()Ljava/lang/String;
+	method getKOTLIN_SOURCE-MdtDh_0()Ljava/lang/String;
+	method key(Ljava/lang/String;)Ljava/lang/String;
+dev/ide/index/ClassNameExternalizer
+	kind class
+	super java/lang/Object
+	implements dev/ide/index/Externalizer
+	field static INSTANCE Ldev/ide/index/ClassNameExternalizer;
+	method read(Ldev/ide/platform/DataReader;)Ldev/ide/index/ClassNameValue;
+	method write(Ldev/ide/platform/DataWriter;Ldev/ide/index/ClassNameValue;)V
+dev/ide/index/ClassNameIndex
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/index/ClassNameIndex;
+	method getALL()Ljava/util/List;
+	method getJAVA-MdtDh_0()Ljava/lang/String;
+	method getKOTLIN-MdtDh_0()Ljava/lang/String;
+dev/ide/index/ClassNameValue
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ldev/ide/index/IndexOrigin;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ldev/ide/index/IndexOrigin;
+	method component3()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ldev/ide/index/IndexOrigin;Ljava/lang/String;)Ldev/ide/index/ClassNameValue;
+	method equals(Ljava/lang/Object;)Z
+	method getFqn()Ljava/lang/String;
+	method getKind()Ljava/lang/String;
+	method getOrigin()Ldev/ide/index/IndexOrigin;
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/ClassNameValue;Ljava/lang/String;Ldev/ide/index/IndexOrigin;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/index/ClassNameValue;
+	method toString()Ljava/lang/String;
+dev/ide/index/EntryPointExternalizer
+	kind class
+	super java/lang/Object
+	implements dev/ide/index/Externalizer
+	field static INSTANCE Ldev/ide/index/EntryPointExternalizer;
+	method read(Ldev/ide/platform/DataReader;)Ldev/ide/index/EntryPointValue;
+	method write(Ldev/ide/platform/DataWriter;Ldev/ide/index/EntryPointValue;)V
+dev/ide/index/EntryPointIndex
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/index/EntryPointIndex;
+	field static KEY Ljava/lang/String;
+	method getJAVA-MdtDh_0()Ljava/lang/String;
+	method getKOTLIN-MdtDh_0()Ljava/lang/String;
+dev/ide/index/EntryPointValue
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;IZ)V
+	method component1()Ljava/lang/String;
+	method component2()I
+	method component3()Z
+	method copy(Ljava/lang/String;IZ)Ldev/ide/index/EntryPointValue;
+	method equals(Ljava/lang/Object;)Z
+	method getFileId()I
+	method getFqn()Ljava/lang/String;
+	method getInstance()Z
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/EntryPointValue;Ljava/lang/String;IZILjava/lang/Object;)Ldev/ide/index/EntryPointValue;
+	method toString()Ljava/lang/String;
+dev/ide/index/Externalizer
+	kind interface
+	method abstract read(Ldev/ide/platform/DataReader;)Ljava/lang/Object;
+	method abstract write(Ldev/ide/platform/DataWriter;Ljava/lang/Object;)V
+dev/ide/index/Hit
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/Object;I)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/Object;
+	method component3()I
+	method copy(Ljava/lang/String;Ljava/lang/Object;I)Ldev/ide/index/Hit;
+	method equals(Ljava/lang/Object;)Z
+	method getKey()Ljava/lang/String;
+	method getScore()I
+	method getValue()Ljava/lang/Object;
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/Hit;Ljava/lang/String;Ljava/lang/Object;IILjava/lang/Object;)Ldev/ide/index/Hit;
+	method toString()Ljava/lang/String;
+dev/ide/index/IndexBuildStats
+	kind class
+	super java/lang/Object
+	ctor ()V
+	ctor (JJIIIII)V
+	ctor (JJIIIIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()J
+	method component2()J
+	method component3()I
+	method component4()I
+	method component5()I
+	method component6()I
+	method component7()I
+	method copy(JJIIIII)Ldev/ide/index/IndexBuildStats;
+	method equals(Ljava/lang/Object;)Z
+	method getArtifacts()I
+	method getArtifactsBuilt()I
+	method getArtifactsReused()I
+	method getLibMs()J
+	method getSourceFiles()I
+	method getSourceMs()J
+	method getSourceParsed()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/IndexBuildStats;JJIIIIIILjava/lang/Object;)Ldev/ide/index/IndexBuildStats;
+	method toString()Ljava/lang/String;
+dev/ide/index/IndexExtension
+	kind interface
+	method abstract getId-MdtDh_0()Ljava/lang/String;
+	method abstract getInputFilter()Ldev/ide/index/InputFilter;
+	method abstract getKeyDescriptor()Ldev/ide/index/KeyDescriptor;
+	method abstract getMatching()Ldev/ide/index/MatchingMode;
+	method abstract getValueExternalizer()Ldev/ide/index/Externalizer;
+	method abstract getVersion()I
+	method abstract index(Ldev/ide/index/IndexInput;)Ljava/util/Map;
+dev/ide/index/IndexHelpersKt
+	kind class
+	super java/lang/Object
+	method static classEntryToFqn(Ljava/lang/String;)Lkotlin/Pair;
+	method static nestedClassEntryToFqn(Ljava/lang/String;)Lkotlin/Pair;
+	method static packagePrefixes(Ljava/lang/String;)Ljava/util/List;
+dev/ide/index/IndexId
+	kind class
+	super java/lang/Object
+	method equals(Ljava/lang/Object;)Z
+	method getValue()Ljava/lang/String;
+	method hashCode()I
+	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
+	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
+	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
+	method static hashCode-impl(Ljava/lang/String;)I
+	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
+	method toString()Ljava/lang/String;
+dev/ide/index/IndexInput
+	kind interface
+	field static CLASS_FILE Ljava/lang/String;
+	field static CLASS_READER Ljava/lang/String;
+	field static Companion Ldev/ide/index/IndexInput$Companion;
+	method abstract bytes()[B
+	method abstract dom()Ldev/ide/lang/dom/ParsedFile;
+	method abstract getContentHash-Q9wPEHw()Ljava/lang/String;
+	method abstract getOrigin()Ldev/ide/index/IndexOrigin;
+	method abstract getSourcePath()Ljava/lang/String;
+	method abstract getUnitName()Ljava/lang/String;
+	method abstract text()Ljava/lang/String;
+	method getFileId()I
+	method shared(Ljava/lang/String;Lkotlin/jvm/functions/Function0;)Ljava/lang/Object;
+dev/ide/index/IndexInput$Companion
+	kind class
+	super java/lang/Object
+	field static CLASS_FILE Ljava/lang/String;
+	field static CLASS_READER Ljava/lang/String;
+dev/ide/index/IndexInput$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getFileId(Ldev/ide/index/IndexInput;)I
+	method static shared(Ldev/ide/index/IndexInput;Ljava/lang/String;Lkotlin/jvm/functions/Function0;)Ljava/lang/Object;
+dev/ide/index/IndexItem
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ldev/ide/index/IndexItemState;)V
+	ctor (Ljava/lang/String;Ldev/ide/index/IndexItemState;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ldev/ide/index/IndexItemState;
+	method copy(Ljava/lang/String;Ldev/ide/index/IndexItemState;)Ldev/ide/index/IndexItem;
+	method equals(Ljava/lang/Object;)Z
+	method getLabel()Ljava/lang/String;
+	method getState()Ldev/ide/index/IndexItemState;
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/IndexItem;Ljava/lang/String;Ldev/ide/index/IndexItemState;ILjava/lang/Object;)Ldev/ide/index/IndexItem;
+	method toString()Ljava/lang/String;
+dev/ide/index/IndexItemState
+	kind enum
+	super java/lang/Enum
+	field static ACTIVE Ldev/ide/index/IndexItemState;
+	field static DONE Ldev/ide/index/IndexItemState;
+	field static PENDING Ldev/ide/index/IndexItemState;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/index/IndexItemState;
+	method static values()[Ldev/ide/index/IndexItemState;
+dev/ide/index/IndexOrigin
+	kind enum
+	super java/lang/Enum
+	field static LIBRARY Ldev/ide/index/IndexOrigin;
+	field static LIBRARY_SOURCE Ldev/ide/index/IndexOrigin;
+	field static SDK Ldev/ide/index/IndexOrigin;
+	field static SOURCE Ldev/ide/index/IndexOrigin;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/index/IndexOrigin;
+	method static values()[Ldev/ide/index/IndexOrigin;
+dev/ide/index/IndexQueries
+	kind interface
+	method abstract exact-3Nq2rn8(Ljava/lang/String;Ljava/lang/String;)Lkotlin/sequences/Sequence;
+	method abstract fuzzy-7277RlM(Ljava/lang/String;Ljava/lang/String;I)Lkotlin/sequences/Sequence;
+	method abstract getStatus()Ldev/ide/index/IndexStatus;
+	method abstract prefix-7277RlM(Ljava/lang/String;Ljava/lang/String;I)Lkotlin/sequences/Sequence;
+	method filePath(I)Ljava/lang/String;
+	method static fuzzy-7277RlM$default(Ldev/ide/index/IndexQueries;Ljava/lang/String;Ljava/lang/String;IILjava/lang/Object;)Lkotlin/sequences/Sequence;
+	method static prefix-7277RlM$default(Ldev/ide/index/IndexQueries;Ljava/lang/String;Ljava/lang/String;IILjava/lang/Object;)Lkotlin/sequences/Sequence;
+dev/ide/index/IndexQueries$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static filePath(Ldev/ide/index/IndexQueries;I)Ljava/lang/String;
+	method static fuzzy-7277RlM$default(Ldev/ide/index/IndexQueries;Ljava/lang/String;Ljava/lang/String;IILjava/lang/Object;)Lkotlin/sequences/Sequence;
+	method static prefix-7277RlM$default(Ldev/ide/index/IndexQueries;Ljava/lang/String;Ljava/lang/String;IILjava/lang/Object;)Lkotlin/sequences/Sequence;
+dev/ide/index/IndexQueriesKt
+	kind class
+	super java/lang/Object
+	method static exactAll(Ldev/ide/index/IndexQueries;Ljava/util/List;Ljava/lang/String;)Lkotlin/sequences/Sequence;
+	method static fuzzyAll$default(Ldev/ide/index/IndexQueries;Ljava/util/List;Ljava/lang/String;IILjava/lang/Object;)Ljava/util/List;
+	method static fuzzyAll(Ldev/ide/index/IndexQueries;Ljava/util/List;Ljava/lang/String;I)Ljava/util/List;
+	method static prefixAll$default(Ldev/ide/index/IndexQueries;Ljava/util/List;Ljava/lang/String;IILjava/lang/Object;)Ljava/util/List;
+	method static prefixAll(Ldev/ide/index/IndexQueries;Ljava/util/List;Ljava/lang/String;I)Ljava/util/List;
+dev/ide/index/IndexStatus
+	kind class
+	super java/lang/Object
+	ctor ()V
+	ctor (ZLjava/lang/String;DZLjava/lang/String;Ljava/util/List;IILjava/util/List;Ldev/ide/index/IndexBuildStats;)V
+	ctor (ZLjava/lang/String;DZLjava/lang/String;Ljava/util/List;IILjava/util/List;Ldev/ide/index/IndexBuildStats;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Z
+	method component10()Ldev/ide/index/IndexBuildStats;
+	method component2()Ljava/lang/String;
+	method component3()D
+	method component4()Z
+	method component5()Ljava/lang/String;
+	method component6()Ljava/util/List;
+	method component7()I
+	method component8()I
+	method component9()Ljava/util/List;
+	method copy(ZLjava/lang/String;DZLjava/lang/String;Ljava/util/List;IILjava/util/List;Ldev/ide/index/IndexBuildStats;)Ldev/ide/index/IndexStatus;
+	method equals(Ljava/lang/Object;)Z
+	method getBreakdown()Ljava/util/List;
+	method getBuilding()Z
+	method getFraction()D
+	method getItems()Ljava/util/List;
+	method getMessage()Ljava/lang/String;
+	method getPhase()Ljava/lang/String;
+	method getProcessed()I
+	method getReady()Z
+	method getSettled()Z
+	method getStats()Ldev/ide/index/IndexBuildStats;
+	method getTotal()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/IndexStatus;ZLjava/lang/String;DZLjava/lang/String;Ljava/util/List;IILjava/util/List;Ldev/ide/index/IndexBuildStats;ILjava/lang/Object;)Ldev/ide/index/IndexStatus;
+	method toString()Ljava/lang/String;
+dev/ide/index/IndexerStat
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;JJ)V
+	method component1()Ljava/lang/String;
+	method component2()J
+	method component3()J
+	method copy(Ljava/lang/String;JJ)Ldev/ide/index/IndexerStat;
+	method equals(Ljava/lang/Object;)Z
+	method getEntries()J
+	method getId()Ljava/lang/String;
+	method getIndexMs()J
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/IndexerStat;Ljava/lang/String;JJILjava/lang/Object;)Ldev/ide/index/IndexerStat;
+	method toString()Ljava/lang/String;
+dev/ide/index/InputFilter
+	kind interface
+	method abstract accepts(Ldev/ide/index/IndexInput;)Z
+dev/ide/index/JavaSourceMemberCodec
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/index/JavaSourceMemberCodec;
+	method decodeField(Ljava/lang/String;)Ldev/ide/index/JavaSourceMemberCodec$Field;
+	method decodeMethod(Ljava/lang/String;)Ldev/ide/index/JavaSourceMemberCodec$Method;
+	method encodeField(ZLjava/lang/String;)Ljava/lang/String;
+	method encodeMethod(ZLjava/util/List;Ljava/util/List;Ljava/lang/String;I)Ljava/lang/String;
+dev/ide/index/JavaSourceMemberCodec$Field
+	kind class
+	super java/lang/Object
+	ctor (ZLjava/lang/String;)V
+	method component1()Z
+	method component2()Ljava/lang/String;
+	method copy(ZLjava/lang/String;)Ldev/ide/index/JavaSourceMemberCodec$Field;
+	method equals(Ljava/lang/Object;)Z
+	method getStatic()Z
+	method getType()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/JavaSourceMemberCodec$Field;ZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/index/JavaSourceMemberCodec$Field;
+	method toString()Ljava/lang/String;
+dev/ide/index/JavaSourceMemberCodec$Method
+	kind class
+	super java/lang/Object
+	ctor (ZLjava/util/List;Ljava/util/List;Ljava/lang/String;I)V
+	method component1()Z
+	method component2()Ljava/util/List;
+	method component3()Ljava/util/List;
+	method component4()Ljava/lang/String;
+	method component5()I
+	method copy(ZLjava/util/List;Ljava/util/List;Ljava/lang/String;I)Ldev/ide/index/JavaSourceMemberCodec$Method;
+	method equals(Ljava/lang/Object;)Z
+	method getParamNames()Ljava/util/List;
+	method getParamTypes()Ljava/util/List;
+	method getReturnType()Ljava/lang/String;
+	method getStatic()Z
+	method getVarargIndex()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/JavaSourceMemberCodec$Method;ZLjava/util/List;Ljava/util/List;Ljava/lang/String;IILjava/lang/Object;)Ldev/ide/index/JavaSourceMemberCodec$Method;
+	method toString()Ljava/lang/String;
+dev/ide/index/KeyDescriptor
+	kind interface
+	implements java/util/Comparator
+	method abstract asTerm(Ljava/lang/Object;)Ljava/lang/String;
+	method abstract fromTerm(Ljava/lang/String;)Ljava/lang/Object;
+dev/ide/index/MatchingMode
+	kind enum
+	super java/lang/Enum
+	field static PREFIX_AND_FUZZY Ldev/ide/index/MatchingMode;
+	field static PREFIX_ONLY Ldev/ide/index/MatchingMode;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/index/MatchingMode;
+	method static values()[Ldev/ide/index/MatchingMode;
+dev/ide/index/MemberExternalizer
+	kind class
+	super java/lang/Object
+	implements dev/ide/index/Externalizer
+	field static INSTANCE Ldev/ide/index/MemberExternalizer;
+	method read(Ldev/ide/platform/DataReader;)Ldev/ide/index/MemberValue;
+	method write(Ldev/ide/platform/DataWriter;Ldev/ide/index/MemberValue;)V
+dev/ide/index/MemberValue
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/index/MemberValue;
+	method equals(Ljava/lang/Object;)Z
+	method getKind()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method getOwner()Ljava/lang/String;
+	method getSignature()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/MemberValue;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/index/MemberValue;
+	method toString()Ljava/lang/String;
+dev/ide/index/MembersIndex
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/index/MembersIndex;
+	method getALL()Ljava/util/List;
+	method getJAVA-MdtDh_0()Ljava/lang/String;
+	method getKOTLIN-MdtDh_0()Ljava/lang/String;
+dev/ide/index/PackageTypesIndex
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/index/PackageTypesIndex;
+	method getALL()Ljava/util/List;
+	method getJAVA-MdtDh_0()Ljava/lang/String;
+	method getKOTLIN-MdtDh_0()Ljava/lang/String;
+dev/ide/index/PackagesIndex
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/index/PackagesIndex;
+	method getALL()Ljava/util/List;
+	method getJAVA-MdtDh_0()Ljava/lang/String;
+	method getKOTLIN-MdtDh_0()Ljava/lang/String;
+dev/ide/index/SourceDocExternalizer
+	kind class
+	super java/lang/Object
+	implements dev/ide/index/Externalizer
+	field static INSTANCE Ldev/ide/index/SourceDocExternalizer;
+	method read(Ldev/ide/platform/DataReader;)Ldev/ide/index/SourceDocValue;
+	method write(Ldev/ide/platform/DataWriter;Ldev/ide/index/SourceDocValue;)V
+dev/ide/index/SourceDocValue
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;ILjava/util/List;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()I
+	method component3()Ljava/util/List;
+	method component4()Ljava/lang/String;
+	method copy(Ljava/lang/String;ILjava/util/List;Ljava/lang/String;)Ldev/ide/index/SourceDocValue;
+	method equals(Ljava/lang/Object;)Z
+	method getArity()I
+	method getDoc()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method getNames()Ljava/util/List;
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/SourceDocValue;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/index/SourceDocValue;
+	method toString()Ljava/lang/String;
+dev/ide/index/SourceSymbolIndex
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/index/SourceSymbolIndex;
+	method getALL()Ljava/util/List;
+	method getJAVA-MdtDh_0()Ljava/lang/String;
+	method getKOTLIN-MdtDh_0()Ljava/lang/String;
+dev/ide/index/StringExternalizer
+	kind class
+	super java/lang/Object
+	implements dev/ide/index/Externalizer
+	field static INSTANCE Ldev/ide/index/StringExternalizer;
+	method read(Ldev/ide/platform/DataReader;)Ljava/lang/String;
+	method write(Ldev/ide/platform/DataWriter;Ljava/lang/String;)V
+dev/ide/index/StringKeyDescriptor
+	kind class
+	super java/lang/Object
+	implements dev/ide/index/KeyDescriptor
+	field static INSTANCE Ldev/ide/index/StringKeyDescriptor;
+	method asTerm(Ljava/lang/String;)Ljava/lang/String;
+	method compare(Ljava/lang/String;Ljava/lang/String;)I
+	method fromTerm(Ljava/lang/String;)Ljava/lang/String;
+dev/ide/index/SubtypeExternalizer
+	kind class
+	super java/lang/Object
+	implements dev/ide/index/Externalizer
+	field static INSTANCE Ldev/ide/index/SubtypeExternalizer;
+	method read(Ldev/ide/platform/DataReader;)Ldev/ide/index/SubtypeValue;
+	method write(Ldev/ide/platform/DataWriter;Ldev/ide/index/SubtypeValue;)V
+dev/ide/index/SubtypeIndex
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/index/SubtypeIndex;
+	method getALL()Ljava/util/List;
+	method getBINARY-MdtDh_0()Ljava/lang/String;
+	method getJAVA_SOURCE-MdtDh_0()Ljava/lang/String;
+	method getKOTLIN_SOURCE-MdtDh_0()Ljava/lang/String;
+	method key(Ljava/lang/String;)Ljava/lang/String;
+dev/ide/index/SubtypeValue
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()I
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Ldev/ide/index/SubtypeValue;
+	method equals(Ljava/lang/Object;)Z
+	method getFileId()I
+	method getFqn()Ljava/lang/String;
+	method getKind()Ljava/lang/String;
+	method getSupertype()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/SubtypeValue;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IILjava/lang/Object;)Ldev/ide/index/SubtypeValue;
+	method toString()Ljava/lang/String;
+dev/ide/index/SymbolExternalizer
+	kind class
+	super java/lang/Object
+	implements dev/ide/index/Externalizer
+	field static INSTANCE Ldev/ide/index/SymbolExternalizer;
+	method read(Ldev/ide/platform/DataReader;)Ldev/ide/index/SymbolValue;
+	method write(Ldev/ide/platform/DataWriter;Ldev/ide/index/SymbolValue;)V
+dev/ide/index/SymbolValue
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;IILjava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()I
+	method component4()I
+	method component5()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;IILjava/lang/String;)Ldev/ide/index/SymbolValue;
+	method equals(Ljava/lang/Object;)Z
+	method getContainer()Ljava/lang/String;
+	method getFileId()I
+	method getKind()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method getOffset()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/SymbolValue;Ljava/lang/String;Ljava/lang/String;IILjava/lang/String;ILjava/lang/Object;)Ldev/ide/index/SymbolValue;
+	method toString()Ljava/lang/String;
+dev/ide/lang/dom/Diagnostic
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ldev/ide/lang/dom/TextRange;
+	method component2()Ldev/ide/lang/dom/Severity;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method copy(Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/lang/dom/Diagnostic;
+	method equals(Ljava/lang/Object;)Z
+	method getCode()Ljava/lang/String;
+	method getMessage()Ljava/lang/String;
+	method getRange()Ldev/ide/lang/dom/TextRange;
+	method getSeverity()Ldev/ide/lang/dom/Severity;
+	method hashCode()I
+	method static copy$default(Ldev/ide/lang/dom/Diagnostic;Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/lang/dom/Diagnostic;
+	method toString()Ljava/lang/String;
+dev/ide/lang/dom/DomKt
+	kind class
+	super java/lang/Object
+	method static expandSelection(Ldev/ide/lang/dom/ParsedFile;III)Ldev/ide/lang/dom/TextRange;
+dev/ide/lang/dom/DomNode
+	kind interface
+	method abstract getChildren()Ljava/util/List;
+	method abstract getKind-Iaadglk()Ljava/lang/String;
+	method abstract getParent()Ldev/ide/lang/dom/DomNode;
+	method abstract getRange()Ldev/ide/lang/dom/TextRange;
+	method abstract text()Ljava/lang/CharSequence;
+dev/ide/lang/dom/NodeKind
+	kind class
+	super java/lang/Object
+	field static Companion Ldev/ide/lang/dom/NodeKind$Companion;
+	method equals(Ljava/lang/Object;)Z
+	method getId()Ljava/lang/String;
+	method hashCode()I
+	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
+	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
+	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
+	method static hashCode-impl(Ljava/lang/String;)I
+	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
+	method toString()Ljava/lang/String;
+dev/ide/lang/dom/NodeKind$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getBLOCK-Iaadglk()Ljava/lang/String;
+	method getCLASS_DECL-Iaadglk()Ljava/lang/String;
+	method getCOMPILATION_UNIT-Iaadglk()Ljava/lang/String;
+	method getERROR-Iaadglk()Ljava/lang/String;
+	method getFIELD_DECL-Iaadglk()Ljava/lang/String;
+	method getIMPORT_DECL-Iaadglk()Ljava/lang/String;
+	method getLITERAL-Iaadglk()Ljava/lang/String;
+	method getLOCAL_VAR-Iaadglk()Ljava/lang/String;
+	method getMEMBER_ACCESS-Iaadglk()Ljava/lang/String;
+	method getMETHOD_CALL-Iaadglk()Ljava/lang/String;
+	method getMETHOD_DECL-Iaadglk()Ljava/lang/String;
+	method getMISSING-Iaadglk()Ljava/lang/String;
+	method getNAME_REF-Iaadglk()Ljava/lang/String;
+	method getPACKAGE_DECL-Iaadglk()Ljava/lang/String;
+	method getPARAMETER-Iaadglk()Ljava/lang/String;
+	method getTYPE_REF-Iaadglk()Ljava/lang/String;
+dev/ide/lang/dom/ParsedFile
+	kind interface
+	implements dev/ide/lang/dom/DomNode
+	method abstract getDiagnostics()Ljava/util/List;
+	method abstract getDocumentVersion()J
+	method abstract getFile()Ldev/ide/vfs/VirtualFile;
+	method abstract nodeAt(I)Ldev/ide/lang/dom/DomNode;
+	method abstract nodesIn(Ldev/ide/lang/dom/TextRange;)Lkotlin/sequences/Sequence;
+dev/ide/lang/dom/Severity
+	kind enum
+	super java/lang/Enum
+	field static ERROR Ldev/ide/lang/dom/Severity;
+	field static HINT Ldev/ide/lang/dom/Severity;
+	field static INFO Ldev/ide/lang/dom/Severity;
+	field static WARNING Ldev/ide/lang/dom/Severity;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/lang/dom/Severity;
+	method static values()[Ldev/ide/lang/dom/Severity;
+dev/ide/lang/dom/TextRange
+	kind class
+	super java/lang/Object
+	ctor (II)V
+	method component1()I
+	method component2()I
+	method contains(I)Z
+	method copy(II)Ldev/ide/lang/dom/TextRange;
+	method equals(Ljava/lang/Object;)Z
+	method getEnd()I
+	method getLength()I
+	method getStart()I
+	method hashCode()I
+	method intersects(Ldev/ide/lang/dom/TextRange;)Z
+	method static copy$default(Ldev/ide/lang/dom/TextRange;IIILjava/lang/Object;)Ldev/ide/lang/dom/TextRange;
+	method toString()Ljava/lang/String;
+dev/ide/lang/resolve/DocFormat
+	kind enum
+	super java/lang/Enum
+	field static JAVADOC Ldev/ide/lang/resolve/DocFormat;
+	field static KDOC Ldev/ide/lang/resolve/DocFormat;
+	field static PLAIN Ldev/ide/lang/resolve/DocFormat;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/lang/resolve/DocFormat;
+	method static values()[Ldev/ide/lang/resolve/DocFormat;
+dev/ide/lang/resolve/Modifier
+	kind enum
+	super java/lang/Enum
+	field static ABSTRACT Ldev/ide/lang/resolve/Modifier;
+	field static DEFAULT Ldev/ide/lang/resolve/Modifier;
+	field static FINAL Ldev/ide/lang/resolve/Modifier;
+	field static PRIVATE Ldev/ide/lang/resolve/Modifier;
+	field static PROTECTED Ldev/ide/lang/resolve/Modifier;
+	field static PUBLIC Ldev/ide/lang/resolve/Modifier;
+	field static STATIC Ldev/ide/lang/resolve/Modifier;
+	field static SYNCHRONIZED Ldev/ide/lang/resolve/Modifier;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/lang/resolve/Modifier;
+	method static values()[Ldev/ide/lang/resolve/Modifier;
+dev/ide/lang/resolve/QuickDocInfo
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ldev/ide/lang/resolve/SymbolKind;Ljava/lang/String;Ljava/lang/String;Ldev/ide/lang/resolve/DocFormat;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ldev/ide/lang/resolve/SymbolKind;
+	method component4()Ljava/lang/String;
+	method component5()Ljava/lang/String;
+	method component6()Ldev/ide/lang/resolve/DocFormat;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ldev/ide/lang/resolve/SymbolKind;Ljava/lang/String;Ljava/lang/String;Ldev/ide/lang/resolve/DocFormat;)Ldev/ide/lang/resolve/QuickDocInfo;
+	method equals(Ljava/lang/Object;)Z
+	method getContainer()Ljava/lang/String;
+	method getDoc()Ljava/lang/String;
+	method getDocFormat()Ldev/ide/lang/resolve/DocFormat;
+	method getKind()Ldev/ide/lang/resolve/SymbolKind;
+	method getName()Ljava/lang/String;
+	method getSignature()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/lang/resolve/QuickDocInfo;Ljava/lang/String;Ljava/lang/String;Ldev/ide/lang/resolve/SymbolKind;Ljava/lang/String;Ljava/lang/String;Ldev/ide/lang/resolve/DocFormat;ILjava/lang/Object;)Ldev/ide/lang/resolve/QuickDocInfo;
+	method toString()Ljava/lang/String;
+dev/ide/lang/resolve/ResolveResult
+	kind interface
+dev/ide/lang/resolve/ResolveResult$Ambiguous
+	kind class
+	super java/lang/Object
+	implements dev/ide/lang/resolve/ResolveResult
+	ctor (Ljava/util/List;)V
+	method component1()Ljava/util/List;
+	method copy(Ljava/util/List;)Ldev/ide/lang/resolve/ResolveResult$Ambiguous;
+	method equals(Ljava/lang/Object;)Z
+	method getCandidates()Ljava/util/List;
+	method hashCode()I
+	method static copy$default(Ldev/ide/lang/resolve/ResolveResult$Ambiguous;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/lang/resolve/ResolveResult$Ambiguous;
+	method toString()Ljava/lang/String;
+dev/ide/lang/resolve/ResolveResult$Resolved
+	kind class
+	super java/lang/Object
+	implements dev/ide/lang/resolve/ResolveResult
+	ctor (Ldev/ide/lang/resolve/Symbol;)V
+	method component1()Ldev/ide/lang/resolve/Symbol;
+	method copy(Ldev/ide/lang/resolve/Symbol;)Ldev/ide/lang/resolve/ResolveResult$Resolved;
+	method equals(Ljava/lang/Object;)Z
+	method getSymbol()Ldev/ide/lang/resolve/Symbol;
+	method hashCode()I
+	method static copy$default(Ldev/ide/lang/resolve/ResolveResult$Resolved;Ldev/ide/lang/resolve/Symbol;ILjava/lang/Object;)Ldev/ide/lang/resolve/ResolveResult$Resolved;
+	method toString()Ljava/lang/String;
+dev/ide/lang/resolve/ResolveResult$Unresolved
+	kind class
+	super java/lang/Object
+	implements dev/ide/lang/resolve/ResolveResult
+	field static INSTANCE Ldev/ide/lang/resolve/ResolveResult$Unresolved;
+dev/ide/lang/resolve/Scope
+	kind interface
+	method abstract getEnclosing()Ldev/ide/lang/resolve/Scope;
+	method abstract resolve(Ljava/lang/String;)Ldev/ide/lang/resolve/ResolveResult;
+	method abstract symbols(Ldev/ide/lang/resolve/SymbolFilter;)Ljava/util/List;
+	method static symbols$default(Ldev/ide/lang/resolve/Scope;Ldev/ide/lang/resolve/SymbolFilter;ILjava/lang/Object;)Ljava/util/List;
+dev/ide/lang/resolve/Scope$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static symbols$default(Ldev/ide/lang/resolve/Scope;Ldev/ide/lang/resolve/SymbolFilter;ILjava/lang/Object;)Ljava/util/List;
+dev/ide/lang/resolve/StructureItem
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ldev/ide/lang/resolve/SymbolKind;III)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ldev/ide/lang/resolve/SymbolKind;
+	method component4()I
+	method component5()I
+	method component6()I
+	method copy(Ljava/lang/String;Ljava/lang/String;Ldev/ide/lang/resolve/SymbolKind;III)Ldev/ide/lang/resolve/StructureItem;
+	method equals(Ljava/lang/Object;)Z
+	method getDepth()I
+	method getDetail()Ljava/lang/String;
+	method getEndOffset()I
+	method getKind()Ldev/ide/lang/resolve/SymbolKind;
+	method getName()Ljava/lang/String;
+	method getNameOffset()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/lang/resolve/StructureItem;Ljava/lang/String;Ljava/lang/String;Ldev/ide/lang/resolve/SymbolKind;IIIILjava/lang/Object;)Ldev/ide/lang/resolve/StructureItem;
+	method toString()Ljava/lang/String;
+dev/ide/lang/resolve/Symbol
+	kind interface
+	method abstract declaration()Ldev/ide/lang/dom/DomNode;
+	method abstract documentation()Ljava/lang/String;
+	method abstract getKind()Ldev/ide/lang/resolve/SymbolKind;
+	method abstract getModifiers()Ljava/util/Set;
+	method abstract getName()Ljava/lang/String;
+	method abstract getOrigin()Ldev/ide/lang/resolve/SymbolOrigin;
+	method abstract getOwner()Ldev/ide/lang/resolve/Symbol;
+	method abstract getType()Ldev/ide/lang/resolve/TypeRef;
+dev/ide/lang/resolve/SymbolFilter
+	kind class
+	super java/lang/Object
+	ctor ()V
+	ctor (Ljava/util/Set;ZZ)V
+	ctor (Ljava/util/Set;ZZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/lang/resolve/SymbolFilter$Companion;
+	method component1()Ljava/util/Set;
+	method component2()Z
+	method component3()Z
+	method copy(Ljava/util/Set;ZZ)Ldev/ide/lang/resolve/SymbolFilter;
+	method equals(Ljava/lang/Object;)Z
+	method getInstanceOnly()Z
+	method getKinds()Ljava/util/Set;
+	method getStaticOnly()Z
+	method hashCode()I
+	method static copy$default(Ldev/ide/lang/resolve/SymbolFilter;Ljava/util/Set;ZZILjava/lang/Object;)Ldev/ide/lang/resolve/SymbolFilter;
+	method toString()Ljava/lang/String;
+dev/ide/lang/resolve/SymbolFilter$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getALL()Ldev/ide/lang/resolve/SymbolFilter;
+dev/ide/lang/resolve/SymbolKind
+	kind enum
+	super java/lang/Enum
+	field static ANNOTATION_TYPE Ldev/ide/lang/resolve/SymbolKind;
+	field static CLASS Ldev/ide/lang/resolve/SymbolKind;
+	field static CONSTRUCTOR Ldev/ide/lang/resolve/SymbolKind;
+	field static ENUM Ldev/ide/lang/resolve/SymbolKind;
+	field static ENUM_CONSTANT Ldev/ide/lang/resolve/SymbolKind;
+	field static FIELD Ldev/ide/lang/resolve/SymbolKind;
+	field static INTERFACE Ldev/ide/lang/resolve/SymbolKind;
+	field static LOCAL_VARIABLE Ldev/ide/lang/resolve/SymbolKind;
+	field static METHOD Ldev/ide/lang/resolve/SymbolKind;
+	field static PACKAGE Ldev/ide/lang/resolve/SymbolKind;
+	field static PARAMETER Ldev/ide/lang/resolve/SymbolKind;
+	field static RECORD Ldev/ide/lang/resolve/SymbolKind;
+	field static TYPE_PARAMETER Ldev/ide/lang/resolve/SymbolKind;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/lang/resolve/SymbolKind;
+	method static values()[Ldev/ide/lang/resolve/SymbolKind;
+dev/ide/lang/resolve/SymbolOrigin
+	kind class
+	super java/lang/Object
+	ctor (ZLdev/ide/vfs/VirtualFile;)V
+	method component1()Z
+	method component2()Ldev/ide/vfs/VirtualFile;
+	method copy(ZLdev/ide/vfs/VirtualFile;)Ldev/ide/lang/resolve/SymbolOrigin;
+	method equals(Ljava/lang/Object;)Z
+	method getFile()Ldev/ide/vfs/VirtualFile;
+	method getFromSource()Z
+	method hashCode()I
+	method static copy$default(Ldev/ide/lang/resolve/SymbolOrigin;ZLdev/ide/vfs/VirtualFile;ILjava/lang/Object;)Ldev/ide/lang/resolve/SymbolOrigin;
+	method toString()Ljava/lang/String;
+dev/ide/lang/resolve/TypeRef
+	kind interface
+	method abstract getQualifiedName()Ljava/lang/String;
+	method abstract getTypeArguments()Ljava/util/List;
+	method abstract isAssignableFrom(Ldev/ide/lang/resolve/TypeRef;)Z
+	method abstract members(Ldev/ide/lang/resolve/Symbol;)Ljava/util/List;
+	method abstract supertypes()Ljava/util/List;
+dev/ide/model/Coordinate
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/model/Coordinate$Companion;
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/model/Coordinate;
+	method equals(Ljava/lang/Object;)Z
+	method getClassifier()Ljava/lang/String;
+	method getGroup()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method getVersion()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/model/Coordinate;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/model/Coordinate;
+	method toString()Ljava/lang/String;
+dev/ide/model/Coordinate$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method parseOrNull(Ljava/lang/String;)Ldev/ide/model/Coordinate;
+dev/ide/model/CoordinatesKt
+	kind class
+	super java/lang/Object
+	method static sanitizeCoordinate(Ldev/ide/model/Coordinate;)Ldev/ide/model/Coordinate;
+	method static sanitizeCoordinate(Ljava/lang/String;)Ljava/lang/String;
+dev/ide/model/Exclusion
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	field static Companion Ldev/ide/model/Exclusion$Companion;
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/model/Exclusion;
+	method equals(Ljava/lang/Object;)Z
+	method getGroup()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/model/Exclusion;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/model/Exclusion;
+	method toString()Ljava/lang/String;
+dev/ide/model/Exclusion$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method parse(Ljava/lang/String;)Ldev/ide/model/Exclusion;
+dev/ide/platform/ByteArrayDataReader
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/DataReader
+	ctor ([BI)V
+	ctor ([BIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getHasMore()Z
+	method getPosition()I
+	method readBoolean()Z
+	method readByte()I
+	method readBytes(I)[B
+	method readInt()I
+	method readLong()J
+	method readShort()I
+	method readUTF()Ljava/lang/String;
+	method readUnsignedByte()I
+dev/ide/platform/ByteArrayDataWriter
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/DataWriter
+	ctor ()V
+	method getSize()I
+	method toByteArray()[B
+	method writeBoolean(Z)V
+	method writeByte(I)V
+	method writeBytes([B)V
+	method writeInt(I)V
+	method writeLong(J)V
+	method writeShort(I)V
+	method writeUTF(Ljava/lang/String;)V
+dev/ide/platform/ByteArraySource
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/ByteSource
+	ctor ([B)V
+	method getSize()J
+	method read(JI)[B
+dev/ide/platform/ByteSource
+	kind interface
+	method abstract getSize()J
+	method abstract read(JI)[B
+dev/ide/platform/CancelToken
+	kind class
+	super java/lang/Object
+	ctor ()V
+	method cancel()V
+	method getCanceled()Z
+dev/ide/platform/Clock_jvmKt
+	kind class
+	super java/lang/Object
+	method static epochMillis()J
+dev/ide/platform/ConcurrentMap
+	kind class
+	super java/lang/Object
+	ctor ()V
+	method clear()V
+	method get(Ljava/lang/Object;)Ljava/lang/Object;
+	method getKeys()Ljava/util/Set;
+	method getOrPut(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;)Ljava/lang/Object;
+	method getSize()I
+	method getValues()Ljava/util/Collection;
+	method remove(Ljava/lang/Object;)Ljava/lang/Object;
+	method set(Ljava/lang/Object;Ljava/lang/Object;)V
+dev/ide/platform/ContentHash
+	kind class
+	super java/lang/Object
+	field static Companion Ldev/ide/platform/ContentHash$Companion;
+	method equals(Ljava/lang/Object;)Z
+	method getValue()Ljava/lang/String;
+	method hashCode()I
+	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
+	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
+	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
+	method static hashCode-impl(Ljava/lang/String;)I
+	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
+	method toString()Ljava/lang/String;
+dev/ide/platform/ContentHash$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method of-sdcvfw4(Ljava/lang/String;)Ljava/lang/String;
+	method of-sdcvfw4([B)Ljava/lang/String;
+dev/ide/platform/ContentHash_jvmKt
+	kind class
+	super java/lang/Object
+	method static sha256Hex([B)Ljava/lang/String;
+dev/ide/platform/Contribution
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/Object;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/Object;
+	method component2-0MWS1W8()Ljava/lang/String;
+	method copy-oepbLLw(Ljava/lang/Object;Ljava/lang/String;)Ldev/ide/platform/Contribution;
+	method equals(Ljava/lang/Object;)Z
+	method getImpl()Ljava/lang/Object;
+	method getPlugin-0MWS1W8()Ljava/lang/String;
+	method hashCode()I
+	method static copy-oepbLLw$default(Ldev/ide/platform/Contribution;Ljava/lang/Object;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/platform/Contribution;
+	method toString()Ljava/lang/String;
+dev/ide/platform/CopyOnWriteList
+	kind class
+	super java/lang/Object
+	ctor ()V
+	method add(Ljava/lang/Object;)V
+	method clear()V
+	method contains(Ljava/lang/Object;)Z
+	method getSize()I
+	method isEmpty()Z
+	method remove(Ljava/lang/Object;)Z
+	method removeAll(Lkotlin/jvm/functions/Function1;)Z
+	method snapshot()Ljava/util/List;
+dev/ide/platform/DataReader
+	kind interface
+	method abstract readBoolean()Z
+	method abstract readByte()I
+	method abstract readInt()I
+	method abstract readLong()J
+	method abstract readShort()I
+	method abstract readUTF()Ljava/lang/String;
+	method abstract readUnsignedByte()I
+dev/ide/platform/DataWriter
+	kind interface
+	method abstract writeBoolean(Z)V
+	method abstract writeByte(I)V
+	method abstract writeInt(I)V
+	method abstract writeLong(J)V
+	method abstract writeShort(I)V
+	method abstract writeUTF(Ljava/lang/String;)V
+dev/ide/platform/Disposable
+	kind interface
+	method abstract dispose()V
+dev/ide/platform/EngineCanceledException
+	kind class
+	super java/lang/RuntimeException
+	ctor ()V
+dev/ide/platform/EngineCancellation
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/platform/EngineCancellation;
+	method checkCanceled()V
+	method withToken(Ldev/ide/platform/CancelToken;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/platform/EngineCancellation_jvmKt
+	kind class
+	super java/lang/Object
+	method static currentCancelToken()Ldev/ide/platform/CancelToken;
+	method static withCancelToken(Ldev/ide/platform/CancelToken;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/platform/ExtensionPoint
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;)V
+	method getId()Ljava/lang/String;
+dev/ide/platform/ExtensionRegistry
+	kind interface
+	method abstract extensions(Ldev/ide/platform/ExtensionPoint;)Ljava/util/List;
+	method abstract register-CaD5b6o(Ldev/ide/platform/ExtensionPoint;Ljava/lang/Object;Ljava/lang/String;)Ldev/ide/platform/Disposable;
+	method abstract unregisterAll-s5lgTNk(Ljava/lang/String;)V
+	method contributions(Ldev/ide/platform/ExtensionPoint;)Ljava/util/List;
+dev/ide/platform/ExtensionRegistry$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static contributions(Ldev/ide/platform/ExtensionRegistry;Ldev/ide/platform/ExtensionPoint;)Ljava/util/List;
+dev/ide/platform/FileInfo
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;ZJJ)V
+	method getLastModified()J
+	method getPath()Ljava/lang/String;
+	method getSize()J
+	method isDirectory()Z
+dev/ide/platform/FileSink
+	kind interface
+	method abstract close()V
+	method abstract flush()V
+	method abstract write([BII)V
+	method static write$default(Ldev/ide/platform/FileSink;[BIIILjava/lang/Object;)V
+dev/ide/platform/FileSink$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static write$default(Ldev/ide/platform/FileSink;[BIIILjava/lang/Object;)V
+dev/ide/platform/FileSink_jvmKt
+	kind class
+	super java/lang/Object
+	method static moveFile(Ljava/lang/String;Ljava/lang/String;)Z
+	method static openFileForWrite(Ljava/lang/String;)Ldev/ide/platform/FileSink;
+dev/ide/platform/FileSource
+	kind interface
+	implements dev/ide/platform/ByteSource
+	method abstract close()V
+dev/ide/platform/FileSource_jvmKt
+	kind class
+	super java/lang/Object
+	method static openFile(Ljava/lang/String;)Ldev/ide/platform/FileSource;
+dev/ide/platform/FileSystem_jvmKt
+	kind class
+	super java/lang/Object
+	method static createDirectories(Ljava/lang/String;)Z
+	method static deleteFile(Ljava/lang/String;)Z
+	method static fileInfo(Ljava/lang/String;)Ldev/ide/platform/FileInfo;
+	method static listDirectory(Ljava/lang/String;)Ljava/util/List;
+	method static readFile(Ljava/lang/String;)[B
+	method static writeFileAtomically(Ljava/lang/String;[B)Z
+dev/ide/platform/IdentitySet
+	kind class
+	super java/lang/Object
+	ctor ()V
+	method add(Ljava/lang/Object;)Z
+	method contains(Ljava/lang/Object;)Z
+	method getSize()I
+	method toList()Ljava/util/List;
+dev/ide/platform/IoDispatcher_jvmKt
+	kind class
+	super java/lang/Object
+	method static getIoDispatcher()Lkotlinx/coroutines/CoroutineDispatcher;
+dev/ide/platform/Lock
+	kind class
+	super java/lang/Object
+	ctor ()V
+	method withLock(Lkotlin/jvm/functions/Function0;)Ljava/lang/Object;
+dev/ide/platform/PathNamesKt
+	kind class
+	super java/lang/Object
+	field static PATH_SEPARATOR C
+	method static fileName(Ljava/lang/String;)Ljava/lang/String;
+	method static isAbsolutePath(Ljava/lang/String;)Z
+	method static normalizePath(Ljava/lang/String;)Ljava/lang/String;
+	method static parentPath(Ljava/lang/String;)Ljava/lang/String;
+	method static relativizePath(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+	method static resolvePath(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+dev/ide/platform/PluginId
+	kind class
+	super java/lang/Object
+	field static Companion Ldev/ide/platform/PluginId$Companion;
+	method equals(Ljava/lang/Object;)Z
+	method getValue()Ljava/lang/String;
+	method hashCode()I
+	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
+	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
+	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
+	method static hashCode-impl(Ljava/lang/String;)I
+	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
+	method toString()Ljava/lang/String;
+dev/ide/platform/PluginId$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getUNKNOWN-0MWS1W8()Ljava/lang/String;
+dev/ide/platform/ProgressReporter
+	kind interface
+	method abstract checkCanceled()V
+	method abstract isCanceled()Z
+	method abstract report(DLjava/lang/String;)V
+	method static report$default(Ldev/ide/platform/ProgressReporter;DLjava/lang/String;ILjava/lang/Object;)V
+dev/ide/platform/ProgressReporter$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static report$default(Ldev/ide/platform/ProgressReporter;DLjava/lang/String;ILjava/lang/Object;)V
+dev/ide/platform/ServiceKey
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;)V
+	method getId()Ljava/lang/String;
+dev/ide/platform/ThreadLocalValue
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/functions/Function0;)V
+	method get()Ljava/lang/Object;
+dev/ide/platform/log/ConsoleLogSink
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/log/LogSink
+	ctor ()V
+	ctor (Ljava/io/PrintStream;Ljava/io/PrintStream;)V
+	ctor (Ljava/io/PrintStream;Ljava/io/PrintStream;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method log(Ldev/ide/platform/log/LogRecord;)V
+dev/ide/platform/log/Log
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/platform/log/Log;
+	method addSink(Ldev/ide/platform/log/LogSink;)V
+	method getMinLevel()Ldev/ide/platform/log/LogLevel;
+	method getRing()Ldev/ide/platform/log/RingBufferSink;
+	method logger(Ljava/lang/String;)Ldev/ide/platform/log/Logger;
+	method logger(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/platform/log/Logger;
+	method recent()Ljava/util/List;
+	method removeSink(Ldev/ide/platform/log/LogSink;)V
+	method setMinLevel(Ldev/ide/platform/log/LogLevel;)V
+dev/ide/platform/log/LogLevel
+	kind enum
+	super java/lang/Enum
+	field static DEBUG Ldev/ide/platform/log/LogLevel;
+	field static ERROR Ldev/ide/platform/log/LogLevel;
+	field static INFO Ldev/ide/platform/log/LogLevel;
+	field static WARN Ldev/ide/platform/log/LogLevel;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/platform/log/LogLevel;
+	method static values()[Ldev/ide/platform/log/LogLevel;
+dev/ide/platform/log/LogRecord
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/platform/log/LogLevel;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;JLjava/lang/String;Ljava/lang/String;)V
+	ctor (Ldev/ide/platform/log/LogLevel;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;JLjava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ldev/ide/platform/log/LogLevel;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/Throwable;
+	method component5()J
+	method component6()Ljava/lang/String;
+	method component7()Ljava/lang/String;
+	method copy(Ldev/ide/platform/log/LogLevel;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;JLjava/lang/String;Ljava/lang/String;)Ldev/ide/platform/log/LogRecord;
+	method equals(Ljava/lang/Object;)Z
+	method getLevel()Ldev/ide/platform/log/LogLevel;
+	method getMessage()Ljava/lang/String;
+	method getSource()Ljava/lang/String;
+	method getTag()Ljava/lang/String;
+	method getThreadName()Ljava/lang/String;
+	method getThrowable()Ljava/lang/Throwable;
+	method getTimestampMs()J
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/log/LogRecord;Ldev/ide/platform/log/LogLevel;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;JLjava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/platform/log/LogRecord;
+	method toString()Ljava/lang/String;
+dev/ide/platform/log/LogSink
+	kind interface
+	method abstract log(Ldev/ide/platform/log/LogRecord;)V
+dev/ide/platform/log/Log_jvmKt
+	kind class
+	super java/lang/Object
+	method static currentThreadName()Ljava/lang/String;
+	method static defaultLogSink()Ldev/ide/platform/log/LogSink;
+dev/ide/platform/log/Logger
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method debug(Ljava/lang/String;)V
+	method error(Ljava/lang/String;Ljava/lang/Throwable;)V
+	method info(Ljava/lang/String;)V
+	method static error$default(Ldev/ide/platform/log/Logger;Ljava/lang/String;Ljava/lang/Throwable;ILjava/lang/Object;)V
+	method static warn$default(Ldev/ide/platform/log/Logger;Ljava/lang/String;Ljava/lang/Throwable;ILjava/lang/Object;)V
+	method warn(Ljava/lang/String;Ljava/lang/Throwable;)V
+dev/ide/platform/log/PerfTrace
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/platform/log/PerfTrace;
+	method applyUserPreference(Z)V
+	method getEnabled()Z
+	method setEnabled(Z)V
+dev/ide/platform/log/PerfTrace_jvmKt
+	kind class
+	super java/lang/Object
+	method static perfTraceLaunchFlag()Z
+dev/ide/platform/log/RingBufferSink
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/log/LogSink
+	ctor (I)V
+	method log(Ldev/ide/platform/log/LogRecord;)V
+	method snapshot()Ljava/util/List;
+dev/ide/vfs/VirtualFile
+	kind interface
+	method abstract children()Ljava/util/List;
+	method abstract contentHash-Q9wPEHw()Ljava/lang/String;
+	method abstract getExists()Z
+	method abstract getLength()J
+	method abstract getName()Ljava/lang/String;
+	method abstract getPath()Ljava/lang/String;
+	method abstract isDirectory()Z
+	method abstract parent()Ldev/ide/vfs/VirtualFile;
+	method abstract readBytes()[B
+	method abstract readText()Ljava/lang/CharSequence;

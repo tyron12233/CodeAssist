@@ -704,6 +704,73 @@ class MavenDependencyResolverTest {
     }
 
     @Test
+    fun aKmpLibraryWithNoAndroidVariantResolvesItsJvmOneForAnAndroidConsumer() {
+        // The shape CodeAssist's OWN SPI publishes in from 3.0.0, and the one a plugin project on device
+        // resolves: `model-api` and `platform-core` are Kotlin Multiplatform with jvm + iOS targets and NO
+        // android target, while the consumer is an Android module (the plugin ships as an APK).
+        //
+        // Three things have to hold at once for that to work, and each has its own way of failing silently:
+        // the native variants must be DROPPED rather than picked (a klib on a compile classpath is not a
+        // jar), the `jvm` variant must be accepted even though the request asks for `androidJvm` (a KMP
+        // library with no android target is otherwise unresolvable), and the root module's `available-at`
+        // must be followed to `-jvm`, whose GMM carries both the file and the transitive SPI modules.
+        val g = "io.github.tyron12233"
+        val nativeApi = mapOf(
+            "org.gradle.category" to "library", "org.gradle.usage" to "kotlin-api",
+            "org.jetbrains.kotlin.platform.type" to "native",
+            "org.jetbrains.kotlin.native.target" to "ios_simulator_arm64",
+        )
+        val metadataApi = mapOf(
+            "org.gradle.category" to "library", "org.gradle.usage" to "kotlin-metadata",
+            "org.jetbrains.kotlin.platform.type" to "common",
+        )
+        val files = FakeRepo()
+        files.putModule("platform-core", "3.0.0", group = g, variants = listOf(
+            GmmVar("metadataApiElements", metadataApi, files = listOf("platform-core-3.0.0-all.jar")),
+            GmmVar("iosSimulatorArm64ApiElements", nativeApi,
+                availableAt = Triple(g, "platform-core-iossimulatorarm64", "3.0.0")),
+            GmmVar("jvmApiElements-published", jvmApi, availableAt = Triple(g, "platform-core-jvm", "3.0.0")),
+        ))
+        files.putModule("platform-core-jvm", "3.0.0", group = g, variants = listOf(
+            GmmVar("jvmApiElements", jvmApi, files = listOf("platform-core-jvm-3.0.0.jar"),
+                deps = listOf(Dep(g, "model-api", "3.0.0"))),
+        ))
+        // The transitive is KMP-shaped too: `platform-core` api-exposes `model-api`, which is what keeps a
+        // plugin's existing imports of the platform-free core resolving without naming a new coordinate.
+        files.putModule("model-api", "3.0.0", group = g, variants = listOf(
+            GmmVar("iosSimulatorArm64ApiElements", nativeApi,
+                availableAt = Triple(g, "model-api-iossimulatorarm64", "3.0.0")),
+            GmmVar("jvmApiElements-published", jvmApi, availableAt = Triple(g, "model-api-jvm", "3.0.0")),
+        ))
+        files.putModule("model-api-jvm", "3.0.0", group = g, variants = listOf(
+            GmmVar("jvmApiElements", jvmApi, files = listOf("model-api-jvm-3.0.0.jar")),
+        ))
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(Coordinate(g, "platform-core", "3.0.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress,
+            )
+        }
+
+        assertEquals(emptyList(), result.unresolved, "the SPI must resolve for an Android consumer")
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        assertTrue(
+            byName.getValue("platform-core").classesRoot.path.endsWith("platform-core-jvm-3.0.0.jar"),
+            "the jvm variant is the only usable one: ${byName.getValue("platform-core").classesRoot.path}",
+        )
+        assertTrue("model-api" in byName.keys, "the api-exposed core must come with it: ${byName.keys}")
+        assertTrue(
+            byName.getValue("model-api").classesRoot.path.endsWith("model-api-jvm-3.0.0.jar"),
+            "and through its own jvm redirect: ${byName.getValue("model-api").classesRoot.path}",
+        )
+        assertFalse(
+            byName.keys.any { it.contains("iossimulatorarm64") },
+            "a native variant on a plugin's compile classpath is a klib it cannot read: ${byName.keys}",
+        )
+    }
+
+    @Test
     fun kmpAarFileUrlDiffersFromName() {
         // The real AndroidX KMP AAR shape: the `-android` platform module lists its file with a logical
         // name (`<artifact>-release.aar`) but a different `url` (`<artifact>-android-<version>.aar`). The

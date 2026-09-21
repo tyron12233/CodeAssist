@@ -1,0 +1,767 @@
+# The compiled surface of io.github.tyron12233:plugin-api, pinned at SPI 3.0.0.
+# A plugin links against these by name and descriptor; see :spi-compat.
+# Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/plugin/Plugin
+	kind interface
+	method abstract register(Ldev/ide/plugin/PluginRegistration;)V
+	method dispose()V
+	method getManifest()Ldev/ide/plugin/PluginManifest;
+dev/ide/plugin/Plugin$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static dispose(Ldev/ide/plugin/Plugin;)V
+	method static getManifest(Ldev/ide/plugin/Plugin;)Ldev/ide/plugin/PluginManifest;
+dev/ide/plugin/PluginCapabilities
+	kind class
+	super java/lang/Object
+	field static BUILD_RUN_TASK Ljava/lang/String;
+	field static BUILD_SOURCE_GENERATOR Ljava/lang/String;
+	field static BUILD_TASK Ljava/lang/String;
+	field static FS_READ Ljava/lang/String;
+	field static FS_WRITE Ljava/lang/String;
+	field static INSTANCE Ldev/ide/plugin/PluginCapabilities;
+	field static INTERP_RUN Ljava/lang/String;
+	field static LANG_BACKEND Ljava/lang/String;
+	field static MODEL_FACET Ljava/lang/String;
+	field static MODEL_MODULE_TYPE Ljava/lang/String;
+	field static NET Ljava/lang/String;
+	field static UI_ACTION Ljava/lang/String;
+	field static UI_EDITOR_ACTION Ljava/lang/String;
+	field static UI_EDITOR_DECORATION Ljava/lang/String;
+	field static UI_EDITOR_LANGUAGE Ljava/lang/String;
+	field static UI_EDITOR_LAYER Ljava/lang/String;
+	field static UI_EDITOR_PAINTER Ljava/lang/String;
+	field static UI_EDITOR_PREVIEW Ljava/lang/String;
+	field static UI_KEY_BINDING Ljava/lang/String;
+	field static UI_OVERLAY Ljava/lang/String;
+	field static UI_SCREEN Ljava/lang/String;
+	field static UI_SETTINGS_PAGE Ljava/lang/String;
+	field static UI_TOOL_WINDOW Ljava/lang/String;
+	method getKNOWN()Ljava/util/Set;
+	method getNEEDS_ENGINE_FACET()Ljava/util/Set;
+	method getNEEDS_UI_FACET()Ljava/util/Set;
+dev/ide/plugin/PluginKt
+	kind class
+	super java/lang/Object
+dev/ide/plugin/PluginManifest
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Z)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component10()Ljava/util/List;
+	method component11()Ljava/lang/String;
+	method component12()Z
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()I
+	method component5()Ljava/util/List;
+	method component6()Ljava/lang/String;
+	method component7()Z
+	method component8()Ljava/util/List;
+	method component9()Ljava/util/List;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Z)Ldev/ide/plugin/PluginManifest;
+	method equals(Ljava/lang/Object;)Z
+	method getApiVersion()I
+	method getCapabilities()Ljava/util/List;
+	method getDependsOn()Ljava/util/List;
+	method getDescription()Ljava/lang/String;
+	method getEntryPoints()Ljava/util/List;
+	method getEssential()Z
+	method getId()Ljava/lang/String;
+	method getMinHostVersion()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method getPluginId-0MWS1W8()Ljava/lang/String;
+	method getTrusted()Z
+	method getUiEntryPoints()Ljava/util/List;
+	method getVersion()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/PluginManifest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/plugin/PluginManifest;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/PluginManifestKt
+	kind class
+	super java/lang/Object
+	field static PLUGIN_API_VERSION I
+	field static PLUGIN_SPI_VERSION Ljava/lang/String;
+dev/ide/plugin/PluginRegistration
+	kind interface
+	method abstract busConnection()Ldev/ide/platform/MessageBusConnection;
+	method abstract contributeVia(Lkotlin/jvm/functions/Function2;)V
+	method abstract getDataDir()Ljava/nio/file/Path;
+	method abstract getMessageBus()Ldev/ide/platform/MessageBus;
+	method abstract getPluginId-0MWS1W8()Ljava/lang/String;
+	method abstract logger(Ljava/lang/String;)Ldev/ide/platform/log/Logger;
+	method abstract onDispose(Ldev/ide/platform/Disposable;)V
+	method abstract register(Ldev/ide/platform/ExtensionPoint;Ljava/lang/Object;)Ldev/ide/platform/Disposable;
+	method abstract service(Ldev/ide/platform/ServiceKey;Ldev/ide/platform/ServiceScopeLevel;Ldev/ide/platform/ServiceFactory;)Ldev/ide/platform/Disposable;
+	method getAppServices()Ldev/ide/platform/ServiceLookup;
+	method getHostVersion()Ljava/lang/String;
+	method getNativeLibraryDir()Ljava/nio/file/Path;
+	method nativeLibrary(Ljava/lang/String;)Ljava/nio/file/Path;
+dev/ide/plugin/PluginRegistration$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getAppServices(Ldev/ide/plugin/PluginRegistration;)Ldev/ide/platform/ServiceLookup;
+	method static getHostVersion(Ldev/ide/plugin/PluginRegistration;)Ljava/lang/String;
+	method static getNativeLibraryDir(Ldev/ide/plugin/PluginRegistration;)Ljava/nio/file/Path;
+	method static nativeLibrary(Ldev/ide/plugin/PluginRegistration;Ljava/lang/String;)Ljava/nio/file/Path;
+dev/ide/plugin/PluginVersions
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/plugin/PluginVersions;
+	method compare(Ljava/lang/String;Ljava/lang/String;)I
+	method satisfies(Ljava/lang/String;Ljava/lang/String;)Z
+dev/ide/plugin/action/ActionContext
+	kind interface
+	method abstract getActiveFilePath()Ljava/lang/String;
+	method abstract getContextPath()Ljava/lang/String;
+	method abstract getPlace-d7s9Rns()Ljava/lang/String;
+	method abstract getProjectRoot()Ljava/lang/String;
+	method abstract getSelectionEnd()Ljava/lang/Integer;
+	method abstract getSelectionStart()Ljava/lang/Integer;
+	method getCaret()Ldev/ide/plugin/action/CaretContext;
+	method getDocumentText()Ljava/lang/String;
+dev/ide/plugin/action/ActionContext$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getCaret(Ldev/ide/plugin/action/ActionContext;)Ldev/ide/plugin/action/CaretContext;
+	method static getDocumentText(Ldev/ide/plugin/action/ActionContext;)Ljava/lang/String;
+dev/ide/plugin/action/ActionEffect
+	kind interface
+dev/ide/plugin/action/ActionEffect$ApplyEdits
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/action/ActionEffect
+	ctor (Ljava/util/List;)V
+	ctor ([Ldev/ide/plugin/action/TextEdit;)V
+	method component1()Ljava/util/List;
+	method copy(Ljava/util/List;)Ldev/ide/plugin/action/ActionEffect$ApplyEdits;
+	method equals(Ljava/lang/Object;)Z
+	method getEdits()Ljava/util/List;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/action/ActionEffect$ApplyEdits;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/plugin/action/ActionEffect$ApplyEdits;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/ActionEffect$ApplyWorkspaceEdit
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/action/ActionEffect
+	ctor (Ljava/util/Map;)V
+	method component1()Ljava/util/Map;
+	method copy(Ljava/util/Map;)Ldev/ide/plugin/action/ActionEffect$ApplyWorkspaceEdit;
+	method equals(Ljava/lang/Object;)Z
+	method getEdits()Ljava/util/Map;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/action/ActionEffect$ApplyWorkspaceEdit;Ljava/util/Map;ILjava/lang/Object;)Ldev/ide/plugin/action/ActionEffect$ApplyWorkspaceEdit;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/ActionEffect$CreateFile
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/action/ActionEffect
+	ctor (Ljava/lang/String;Ljava/lang/String;Z)V
+	ctor (Ljava/lang/String;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Z
+	method copy(Ljava/lang/String;Ljava/lang/String;Z)Ldev/ide/plugin/action/ActionEffect$CreateFile;
+	method equals(Ljava/lang/Object;)Z
+	method getOpen()Z
+	method getPath()Ljava/lang/String;
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/action/ActionEffect$CreateFile;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/plugin/action/ActionEffect$CreateFile;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/ActionEffect$DeleteFile
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/action/ActionEffect
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/plugin/action/ActionEffect$DeleteFile;
+	method equals(Ljava/lang/Object;)Z
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/action/ActionEffect$DeleteFile;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/plugin/action/ActionEffect$DeleteFile;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/ActionEffect$MoveCaret
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/action/ActionEffect
+	ctor (I)V
+	method component1()I
+	method copy(I)Ldev/ide/plugin/action/ActionEffect$MoveCaret;
+	method equals(Ljava/lang/Object;)Z
+	method getOffset()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/action/ActionEffect$MoveCaret;IILjava/lang/Object;)Ldev/ide/plugin/action/ActionEffect$MoveCaret;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/ActionEffect$Navigate
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/action/ActionEffect
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/plugin/action/ActionEffect$Navigate;
+	method equals(Ljava/lang/Object;)Z
+	method getTarget()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/action/ActionEffect$Navigate;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/plugin/action/ActionEffect$Navigate;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/ActionEffect$OpenFile
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/action/ActionEffect
+	ctor (Ljava/lang/String;Ljava/lang/Integer;)V
+	ctor (Ljava/lang/String;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/Integer;
+	method copy(Ljava/lang/String;Ljava/lang/Integer;)Ldev/ide/plugin/action/ActionEffect$OpenFile;
+	method equals(Ljava/lang/Object;)Z
+	method getOffset()Ljava/lang/Integer;
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/action/ActionEffect$OpenFile;Ljava/lang/String;Ljava/lang/Integer;ILjava/lang/Object;)Ldev/ide/plugin/action/ActionEffect$OpenFile;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/ActionEffect$RefreshTree
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/action/ActionEffect
+	field static INSTANCE Ldev/ide/plugin/action/ActionEffect$RefreshTree;
+	method equals(Ljava/lang/Object;)Z
+	method hashCode()I
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/ActionEffect$ReloadFile
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/action/ActionEffect
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/plugin/action/ActionEffect$ReloadFile;
+	method equals(Ljava/lang/Object;)Z
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/action/ActionEffect$ReloadFile;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/plugin/action/ActionEffect$ReloadFile;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/ActionEffect$RenameFile
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/action/ActionEffect
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/plugin/action/ActionEffect$RenameFile;
+	method equals(Ljava/lang/Object;)Z
+	method getFrom()Ljava/lang/String;
+	method getTo()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/action/ActionEffect$RenameFile;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/plugin/action/ActionEffect$RenameFile;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/ActionEffect$Select
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/action/ActionEffect
+	ctor (II)V
+	method component1()I
+	method component2()I
+	method copy(II)Ldev/ide/plugin/action/ActionEffect$Select;
+	method equals(Ljava/lang/Object;)Z
+	method getEnd()I
+	method getStart()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/action/ActionEffect$Select;IIILjava/lang/Object;)Ldev/ide/plugin/action/ActionEffect$Select;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/ActionGroup
+	kind interface
+	field static Companion Ldev/ide/plugin/action/ActionGroup$Companion;
+	field static SEPARATOR Ljava/lang/String;
+	method abstract children(Ldev/ide/plugin/action/ActionContext;)Ljava/util/List;
+	method abstract getId()Ljava/lang/String;
+	method abstract getPlaces()Ljava/util/Set;
+	method abstract getText()Ljava/lang/String;
+	method getIconId()Ljava/lang/String;
+	method getOrder()I
+dev/ide/plugin/action/ActionGroup$Companion
+	kind class
+	super java/lang/Object
+	field static SEPARATOR Ljava/lang/String;
+dev/ide/plugin/action/ActionGroup$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getIconId(Ldev/ide/plugin/action/ActionGroup;)Ljava/lang/String;
+	method static getOrder(Ldev/ide/plugin/action/ActionGroup;)I
+dev/ide/plugin/action/ActionPlace
+	kind class
+	super java/lang/Object
+	method equals(Ljava/lang/Object;)Z
+	method getId()Ljava/lang/String;
+	method hashCode()I
+	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
+	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
+	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
+	method static hashCode-impl(Ljava/lang/String;)I
+	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/ActionPlaces
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/plugin/action/ActionPlaces;
+	method getCOMMAND_PALETTE-d7s9Rns()Ljava/lang/String;
+	method getEDITOR-d7s9Rns()Ljava/lang/String;
+	method getEDITOR_TAB-d7s9Rns()Ljava/lang/String;
+	method getFILE_CONTEXT-d7s9Rns()Ljava/lang/String;
+	method getMAIN_OVERFLOW-d7s9Rns()Ljava/lang/String;
+	method getMAIN_TOOLBAR-d7s9Rns()Ljava/lang/String;
+	method getMORE_MENU-d7s9Rns()Ljava/lang/String;
+dev/ide/plugin/action/ActionResult
+	kind class
+	super java/lang/Object
+	ctor ()V
+	ctor (Ljava/lang/String;Ljava/util/List;)V
+	ctor (Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/plugin/action/ActionResult$Companion;
+	method component1()Ljava/lang/String;
+	method component2()Ljava/util/List;
+	method copy(Ljava/lang/String;Ljava/util/List;)Ldev/ide/plugin/action/ActionResult;
+	method equals(Ljava/lang/Object;)Z
+	method getEffects()Ljava/util/List;
+	method getMessage()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/action/ActionResult;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/plugin/action/ActionResult;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/ActionResult$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method effect([Ldev/ide/plugin/action/ActionEffect;)Ldev/ide/plugin/action/ActionResult;
+	method getNONE()Ldev/ide/plugin/action/ActionResult;
+	method message(Ljava/lang/String;)Ldev/ide/plugin/action/ActionResult;
+dev/ide/plugin/action/ActionsKt
+	kind class
+	super java/lang/Object
+	method static getACTION_GROUP_EP()Ldev/ide/platform/ExtensionPoint;
+	method static getUI_ACTION_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/plugin/action/CaretAncestor
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;II)V
+	method component1()Ljava/lang/String;
+	method component2()I
+	method component3()I
+	method copy(Ljava/lang/String;II)Ldev/ide/plugin/action/CaretAncestor;
+	method equals(Ljava/lang/Object;)Z
+	method getEnd()I
+	method getKind()Ljava/lang/String;
+	method getStart()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/action/CaretAncestor;Ljava/lang/String;IIILjava/lang/Object;)Ldev/ide/plugin/action/CaretAncestor;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/CaretContext
+	kind class
+	super java/lang/Object
+	ctor (ILjava/lang/String;Ljava/lang/String;IILjava/lang/String;ZLjava/util/List;)V
+	ctor (ILjava/lang/String;Ljava/lang/String;IILjava/lang/String;ZLjava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/plugin/action/CaretContext$Companion;
+	field static MAX_NODE_TEXT I
+	method component1()I
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()I
+	method component5()I
+	method component6()Ljava/lang/String;
+	method component7()Z
+	method component8()Ljava/util/List;
+	method copy(ILjava/lang/String;Ljava/lang/String;IILjava/lang/String;ZLjava/util/List;)Ldev/ide/plugin/action/CaretContext;
+	method enclosing(Ljava/lang/String;)Ldev/ide/plugin/action/CaretAncestor;
+	method equals(Ljava/lang/Object;)Z
+	method getAncestors()Ljava/util/List;
+	method getKindPath()Ljava/util/List;
+	method getLanguageId()Ljava/lang/String;
+	method getNodeEnd()I
+	method getNodeKind()Ljava/lang/String;
+	method getNodeStart()I
+	method getNodeText()Ljava/lang/String;
+	method getNodeTextTruncated()Z
+	method getOffset()I
+	method hashCode()I
+	method isInside(Ljava/lang/String;)Z
+	method static copy$default(Ldev/ide/plugin/action/CaretContext;ILjava/lang/String;Ljava/lang/String;IILjava/lang/String;ZLjava/util/List;ILjava/lang/Object;)Ldev/ide/plugin/action/CaretContext;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/CaretContext$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+dev/ide/plugin/action/IdeAction
+	kind interface
+	method abstract getId()Ljava/lang/String;
+	method abstract getPlaces()Ljava/util/Set;
+	method abstract getText()Ljava/lang/String;
+	method abstract perform(Ldev/ide/plugin/action/ActionContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method getIconId()Ljava/lang/String;
+	method getOrder()I
+	method isEnabled(Ldev/ide/plugin/action/ActionContext;)Z
+	method isVisible(Ldev/ide/plugin/action/ActionContext;)Z
+dev/ide/plugin/action/IdeAction$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getIconId(Ldev/ide/plugin/action/IdeAction;)Ljava/lang/String;
+	method static getOrder(Ldev/ide/plugin/action/IdeAction;)I
+	method static isEnabled(Ldev/ide/plugin/action/IdeAction;Ldev/ide/plugin/action/ActionContext;)Z
+	method static isVisible(Ldev/ide/plugin/action/IdeAction;Ldev/ide/plugin/action/ActionContext;)Z
+dev/ide/plugin/action/SimpleAction
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/action/IdeAction
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/util/Set;Ljava/lang/String;ILkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/util/Set;Ljava/lang/String;ILkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getIconId()Ljava/lang/String;
+	method getId()Ljava/lang/String;
+	method getOrder()I
+	method getPlaces()Ljava/util/Set;
+	method getText()Ljava/lang/String;
+	method isEnabled(Ldev/ide/plugin/action/ActionContext;)Z
+	method isVisible(Ldev/ide/plugin/action/ActionContext;)Z
+	method perform(Ldev/ide/plugin/action/ActionContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/plugin/action/SimpleGroup
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/action/ActionGroup
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/util/Set;Ljava/lang/String;ILjava/util/List;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/util/Set;Ljava/lang/String;ILjava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/util/Set;Ljava/lang/String;ILkotlin/jvm/functions/Function1;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/util/Set;Ljava/lang/String;ILkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method children(Ldev/ide/plugin/action/ActionContext;)Ljava/util/List;
+	method getIconId()Ljava/lang/String;
+	method getId()Ljava/lang/String;
+	method getOrder()I
+	method getPlaces()Ljava/util/Set;
+	method getText()Ljava/lang/String;
+dev/ide/plugin/action/TextEdit
+	kind class
+	super java/lang/Object
+	ctor (IILjava/lang/String;)V
+	field static Companion Ldev/ide/plugin/action/TextEdit$Companion;
+	method component1()I
+	method component2()I
+	method component3()Ljava/lang/String;
+	method copy(IILjava/lang/String;)Ldev/ide/plugin/action/TextEdit;
+	method equals(Ljava/lang/Object;)Z
+	method getLength()I
+	method getNewText()Ljava/lang/String;
+	method getOffset()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/action/TextEdit;IILjava/lang/String;ILjava/lang/Object;)Ldev/ide/plugin/action/TextEdit;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/action/TextEdit$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method delete(II)Ldev/ide/plugin/action/TextEdit;
+	method insert(ILjava/lang/String;)Ldev/ide/plugin/action/TextEdit;
+	method replace(IILjava/lang/String;)Ldev/ide/plugin/action/TextEdit;
+dev/ide/plugin/editor/DecorationStyle
+	kind enum
+	super java/lang/Enum
+	field static Background Ldev/ide/plugin/editor/DecorationStyle;
+	field static Box Ldev/ide/plugin/editor/DecorationStyle;
+	field static DottedUnderline Ldev/ide/plugin/editor/DecorationStyle;
+	field static Foreground Ldev/ide/plugin/editor/DecorationStyle;
+	field static Strikethrough Ldev/ide/plugin/editor/DecorationStyle;
+	field static Underline Ldev/ide/plugin/editor/DecorationStyle;
+	field static WavyUnderline Ldev/ide/plugin/editor/DecorationStyle;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/plugin/editor/DecorationStyle;
+	method static values()[Ldev/ide/plugin/editor/DecorationStyle;
+dev/ide/plugin/editor/DecorationTint
+	kind enum
+	super java/lang/Enum
+	field static Accent Ldev/ide/plugin/editor/DecorationTint;
+	field static Added Ldev/ide/plugin/editor/DecorationTint;
+	field static Error Ldev/ide/plugin/editor/DecorationTint;
+	field static Info Ldev/ide/plugin/editor/DecorationTint;
+	field static Modified Ldev/ide/plugin/editor/DecorationTint;
+	field static Muted Ldev/ide/plugin/editor/DecorationTint;
+	field static Removed Ldev/ide/plugin/editor/DecorationTint;
+	field static Success Ldev/ide/plugin/editor/DecorationTint;
+	field static Warning Ldev/ide/plugin/editor/DecorationTint;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/plugin/editor/DecorationTint;
+	method static values()[Ldev/ide/plugin/editor/DecorationTint;
+dev/ide/plugin/editor/EditorDecorationContext
+	kind interface
+	method abstract getLanguageId()Ljava/lang/String;
+	method abstract getPath()Ljava/lang/String;
+	method abstract getText()Ljava/lang/String;
+dev/ide/plugin/editor/EditorDecorationProvider
+	kind interface
+	method abstract decorate(Ldev/ide/plugin/editor/EditorDecorationContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract getId()Ljava/lang/String;
+	method appliesTo(Ldev/ide/plugin/editor/EditorDecorationContext;)Z
+dev/ide/plugin/editor/EditorDecorationProvider$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static appliesTo(Ldev/ide/plugin/editor/EditorDecorationProvider;Ldev/ide/plugin/editor/EditorDecorationContext;)Z
+dev/ide/plugin/editor/EditorDecorations
+	kind class
+	super java/lang/Object
+	ctor ()V
+	ctor (Ljava/util/List;Ljava/util/List;Ljava/util/List;)V
+	ctor (Ljava/util/List;Ljava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/plugin/editor/EditorDecorations$Companion;
+	method getGutter()Ljava/util/List;
+	method getInlays()Ljava/util/List;
+	method getRanges()Ljava/util/List;
+	method isEmpty()Z
+dev/ide/plugin/editor/EditorDecorations$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getEMPTY()Ldev/ide/plugin/editor/EditorDecorations;
+dev/ide/plugin/editor/EditorDecorationsKt
+	kind class
+	super java/lang/Object
+	method static getEDITOR_DECORATION_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/plugin/editor/EditorEvent
+	kind interface
+dev/ide/plugin/editor/EditorEvent$ActiveEditorChanged
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/editor/EditorEvent
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/plugin/editor/EditorEvent$ActiveEditorChanged;
+	method equals(Ljava/lang/Object;)Z
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/editor/EditorEvent$ActiveEditorChanged;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/plugin/editor/EditorEvent$ActiveEditorChanged;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/editor/EditorEvent$FileClosed
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/editor/EditorEvent
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/plugin/editor/EditorEvent$FileClosed;
+	method equals(Ljava/lang/Object;)Z
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/editor/EditorEvent$FileClosed;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/plugin/editor/EditorEvent$FileClosed;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/editor/EditorEvent$FileOpened
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/editor/EditorEvent
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/plugin/editor/EditorEvent$FileOpened;
+	method equals(Ljava/lang/Object;)Z
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/editor/EditorEvent$FileOpened;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/plugin/editor/EditorEvent$FileOpened;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/editor/EditorEvent$SelectionChanged
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/editor/EditorEvent
+	ctor (Ljava/lang/String;II)V
+	method component1()Ljava/lang/String;
+	method component2()I
+	method component3()I
+	method copy(Ljava/lang/String;II)Ldev/ide/plugin/editor/EditorEvent$SelectionChanged;
+	method equals(Ljava/lang/Object;)Z
+	method getEnd()I
+	method getPath()Ljava/lang/String;
+	method getStart()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/editor/EditorEvent$SelectionChanged;Ljava/lang/String;IIILjava/lang/Object;)Ldev/ide/plugin/editor/EditorEvent$SelectionChanged;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/editor/EditorEventListener
+	kind interface
+	method abstract onEditorEvent(Ldev/ide/plugin/editor/EditorEvent;)V
+dev/ide/plugin/editor/EditorInlay
+	kind class
+	super java/lang/Object
+	ctor (ILjava/lang/String;Ldev/ide/plugin/editor/InlayKind;Ljava/lang/Integer;)V
+	ctor (ILjava/lang/String;Ldev/ide/plugin/editor/InlayKind;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getKind()Ldev/ide/plugin/editor/InlayKind;
+	method getNavOffset()Ljava/lang/Integer;
+	method getOffset()I
+	method getText()Ljava/lang/String;
+dev/ide/plugin/editor/EditorTopics
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/plugin/editor/EditorTopics;
+	method getEDITOR()Ldev/ide/platform/Topic;
+dev/ide/plugin/editor/GutterMark
+	kind class
+	super java/lang/Object
+	ctor (ILjava/lang/String;Ldev/ide/plugin/editor/DecorationTint;Ljava/lang/String;Ljava/lang/String;I)V
+	ctor (ILjava/lang/String;Ldev/ide/plugin/editor/DecorationTint;Ljava/lang/String;Ljava/lang/String;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getActionId()Ljava/lang/String;
+	method getIconId()Ljava/lang/String;
+	method getLine()I
+	method getOrder()I
+	method getTint()Ldev/ide/plugin/editor/DecorationTint;
+	method getTooltip()Ljava/lang/String;
+dev/ide/plugin/editor/InlayKind
+	kind enum
+	super java/lang/Enum
+	field static Chaining Ldev/ide/plugin/editor/InlayKind;
+	field static Other Ldev/ide/plugin/editor/InlayKind;
+	field static Parameter Ldev/ide/plugin/editor/InlayKind;
+	field static Type Ldev/ide/plugin/editor/InlayKind;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/plugin/editor/InlayKind;
+	method static values()[Ldev/ide/plugin/editor/InlayKind;
+dev/ide/plugin/editor/TextDecoration
+	kind class
+	super java/lang/Object
+	ctor (IILdev/ide/plugin/editor/DecorationStyle;Ldev/ide/plugin/editor/DecorationTint;Ljava/lang/String;I)V
+	ctor (IILdev/ide/plugin/editor/DecorationStyle;Ldev/ide/plugin/editor/DecorationTint;Ljava/lang/String;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getEndOffset()I
+	method getOrder()I
+	method getStartOffset()I
+	method getStyle()Ldev/ide/plugin/editor/DecorationStyle;
+	method getTint()Ldev/ide/plugin/editor/DecorationTint;
+	method getTooltip()Ljava/lang/String;
+dev/ide/plugin/external/DiscoveredPlugin
+	kind interface
+	implements dev/ide/plugin/external/PluginCandidate
+	method abstract classLoader()Ljava/lang/ClassLoader;
+	method abstract getManifest()Ldev/ide/plugin/PluginManifest;
+	method abstract getOrigin()Ldev/ide/plugin/external/PluginOrigin;
+	method getNativeLibraryDir()Ljava/nio/file/Path;
+dev/ide/plugin/external/DiscoveredPlugin$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getNativeLibraryDir(Ldev/ide/plugin/external/DiscoveredPlugin;)Ljava/nio/file/Path;
+dev/ide/plugin/external/PluginCandidate
+	kind interface
+	method abstract getOrigin()Ldev/ide/plugin/external/PluginOrigin;
+dev/ide/plugin/external/PluginOrigin
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/plugin/external/PluginOrigin;
+	method equals(Ljava/lang/Object;)Z
+	method getLabel()Ljava/lang/String;
+	method getSignature()Ljava/lang/String;
+	method getSourceId()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/external/PluginOrigin;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/plugin/external/PluginOrigin;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/external/PluginSource
+	kind interface
+	method abstract discover()Ljava/util/List;
+	method abstract getId()Ljava/lang/String;
+dev/ide/plugin/external/RejectedPlugin
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/external/PluginCandidate
+	ctor (Ldev/ide/plugin/external/PluginOrigin;Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ldev/ide/plugin/external/PluginOrigin;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ldev/ide/plugin/external/PluginOrigin;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(Ldev/ide/plugin/external/PluginOrigin;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/plugin/external/RejectedPlugin;
+	method equals(Ljava/lang/Object;)Z
+	method getName()Ljava/lang/String;
+	method getOrigin()Ldev/ide/plugin/external/PluginOrigin;
+	method getReason()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/external/RejectedPlugin;Ldev/ide/plugin/external/PluginOrigin;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/plugin/external/RejectedPlugin;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/keymap/KeyBinding
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ldev/ide/plugin/keymap/Shortcut;Ldev/ide/plugin/keymap/KeyContext;I)V
+	ctor (Ljava/lang/String;Ldev/ide/plugin/keymap/Shortcut;Ldev/ide/plugin/keymap/KeyContext;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getActionId()Ljava/lang/String;
+	method getContext()Ldev/ide/plugin/keymap/KeyContext;
+	method getOrder()I
+	method getShortcut()Ldev/ide/plugin/keymap/Shortcut;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/keymap/KeyContext
+	kind enum
+	super java/lang/Enum
+	field static Editor Ldev/ide/plugin/keymap/KeyContext;
+	field static Global Ldev/ide/plugin/keymap/KeyContext;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/plugin/keymap/KeyContext;
+	method static values()[Ldev/ide/plugin/keymap/KeyContext;
+dev/ide/plugin/keymap/KeyModifier
+	kind enum
+	super java/lang/Enum
+	field static Alt Ldev/ide/plugin/keymap/KeyModifier;
+	field static Ctrl Ldev/ide/plugin/keymap/KeyModifier;
+	field static Meta Ldev/ide/plugin/keymap/KeyModifier;
+	field static Primary Ldev/ide/plugin/keymap/KeyModifier;
+	field static Shift Ldev/ide/plugin/keymap/KeyModifier;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/plugin/keymap/KeyModifier;
+	method static values()[Ldev/ide/plugin/keymap/KeyModifier;
+dev/ide/plugin/keymap/KeyPress
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;ZZZZ)V
+	ctor (Ljava/lang/String;ZZZZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Z
+	method component3()Z
+	method component4()Z
+	method component5()Z
+	method copy(Ljava/lang/String;ZZZZ)Ldev/ide/plugin/keymap/KeyPress;
+	method equals(Ljava/lang/Object;)Z
+	method getAlt()Z
+	method getCtrl()Z
+	method getKey()Ljava/lang/String;
+	method getMeta()Z
+	method getShift()Z
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/keymap/KeyPress;Ljava/lang/String;ZZZZILjava/lang/Object;)Ldev/ide/plugin/keymap/KeyPress;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/keymap/KeyStroke
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/util/Set;)V
+	ctor (Ljava/lang/String;Ljava/util/Set;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/plugin/keymap/KeyStroke$Companion;
+	method component1()Ljava/lang/String;
+	method component2()Ljava/util/Set;
+	method copy(Ljava/lang/String;Ljava/util/Set;)Ldev/ide/plugin/keymap/KeyStroke;
+	method equals(Ljava/lang/Object;)Z
+	method getKey()Ljava/lang/String;
+	method getModifiers()Ljava/util/Set;
+	method hashCode()I
+	method static copy$default(Ldev/ide/plugin/keymap/KeyStroke;Ljava/lang/String;Ljava/util/Set;ILjava/lang/Object;)Ldev/ide/plugin/keymap/KeyStroke;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/keymap/KeyStroke$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+dev/ide/plugin/keymap/KeymapKt
+	kind class
+	super java/lang/Object
+	method static getKEY_BINDING_EP()Ldev/ide/platform/ExtensionPoint;
+	method static matches(Ldev/ide/plugin/keymap/KeyStroke;Ldev/ide/plugin/keymap/KeyPress;)Z
+dev/ide/plugin/keymap/Shortcut
+	kind class
+	super java/lang/Object
+	ctor (Ljava/util/List;)V
+	field static Companion Ldev/ide/plugin/keymap/Shortcut$Companion;
+	method component1()Ljava/util/List;
+	method copy(Ljava/util/List;)Ldev/ide/plugin/keymap/Shortcut;
+	method equals(Ljava/lang/Object;)Z
+	method getStrokes()Ljava/util/List;
+	method hashCode()I
+	method isChord()Z
+	method static copy$default(Ldev/ide/plugin/keymap/Shortcut;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/plugin/keymap/Shortcut;
+	method toString()Ljava/lang/String;
+dev/ide/plugin/keymap/Shortcut$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method of(Ljava/lang/String;[Ldev/ide/plugin/keymap/KeyModifier;)Ldev/ide/plugin/keymap/Shortcut;
+	method parse(Ljava/lang/String;)Ldev/ide/plugin/keymap/Shortcut;

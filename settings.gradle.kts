@@ -122,6 +122,7 @@ include(
     ":plugin-ui-api", // the UI half of the plugin SPI: what an installed plugin implements to contribute Compose UI
     ":plugin-bom", // the versions a plugin compiles against (SPI + the Compose the IDE provides), as one coordinate
     ":plugin-impl", // ActionManager: resolves UI_ACTION_EP/ACTION_GROUP_EP into places/menus, dispatches
+    ":spi-compat", // test-only: holds the published SPI's compiled surface against a checked-in baseline
     ":agent-api",   // agentic-coding SPI: provider-neutral LLM client + AgentTool + AgentWorkspace engine port
     ":agent-impl",  // the agent engine: OkHttp/SSE transport, Anthropic/OpenAI/Gemini providers, loop, built-in tools
     ":agent-mcp",   // Model Context Protocol server: exposes the agent's tools over stdio JSON-RPC to external clients
@@ -246,7 +247,7 @@ val layers = mapOf(
         "analytics-api", "analytics-impl", "agent-api", "agent-impl", "agent-mcp", "agent-ui",
     ),
     // The plugin SPI a third-party plugin compiles against, and the host that resolves it.
-    "plugins" to listOf("plugin-api", "plugin-ui-api", "plugin-bom", "plugin-impl"),
+    "plugins" to listOf("plugin-api", "plugin-ui-api", "plugin-bom", "plugin-impl", "spi-compat"),
     // The IDE itself: the Compose UI, its backend port, and the desktop/Android/iOS shells.
     "app" to listOf(
         "ide-ui-api", "ide-ui-resources", "ide-ui-core", "ide-ui-components", "ide-ui-editor",

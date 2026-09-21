@@ -1,0 +1,78 @@
+# The compiled surface of io.github.tyron12233:vfs-api, pinned at SPI 3.0.0.
+# A plugin links against these by name and descriptor; see :spi-compat.
+# Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/vfs/FileChanged
+	kind class
+	super java/lang/Object
+	implements dev/ide/vfs/VfsEvent
+	ctor (Ldev/ide/vfs/VirtualFile;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ldev/ide/vfs/VirtualFile;
+	method component2-Q9wPEHw()Ljava/lang/String;
+	method component3-Q9wPEHw()Ljava/lang/String;
+	method copy-jIeX82E(Ldev/ide/vfs/VirtualFile;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/vfs/FileChanged;
+	method equals(Ljava/lang/Object;)Z
+	method getFile()Ldev/ide/vfs/VirtualFile;
+	method getNewHash-Q9wPEHw()Ljava/lang/String;
+	method getOldHash-Q9wPEHw()Ljava/lang/String;
+	method hashCode()I
+	method static copy-jIeX82E$default(Ldev/ide/vfs/FileChanged;Ldev/ide/vfs/VirtualFile;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vfs/FileChanged;
+	method toString()Ljava/lang/String;
+dev/ide/vfs/FileCreated
+	kind class
+	super java/lang/Object
+	implements dev/ide/vfs/VfsEvent
+	ctor (Ldev/ide/vfs/VirtualFile;)V
+	method component1()Ldev/ide/vfs/VirtualFile;
+	method copy(Ldev/ide/vfs/VirtualFile;)Ldev/ide/vfs/FileCreated;
+	method equals(Ljava/lang/Object;)Z
+	method getFile()Ldev/ide/vfs/VirtualFile;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vfs/FileCreated;Ldev/ide/vfs/VirtualFile;ILjava/lang/Object;)Ldev/ide/vfs/FileCreated;
+	method toString()Ljava/lang/String;
+dev/ide/vfs/FileDeleted
+	kind class
+	super java/lang/Object
+	implements dev/ide/vfs/VfsEvent
+	ctor (Ldev/ide/vfs/VirtualFile;)V
+	method component1()Ldev/ide/vfs/VirtualFile;
+	method copy(Ldev/ide/vfs/VirtualFile;)Ldev/ide/vfs/FileDeleted;
+	method equals(Ljava/lang/Object;)Z
+	method getFile()Ldev/ide/vfs/VirtualFile;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vfs/FileDeleted;Ldev/ide/vfs/VirtualFile;ILjava/lang/Object;)Ldev/ide/vfs/FileDeleted;
+	method toString()Ljava/lang/String;
+dev/ide/vfs/FileMoved
+	kind class
+	super java/lang/Object
+	implements dev/ide/vfs/VfsEvent
+	ctor (Ldev/ide/vfs/VirtualFile;Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ldev/ide/vfs/VirtualFile;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(Ldev/ide/vfs/VirtualFile;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/vfs/FileMoved;
+	method equals(Ljava/lang/Object;)Z
+	method getFile()Ldev/ide/vfs/VirtualFile;
+	method getFrom()Ljava/lang/String;
+	method getTo()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vfs/FileMoved;Ldev/ide/vfs/VirtualFile;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vfs/FileMoved;
+	method toString()Ljava/lang/String;
+dev/ide/vfs/FileWatch
+	kind interface
+	implements dev/ide/platform/Disposable
+dev/ide/vfs/VfsEvent
+	kind interface
+	method abstract getFile()Ldev/ide/vfs/VirtualFile;
+dev/ide/vfs/VfsListener
+	kind interface
+	method abstract onEvents(Ljava/util/List;)V
+dev/ide/vfs/VfsTopics
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/vfs/VfsTopics;
+	method getCHANGES()Ldev/ide/platform/Topic;
+dev/ide/vfs/VirtualFileSystem
+	kind interface
+	method abstract findByPath(Ljava/lang/String;)Ldev/ide/vfs/VirtualFile;
+	method abstract root()Ldev/ide/vfs/VirtualFile;
+	method abstract watch(Ldev/ide/vfs/VirtualFile;)Ldev/ide/vfs/FileWatch;

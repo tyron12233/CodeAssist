@@ -1,0 +1,634 @@
+# The compiled surface of io.github.tyron12233:vcs-api, pinned at SPI 3.0.0.
+# A plugin links against these by name and descriptor; see :spi-compat.
+# Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/vcs/AccountStore
+	kind interface
+	method abstract accounts()Ljava/util/List;
+	method abstract activeAccount()Ldev/ide/vcs/VcsAccount;
+	method abstract add(Ldev/ide/vcs/VcsAccount;Ljava/lang/String;)Ldev/ide/vcs/VcsAccount;
+	method abstract clearHostCredentials(Ljava/lang/String;)V
+	method abstract credentialHosts()Ljava/util/List;
+	method abstract credentialsFor(Ljava/lang/String;)Ldev/ide/vcs/VcsCredentials;
+	method abstract remove(Ljava/lang/String;)V
+	method abstract saveHostCredentials(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	method abstract setActive(Ljava/lang/String;)V
+	method abstract token(Ljava/lang/String;)Ljava/lang/String;
+dev/ide/vcs/DeviceAuthPoll
+	kind interface
+dev/ide/vcs/DeviceAuthPoll$Authorized
+	kind class
+	super java/lang/Object
+	implements dev/ide/vcs/DeviceAuthPoll
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/vcs/DeviceAuthPoll$Authorized;
+	method equals(Ljava/lang/Object;)Z
+	method getToken()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/DeviceAuthPoll$Authorized;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/DeviceAuthPoll$Authorized;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/DeviceAuthPoll$Failed
+	kind class
+	super java/lang/Object
+	implements dev/ide/vcs/DeviceAuthPoll
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/vcs/DeviceAuthPoll$Failed;
+	method equals(Ljava/lang/Object;)Z
+	method getMessage()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/DeviceAuthPoll$Failed;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/DeviceAuthPoll$Failed;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/DeviceAuthPoll$Pending
+	kind class
+	super java/lang/Object
+	implements dev/ide/vcs/DeviceAuthPoll
+	field static INSTANCE Ldev/ide/vcs/DeviceAuthPoll$Pending;
+	method equals(Ljava/lang/Object;)Z
+	method hashCode()I
+	method toString()Ljava/lang/String;
+dev/ide/vcs/DeviceAuthPoll$SlowDown
+	kind class
+	super java/lang/Object
+	implements dev/ide/vcs/DeviceAuthPoll
+	ctor (I)V
+	method component1()I
+	method copy(I)Ldev/ide/vcs/DeviceAuthPoll$SlowDown;
+	method equals(Ljava/lang/Object;)Z
+	method getIntervalSeconds()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/DeviceAuthPoll$SlowDown;IILjava/lang/Object;)Ldev/ide/vcs/DeviceAuthPoll$SlowDown;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/DeviceAuthorization
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()I
+	method component5()I
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II)Ldev/ide/vcs/DeviceAuthorization;
+	method equals(Ljava/lang/Object;)Z
+	method getDeviceCode()Ljava/lang/String;
+	method getExpiresInSeconds()I
+	method getIntervalSeconds()I
+	method getUserCode()Ljava/lang/String;
+	method getVerificationUri()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/DeviceAuthorization;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIILjava/lang/Object;)Ldev/ide/vcs/DeviceAuthorization;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/ForgeClient
+	kind interface
+	method abstract createPullRequest(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/vcs/ForgePullRequest;
+	method abstract createRepository(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)Ldev/ide/vcs/ForgeRepo;
+	method abstract getDeviceAuthSupported()Z
+	method abstract getDisplayName()Ljava/lang/String;
+	method abstract getHost()Ljava/lang/String;
+	method abstract getId()Ljava/lang/String;
+	method abstract pollDeviceAuth(Ljava/lang/String;)Ldev/ide/vcs/DeviceAuthPoll;
+	method abstract pullRequests(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/util/List;
+	method abstract repositories(Ljava/lang/String;Ljava/lang/String;II)Ljava/util/List;
+	method abstract startDeviceAuth()Ldev/ide/vcs/DeviceAuthorization;
+	method abstract verifyToken(Ljava/lang/String;)Ldev/ide/vcs/VcsAccount;
+	method cloneUrl(Ldev/ide/vcs/ForgeRepo;)Ljava/lang/String;
+	method static createRepository$default(Ldev/ide/vcs/ForgeClient;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/vcs/ForgeRepo;
+	method static repositories$default(Ldev/ide/vcs/ForgeClient;Ljava/lang/String;Ljava/lang/String;IIILjava/lang/Object;)Ljava/util/List;
+dev/ide/vcs/ForgeClient$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static cloneUrl(Ldev/ide/vcs/ForgeClient;Ldev/ide/vcs/ForgeRepo;)Ljava/lang/String;
+	method static createRepository$default(Ldev/ide/vcs/ForgeClient;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/vcs/ForgeRepo;
+	method static repositories$default(Ldev/ide/vcs/ForgeClient;Ljava/lang/String;Ljava/lang/String;IIILjava/lang/Object;)Ljava/util/List;
+dev/ide/vcs/ForgePullRequest
+	kind class
+	super java/lang/Object
+	ctor (ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZJ)V
+	ctor (ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()I
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method component5()Ljava/lang/String;
+	method component6()Ljava/lang/String;
+	method component7()Z
+	method component8()J
+	method copy(ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZJ)Ldev/ide/vcs/ForgePullRequest;
+	method equals(Ljava/lang/Object;)Z
+	method getAuthor()Ljava/lang/String;
+	method getBaseBranch()Ljava/lang/String;
+	method getDraft()Z
+	method getHeadBranch()Ljava/lang/String;
+	method getNumber()I
+	method getTitle()Ljava/lang/String;
+	method getUpdatedMs()J
+	method getWebUrl()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/ForgePullRequest;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZJILjava/lang/Object;)Ldev/ide/vcs/ForgePullRequest;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/ForgeRepo
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;J)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component10()Ljava/lang/String;
+	method component11()J
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Z
+	method component5()Z
+	method component6()Ljava/lang/String;
+	method component7()Ljava/lang/String;
+	method component8()Ljava/lang/String;
+	method component9()I
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;J)Ldev/ide/vcs/ForgeRepo;
+	method equals(Ljava/lang/Object;)Z
+	method getCloneUrl()Ljava/lang/String;
+	method getDefaultBranch()Ljava/lang/String;
+	method getDescription()Ljava/lang/String;
+	method getFork()Z
+	method getFullName()Ljava/lang/String;
+	method getLanguage()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method getOwner()Ljava/lang/String;
+	method getPrivate()Z
+	method getStars()I
+	method getUpdatedMs()J
+	method getWebUrl()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/ForgeRepo;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;JILjava/lang/Object;)Ldev/ide/vcs/ForgeRepo;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsAccount
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/vcs/VcsAccount$Kind;J)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/vcs/VcsAccount$Kind;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/vcs/VcsAccount$Companion;
+	field static FORGE_GITHUB Ljava/lang/String;
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method component5()Ljava/lang/String;
+	method component6()Ljava/lang/String;
+	method component7()Ljava/lang/String;
+	method component8()Ldev/ide/vcs/VcsAccount$Kind;
+	method component9()J
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/vcs/VcsAccount$Kind;J)Ldev/ide/vcs/VcsAccount;
+	method equals(Ljava/lang/Object;)Z
+	method getAddedMs()J
+	method getAvatarUrl()Ljava/lang/String;
+	method getEmail()Ljava/lang/String;
+	method getForgeId()Ljava/lang/String;
+	method getHost()Ljava/lang/String;
+	method getId()Ljava/lang/String;
+	method getKind()Ldev/ide/vcs/VcsAccount$Kind;
+	method getLogin()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsAccount;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/vcs/VcsAccount$Kind;JILjava/lang/Object;)Ldev/ide/vcs/VcsAccount;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsAccount$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method idOf(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+dev/ide/vcs/VcsAccount$Kind
+	kind enum
+	super java/lang/Enum
+	field static OAUTH Ldev/ide/vcs/VcsAccount$Kind;
+	field static TOKEN Ldev/ide/vcs/VcsAccount$Kind;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/vcs/VcsAccount$Kind;
+	method static values()[Ldev/ide/vcs/VcsAccount$Kind;
+dev/ide/vcs/VcsAuthException
+	kind class
+	super java/lang/Exception
+	ctor (Ljava/lang/String;Ljava/lang/Throwable;)V
+	ctor (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+dev/ide/vcs/VcsAuthor
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/vcs/VcsAuthor;
+	method equals(Ljava/lang/Object;)Z
+	method getEmail()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsAuthor;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsAuthor;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsBranch
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Z
+	method component4()Z
+	method component5()Ljava/lang/String;
+	method component6()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;Ljava/lang/String;)Ldev/ide/vcs/VcsBranch;
+	method equals(Ljava/lang/Object;)Z
+	method getCurrent()Z
+	method getName()Ljava/lang/String;
+	method getRef()Ljava/lang/String;
+	method getRemote()Z
+	method getTip()Ljava/lang/String;
+	method getUpstream()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsBranch;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsBranch;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsChange
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ldev/ide/vcs/VcsChangeKind;Ldev/ide/vcs/VcsChangeArea;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ldev/ide/vcs/VcsChangeKind;Ldev/ide/vcs/VcsChangeArea;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ldev/ide/vcs/VcsChangeKind;
+	method component3()Ldev/ide/vcs/VcsChangeArea;
+	method component4()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ldev/ide/vcs/VcsChangeKind;Ldev/ide/vcs/VcsChangeArea;Ljava/lang/String;)Ldev/ide/vcs/VcsChange;
+	method equals(Ljava/lang/Object;)Z
+	method getArea()Ldev/ide/vcs/VcsChangeArea;
+	method getKind()Ldev/ide/vcs/VcsChangeKind;
+	method getOldPath()Ljava/lang/String;
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsChange;Ljava/lang/String;Ldev/ide/vcs/VcsChangeKind;Ldev/ide/vcs/VcsChangeArea;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsChange;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsChangeArea
+	kind enum
+	super java/lang/Enum
+	field static CONFLICTED Ldev/ide/vcs/VcsChangeArea;
+	field static STAGED Ldev/ide/vcs/VcsChangeArea;
+	field static UNSTAGED Ldev/ide/vcs/VcsChangeArea;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/vcs/VcsChangeArea;
+	method static values()[Ldev/ide/vcs/VcsChangeArea;
+dev/ide/vcs/VcsChangeKind
+	kind enum
+	super java/lang/Enum
+	field static ADDED Ldev/ide/vcs/VcsChangeKind;
+	field static CONFLICTED Ldev/ide/vcs/VcsChangeKind;
+	field static COPIED Ldev/ide/vcs/VcsChangeKind;
+	field static DELETED Ldev/ide/vcs/VcsChangeKind;
+	field static IGNORED Ldev/ide/vcs/VcsChangeKind;
+	field static MODIFIED Ldev/ide/vcs/VcsChangeKind;
+	field static RENAMED Ldev/ide/vcs/VcsChangeKind;
+	field static UNTRACKED Ldev/ide/vcs/VcsChangeKind;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/vcs/VcsChangeKind;
+	method static values()[Ldev/ide/vcs/VcsChangeKind;
+dev/ide/vcs/VcsCommit
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/vcs/VcsAuthor;Ldev/ide/vcs/VcsAuthor;JLjava/util/List;Ljava/util/List;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/vcs/VcsAuthor;Ldev/ide/vcs/VcsAuthor;JLjava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method component5()Ldev/ide/vcs/VcsAuthor;
+	method component6()Ldev/ide/vcs/VcsAuthor;
+	method component7()J
+	method component8()Ljava/util/List;
+	method component9()Ljava/util/List;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/vcs/VcsAuthor;Ldev/ide/vcs/VcsAuthor;JLjava/util/List;Ljava/util/List;)Ldev/ide/vcs/VcsCommit;
+	method equals(Ljava/lang/Object;)Z
+	method getAuthor()Ldev/ide/vcs/VcsAuthor;
+	method getBody()Ljava/lang/String;
+	method getCommitter()Ldev/ide/vcs/VcsAuthor;
+	method getId()Ljava/lang/String;
+	method getMerge()Z
+	method getParents()Ljava/util/List;
+	method getRefs()Ljava/util/List;
+	method getShortId()Ljava/lang/String;
+	method getSummary()Ljava/lang/String;
+	method getTimeMs()J
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsCommit;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/vcs/VcsAuthor;Ldev/ide/vcs/VcsAuthor;JLjava/util/List;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/vcs/VcsCommit;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsCommitDetail
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/vcs/VcsCommit;Ljava/util/List;II)V
+	ctor (Ldev/ide/vcs/VcsCommit;Ljava/util/List;IIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ldev/ide/vcs/VcsCommit;
+	method component2()Ljava/util/List;
+	method component3()I
+	method component4()I
+	method copy(Ldev/ide/vcs/VcsCommit;Ljava/util/List;II)Ldev/ide/vcs/VcsCommitDetail;
+	method equals(Ljava/lang/Object;)Z
+	method getChanges()Ljava/util/List;
+	method getCommit()Ldev/ide/vcs/VcsCommit;
+	method getDeletions()I
+	method getInsertions()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsCommitDetail;Ldev/ide/vcs/VcsCommit;Ljava/util/List;IIILjava/lang/Object;)Ldev/ide/vcs/VcsCommitDetail;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsCredentials
+	kind interface
+dev/ide/vcs/VcsCredentials$Anonymous
+	kind class
+	super java/lang/Object
+	implements dev/ide/vcs/VcsCredentials
+	field static INSTANCE Ldev/ide/vcs/VcsCredentials$Anonymous;
+	method equals(Ljava/lang/Object;)Z
+	method hashCode()I
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsCredentials$Token
+	kind class
+	super java/lang/Object
+	implements dev/ide/vcs/VcsCredentials
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/vcs/VcsCredentials$Token;
+	method equals(Ljava/lang/Object;)Z
+	method getToken()Ljava/lang/String;
+	method getUsername()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsCredentials$Token;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsCredentials$Token;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsCredentials$UserPassword
+	kind class
+	super java/lang/Object
+	implements dev/ide/vcs/VcsCredentials
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/vcs/VcsCredentials$UserPassword;
+	method equals(Ljava/lang/Object;)Z
+	method getPassword()Ljava/lang/String;
+	method getUsername()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsCredentials$UserPassword;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsCredentials$UserPassword;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsDiff
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZII)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Z
+	method component5()I
+	method component6()I
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZII)Ldev/ide/vcs/VcsDiff;
+	method equals(Ljava/lang/Object;)Z
+	method getBinary()Z
+	method getDeletions()I
+	method getInsertions()I
+	method getOldPath()Ljava/lang/String;
+	method getPath()Ljava/lang/String;
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsDiff;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZIIILjava/lang/Object;)Ldev/ide/vcs/VcsDiff;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsException
+	kind class
+	super java/lang/Exception
+	ctor (Ljava/lang/String;Ljava/lang/Throwable;)V
+	ctor (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+dev/ide/vcs/VcsMergeResult
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/vcs/VcsMergeResult$Status;Ljava/util/List;Ljava/lang/String;)V
+	ctor (Ldev/ide/vcs/VcsMergeResult$Status;Ljava/util/List;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ldev/ide/vcs/VcsMergeResult$Status;
+	method component2()Ljava/util/List;
+	method component3()Ljava/lang/String;
+	method copy(Ldev/ide/vcs/VcsMergeResult$Status;Ljava/util/List;Ljava/lang/String;)Ldev/ide/vcs/VcsMergeResult;
+	method equals(Ljava/lang/Object;)Z
+	method getConflicts()Ljava/util/List;
+	method getMessage()Ljava/lang/String;
+	method getStatus()Ldev/ide/vcs/VcsMergeResult$Status;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsMergeResult;Ldev/ide/vcs/VcsMergeResult$Status;Ljava/util/List;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsMergeResult;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsMergeResult$Status
+	kind enum
+	super java/lang/Enum
+	field static ABORTED Ldev/ide/vcs/VcsMergeResult$Status;
+	field static ALREADY_UP_TO_DATE Ldev/ide/vcs/VcsMergeResult$Status;
+	field static CONFLICTS Ldev/ide/vcs/VcsMergeResult$Status;
+	field static FAILED Ldev/ide/vcs/VcsMergeResult$Status;
+	field static FAST_FORWARD Ldev/ide/vcs/VcsMergeResult$Status;
+	field static MERGED Ldev/ide/vcs/VcsMergeResult$Status;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/vcs/VcsMergeResult$Status;
+	method static values()[Ldev/ide/vcs/VcsMergeResult$Status;
+dev/ide/vcs/VcsOperation
+	kind enum
+	super java/lang/Enum
+	field static BISECT Ldev/ide/vcs/VcsOperation;
+	field static CHERRY_PICK Ldev/ide/vcs/VcsOperation;
+	field static MERGE Ldev/ide/vcs/VcsOperation;
+	field static NONE Ldev/ide/vcs/VcsOperation;
+	field static REBASE Ldev/ide/vcs/VcsOperation;
+	field static REVERT Ldev/ide/vcs/VcsOperation;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/vcs/VcsOperation;
+	method static values()[Ldev/ide/vcs/VcsOperation;
+dev/ide/vcs/VcsProgress
+	kind interface
+	method abstract update(Ljava/lang/String;II)V
+dev/ide/vcs/VcsProgress$None
+	kind class
+	super java/lang/Object
+	implements dev/ide/vcs/VcsProgress
+	field static INSTANCE Ldev/ide/vcs/VcsProgress$None;
+	method update(Ljava/lang/String;II)V
+dev/ide/vcs/VcsProvider
+	kind interface
+	method abstract clone(Ljava/lang/String;Ljava/nio/file/Path;Ljava/lang/String;ILdev/ide/vcs/VcsCredentials;Ldev/ide/vcs/VcsProgress;)Ldev/ide/vcs/VcsRepository;
+	method abstract findRoot(Ljava/nio/file/Path;)Ljava/nio/file/Path;
+	method abstract getDisplayName()Ljava/lang/String;
+	method abstract getId()Ljava/lang/String;
+	method abstract init(Ljava/nio/file/Path;Ljava/lang/String;)Ldev/ide/vcs/VcsRepository;
+	method abstract open(Ljava/nio/file/Path;)Ldev/ide/vcs/VcsRepository;
+	method static clone$default(Ldev/ide/vcs/VcsProvider;Ljava/lang/String;Ljava/nio/file/Path;Ljava/lang/String;ILdev/ide/vcs/VcsCredentials;Ldev/ide/vcs/VcsProgress;ILjava/lang/Object;)Ldev/ide/vcs/VcsRepository;
+	method static init$default(Ldev/ide/vcs/VcsProvider;Ljava/nio/file/Path;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsRepository;
+dev/ide/vcs/VcsProvider$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static clone$default(Ldev/ide/vcs/VcsProvider;Ljava/lang/String;Ljava/nio/file/Path;Ljava/lang/String;ILdev/ide/vcs/VcsCredentials;Ldev/ide/vcs/VcsProgress;ILjava/lang/Object;)Ldev/ide/vcs/VcsRepository;
+	method static init$default(Ldev/ide/vcs/VcsProvider;Ljava/nio/file/Path;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsRepository;
+dev/ide/vcs/VcsProviderKt
+	kind class
+	super java/lang/Object
+	method static getVCS_PROVIDER_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/vcs/VcsRemote
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/vcs/VcsRemote;
+	method equals(Ljava/lang/Object;)Z
+	method getFetchUrl()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method getPushUrl()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsRemote;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsRemote;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsRepository
+	kind interface
+	implements java/lang/AutoCloseable
+	field static Companion Ldev/ide/vcs/VcsRepository$Companion;
+	field static DEFAULT_REMOTE Ljava/lang/String;
+	method abstract abortMerge()V
+	method abstract addRemote(Ljava/lang/String;Ljava/lang/String;)V
+	method abstract branches(Z)Ljava/util/List;
+	method abstract checkout(Ljava/lang/String;)V
+	method abstract commit(Ljava/lang/String;Ldev/ide/vcs/VcsAuthor;Z)Ldev/ide/vcs/VcsCommit;
+	method abstract commitDetail(Ljava/lang/String;)Ldev/ide/vcs/VcsCommitDetail;
+	method abstract createBranch(Ljava/lang/String;Ljava/lang/String;Z)Ldev/ide/vcs/VcsBranch;
+	method abstract deleteBranch(Ljava/lang/String;Z)V
+	method abstract diff(Ljava/lang/String;ZLjava/lang/String;)Ldev/ide/vcs/VcsDiff;
+	method abstract discard(Ljava/util/List;)V
+	method abstract fetch(Ljava/lang/String;Ldev/ide/vcs/VcsCredentials;Ldev/ide/vcs/VcsProgress;)Ldev/ide/vcs/VcsSyncResult;
+	method abstract getRoot()Ljava/nio/file/Path;
+	method abstract identity()Ldev/ide/vcs/VcsAuthor;
+	method abstract ignore(Ljava/util/List;)V
+	method abstract log(IILjava/lang/String;Ljava/lang/String;)Ljava/util/List;
+	method abstract markResolved(Ljava/util/List;)V
+	method abstract merge(Ljava/lang/String;)Ldev/ide/vcs/VcsMergeResult;
+	method abstract pull(Ljava/lang/String;Ldev/ide/vcs/VcsCredentials;Ldev/ide/vcs/VcsProgress;)Ldev/ide/vcs/VcsSyncResult;
+	method abstract push(Ljava/lang/String;Ljava/lang/String;ZZLdev/ide/vcs/VcsCredentials;Ldev/ide/vcs/VcsProgress;)Ldev/ide/vcs/VcsSyncResult;
+	method abstract remotes()Ljava/util/List;
+	method abstract removeRemote(Ljava/lang/String;)V
+	method abstract renameBranch(Ljava/lang/String;Ljava/lang/String;)V
+	method abstract setIdentity(Ldev/ide/vcs/VcsAuthor;)V
+	method abstract show(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+	method abstract stage(Ljava/util/List;)V
+	method abstract stashApply(IZ)V
+	method abstract stashDrop(I)V
+	method abstract stashPush(Ljava/lang/String;Z)Z
+	method abstract stashes()Ljava/util/List;
+	method abstract status()Ldev/ide/vcs/VcsStatus;
+	method abstract unstage(Ljava/util/List;)V
+	method close()V
+	method static branches$default(Ldev/ide/vcs/VcsRepository;ZILjava/lang/Object;)Ljava/util/List;
+	method static commit$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ldev/ide/vcs/VcsAuthor;ZILjava/lang/Object;)Ldev/ide/vcs/VcsCommit;
+	method static createBranch$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/vcs/VcsBranch;
+	method static deleteBranch$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;ZILjava/lang/Object;)V
+	method static diff$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;ZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsDiff;
+	method static fetch$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ldev/ide/vcs/VcsCredentials;Ldev/ide/vcs/VcsProgress;ILjava/lang/Object;)Ldev/ide/vcs/VcsSyncResult;
+	method static log$default(Ldev/ide/vcs/VcsRepository;IILjava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ljava/util/List;
+	method static pull$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ldev/ide/vcs/VcsCredentials;Ldev/ide/vcs/VcsProgress;ILjava/lang/Object;)Ldev/ide/vcs/VcsSyncResult;
+	method static push$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ljava/lang/String;ZZLdev/ide/vcs/VcsCredentials;Ldev/ide/vcs/VcsProgress;ILjava/lang/Object;)Ldev/ide/vcs/VcsSyncResult;
+	method static show$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String;
+	method static stashApply$default(Ldev/ide/vcs/VcsRepository;IZILjava/lang/Object;)V
+	method static stashPush$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;ZILjava/lang/Object;)Z
+dev/ide/vcs/VcsRepository$Companion
+	kind class
+	super java/lang/Object
+	field static DEFAULT_REMOTE Ljava/lang/String;
+dev/ide/vcs/VcsRepository$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static branches$default(Ldev/ide/vcs/VcsRepository;ZILjava/lang/Object;)Ljava/util/List;
+	method static close(Ldev/ide/vcs/VcsRepository;)V
+	method static commit$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ldev/ide/vcs/VcsAuthor;ZILjava/lang/Object;)Ldev/ide/vcs/VcsCommit;
+	method static createBranch$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/vcs/VcsBranch;
+	method static deleteBranch$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;ZILjava/lang/Object;)V
+	method static diff$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;ZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/vcs/VcsDiff;
+	method static fetch$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ldev/ide/vcs/VcsCredentials;Ldev/ide/vcs/VcsProgress;ILjava/lang/Object;)Ldev/ide/vcs/VcsSyncResult;
+	method static log$default(Ldev/ide/vcs/VcsRepository;IILjava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ljava/util/List;
+	method static pull$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ldev/ide/vcs/VcsCredentials;Ldev/ide/vcs/VcsProgress;ILjava/lang/Object;)Ldev/ide/vcs/VcsSyncResult;
+	method static push$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ljava/lang/String;ZZLdev/ide/vcs/VcsCredentials;Ldev/ide/vcs/VcsProgress;ILjava/lang/Object;)Ldev/ide/vcs/VcsSyncResult;
+	method static show$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String;
+	method static stashApply$default(Ldev/ide/vcs/VcsRepository;IZILjava/lang/Object;)V
+	method static stashPush$default(Ldev/ide/vcs/VcsRepository;Ljava/lang/String;ZILjava/lang/Object;)Z
+dev/ide/vcs/VcsStash
+	kind class
+	super java/lang/Object
+	ctor (ILjava/lang/String;Ljava/lang/String;J)V
+	ctor (ILjava/lang/String;Ljava/lang/String;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()I
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()J
+	method copy(ILjava/lang/String;Ljava/lang/String;J)Ldev/ide/vcs/VcsStash;
+	method equals(Ljava/lang/Object;)Z
+	method getId()Ljava/lang/String;
+	method getIndex()I
+	method getMessage()Ljava/lang/String;
+	method getTimeMs()J
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsStash;ILjava/lang/String;Ljava/lang/String;JILjava/lang/Object;)Ldev/ide/vcs/VcsStash;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsStatus
+	kind class
+	super java/lang/Object
+	ctor ()V
+	ctor (Ljava/lang/String;Ldev/ide/vcs/VcsCommit;ZLjava/util/List;Ldev/ide/vcs/VcsTracking;Ldev/ide/vcs/VcsOperation;Z)V
+	ctor (Ljava/lang/String;Ldev/ide/vcs/VcsCommit;ZLjava/util/List;Ldev/ide/vcs/VcsTracking;Ldev/ide/vcs/VcsOperation;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ldev/ide/vcs/VcsCommit;
+	method component3()Z
+	method component4()Ljava/util/List;
+	method component5()Ldev/ide/vcs/VcsTracking;
+	method component6()Ldev/ide/vcs/VcsOperation;
+	method component7()Z
+	method copy(Ljava/lang/String;Ldev/ide/vcs/VcsCommit;ZLjava/util/List;Ldev/ide/vcs/VcsTracking;Ldev/ide/vcs/VcsOperation;Z)Ldev/ide/vcs/VcsStatus;
+	method equals(Ljava/lang/Object;)Z
+	method getBranch()Ljava/lang/String;
+	method getChanges()Ljava/util/List;
+	method getClean()Z
+	method getConflicted()Ljava/util/List;
+	method getDetached()Z
+	method getHead()Ldev/ide/vcs/VcsCommit;
+	method getOperation()Ldev/ide/vcs/VcsOperation;
+	method getStaged()Ljava/util/List;
+	method getTracking()Ldev/ide/vcs/VcsTracking;
+	method getUnborn()Z
+	method getUnstaged()Ljava/util/List;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsStatus;Ljava/lang/String;Ldev/ide/vcs/VcsCommit;ZLjava/util/List;Ldev/ide/vcs/VcsTracking;Ldev/ide/vcs/VcsOperation;ZILjava/lang/Object;)Ldev/ide/vcs/VcsStatus;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsSyncResult
+	kind class
+	super java/lang/Object
+	ctor (ZLjava/lang/String;Ljava/util/List;Ldev/ide/vcs/VcsMergeResult;)V
+	ctor (ZLjava/lang/String;Ljava/util/List;Ldev/ide/vcs/VcsMergeResult;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Z
+	method component2()Ljava/lang/String;
+	method component3()Ljava/util/List;
+	method component4()Ldev/ide/vcs/VcsMergeResult;
+	method copy(ZLjava/lang/String;Ljava/util/List;Ldev/ide/vcs/VcsMergeResult;)Ldev/ide/vcs/VcsSyncResult;
+	method equals(Ljava/lang/Object;)Z
+	method getMerge()Ldev/ide/vcs/VcsMergeResult;
+	method getMessage()Ljava/lang/String;
+	method getOk()Z
+	method getUpdates()Ljava/util/List;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsSyncResult;ZLjava/lang/String;Ljava/util/List;Ldev/ide/vcs/VcsMergeResult;ILjava/lang/Object;)Ldev/ide/vcs/VcsSyncResult;
+	method toString()Ljava/lang/String;
+dev/ide/vcs/VcsTracking
+	kind class
+	super java/lang/Object
+	ctor ()V
+	ctor (Ljava/lang/String;II)V
+	ctor (Ljava/lang/String;IIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()I
+	method component3()I
+	method copy(Ljava/lang/String;II)Ldev/ide/vcs/VcsTracking;
+	method equals(Ljava/lang/Object;)Z
+	method getAhead()I
+	method getBehind()I
+	method getUpstream()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/vcs/VcsTracking;Ljava/lang/String;IIILjava/lang/Object;)Ldev/ide/vcs/VcsTracking;
+	method toString()Ljava/lang/String;

@@ -1,0 +1,95 @@
+# The compiled surface of io.github.tyron12233:index-api, pinned at SPI 3.0.0.
+# A plugin links against these by name and descriptor; see :spi-compat.
+# Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/index/IndexEvent
+	kind interface
+dev/ide/index/IndexEvent$Finished
+	kind class
+	super java/lang/Object
+	implements dev/ide/index/IndexEvent
+	ctor (Ldev/ide/index/IndexStatus;)V
+	method component1()Ldev/ide/index/IndexStatus;
+	method copy(Ldev/ide/index/IndexStatus;)Ldev/ide/index/IndexEvent$Finished;
+	method equals(Ljava/lang/Object;)Z
+	method getStatus()Ldev/ide/index/IndexStatus;
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/IndexEvent$Finished;Ldev/ide/index/IndexStatus;ILjava/lang/Object;)Ldev/ide/index/IndexEvent$Finished;
+	method toString()Ljava/lang/String;
+dev/ide/index/IndexEvent$Started
+	kind class
+	super java/lang/Object
+	implements dev/ide/index/IndexEvent
+	field static INSTANCE Ldev/ide/index/IndexEvent$Started;
+	method equals(Ljava/lang/Object;)Z
+	method hashCode()I
+	method toString()Ljava/lang/String;
+dev/ide/index/IndexEventListener
+	kind interface
+	method abstract onIndexEvent(Ldev/ide/index/IndexEvent;)V
+dev/ide/index/IndexHelpersJvmKt
+	kind class
+	super java/lang/Object
+	method static normalizedJarKey(Ljava/lang/String;)Ljava/lang/String;
+	method static normalizedJarKey(Ljava/nio/file/Path;)Ljava/lang/String;
+dev/ide/index/IndexKt
+	kind class
+	super java/lang/Object
+	method static getINDEX_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/index/IndexScope
+	kind class
+	super java/lang/Object
+	ctor ()V
+	ctor (Ljava/util/List;Ljava/util/List;Ljava/nio/file/Path;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/Map;)V
+	ctor (Ljava/util/List;Ljava/util/List;Ljava/nio/file/Path;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/util/List;
+	method component2()Ljava/util/List;
+	method component3()Ljava/nio/file/Path;
+	method component4()Ljava/util/List;
+	method component5()Ljava/util/List;
+	method component6()Ljava/util/List;
+	method component7()Ljava/util/Map;
+	method copy(Ljava/util/List;Ljava/util/List;Ljava/nio/file/Path;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/Map;)Ldev/ide/index/IndexScope;
+	method equals(Ljava/lang/Object;)Z
+	method getJdkHome()Ljava/nio/file/Path;
+	method getLibraryJars()Ljava/util/List;
+	method getLibraryResourceRoots()Ljava/util/List;
+	method getResourceRoots()Ljava/util/List;
+	method getSourceArchives()Ljava/util/List;
+	method getSourceRoots()Ljava/util/List;
+	method getStableJarIds()Ljava/util/Map;
+	method hashCode()I
+	method static copy$default(Ldev/ide/index/IndexScope;Ljava/util/List;Ljava/util/List;Ljava/nio/file/Path;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/Map;ILjava/lang/Object;)Ldev/ide/index/IndexScope;
+	method toString()Ljava/lang/String;
+dev/ide/index/IndexService
+	kind interface
+	implements dev/ide/index/IndexQueries
+	method abstract ensureUpToDate(Ldev/ide/index/IndexScope;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract observeStatus(Lkotlin/jvm/functions/Function1;)Ldev/ide/platform/Disposable;
+	method abstract reindexSource(Ljava/nio/file/Path;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method invalidate(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/index/IndexService$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static filePath(Ldev/ide/index/IndexService;I)Ljava/lang/String;
+	method static invalidate(Ldev/ide/index/IndexService;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/index/IndexTopics
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/index/IndexTopics;
+	method getINDEXING()Ldev/ide/platform/Topic;
+dev/ide/index/SymbolSearch
+	kind interface
+	method abstract searchMembers(Ljava/lang/String;I)Ljava/util/List;
+	method abstract searchSymbols(Ljava/lang/String;I)Ljava/util/List;
+	method abstract symbolFilePath(I)Ljava/lang/String;
+	method static searchMembers$default(Ldev/ide/index/SymbolSearch;Ljava/lang/String;IILjava/lang/Object;)Ljava/util/List;
+	method static searchSymbols$default(Ldev/ide/index/SymbolSearch;Ljava/lang/String;IILjava/lang/Object;)Ljava/util/List;
+dev/ide/index/SymbolSearch$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static searchMembers$default(Ldev/ide/index/SymbolSearch;Ljava/lang/String;IILjava/lang/Object;)Ljava/util/List;
+	method static searchSymbols$default(Ldev/ide/index/SymbolSearch;Ljava/lang/String;IILjava/lang/Object;)Ljava/util/List;
+dev/ide/index/SymbolSearchKt
+	kind class
+	super java/lang/Object
+	method static getSYMBOL_SEARCH()Ldev/ide/platform/ServiceKey;

@@ -1,0 +1,8 @@
+CodeAssist 3.21.0
+
+* Kotlin files show far fewer false errors: smart casts through while/as/elvis, typealiases, sealed and nested types, unsigned literals, vararg overloads and shadowed names now resolve correctly.
+* Faster Kotlin completion and analysis: a keystroke inside one function no longer reparses the whole file, and the classpath reader stops reopening jars it has already read.
+* Expand selection now works on every host.
+* Fixed a hang on files of inferred declarations.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.21.0

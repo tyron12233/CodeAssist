@@ -94,6 +94,42 @@ not just contribute:
   so a plugin's output flows into the same `Log` facade as the IDE's and is separable in the in-app Logs viewer
   (which gained a per-plugin filter). The attribution is stamped by the platform, not the caller.
 
+### What the published surface promises (`spi-compat`)
+
+A plugin does not carry the SPI. It compiles against the published artifacts (`compileOnly`) and links
+against the IDE's own copies at runtime, through its classloader's parent. So the contract is the SPI's
+BYTECODE: every class, method, constructor and field, with its exact descriptor. Kotlin will break that
+while the source stays compatible, and the failure arrives late:
+
+- a top-level function moved between files in the same package changes facade class
+  (`ProjectModelKt.module` becoming `JvmProjectModelKt.module` is a source-compatible refactor);
+- a constructor replaced by a same-named factory function keeps callers compiling
+  (`Topic(name, listenerType)`);
+- a defaulted parameter added to a public function changes its `$default` bridge.
+
+None of those fail the build, and none fail at load: the plugin is discovered, consented and loaded, then
+throws `NoSuchMethodError` the first time the user reaches the feature.
+
+`:spi-compat` holds that line. It reads the compiled surface of every published module off its own test
+classpath and compares it with a baseline checked in beside each module (`<module>/api/<module>.api`).
+Only REMOVALS fail, since the SPI is additive by design, and the verdict is taken over the published set as
+a whole: a class that moves BETWEEN two published modules is still on the plugin's classpath and breaks
+nothing. A member pulled up into a supertype is likewise fine, because that is how the JVM resolves a call.
+
+A removal that is intended goes in `plugins/spi-compat/accepted-breaks.txt`, one line per member, reviewed
+once. A line there whose member is back in the build also fails, so the list cannot rot.
+
+At a release: decide what to do about everything in that file (restore it, or bump `PLUGIN_API_VERSION`, so
+`ExternalPluginLoader` refuses a plugin built for the old API with a reason on its row rather than letting
+it fail mid-session), regenerate the baselines from the tree being published with
+
+```
+./gradlew :spi-compat:test -Dspi.updateBaselines=true
+```
+
+and empty the file. The diff that regeneration produces is the list of what the new SPI version changes for
+a plugin author.
+
 ## The manager (`plugin-impl`)
 
 `PluginManager(registry, bus)` (the `bus` is the app's `MessageBus`, handed to each plugin's registrar) loads a
@@ -289,7 +325,7 @@ itself undisablable) and `trusted` (which follows from the origin's signature).
 id = "com.example.hello"
 name = "Hello"
 version = "1.0.0"
-apiVersion = 3
+apiVersion = 4
 description = "Adds a Hello tool window."
 entryPoints = ["com.example.hello.HelloPlugin"]
 uiEntryPoints = ["com.example.hello.HelloUiPlugin"]

@@ -1,0 +1,943 @@
+# The compiled surface of io.github.tyron12233:agent-api, pinned at SPI 3.0.0.
+# A plugin links against these by name and descriptor; see :spi-compat.
+# Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/agent/AgentEvent
+	kind interface
+dev/ide/agent/AgentEvent$AssistantTextDelta
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentEvent
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/agent/AgentEvent$AssistantTextDelta;
+	method equals(Ljava/lang/Object;)Z
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/AgentEvent$AssistantTextDelta;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$AssistantTextDelta;
+	method toString()Ljava/lang/String;
+dev/ide/agent/AgentEvent$AssistantThinkingDelta
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentEvent
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/agent/AgentEvent$AssistantThinkingDelta;
+	method equals(Ljava/lang/Object;)Z
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/AgentEvent$AssistantThinkingDelta;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$AssistantThinkingDelta;
+	method toString()Ljava/lang/String;
+dev/ide/agent/AgentEvent$Error
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentEvent
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/agent/AgentEvent$Error;
+	method equals(Ljava/lang/Object;)Z
+	method getMessage()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/AgentEvent$Error;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$Error;
+	method toString()Ljava/lang/String;
+dev/ide/agent/AgentEvent$ToolCallDenied
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentEvent
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/AgentEvent$ToolCallDenied;
+	method equals(Ljava/lang/Object;)Z
+	method getId()Ljava/lang/String;
+	method getReason()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/AgentEvent$ToolCallDenied;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$ToolCallDenied;
+	method toString()Ljava/lang/String;
+dev/ide/agent/AgentEvent$ToolCallFinished
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentEvent
+	ctor (Ljava/lang/String;ZLjava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Z
+	method component3()Ljava/lang/String;
+	method copy(Ljava/lang/String;ZLjava/lang/String;)Ldev/ide/agent/AgentEvent$ToolCallFinished;
+	method equals(Ljava/lang/Object;)Z
+	method getId()Ljava/lang/String;
+	method getOk()Z
+	method getResultSummary()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/AgentEvent$ToolCallFinished;Ljava/lang/String;ZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$ToolCallFinished;
+	method toString()Ljava/lang/String;
+dev/ide/agent/AgentEvent$ToolCallStarted
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentEvent
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/AgentEvent$ToolCallStarted;
+	method equals(Ljava/lang/Object;)Z
+	method getDisplaySummary()Ljava/lang/String;
+	method getId()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/AgentEvent$ToolCallStarted;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$ToolCallStarted;
+	method toString()Ljava/lang/String;
+dev/ide/agent/AgentEvent$TurnCompleted
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentEvent
+	ctor (Ldev/ide/agent/StopReason;Ldev/ide/agent/TokenUsage;)V
+	method component1()Ldev/ide/agent/StopReason;
+	method component2()Ldev/ide/agent/TokenUsage;
+	method copy(Ldev/ide/agent/StopReason;Ldev/ide/agent/TokenUsage;)Ldev/ide/agent/AgentEvent$TurnCompleted;
+	method equals(Ljava/lang/Object;)Z
+	method getStopReason()Ldev/ide/agent/StopReason;
+	method getUsage()Ldev/ide/agent/TokenUsage;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/AgentEvent$TurnCompleted;Ldev/ide/agent/StopReason;Ldev/ide/agent/TokenUsage;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$TurnCompleted;
+	method toString()Ljava/lang/String;
+dev/ide/agent/AgentEvent$UserMessage
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentEvent
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/agent/AgentEvent$UserMessage;
+	method equals(Ljava/lang/Object;)Z
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/AgentEvent$UserMessage;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/AgentEvent$UserMessage;
+	method toString()Ljava/lang/String;
+dev/ide/agent/AgentEventSink
+	kind interface
+	method abstract emit(Ldev/ide/agent/AgentEvent;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/agent/AgentPermissionGate
+	kind interface
+	method abstract authorize(Ldev/ide/agent/WriteRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract getMode()Ldev/ide/agent/PermissionMode;
+dev/ide/agent/AgentTool
+	kind interface
+	method abstract execute(Ldev/ide/agent/ToolArgs;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract getSpec()Ldev/ide/agent/ToolSpec;
+	method getMutating()Z
+	method summarize(Ldev/ide/agent/ToolArgs;)Ljava/lang/String;
+dev/ide/agent/AgentTool$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getMutating(Ldev/ide/agent/AgentTool;)Z
+	method static summarize(Ldev/ide/agent/AgentTool;Ldev/ide/agent/ToolArgs;)Ljava/lang/String;
+dev/ide/agent/AgentToolRegistry
+	kind interface
+	method abstract find(Ljava/lang/String;)Ldev/ide/agent/AgentTool;
+	method abstract getTools()Ljava/util/List;
+	method specs()Ljava/util/List;
+dev/ide/agent/AgentToolRegistry$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static specs(Ldev/ide/agent/AgentToolRegistry;)Ljava/util/List;
+dev/ide/agent/AgentWorkspace
+	kind interface
+	method abstract addDependency(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract applyEdits(Ljava/lang/String;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract createDir(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract createFile(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract deletePath(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract diagnostics(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract findSymbol(Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract listDir(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract movePath(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract projectOverview(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract projectRoot()Ljava/lang/String;
+	method abstract readFile(Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract renamePath(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract searchText(Ljava/lang/String;ZZILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract writeFile(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method applyQuickFix(Ljava/lang/String;IILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method fetchUrl(Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method findReferences(Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method formatFile(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method goToDefinition(Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method httpRequest(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method listTasks(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method organizeImports(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method prepareRename(Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method projectDiagnostics(ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method quickFixes(Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method readMemory(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method renameSymbol(Ljava/lang/String;ILjava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method runProgram(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method runTask(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method searchDependency(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static fetchUrl$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static findSymbol$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static httpRequest$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static projectDiagnostics$default(Ldev/ide/agent/AgentWorkspace;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static readFile$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static runProgram$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static searchDependency$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static searchText$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ZZILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method writeMemory(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/agent/AgentWorkspace$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static applyQuickFix(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;IILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static fetchUrl$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static fetchUrl(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static findReferences(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static findSymbol$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static formatFile(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static goToDefinition(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static httpRequest$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static httpRequest(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static listTasks(Ldev/ide/agent/AgentWorkspace;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static organizeImports(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static prepareRename(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static projectDiagnostics$default(Ldev/ide/agent/AgentWorkspace;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static projectDiagnostics(Ldev/ide/agent/AgentWorkspace;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static quickFixes(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static readFile$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static readMemory(Ldev/ide/agent/AgentWorkspace;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static renameSymbol(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ILjava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static runProgram$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static runProgram(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static runTask(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static searchDependency$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static searchDependency(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static searchText$default(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;ZZILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static writeMemory(Ldev/ide/agent/AgentWorkspace;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/agent/AllowAllGate
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentPermissionGate
+	field static INSTANCE Ldev/ide/agent/AllowAllGate;
+	method authorize(Ldev/ide/agent/WriteRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method getMode()Ldev/ide/agent/PermissionMode;
+dev/ide/agent/ArtifactHit
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Z
+	method component4()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;)Ldev/ide/agent/ArtifactHit;
+	method equals(Ljava/lang/Object;)Z
+	method getCompatible()Z
+	method getCoordinate()Ljava/lang/String;
+	method getNote()Ljava/lang/String;
+	method getPackaging()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/ArtifactHit;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/ArtifactHit;
+	method toString()Ljava/lang/String;
+dev/ide/agent/ContentPart
+	kind interface
+dev/ide/agent/ContentPart$Text
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/ContentPart
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/agent/ContentPart$Text;
+	method equals(Ljava/lang/Object;)Z
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/ContentPart$Text;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/ContentPart$Text;
+	method toString()Ljava/lang/String;
+dev/ide/agent/ContentPart$Thinking
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/ContentPart
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/ContentPart$Thinking;
+	method equals(Ljava/lang/Object;)Z
+	method getSignature()Ljava/lang/String;
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/ContentPart$Thinking;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/ContentPart$Thinking;
+	method toString()Ljava/lang/String;
+dev/ide/agent/ContentPart$ToolResultPart
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/ContentPart
+	ctor (Ljava/lang/String;Ljava/lang/String;Z)V
+	ctor (Ljava/lang/String;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Z
+	method copy(Ljava/lang/String;Ljava/lang/String;Z)Ldev/ide/agent/ContentPart$ToolResultPart;
+	method equals(Ljava/lang/Object;)Z
+	method getContent()Ljava/lang/String;
+	method getToolCallId()Ljava/lang/String;
+	method hashCode()I
+	method isError()Z
+	method static copy$default(Ldev/ide/agent/ContentPart$ToolResultPart;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/agent/ContentPart$ToolResultPart;
+	method toString()Ljava/lang/String;
+dev/ide/agent/ContentPart$ToolUse
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/ContentPart
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/ContentPart$ToolUse;
+	method equals(Ljava/lang/Object;)Z
+	method getArguments()Ljava/lang/String;
+	method getId()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method getSignature()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/ContentPart$ToolUse;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/ContentPart$ToolUse;
+	method toString()Ljava/lang/String;
+dev/ide/agent/DiagnosticInfo
+	kind class
+	super java/lang/Object
+	ctor (IILdev/ide/agent/DiagnosticSeverity;Ljava/lang/String;)V
+	method component1()I
+	method component2()I
+	method component3()Ldev/ide/agent/DiagnosticSeverity;
+	method component4()Ljava/lang/String;
+	method copy(IILdev/ide/agent/DiagnosticSeverity;Ljava/lang/String;)Ldev/ide/agent/DiagnosticInfo;
+	method equals(Ljava/lang/Object;)Z
+	method getColumn()I
+	method getLine()I
+	method getMessage()Ljava/lang/String;
+	method getSeverity()Ldev/ide/agent/DiagnosticSeverity;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/DiagnosticInfo;IILdev/ide/agent/DiagnosticSeverity;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/DiagnosticInfo;
+	method toString()Ljava/lang/String;
+dev/ide/agent/DiagnosticSeverity
+	kind enum
+	super java/lang/Enum
+	field static ERROR Ldev/ide/agent/DiagnosticSeverity;
+	field static INFO Ldev/ide/agent/DiagnosticSeverity;
+	field static WARNING Ldev/ide/agent/DiagnosticSeverity;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/agent/DiagnosticSeverity;
+	method static values()[Ldev/ide/agent/DiagnosticSeverity;
+dev/ide/agent/FileDiagnostic
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;IILdev/ide/agent/DiagnosticSeverity;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()I
+	method component3()I
+	method component4()Ldev/ide/agent/DiagnosticSeverity;
+	method component5()Ljava/lang/String;
+	method copy(Ljava/lang/String;IILdev/ide/agent/DiagnosticSeverity;Ljava/lang/String;)Ldev/ide/agent/FileDiagnostic;
+	method equals(Ljava/lang/Object;)Z
+	method getColumn()I
+	method getLine()I
+	method getMessage()Ljava/lang/String;
+	method getPath()Ljava/lang/String;
+	method getSeverity()Ldev/ide/agent/DiagnosticSeverity;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/FileDiagnostic;Ljava/lang/String;IILdev/ide/agent/DiagnosticSeverity;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/FileDiagnostic;
+	method toString()Ljava/lang/String;
+dev/ide/agent/LlmClient
+	kind interface
+	method abstract chat(Ldev/ide/agent/LlmRequest;)Lkotlinx/coroutines/flow/Flow;
+dev/ide/agent/LlmEffort
+	kind class
+	super java/lang/Object
+	field static HIGH Ljava/lang/String;
+	field static INSTANCE Ldev/ide/agent/LlmEffort;
+	field static LOW Ljava/lang/String;
+	field static MAX Ljava/lang/String;
+	field static MEDIUM Ljava/lang/String;
+	field static MINIMAL Ljava/lang/String;
+	field static NONE Ljava/lang/String;
+	field static XHIGH Ljava/lang/String;
+	method getALL()Ljava/util/List;
+dev/ide/agent/LlmMessage
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/agent/LlmRole;Ljava/util/List;)V
+	field static Companion Ldev/ide/agent/LlmMessage$Companion;
+	method component1()Ldev/ide/agent/LlmRole;
+	method component2()Ljava/util/List;
+	method copy(Ldev/ide/agent/LlmRole;Ljava/util/List;)Ldev/ide/agent/LlmMessage;
+	method equals(Ljava/lang/Object;)Z
+	method getContent()Ljava/util/List;
+	method getRole()Ldev/ide/agent/LlmRole;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/LlmMessage;Ldev/ide/agent/LlmRole;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/agent/LlmMessage;
+	method toString()Ljava/lang/String;
+dev/ide/agent/LlmMessage$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method assistant(Ljava/util/List;)Ldev/ide/agent/LlmMessage;
+	method static toolResult$default(Ldev/ide/agent/LlmMessage$Companion;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/agent/LlmMessage;
+	method toolResult(Ljava/lang/String;Ljava/lang/String;Z)Ldev/ide/agent/LlmMessage;
+	method user(Ljava/lang/String;)Ldev/ide/agent/LlmMessage;
+dev/ide/agent/LlmModelInfo
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Z)V
+	ctor (Ljava/lang/String;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Z
+	method copy(Ljava/lang/String;Ljava/lang/String;Z)Ldev/ide/agent/LlmModelInfo;
+	method equals(Ljava/lang/Object;)Z
+	method getDisplayName()Ljava/lang/String;
+	method getId()Ljava/lang/String;
+	method getSupportsThinking()Z
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/LlmModelInfo;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/agent/LlmModelInfo;
+	method toString()Ljava/lang/String;
+dev/ide/agent/LlmProvider
+	kind interface
+	method abstract client(Ldev/ide/agent/ProviderConfig;)Ldev/ide/agent/LlmClient;
+	method abstract getDefaultModel()Ljava/lang/String;
+	method abstract getDisplayName()Ljava/lang/String;
+	method abstract getId()Ljava/lang/String;
+	method abstract getModels()Ljava/util/List;
+	method getManagesContext()Z
+	method listModels(Ldev/ide/agent/ProviderConfig;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/agent/LlmProvider$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getManagesContext(Ldev/ide/agent/LlmProvider;)Z
+	method static listModels(Ldev/ide/agent/LlmProvider;Ldev/ide/agent/ProviderConfig;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/agent/LlmProviderRegistry
+	kind interface
+	method abstract getProviders()Ljava/util/List;
+	method abstract provider(Ljava/lang/String;)Ldev/ide/agent/LlmProvider;
+dev/ide/agent/LlmRequest
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;IZLjava/lang/Integer;ZLjava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;IZLjava/lang/Integer;ZLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/util/List;
+	method component4()Ljava/util/List;
+	method component5()I
+	method component6()Z
+	method component7()Ljava/lang/Integer;
+	method component8()Z
+	method component9()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;IZLjava/lang/Integer;ZLjava/lang/String;)Ldev/ide/agent/LlmRequest;
+	method equals(Ljava/lang/Object;)Z
+	method getEffort()Ljava/lang/String;
+	method getMaxTokens()I
+	method getMessages()Ljava/util/List;
+	method getModel()Ljava/lang/String;
+	method getSystem()Ljava/lang/String;
+	method getThinking()Z
+	method getThinkingBudget()Ljava/lang/Integer;
+	method getTools()Ljava/util/List;
+	method getWebSearch()Z
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/LlmRequest;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;IZLjava/lang/Integer;ZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/LlmRequest;
+	method toString()Ljava/lang/String;
+dev/ide/agent/LlmRole
+	kind enum
+	super java/lang/Enum
+	field static ASSISTANT Ldev/ide/agent/LlmRole;
+	field static SYSTEM Ldev/ide/agent/LlmRole;
+	field static TOOL Ldev/ide/agent/LlmRole;
+	field static USER Ldev/ide/agent/LlmRole;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/agent/LlmRole;
+	method static values()[Ldev/ide/agent/LlmRole;
+dev/ide/agent/LlmStreamEvent
+	kind interface
+dev/ide/agent/LlmStreamEvent$Completed
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/LlmStreamEvent
+	ctor (Ldev/ide/agent/StopReason;)V
+	method component1()Ldev/ide/agent/StopReason;
+	method copy(Ldev/ide/agent/StopReason;)Ldev/ide/agent/LlmStreamEvent$Completed;
+	method equals(Ljava/lang/Object;)Z
+	method getStopReason()Ldev/ide/agent/StopReason;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/LlmStreamEvent$Completed;Ldev/ide/agent/StopReason;ILjava/lang/Object;)Ldev/ide/agent/LlmStreamEvent$Completed;
+	method toString()Ljava/lang/String;
+dev/ide/agent/LlmStreamEvent$Failed
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/LlmStreamEvent
+	ctor (Ljava/lang/String;Ljava/lang/Throwable;)V
+	ctor (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/Throwable;
+	method copy(Ljava/lang/String;Ljava/lang/Throwable;)Ldev/ide/agent/LlmStreamEvent$Failed;
+	method equals(Ljava/lang/Object;)Z
+	method getCause()Ljava/lang/Throwable;
+	method getMessage()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/LlmStreamEvent$Failed;Ljava/lang/String;Ljava/lang/Throwable;ILjava/lang/Object;)Ldev/ide/agent/LlmStreamEvent$Failed;
+	method toString()Ljava/lang/String;
+dev/ide/agent/LlmStreamEvent$TextDelta
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/LlmStreamEvent
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/agent/LlmStreamEvent$TextDelta;
+	method equals(Ljava/lang/Object;)Z
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/LlmStreamEvent$TextDelta;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/LlmStreamEvent$TextDelta;
+	method toString()Ljava/lang/String;
+dev/ide/agent/LlmStreamEvent$ThinkingCompleted
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/LlmStreamEvent
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/LlmStreamEvent$ThinkingCompleted;
+	method equals(Ljava/lang/Object;)Z
+	method getSignature()Ljava/lang/String;
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/LlmStreamEvent$ThinkingCompleted;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/LlmStreamEvent$ThinkingCompleted;
+	method toString()Ljava/lang/String;
+dev/ide/agent/LlmStreamEvent$ThinkingDelta
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/LlmStreamEvent
+	ctor (Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method copy(Ljava/lang/String;)Ldev/ide/agent/LlmStreamEvent$ThinkingDelta;
+	method equals(Ljava/lang/Object;)Z
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/LlmStreamEvent$ThinkingDelta;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/LlmStreamEvent$ThinkingDelta;
+	method toString()Ljava/lang/String;
+dev/ide/agent/LlmStreamEvent$ToolCallArgsDelta
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/LlmStreamEvent
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/LlmStreamEvent$ToolCallArgsDelta;
+	method equals(Ljava/lang/Object;)Z
+	method getId()Ljava/lang/String;
+	method getPartialJson()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/LlmStreamEvent$ToolCallArgsDelta;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/LlmStreamEvent$ToolCallArgsDelta;
+	method toString()Ljava/lang/String;
+dev/ide/agent/LlmStreamEvent$ToolCallCompleted
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/LlmStreamEvent
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/LlmStreamEvent$ToolCallCompleted;
+	method equals(Ljava/lang/Object;)Z
+	method getArguments()Ljava/lang/String;
+	method getId()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method getSignature()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/LlmStreamEvent$ToolCallCompleted;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/LlmStreamEvent$ToolCallCompleted;
+	method toString()Ljava/lang/String;
+dev/ide/agent/LlmStreamEvent$ToolCallStarted
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/LlmStreamEvent
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/LlmStreamEvent$ToolCallStarted;
+	method equals(Ljava/lang/Object;)Z
+	method getId()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/LlmStreamEvent$ToolCallStarted;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/LlmStreamEvent$ToolCallStarted;
+	method toString()Ljava/lang/String;
+dev/ide/agent/LlmStreamEvent$Usage
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/LlmStreamEvent
+	ctor (Ldev/ide/agent/TokenUsage;)V
+	method component1()Ldev/ide/agent/TokenUsage;
+	method copy(Ldev/ide/agent/TokenUsage;)Ldev/ide/agent/LlmStreamEvent$Usage;
+	method equals(Ljava/lang/Object;)Z
+	method getUsage()Ldev/ide/agent/TokenUsage;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/LlmStreamEvent$Usage;Ldev/ide/agent/TokenUsage;ILjava/lang/Object;)Ldev/ide/agent/LlmStreamEvent$Usage;
+	method toString()Ljava/lang/String;
+dev/ide/agent/Location
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;IILjava/lang/String;)V
+	ctor (Ljava/lang/String;IILjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()I
+	method component3()I
+	method component4()Ljava/lang/String;
+	method copy(Ljava/lang/String;IILjava/lang/String;)Ldev/ide/agent/Location;
+	method equals(Ljava/lang/Object;)Z
+	method getColumn()I
+	method getLabel()Ljava/lang/String;
+	method getLine()I
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/Location;Ljava/lang/String;IILjava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/Location;
+	method toString()Ljava/lang/String;
+dev/ide/agent/ModuleInfo
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/util/List;
+	method component5()Ljava/util/List;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;)Ldev/ide/agent/ModuleInfo;
+	method equals(Ljava/lang/Object;)Z
+	method getDependencies()Ljava/util/List;
+	method getLanguageLevel()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method getSourceRoots()Ljava/util/List;
+	method getType()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/ModuleInfo;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/agent/ModuleInfo;
+	method toString()Ljava/lang/String;
+dev/ide/agent/PermissionMode
+	kind enum
+	super java/lang/Enum
+	field static ASK_EACH Ldev/ide/agent/PermissionMode;
+	field static AUTO_ACCEPT Ldev/ide/agent/PermissionMode;
+	field static PLAN_ONLY Ldev/ide/agent/PermissionMode;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/agent/PermissionMode;
+	method static values()[Ldev/ide/agent/PermissionMode;
+dev/ide/agent/ProjectOverview
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/util/List;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/util/List;
+	method copy(Ljava/lang/String;Ljava/util/List;)Ldev/ide/agent/ProjectOverview;
+	method equals(Ljava/lang/Object;)Z
+	method getModules()Ljava/util/List;
+	method getName()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/ProjectOverview;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/agent/ProjectOverview;
+	method toString()Ljava/lang/String;
+dev/ide/agent/ProviderConfig
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/ProviderConfig;
+	method equals(Ljava/lang/Object;)Z
+	method getApiKey()Ljava/lang/String;
+	method getBaseUrl()Ljava/lang/String;
+	method getCaCertificatePem()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/ProviderConfig;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/ProviderConfig;
+	method toString()Ljava/lang/String;
+dev/ide/agent/QuickFixInfo
+	kind class
+	super java/lang/Object
+	ctor (ILjava/lang/String;Ljava/lang/String;)V
+	method component1()I
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(ILjava/lang/String;Ljava/lang/String;)Ldev/ide/agent/QuickFixInfo;
+	method equals(Ljava/lang/Object;)Z
+	method getIndex()I
+	method getKind()Ljava/lang/String;
+	method getTitle()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/QuickFixInfo;ILjava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/QuickFixInfo;
+	method toString()Ljava/lang/String;
+dev/ide/agent/RenameResult
+	kind class
+	super java/lang/Object
+	ctor (ZLjava/lang/String;II)V
+	ctor (ZLjava/lang/String;IIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Z
+	method component2()Ljava/lang/String;
+	method component3()I
+	method component4()I
+	method copy(ZLjava/lang/String;II)Ldev/ide/agent/RenameResult;
+	method equals(Ljava/lang/Object;)Z
+	method getFilesChanged()I
+	method getMessage()Ljava/lang/String;
+	method getOccurrences()I
+	method getSuccess()Z
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/RenameResult;ZLjava/lang/String;IIILjava/lang/Object;)Ldev/ide/agent/RenameResult;
+	method toString()Ljava/lang/String;
+dev/ide/agent/RenameTargetInfo
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/RenameTargetInfo;
+	method equals(Ljava/lang/Object;)Z
+	method getKind()Ljava/lang/String;
+	method getOldName()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/RenameTargetInfo;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/RenameTargetInfo;
+	method toString()Ljava/lang/String;
+dev/ide/agent/RunResult
+	kind class
+	super java/lang/Object
+	ctor (ZZLjava/lang/String;Ljava/lang/Integer;Ljava/util/List;)V
+	method component1()Z
+	method component2()Z
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/Integer;
+	method component5()Ljava/util/List;
+	method copy(ZZLjava/lang/String;Ljava/lang/Integer;Ljava/util/List;)Ldev/ide/agent/RunResult;
+	method equals(Ljava/lang/Object;)Z
+	method getCompiled()Z
+	method getDiagnostics()Ljava/util/List;
+	method getExitCode()Ljava/lang/Integer;
+	method getFinished()Z
+	method getOutput()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/RunResult;ZZLjava/lang/String;Ljava/lang/Integer;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/agent/RunResult;
+	method toString()Ljava/lang/String;
+dev/ide/agent/SimpleLlmProviderRegistry
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/LlmProviderRegistry
+	ctor (Ljava/util/List;)V
+	method getProviders()Ljava/util/List;
+	method provider(Ljava/lang/String;)Ldev/ide/agent/LlmProvider;
+dev/ide/agent/SimpleToolRegistry
+	kind class
+	super java/lang/Object
+	implements dev/ide/agent/AgentToolRegistry
+	ctor (Ljava/util/List;)V
+	method find(Ljava/lang/String;)Ldev/ide/agent/AgentTool;
+	method getTools()Ljava/util/List;
+dev/ide/agent/StopReason
+	kind enum
+	super java/lang/Enum
+	field static END_TURN Ldev/ide/agent/StopReason;
+	field static ERROR Ldev/ide/agent/StopReason;
+	field static MAX_TOKENS Ldev/ide/agent/StopReason;
+	field static REFUSAL Ldev/ide/agent/StopReason;
+	field static STOP_SEQUENCE Ldev/ide/agent/StopReason;
+	field static TOOL_USE Ldev/ide/agent/StopReason;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/agent/StopReason;
+	method static values()[Ldev/ide/agent/StopReason;
+dev/ide/agent/SymbolHit
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()I
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Ldev/ide/agent/SymbolHit;
+	method equals(Ljava/lang/Object;)Z
+	method getKind()Ljava/lang/String;
+	method getLine()I
+	method getName()Ljava/lang/String;
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/SymbolHit;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IILjava/lang/Object;)Ldev/ide/agent/SymbolHit;
+	method toString()Ljava/lang/String;
+dev/ide/agent/TaskInfo
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/TaskInfo;
+	method equals(Ljava/lang/Object;)Z
+	method getGroup()Ljava/lang/String;
+	method getId()Ljava/lang/String;
+	method getLabel()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/TaskInfo;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/TaskInfo;
+	method toString()Ljava/lang/String;
+dev/ide/agent/TaskRunResult
+	kind class
+	super java/lang/Object
+	ctor (ZLjava/lang/String;Ljava/lang/String;Ljava/util/List;)V
+	ctor (ZLjava/lang/String;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Z
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/util/List;
+	method copy(ZLjava/lang/String;Ljava/lang/String;Ljava/util/List;)Ldev/ide/agent/TaskRunResult;
+	method equals(Ljava/lang/Object;)Z
+	method getDiagnostics()Ljava/util/List;
+	method getLog()Ljava/lang/String;
+	method getStatus()Ljava/lang/String;
+	method getSuccess()Z
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/TaskRunResult;ZLjava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/agent/TaskRunResult;
+	method toString()Ljava/lang/String;
+dev/ide/agent/TextEdit
+	kind class
+	super java/lang/Object
+	ctor (IILjava/lang/String;)V
+	method component1()I
+	method component2()I
+	method component3()Ljava/lang/String;
+	method copy(IILjava/lang/String;)Ldev/ide/agent/TextEdit;
+	method equals(Ljava/lang/Object;)Z
+	method getNewText()Ljava/lang/String;
+	method getOffset()I
+	method getOldLength()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/TextEdit;IILjava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/TextEdit;
+	method toString()Ljava/lang/String;
+dev/ide/agent/TextMatch
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;IILjava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()I
+	method component3()I
+	method component4()Ljava/lang/String;
+	method copy(Ljava/lang/String;IILjava/lang/String;)Ldev/ide/agent/TextMatch;
+	method equals(Ljava/lang/Object;)Z
+	method getColumn()I
+	method getLine()I
+	method getLineText()Ljava/lang/String;
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/TextMatch;Ljava/lang/String;IILjava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/TextMatch;
+	method toString()Ljava/lang/String;
+dev/ide/agent/TokenUsage
+	kind class
+	super java/lang/Object
+	ctor ()V
+	ctor (IIII)V
+	ctor (IIIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()I
+	method component2()I
+	method component3()I
+	method component4()I
+	method copy(IIII)Ldev/ide/agent/TokenUsage;
+	method equals(Ljava/lang/Object;)Z
+	method getCacheReadTokens()I
+	method getCacheWriteTokens()I
+	method getInputTokens()I
+	method getOutputTokens()I
+	method getPromptTokens()I
+	method hashCode()I
+	method plus(Ldev/ide/agent/TokenUsage;)Ldev/ide/agent/TokenUsage;
+	method static copy$default(Ldev/ide/agent/TokenUsage;IIIIILjava/lang/Object;)Ldev/ide/agent/TokenUsage;
+	method toString()Ljava/lang/String;
+dev/ide/agent/ToolArgs
+	kind interface
+	method abstract boolean(Ljava/lang/String;)Z
+	method abstract int(Ljava/lang/String;)I
+	method abstract optBoolean(Ljava/lang/String;)Ljava/lang/Boolean;
+	method abstract optInt(Ljava/lang/String;)Ljava/lang/Integer;
+	method abstract optString(Ljava/lang/String;)Ljava/lang/String;
+	method abstract raw()Ljava/lang/String;
+	method abstract string(Ljava/lang/String;)Ljava/lang/String;
+	method abstract stringList(Ljava/lang/String;)Ljava/util/List;
+dev/ide/agent/ToolExecutionResult
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Z)V
+	ctor (Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/agent/ToolExecutionResult$Companion;
+	method component1()Ljava/lang/String;
+	method component2()Z
+	method copy(Ljava/lang/String;Z)Ldev/ide/agent/ToolExecutionResult;
+	method equals(Ljava/lang/Object;)Z
+	method getContent()Ljava/lang/String;
+	method hashCode()I
+	method isError()Z
+	method static copy$default(Ldev/ide/agent/ToolExecutionResult;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/agent/ToolExecutionResult;
+	method toString()Ljava/lang/String;
+dev/ide/agent/ToolExecutionResult$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method error(Ljava/lang/String;)Ldev/ide/agent/ToolExecutionResult;
+	method ok(Ljava/lang/String;)Ldev/ide/agent/ToolExecutionResult;
+dev/ide/agent/ToolSchemaBuilder
+	kind class
+	super java/lang/Object
+	ctor ()V
+	method boolean(Ljava/lang/String;Ljava/lang/String;Z)V
+	method build()Ljava/lang/String;
+	method integer(Ljava/lang/String;Ljava/lang/String;Z)V
+	method static boolean$default(Ldev/ide/agent/ToolSchemaBuilder;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)V
+	method static integer$default(Ldev/ide/agent/ToolSchemaBuilder;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)V
+	method static string$default(Ldev/ide/agent/ToolSchemaBuilder;Ljava/lang/String;Ljava/lang/String;ZLjava/util/List;ILjava/lang/Object;)V
+	method static stringArray$default(Ldev/ide/agent/ToolSchemaBuilder;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)V
+	method string(Ljava/lang/String;Ljava/lang/String;ZLjava/util/List;)V
+	method stringArray(Ljava/lang/String;Ljava/lang/String;Z)V
+dev/ide/agent/ToolSpec
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/ToolSpec;
+	method equals(Ljava/lang/Object;)Z
+	method getDescription()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method getParameters()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/ToolSpec;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/ToolSpec;
+	method toString()Ljava/lang/String;
+dev/ide/agent/ToolsKt
+	kind class
+	super java/lang/Object
+	method static toolSchema(Lkotlin/jvm/functions/Function1;)Ljava/lang/String;
+dev/ide/agent/WorkspaceEntry
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Z)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Z
+	method copy(Ljava/lang/String;Ljava/lang/String;Z)Ldev/ide/agent/WorkspaceEntry;
+	method equals(Ljava/lang/Object;)Z
+	method getName()Ljava/lang/String;
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method isDirectory()Z
+	method static copy$default(Ldev/ide/agent/WorkspaceEntry;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/agent/WorkspaceEntry;
+	method toString()Ljava/lang/String;
+dev/ide/agent/WriteRequest
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/agent/WriteRequest;
+	method equals(Ljava/lang/Object;)Z
+	method getPath()Ljava/lang/String;
+	method getSummary()Ljava/lang/String;
+	method getTool()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/agent/WriteRequest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/agent/WriteRequest;
+	method toString()Ljava/lang/String;

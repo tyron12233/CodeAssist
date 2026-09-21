@@ -1202,7 +1202,7 @@ An **installed** plugin declares only `plugin-api` and `platform-core` by defaul
 `EditorTopics`. Subscribing to any of the others means adding that artifact, which the BOM already versions:
 
 ```kotlin
-compileOnly(platform("io.github.tyron12233:plugin-bom:2.10.0"))
+compileOnly(platform("io.github.tyron12233:plugin-bom:3.0.0"))
 compileOnly("io.github.tyron12233:build-api")     // BuildTopics
 ```
 
@@ -2478,7 +2478,7 @@ what the IDE reads to build its catalogue, so it must agree with what your entry
 id = "com.example.hello"
 name = "Hello"
 version = "1.0.0"
-apiVersion = 2
+apiVersion = 4
 description = "Adds a Hello command and a settings page."
 entryPoints = ["com.example.hello.HelloPlugin"]
 uiEntryPoints = ["com.example.hello.HelloUiPlugin"]   # optional; the Compose UI facet
@@ -2558,7 +2558,7 @@ the IDE's own runtime:
 ```kotlin
 dependencies {
     // The BOM carries the versions, including the Compose the IDE provides.
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.10.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:3.0.0"))
 
     compileOnly("io.github.tyron12233:plugin-ui-api")
     compileOnly("androidx.compose.runtime:runtime")
@@ -2616,7 +2616,7 @@ not part of it, so an id or an anchor that is wrong still shows up only once the
 The engine SPI is published, so the extension points in these modules are available to a plugin app:
 
 ```kotlin
-compileOnly(platform("io.github.tyron12233:plugin-bom:2.10.0")) // one version for everything below
+compileOnly(platform("io.github.tyron12233:plugin-bom:3.0.0")) // one version for everything below
 
 compileOnly("io.github.tyron12233:plugin-api")        // actions, menus, palette commands, editor events
 compileOnly("io.github.tyron12233:platform-core")     // scoped services, settings pages, logging
@@ -2650,15 +2650,16 @@ The SPI is published, so it is an ordinary dependency:
 
 ```kotlin
 dependencies {
-    compileOnly(platform("io.github.tyron12233:plugin-bom:2.10.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:3.0.0"))
     compileOnly("io.github.tyron12233:plugin-api")
     compileOnly("io.github.tyron12233:platform-core")
 }
 ```
 
-Upgrading a plugin written against `1.x`? See
-[Migrating a plugin to SPI 2.0.0](plugin-spi-2.0-migration.md): `PLUGIN_API_VERSION` moved to `3`, so an
-older plugin is refused at the gate, and recompiling is usually the whole migration.
+Upgrading a plugin built against `2.10.0`? See
+[Migrating a plugin to SPI 3.0.0](plugin-spi-3.0-migration.md): `PLUGIN_API_VERSION` moved to `4`, so an
+older plugin is refused at the gate instead of failing mid-session, and recompiling is usually the whole
+migration. From `1.x`, read [Migrating a plugin to SPI 2.0.0](plugin-spi-2.0-migration.md) first.
 
 Those two modules are GPL-3.0-or-later **with** the Classpath exception, which is what lets your plugin carry
 whatever license you choose; the rest of CodeAssist is plain GPL-3.0-or-later. The SPI version is independent

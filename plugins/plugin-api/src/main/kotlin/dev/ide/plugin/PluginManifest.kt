@@ -24,8 +24,18 @@ import dev.ide.platform.PluginId
  * stopped being enums so that a plugin can name a value of its own. A plugin compiled against the enums
  * references `Enum` members and `values()`/`valueOf` descriptors that no longer exist, which is a linkage
  * error at first touch rather than at load.
+ *
+ * `4` is where the multiplatform split moved it. Taking the SPI's platform-free core into `:model-api` and
+ * converting the index layer changed 42 members of the surface published at `2.10.0`, none of it visible in
+ * the source: `Externalizer` reads and writes `DataReader`/`DataWriter` rather than `java.io.DataInput` and
+ * `DataOutput`, [dev.ide.index.IndexInput.sourcePath] is a `String`, the bulk query helpers moved off
+ * `IndexQueries` onto `:model-api`'s `IndexQueriesKt`, `ProjectModelKt.module`/`workspace`/`contentRootsFor`
+ * moved to `JvmProjectModelKt`, `SYNTHETIC_CLASS_EP`'s facade class moved with its file, and
+ * [dev.ide.platform.Topic]`(name, Class)` stopped being a constructor. `:spi-compat` is what found them, and
+ * this bump is what turns each one from a `NoSuchMethodError` under the user's hands into a refusal at the
+ * gate with a reason on the plugin's row.
  */
-const val PLUGIN_API_VERSION: Int = 3
+const val PLUGIN_API_VERSION: Int = 4
 
 /**
  * The version the SPI artifacts are published under, so a project that compiles against them can be
@@ -266,8 +276,30 @@ const val PLUGIN_API_VERSION: Int = 3
  *    means and nothing else about Gradle; its only options were to replace the Gradle importer, or to re-read
  *    the build files behind its back and keep a model the next Sync silently invalidates. A contributor runs
  *    on the first import and on every Sync, so the two cannot disagree.
+ *
+ * `3.0.0` is a major bump for the reason `2.0.0` was one: it changes what an already-compiled plugin links
+ * against. Nothing was designed away. Taking the SPI's platform-free core into `model-api` and converting
+ * the index layer to common code rewrote 42 members of the surface published at `2.10.0` without touching a
+ * line of anyone's source: `Externalizer` reads and writes `DataReader`/`DataWriter` instead of
+ * `java.io.DataInput`/`DataOutput` (the BYTES are unchanged, the signatures are not), `IndexInput.sourcePath`
+ * is a `String`, the bulk query helpers extend `IndexQueries` from `model-api`'s `IndexQueriesKt` rather than
+ * `IndexService`, `ProjectModelKt.module`/`workspace`/`contentRootsFor` moved to `JvmProjectModelKt` with
+ * their file, `SYNTHETIC_CLASS_EP`'s facade moved the same way, and [dev.ide.platform.Topic]`(name, Class)`
+ * became a factory function rather than a constructor.
+ *
+ * None of that is visible to a compiler and all of it is fatal to a plugin compiled against `2.10.0`, which
+ * is why [PLUGIN_API_VERSION] moves to `4` in the same release: such a plugin is refused at the gate, with
+ * the mismatch on its row, instead of loading and throwing `NoSuchMethodError` under the user's hands. The
+ * fix for a plugin author is a recompile; `docs/plugin-spi-3.0-migration.md` is the upgrade path, and
+ * `:spi-compat` is what found the 42 and now holds this surface for the next time.
+ *
+ * `3.0.0` also publishes `model-api` for the first time (the platform-free core: the symbol model, the DOM,
+ * `VirtualFile`, `ContentHash`, the portable filesystem and `Coordinate`), which is where a plugin's imports
+ * of those types now resolve from. `platform-core` keeps exposing them as an `api` dependency, so an import
+ * that already compiled still does.
+
  */
-const val PLUGIN_SPI_VERSION: String = "2.10.0"
+const val PLUGIN_SPI_VERSION: String = "3.0.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry

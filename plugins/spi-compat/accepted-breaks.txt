@@ -1,0 +1,23 @@
+# Members of the published SPI that this build deliberately no longer has.
+#
+# Each baseline under <module>/api/ is the surface of the artifact PUBLISHED at that version, so a plugin
+# built against it is the thing this list is about: every line here is a call that compiled then and does
+# not link now. A plugin that makes one loads normally and throws NoSuchMethodError or NoClassDefFoundError
+# at its first use, which is why each one is written down rather than discovered by a user.
+#
+# Format: <owner internal name> <the baseline entry, verbatim>. A line whose member is back in the build
+# fails the test: an acceptance that describes nothing hides the next real removal of the same member.
+#
+# At a release: decide what to do about everything here (restore it, or bump PLUGIN_API_VERSION so the
+# loader refuses a plugin built for the old API instead of letting it fail mid-session), regenerate the
+# baselines from the tree that is being published with
+#   ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+# and empty this file.
+#
+# Empty, and that is the state to keep it in between releases.
+#
+# The 42 members the multiplatform split changed (99aefcedd and the index conversion after it) were retired
+# at SPI 3.0.0 / PLUGIN_API_VERSION 4: the baselines above now pin the 3.0.0 surface, and a plugin built
+# against 2.10.0 is refused at the gate with the mismatch on its row rather than loading and throwing
+# NoSuchMethodError at its first call. docs/plugin-spi-3.0-migration.md is what a plugin author does about it.
+

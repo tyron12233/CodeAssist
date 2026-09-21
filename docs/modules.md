@@ -16,7 +16,7 @@ android/       android-support, android-sdk-metadata, art-compat, layout-preview
                applog-runtime
 services/      deps-{api,impl}, vcs-{api,impl,ui}, store-{api,impl}, analytics-{api,impl},
                agent-{api,impl,mcp,ui}
-plugins/       plugin-{api,ui-api,bom,impl}
+plugins/       plugin-{api,ui-api,bom,impl}, spi-compat
 app/           ide-ui{,-api}, model-bridge, ide-core, ide-desktop, ide-android, ide-ios
 tools/         test-support, bench-support
 ```

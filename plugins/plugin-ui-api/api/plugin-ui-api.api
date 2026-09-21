@@ -1,0 +1,245 @@
+# The compiled surface of io.github.tyron12233:plugin-ui-api, pinned at SPI 3.0.0.
+# A plugin links against these by name and descriptor; see :spi-compat.
+# Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/plugin/ui/EditorAnchor
+	kind interface
+dev/ide/plugin/ui/EditorAnchor$AboveLine
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/ui/EditorAnchor
+	ctor (I)V
+	method getLine()I
+dev/ide/plugin/ui/EditorAnchor$AfterLine
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/ui/EditorAnchor
+	ctor (I)V
+	method getLine()I
+dev/ide/plugin/ui/EditorAnchor$AtOffset
+	kind class
+	super java/lang/Object
+	implements dev/ide/plugin/ui/EditorAnchor
+	ctor (I)V
+	method getOffset()I
+dev/ide/plugin/ui/EditorLanguage
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/util/List;Ldev/ide/plugin/ui/SyntaxStyle;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V
+	ctor (Ljava/lang/String;Ljava/util/List;Ldev/ide/plugin/ui/SyntaxStyle;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getBlockCommentClose()Ljava/lang/String;
+	method getBlockCommentOpen()Ljava/lang/String;
+	method getDirectivePrefix()Ljava/lang/String;
+	method getId()Ljava/lang/String;
+	method getKeywords()Ljava/util/Set;
+	method getLineComment()Ljava/lang/String;
+	method getOrder()I
+	method getSuffixes()Ljava/util/List;
+	method getSyntax()Ldev/ide/plugin/ui/SyntaxStyle;
+dev/ide/plugin/ui/EditorLayer
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;ILkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;)V
+	ctor (Ljava/lang/String;ILkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getAppliesTo()Lkotlin/jvm/functions/Function1;
+	method getId()Ljava/lang/String;
+	method getOrder()I
+	method getWidgets()Lkotlin/jvm/functions/Function3;
+dev/ide/plugin/ui/EditorLayerContext
+	kind interface
+	implements dev/ide/plugin/ui/UiContext
+	method abstract getCaretOffset()I
+	method abstract getPath()Ljava/lang/String;
+	method abstract getText()Ljava/lang/String;
+	method abstract getVisibleLines()Lkotlin/ranges/IntRange;
+dev/ide/plugin/ui/EditorLayerContext$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static service(Ldev/ide/plugin/ui/EditorLayerContext;Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+dev/ide/plugin/ui/EditorPaintContext
+	kind interface
+	method abstract getCharWidth()F
+	method abstract getGutterWidth()F
+	method abstract getLineCount()I
+	method abstract getLineHeight()F
+	method abstract getPath()Ljava/lang/String;
+	method abstract getTextLeft()F
+	method abstract getVisibleLines()Lkotlin/ranges/IntRange;
+	method abstract isHidden(I)Z
+	method abstract lineOf(I)I
+	method abstract lineRange(I)Lkotlin/ranges/IntRange;
+	method abstract lineTop(I)F
+	method abstract xOf(I)F
+dev/ide/plugin/ui/EditorPaintLayer
+	kind enum
+	super java/lang/Enum
+	field static AboveText Ldev/ide/plugin/ui/EditorPaintLayer;
+	field static BelowText Ldev/ide/plugin/ui/EditorPaintLayer;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/plugin/ui/EditorPaintLayer;
+	method static values()[Ldev/ide/plugin/ui/EditorPaintLayer;
+dev/ide/plugin/ui/EditorPainter
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;ILdev/ide/plugin/ui/EditorPaintLayer;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;)V
+	ctor (Ljava/lang/String;ILdev/ide/plugin/ui/EditorPaintLayer;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getAppliesTo()Lkotlin/jvm/functions/Function1;
+	method getId()Ljava/lang/String;
+	method getLayer()Ldev/ide/plugin/ui/EditorPaintLayer;
+	method getOrder()I
+	method getPaint()Lkotlin/jvm/functions/Function2;
+dev/ide/plugin/ui/EditorPreview
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;)V
+	method getAppliesTo()Lkotlin/jvm/functions/Function1;
+	method getContent()Lkotlin/jvm/functions/Function3;
+	method getId()Ljava/lang/String;
+	method getTitle()Ljava/lang/String;
+dev/ide/plugin/ui/EditorPreviewContext
+	kind interface
+	implements dev/ide/plugin/ui/UiContext
+	method abstract getDark()Z
+	method abstract getPath()Ljava/lang/String;
+	method abstract getText()Ljava/lang/String;
+	method abstract reportProblems(Ljava/util/List;)V
+dev/ide/plugin/ui/EditorPreviewContext$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static service(Ldev/ide/plugin/ui/EditorPreviewContext;Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+dev/ide/plugin/ui/EditorViewMode
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getAppliesTo()Lkotlin/jvm/functions/Function1;
+	method getContent()Lkotlin/jvm/functions/Function3;
+	method getIconId()Ljava/lang/String;
+	method getId()Ljava/lang/String;
+	method getLabel()Ljava/lang/String;
+	method getOrder()I
+	method isDefault()Lkotlin/jvm/functions/Function1;
+dev/ide/plugin/ui/EditorViewModeContext
+	kind interface
+	implements dev/ide/plugin/ui/UiContext
+	method abstract getCaretOffset()I
+	method abstract getPath()Ljava/lang/String;
+	method abstract getText()Ljava/lang/String;
+	method abstract replaceText(IILjava/lang/String;)V
+dev/ide/plugin/ui/EditorViewModeContext$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static service(Ldev/ide/plugin/ui/EditorViewModeContext;Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+dev/ide/plugin/ui/EditorWidget
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/plugin/ui/EditorAnchor;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)V
+	method getAnchor()Ldev/ide/plugin/ui/EditorAnchor;
+	method getContent()Lkotlin/jvm/functions/Function2;
+	method getKey()Ljava/lang/Object;
+dev/ide/plugin/ui/FileIcon
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/util/List;Ljava/lang/String;J)V
+	method getBadge()Ljava/lang/String;
+	method getColor()J
+	method getId()Ljava/lang/String;
+	method getSuffixes()Ljava/util/List;
+dev/ide/plugin/ui/Overlay
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Lkotlin/jvm/functions/Function3;)V
+	method getContent()Lkotlin/jvm/functions/Function3;
+	method getId()Ljava/lang/String;
+dev/ide/plugin/ui/Screen
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function3;)V
+	method getContent()Lkotlin/jvm/functions/Function3;
+	method getId()Ljava/lang/String;
+	method getTitle()Ljava/lang/String;
+dev/ide/plugin/ui/ScreenUiContext
+	kind interface
+	implements dev/ide/plugin/ui/UiContext
+	field static Companion Ldev/ide/plugin/ui/ScreenUiContext$Companion;
+	method abstract back()V
+dev/ide/plugin/ui/ScreenUiContext$Companion
+	kind class
+	super java/lang/Object
+	method preview(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/plugin/ui/ScreenUiContext;
+	method static preview$default(Ldev/ide/plugin/ui/ScreenUiContext$Companion;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/plugin/ui/ScreenUiContext;
+dev/ide/plugin/ui/ScreenUiContext$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static service(Ldev/ide/plugin/ui/ScreenUiContext;Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+dev/ide/plugin/ui/SyntaxStyle
+	kind enum
+	super java/lang/Enum
+	field static C_FAMILY Ldev/ide/plugin/ui/SyntaxStyle;
+	field static HASH_COMMENT Ldev/ide/plugin/ui/SyntaxStyle;
+	field static MARKDOWN Ldev/ide/plugin/ui/SyntaxStyle;
+	field static PLAIN Ldev/ide/plugin/ui/SyntaxStyle;
+	field static XML Ldev/ide/plugin/ui/SyntaxStyle;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/plugin/ui/SyntaxStyle;
+	method static values()[Ldev/ide/plugin/ui/SyntaxStyle;
+dev/ide/plugin/ui/ToolWindow
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/plugin/ui/ToolWindowAnchor;ILkotlin/jvm/functions/Function3;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/plugin/ui/ToolWindowAnchor;ILkotlin/jvm/functions/Function3;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getAnchor()Ldev/ide/plugin/ui/ToolWindowAnchor;
+	method getContent()Lkotlin/jvm/functions/Function3;
+	method getIconId()Ljava/lang/String;
+	method getId()Ljava/lang/String;
+	method getOrder()I
+	method getTitle()Ljava/lang/String;
+dev/ide/plugin/ui/ToolWindowAnchor
+	kind enum
+	super java/lang/Enum
+	field static BOTTOM Ldev/ide/plugin/ui/ToolWindowAnchor;
+	field static LEFT Ldev/ide/plugin/ui/ToolWindowAnchor;
+	field static RIGHT Ldev/ide/plugin/ui/ToolWindowAnchor;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/plugin/ui/ToolWindowAnchor;
+	method static values()[Ldev/ide/plugin/ui/ToolWindowAnchor;
+dev/ide/plugin/ui/UiContext
+	kind interface
+	field static Companion Ldev/ide/plugin/ui/UiContext$Companion;
+	method abstract getActiveFilePath()Ljava/lang/String;
+	method abstract getProjectPath()Ljava/lang/String;
+	method abstract openFile(Ljava/lang/String;I)V
+	method abstract openScreen(Ljava/lang/String;)V
+	method service(Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+	method static openFile$default(Ldev/ide/plugin/ui/UiContext;Ljava/lang/String;IILjava/lang/Object;)V
+dev/ide/plugin/ui/UiContext$Companion
+	kind class
+	super java/lang/Object
+	method preview(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/plugin/ui/UiContext;
+	method static preview$default(Ldev/ide/plugin/ui/UiContext$Companion;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/plugin/ui/UiContext;
+dev/ide/plugin/ui/UiContext$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static openFile$default(Ldev/ide/plugin/ui/UiContext;Ljava/lang/String;IILjava/lang/Object;)V
+	method static service(Ldev/ide/plugin/ui/UiContext;Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+dev/ide/plugin/ui/UiContextKt
+	kind class
+	super java/lang/Object
+dev/ide/plugin/ui/UiHandle
+	kind interface
+	method abstract dispose()V
+dev/ide/plugin/ui/UiPlugin
+	kind interface
+	method abstract contribute(Ldev/ide/plugin/ui/UiRegistration;)V
+	method abstract getId()Ljava/lang/String;
+dev/ide/plugin/ui/UiRegistration
+	kind interface
+	method abstract editorLanguage(Ldev/ide/plugin/ui/EditorLanguage;)Ldev/ide/plugin/ui/UiHandle;
+	method abstract editorLayer(Ldev/ide/plugin/ui/EditorLayer;)Ldev/ide/plugin/ui/UiHandle;
+	method abstract editorPainter(Ldev/ide/plugin/ui/EditorPainter;)Ldev/ide/plugin/ui/UiHandle;
+	method abstract editorPreview(Ldev/ide/plugin/ui/EditorPreview;)Ldev/ide/plugin/ui/UiHandle;
+	method abstract fileIcon(Ldev/ide/plugin/ui/FileIcon;)Ldev/ide/plugin/ui/UiHandle;
+	method abstract getPluginId()Ljava/lang/String;
+	method abstract overlay(Ldev/ide/plugin/ui/Overlay;)Ldev/ide/plugin/ui/UiHandle;
+	method abstract screen(Ldev/ide/plugin/ui/Screen;)Ldev/ide/plugin/ui/UiHandle;
+	method abstract toolWindow(Ldev/ide/plugin/ui/ToolWindow;)Ldev/ide/plugin/ui/UiHandle;
+	method abstract viewMode(Ldev/ide/plugin/ui/EditorViewMode;)Ldev/ide/plugin/ui/UiHandle;

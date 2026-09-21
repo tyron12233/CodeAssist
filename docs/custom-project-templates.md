@@ -39,7 +39,7 @@ Everything a template touches is in `project-model-api`, which is published, so 
 installed plugin with no access to the IDE's internals:
 
 ```kotlin
-compileOnly(platform("io.github.tyron12233:plugin-bom:2.7.0"))
+compileOnly(platform("io.github.tyron12233:plugin-bom:3.0.0"))
 compileOnly("io.github.tyron12233:plugin-api")
 compileOnly("io.github.tyron12233:project-model-api")
 compileOnly("io.github.tyron12233:platform-core")

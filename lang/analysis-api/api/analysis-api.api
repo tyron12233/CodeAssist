@@ -1,0 +1,404 @@
+# The compiled surface of io.github.tyron12233:analysis-api, pinned at SPI 3.0.0.
+# A plugin links against these by name and descriptor; see :spi-compat.
+# Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/analysis/ActionProvider
+	kind interface
+	method abstract getLanguages()Ljava/util/Set;
+	method actions(Ldev/ide/analysis/AnalysisTarget;Ldev/ide/lang/dom/TextRange;)Ljava/util/List;
+	method actions(Ldev/ide/analysis/EditorActionContext;)Ljava/util/List;
+dev/ide/analysis/ActionProvider$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static actions(Ldev/ide/analysis/ActionProvider;Ldev/ide/analysis/AnalysisTarget;Ldev/ide/lang/dom/TextRange;)Ljava/util/List;
+	method static actions(Ldev/ide/analysis/ActionProvider;Ldev/ide/analysis/EditorActionContext;)Ljava/util/List;
+dev/ide/analysis/AnalysisEvent
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/util/List;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/util/List;
+	method copy(Ljava/lang/String;Ljava/util/List;)Ldev/ide/analysis/AnalysisEvent;
+	method equals(Ljava/lang/Object;)Z
+	method getDiagnostics()Ljava/util/List;
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/analysis/AnalysisEvent;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/analysis/AnalysisEvent;
+	method toString()Ljava/lang/String;
+dev/ide/analysis/AnalysisEventListener
+	kind interface
+	method abstract onAnalysisEvent(Ldev/ide/analysis/AnalysisEvent;)V
+dev/ide/analysis/AnalysisListener
+	kind interface
+	method abstract diagnosticsChanged(Ldev/ide/vfs/VirtualFile;Ljava/util/List;)V
+dev/ide/analysis/AnalysisProfile
+	kind class
+	super java/lang/Object
+	ctor ()V
+	ctor (Ljava/util/Set;Ljava/util/Map;)V
+	ctor (Ljava/util/Set;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/analysis/AnalysisProfile$Companion;
+	method component1()Ljava/util/Set;
+	method component2()Ljava/util/Map;
+	method copy(Ljava/util/Set;Ljava/util/Map;)Ldev/ide/analysis/AnalysisProfile;
+	method equals(Ljava/lang/Object;)Z
+	method getDisabled()Ljava/util/Set;
+	method getSeverityOverrides()Ljava/util/Map;
+	method hashCode()I
+	method isEnabled-dclSb8A(Ljava/lang/String;)Z
+	method severityFor(Ldev/ide/analysis/Analyzer;)Ldev/ide/lang/dom/Severity;
+	method static copy$default(Ldev/ide/analysis/AnalysisProfile;Ljava/util/Set;Ljava/util/Map;ILjava/lang/Object;)Ldev/ide/analysis/AnalysisProfile;
+	method toString()Ljava/lang/String;
+dev/ide/analysis/AnalysisProfile$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getDEFAULT()Ldev/ide/analysis/AnalysisProfile;
+dev/ide/analysis/AnalysisService
+	kind interface
+	method abstract addListener(Ldev/ide/analysis/AnalysisListener;)Ldev/ide/platform/Disposable;
+	method abstract analyzeNow(Ldev/ide/vfs/VirtualFile;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract apply(Ldev/ide/analysis/QuickFix;Ldev/ide/analysis/FixContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract caretSnapshotAt(Ldev/ide/vfs/VirtualFile;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract computeActionEdits(Ldev/ide/vfs/VirtualFile;Ldev/ide/lang/dom/TextRange;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract configure(Ldev/ide/analysis/AnalysisProfile;)V
+	method abstract diagnostics(Ldev/ide/vfs/VirtualFile;)Ljava/util/List;
+	method abstract editorActionsAt(Ldev/ide/vfs/VirtualFile;Ldev/ide/lang/dom/TextRange;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract fixesFor(Ldev/ide/analysis/Diagnostic;Ldev/ide/analysis/AnalysisTarget;)Ljava/util/List;
+	method abstract lint(Ldev/ide/analysis/ProjectAnalysisScope;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/analysis/AnalysisServiceKt
+	kind class
+	super java/lang/Object
+	method static getACTION_PROVIDER_EP()Ldev/ide/platform/ExtensionPoint;
+	method static getANALYZER_EP()Ldev/ide/platform/ExtensionPoint;
+	method static getDIAGNOSTIC_PROVIDER_EP()Ldev/ide/platform/ExtensionPoint;
+	method static getQUICK_FIX_PROVIDER_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/analysis/AnalysisTarget
+	kind interface
+	method abstract checkCanceled()V
+	method abstract getDocumentVersion()J
+	method abstract getFile()Ldev/ide/vfs/VirtualFile;
+	method abstract getIndex()Ldev/ide/index/IndexService;
+	method abstract getModule()Ldev/ide/model/Module;
+	method abstract getParsed()Ldev/ide/lang/dom/ParsedFile;
+	method abstract getResolver()Ldev/ide/lang/SourceAnalyzer;
+dev/ide/analysis/AnalysisTopics
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/analysis/AnalysisTopics;
+	method getANALYSIS()Ldev/ide/platform/Topic;
+dev/ide/analysis/Analyzer
+	kind interface
+	method abstract getDefaultSeverity()Ldev/ide/lang/dom/Severity;
+	method abstract getDisplayName()Ljava/lang/String;
+	method abstract getId-iYFlicA()Ljava/lang/String;
+	method abstract getLanguages()Ljava/util/Set;
+	method abstract getTier()Ldev/ide/analysis/AnalyzerTier;
+dev/ide/analysis/AnalyzerId
+	kind class
+	super java/lang/Object
+	method equals(Ljava/lang/Object;)Z
+	method getValue()Ljava/lang/String;
+	method hashCode()I
+	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
+	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
+	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
+	method static hashCode-impl(Ljava/lang/String;)I
+	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
+	method toString()Ljava/lang/String;
+dev/ide/analysis/AnalyzerTier
+	kind enum
+	super java/lang/Enum
+	field static PROJECT Ldev/ide/analysis/AnalyzerTier;
+	field static SEMANTIC Ldev/ide/analysis/AnalyzerTier;
+	field static SYNTAX Ldev/ide/analysis/AnalyzerTier;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/analysis/AnalyzerTier;
+	method static values()[Ldev/ide/analysis/AnalyzerTier;
+dev/ide/analysis/AncestorSpan
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;II)V
+	method component1()Ljava/lang/String;
+	method component2()I
+	method component3()I
+	method copy(Ljava/lang/String;II)Ldev/ide/analysis/AncestorSpan;
+	method equals(Ljava/lang/Object;)Z
+	method getEnd()I
+	method getKind()Ljava/lang/String;
+	method getStart()I
+	method hashCode()I
+	method static copy$default(Ldev/ide/analysis/AncestorSpan;Ljava/lang/String;IIILjava/lang/Object;)Ldev/ide/analysis/AncestorSpan;
+	method toString()Ljava/lang/String;
+dev/ide/analysis/CaretSnapshot
+	kind class
+	super java/lang/Object
+	ctor (ILjava/lang/String;Ljava/lang/String;Ldev/ide/lang/dom/TextRange;Ljava/lang/String;ZLjava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (ILjava/lang/String;Ljava/lang/String;Ldev/ide/lang/dom/TextRange;Ljava/lang/String;ZLjava/util/List;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/analysis/CaretSnapshot$Companion;
+	field static MAX_NODE_TEXT I
+	method component1()I
+	method component2-udzRf0M()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ldev/ide/lang/dom/TextRange;
+	method component5()Ljava/lang/String;
+	method component6()Z
+	method component7()Ljava/util/List;
+	method copy-7w-I3kw(ILjava/lang/String;Ljava/lang/String;Ldev/ide/lang/dom/TextRange;Ljava/lang/String;ZLjava/util/List;)Ldev/ide/analysis/CaretSnapshot;
+	method equals(Ljava/lang/Object;)Z
+	method getAncestors()Ljava/util/List;
+	method getLanguageId-udzRf0M()Ljava/lang/String;
+	method getNodeKind()Ljava/lang/String;
+	method getNodeRange()Ldev/ide/lang/dom/TextRange;
+	method getNodeText()Ljava/lang/String;
+	method getNodeTextTruncated()Z
+	method getOffset()I
+	method hashCode()I
+	method static copy-7w-I3kw$default(Ldev/ide/analysis/CaretSnapshot;ILjava/lang/String;Ljava/lang/String;Ldev/ide/lang/dom/TextRange;Ljava/lang/String;ZLjava/util/List;ILjava/lang/Object;)Ldev/ide/analysis/CaretSnapshot;
+	method toString()Ljava/lang/String;
+dev/ide/analysis/CaretSnapshot$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method of-9u7kJ88(Ldev/ide/lang/dom/ParsedFile;ILjava/lang/String;)Ldev/ide/analysis/CaretSnapshot;
+	method static of-9u7kJ88$default(Ldev/ide/analysis/CaretSnapshot$Companion;Ldev/ide/lang/dom/ParsedFile;ILjava/lang/String;ILjava/lang/Object;)Ldev/ide/analysis/CaretSnapshot;
+dev/ide/analysis/CodeActionKind
+	kind enum
+	super java/lang/Enum
+	field static INTENTION Ldev/ide/analysis/CodeActionKind;
+	field static QUICK_FIX Ldev/ide/analysis/CodeActionKind;
+	field static REFACTOR Ldev/ide/analysis/CodeActionKind;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/analysis/CodeActionKind;
+	method static values()[Ldev/ide/analysis/CodeActionKind;
+dev/ide/analysis/Codes
+	kind class
+	super java/lang/Object
+	field static CREATE_FROM_USAGE Ljava/lang/String;
+	field static INSTANCE Ldev/ide/analysis/Codes;
+	field static MISSING_OVERRIDE Ljava/lang/String;
+	field static MISSING_SEMICOLON Ljava/lang/String;
+	field static PACKAGE_MISMATCH Ljava/lang/String;
+	field static UNRESOLVED_REFERENCE Ljava/lang/String;
+	field static UNUSED_IMPORT Ljava/lang/String;
+	field static UNUSED_LOCAL Ljava/lang/String;
+dev/ide/analysis/Diagnostic
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ldev/ide/analysis/DiagnosticSource;Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Ljava/util/List;)V
+	ctor (Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ldev/ide/analysis/DiagnosticSource;Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ldev/ide/lang/dom/TextRange;
+	method component2()Ldev/ide/lang/dom/Severity;
+	method component3()Ljava/lang/String;
+	method component4()Ldev/ide/analysis/DiagnosticSource;
+	method component5()Ljava/lang/String;
+	method component6()Ljava/util/List;
+	method component7()Ljava/util/Set;
+	method component8()Ljava/util/List;
+	method copy(Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ldev/ide/analysis/DiagnosticSource;Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Ljava/util/List;)Ldev/ide/analysis/Diagnostic;
+	method equals(Ljava/lang/Object;)Z
+	method getCode()Ljava/lang/String;
+	method getFixes()Ljava/util/List;
+	method getMessage()Ljava/lang/String;
+	method getRange()Ldev/ide/lang/dom/TextRange;
+	method getRelatedRanges()Ljava/util/List;
+	method getSeverity()Ldev/ide/lang/dom/Severity;
+	method getSource()Ldev/ide/analysis/DiagnosticSource;
+	method getTags()Ljava/util/Set;
+	method hashCode()I
+	method static copy$default(Ldev/ide/analysis/Diagnostic;Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ldev/ide/analysis/DiagnosticSource;Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/analysis/Diagnostic;
+	method toString()Ljava/lang/String;
+dev/ide/analysis/DiagnosticProvider
+	kind interface
+	method abstract diagnose(Ldev/ide/analysis/AnalysisTarget;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract getId()Ljava/lang/String;
+	method getLanguages()Ljava/util/Set;
+dev/ide/analysis/DiagnosticProvider$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getLanguages(Ldev/ide/analysis/DiagnosticProvider;)Ljava/util/Set;
+dev/ide/analysis/DiagnosticSink
+	kind interface
+	method abstract report(Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Ljava/util/List;)V
+	method static report$default(Ldev/ide/analysis/DiagnosticSink;Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Ljava/util/List;ILjava/lang/Object;)V
+dev/ide/analysis/DiagnosticSink$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static report$default(Ldev/ide/analysis/DiagnosticSink;Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Ljava/util/List;ILjava/lang/Object;)V
+dev/ide/analysis/DiagnosticSource
+	kind interface
+dev/ide/analysis/DiagnosticSource$Analyzer
+	kind class
+	super java/lang/Object
+	implements dev/ide/analysis/DiagnosticSource
+	ctor (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1-iYFlicA()Ljava/lang/String;
+	method copy-dclSb8A(Ljava/lang/String;)Ldev/ide/analysis/DiagnosticSource$Analyzer;
+	method equals(Ljava/lang/Object;)Z
+	method getId-iYFlicA()Ljava/lang/String;
+	method hashCode()I
+	method static copy-dclSb8A$default(Ldev/ide/analysis/DiagnosticSource$Analyzer;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/analysis/DiagnosticSource$Analyzer;
+	method toString()Ljava/lang/String;
+dev/ide/analysis/DiagnosticSource$Compiler
+	kind class
+	super java/lang/Object
+	implements dev/ide/analysis/DiagnosticSource
+	field static INSTANCE Ldev/ide/analysis/DiagnosticSource$Compiler;
+dev/ide/analysis/DiagnosticTag
+	kind enum
+	super java/lang/Enum
+	field static DEPRECATED Ldev/ide/analysis/DiagnosticTag;
+	field static UNUSED Ldev/ide/analysis/DiagnosticTag;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/analysis/DiagnosticTag;
+	method static values()[Ldev/ide/analysis/DiagnosticTag;
+dev/ide/analysis/EditorActionContext
+	kind interface
+	field static Companion Ldev/ide/analysis/EditorActionContext$Companion;
+	method abstract checkCanceled()V
+	method abstract getAncestors()Ljava/util/List;
+	method abstract getCaret()Ldev/ide/analysis/CaretSnapshot;
+	method abstract getNode()Ldev/ide/lang/dom/DomNode;
+	method abstract getRange()Ldev/ide/lang/dom/TextRange;
+	method abstract getTarget()Ldev/ide/analysis/AnalysisTarget;
+	method enclosingStatement()Ldev/ide/lang/dom/DomNode;
+	method nearest-InuGyfI(Ljava/lang/String;)Ldev/ide/lang/dom/DomNode;
+dev/ide/analysis/EditorActionContext$Companion
+	kind class
+	super java/lang/Object
+	method of-9u7kJ88(Ldev/ide/analysis/AnalysisTarget;Ldev/ide/lang/dom/TextRange;Ljava/lang/String;)Ldev/ide/analysis/EditorActionContext;
+	method static of-9u7kJ88$default(Ldev/ide/analysis/EditorActionContext$Companion;Ldev/ide/analysis/AnalysisTarget;Ldev/ide/lang/dom/TextRange;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/analysis/EditorActionContext;
+dev/ide/analysis/EditorActionContext$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static enclosingStatement(Ldev/ide/analysis/EditorActionContext;)Ldev/ide/lang/dom/DomNode;
+	method static nearest-InuGyfI(Ldev/ide/analysis/EditorActionContext;Ljava/lang/String;)Ldev/ide/lang/dom/DomNode;
+dev/ide/analysis/FileAnalyzer
+	kind interface
+	implements dev/ide/analysis/Analyzer
+	method abstract analyze(Ldev/ide/analysis/AnalysisTarget;Ldev/ide/analysis/DiagnosticSink;)V
+	method abstract getInterestedIn()Ljava/util/Set;
+	method analyze(Ldev/ide/analysis/AnalysisTarget;Ldev/ide/analysis/DiagnosticSink;Ldev/ide/analysis/NodeIndex;)V
+dev/ide/analysis/FileAnalyzer$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static analyze(Ldev/ide/analysis/FileAnalyzer;Ldev/ide/analysis/AnalysisTarget;Ldev/ide/analysis/DiagnosticSink;Ldev/ide/analysis/NodeIndex;)V
+dev/ide/analysis/FileDiagnostics
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/vfs/VirtualFile;Ljava/util/List;)V
+	method component1()Ldev/ide/vfs/VirtualFile;
+	method component2()Ljava/util/List;
+	method copy(Ldev/ide/vfs/VirtualFile;Ljava/util/List;)Ldev/ide/analysis/FileDiagnostics;
+	method equals(Ljava/lang/Object;)Z
+	method getDiagnostics()Ljava/util/List;
+	method getFile()Ldev/ide/vfs/VirtualFile;
+	method hashCode()I
+	method static copy$default(Ldev/ide/analysis/FileDiagnostics;Ldev/ide/vfs/VirtualFile;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/analysis/FileDiagnostics;
+	method toString()Ljava/lang/String;
+dev/ide/analysis/FixContext
+	kind interface
+	method abstract checkCanceled()V
+	method abstract getTarget()Ldev/ide/analysis/AnalysisTarget;
+dev/ide/analysis/LintReport
+	kind class
+	super java/lang/Object
+	ctor (Ljava/util/List;)V
+	method component1()Ljava/util/List;
+	method copy(Ljava/util/List;)Ldev/ide/analysis/LintReport;
+	method equals(Ljava/lang/Object;)Z
+	method getAll()Ljava/util/List;
+	method getCountsBySeverity()Ljava/util/Map;
+	method getFiles()Ljava/util/List;
+	method getHasErrors()Z
+	method hashCode()I
+	method static copy$default(Ldev/ide/analysis/LintReport;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/analysis/LintReport;
+	method toString()Ljava/lang/String;
+dev/ide/analysis/ModuleAnalysis
+	kind interface
+	method abstract analyzer-zWVrst4(Ljava/lang/String;)Ldev/ide/lang/SourceAnalyzer;
+	method abstract peek-zWVrst4(Ljava/lang/String;)Ldev/ide/lang/SourceAnalyzer;
+dev/ide/analysis/ModuleAnalysisKt
+	kind class
+	super java/lang/Object
+	method static getMODULE_ANALYSIS()Ldev/ide/platform/ServiceKey;
+dev/ide/analysis/NodeIndex
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/lang/dom/ParsedFile;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/analysis/NodeIndex$Companion;
+	method contains-InuGyfI(Ljava/lang/String;)Z
+	method getKinds()Ljava/util/Set;
+	method nodes-InuGyfI(Ljava/lang/String;)Ljava/util/List;
+dev/ide/analysis/NodeIndex$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method over(Ldev/ide/lang/dom/ParsedFile;)Ldev/ide/analysis/NodeIndex;
+dev/ide/analysis/ProjectAnalysisScope
+	kind interface
+	method abstract checkCanceled()V
+	method abstract files()Lkotlin/sequences/Sequence;
+	method abstract getIndex()Ldev/ide/index/IndexService;
+	method abstract getModules()Ljava/util/List;
+	method abstract targetFor(Ldev/ide/vfs/VirtualFile;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/analysis/ProjectAnalyzer
+	kind interface
+	implements dev/ide/analysis/Analyzer
+	method abstract analyze(Ldev/ide/analysis/ProjectAnalysisScope;Ldev/ide/analysis/ProjectDiagnosticSink;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/analysis/ProjectDiagnosticSink
+	kind interface
+	method abstract report(Ldev/ide/vfs/VirtualFile;Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Ljava/util/List;)V
+	method static report$default(Ldev/ide/analysis/ProjectDiagnosticSink;Ldev/ide/vfs/VirtualFile;Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Ljava/util/List;ILjava/lang/Object;)V
+dev/ide/analysis/ProjectDiagnosticSink$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static report$default(Ldev/ide/analysis/ProjectDiagnosticSink;Ldev/ide/vfs/VirtualFile;Ldev/ide/lang/dom/TextRange;Ldev/ide/lang/dom/Severity;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Ljava/util/List;ILjava/lang/Object;)V
+dev/ide/analysis/QuickFix
+	kind interface
+	method abstract computeEdits(Ldev/ide/analysis/FixContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract getKind()Ldev/ide/analysis/CodeActionKind;
+	method abstract getTitle()Ljava/lang/String;
+dev/ide/analysis/QuickFixProvider
+	kind interface
+	method abstract fixes(Ldev/ide/analysis/Diagnostic;Ldev/ide/analysis/AnalysisTarget;)Ljava/util/List;
+	method abstract getForCodes()Ljava/util/Set;
+	method getLanguages()Ljava/util/Set;
+dev/ide/analysis/QuickFixProvider$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getLanguages(Ldev/ide/analysis/QuickFixProvider;)Ljava/util/Set;
+dev/ide/analysis/RelatedRange
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/vfs/VirtualFile;Ldev/ide/lang/dom/TextRange;Ljava/lang/String;)V
+	method component1()Ldev/ide/vfs/VirtualFile;
+	method component2()Ldev/ide/lang/dom/TextRange;
+	method component3()Ljava/lang/String;
+	method copy(Ldev/ide/vfs/VirtualFile;Ldev/ide/lang/dom/TextRange;Ljava/lang/String;)Ldev/ide/analysis/RelatedRange;
+	method equals(Ljava/lang/Object;)Z
+	method getFile()Ldev/ide/vfs/VirtualFile;
+	method getMessage()Ljava/lang/String;
+	method getRange()Ldev/ide/lang/dom/TextRange;
+	method hashCode()I
+	method static copy$default(Ldev/ide/analysis/RelatedRange;Ldev/ide/vfs/VirtualFile;Ldev/ide/lang/dom/TextRange;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/analysis/RelatedRange;
+	method toString()Ljava/lang/String;
+dev/ide/analysis/WorkspaceEdit
+	kind class
+	super java/lang/Object
+	ctor (Ljava/util/Map;)V
+	field static Companion Ldev/ide/analysis/WorkspaceEdit$Companion;
+	method component1()Ljava/util/Map;
+	method copy(Ljava/util/Map;)Ldev/ide/analysis/WorkspaceEdit;
+	method equals(Ljava/lang/Object;)Z
+	method getEdits()Ljava/util/Map;
+	method getFiles()Ljava/util/Set;
+	method hashCode()I
+	method isEmpty()Z
+	method static copy$default(Ldev/ide/analysis/WorkspaceEdit;Ljava/util/Map;ILjava/lang/Object;)Ldev/ide/analysis/WorkspaceEdit;
+	method toString()Ljava/lang/String;
+dev/ide/analysis/WorkspaceEdit$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getEMPTY()Ldev/ide/analysis/WorkspaceEdit;
+	method of(Ldev/ide/vfs/VirtualFile;[Ldev/ide/lang/incremental/DocumentEdit;)Ldev/ide/analysis/WorkspaceEdit;

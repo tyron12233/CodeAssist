@@ -19,6 +19,9 @@ and follow the links into each subsystem.
   to the Create-Project gallery: declaring a template's inputs so the screen renders itself, authoring the
   project model, configuring a facet whose class is out of reach, writing generated files, and declaring the
   dependencies the host resolves afterwards.
+- [plugin-spi-3.0-migration.md](plugin-spi-3.0-migration.md) — the upgrade path for a plugin built
+  against SPI `2.10.0`: 42 members whose bytecode changed while the source did not, what `model-api` is,
+  and why `PLUGIN_API_VERSION` `4` refuses the old build rather than letting it fail mid-session.
 - [plugin-spi-2.0-migration.md](plugin-spi-2.0-migration.md) — the upgrade path for a plugin written
   against SPI `1.x`: what the opened project-model vocabularies break (an exhaustive `when`), where the
   model registries moved, and what `Module.dir` replaces.

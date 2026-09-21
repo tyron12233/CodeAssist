@@ -1,0 +1,789 @@
+# The compiled surface of io.github.tyron12233:build-api, pinned at SPI 3.0.0.
+# A plugin links against these by name and descriptor; see :spi-compat.
+# Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/build/AlwaysRun
+	kind interface
+dev/ide/build/BuildConfiguration
+	kind interface
+	method abstract getProject()Ldev/ide/model/Project;
+	method abstract getRequest()Ldev/ide/build/BuildRequest;
+	method abstract getTasks()Ldev/ide/build/TaskContainer;
+	method getBuildSystemId--V1bbYQ()Ljava/lang/String;
+	method getEnv()Ldev/ide/build/BuildEnv;
+dev/ide/build/BuildConfiguration$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getBuildSystemId--V1bbYQ(Ldev/ide/build/BuildConfiguration;)Ljava/lang/String;
+	method static getEnv(Ldev/ide/build/BuildConfiguration;)Ldev/ide/build/BuildEnv;
+dev/ide/build/BuildContext
+	kind class
+	super java/lang/Object
+	ctor (Ljava/util/List;Ldev/ide/build/BuildEnv;Ldev/ide/platform/ExtensionRegistry;Lkotlin/jvm/functions/Function1;Ldev/ide/build/ProgramInterpreter;)V
+	ctor (Ljava/util/List;Ldev/ide/build/BuildEnv;Ldev/ide/platform/ExtensionRegistry;Lkotlin/jvm/functions/Function1;Ldev/ide/build/ProgramInterpreter;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getEnv()Ldev/ide/build/BuildEnv;
+	method getExtensions()Ldev/ide/platform/ExtensionRegistry;
+	method getOnExtensionError()Lkotlin/jvm/functions/Function1;
+	method getPlugins()Ljava/util/List;
+	method getProgramInterpreter()Ldev/ide/build/ProgramInterpreter;
+dev/ide/build/BuildControl
+	kind interface
+	method abstract runAndCapture(Ljava/lang/String;Ljava/lang/String;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract runBuild()V
+	method abstract stopBuild()V
+	method static runAndCapture$default(Ldev/ide/build/BuildControl;Ljava/lang/String;Ljava/lang/String;JLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+dev/ide/build/BuildControl$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static runAndCapture$default(Ldev/ide/build/BuildControl;Ljava/lang/String;Ljava/lang/String;JLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+dev/ide/build/BuildControlKt
+	kind class
+	super java/lang/Object
+	method static getBUILD_CONTROL()Ldev/ide/platform/ServiceKey;
+dev/ide/build/BuildDiagnostic
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/build/BuildSeverity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/build/DiagnosticLocation;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ldev/ide/build/BuildSeverity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/build/DiagnosticLocation;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ldev/ide/build/BuildSeverity;
+	method component2()Ljava/lang/String;
+	method component3-sqJ9SM4()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method component5()Ldev/ide/build/DiagnosticLocation;
+	method component6()Ljava/lang/String;
+	method component7()Ljava/lang/String;
+	method component8-ibam-Qk()Ljava/lang/String;
+	method copy-albx5T8(Ldev/ide/build/BuildSeverity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/build/DiagnosticLocation;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/build/BuildDiagnostic;
+	method equals(Ljava/lang/Object;)Z
+	method getCode()Ljava/lang/String;
+	method getDetail()Ljava/lang/String;
+	method getKind-sqJ9SM4()Ljava/lang/String;
+	method getLocation()Ldev/ide/build/DiagnosticLocation;
+	method getMessage()Ljava/lang/String;
+	method getSeverity()Ldev/ide/build/BuildSeverity;
+	method getSource()Ljava/lang/String;
+	method getTask-ibam-Qk()Ljava/lang/String;
+	method hashCode()I
+	method static copy-albx5T8$default(Ldev/ide/build/BuildDiagnostic;Ldev/ide/build/BuildSeverity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/ide/build/DiagnosticLocation;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/build/BuildDiagnostic;
+	method toString()Ljava/lang/String;
+dev/ide/build/BuildEnv
+	kind interface
+	field static Companion Ldev/ide/build/BuildEnv$Companion;
+	method abstract getWorkspaceRoot()Ljava/nio/file/Path;
+	method bootClasspath(Ldev/ide/model/Module;)Ljava/util/List;
+	method buildDir(Ldev/ide/model/Module;)Ljava/nio/file/Path;
+	method generatedDir(Ldev/ide/model/Module;Ljava/lang/String;)Ljava/nio/file/Path;
+	method getSharedCachesRoot()Ljava/nio/file/Path;
+dev/ide/build/BuildEnv$Companion
+	kind class
+	super java/lang/Object
+	method of(Ldev/ide/model/Project;)Ldev/ide/build/BuildEnv;
+dev/ide/build/BuildEnv$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static bootClasspath(Ldev/ide/build/BuildEnv;Ldev/ide/model/Module;)Ljava/util/List;
+	method static buildDir(Ldev/ide/build/BuildEnv;Ldev/ide/model/Module;)Ljava/nio/file/Path;
+	method static generatedDir(Ldev/ide/build/BuildEnv;Ldev/ide/model/Module;Ljava/lang/String;)Ljava/nio/file/Path;
+	method static getSharedCachesRoot(Ldev/ide/build/BuildEnv;)Ljava/nio/file/Path;
+dev/ide/build/BuildEvent
+	kind interface
+dev/ide/build/BuildEvent$Finished
+	kind class
+	super java/lang/Object
+	implements dev/ide/build/BuildEvent
+	ctor (Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;)V
+	ctor (Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Z
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method copy(Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;)Ldev/ide/build/BuildEvent$Finished;
+	method equals(Ljava/lang/Object;)Z
+	method getFailureKind()Ljava/lang/String;
+	method getMessage()Ljava/lang/String;
+	method getModule()Ljava/lang/String;
+	method getSucceeded()Z
+	method hashCode()I
+	method static copy$default(Ldev/ide/build/BuildEvent$Finished;Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/build/BuildEvent$Finished;
+	method toString()Ljava/lang/String;
+dev/ide/build/BuildEvent$Started
+	kind class
+	super java/lang/Object
+	implements dev/ide/build/BuildEvent
+	ctor (Ljava/lang/String;Ljava/util/List;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/util/List;
+	method copy(Ljava/lang/String;Ljava/util/List;)Ldev/ide/build/BuildEvent$Started;
+	method equals(Ljava/lang/Object;)Z
+	method getModule()Ljava/lang/String;
+	method getTaskIds()Ljava/util/List;
+	method hashCode()I
+	method static copy$default(Ldev/ide/build/BuildEvent$Started;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/build/BuildEvent$Started;
+	method toString()Ljava/lang/String;
+dev/ide/build/BuildEventListener
+	kind interface
+	method abstract onBuildEvent(Ldev/ide/build/BuildEvent;)V
+dev/ide/build/BuildGoal
+	kind enum
+	super java/lang/Enum
+	field static ASSEMBLE Ldev/ide/build/BuildGoal;
+	field static BUNDLE Ldev/ide/build/BuildGoal;
+	field static CLEAN Ldev/ide/build/BuildGoal;
+	field static COMPILE_ONLY Ldev/ide/build/BuildGoal;
+	field static DEX Ldev/ide/build/BuildGoal;
+	field static INSTALL Ldev/ide/build/BuildGoal;
+	field static LINT Ldev/ide/build/BuildGoal;
+	field static PACKAGE Ldev/ide/build/BuildGoal;
+	field static TEST Ldev/ide/build/BuildGoal;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/build/BuildGoal;
+	method static values()[Ldev/ide/build/BuildGoal;
+dev/ide/build/BuildKt
+	kind class
+	super java/lang/Object
+	method static getBUILD_SYSTEM_EP()Ldev/ide/platform/ExtensionPoint;
+	method static getRUN_TASK_PROVIDER_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/build/BuildLogEntry
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ldev/ide/build/BuildLogLevel;Ljava/lang/String;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ljava/lang/String;Ldev/ide/build/BuildLogLevel;Ljava/lang/String;JLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ldev/ide/build/BuildLogLevel;
+	method component3-ibam-Qk()Ljava/lang/String;
+	method component4()J
+	method copy-AjstYY8(Ljava/lang/String;Ldev/ide/build/BuildLogLevel;Ljava/lang/String;J)Ldev/ide/build/BuildLogEntry;
+	method equals(Ljava/lang/Object;)Z
+	method getLevel()Ldev/ide/build/BuildLogLevel;
+	method getMessage()Ljava/lang/String;
+	method getTask-ibam-Qk()Ljava/lang/String;
+	method getTimestampMs()J
+	method hashCode()I
+	method static copy-AjstYY8$default(Ldev/ide/build/BuildLogEntry;Ljava/lang/String;Ldev/ide/build/BuildLogLevel;Ljava/lang/String;JILjava/lang/Object;)Ldev/ide/build/BuildLogEntry;
+	method toString()Ljava/lang/String;
+dev/ide/build/BuildLogLevel
+	kind enum
+	super java/lang/Enum
+	field static DEBUG Ldev/ide/build/BuildLogLevel;
+	field static ERROR Ldev/ide/build/BuildLogLevel;
+	field static INFO Ldev/ide/build/BuildLogLevel;
+	field static WARN Ldev/ide/build/BuildLogLevel;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/build/BuildLogLevel;
+	method static values()[Ldev/ide/build/BuildLogLevel;
+dev/ide/build/BuildLogSink
+	kind interface
+	field static Companion Ldev/ide/build/BuildLogSink$Companion;
+	method abstract log(Ldev/ide/build/BuildLogEntry;)V
+dev/ide/build/BuildLogSink$Companion
+	kind class
+	super java/lang/Object
+	method getNOOP()Ldev/ide/build/BuildLogSink;
+dev/ide/build/BuildOutcome
+	kind class
+	super java/lang/Object
+	ctor (ZLjava/util/List;Ljava/util/List;)V
+	method component1()Z
+	method component2()Ljava/util/List;
+	method component3()Ljava/util/List;
+	method copy(ZLjava/util/List;Ljava/util/List;)Ldev/ide/build/BuildOutcome;
+	method equals(Ljava/lang/Object;)Z
+	method getRanTasks()Ljava/util/List;
+	method getSkippedTasks()Ljava/util/List;
+	method getSucceeded()Z
+	method hashCode()I
+	method static copy$default(Ldev/ide/build/BuildOutcome;ZLjava/util/List;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/build/BuildOutcome;
+	method toString()Ljava/lang/String;
+dev/ide/build/BuildPlugin
+	kind interface
+	implements dev/ide/build/Plugin
+	method abstract getId()Ljava/lang/String;
+	method appliesTo(Ldev/ide/build/BuildConfiguration;)Z
+dev/ide/build/BuildPlugin$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static appliesTo(Ldev/ide/build/BuildPlugin;Ldev/ide/build/BuildConfiguration;)Z
+dev/ide/build/BuildRequest
+	kind class
+	super java/lang/Object
+	ctor (Ljava/util/List;Ljava/lang/String;Ldev/ide/build/BuildGoal;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/util/List;
+	method component2-ddrDqUg()Ljava/lang/String;
+	method component3()Ldev/ide/build/BuildGoal;
+	method copy-qGSJ_AQ(Ljava/util/List;Ljava/lang/String;Ldev/ide/build/BuildGoal;)Ldev/ide/build/BuildRequest;
+	method equals(Ljava/lang/Object;)Z
+	method getGoal()Ldev/ide/build/BuildGoal;
+	method getTargets()Ljava/util/List;
+	method getVariant-ddrDqUg()Ljava/lang/String;
+	method hashCode()I
+	method static copy-qGSJ_AQ$default(Ldev/ide/build/BuildRequest;Ljava/util/List;Ljava/lang/String;Ldev/ide/build/BuildGoal;ILjava/lang/Object;)Ldev/ide/build/BuildRequest;
+	method toString()Ljava/lang/String;
+dev/ide/build/BuildSeverity
+	kind enum
+	super java/lang/Enum
+	field static ERROR Ldev/ide/build/BuildSeverity;
+	field static INFO Ldev/ide/build/BuildSeverity;
+	field static WARNING Ldev/ide/build/BuildSeverity;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/build/BuildSeverity;
+	method static values()[Ldev/ide/build/BuildSeverity;
+dev/ide/build/BuildSystem
+	kind interface
+	method abstract createBuildGraph(Ldev/ide/model/Project;Ldev/ide/build/BuildRequest;)Ldev/ide/build/TaskGraph;
+	method abstract getId--V1bbYQ()Ljava/lang/String;
+	method abstract supports(Ldev/ide/model/ModuleType;)Z
+	method abstract tasks(Ldev/ide/model/Project;)Ljava/util/List;
+	method actionFor(Ldev/ide/build/RunTaskSpec;Ldev/ide/model/Project;Ldev/ide/build/BuildContext;)Ldev/ide/build/RunAction;
+	method createBuildGraph(Ldev/ide/model/Project;Ldev/ide/build/BuildRequest;Ldev/ide/build/BuildContext;)Ldev/ide/build/TaskGraph;
+	method runTasks(Ldev/ide/model/Project;)Ljava/util/List;
+	method sync(Ldev/ide/model/Project;Ldev/ide/platform/ProgressReporter;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/build/BuildSystem$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static actionFor(Ldev/ide/build/BuildSystem;Ldev/ide/build/RunTaskSpec;Ldev/ide/model/Project;Ldev/ide/build/BuildContext;)Ldev/ide/build/RunAction;
+	method static createBuildGraph(Ldev/ide/build/BuildSystem;Ldev/ide/model/Project;Ldev/ide/build/BuildRequest;Ldev/ide/build/BuildContext;)Ldev/ide/build/TaskGraph;
+	method static runTasks(Ldev/ide/build/BuildSystem;Ldev/ide/model/Project;)Ljava/util/List;
+	method static sync(Ldev/ide/build/BuildSystem;Ldev/ide/model/Project;Ldev/ide/platform/ProgressReporter;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/build/BuildTopics
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/build/BuildTopics;
+	method getBUILD()Ldev/ide/platform/Topic;
+	method getRUN()Ldev/ide/platform/Topic;
+dev/ide/build/ClassTransform
+	kind interface
+	method abstract getId()Ljava/lang/String;
+	method abstract transform(Ljava/lang/String;[B)[B
+	method appliesTo(Ljava/lang/String;)Z
+	method getScope()Ldev/ide/build/ClassTransformScope;
+	method getVersion()I
+dev/ide/build/ClassTransform$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static appliesTo(Ldev/ide/build/ClassTransform;Ljava/lang/String;)Z
+	method static getScope(Ldev/ide/build/ClassTransform;)Ldev/ide/build/ClassTransformScope;
+	method static getVersion(Ldev/ide/build/ClassTransform;)I
+dev/ide/build/ClassTransformKt
+	kind class
+	super java/lang/Object
+	method static getCLASS_TRANSFORM_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/build/ClassTransformScope
+	kind enum
+	super java/lang/Enum
+	field static ALL Ldev/ide/build/ClassTransformScope;
+	field static DEPENDENCIES Ldev/ide/build/ClassTransformScope;
+	field static PROJECT Ldev/ide/build/ClassTransformScope;
+	method includesDependencies()Z
+	method includesProject()Z
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/build/ClassTransformScope;
+	method static values()[Ldev/ide/build/ClassTransformScope;
+dev/ide/build/ControlledExit
+	kind class
+	super java/lang/Error
+	ctor (I)V
+	method getCode()I
+dev/ide/build/CyclicTaskDependencyException
+	kind class
+	super java/lang/RuntimeException
+	ctor (Ljava/util/List;)V
+	method getCycle()Ljava/util/List;
+dev/ide/build/DiagnosticKind
+	kind class
+	super java/lang/Object
+	field static Companion Ldev/ide/build/DiagnosticKind$Companion;
+	method equals(Ljava/lang/Object;)Z
+	method getId()Ljava/lang/String;
+	method hashCode()I
+	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
+	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
+	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
+	method static hashCode-impl(Ljava/lang/String;)I
+	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
+	method toString()Ljava/lang/String;
+dev/ide/build/DiagnosticKind$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getCOMPILER-sqJ9SM4()Ljava/lang/String;
+	method getDEPENDENCY-sqJ9SM4()Ljava/lang/String;
+	method getDEX-sqJ9SM4()Ljava/lang/String;
+	method getGENERIC-sqJ9SM4()Ljava/lang/String;
+	method getLINT-sqJ9SM4()Ljava/lang/String;
+	method getPACKAGING-sqJ9SM4()Ljava/lang/String;
+	method getRESOURCE-sqJ9SM4()Ljava/lang/String;
+dev/ide/build/DiagnosticLocation
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;IIII)V
+	ctor (Ljava/lang/String;IIIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()I
+	method component3()I
+	method component4()I
+	method component5()I
+	method copy(Ljava/lang/String;IIII)Ldev/ide/build/DiagnosticLocation;
+	method equals(Ljava/lang/Object;)Z
+	method getColumn()I
+	method getEndColumn()I
+	method getEndLine()I
+	method getLine()I
+	method getPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/build/DiagnosticLocation;Ljava/lang/String;IIIIILjava/lang/Object;)Ldev/ide/build/DiagnosticLocation;
+	method toString()Ljava/lang/String;
+dev/ide/build/DiagnosticSink
+	kind interface
+	field static Companion Ldev/ide/build/DiagnosticSink$Companion;
+	method abstract report(Ldev/ide/build/BuildDiagnostic;)V
+dev/ide/build/DiagnosticSink$Companion
+	kind class
+	super java/lang/Object
+	method getNOOP()Ldev/ide/build/DiagnosticSink;
+dev/ide/build/InterpretExecTask
+	kind class
+	super java/lang/Object
+	implements dev/ide/build/AlwaysRun
+	implements dev/ide/build/Task
+	ctor (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function0;Ldev/ide/build/ProgramInterpreter;Ljava/util/List;ZLdev/ide/build/ProgramIo;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function0;Ldev/ide/build/ProgramInterpreter;Ljava/util/List;ZLdev/ide/build/ProgramIo;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method execute(Ldev/ide/build/TaskContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method getInputs()Ldev/ide/build/TaskInputs;
+	method getName-xgv66CM()Ljava/lang/String;
+	method getOutputs()Ldev/ide/build/TaskOutputs;
+dev/ide/build/InterpretRunRequest
+	kind class
+	super java/lang/Object
+	ctor (Ljava/util/List;Ljava/lang/String;ZLjava/util/List;)V
+	ctor (Ljava/util/List;Ljava/lang/String;ZLjava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getArgs()Ljava/util/List;
+	method getClasspath()Ljava/util/List;
+	method getInstanceMain()Z
+	method getMainClass()Ljava/lang/String;
+dev/ide/build/KotlinCompilerPlugin
+	kind interface
+	method abstract appliesTo(Ldev/ide/model/Module;Ljava/util/List;)Z
+	method abstract classpath(Ldev/ide/model/Module;)Ljava/util/List;
+	method abstract getPluginId()Ljava/lang/String;
+	method getDescription()Ljava/lang/String;
+	method getDisplayName()Ljava/lang/String;
+	method getLoading()Ldev/ide/build/KotlinPluginLoading;
+	method options(Ldev/ide/model/Module;)Ljava/util/List;
+dev/ide/build/KotlinCompilerPlugin$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getDescription(Ldev/ide/build/KotlinCompilerPlugin;)Ljava/lang/String;
+	method static getDisplayName(Ldev/ide/build/KotlinCompilerPlugin;)Ljava/lang/String;
+	method static getLoading(Ldev/ide/build/KotlinCompilerPlugin;)Ldev/ide/build/KotlinPluginLoading;
+	method static options(Ldev/ide/build/KotlinCompilerPlugin;Ldev/ide/model/Module;)Ljava/util/List;
+dev/ide/build/KotlinCompilerPluginKt
+	kind class
+	super java/lang/Object
+	method static getKOTLIN_COMPILER_PLUGIN_EP()Ldev/ide/platform/ExtensionPoint;
+	method static resolveFor(Ljava/util/List;Ldev/ide/model/Module;Ljava/util/List;)Ldev/ide/build/ResolvedKotlinPlugins;
+dev/ide/build/KotlinPluginLoading
+	kind enum
+	super java/lang/Enum
+	field static COMPILE_CLASSPATH Ldev/ide/build/KotlinPluginLoading;
+	field static RUNTIME_REGISTRAR Ldev/ide/build/KotlinPluginLoading;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/build/KotlinPluginLoading;
+	method static values()[Ldev/ide/build/KotlinPluginLoading;
+dev/ide/build/Lifecycle
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/build/Lifecycle;
+	method assemble-oZchZD8(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+	method classes-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
+	method compileJava-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
+	method compileKotlin-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
+	method generateSources-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
+	method jar-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
+	method processResources-o5x2mL4(Ljava/lang/String;)Ljava/lang/String;
+	method static assemble-oZchZD8$default(Ldev/ide/build/Lifecycle;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String;
+dev/ide/build/LoggingProgramIo
+	kind class
+	super java/lang/Object
+	implements dev/ide/build/ProgramIo
+	ctor (Lkotlin/jvm/functions/Function1;)V
+	method exited(I)V
+	method getStdin()Ljava/io/InputStream;
+	method stdout(Ljava/lang/String;)V
+dev/ide/build/Plugin
+	kind interface
+	method abstract apply(Ldev/ide/build/BuildConfiguration;)V
+dev/ide/build/PluginsKt
+	kind class
+	super java/lang/Object
+	method static getBUILD_PLUGIN_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/build/ProgramInterpreter
+	kind interface
+	method abstract run(Ldev/ide/build/InterpretRunRequest;Ldev/ide/build/ProgramIo;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev/ide/build/ProgramIo
+	kind interface
+	method abstract getStdin()Ljava/io/InputStream;
+	method abstract stdout(Ljava/lang/String;)V
+	method exited(I)V
+	method frame(Ljava/lang/String;IIJ)V
+	method started()V
+	method windowed(Ldev/ide/build/RunWindow;)V
+dev/ide/build/ProgramIo$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static exited(Ldev/ide/build/ProgramIo;I)V
+	method static frame(Ldev/ide/build/ProgramIo;Ljava/lang/String;IIJ)V
+	method static started(Ldev/ide/build/ProgramIo;)V
+	method static windowed(Ldev/ide/build/ProgramIo;Ldev/ide/build/RunWindow;)V
+dev/ide/build/ResolvedKotlinPlugins
+	kind class
+	super java/lang/Object
+	ctor (Ljava/util/List;Ljava/util/List;Ljava/util/List;)V
+	ctor (Ljava/util/List;Ljava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/build/ResolvedKotlinPlugins$Companion;
+	method component1()Ljava/util/List;
+	method component2()Ljava/util/List;
+	method component3()Ljava/util/List;
+	method copy(Ljava/util/List;Ljava/util/List;Ljava/util/List;)Ldev/ide/build/ResolvedKotlinPlugins;
+	method equals(Ljava/lang/Object;)Z
+	method getClasspaths()Ljava/util/List;
+	method getOptions()Ljava/util/List;
+	method getRuntimeClasspaths()Ljava/util/List;
+	method hashCode()I
+	method static copy$default(Ldev/ide/build/ResolvedKotlinPlugins;Ljava/util/List;Ljava/util/List;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/build/ResolvedKotlinPlugins;
+	method toString()Ljava/lang/String;
+dev/ide/build/ResolvedKotlinPlugins$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getEMPTY()Ldev/ide/build/ResolvedKotlinPlugins;
+dev/ide/build/RunAction
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ldev/ide/build/TaskGraph;Ljava/lang/String;Lkotlin/jvm/functions/Function2;)V
+	ctor (Ljava/lang/String;Ldev/ide/build/TaskGraph;Ljava/lang/String;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getBanner()Ljava/lang/String;
+	method getGraph()Ldev/ide/build/TaskGraph;
+	method getHeader()Ljava/lang/String;
+	method getOnSuccess()Lkotlin/jvm/functions/Function2;
+dev/ide/build/RunCapture
+	kind class
+	super java/lang/Object
+	ctor (ZZLjava/lang/String;Ljava/lang/Integer;Ljava/util/List;)V
+	method component1()Z
+	method component2()Z
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/Integer;
+	method component5()Ljava/util/List;
+	method copy(ZZLjava/lang/String;Ljava/lang/Integer;Ljava/util/List;)Ldev/ide/build/RunCapture;
+	method equals(Ljava/lang/Object;)Z
+	method getCompiled()Z
+	method getDiagnostics()Ljava/util/List;
+	method getExitCode()Ljava/lang/Integer;
+	method getRan()Z
+	method getStdout()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/build/RunCapture;ZZLjava/lang/String;Ljava/lang/Integer;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/build/RunCapture;
+	method toString()Ljava/lang/String;
+dev/ide/build/RunEvent
+	kind interface
+dev/ide/build/RunEvent$Finished
+	kind class
+	super java/lang/Object
+	implements dev/ide/build/RunEvent
+	ctor (Ljava/lang/String;Ljava/lang/Integer;Z)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/Integer;
+	method component3()Z
+	method copy(Ljava/lang/String;Ljava/lang/Integer;Z)Ldev/ide/build/RunEvent$Finished;
+	method equals(Ljava/lang/Object;)Z
+	method getExitCode()Ljava/lang/Integer;
+	method getModule()Ljava/lang/String;
+	method getSucceeded()Z
+	method hashCode()I
+	method static copy$default(Ldev/ide/build/RunEvent$Finished;Ljava/lang/String;Ljava/lang/Integer;ZILjava/lang/Object;)Ldev/ide/build/RunEvent$Finished;
+	method toString()Ljava/lang/String;
+dev/ide/build/RunEvent$Started
+	kind class
+	super java/lang/Object
+	implements dev/ide/build/RunEvent
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/build/RunEvent$Started;
+	method equals(Ljava/lang/Object;)Z
+	method getMainClass()Ljava/lang/String;
+	method getModule()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/build/RunEvent$Started;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/build/RunEvent$Started;
+	method toString()Ljava/lang/String;
+dev/ide/build/RunEventListener
+	kind interface
+	method abstract onRunEvent(Ldev/ide/build/RunEvent;)V
+dev/ide/build/RunKey
+	kind class
+	super java/lang/Object
+	field static CHAR_UNDEFINED C
+	field static DOWN I
+	field static INSTANCE Ldev/ide/build/RunKey;
+	field static UP I
+dev/ide/build/RunPointer
+	kind class
+	super java/lang/Object
+	field static CANCEL I
+	field static DOWN I
+	field static INSTANCE Ldev/ide/build/RunPointer;
+	field static MOVE I
+	field static UP I
+dev/ide/build/RunTaskProvider
+	kind interface
+	method abstract tasksFor(Ldev/ide/model/Module;)Ljava/util/List;
+	method actionFor(Ldev/ide/build/RunTaskSpec;Ldev/ide/model/Project;Ldev/ide/model/Module;Ldev/ide/build/BuildContext;)Ldev/ide/build/RunAction;
+dev/ide/build/RunTaskProvider$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static actionFor(Ldev/ide/build/RunTaskProvider;Ldev/ide/build/RunTaskSpec;Ldev/ide/model/Project;Ldev/ide/model/Module;Ldev/ide/build/BuildContext;)Ldev/ide/build/RunAction;
+dev/ide/build/RunTaskSpec
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/build/RunTaskSpec;
+	method equals(Ljava/lang/Object;)Z
+	method getGroup()Ljava/lang/String;
+	method getId()Ljava/lang/String;
+	method getLabel()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/build/RunTaskSpec;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/build/RunTaskSpec;
+	method toString()Ljava/lang/String;
+dev/ide/build/RunWindow
+	kind interface
+	method abstract key(IIC)V
+	method abstract pointer(IFF)V
+	method abstract resize(II)V
+	method abstract scroll(FFI)V
+dev/ide/build/SourceGenRequest
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/nio/file/Path;Ljava/util/List;Ljava/util/List;Ljava/util/Set;)V
+	ctor (Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/nio/file/Path;Ljava/util/List;Ljava/util/List;Ljava/util/Set;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getAcceptedWarnings()Ljava/util/Set;
+	method getClasspath()Ljava/util/List;
+	method getDeclaredDependencies()Ljava/util/List;
+	method getJavaSources()Ljava/util/List;
+	method getKotlinSources()Ljava/util/List;
+	method getModuleName()Ljava/lang/String;
+	method getOutputDir()Ljava/nio/file/Path;
+	method getSourceRoots()Ljava/util/List;
+dev/ide/build/SourceGenResult
+	kind class
+	super java/lang/Object
+	ctor (ZLjava/util/List;)V
+	ctor (ZLjava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/build/SourceGenResult$Companion;
+	method getMessages()Ljava/util/List;
+	method getSuccess()Z
+dev/ide/build/SourceGenResult$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getOK()Ldev/ide/build/SourceGenResult;
+dev/ide/build/SourceGenerator
+	kind interface
+	method abstract appliesTo(Ldev/ide/build/SourceGenRequest;)Z
+	method abstract generate(Ldev/ide/build/SourceGenRequest;)Ldev/ide/build/SourceGenResult;
+	method abstract getId()Ljava/lang/String;
+dev/ide/build/SourceGeneratorKt
+	kind class
+	super java/lang/Object
+	method static getSOURCE_GENERATOR_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/build/SyncResult
+	kind class
+	super java/lang/Object
+	ctor (ZLjava/util/List;)V
+	method component1()Z
+	method component2()Ljava/util/List;
+	method copy(ZLjava/util/List;)Ldev/ide/build/SyncResult;
+	method equals(Ljava/lang/Object;)Z
+	method getMessages()Ljava/util/List;
+	method getSuccess()Z
+	method hashCode()I
+	method static copy$default(Ldev/ide/build/SyncResult;ZLjava/util/List;ILjava/lang/Object;)Ldev/ide/build/SyncResult;
+	method toString()Ljava/lang/String;
+dev/ide/build/Task
+	kind interface
+	method abstract execute(Ldev/ide/build/TaskContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract getInputs()Ldev/ide/build/TaskInputs;
+	method abstract getName-xgv66CM()Ljava/lang/String;
+	method abstract getOutputs()Ldev/ide/build/TaskOutputs;
+	method getDependsOn()Ljava/util/List;
+	method getMustRunAfter()Ljava/util/List;
+	method getMustRunBefore()Ljava/util/List;
+dev/ide/build/Task$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getDependsOn(Ldev/ide/build/Task;)Ljava/util/List;
+	method static getMustRunAfter(Ldev/ide/build/Task;)Ljava/util/List;
+	method static getMustRunBefore(Ldev/ide/build/Task;)Ljava/util/List;
+dev/ide/build/TaskContainer
+	kind interface
+	method abstract build()Ldev/ide/build/TaskGraph;
+	method abstract configureEach(Lkotlin/jvm/functions/Function1;)V
+	method abstract named-NOY6EH0(Ljava/lang/String;)Ldev/ide/build/TaskProvider;
+	method abstract register-Se5Was0(Ljava/lang/String;Lkotlin/jvm/functions/Function0;)Ldev/ide/build/TaskProvider;
+dev/ide/build/TaskContext
+	kind interface
+	method abstract checkCanceled()V
+	method abstract getProgress()Ldev/ide/platform/ProgressReporter;
+	method getBuildLog()Ldev/ide/build/BuildLogSink;
+	method getDiagnostics()Ldev/ide/build/DiagnosticSink;
+	method logger()Lkotlin/jvm/functions/Function1;
+dev/ide/build/TaskContext$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getBuildLog(Ldev/ide/build/TaskContext;)Ldev/ide/build/BuildLogSink;
+	method static getDiagnostics(Ldev/ide/build/TaskContext;)Ldev/ide/build/DiagnosticSink;
+	method static logger(Ldev/ide/build/TaskContext;)Lkotlin/jvm/functions/Function1;
+dev/ide/build/TaskDescriptor
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/build/TaskDescriptor;
+	method equals(Ljava/lang/Object;)Z
+	method getDescription()Ljava/lang/String;
+	method getGroup()Ljava/lang/String;
+	method getName()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/build/TaskDescriptor;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/build/TaskDescriptor;
+	method toString()Ljava/lang/String;
+dev/ide/build/TaskExecutor
+	kind interface
+	method abstract execute(Ldev/ide/build/TaskGraph;Ldev/ide/build/TaskContext;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static execute$default(Ldev/ide/build/TaskExecutor;Ldev/ide/build/TaskGraph;Ldev/ide/build/TaskContext;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+dev/ide/build/TaskExecutor$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static execute$default(Ldev/ide/build/TaskExecutor;Ldev/ide/build/TaskGraph;Ldev/ide/build/TaskContext;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+dev/ide/build/TaskFingerprintsKt
+	kind class
+	super java/lang/Object
+	method static hex(Ljava/security/MessageDigest;)Ljava/lang/String;
+	method static put(Ljava/security/MessageDigest;Ljava/lang/String;)V
+	method static sha256()Ljava/security/MessageDigest;
+dev/ide/build/TaskGraph
+	kind interface
+	method abstract dependencies(Ldev/ide/build/Task;)Ljava/util/List;
+	method abstract getTasks()Ljava/util/List;
+	method abstract topologicalLevels()Ljava/util/List;
+dev/ide/build/TaskInputs
+	kind interface
+	method abstract classpath(Ljava/lang/String;Ldev/ide/model/ClasspathSnapshot;)V
+	method abstract files(Ljava/lang/String;Ljava/lang/Iterable;)V
+	method abstract fingerprint-Q9wPEHw()Ljava/lang/String;
+	method abstract property(Ljava/lang/String;Ljava/lang/Object;)V
+	method declaredPaths()Ljava/util/Set;
+	method isEmpty()Z
+dev/ide/build/TaskInputs$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static declaredPaths(Ldev/ide/build/TaskInputs;)Ljava/util/Set;
+	method static isEmpty(Ldev/ide/build/TaskInputs;)Z
+dev/ide/build/TaskInputsImpl
+	kind class
+	super java/lang/Object
+	implements dev/ide/build/TaskInputs
+	ctor ()V
+	method classpath(Ljava/lang/String;Ldev/ide/model/ClasspathSnapshot;)V
+	method declaredPaths()Ljava/util/Set;
+	method dirPaths(Ljava/lang/String;Ljava/lang/Iterable;)V
+	method dirs(Ljava/lang/String;Ljava/lang/Iterable;)V
+	method filePaths(Ljava/lang/String;Ljava/lang/Iterable;)V
+	method files(Ljava/lang/String;Ljava/lang/Iterable;)V
+	method fingerprint-Q9wPEHw()Ljava/lang/String;
+	method isEmpty()Z
+	method property(Ljava/lang/String;Ljava/lang/Object;)V
+dev/ide/build/TaskName
+	kind class
+	super java/lang/Object
+	method equals(Ljava/lang/Object;)Z
+	method getValue()Ljava/lang/String;
+	method hashCode()I
+	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
+	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
+	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
+	method static hashCode-impl(Ljava/lang/String;)I
+	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
+	method toString()Ljava/lang/String;
+dev/ide/build/TaskOutputs
+	kind interface
+	method abstract dir(Ljava/lang/String;Ldev/ide/vfs/VirtualFile;)V
+	method abstract files(Ljava/lang/String;Ljava/lang/Iterable;)V
+	method abstract fingerprint-Q9wPEHw()Ljava/lang/String;
+	method declaredPaths()Ljava/util/Set;
+dev/ide/build/TaskOutputs$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static declaredPaths(Ldev/ide/build/TaskOutputs;)Ljava/util/Set;
+dev/ide/build/TaskOutputsImpl
+	kind class
+	super java/lang/Object
+	implements dev/ide/build/TaskOutputs
+	ctor ()V
+	method declaredPaths()Ljava/util/Set;
+	method dir(Ljava/lang/String;Ldev/ide/vfs/VirtualFile;)V
+	method dirPath(Ljava/lang/String;Ljava/nio/file/Path;)V
+	method filePath(Ljava/lang/String;Ljava/nio/file/Path;)V
+	method files(Ljava/lang/String;Ljava/lang/Iterable;)V
+	method fingerprint-Q9wPEHw()Ljava/lang/String;
+dev/ide/build/TaskProvider
+	kind interface
+	method abstract configure(Lkotlin/jvm/functions/Function1;)Ldev/ide/build/TaskProvider;
+	method abstract getName-xgv66CM()Ljava/lang/String;
+dev/ide/build/TaskResult
+	kind interface
+dev/ide/build/TaskResult$Failed
+	kind class
+	super java/lang/Object
+	implements dev/ide/build/TaskResult
+	ctor (Ljava/lang/String;Ljava/lang/Throwable;)V
+	ctor (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/Throwable;
+	method copy(Ljava/lang/String;Ljava/lang/Throwable;)Ldev/ide/build/TaskResult$Failed;
+	method equals(Ljava/lang/Object;)Z
+	method getCause()Ljava/lang/Throwable;
+	method getMessage()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/build/TaskResult$Failed;Ljava/lang/String;Ljava/lang/Throwable;ILjava/lang/Object;)Ldev/ide/build/TaskResult$Failed;
+	method toString()Ljava/lang/String;
+dev/ide/build/TaskResult$Success
+	kind class
+	super java/lang/Object
+	implements dev/ide/build/TaskResult
+	field static INSTANCE Ldev/ide/build/TaskResult$Success;
+dev/ide/build/TaskResult$UpToDate
+	kind class
+	super java/lang/Object
+	implements dev/ide/build/TaskResult
+	field static INSTANCE Ldev/ide/build/TaskResult$UpToDate;
+dev/ide/build/TaskSpec
+	kind interface
+	method abstract dependsOn([Ljava/lang/Object;)V
+	method abstract getName-xgv66CM()Ljava/lang/String;
+	method abstract mustRunAfter([Ljava/lang/Object;)V
+	method abstract mustRunBefore([Ljava/lang/Object;)V
+dev/ide/build/VariantSelector
+	kind class
+	super java/lang/Object
+	method equals(Ljava/lang/Object;)Z
+	method getName()Ljava/lang/String;
+	method hashCode()I
+	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
+	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
+	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
+	method static hashCode-impl(Ljava/lang/String;)I
+	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
+	method toString()Ljava/lang/String;

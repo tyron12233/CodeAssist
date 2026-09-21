@@ -1,0 +1,313 @@
+# The compiled surface of io.github.tyron12233:block-api, pinned at SPI 3.0.0.
+# A plugin links against these by name and descriptor; see :spi-compat.
+# Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/block/BlockEdit
+	kind interface
+dev/ide/block/BlockField
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;ZLdev/ide/lang/dom/TextRange;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;ZLdev/ide/lang/dom/TextRange;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/block/BlockField$Companion;
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Z
+	method component4()Ldev/ide/lang/dom/TextRange;
+	method copy(Ljava/lang/String;Ljava/lang/String;ZLdev/ide/lang/dom/TextRange;)Ldev/ide/block/BlockField;
+	method equals(Ljava/lang/Object;)Z
+	method getEditable()Z
+	method getRange()Ldev/ide/lang/dom/TextRange;
+	method getRole()Ljava/lang/String;
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/BlockField;Ljava/lang/String;Ljava/lang/String;ZLdev/ide/lang/dom/TextRange;ILjava/lang/Object;)Ldev/ide/block/BlockField;
+	method toString()Ljava/lang/String;
+dev/ide/block/BlockField$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method chrome(Ljava/lang/String;Ldev/ide/lang/dom/TextRange;)Ldev/ide/block/BlockField;
+	method static chrome$default(Ldev/ide/block/BlockField$Companion;Ljava/lang/String;Ldev/ide/lang/dom/TextRange;ILjava/lang/Object;)Ldev/ide/block/BlockField;
+dev/ide/block/BlockId
+	kind class
+	super java/lang/Object
+	method equals(Ljava/lang/Object;)Z
+	method getValue()Ljava/lang/String;
+	method hashCode()I
+	method static constructor-impl(Ljava/lang/String;)Ljava/lang/String;
+	method static equals-impl(Ljava/lang/String;Ljava/lang/Object;)Z
+	method static equals-impl0(Ljava/lang/String;Ljava/lang/String;)Z
+	method static hashCode-impl(Ljava/lang/String;)I
+	method static toString-impl(Ljava/lang/String;)Ljava/lang/String;
+	method toString()Ljava/lang/String;
+dev/ide/block/BlockMapping
+	kind interface
+	method abstract getHandles()Ljava/util/Set;
+	method abstract getLanguages()Ljava/util/Set;
+	method abstract template()Ldev/ide/block/BlockTemplate;
+	method project(Ldev/ide/lang/dom/DomNode;Ldev/ide/block/ProjectionContext;)Ldev/ide/block/BlockNode;
+	method serialize(Ldev/ide/block/BlockNode;)Ljava/lang/String;
+dev/ide/block/BlockMapping$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static project(Ldev/ide/block/BlockMapping;Ldev/ide/lang/dom/DomNode;Ldev/ide/block/ProjectionContext;)Ldev/ide/block/BlockNode;
+	method static serialize(Ldev/ide/block/BlockMapping;Ldev/ide/block/BlockNode;)Ljava/lang/String;
+dev/ide/block/BlockMappingKt
+	kind class
+	super java/lang/Object
+	method static defaultSerialize(Ldev/ide/block/BlockNode;)Ljava/lang/String;
+	method static getBLOCK_MAPPING_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/block/BlockNode
+	kind interface
+	method abstract getAnchor()Ldev/ide/lang/dom/DomNode;
+	method abstract getId-EhzzDi8()Ljava/lang/String;
+	method abstract getKind-Iaadglk()Ljava/lang/String;
+	method abstract getParts()Ljava/util/List;
+	method abstract getRange()Ldev/ide/lang/dom/TextRange;
+	method getFields()Ljava/util/List;
+	method getLabel()Ljava/lang/String;
+	method getSlots()Ljava/util/List;
+	method getValueKind()Ldev/ide/block/ValueKind;
+dev/ide/block/BlockNode$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getFields(Ldev/ide/block/BlockNode;)Ljava/util/List;
+	method static getLabel(Ldev/ide/block/BlockNode;)Ljava/lang/String;
+	method static getSlots(Ldev/ide/block/BlockNode;)Ljava/util/List;
+	method static getValueKind(Ldev/ide/block/BlockNode;)Ldev/ide/block/ValueKind;
+dev/ide/block/BlockPart
+	kind interface
+dev/ide/block/BlockPart$Field
+	kind class
+	super java/lang/Object
+	implements dev/ide/block/BlockPart
+	ctor (Ldev/ide/block/BlockField;)V
+	method component1()Ldev/ide/block/BlockField;
+	method copy(Ldev/ide/block/BlockField;)Ldev/ide/block/BlockPart$Field;
+	method equals(Ljava/lang/Object;)Z
+	method getField()Ldev/ide/block/BlockField;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/BlockPart$Field;Ldev/ide/block/BlockField;ILjava/lang/Object;)Ldev/ide/block/BlockPart$Field;
+	method toString()Ljava/lang/String;
+dev/ide/block/BlockPart$Slot
+	kind class
+	super java/lang/Object
+	implements dev/ide/block/BlockPart
+	ctor (Ldev/ide/block/BlockSlot;)V
+	method component1()Ldev/ide/block/BlockSlot;
+	method copy(Ldev/ide/block/BlockSlot;)Ldev/ide/block/BlockPart$Slot;
+	method equals(Ljava/lang/Object;)Z
+	method getSlot()Ldev/ide/block/BlockSlot;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/BlockPart$Slot;Ldev/ide/block/BlockSlot;ILjava/lang/Object;)Ldev/ide/block/BlockPart$Slot;
+	method toString()Ljava/lang/String;
+dev/ide/block/BlockProjectionService
+	kind interface
+	method abstract computeEdit(Ldev/ide/block/BlockTree;Ljava/lang/CharSequence;Ldev/ide/block/BlockEdit;)Ljava/util/List;
+	method abstract project(Ldev/ide/lang/dom/ParsedFile;)Ldev/ide/block/BlockTree;
+	method blockAt(Ldev/ide/block/BlockTree;I)Ldev/ide/block/BlockNode;
+dev/ide/block/BlockProjectionService$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static blockAt(Ldev/ide/block/BlockProjectionService;Ldev/ide/block/BlockTree;I)Ldev/ide/block/BlockNode;
+dev/ide/block/BlockRef
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1-EhzzDi8()Ljava/lang/String;
+	method copy-TkmiAxo(Ljava/lang/String;)Ldev/ide/block/BlockRef;
+	method equals(Ljava/lang/Object;)Z
+	method getId-EhzzDi8()Ljava/lang/String;
+	method hashCode()I
+	method static copy-TkmiAxo$default(Ldev/ide/block/BlockRef;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/block/BlockRef;
+	method toString()Ljava/lang/String;
+dev/ide/block/BlockSlot
+	kind interface
+	method abstract getCategory()Ldev/ide/block/SlotCategory;
+	method abstract getChildren()Ljava/util/List;
+	method abstract getMultiple()Z
+	method abstract getRange()Ldev/ide/lang/dom/TextRange;
+	method getValueKind()Ldev/ide/block/ValueKind;
+dev/ide/block/BlockSlot$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getValueKind(Ldev/ide/block/BlockSlot;)Ldev/ide/block/ValueKind;
+dev/ide/block/BlockTemplate
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ldev/ide/block/SlotCategory;Ljava/lang/String;Ljava/util/List;)V
+	ctor (Ljava/lang/String;Ldev/ide/block/SlotCategory;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/block/BlockTemplate$Companion;
+	field static PLACEHOLDER C
+	method component1()Ljava/lang/String;
+	method component2()Ldev/ide/block/SlotCategory;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/util/List;
+	method copy(Ljava/lang/String;Ldev/ide/block/SlotCategory;Ljava/lang/String;Ljava/util/List;)Ldev/ide/block/BlockTemplate;
+	method equals(Ljava/lang/Object;)Z
+	method getCategory()Ldev/ide/block/SlotCategory;
+	method getDefaultText()Ljava/lang/String;
+	method getLabel()Ljava/lang/String;
+	method getSlots()Ljava/util/List;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/BlockTemplate;Ljava/lang/String;Ldev/ide/block/SlotCategory;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/block/BlockTemplate;
+	method toString()Ljava/lang/String;
+dev/ide/block/BlockTemplate$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+dev/ide/block/BlockTree
+	kind interface
+	method abstract block-TkmiAxo(Ljava/lang/String;)Ldev/ide/block/BlockNode;
+	method abstract blockAt(I)Ldev/ide/block/BlockNode;
+	method abstract getRoot()Ldev/ide/block/BlockNode;
+	method abstract getVersion()J
+dev/ide/block/Delete
+	kind class
+	super java/lang/Object
+	implements dev/ide/block/BlockEdit
+	ctor (Ldev/ide/block/BlockRef;)V
+	method component1()Ldev/ide/block/BlockRef;
+	method copy(Ldev/ide/block/BlockRef;)Ldev/ide/block/Delete;
+	method equals(Ljava/lang/Object;)Z
+	method getBlock()Ldev/ide/block/BlockRef;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/Delete;Ldev/ide/block/BlockRef;ILjava/lang/Object;)Ldev/ide/block/Delete;
+	method toString()Ljava/lang/String;
+dev/ide/block/InsertTemplate
+	kind class
+	super java/lang/Object
+	implements dev/ide/block/BlockEdit
+	ctor (Ldev/ide/block/SlotRef;Ldev/ide/block/BlockTemplate;)V
+	method component1()Ldev/ide/block/SlotRef;
+	method component2()Ldev/ide/block/BlockTemplate;
+	method copy(Ldev/ide/block/SlotRef;Ldev/ide/block/BlockTemplate;)Ldev/ide/block/InsertTemplate;
+	method equals(Ljava/lang/Object;)Z
+	method getAt()Ldev/ide/block/SlotRef;
+	method getTemplate()Ldev/ide/block/BlockTemplate;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/InsertTemplate;Ldev/ide/block/SlotRef;Ldev/ide/block/BlockTemplate;ILjava/lang/Object;)Ldev/ide/block/InsertTemplate;
+	method toString()Ljava/lang/String;
+dev/ide/block/Move
+	kind class
+	super java/lang/Object
+	implements dev/ide/block/BlockEdit
+	ctor (Ldev/ide/block/BlockRef;Ldev/ide/block/SlotRef;)V
+	method component1()Ldev/ide/block/BlockRef;
+	method component2()Ldev/ide/block/SlotRef;
+	method copy(Ldev/ide/block/BlockRef;Ldev/ide/block/SlotRef;)Ldev/ide/block/Move;
+	method equals(Ljava/lang/Object;)Z
+	method getBlock()Ldev/ide/block/BlockRef;
+	method getTo()Ldev/ide/block/SlotRef;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/Move;Ldev/ide/block/BlockRef;Ldev/ide/block/SlotRef;ILjava/lang/Object;)Ldev/ide/block/Move;
+	method toString()Ljava/lang/String;
+dev/ide/block/ProjectionContext
+	kind interface
+	method abstract block-bnSY5Jo(Ldev/ide/lang/dom/DomNode;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ldev/ide/block/ValueKind;)Ldev/ide/block/BlockNode;
+	method abstract carve(Ldev/ide/lang/dom/DomNode;)Ldev/ide/block/BlockNode;
+	method abstract child(Ldev/ide/lang/dom/DomNode;)Ldev/ide/block/BlockNode;
+	method abstract field(Ljava/lang/String;Ljava/lang/String;ZLdev/ide/lang/dom/TextRange;)Ldev/ide/block/BlockField;
+	method abstract getSource()Ljava/lang/CharSequence;
+	method abstract slot(Ldev/ide/block/SlotCategory;Ljava/util/List;ZLdev/ide/lang/dom/TextRange;Ldev/ide/block/ValueKind;)Ldev/ide/block/BlockSlot;
+	method abstract textOf(Ldev/ide/lang/dom/TextRange;)Ljava/lang/CharSequence;
+	method static block-bnSY5Jo$default(Ldev/ide/block/ProjectionContext;Ldev/ide/lang/dom/DomNode;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ldev/ide/block/ValueKind;ILjava/lang/Object;)Ldev/ide/block/BlockNode;
+	method static field$default(Ldev/ide/block/ProjectionContext;Ljava/lang/String;Ljava/lang/String;ZLdev/ide/lang/dom/TextRange;ILjava/lang/Object;)Ldev/ide/block/BlockField;
+	method static slot$default(Ldev/ide/block/ProjectionContext;Ldev/ide/block/SlotCategory;Ljava/util/List;ZLdev/ide/lang/dom/TextRange;Ldev/ide/block/ValueKind;ILjava/lang/Object;)Ldev/ide/block/BlockSlot;
+dev/ide/block/ProjectionContext$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static block-bnSY5Jo$default(Ldev/ide/block/ProjectionContext;Ldev/ide/lang/dom/DomNode;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ldev/ide/block/ValueKind;ILjava/lang/Object;)Ldev/ide/block/BlockNode;
+	method static field$default(Ldev/ide/block/ProjectionContext;Ljava/lang/String;Ljava/lang/String;ZLdev/ide/lang/dom/TextRange;ILjava/lang/Object;)Ldev/ide/block/BlockField;
+	method static slot$default(Ldev/ide/block/ProjectionContext;Ldev/ide/block/SlotCategory;Ljava/util/List;ZLdev/ide/lang/dom/TextRange;Ldev/ide/block/ValueKind;ILjava/lang/Object;)Ldev/ide/block/BlockSlot;
+dev/ide/block/ReplaceWithText
+	kind class
+	super java/lang/Object
+	implements dev/ide/block/BlockEdit
+	ctor (Ldev/ide/block/SlotRef;Ljava/lang/String;)V
+	method component1()Ldev/ide/block/SlotRef;
+	method component2()Ljava/lang/String;
+	method copy(Ldev/ide/block/SlotRef;Ljava/lang/String;)Ldev/ide/block/ReplaceWithText;
+	method equals(Ljava/lang/Object;)Z
+	method getSlot()Ldev/ide/block/SlotRef;
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/ReplaceWithText;Ldev/ide/block/SlotRef;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/block/ReplaceWithText;
+	method toString()Ljava/lang/String;
+dev/ide/block/SetField
+	kind class
+	super java/lang/Object
+	implements dev/ide/block/BlockEdit
+	ctor (Ldev/ide/block/BlockRef;Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ldev/ide/block/BlockRef;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method copy(Ldev/ide/block/BlockRef;Ljava/lang/String;Ljava/lang/String;)Ldev/ide/block/SetField;
+	method equals(Ljava/lang/Object;)Z
+	method getBlock()Ldev/ide/block/BlockRef;
+	method getRole()Ljava/lang/String;
+	method getText()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/SetField;Ldev/ide/block/BlockRef;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/block/SetField;
+	method toString()Ljava/lang/String;
+dev/ide/block/SlotCategory
+	kind enum
+	super java/lang/Enum
+	field static ARGUMENT Ldev/ide/block/SlotCategory;
+	field static DECLARATION Ldev/ide/block/SlotCategory;
+	field static EXPRESSION Ldev/ide/block/SlotCategory;
+	field static MODIFIER Ldev/ide/block/SlotCategory;
+	field static NAME Ldev/ide/block/SlotCategory;
+	field static OPAQUE Ldev/ide/block/SlotCategory;
+	field static PARAMETER Ldev/ide/block/SlotCategory;
+	field static STATEMENT Ldev/ide/block/SlotCategory;
+	field static TYPE Ldev/ide/block/SlotCategory;
+	method accepts(Ldev/ide/block/SlotCategory;)Z
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/block/SlotCategory;
+	method static values()[Ldev/ide/block/SlotCategory;
+dev/ide/block/SlotRef
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;IIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ljava/lang/String;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1-EhzzDi8()Ljava/lang/String;
+	method component2()I
+	method component3()I
+	method copy-0pyA3Do(Ljava/lang/String;II)Ldev/ide/block/SlotRef;
+	method equals(Ljava/lang/Object;)Z
+	method getIndex()I
+	method getOwner-EhzzDi8()Ljava/lang/String;
+	method getSlotIndex()I
+	method hashCode()I
+	method static copy-0pyA3Do$default(Ldev/ide/block/SlotRef;Ljava/lang/String;IIILjava/lang/Object;)Ldev/ide/block/SlotRef;
+	method toString()Ljava/lang/String;
+dev/ide/block/ValueKind
+	kind enum
+	super java/lang/Enum
+	field static BOOLEAN Ldev/ide/block/ValueKind;
+	field static NUMBER Ldev/ide/block/ValueKind;
+	field static OBJECT Ldev/ide/block/ValueKind;
+	field static STRING Ldev/ide/block/ValueKind;
+	field static TYPE Ldev/ide/block/ValueKind;
+	field static UNKNOWN Ldev/ide/block/ValueKind;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/block/ValueKind;
+	method static values()[Ldev/ide/block/ValueKind;
+dev/ide/block/ValueKindOracle
+	kind interface
+	method abstract producedKind(Ldev/ide/lang/dom/DomNode;)Ldev/ide/block/ValueKind;
+dev/ide/block/Wrap
+	kind class
+	super java/lang/Object
+	implements dev/ide/block/BlockEdit
+	ctor (Ldev/ide/block/BlockRef;Ldev/ide/block/BlockTemplate;)V
+	method component1()Ldev/ide/block/BlockRef;
+	method component2()Ldev/ide/block/BlockTemplate;
+	method copy(Ldev/ide/block/BlockRef;Ldev/ide/block/BlockTemplate;)Ldev/ide/block/Wrap;
+	method equals(Ljava/lang/Object;)Z
+	method getBlock()Ldev/ide/block/BlockRef;
+	method getWith()Ldev/ide/block/BlockTemplate;
+	method hashCode()I
+	method static copy$default(Ldev/ide/block/Wrap;Ldev/ide/block/BlockRef;Ldev/ide/block/BlockTemplate;ILjava/lang/Object;)Ldev/ide/block/Wrap;
+	method toString()Ljava/lang/String;

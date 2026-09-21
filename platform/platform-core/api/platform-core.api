@@ -1,0 +1,658 @@
+# The compiled surface of io.github.tyron12233:platform-core, pinned at SPI 3.0.0.
+# A plugin links against these by name and descriptor; see :spi-compat.
+# Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/platform/EngineBreadcrumb
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/platform/EngineBreadcrumb;
+	method clear()V
+	method init(Ljava/nio/file/Path;)V
+	method noteIndexBuilding(Z)V
+	method readLast()Ldev/ide/platform/EngineBreadcrumb$Crumb;
+	method record(Ljava/lang/String;)V
+dev/ide/platform/EngineBreadcrumb$Crumb
+	kind class
+	super java/lang/Object
+	ctor (JLjava/lang/String;Ljava/lang/String;Z)V
+	ctor (JLjava/lang/String;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()J
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Z
+	method copy(JLjava/lang/String;Ljava/lang/String;Z)Ldev/ide/platform/EngineBreadcrumb$Crumb;
+	method equals(Ljava/lang/Object;)Z
+	method getEpochMillis()J
+	method getIndexBuilding()Z
+	method getOp()Ljava/lang/String;
+	method getThread()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/EngineBreadcrumb$Crumb;JLjava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/platform/EngineBreadcrumb$Crumb;
+	method toString()Ljava/lang/String;
+dev/ide/platform/EngineLane
+	kind enum
+	super java/lang/Enum
+	field static BACKGROUND Ldev/ide/platform/EngineLane;
+	field static INTERACTIVE Ldev/ide/platform/EngineLane;
+	field static PREVIEW Ldev/ide/platform/EngineLane;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/platform/EngineLane;
+	method static values()[Ldev/ide/platform/EngineLane;
+dev/ide/platform/EnginePhase
+	kind enum
+	super java/lang/Enum
+	field static DONE Ldev/ide/platform/EnginePhase;
+	field static PREEMPTED Ldev/ide/platform/EnginePhase;
+	field static QUEUED Ldev/ide/platform/EnginePhase;
+	field static RUNNING Ldev/ide/platform/EnginePhase;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/platform/EnginePhase;
+	method static values()[Ldev/ide/platform/EnginePhase;
+dev/ide/platform/EngineScheduler
+	kind class
+	super java/lang/Object
+	ctor ()V
+	ctor (Lkotlinx/coroutines/CoroutineDispatcher;Ldev/ide/platform/EngineSchedulerObserver;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Lkotlinx/coroutines/CoroutineDispatcher;Ldev/ide/platform/EngineSchedulerObserver;JLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method background(Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method getDispatcher()Lkotlinx/coroutines/CoroutineDispatcher;
+	method interactive(Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method preview(Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method static background$default(Ldev/ide/platform/EngineScheduler;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static interactive$default(Ldev/ide/platform/EngineScheduler;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	method static preview$default(Ldev/ide/platform/EngineScheduler;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+dev/ide/platform/EngineSchedulerObserver
+	kind interface
+	method abstract on(Ldev/ide/platform/EngineLane;Ldev/ide/platform/EnginePhase;Ljava/lang/String;)V
+dev/ide/platform/ForkedToolVm
+	kind class
+	super java/lang/Object
+	field static HEAP_RESERVATION_FACTOR I
+	field static INSTANCE Ldev/ide/platform/ForkedToolVm;
+	field static RESERVATION_BUDGET_FRACTION D
+	method affordableHeaps(Ljava/util/List;JD)Ljava/util/List;
+	method getLAUNCHER_THREAD_NAMES()Ljava/util/Set;
+	method isToolVmCrash(Ldev/ide/platform/NativeTombstone;)Z
+	method static affordableHeaps$default(Ldev/ide/platform/ForkedToolVm;Ljava/util/List;JDILjava/lang/Object;)Ljava/util/List;
+dev/ide/platform/JvmTopicKt
+	kind class
+	super java/lang/Object
+	method static Topic(Ljava/lang/String;Ljava/lang/Class;)Ldev/ide/platform/Topic;
+dev/ide/platform/MessageBus
+	kind interface
+	method abstract connect()Ldev/ide/platform/MessageBusConnection;
+	method abstract syncPublisher(Ldev/ide/platform/Topic;)Ljava/lang/Object;
+dev/ide/platform/MessageBusConnection
+	kind interface
+	implements dev/ide/platform/Disposable
+	method abstract subscribe(Ldev/ide/platform/Topic;Ljava/lang/Object;)V
+dev/ide/platform/NativeTombstone
+	kind class
+	super java/lang/Object
+	ctor ()V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/util/List;Ljava/lang/Integer;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/util/List;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/platform/NativeTombstone$Companion;
+	field static MAX_BYTES I
+	method component1()Ljava/lang/String;
+	method component10()Ljava/lang/Integer;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/Long;
+	method component5()Ljava/lang/String;
+	method component6()Ljava/lang/String;
+	method component7()Ljava/lang/Integer;
+	method component8()Ljava/lang/String;
+	method component9()Ljava/util/List;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/util/List;Ljava/lang/Integer;)Ldev/ide/platform/NativeTombstone;
+	method equals(Ljava/lang/Object;)Z
+	method getAbortMessage()Ljava/lang/String;
+	method getArch()Ljava/lang/String;
+	method getCause()Ljava/lang/String;
+	method getFaultAddress()Ljava/lang/Long;
+	method getFaultingThread()Ljava/lang/String;
+	method getFaultingTid()Ljava/lang/Integer;
+	method getFrames()Ljava/util/List;
+	method getSignal()Ljava/lang/String;
+	method getSignalCode()Ljava/lang/String;
+	method getUptimeSeconds()Ljava/lang/Integer;
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/NativeTombstone;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/util/List;Ljava/lang/Integer;ILjava/lang/Object;)Ldev/ide/platform/NativeTombstone;
+	method static topFrames$default(Ldev/ide/platform/NativeTombstone;IILjava/lang/Object;)Ljava/lang/String;
+	method toString()Ljava/lang/String;
+	method topFrames(I)Ljava/lang/String;
+dev/ide/platform/NativeTombstone$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method parse(Ljava/io/InputStream;I)Ldev/ide/platform/NativeTombstone;
+	method static parse$default(Ldev/ide/platform/NativeTombstone$Companion;Ljava/io/InputStream;IILjava/lang/Object;)Ldev/ide/platform/NativeTombstone;
+dev/ide/platform/PlatformKt
+	kind class
+	super java/lang/Object
+	method static deliverToAll(Ljava/util/List;Lkotlin/jvm/functions/Function1;)V
+dev/ide/platform/ProcessDeath
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/platform/ProcessDeath;
+	field static REASON_SIGNALED I
+	field static SIGKILL I
+	method isSystemKill(IIZ)Z
+dev/ide/platform/RuntimeInfo
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/platform/RuntimeInfo;
+	method is32Bit()Z
+	method set32Bit(Z)V
+dev/ide/platform/ServiceContainer
+	kind interface
+	implements dev/ide/platform/Disposable
+	implements dev/ide/platform/ServiceLookup
+	method abstract evict(Ldev/ide/platform/ServiceKey;)V
+	method abstract getLevel()Ldev/ide/platform/ServiceScopeLevel;
+	method abstract getParent()Ldev/ide/platform/ServiceContainer;
+	method abstract peekService(Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+	method abstract registerService(Ldev/ide/platform/ServiceKey;Ldev/ide/platform/ServiceFactory;)V
+	method abstract registerServiceIfAbsent(Ldev/ide/platform/ServiceKey;Ldev/ide/platform/ServiceFactory;)V
+dev/ide/platform/ServiceCycleException
+	kind class
+	super java/lang/IllegalStateException
+	ctor (Ljava/util/List;)V
+	method getChain()Ljava/util/List;
+dev/ide/platform/ServiceDescriptor
+	kind class
+	super java/lang/Object
+	ctor (Ldev/ide/platform/ServiceKey;Ldev/ide/platform/ServiceScopeLevel;Ldev/ide/platform/ServiceFactory;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ldev/ide/platform/ServiceKey;Ldev/ide/platform/ServiceScopeLevel;Ldev/ide/platform/ServiceFactory;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getFactory()Ldev/ide/platform/ServiceFactory;
+	method getKey()Ldev/ide/platform/ServiceKey;
+	method getLevel()Ldev/ide/platform/ServiceScopeLevel;
+	method getPlugin-3UPrdOo()Ljava/lang/String;
+dev/ide/platform/ServiceFactory
+	kind interface
+	method abstract create(Ldev/ide/platform/ServiceScope;)Ljava/lang/Object;
+dev/ide/platform/ServiceLookup
+	kind interface
+	field static Companion Ldev/ide/platform/ServiceLookup$Companion;
+	method abstract getService(Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+	method abstract getServiceOrNull(Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+dev/ide/platform/ServiceLookup$Companion
+	kind class
+	super java/lang/Object
+	method getEmpty()Ldev/ide/platform/ServiceLookup;
+dev/ide/platform/ServiceScope
+	kind interface
+	method abstract getContainer()Ldev/ide/platform/ServiceContainer;
+	method abstract getLevel()Ldev/ide/platform/ServiceScopeLevel;
+	method abstract getParent()Ldev/ide/platform/ServiceContainer;
+	method abstract getScopeObject()Ljava/lang/Object;
+	method abstract onDispose(Ldev/ide/platform/Disposable;)V
+	method getService(Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+dev/ide/platform/ServiceScope$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getService(Ldev/ide/platform/ServiceScope;Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+dev/ide/platform/ServiceScopeLevel
+	kind enum
+	super java/lang/Enum
+	field static APPLICATION Ldev/ide/platform/ServiceScopeLevel;
+	field static MODULE Ldev/ide/platform/ServiceScopeLevel;
+	field static WORKSPACE Ldev/ide/platform/ServiceScopeLevel;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/platform/ServiceScopeLevel;
+	method static values()[Ldev/ide/platform/ServiceScopeLevel;
+dev/ide/platform/ServicesKt
+	kind class
+	super java/lang/Object
+	method static getSERVICE_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/platform/ToolClassIsolation
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/platform/ToolClassIsolation;
+	method getCHILD_FIRST_PACKAGES()Ljava/util/List;
+	method isChildFirst(Ljava/lang/String;)Z
+dev/ide/platform/ToolUrlClassLoader
+	kind class
+	super java/net/URLClassLoader
+	ctor ([Ljava/net/URL;Ljava/lang/ClassLoader;)V
+	method loadClass(Ljava/lang/String;Z)Ljava/lang/Class;
+dev/ide/platform/Topic
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Lkotlin/jvm/functions/Function1;)V
+	method getFanOut()Lkotlin/jvm/functions/Function1;
+	method getName()Ljava/lang/String;
+dev/ide/platform/impl/ApplicationContainer
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/ServiceContainer
+	ctor (Ldev/ide/platform/ExtensionRegistry;)V
+	ctor (Ldev/ide/platform/ExtensionRegistry;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method dispose()V
+	method evict(Ldev/ide/platform/ServiceKey;)V
+	method getExtensions()Ldev/ide/platform/ExtensionRegistry;
+	method getLevel()Ldev/ide/platform/ServiceScopeLevel;
+	method getParent()Ldev/ide/platform/ServiceContainer;
+	method getService(Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+	method getServiceOrNull(Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+	method peekService(Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+	method registerService(Ldev/ide/platform/ServiceKey;Ldev/ide/platform/ServiceFactory;)V
+	method registerServiceIfAbsent(Ldev/ide/platform/ServiceKey;Ldev/ide/platform/ServiceFactory;)V
+dev/ide/platform/impl/CompositeDisposable
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/Disposable
+	ctor ()V
+	method add(Ldev/ide/platform/Disposable;)Ldev/ide/platform/Disposable;
+	method dispose()V
+	method isDisposed()Z
+	method remove(Ldev/ide/platform/Disposable;)Z
+dev/ide/platform/impl/ExtensionRegistryImpl
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/ExtensionRegistry
+	ctor ()V
+	ctor (Ldev/ide/platform/ExtensionRegistry;)V
+	ctor (Ldev/ide/platform/ExtensionRegistry;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method contributions(Ldev/ide/platform/ExtensionPoint;)Ljava/util/List;
+	method extensions(Ldev/ide/platform/ExtensionPoint;)Ljava/util/List;
+	method register-CaD5b6o(Ldev/ide/platform/ExtensionPoint;Ljava/lang/Object;Ljava/lang/String;)Ldev/ide/platform/Disposable;
+	method unregisterAll-s5lgTNk(Ljava/lang/String;)V
+dev/ide/platform/impl/MessageBusImpl
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/MessageBus
+	ctor ()V
+	method connect()Ldev/ide/platform/MessageBusConnection;
+	method syncPublisher(Ldev/ide/platform/Topic;)Ljava/lang/Object;
+dev/ide/platform/impl/ModelReadWriteLock
+	kind class
+	super java/lang/Object
+	ctor ()V
+	method getReadHoldCount()I
+	method isWriteLockedByCurrentThread()Z
+	method read(Lkotlin/jvm/functions/Function0;)Ljava/lang/Object;
+	method write(Lkotlin/jvm/functions/Function0;)Ljava/lang/Object;
+dev/ide/platform/impl/PlatformCore
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/Disposable
+	ctor ()V
+	ctor (Ldev/ide/platform/ExtensionRegistry;Ldev/ide/platform/MessageBus;Ldev/ide/platform/impl/ModelReadWriteLock;)V
+	ctor (Ldev/ide/platform/ExtensionRegistry;Ldev/ide/platform/MessageBus;Ldev/ide/platform/impl/ModelReadWriteLock;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method dispose()V
+	method getExtensions()Ldev/ide/platform/ExtensionRegistry;
+	method getMessageBus()Ldev/ide/platform/MessageBus;
+	method getModelLock()Ldev/ide/platform/impl/ModelReadWriteLock;
+	method register(Ldev/ide/platform/Disposable;)Ldev/ide/platform/Disposable;
+dev/ide/platform/impl/ServiceContainerImpl
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/ServiceContainer
+	ctor (Ldev/ide/platform/ServiceScopeLevel;Ldev/ide/platform/ServiceContainer;Ljava/lang/Object;Lkotlin/jvm/functions/Function0;)V
+	ctor (Ldev/ide/platform/ServiceScopeLevel;Ldev/ide/platform/ServiceContainer;Ljava/lang/Object;Lkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	field static Companion Ldev/ide/platform/impl/ServiceContainerImpl$Companion;
+	method dispose()V
+	method evict(Ldev/ide/platform/ServiceKey;)V
+	method getLevel()Ldev/ide/platform/ServiceScopeLevel;
+	method getParent()Ldev/ide/platform/ServiceContainer;
+	method getService(Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+	method getServiceOrNull(Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+	method peekService(Ldev/ide/platform/ServiceKey;)Ljava/lang/Object;
+	method registerService(Ldev/ide/platform/ServiceKey;Ldev/ide/platform/ServiceFactory;)V
+	method registerServiceIfAbsent(Ldev/ide/platform/ServiceKey;Ldev/ide/platform/ServiceFactory;)V
+dev/ide/platform/impl/ServiceContainerImpl$Companion
+	kind class
+	super java/lang/Object
+	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+dev/ide/platform/notify/MessageSeverity
+	kind enum
+	super java/lang/Enum
+	field static ERROR Ldev/ide/platform/notify/MessageSeverity;
+	field static INFO Ldev/ide/platform/notify/MessageSeverity;
+	field static WARNING Ldev/ide/platform/notify/MessageSeverity;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/platform/notify/MessageSeverity;
+	method static values()[Ldev/ide/platform/notify/MessageSeverity;
+dev/ide/platform/notify/ProgressHandle
+	kind interface
+	method abstract finish()V
+	method abstract getDetail()Ljava/lang/String;
+	method abstract getFraction()Ljava/lang/Float;
+	method abstract setDetail(Ljava/lang/String;)V
+	method abstract setFraction(Ljava/lang/Float;)V
+dev/ide/platform/notify/UserMessage
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ldev/ide/platform/notify/MessageSeverity;Ljava/lang/String;Lkotlin/jvm/functions/Function0;)V
+	ctor (Ljava/lang/String;Ldev/ide/platform/notify/MessageSeverity;Ljava/lang/String;Lkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getActionLabel()Ljava/lang/String;
+	method getOnAction()Lkotlin/jvm/functions/Function0;
+	method getSeverity()Ldev/ide/platform/notify/MessageSeverity;
+	method getText()Ljava/lang/String;
+dev/ide/platform/notify/UserMessages
+	kind interface
+	method abstract show(Ldev/ide/platform/notify/UserMessage;)V
+	method abstract startProgress(Ljava/lang/String;)Ldev/ide/platform/notify/ProgressHandle;
+dev/ide/platform/notify/UserMessagesKt
+	kind class
+	super java/lang/Object
+	method static error(Ldev/ide/platform/notify/UserMessages;Ljava/lang/String;)V
+	method static getUSER_MESSAGES()Ldev/ide/platform/ServiceKey;
+	method static info(Ldev/ide/platform/notify/UserMessages;Ljava/lang/String;)V
+	method static warn(Ldev/ide/platform/notify/UserMessages;Ljava/lang/String;)V
+dev/ide/platform/settings/PreferenceReader
+	kind interface
+	method abstract raw(Ljava/lang/String;)Ljava/lang/String;
+	method bool(Ljava/lang/String;Z)Z
+	method float(Ljava/lang/String;F)F
+	method int(Ljava/lang/String;I)I
+	method string(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+dev/ide/platform/settings/PreferenceReader$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static bool(Ldev/ide/platform/settings/PreferenceReader;Ljava/lang/String;Z)Z
+	method static float(Ldev/ide/platform/settings/PreferenceReader;Ljava/lang/String;F)F
+	method static int(Ldev/ide/platform/settings/PreferenceReader;Ljava/lang/String;I)I
+	method static string(Ldev/ide/platform/settings/PreferenceReader;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+dev/ide/platform/settings/PreferenceStore
+	kind interface
+	implements dev/ide/platform/settings/PreferenceReader
+	method abstract set(Ljava/lang/String;Ljava/lang/String;)V
+dev/ide/platform/settings/PreferenceStore$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static bool(Ldev/ide/platform/settings/PreferenceStore;Ljava/lang/String;Z)Z
+	method static float(Ldev/ide/platform/settings/PreferenceStore;Ljava/lang/String;F)F
+	method static int(Ldev/ide/platform/settings/PreferenceStore;Ljava/lang/String;I)I
+	method static string(Ldev/ide/platform/settings/PreferenceStore;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+dev/ide/platform/settings/SettingControl
+	kind interface
+	method abstract getAdvanced()Z
+	method abstract getDescription()Ljava/lang/String;
+	method abstract getGroup()Ljava/lang/String;
+	method abstract getKey()Ljava/lang/String;
+	method abstract getTitle()Ljava/lang/String;
+dev/ide/platform/settings/SettingControl$Action
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/settings/SettingControl
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method component5()Z
+	method component6()Z
+	method component7()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;)Ldev/ide/platform/settings/SettingControl$Action;
+	method equals(Ljava/lang/Object;)Z
+	method getAdvanced()Z
+	method getButtonLabel()Ljava/lang/String;
+	method getDescription()Ljava/lang/String;
+	method getDestructive()Z
+	method getGroup()Ljava/lang/String;
+	method getKey()Ljava/lang/String;
+	method getTitle()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/settings/SettingControl$Action;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/platform/settings/SettingControl$Action;
+	method toString()Ljava/lang/String;
+dev/ide/platform/settings/SettingControl$Choice
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/settings/SettingControl
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZLjava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method component5()Ljava/util/List;
+	method component6()Z
+	method component7()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZLjava/lang/String;)Ldev/ide/platform/settings/SettingControl$Choice;
+	method equals(Ljava/lang/Object;)Z
+	method getAdvanced()Z
+	method getDefault()Ljava/lang/String;
+	method getDescription()Ljava/lang/String;
+	method getGroup()Ljava/lang/String;
+	method getKey()Ljava/lang/String;
+	method getOptions()Ljava/util/List;
+	method getTitle()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/settings/SettingControl$Choice;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/platform/settings/SettingControl$Choice;
+	method toString()Ljava/lang/String;
+dev/ide/platform/settings/SettingControl$Choice$Option
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;)Ldev/ide/platform/settings/SettingControl$Choice$Option;
+	method equals(Ljava/lang/Object;)Z
+	method getLabel()Ljava/lang/String;
+	method getValue()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/settings/SettingControl$Choice$Option;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/ide/platform/settings/SettingControl$Choice$Option;
+	method toString()Ljava/lang/String;
+dev/ide/platform/settings/SettingControl$Color
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/settings/SettingControl
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JZLjava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JZLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()J
+	method component5()Z
+	method component6()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JZLjava/lang/String;)Ldev/ide/platform/settings/SettingControl$Color;
+	method equals(Ljava/lang/Object;)Z
+	method getAdvanced()Z
+	method getDefault()J
+	method getDescription()Ljava/lang/String;
+	method getGroup()Ljava/lang/String;
+	method getKey()Ljava/lang/String;
+	method getTitle()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/settings/SettingControl$Color;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/platform/settings/SettingControl$Color;
+	method toString()Ljava/lang/String;
+dev/ide/platform/settings/SettingControl$IntSlider
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/settings/SettingControl
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIILjava/lang/String;ZLjava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIILjava/lang/String;ZLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component10()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()I
+	method component5()I
+	method component6()I
+	method component7()I
+	method component8()Ljava/lang/String;
+	method component9()Z
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIILjava/lang/String;ZLjava/lang/String;)Ldev/ide/platform/settings/SettingControl$IntSlider;
+	method equals(Ljava/lang/Object;)Z
+	method getAdvanced()Z
+	method getDefault()I
+	method getDescription()Ljava/lang/String;
+	method getGroup()Ljava/lang/String;
+	method getKey()Ljava/lang/String;
+	method getMax()I
+	method getMin()I
+	method getStep()I
+	method getTitle()Ljava/lang/String;
+	method getUnit()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/settings/SettingControl$IntSlider;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIILjava/lang/String;ZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/platform/settings/SettingControl$IntSlider;
+	method toString()Ljava/lang/String;
+dev/ide/platform/settings/SettingControl$Shortcut
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/settings/SettingControl
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method component5()Z
+	method component6()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;)Ldev/ide/platform/settings/SettingControl$Shortcut;
+	method equals(Ljava/lang/Object;)Z
+	method getAdvanced()Z
+	method getDefault()Ljava/lang/String;
+	method getDescription()Ljava/lang/String;
+	method getGroup()Ljava/lang/String;
+	method getKey()Ljava/lang/String;
+	method getTitle()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/settings/SettingControl$Shortcut;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/platform/settings/SettingControl$Shortcut;
+	method toString()Ljava/lang/String;
+dev/ide/platform/settings/SettingControl$Text
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/settings/SettingControl
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Ljava/lang/String;
+	method component5()Ljava/lang/String;
+	method component6()Z
+	method component7()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;)Ldev/ide/platform/settings/SettingControl$Text;
+	method equals(Ljava/lang/Object;)Z
+	method getAdvanced()Z
+	method getDefault()Ljava/lang/String;
+	method getDescription()Ljava/lang/String;
+	method getGroup()Ljava/lang/String;
+	method getKey()Ljava/lang/String;
+	method getPlaceholder()Ljava/lang/String;
+	method getTitle()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/settings/SettingControl$Text;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/platform/settings/SettingControl$Text;
+	method toString()Ljava/lang/String;
+dev/ide/platform/settings/SettingControl$Toggle
+	kind class
+	super java/lang/Object
+	implements dev/ide/platform/settings/SettingControl
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()Ljava/lang/String;
+	method component4()Z
+	method component5()Z
+	method component6()Ljava/lang/String;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;)Ldev/ide/platform/settings/SettingControl$Toggle;
+	method equals(Ljava/lang/Object;)Z
+	method getAdvanced()Z
+	method getDefault()Z
+	method getDescription()Ljava/lang/String;
+	method getGroup()Ljava/lang/String;
+	method getKey()Ljava/lang/String;
+	method getTitle()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/settings/SettingControl$Toggle;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;ILjava/lang/Object;)Ldev/ide/platform/settings/SettingControl$Toggle;
+	method toString()Ljava/lang/String;
+dev/ide/platform/settings/SettingsAccess
+	kind interface
+	method abstract reader(Ldev/ide/platform/settings/SettingsPage;)Ldev/ide/platform/settings/PreferenceReader;
+dev/ide/platform/settings/SettingsKt
+	kind class
+	super java/lang/Object
+	method static getSETTINGS_ACCESS()Ldev/ide/platform/ServiceKey;
+	method static getSETTINGS_PAGE_EP()Ldev/ide/platform/ExtensionPoint;
+	method static settingsKey(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+dev/ide/platform/settings/SettingsPage
+	kind interface
+	method abstract controls()Ljava/util/List;
+	method abstract getIconId()Ljava/lang/String;
+	method abstract getId()Ljava/lang/String;
+	method abstract getTitle()Ljava/lang/String;
+	method getOrder()I
+	method getScope()Ldev/ide/platform/settings/SettingsScope;
+	method onAction(Ljava/lang/String;Ldev/ide/platform/settings/PreferenceReader;)Ljava/lang/String;
+	method onChanged(Ljava/lang/String;Ldev/ide/platform/settings/PreferenceReader;)V
+dev/ide/platform/settings/SettingsPage$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static getOrder(Ldev/ide/platform/settings/SettingsPage;)I
+	method static getScope(Ldev/ide/platform/settings/SettingsPage;)Ldev/ide/platform/settings/SettingsScope;
+	method static onAction(Ldev/ide/platform/settings/SettingsPage;Ljava/lang/String;Ldev/ide/platform/settings/PreferenceReader;)Ljava/lang/String;
+	method static onChanged(Ldev/ide/platform/settings/SettingsPage;Ljava/lang/String;Ldev/ide/platform/settings/PreferenceReader;)V
+dev/ide/platform/settings/SettingsScope
+	kind enum
+	super java/lang/Enum
+	field static APPLICATION Ldev/ide/platform/settings/SettingsScope;
+	field static PROJECT Ldev/ide/platform/settings/SettingsScope;
+	method static getEntries()Lkotlin/enums/EnumEntries;
+	method static valueOf(Ljava/lang/String;)Ldev/ide/platform/settings/SettingsScope;
+	method static values()[Ldev/ide/platform/settings/SettingsScope;
+dev/ide/platform/storage/StorageUsage
+	kind class
+	super java/lang/Object
+	field static BUILD Ljava/lang/String;
+	field static DEPENDENCIES Ljava/lang/String;
+	field static INDEX Ljava/lang/String;
+	field static INSTANCE Ldev/ide/platform/storage/StorageUsage;
+	field static LANGUAGE Ljava/lang/String;
+	field static OTHER Ljava/lang/String;
+	field static PREVIEW Ljava/lang/String;
+	field static PROJECTS Ljava/lang/String;
+	field static SDK Ljava/lang/String;
+	method clearCategory(Ljava/lang/String;Ljava/util/List;Ljava/nio/file/Path;)J
+	method getCLEARABLE()Ljava/util/Set;
+	method getDESTRUCTIVE()Ljava/util/Set;
+	method getORDER()Ljava/util/List;
+	method report(Ljava/nio/file/Path;Ljava/util/List;Ljava/nio/file/Path;)Ldev/ide/platform/storage/StorageUsage$Report;
+dev/ide/platform/storage/StorageUsage$Cat
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;J)V
+	method component1()Ljava/lang/String;
+	method component2()J
+	method copy(Ljava/lang/String;J)Ldev/ide/platform/storage/StorageUsage$Cat;
+	method equals(Ljava/lang/Object;)Z
+	method getBytes()J
+	method getId()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/storage/StorageUsage$Cat;Ljava/lang/String;JILjava/lang/Object;)Ldev/ide/platform/storage/StorageUsage$Cat;
+	method toString()Ljava/lang/String;
+dev/ide/platform/storage/StorageUsage$Proj
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;Ljava/lang/String;J)V
+	method component1()Ljava/lang/String;
+	method component2()Ljava/lang/String;
+	method component3()J
+	method copy(Ljava/lang/String;Ljava/lang/String;J)Ldev/ide/platform/storage/StorageUsage$Proj;
+	method equals(Ljava/lang/Object;)Z
+	method getBytes()J
+	method getName()Ljava/lang/String;
+	method getRootPath()Ljava/lang/String;
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/storage/StorageUsage$Proj;Ljava/lang/String;Ljava/lang/String;JILjava/lang/Object;)Ldev/ide/platform/storage/StorageUsage$Proj;
+	method toString()Ljava/lang/String;
+dev/ide/platform/storage/StorageUsage$Report
+	kind class
+	super java/lang/Object
+	ctor (Ljava/lang/String;JLjava/util/List;Ljava/util/List;)V
+	method component1()Ljava/lang/String;
+	method component2()J
+	method component3()Ljava/util/List;
+	method component4()Ljava/util/List;
+	method copy(Ljava/lang/String;JLjava/util/List;Ljava/util/List;)Ldev/ide/platform/storage/StorageUsage$Report;
+	method equals(Ljava/lang/Object;)Z
+	method getCategories()Ljava/util/List;
+	method getProjects()Ljava/util/List;
+	method getStorageRoot()Ljava/lang/String;
+	method getTotalBytes()J
+	method hashCode()I
+	method static copy$default(Ldev/ide/platform/storage/StorageUsage$Report;Ljava/lang/String;JLjava/util/List;Ljava/util/List;ILjava/lang/Object;)Ldev/ide/platform/storage/StorageUsage$Report;
+	method toString()Ljava/lang/String;

@@ -2,7 +2,7 @@
 id = "dev.codeassist.ndk"
 name = "NDK (C/C++)"
 version = "1.0.0"
-apiVersion = 3
+apiVersion = 4
 description = "Compiles C and C++ on the device. Carries a clang and an lld built to run on Android arm64, colors C/C++ in the editor, reports errors from the same compiler that builds the code, and adds a Native C++ project template."
 entryPoints = ["dev.codeassist.ndk.NdkPlugin"]
 uiEntryPoints = ["dev.codeassist.ndk.NdkUiPlugin"]
