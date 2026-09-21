@@ -1,5 +1,6 @@
 package dev.ide.deps.impl
 
+import dev.ide.deps.ArtifactKind
 import dev.ide.deps.ConflictPolicy
 import dev.ide.deps.Repository
 import dev.ide.platform.deleteFile
@@ -118,6 +119,38 @@ class ResolveOffTheJvmTest {
         assertEquals(jar, result.resolved.single().classesRoot.path)
     }
 
+    /**
+     * An Android library resolves to its CLASSES, on every platform.
+     *
+     * `androidx.*` and Material ship their code inside an `.aar`, so this is the difference between a host
+     * that can open an Android project and one that resolves nothing in it. The artifact is downloaded like
+     * any other and then unpacked to the `classes.jar` inside it, which is what goes on the classpath. Its
+     * `res/` and manifest are the build's business and are not read here (nor written at all, off the JVM).
+     */
+    @Test
+    fun anAndroidLibraryResolvesToTheClassesInsideIt() = runTest {
+        val repo = FixtureRepo()
+        repo.put("widget", "1.0", packaging = "aar")
+        val cache = ResolverCache(dir)
+
+        val result = MavenDependencyResolver(cache, ::DiskFile, repo).resolve(
+            listOf(Coordinate("g", "widget", "1.0")),
+            listOf(repository),
+            ConflictPolicy.NEWEST,
+            silent,
+        )
+
+        assertEquals(emptyList(), result.unresolved, "an .aar is not an unresolvable coordinate")
+        val artifact = result.resolved.single()
+        assertEquals(ArtifactKind.AAR, artifact.kind)
+        assertTrue(artifact.classesRoot.path.endsWith("classes.jar"), artifact.classesRoot.path)
+        assertContentEquals(
+            TINY_JAR,
+            readFile(artifact.classesRoot.path),
+            "the class root is the jar that was inside the archive",
+        )
+    }
+
     /** The second resolve must not touch the fetcher at all: the cache IS the offline repository. */
     @Test
     fun aSecondResolveAnswersFromTheCacheWithNoFetches() = runTest {
@@ -232,7 +265,13 @@ class ResolveOffTheJvmTest {
         ) {
             val rel = "${group.replace('.', '/')}/$name/$version/$name-$version"
             byUrl["$BASE/$rel.pom"] = pom(group, name, version, packaging, deps, managed, parent).encodeToByteArray()
-            if (packaging != "pom") byUrl["$BASE/$rel.jar"] = JAR_BYTES
+            // Published under the extension its packaging names: an `aar` is where Android libraries keep
+            // their code, and the resolver has to unpack one to get a class root out of it.
+            when (packaging) {
+                "pom" -> Unit
+                "aar" -> byUrl["$BASE/$rel.aar"] = aarBytes(TINY_JAR)
+                else -> byUrl["$BASE/$rel.jar"] = JAR_BYTES
+            }
         }
 
         private fun pom(
