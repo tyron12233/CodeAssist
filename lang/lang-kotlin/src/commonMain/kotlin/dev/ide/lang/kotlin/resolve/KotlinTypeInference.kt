@@ -216,6 +216,9 @@ private fun KotlinResolver.mostSpecificByReceiver(
  *  types are left as their JVM name on purpose (a Java `List` is assignable to both `List` and `MutableList`),
  *  so a caller sees an unmodeled name there and backs off rather than concluding a clash. */
 internal fun canonicalTypeForCheck(t: KotlinType): KotlinType {
+    // A Kotlin TYPEALIAS and its JVM target are the same class under two spellings, so collapse to one of
+    // them before comparing. See [Builtins.TYPEALIAS_TO_JVM].
+    Builtins.TYPEALIAS_TO_JVM[t.qualifiedName]?.let { return t.withClassifier(it) }
     val mapped = Builtins.kotlinTypeFor(t.qualifiedName) ?: return t
     return if (mapped.startsWith("kotlin.collections")) t else t.withClassifier(mapped)
 }

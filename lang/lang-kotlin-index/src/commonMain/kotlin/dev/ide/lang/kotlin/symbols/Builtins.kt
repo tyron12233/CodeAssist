@@ -289,6 +289,21 @@ object Builtins {
         "kotlin.Comparator" to listOf("in"),
     )
 
+    /**
+     * The Kotlin names that are TYPEALIASES for a JVM class, rather than mapped built-ins with an API of their
+     * own. `kotlin.Comparator` IS `java.util.Comparator` -- same class, two spellings -- whereas `kotlin.String`
+     * is a distinct classifier that merely maps to `java.lang.String`.
+     *
+     * The difference matters when comparing two types: one side spelled by the alias and the other read from
+     * bytecode under the JVM name produced "inferred type is Comparator<Candidate> but Comparator<Candidate>
+     * was expected", the same rendering on both sides of the message.
+     */
+    val TYPEALIAS_TO_JVM: Map<String, String> = mapOf(
+        "kotlin.Comparator" to "java.util.Comparator",
+        "kotlin.text.StringBuilder" to "java.lang.StringBuilder",
+        "kotlin.text.StringBuffer" to "java.lang.StringBuffer",
+    )
+
     fun javaTypeFor(kotlinFqn: String): String? = KOTLIN_TO_JAVA[kotlinFqn]
 
     /** The Kotlin classifier a JVM type maps to (`java.lang.String` → `kotlin.String`), or null if unmapped. */
