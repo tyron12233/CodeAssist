@@ -31,7 +31,7 @@ object KotlinNodeKinds {
     val MEMBER_ACCESS = NodeKind.MEMBER_ACCESS         // KtDotQualifiedExpression (selector is the completion site)
     val NAME_REF = NodeKind.NAME_REF                   // KtNameReferenceExpression (scope completion site)
     val TYPE_REF = NodeKind.TYPE_REF                   // KtTypeReference (type-position completion site)
-    val LITERAL = NodeKind.LITERAL                     // KtConstantExpression / KtStringTemplateExpression
+    val LITERAL = NodeKind.LITERAL                     // KtConstantExpression (a string is STRING_TEMPLATE)
     val LOCAL_VAR = NodeKind.LOCAL_VAR                 // KtProperty in a block (local val/var)
     val ERROR = NodeKind.ERROR                         // PsiErrorElement — preserves error tolerance
     val MISSING = NodeKind.MISSING
@@ -58,8 +58,10 @@ object KotlinNodeKinds {
     /** `when (…) { … }`. */
     val WHEN = NodeKind("kt.when")
 
-    /** String template `"… $x …"` (its interpolated entries resolve as expressions). */
-    val STRING_TEMPLATE = NodeKind("kt.string_template")
+    /** String template `"… $x …"`. The neutral [NodeKind.STRING_LITERAL]: a Kotlin string literal and a
+     *  Java one answer the same kind, and a plain `"x"` differs from this only by having no
+     *  [STRING_TEMPLATE_INTERPOLATION] child. */
+    val STRING_TEMPLATE = NodeKind.STRING_LITERAL
 
     /**
      * One literal piece of a [STRING_TEMPLATE] — plain text or an escape (`\n`). A raw (`"""`) string is
@@ -79,10 +81,10 @@ object KotlinNodeKinds {
 
     // --- calls and arguments ---
     /** The `(…)` of a call: the parent of every [ARGUMENT]. */
-    val ARGUMENT_LIST = NodeKind("kt.argument_list")
+    val ARGUMENT_LIST = NodeKind.ARGUMENT_LIST
 
     /** One argument inside an [ARGUMENT_LIST]. A trailing lambda is a [LAMBDA_ARGUMENT] instead. */
-    val ARGUMENT = NodeKind("kt.argument")
+    val ARGUMENT = NodeKind.ARGUMENT
 
     /** The `name =` half of a named argument; its child is the [NAME_REF] for the parameter. */
     val ARGUMENT_NAME = NodeKind("kt.argument_name")
@@ -287,8 +289,9 @@ object KotlinNodeKinds {
     /** A plain supertype in a [SUPERTYPE_LIST]: the `Runnable` of `: Runnable`. */
     val SUPERTYPE_ENTRY = NodeKind("kt.supertype_entry")
 
-    /** A supertype whose constructor is invoked: the `Base(1)` of `: Base(1)`. */
-    val SUPERTYPE_CALL = NodeKind("kt.supertype_call")
+    /** A supertype whose constructor is invoked: the `Base(1)` of `: Base(1)`. The neutral
+     *  [NodeKind.CONSTRUCTOR_CALL], so it answers the same kind as Java's `new Base(1)`. */
+    val SUPERTYPE_CALL = NodeKind.CONSTRUCTOR_CALL
 
     /** A delegated supertype: the `I by impl` of `: I by impl`. */
     val SUPERTYPE_DELEGATE = NodeKind("kt.supertype_delegate")

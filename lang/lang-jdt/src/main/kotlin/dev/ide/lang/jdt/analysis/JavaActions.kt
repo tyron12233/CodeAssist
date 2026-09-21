@@ -197,6 +197,9 @@ class SurroundWithTryCatchActionProvider : ActionProvider {
 /** Expression-ish node kinds, recognised structurally so this stays backend-neutral (no JDT types). */
 private fun isExpression(n: DomNode): Boolean = n.kind == NodeKind.METHOD_CALL ||
     n.kind == NodeKind.MEMBER_ACCESS || n.kind == NodeKind.NAME_REF || n.kind == NodeKind.LITERAL ||
+    // STRING_LITERAL and CONSTRUCTOR_CALL are the neutral kinds a string and a `new` now answer. The id
+    // suffix tests below do NOT cover them: `string_literal` does not end with `Literal`.
+    n.kind == NodeKind.STRING_LITERAL || n.kind == NodeKind.CONSTRUCTOR_CALL ||
     n.kind.id.endsWith("Expression") || n.kind.id.endsWith("Literal") || n.kind.id == "ClassInstanceCreation"
 
 /** For a bare caret, only "interesting" expressions are worth extracting — not a lone name reference. */

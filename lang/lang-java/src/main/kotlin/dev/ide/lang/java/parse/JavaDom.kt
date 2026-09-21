@@ -1,10 +1,12 @@
 package dev.ide.lang.java.parse
 
+import com.intellij.psi.JavaTokenType
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiCodeBlock
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.PsiExpression
+import com.intellij.psi.PsiExpressionList
 import com.intellij.psi.PsiField
 import com.intellij.psi.PsiImportStatementBase
 import com.intellij.psi.PsiJavaCodeReferenceElement
@@ -48,6 +50,12 @@ internal fun isRepresented(psi: PsiElement): Boolean = when (psi) {
     is PsiJavaCodeReferenceElement, is PsiTypeElement,
     is PsiPackageStatement, is PsiImportStatementBase,
     is PsiErrorElement -> true
+    // A `(…)` argument list. Not a PsiExpression, so it used to be flattened away and a call's arguments
+    // arrived as direct children beside its callee. That made the neutral shape of a call differ from
+    // Kotlin's, where the list is a node, and a pattern over "an argument of this call" could only be
+    // written for one language at a time. Java still gives an individual argument no node of its own; see
+    // [NodeKind.ARGUMENT] and read arguments through `argumentNodes()`.
+    is PsiExpressionList -> true
     else -> false
 }
 
@@ -63,12 +71,21 @@ private fun kindOf(psi: PsiElement): NodeKind = when (psi) {
     is PsiCodeBlock -> NodeKind.BLOCK
     is PsiNewExpression -> JavaNodeKinds.NEW_EXPR
     is PsiMethodCallExpression -> NodeKind.METHOD_CALL
+    is PsiExpressionList -> NodeKind.ARGUMENT_LIST
     is PsiReferenceExpression -> if (psi.qualifierExpression != null) NodeKind.MEMBER_ACCESS else NodeKind.NAME_REF
-    is PsiLiteralExpression -> NodeKind.LITERAL
+    // A string is split out of LITERAL so one pattern covers Java's `"x"` and Kotlin's. Read off the token
+    // type rather than `psi.value`, which decodes escapes and would allocate the whole string per node.
+    is PsiLiteralExpression -> if (isStringToken(psi)) NodeKind.STRING_LITERAL else NodeKind.LITERAL
     is PsiJavaCodeReferenceElement -> NodeKind.TYPE_REF
     is PsiTypeElement -> NodeKind.TYPE_REF
     is PsiErrorElement -> NodeKind.ERROR
     else -> JavaNodeKinds.OTHER
+}
+
+/** Whether [psi] is a string literal (or a text block) rather than a number, char, boolean or `null`. */
+private fun isStringToken(psi: PsiLiteralExpression): Boolean {
+    val token = psi.node?.firstChildNode?.elementType ?: return false
+    return token == JavaTokenType.STRING_LITERAL || token == JavaTokenType.TEXT_BLOCK_LITERAL
 }
 
 /** Represented children of [parent], flattening any non-represented wrappers in between. */

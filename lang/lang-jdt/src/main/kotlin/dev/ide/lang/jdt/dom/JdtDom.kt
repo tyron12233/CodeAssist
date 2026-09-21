@@ -134,7 +134,13 @@ private fun kindOf(node: ASTNode): NodeKind = when (node.nodeType) {
     ASTNode.SIMPLE_NAME -> NodeKind.NAME_REF
     ASTNode.FIELD_ACCESS, ASTNode.QUALIFIED_NAME, ASTNode.SUPER_FIELD_ACCESS -> NodeKind.MEMBER_ACCESS
     ASTNode.METHOD_INVOCATION, ASTNode.SUPER_METHOD_INVOCATION -> NodeKind.METHOD_CALL
+    ASTNode.CLASS_INSTANCE_CREATION -> NodeKind.CONSTRUCTOR_CALL
     ASTNode.SIMPLE_TYPE, ASTNode.QUALIFIED_TYPE, ASTNode.PARAMETERIZED_TYPE, ASTNode.NAME_QUALIFIED_TYPE -> NodeKind.TYPE_REF
-    ASTNode.STRING_LITERAL, ASTNode.NUMBER_LITERAL, ASTNode.BOOLEAN_LITERAL, ASTNode.CHARACTER_LITERAL, ASTNode.NULL_LITERAL -> NodeKind.LITERAL
+    // A string is its own neutral kind, so one pattern covers it across the backends. There is no
+    // ARGUMENT_LIST here: JDT models a call's arguments as a child list PROPERTY, with no node to adapt,
+    // so this backend cannot offer the uniform call shape that :lang-java and :lang-kotlin do. It is not
+    // the editor's Java backend any more (:lang-java is), so the gap is only the block editor's.
+    ASTNode.STRING_LITERAL, ASTNode.TEXT_BLOCK -> NodeKind.STRING_LITERAL
+    ASTNode.NUMBER_LITERAL, ASTNode.BOOLEAN_LITERAL, ASTNode.CHARACTER_LITERAL, ASTNode.NULL_LITERAL -> NodeKind.LITERAL
     else -> NodeKind(ASTNode.nodeClassForType(node.nodeType).simpleName)
 }

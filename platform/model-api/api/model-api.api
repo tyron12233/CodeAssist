@@ -519,6 +519,8 @@ dev/ide/lang/dom/Diagnostic
 dev/ide/lang/dom/DomKt
 	kind class
 	super java/lang/Object
+	method static argumentNodes(Ldev/ide/lang/dom/DomNode;)Ljava/util/List;
+	method static calleeName(Ldev/ide/lang/dom/DomNode;)Ljava/lang/String;
 	method static expandSelection(Ldev/ide/lang/dom/ParsedFile;III)Ldev/ide/lang/dom/TextRange;
 dev/ide/lang/dom/DomNode
 	kind interface
@@ -656,9 +658,12 @@ dev/ide/lang/dom/NodeKind$Companion
 	kind class
 	super java/lang/Object
 	ctor (Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method getARGUMENT-Iaadglk()Ljava/lang/String;
+	method getARGUMENT_LIST-Iaadglk()Ljava/lang/String;
 	method getBLOCK-Iaadglk()Ljava/lang/String;
 	method getCLASS_DECL-Iaadglk()Ljava/lang/String;
 	method getCOMPILATION_UNIT-Iaadglk()Ljava/lang/String;
+	method getCONSTRUCTOR_CALL-Iaadglk()Ljava/lang/String;
 	method getERROR-Iaadglk()Ljava/lang/String;
 	method getFIELD_DECL-Iaadglk()Ljava/lang/String;
 	method getIMPORT_DECL-Iaadglk()Ljava/lang/String;
@@ -671,6 +676,7 @@ dev/ide/lang/dom/NodeKind$Companion
 	method getNAME_REF-Iaadglk()Ljava/lang/String;
 	method getPACKAGE_DECL-Iaadglk()Ljava/lang/String;
 	method getPARAMETER-Iaadglk()Ljava/lang/String;
+	method getSTRING_LITERAL-Iaadglk()Ljava/lang/String;
 	method getTYPE_REF-Iaadglk()Ljava/lang/String;
 dev/ide/lang/dom/ParsedFile
 	kind interface

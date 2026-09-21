@@ -42,7 +42,7 @@ object JavaBlockMapping : BlockMapping {
         addAll(STATEMENT_KINDS)
         // key expressions
         add(NodeKind.METHOD_CALL); add(NodeKind.NAME_REF); add(NodeKind.MEMBER_ACCESS)
-        add(NodeKind.TYPE_REF); add(NodeKind.LITERAL); add(INFIX_EXPRESSION)
+        add(NodeKind.TYPE_REF); add(NodeKind.LITERAL); add(NodeKind.STRING_LITERAL); add(INFIX_EXPRESSION)
     }
 
     override fun project(node: DomNode, ctx: ProjectionContext): BlockNode = when (node.kind) {
@@ -226,7 +226,8 @@ internal fun categoryFor(kind: NodeKind): SlotCategory {
         kind == NodeKind.METHOD_DECL || kind == NodeKind.FIELD_DECL || kind == NodeKind.CLASS_DECL -> SlotCategory.DECLARATION
         kind == NodeKind.IMPORT_DECL || kind == NodeKind.PACKAGE_DECL -> SlotCategory.DECLARATION
         kind == NodeKind.METHOD_CALL || kind == NodeKind.MEMBER_ACCESS || kind == NodeKind.NAME_REF -> SlotCategory.EXPRESSION
-        kind == NodeKind.LITERAL || id.endsWith("Expression") || id.endsWith("Literal") || id.endsWith("Access") -> SlotCategory.EXPRESSION
+        kind == NodeKind.LITERAL || kind == NodeKind.STRING_LITERAL ||
+            id.endsWith("Expression") || id.endsWith("Literal") || id.endsWith("Access") -> SlotCategory.EXPRESSION
         else -> SlotCategory.OPAQUE
     }
 }
@@ -234,7 +235,7 @@ internal fun categoryFor(kind: NodeKind): SlotCategory {
 /** The field role for a leaf block's editable token. */
 internal fun roleFor(kind: NodeKind): String = when {
     kind == NodeKind.NAME_REF -> "name"
-    kind == NodeKind.LITERAL || kind.id.endsWith("Literal") -> "literal"
+    kind == NodeKind.LITERAL || kind == NodeKind.STRING_LITERAL || kind.id.endsWith("Literal") -> "literal"
     kind == NodeKind.TYPE_REF || kind.id.endsWith("Type") -> "type"
     else -> "code"
 }
@@ -253,9 +254,10 @@ private fun isTypeNode(node: DomNode): Boolean =
 internal fun valueKindFor(node: DomNode): ValueKind {
     val id = node.kind.id
     return when {
-        // ALL literal classes map to the one LITERAL kind — distinguish by token text.
+        // A string is its own kind now; every other literal class maps to LITERAL and is told apart
+        // by its token text.
+        node.kind == NodeKind.STRING_LITERAL -> ValueKind.STRING
         node.kind == NodeKind.LITERAL -> literalKind(node.text().toString())
-        id == "TextBlock" -> ValueKind.STRING
         isTypeNode(node) -> ValueKind.TYPE
         id == "InfixExpression" -> infixKind(node)
         id == "PrefixExpression" -> when (node.text().firstOrNull()) {
