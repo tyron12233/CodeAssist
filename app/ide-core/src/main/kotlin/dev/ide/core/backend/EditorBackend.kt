@@ -74,18 +74,44 @@ import dev.ide.ui.backend.UiActionEdits
  * [BackendContext.background] for analysis/hints/etc.); a preemption surfaces as [AnalysisPreempted] for the
  * host to retry. Maps the framework results onto the neutral UI DTOs.
  */
+/** File extensions an engine-op label may carry. A closed set, so the label can never leak a file name. */
+private val REPORTABLE_EXTENSIONS = setOf(
+    "kt", "kts", "java", "xml", "gradle", "toml", "json", "properties", "txt", "md", "pro", "cfg",
+    "c", "cc", "cpp", "h", "hpp", "aidl", "proto", "yaml", "yml", "html", "css", "js", "ts", "sh",
+)
+
 internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     private val log = dev.ide.platform.log.Log.logger("ide.editor")
 
+    /**
+     * The engine-op label for a pass over [path]: the pass name with the file's extension appended
+     * (`folding:kt`, `analysis:xml`).
+     *
+     * The label is what [dev.ide.platform.EngineBreadcrumb] persists, and it is the only thing a native crash
+     * leaves behind about what the engine was doing. Without the extension every reading of the top native
+     * cluster -- a SIGSEGV inside IntelliJ's `PsiBuilderImpl.buildTree`, 544 rows in the Aug/Sep window and
+     * confined to Android 12 -- could say the pass but not the language, and the three backends that build a
+     * tree (Java and XML through the shared IntelliJ PSI host, Kotlin through its own parser) are the first
+     * thing that has to be told apart to localise it.
+     *
+     * An extension is not user content: it comes from a closed set of file types, never a name or a path. An
+     * unusual one is dropped rather than reported, so a file called `Secret.myprivatething` contributes
+     * nothing.
+     */
+    private fun op(pass: String, path: String): String {
+        val ext = path.substringAfterLast('.', "").lowercase()
+        return if (ext in REPORTABLE_EXTENSIONS) "$pass:$ext" else pass
+    }
+
     override suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> = try {
-        ctx.background(op = "docBreadcrumb") { ctx.services.breadcrumbAt(Paths.get(path), text, offset) }
+        ctx.background(op = op("docBreadcrumb", path)) { ctx.services.breadcrumbAt(Paths.get(path), text, offset) }
     } catch (_: EngineCanceledException) {
         emptyList()
     } // re-runs on the next caret move
 
     override suspend fun fileStructure(path: String, text: String): List<UiFileSymbol> = try {
-        ctx.background(op = "fileStructure") {
+        ctx.background(op = op("fileStructure", path)) {
             ctx.services.fileStructure(Paths.get(path), text).map {
                 UiFileSymbol(
                     it.name,
@@ -241,7 +267,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
         val t0 = System.nanoTime()
         val result = try {
-            ctx.interactive(op = "completion") { ctx.services.complete(Paths.get(path), text, offset) }
+            ctx.interactive(op = op("completion", path)) { ctx.services.complete(Paths.get(path), text, offset) }
         } catch (_: EngineCanceledException) {
             throw AnalysisPreempted()
         }
@@ -286,7 +312,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         val t0 = System.nanoTime()
         val diagnostics = try {
             timedPass("diagnostics", path, { it.size }) {
-                ctx.background(op = "analysis") { ctx.services.analyzeDiagnostics(Paths.get(path), text) }
+                ctx.background(op = op("analysis", path)) { ctx.services.analyzeDiagnostics(Paths.get(path), text) }
             }
         } catch (_: EngineCanceledException) {
             throw AnalysisPreempted() // preempted: don't record a (misleadingly short) latency sample
@@ -316,7 +342,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     ): List<UiInlayHint> {
         val hints = try {
             timedPass("inlay", path, { it.size }) {
-                ctx.background(op = "inlay") {
+                ctx.background(op = op("inlay", path)) {
                     ctx.services.inlayHints(
                         Paths.get(path), text, startOffset, endOffset
                     )
@@ -349,7 +375,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         // Background lane: completion (interactive) preempts it. A preemption just means "no panel this round";
         // the editor re-queries on the next caret move / edit, so swallowing it to null is correct (no retry needed).
         val help = try {
-            ctx.background(op = "signature") { ctx.services.signatureHelp(Paths.get(path), text, offset) }
+            ctx.background(op = op("signature", path)) { ctx.services.signatureHelp(Paths.get(path), text, offset) }
         } catch (_: EngineCanceledException) {
             return null
         } ?: return null
@@ -374,7 +400,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> {
         val tokens = try {
             timedPass("semantic", path, { it.size }) {
-                ctx.background(op = "semantic") { ctx.services.semanticTokens(Paths.get(path), text) }
+                ctx.background(op = op("semantic", path)) { ctx.services.semanticTokens(Paths.get(path), text) }
             }
         } catch (_: EngineCanceledException) {
             // Preempted by completion on the shared engine thread — surface it so the host retries and keeps
@@ -394,7 +420,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> {
         val folds = try {
             timedPass("folds", path, { it.size }) {
-                ctx.background(op = "folding") { ctx.services.codeFolds(Paths.get(path), text) }
+                ctx.background(op = op("folding", path)) { ctx.services.codeFolds(Paths.get(path), text) }
             }
         } catch (_: EngineCanceledException) {
             throw AnalysisPreempted() // preempted by completion — host retries, keeps current folds meanwhile
