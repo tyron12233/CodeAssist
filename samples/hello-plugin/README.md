@@ -80,33 +80,39 @@ published coordinates:
 
 ```kotlin
 dependencies {
-    compileOnly("io.github.tyron12233:plugin-api:1.2.0")
-    compileOnly("io.github.tyron12233:platform-core:1.2.0")
+    // One version for every coordinate below, including the Compose the IDE bundles.
+    compileOnly(platform("io.github.tyron12233:plugin-bom:3.0.0"))
+
+    compileOnly("io.github.tyron12233:plugin-api")
+    compileOnly("io.github.tyron12233:platform-core")
 
     // The build facet. It brings project-model-api, vfs-api and platform-core with it.
-    compileOnly("io.github.tyron12233:build-api:1.2.0")
+    compileOnly("io.github.tyron12233:build-api")
 
-    // The UI facet, plus the Compose the IDE bundles. Pinned: your @Composable code composes into the
-    // IDE's own Compose runtime, so a newer version here fails at first composition, not at build time.
-    compileOnly("io.github.tyron12233:plugin-ui-api:1.2.0")
-    compileOnly("androidx.compose.runtime:runtime:1.11.2")
-    compileOnly("androidx.compose.foundation:foundation:1.11.2")
-    compileOnly("androidx.compose.ui:ui:1.11.2")
-    compileOnly("androidx.compose.material3:material3:1.4.0")
+    // The UI facet, plus the Compose the IDE bundles. The versions come from the BOM, and they matter:
+    // your @Composable code composes into the IDE's own Compose runtime, so a newer version fails at
+    // first composition rather than at build time.
+    compileOnly("io.github.tyron12233:plugin-ui-api")
+    compileOnly("androidx.compose.runtime:runtime")
+    compileOnly("androidx.compose.foundation:foundation")
+    compileOnly("androidx.compose.ui:ui")
+    compileOnly("androidx.compose.material3:material3")
 }
 ```
+
+Declare `apiVersion = 4` in the manifest to match, as this sample's own does: `PLUGIN_API_VERSION` is `4`
+for SPI `3.0.0`, and the loader compares the manifest's value with the host's on strict equality.
 
 The Compose *compiler* needs no declaration when the project is built by CodeAssist: it applies the plugin to
 any module whose classpath carries the Compose runtime. Building with Gradle, apply
 `org.jetbrains.kotlin.plugin.compose` (this module does).
 
 The SPI carries its own version, independent of the IDE's: it changes far less often than the app ships, and
-compatibility is decided by `apiVersion` and `minHostVersion` rather than by this coordinate. Before the
-first Central release, publish them locally and add `mavenLocal()` to your repositories:
+compatibility is decided by `apiVersion` and `minHostVersion` rather than by this coordinate. To try a change
+to the SPI itself before it is released, publish it locally and add `mavenLocal()` to your repositories:
 
 ```
-./gradlew :plugin-api:publishToMavenLocal :platform-core:publishToMavenLocal \
-    :plugin-ui-api:publishToMavenLocal :build-api:publishToMavenLocal
+./gradlew publishToMavenLocal
 ```
 
 `compileOnly` is the important part either way. The IDE's classloader is the parent of the plugin's, so the
