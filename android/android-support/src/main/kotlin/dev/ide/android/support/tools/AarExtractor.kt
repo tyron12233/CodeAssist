@@ -83,9 +83,17 @@ object AarExtractor {
                 }
             }
             (tmp.resolve(".exploded")).writeText(aar.fileName.toString())
-            // Swap into place: drop any partial/previous dir (no marker → not trusted), then move the
-            // fully-extracted temp dir over it. A crash in the gap leaves NO `into`, so the next run re-extracts.
-            if (Files.exists(into)) into.toFile().deleteRecursively()
+            // Swap into place. A previous dir (no marker → not trusted) is RENAMED aside rather than deleted
+            // in place, then dropped after the swap: the indexer and the build both keep library jars open
+            // while they read them, and on this AAR's `classes.jar` that means an open file whose central
+            // directory the platform has mapped. Renaming leaves those readers on the old inode, where a
+            // delete-then-extract can pull the pages out from under them (SIGBUS, unkillable from Kotlin).
+            // It also removes the window where `into` exists in neither place.
+            val stale: Path? = if (!Files.exists(into)) null else {
+                val aside = parent.resolve("${into.fileName}.stale-${System.nanoTime()}")
+                if (runCatching { Files.move(into, aside) }.isSuccess) aside
+                else { into.toFile().deleteRecursively(); null }
+            }
             try {
                 Files.move(tmp, into, StandardCopyOption.ATOMIC_MOVE)
             } catch (_: AtomicMoveNotSupportedException) {
@@ -93,6 +101,8 @@ object AarExtractor {
             } catch (e: FileAlreadyExistsException) {
                 // A concurrent explode of the same AAR won the swap; its result is complete — reuse it.
                 if (!isAlreadyExploded(into)) throw e
+            } finally {
+                stale?.let { if (Files.exists(it)) it.toFile().deleteRecursively() }
             }
         } finally {
             if (Files.exists(tmp)) tmp.toFile().deleteRecursively()

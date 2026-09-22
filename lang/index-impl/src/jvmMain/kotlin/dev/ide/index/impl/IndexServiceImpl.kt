@@ -1120,7 +1120,11 @@ class IndexServiceImpl(
                     }
                     return seq to Closeable {}
                 }
-                val zip = ZipFile(path.toFile())
+                // Unopenable means "no sources", the same as [Jar.open] treats it: a `-sources.jar` that is
+                // truncated, still downloading, or zero-entry (ART's ZipFile throws `No entries` on those)
+                // must cost the classpath its doc comments, not abort the whole index build.
+                val zip = runCatching { ZipFile(path.toFile()) }.getOrNull()
+                    ?: return emptySequence<IndexInput>() to Closeable {}
                 val seq = zip.entries().asSequence().filter { !it.isDirectory && isSrc(it.name) }
                     .map { entry ->
                         SourceArchiveInput(hash, entry.name) {
