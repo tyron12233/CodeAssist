@@ -184,7 +184,8 @@ object ProjectModel {
         val moduleTypes = ModuleTypeRegistry(platform.extensions)
         val initial =
             if (ModelPersistence.exists(root)) {
-                ModelPersistence.load(root)
+                // The one load the user asked for, so the one that reports what it could not read to them.
+                ModelPersistence.load(root, opening = true)
             } else {
                 WorkspaceData()
             }

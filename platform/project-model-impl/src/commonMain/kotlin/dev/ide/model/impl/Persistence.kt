@@ -194,8 +194,16 @@ object ModelPersistence {
      *
      * Nothing damaged is rewritten: a skipped module is left out of the model, so [save] does not touch its
      * manifest and a file that merely failed to parse stays on disk exactly as it is.
+     *
+     * [opening] is what decides whether the skipped pieces reach the USER. Only [ProjectModelStore] passes it:
+     * every other caller loads a workspace to answer a question about a project it is not opening (the
+     * picker's name and module count, the launcher icon, a module-name list), and several of those run on
+     * every render of the project list. An ERROR raises the critical-error dialog, so reporting damage from
+     * those made one unreadable `module.toml` pop a dialog on a loop: the two clusters together were 469
+     * `error_logged` rows across 76 installs in the Aug/Sep window, all of them below `ProjectManager.list`.
+     * A background probe logs the same detail at WARN; the report the user acts on comes when they open it.
      */
-    fun load(root: String): WorkspaceData {
+    fun load(root: String, opening: Boolean = false): WorkspaceData {
         val platformDir = resolvePath(root, PLATFORM_DIR)
         val wsObj = Json.parse(readTextAt(resolvePath(platformDir, WORKSPACE_FILE))).asObject()
         // The schema field is advisory: a workspace.json that lost it, or holds it as a string, still describes
@@ -207,29 +215,38 @@ object ModelPersistence {
 
         return WorkspaceData(
             schemaVersion = version,
-            projects = (wsObj["projects"] as? List<*>).orEmpty().mapNotNull { loadProject(root, it) },
+            projects = (wsObj["projects"] as? List<*>).orEmpty().mapNotNull { loadProject(root, it, opening) },
             // Both of these hold derived state (resolved artifacts, detected platforms) that the IDE can
             // rebuild, so an unreadable one costs a re-resolve rather than the whole project.
-            libraries = runCatching { loadLibraries(resolvePath(platformDir, LIBRARIES_FILE)) }
-                .onFailure { log.error("$LIBRARIES_FILE could not be read; resolved libraries will be rebuilt", it) }
+            libraries = runCatching { loadLibraries(resolvePath(platformDir, LIBRARIES_FILE), opening) }
+                .onFailure { report(opening, "$LIBRARIES_FILE could not be read; resolved libraries will be rebuilt", it) }
                 .getOrDefault(emptyList()),
-            sdks = runCatching { loadSdks(resolvePath(platformDir, SDKS_FILE)) }
-                .onFailure { log.error("$SDKS_FILE could not be read; platforms will need re-detecting", it) }
+            sdks = runCatching { loadSdks(resolvePath(platformDir, SDKS_FILE), opening) }
+                .onFailure { report(opening, "$SDKS_FILE could not be read; platforms will need re-detecting", it) }
                 .getOrDefault(emptyList()),
         )
     }
 
+    /**
+     * Log something the load could not read, at the level its audience deserves: ERROR (which raises the
+     * critical-error dialog and ships an analytics row) when the user is opening this workspace and can act
+     * on it, WARN when a background probe is merely reading it. See [load]'s `opening`.
+     */
+    private fun report(opening: Boolean, message: String, cause: Throwable) {
+        if (opening) log.error(message, cause) else log.warn(message, cause)
+    }
+
     /** One `projects[]` entry, or null when it cannot be read, so one damaged project in a multi-project
      *  workspace does not stop the others from opening. */
-    private fun loadProject(root: String, entry: Any?): ProjectData? {
+    private fun loadProject(root: String, entry: Any?, opening: Boolean): ProjectData? {
         val name = (entry as? Map<*, *>)?.get("name")?.toString() ?: "?"
         return runCatching {
             val p = entry.asObject()
             val rootRel = p["root"] as String
             val projectRoot = resolveRel(root, rootRel)
-            val damaged = ArrayList<Pair<String, Throwable>>()
+            val damaged = ArrayList<MissingModule>()
             val modules = (p["modules"] as? List<*>).orEmpty().mapNotNull { loadModule(projectRoot, it, damaged) }
-            reportSkippedModules(name, damaged)
+            reportSkippedModules(name, damaged, opening)
             ProjectData(
                 id = p["id"] as String,
                 name = p["name"] as String,
@@ -237,10 +254,10 @@ object ModelPersistence {
                 buildSystemId = p["buildSystem"] as String,
                 settings = (p["settings"] as? Map<*, *>)?.entries?.associate { it.key.toString() to it.value.toString() } ?: emptyMap(),
                 modules = modules,
-                libraries = (p["libraries"] as? List<*>)?.mapNotNull { loadLibrary(it) } ?: emptyList(),
+                libraries = (p["libraries"] as? List<*>)?.mapNotNull { loadLibrary(it, opening) } ?: emptyList(),
             )
         }.onFailure {
-            log.error("Skipped project '$name': its entry in $WORKSPACE_FILE could not be read.", it)
+            report(opening, "Skipped project '$name': its entry in $WORKSPACE_FILE could not be read.", it)
         }.getOrNull()
     }
 
@@ -248,52 +265,84 @@ object ModelPersistence {
      * One module of a project, or null when its manifest is missing or unreadable. A failure is recorded in
      * [damaged] for [reportSkippedModules] rather than reported here, since an ERROR surfaces to the user as a
      * dialog and a stale workspace can list several missing modules at once.
+     *
+     * A module whose whole DIRECTORY has gone is recorded as [MissingModule.vanished]: that is the ordinary
+     * consequence of deleting or moving a module outside the IDE (on-device projects live in browsable
+     * external app storage), not a fault, and it is the most common shape of this failure in the field.
      */
     private fun loadModule(
         projectRoot: String,
         entry: Any?,
-        damaged: MutableList<Pair<String, Throwable>>,
+        damaged: MutableList<MissingModule>,
     ): ModuleData? {
         val name = (entry as? Map<*, *>)?.get("name")?.toString() ?: "?"
+        var moduleDir: String? = null
         return runCatching {
             val m = entry.asObject()
             val dir = m["dir"] as String
-            val toml = Toml.parse(readTextAt(resolvePath(resolveRel(projectRoot, dir), MODULE_FILE)))
+            moduleDir = resolveRel(projectRoot, dir)
+            val toml = Toml.parse(readTextAt(resolvePath(moduleDir, MODULE_FILE)))
             tomlToModule(m["id"] as String, m["name"] as String, dir, toml)
         }.onFailure {
+            val vanished = moduleDir?.let { dir -> fileInfo(dir) == null } ?: false
             log.warn("module '$name': $MODULE_FILE is missing or could not be read", it)
-            damaged += name to it
+            damaged += MissingModule(name, it, vanished)
         }.getOrNull()
     }
 
-    /** Tell the user once that a project opened short of some of its modules. Losing a module changes the shape
-     *  of the project, so it is reported rather than passed over, but one report covers all of them. */
-    private fun reportSkippedModules(project: String, damaged: List<Pair<String, Throwable>>) {
+    /** A module listed in `workspace.json` that did not load, and whether its directory is gone entirely. */
+    private class MissingModule(val name: String, val cause: Throwable, val vanished: Boolean)
+
+    /**
+     * Tell the user that a project opened short of some of its modules. Losing a module changes the shape of
+     * the project, so it is reported rather than passed over, and one report covers all of them.
+     *
+     * The level is what separates the two causes. A module whose directory has gone was deleted or moved by
+     * the user outside the IDE; the open succeeded, the workspace drops the entry on its next save, and there
+     * is nothing to act on, so it is a WARN. A module whose directory is still there but whose manifest is
+     * missing or unparsable is either a corrupt file or a manifest the IDE failed to write, which the user can
+     * act on (re-sync) and which we want to see in the analytics, so that stays an ERROR (and a dialog).
+     *
+     * Reported as the top `error_logged` cluster in the Aug/Sep window: 391 rows across 121 installs, nearly
+     * all of them the vanished-directory case raising a dialog on every open.
+     */
+    private fun reportSkippedModules(project: String, damaged: List<MissingModule>, opening: Boolean) {
         if (damaged.isEmpty()) return
-        val names = damaged.joinToString(", ") { it.first }
-        log.error(
-            "Project '$project' opened without ${damaged.size} module(s) whose $MODULE_FILE is missing or " +
-                "unreadable: $names. Those manifests were left on disk untouched.",
-            damaged.first().second,
-        )
+        val (vanished, unreadable) = damaged.partition { it.vanished }
+        if (vanished.isNotEmpty()) {
+            log.warn(
+                "Project '$project' opened without ${vanished.size} module(s) whose directory no longer " +
+                    "exists: ${vanished.joinToString(", ") { it.name }}. The workspace drops them on its " +
+                    "next save."
+            )
+        }
+        if (unreadable.isNotEmpty()) {
+            report(
+                opening,
+                "Project '$project' opened without ${unreadable.size} module(s) whose $MODULE_FILE is " +
+                    "missing or unreadable: ${unreadable.joinToString(", ") { it.name }}. Those manifests " +
+                    "were left on disk untouched.",
+                unreadable.first().cause,
+            )
+        }
     }
 
-    private fun loadLibrary(entry: Any?): LibraryData? = runCatching { libraryFromJson(entry) }
-        .onFailure { log.error("skipping a library entry that could not be read", it) }
+    private fun loadLibrary(entry: Any?, opening: Boolean): LibraryData? = runCatching { libraryFromJson(entry) }
+        .onFailure { report(opening, "skipping a library entry that could not be read", it) }
         .getOrNull()
 
-    private fun loadLibraries(path: String): List<LibraryData> {
+    private fun loadLibraries(path: String, opening: Boolean): List<LibraryData> {
         if (fileInfo(path) == null) return emptyList()
         val obj = Json.parse(readTextAt(path)).asObject()
-        return (obj["libraries"] as? List<*>)?.mapNotNull { loadLibrary(it) } ?: emptyList()
+        return (obj["libraries"] as? List<*>)?.mapNotNull { loadLibrary(it, opening) } ?: emptyList()
     }
 
-    private fun loadSdks(path: String): List<SdkData> {
+    private fun loadSdks(path: String, opening: Boolean): List<SdkData> {
         if (fileInfo(path) == null) return emptyList()
         val obj = Json.parse(readTextAt(path)).asObject()
         return (obj["sdks"] as? List<*>)?.mapNotNull { sAny ->
             runCatching { sdkFromJson(sAny) }
-                .onFailure { log.error("skipping an SDK entry that could not be read", it) }
+                .onFailure { report(opening, "skipping an SDK entry that could not be read", it) }
                 .getOrNull()
         } ?: emptyList()
     }

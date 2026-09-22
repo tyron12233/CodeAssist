@@ -9,6 +9,9 @@ import dev.ide.model.LibraryRef
 import dev.ide.model.ModuleTypeRegistry
 import dev.ide.model.SourceSetTemplate
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.platform.log.Log
+import dev.ide.platform.log.LogLevel
+import dev.ide.platform.log.LogSink
 import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import java.nio.file.Path
@@ -146,5 +149,52 @@ class DamagedWorkspaceLoadTest {
         // With no workspace.json there is nothing to recover, so this stays a hard failure.
         Files.delete(ws)
         assertFailsWith<java.nio.file.NoSuchFileException> { ModelPersistence.load(dir.toString()) }
+    }
+
+    /** The levels a load logs at, captured off the [Log] hub. ERROR is what raises the critical-error dialog. */
+    private fun levelsWhileLoading(dir: Path, opening: Boolean): List<Pair<LogLevel, String>> {
+        val seen = ArrayList<Pair<LogLevel, String>>()
+        val sink = LogSink { r -> if (r.tag == "ide.model") seen += r.level to r.message }
+        Log.addSink(sink)
+        try {
+            ModelPersistence.load(dir.toString(), opening = opening)
+        } finally {
+            Log.removeSink(sink)
+        }
+        return seen
+    }
+
+    @Test
+    fun aModuleWhoseDirectoryIsGoneIsNotReportedAsAnError() = withTempDir("codeassist-damaged") { dir ->
+        twoModuleWorkspace(dir)
+        // The whole module directory was deleted outside the IDE — the common case, and nothing to act on.
+        dir.resolve("shared").toFile().deleteRecursively()
+
+        val opening = levelsWhileLoading(dir, opening = true)
+        assertTrue(opening.any { it.first == LogLevel.WARN }, "it is still reported: $opening")
+        assertTrue(
+            opening.none { it.first == LogLevel.ERROR },
+            "a module the user deleted must not raise the critical-error dialog: $opening",
+        )
+    }
+
+    @Test
+    fun anUnreadableManifestIsAnErrorOnlyForTheUserOpeningTheProject() = withTempDir("codeassist-damaged") { dir ->
+        twoModuleWorkspace(dir)
+        // The directory is still there and its manifest is corrupt: a real fault, and the user can re-sync.
+        Files.writeString(dir.resolve("shared/module.toml"), "[module\ntype = \"java-lib\"")
+
+        assertTrue(
+            levelsWhileLoading(dir, opening = true).any { it.first == LogLevel.ERROR },
+            "opening a project with a corrupt manifest reports it",
+        )
+        // The project picker re-reads every workspace on each render. Reporting from there put the same
+        // dialog up on a loop — 256 rows from two installs in the Aug/Sep window on one corrupt manifest.
+        val listing = levelsWhileLoading(dir, opening = false)
+        assertTrue(listing.isNotEmpty(), "the detail is still logged for diagnostics: $listing")
+        assertTrue(
+            listing.none { it.first == LogLevel.ERROR },
+            "a background probe of the same workspace must not raise the dialog: $listing",
+        )
     }
 }
