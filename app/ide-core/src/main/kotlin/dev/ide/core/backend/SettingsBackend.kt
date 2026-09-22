@@ -27,6 +27,7 @@ import dev.ide.ui.ext.displayShortcut
 import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.backend.UiSettingsPage
 import dev.ide.ui.backend.UiSeverity
+import kotlin.io.path.writeText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -54,7 +55,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
             val dir = root.resolve("export")
             java.nio.file.Files.createDirectories(dir)
             val file = dir.resolve(fileName.substringAfterLast('/').ifBlank { "export.txt" })
-            java.nio.file.Files.writeString(file, content)
+            file.writeText(content)
             file.toString()
         }.getOrNull()
     }
