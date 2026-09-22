@@ -28,7 +28,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -463,7 +462,8 @@ private fun HeaderOverflowMenu(
             boxSize = 34,
             iconSize = 18
         )
-        CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        // The sort rows below the divider carry no icon of their own, so the menu holds the slot for them.
+        CaDropdownMenu(expanded = open, onDismissRequest = { open = false }, iconLed = true) {
             FileActionItem(CaIcons.plus, stringResource(Res.string.filetree_new_file)) { open = false; onNewFile() }
             FileActionItem(CaIcons.folder, stringResource(Res.string.filetree_new_folder)) { open = false; onNewFolder() }
             FileActionItem(CaIcons.refresh, stringResource(Res.string.filetree_refresh)) { open = false; onRefresh() }
@@ -500,20 +500,14 @@ private fun MenuSectionLabel(text: String) {
     )
 }
 
-/** A dropdown item with a trailing check when [checked] (radio/toggle semantics). */
+/** A dropdown item marked when [checked] (radio/toggle semantics). */
 @Composable
 private fun CheckableMenuItem(label: String, checked: Boolean, onClick: () -> Unit) {
-    DropdownMenuItem(
-        text = { Text(label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium) },
-        trailingIcon = {
-            if (checked) Icon(
-                CaIcons.check,
-                null,
-                Modifier.size(15.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-        },
+    CaMenuItem(
+        label = label,
         onClick = onClick,
+        selected = checked,
+        trailing = if (checked) ({ CaMenuCheck() }) else null,
     )
 }
 
@@ -843,18 +837,7 @@ private fun FileActionItem(
     danger: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val tint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-    DropdownMenuItem(
-        text = {
-            Text(
-                label,
-                color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        },
-        leadingIcon = { Icon(icon, null, Modifier.size(15.dp), tint = tint) },
-        onClick = onClick,
-    )
+    CaMenuItem(label = label, onClick = onClick, icon = icon, danger = danger)
 }
 
 /** A thin separator inside a dropdown menu. */

@@ -447,34 +447,14 @@ private fun EditorOverflowMenu(
                     onExpandedChange = { want -> variantsOpen = want; if (want) variantItems = variants() },
                 ) {
                     if (variantItems.isEmpty()) {
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    stringResource(Res.string.edchrome_no_variants),
-                                    color = MaterialTheme.colorScheme.outline,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            },
-                            onClick = {}, enabled = false,
-                        )
+                        CaMenuItem(stringResource(Res.string.edchrome_no_variants), onClick = {}, enabled = false)
                     }
                     variantItems.forEach { v ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    v,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = if (v == activeVariant) FontWeight.SemiBold else FontWeight.Normal,
-                                )
-                            },
-                            leadingIcon = {
-                                if (v == activeVariant) Icon(
-                                    CaIcons.check, null, Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                ) else Box(Modifier.size(14.dp))
-                            },
+                        CaMenuItem(
+                            label = v,
                             onClick = { open = false; onPickVariant(v) },
+                            selected = v == activeVariant,
+                            trailing = if (v == activeVariant) ({ CaMenuCheck() }) else null,
                         )
                     }
                 }
@@ -500,29 +480,7 @@ private fun OverflowItem(
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    val textColor = when {
-        !enabled -> MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-        active -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-    val tint = when {
-        !enabled -> MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-        active -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    DropdownMenuItem(
-        text = {
-            Text(
-                label,
-                color = textColor,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
-            )
-        },
-        leadingIcon = { Icon(icon, null, Modifier.size(16.dp), tint = tint) },
-        onClick = onClick,
-        enabled = enabled,
-    )
+    CaMenuItem(label = label, onClick = onClick, icon = icon, enabled = enabled, selected = active)
 }
 
 /**
@@ -847,57 +805,27 @@ private fun RunControl(
                 )
             }
             if (items.isEmpty()) {
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            stringResource(Res.string.edchrome_nothing_to_run),
-                            color = MaterialTheme.colorScheme.outline,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    },
-                    onClick = {}, enabled = false,
-                )
+                CaMenuItem(stringResource(Res.string.edchrome_nothing_to_run), onClick = {}, enabled = false)
             }
             if (filtered.isEmpty()) {
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            stringResource(Res.string.edchrome_no_matching_tasks),
-                            color = MaterialTheme.colorScheme.outline,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    },
-                    onClick = {}, enabled = false,
-                )
+                CaMenuItem(stringResource(Res.string.edchrome_no_matching_tasks), onClick = {}, enabled = false)
             }
             Box(Modifier.heightIn(max = 320.dp)) {
                 Column {
                     filtered.forEach { task ->
-                        DropdownMenuItem(
-                            text = {
-                                Column {
-                                    Text(
-                                        task.label,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        task.group,
-                                        color = MaterialTheme.colorScheme.outline,
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                }
-                            },
-                            leadingIcon = {
+                        CaMenuItem(
+                            label = task.label,
+                            onClick = { open = false; onPickTask(task) },
+                            supporting = task.group,
+                            // Accented rather than the usual row tint: the glyph is what says "this runs".
+                            leading = {
                                 Icon(
                                     CaIcons.play,
                                     null,
-                                    Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.primary
+                                    Modifier.size(CaMenuDefaults.IconSize),
+                                    tint = MaterialTheme.colorScheme.primary,
                                 )
                             },
-                            onClick = { open = false; onPickTask(task) },
                         )
                     }
                 }
@@ -949,36 +877,14 @@ private fun VariantChip(
         }
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             if (items.isEmpty()) {
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            stringResource(Res.string.edchrome_no_variants),
-                            color = MaterialTheme.colorScheme.outline,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    },
-                    onClick = {}, enabled = false,
-                )
+                CaMenuItem(stringResource(Res.string.edchrome_no_variants), onClick = {}, enabled = false)
             }
             items.forEach { v ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            v,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = if (v == label) FontWeight.SemiBold else FontWeight.Normal
-                        )
-                    },
-                    leadingIcon = {
-                        if (v == label) Icon(
-                            CaIcons.check,
-                            null,
-                            Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        ) else Box(Modifier.size(14.dp))
-                    },
+                CaMenuItem(
+                    label = v,
                     onClick = { open = false; onPick(v) },
+                    selected = v == label,
+                    trailing = if (v == label) ({ CaMenuCheck() }) else null,
                 )
             }
         }
