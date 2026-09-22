@@ -30,6 +30,18 @@ apiVersion = 4   # was 3
 
 Compile against the Kotlin version the IDE was built with, as before.
 
+### Five artifacts are now published as multiplatform components
+
+`model-api`, `platform-core`, `vfs-api`, `language-api` and `project-model-api` build for iOS as well as the
+JVM, and `3.0.0` is the first release that publishes them that way: a root coordinate carrying Gradle module
+metadata, plus one component per target (`-jvm`, `-iosarm64`, `-iossimulatorarm64`).
+
+A plugin built with Gradle needs no change for this. Gradle reads that metadata and resolves the JVM variant
+from the plain `io.github.tyron12233:platform-core` coordinate exactly as it did at `2.10.0`, and so does the
+IDE's own on-device resolver. A build that resolves POMs alone (Maven, or any tool that ignores Gradle module
+metadata) sees the root coordinate as the shared metadata rather than as JVM classes, and has to name the
+`-jvm` artifact instead.
+
 ## 2. Why you did not see this coming
 
 Every change below is source-compatible and binary-breaking, which is the shape Kotlin makes easy to ship by
