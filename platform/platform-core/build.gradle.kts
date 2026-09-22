@@ -15,11 +15,11 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // forked tool VM, class isolation, the settings store and the engine scheduler.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    // Published for plugin authors to compile against. `spi-pom` rather than the `spi-publish` convention:
-    // that one applies `java-library`, which a multiplatform module cannot. Same coordinate, same BOM entry
-    // (`PluginBomTest` matches either opt-in).
-    id("dev.ide.spi-pom")
-    `maven-publish`
+    // Published for plugin authors to compile against. The multiplatform convention rather than
+    // `dev.ide.spi-publish`: that one applies `java-library`, which a multiplatform module cannot, and a
+    // module published as several components needs a javadoc placeholder per publication rather than one
+    // shared jar. Same coordinate, same POM, same BOM entry (`PluginBomTest` matches either opt-in).
+    id("dev.ide.spi-publish-mpp")
 }
 
 kotlin {
@@ -65,18 +65,6 @@ kotlin {
         val iosTest = create("iosTest") { dependsOn(getByName("commonTest")) }
         getByName("iosSimulatorArm64Test").dependsOn(iosTest)
         getByName("iosArm64Test").dependsOn(iosTest)
-    }
-}
-
-// Central requires a javadoc artifact; Kotlin produces none without Dokka and the KDoc travels in the
-// sources jar the multiplatform plugin already publishes. The same trade :model-api makes.
-val javadocJar by tasks.registering(Jar::class) {
-    archiveClassifier.set("javadoc")
-}
-
-publishing {
-    publications.withType<MavenPublication>().configureEach {
-        artifact(javadocJar)
     }
 }
 

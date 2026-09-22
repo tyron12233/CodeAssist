@@ -13,11 +13,11 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // portable SPI must not assume.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    // Published for plugin authors to compile against. `dev.ide.spi-publish` applies `java-library`, which
-    // the multiplatform plugin rejects, so this takes the coordinate/POM half directly and supplies the
-    // javadoc placeholder itself, exactly as :model-api does.
-    id("dev.ide.spi-pom")
-    `maven-publish`
+    // Published for plugin authors to compile against. The multiplatform convention rather than
+    // `dev.ide.spi-publish`: that one applies `java-library`, which a multiplatform module cannot, and a
+    // module published as several components needs a javadoc placeholder per publication rather than one
+    // shared jar. Same coordinate, same POM, same BOM entry (`PluginBomTest` matches either opt-in).
+    id("dev.ide.spi-publish-mpp")
 }
 
 kotlin {
@@ -67,18 +67,6 @@ dependencies {
     "jvmTestImplementation"(platform(libs.junit.bom))
     "jvmTestImplementation"(libs.junit.jupiter)
     "jvmTestRuntimeOnly"(libs.junit.platform.launcher)
-}
-
-// Central requires a javadoc artifact. Kotlin produces none without Dokka, and the KDoc travels in the
-// sources jar the multiplatform plugin already publishes.
-val javadocJar by tasks.registering(Jar::class) {
-    archiveClassifier.set("javadoc")
-}
-
-publishing {
-    publications.withType<MavenPublication>().configureEach {
-        artifact(javadocJar)
-    }
 }
 
 tasks.named<Test>("jvmTest") {

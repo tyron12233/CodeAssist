@@ -7,10 +7,10 @@ import kotlin.test.assertTrue
 /**
  * The BOM has to name every artifact this build publishes.
  *
- * The two lists live in different files by necessity: a module opts into publication by applying
- * `dev.ide.spi-publish`, and `:plugin-bom` names it in a constraint. A tenth SPI module added without the
- * matching constraint would publish fine and break only for the plugin author who took their versions from
- * the BOM and asked for the one artifact it does not carry a version for.
+ * The two lists live in different files by necessity: a module opts into publication by applying one of
+ * the `dev.ide.spi-publish*` conventions, and `:plugin-bom` names it in a constraint. An SPI module added
+ * without the matching constraint would publish fine and break only for the plugin author who took their
+ * versions from the BOM and asked for the one artifact it does not carry a version for.
  */
 class PluginBomTest {
 
@@ -18,9 +18,11 @@ class PluginBomTest {
     fun `the BOM constrains every module this build publishes`() {
         val root = repoRoot()
         val modules = moduleDirs(root)
-        // Two ways to opt in, not one: `dev.ide.spi-publish` for a plain JVM artifact, and
-        // `dev.ide.spi-pom` directly for a multiplatform one, which cannot apply the `java-library`
-        // convention. Matching only the first is how a published module slips past this guard.
+        // Three ways to opt in, not one: `dev.ide.spi-publish` for a plain JVM artifact,
+        // `dev.ide.spi-publish-mpp` for a multiplatform one (which cannot apply the `java-library`
+        // convention), and `dev.ide.spi-pom` directly for `:plugin-bom`, which is neither. Matching only
+        // the first spelling is how a published module slips past this guard; both prefixes below are
+        // needed, and the first also covers the `-mpp` convention.
         val published = modules
             .filter { module ->
                 val build = File(module, "build.gradle.kts").readText()
