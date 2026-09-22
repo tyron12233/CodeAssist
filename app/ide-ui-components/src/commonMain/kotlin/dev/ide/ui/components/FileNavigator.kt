@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.expandedCaretTurn
 import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
@@ -625,8 +626,9 @@ private fun TreeRowContent(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (isExpandable) {
-                // One caret glyph rotated 0°→90° so open/close reads as a smooth turn, not a swap.
-                val caretAngle by animateFloatAsState(if (isOpen) 90f else 0f, label = "caret")
+                // One caret glyph rotated a quarter turn so open/close reads as a smooth turn, not a swap.
+                val open = expandedCaretTurn()
+                val caretAngle by animateFloatAsState(if (isOpen) open else 0f, label = "caret")
                 Icon(
                     CaIcons.caretRight,
                     null,

@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -20,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.material_symbols_rounded
@@ -57,6 +59,11 @@ fun rememberMaterialSymbols(): SymbolFonts {
  *
  * [contentDescription] is required to be explicit: pass a label for a meaningful icon, or `null` for a
  * decorative one (watermarks, the trending ticker), which clears the node from the semantics tree.
+ *
+ * A glyph is text, so it also cannot carry the `autoMirror` flag that flips a [dev.ide.ui.icons.CaIcons]
+ * vector under an RTL layout direction. The ones that point along the reading direction are swapped for
+ * their counterpart here instead, which is why `LtrContent` regions keep the unmirrored form: they pin
+ * the layout direction, and this reads it.
  */
 @Composable
 fun Symbol(
@@ -69,6 +76,7 @@ fun Symbol(
     symbols: SymbolFonts = rememberMaterialSymbols(),
 ) {
     val fontSize = with(LocalDensity.current) { size.toSp() }
+    val drawn = if (LocalLayoutDirection.current == LayoutDirection.Rtl) CaSymbols.mirrored(glyph) else glyph
     val semantics = if (contentDescription == null) {
         Modifier.clearAndSetSemantics {}
     } else {
@@ -76,7 +84,7 @@ fun Symbol(
     }
     Box(modifier.size(size).then(semantics), contentAlignment = Alignment.Center) {
         Text(
-            text = glyph.toString(),
+            text = drawn.toString(),
             color = tint,
             fontSize = fontSize,
             lineHeight = fontSize,

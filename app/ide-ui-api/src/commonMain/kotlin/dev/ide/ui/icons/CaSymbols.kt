@@ -147,6 +147,26 @@ object CaSymbols {
         }
 
     /**
+     * The right-to-left counterpart of a glyph that points along the reading direction, or [glyph]
+     * unchanged when direction is not part of its meaning.
+     *
+     * A symbol is drawn as text, so unlike the [CaIcons] vectors it cannot carry Compose's `autoMirror`
+     * flag and no layout direction will flip it. The subset bundles both halves of each directional
+     * pair, so the mirrored form is a different codepoint rather than a transform, which keeps the
+     * stroke ends and optical centring the designers drew instead of reflecting them.
+     *
+     * Only navigation direction mirrors. `play_arrow` and `trending_up` point the way they point in
+     * every locale, and the drop-down carets are vertical.
+     */
+    fun mirrored(glyph: Char): Char = when (glyph) {
+        chevronRight -> chevronLeft
+        chevronLeft -> chevronRight
+        arrowBack -> arrowForward
+        arrowForward -> arrowBack
+        else -> glyph
+    }
+
+    /**
      * The glyph for a Material Symbols [name] (`"chevron_right"`), or `null` when the subset does not
      * carry it. Backend-supplied icon names arrive as strings, so a store row naming a glyph we did not
      * bundle has to degrade to a fallback rather than render a missing box.

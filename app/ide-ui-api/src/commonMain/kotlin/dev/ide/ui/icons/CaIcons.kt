@@ -38,8 +38,23 @@ object CaIcons {
         return Sub(d, filled)
     }
 
-    private fun build(name: String, vararg subs: Sub): ImageVector {
-        val b = ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
+    private fun build(name: String, vararg subs: Sub): ImageVector =
+        vector(name, autoMirror = false, subs = subs)
+
+    /**
+     * As [build], for an icon whose meaning points along the reading direction: a disclosure chevron, a
+     * back arrow, the panel that sits at the far edge. Compose flips these under an RTL layout direction,
+     * so an Arabic UI gets the left-pointing form without any call site picking a second glyph.
+     *
+     * Only direction-of-reading icons belong here. An icon whose arrow means something else keeps its
+     * drawn orientation in every locale: playback runs one way, and the VCS graph is read as a diagram
+     * rather than as text.
+     */
+    private fun mirroring(name: String, vararg subs: Sub): ImageVector =
+        vector(name, autoMirror = true, subs = subs)
+
+    private fun vector(name: String, autoMirror: Boolean, subs: Array<out Sub>): ImageVector {
+        val b = ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f, autoMirror = autoMirror)
         for (sub in subs) {
             val nodes = PathParser().parsePathString(sub.d).toNodes()
             if (sub.filled) {
@@ -57,15 +72,15 @@ object CaIcons {
         return b.build()
     }
 
-    val chevronRight = build("chevron-right", s("M9 6l6 6-6 6"))
-    val chevronLeft = build("chevron-left", s("M15 6l-6 6 6 6"))
+    val chevronRight = mirroring("chevron-right", s("M9 6l6 6-6 6"))
+    val chevronLeft = mirroring("chevron-left", s("M15 6l-6 6 6 6"))
     val chevronDown = build("chevron-down", s("M6 9l6 6 6-6"))
     val chevronUp = build("chevron-up", s("M6 15l6-6 6 6"))
     /** Fullscreen / expand: opposite corner brackets (top-left + bottom-right). */
     val expand = build("expand", s("M10 4H4v6"), s("M14 20h6v-6"))
     /** Exit fullscreen / collapse: opposite corner brackets pointing inward. */
     val collapse = build("collapse", s("M4 10h6V4"), s("M20 14h-6v6"))
-    val caretRight = build("caret-right", f("M10 7l5 5-5 5z"))
+    val caretRight = mirroring("caret-right", f("M10 7l5 5-5 5z"))
     val caretDown = build("caret-down", f("M7 10l5 5 5-5z"))
     val close = build("close", s("M6 6l12 12M18 6L6 18"))
 
@@ -141,15 +156,15 @@ object CaIcons {
     val clock = build("clock", circle(12f, 12f, 8.5f), s("M12 7.5V12l3 2"))
     /** A crescent moon — the night-mode toggle. */
     val moon = build("moon", f("M12 3 a 9 9 0 1 0 9 9 a 7 7 0 0 1 -9 -9 z"))
-    val undo = build("undo", s("M4 12h8.5a5.5 5.5 0 0 1 5.5 5.5"), s("M8 8l-4 4 4 4"))
-    val redo = build("redo", s("M20 12h-8.5a5.5 5.5 0 0 0-5.5 5.5"), s("M16 8l4 4-4 4"))
-    val arrowRight = build("arrow-right", s("M5 12h13M13 6l6 6-6 6"))
+    val undo = mirroring("undo", s("M4 12h8.5a5.5 5.5 0 0 1 5.5 5.5"), s("M8 8l-4 4 4 4"))
+    val redo = mirroring("redo", s("M20 12h-8.5a5.5 5.5 0 0 0-5.5 5.5"), s("M16 8l4 4-4 4"))
+    val arrowRight = mirroring("arrow-right", s("M5 12h13M13 6l6 6-6 6"))
     /** Arrow into a tray — import files from outside the app. */
     val download = build("download", s("M12 4v10M8 10.5l4 4 4-4"), s("M5 18.5h14"))
     /** Arrow up out of a tray — share/export a file to another app. */
     val share = build("share", s("M12 16V4.5M8 8l4-4 4 4"), s("M6 12v6.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V12"))
-    val sidebar = build("sidebar", roundRect(3.5f, 5f, 17f, 14f, 3f), s("M9.5 5v14"))
-    val panelRight = build("panel-right", roundRect(3.5f, 5f, 17f, 14f, 3f), s("M15 5v14"))
+    val sidebar = mirroring("sidebar", roundRect(3.5f, 5f, 17f, 14f, 3f), s("M9.5 5v14"))
+    val panelRight = mirroring("panel-right", roundRect(3.5f, 5f, 17f, 14f, 3f), s("M15 5v14"))
     val split = build("split", roundRect(3.5f, 5f, 17f, 14f, 3f), s("M12 5v14"))
     val layers = build("layers", s("M12 4l8 4-8 4-8-4zM4 12l8 4 8-4M4 16l8 4 8-4"))
     val code = build("code", s("M9 8l-4 4 4 4M15 8l4 4-4 4"))

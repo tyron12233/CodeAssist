@@ -18,3 +18,14 @@ import androidx.compose.ui.unit.LayoutDirection
 fun LtrContent(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr, content = content)
 }
+
+/**
+ * The quarter turn that takes a disclosure caret from collapsed to expanded, in degrees.
+ *
+ * The caret is drawn pointing along the reading direction and auto-mirrors, so under RTL it starts out
+ * pointing left; turning it clockwise from there would leave it pointing up. Reading the layout
+ * direction keeps the open state pointing down either way, and keeps the transition a turn rather than a
+ * swap between two glyphs.
+ */
+@Composable
+fun expandedCaretTurn(): Float = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -90f else 90f
