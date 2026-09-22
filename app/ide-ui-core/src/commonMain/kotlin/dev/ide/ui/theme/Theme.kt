@@ -430,7 +430,9 @@ fun CodeAssistTheme(
     /** Follow the device wallpaper (Material You). Only consulted when [seedColor] is null; on a platform
      *  without dynamic color (desktop, pre-12 Android) it falls back to the [accent] preset. */
     useDynamic: Boolean = false,
-    uiFont: FontFamily = FontFamily.SansSerif,
+    /** The UI's own text face. Defaults to the platform sans, or a bundled one for a script the
+     *  platform does not draw: see [rememberUiFont]. The editor's face is [codeFont]. */
+    uiFont: FontFamily = rememberUiFont(),
     codeFont: FontFamily = FontFamily.Monospace,
     /** The user's editor color scheme. The shipped default overrides nothing, so it renders as the theme. */
     editorColorScheme: EditorColorScheme = BuiltInColorSchemes.DEFAULT,

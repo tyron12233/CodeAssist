@@ -33,6 +33,7 @@ import dev.ide.ui.screens.GradleImportModeDialog
 import dev.ide.ui.screens.ImportSourceDialog
 import dev.ide.ui.theme.CodeAssistTheme
 import dev.ide.ui.theme.rememberJetBrainsMono
+import dev.ide.ui.theme.rememberUiFont
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -49,7 +50,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun CodeAssistApp(
     backend: IdeBackend,
-    uiFont: FontFamily = FontFamily.SansSerif,
+    uiFont: FontFamily = rememberUiFont(),
     codeFont: FontFamily = rememberJetBrainsMono(),
     fileActions: FileActions = FileActions.None,
     /** Platform advertising bridge (AdMob on Android, [AdHost.None] on desktop). Ads render only through this. */
