@@ -36,6 +36,7 @@ object InterpTestClasspath {
 fun previewSymbolService(sourceRoots: List<VirtualFile> = emptyList()): KotlinSymbolService =
     KotlinSymbolService(
         sourceRoots = sourceRoots,
-        classpathJars = InterpTestClasspath.jars,
-        cacheDir = InterpTestClasspath.scanCache,
+        // The service takes plain path strings, so that it can be built on a host with no `java.nio` at all.
+        classpathJars = InterpTestClasspath.jars.map { it.toString() },
+        cacheDir = InterpTestClasspath.scanCache.toString(),
     )

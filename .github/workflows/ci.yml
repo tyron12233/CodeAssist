@@ -67,6 +67,20 @@ jobs:
           :project-templates:jvmTest
           --console=plain --stacktrace
 
+      # The rest of the multiplatform modules, for the same reason. These were never named, so nothing ran
+      # them: the suites below went unexecuted long enough for :interp-compose's fixtures to stop compiling
+      # against KotlinSymbolService and for a `Files.writeString` (on no Android release at all) to reach
+      # :ide-core past :platform-core's own API-floor gate. Anything with a `desktopTest`/`jvmTest` source
+      # set belongs in one of these two lists.
+      - name: Multiplatform suites (UI, preview interpreter, store, the model bridge)
+        run: >-
+          ./gradlew :ide-ui:desktopTest :ide-ui-core:desktopTest :ide-ui-components:desktopTest
+          :ide-ui-editor:desktopTest :ide-ui-screens:desktopTest :agent-ui:desktopTest
+          :interp-compose:desktopTest
+          :platform-core:jvmTest :project-model-impl:jvmTest :model-bridge:jvmTest
+          :store-bridge:jvmTest :store-impl:jvmTest
+          --console=plain --stacktrace
+
       # 2) The quality gates: deterministic given the pinned JDK (same `jrt` class library + fixed indexes),
       #    so they gate ranking/recall regressions. One unambiguous invocation per module.
       - name: Completion quality (lang-jdt)
