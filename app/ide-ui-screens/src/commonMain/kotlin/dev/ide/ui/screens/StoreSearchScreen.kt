@@ -52,6 +52,8 @@ import dev.ide.ui.generated.resources.store_search_hint
 import dev.ide.ui.generated.resources.store_search_all
 import dev.ide.ui.generated.resources.store_title
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.itemsIndexedKeyed
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.theme.Symbol
 import kotlinx.coroutines.CoroutineScope
@@ -145,7 +147,7 @@ fun StoreSearchScreen(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(state.categories, key = { it.id }) { cat ->
+                itemsKeyed(state.categories, key = { it.id }) { cat ->
                     PillChip(
                         label = cat.title,
                         selected = state.category == cat.id,
@@ -194,7 +196,7 @@ fun StoreSearchScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 24.dp),
                 ) {
-                    itemsIndexed(results, key = { _, it -> it.id }) { i, item ->
+                    itemsIndexedKeyed(results, key = { _, it -> it.id }) { i, item ->
                         StoreItemRow(item, i, onOpenItem, backend = backend)
                     }
                     if (state.loadingMore) {

@@ -68,6 +68,7 @@ import dev.ide.ui.generated.resources.learn_module_meta
 import dev.ide.ui.generated.resources.learn_resume_lesson
 import dev.ide.ui.generated.resources.learn_title
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.CaShapes
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.cardShape
@@ -300,7 +301,7 @@ private fun TrackFilterRow(categories: List<String>, active: String?, onPick: (S
                 onClick = { onPick(null) },
             )
         }
-        items(categories, key = { it }) { cat ->
+        itemsKeyed(categories, key = { it }) { cat ->
             PillChip(
                 label = cat,
                 selected = active == cat,

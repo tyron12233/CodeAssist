@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.Crossfade
@@ -263,7 +264,7 @@ private fun NarrowLayout(
     val open = openId?.let { id -> pages.firstOrNull { it.id == id } }
     if (open == null) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(pages, key = { it.id }) { page ->
+            itemsKeyed(pages, key = { it.id }) { page ->
                 SettingsCategoryItem(localizedPageTitle(page), iconFor(page.iconId), selected = false, showChevron = true) { openId = page.id }
             }
         }

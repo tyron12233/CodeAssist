@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.UiChartEntry
 import dev.ide.ui.backend.UiChartTab
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.tileShape
 import dev.ide.ui.theme.tonalPair
@@ -116,7 +117,7 @@ fun ChartTabRow(
         contentPadding = PaddingValues(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(tabs, key = { it.key }) { tab ->
+        itemsKeyed(tabs, key = { it.key }) { tab ->
             PillChip(
                 label = tab.label,
                 selected = tab.key == selectedKey,

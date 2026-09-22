@@ -80,6 +80,7 @@ import dev.ide.ui.components.StoreCountBadge
 import dev.ide.ui.components.TrendingTicker
 import dev.ide.ui.components.chartMeta
 import dev.ide.ui.components.motifFor
+import dev.ide.ui.itemsIndexedKeyed
 import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.LocalExpressiveShapeCycling
@@ -234,7 +235,7 @@ fun ExploreFeed(
                         // The SAME row the shelves use. The catalogue used to have a card vocabulary of
                         // its own, three times taller and carrying eight text elements; one project is
                         // one project wherever it appears.
-                        itemsIndexed(section.items, key = { _, it -> "cat_${it.id}" }) { i, item ->
+                        itemsIndexedKeyed(section.items, key = { _, it -> "cat_${it.id}" }) { i, item ->
                             StoreItemRow(item, i, onOpenItem, onInstallItem, installing[item.id], backend)
                         }
                     }
@@ -260,7 +261,7 @@ fun ExploreFeed(
                                     subtitle = stringResource(Res.string.store_bundled_subtitle),
                                 )
                             }
-                            itemsIndexed(bundled, key = { _, it -> "bundled_${it.id}" }) { i, item ->
+                            itemsIndexedKeyed(bundled, key = { _, it -> "bundled_${it.id}" }) { i, item ->
                                 Spacer(Modifier.height(10.dp))
                                 BundledTemplateRow(
                                     title = item.title,
@@ -280,7 +281,7 @@ fun ExploreFeed(
                                 subtitle = stringResource(Res.string.store_ghost_section_subtitle),
                             )
                         }
-                        itemsIndexed(section.shelves, key = { _, it -> "ghost_${it.key}" }) { _, shelf ->
+                        itemsIndexedKeyed(section.shelves, key = { _, it -> "ghost_${it.key}" }) { _, shelf ->
                             Spacer(Modifier.height(12.dp))
                             val spec = ghostSpec(shelf.key, shelf.need)
                             GhostShelfCard(
@@ -391,7 +392,7 @@ private fun FeaturedRow(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        itemsIndexed(items, key = { _, it -> it.id }) { i, item ->
+        itemsIndexedKeyed(items, key = { _, it -> it.id }) { i, item ->
             FeaturedHeroCard(
                 title = item.title,
                 badge = item.kind.name,
@@ -463,7 +464,7 @@ private fun CollectionsRow(section: UiFeedSection.Collections, onOpen: (UiStoreC
             contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            itemsIndexed(section.items, key = { _, it -> it.id }) { i, c ->
+            itemsIndexedKeyed(section.items, key = { _, it -> it.id }) { i, c ->
                 CollectionCard(collection = c, index = i, onOpen = { onOpen(c) })
             }
         }
@@ -501,7 +502,7 @@ private fun PersonalizedRow(
             contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            itemsIndexed(section.items, key = { _, it -> it.id }) { i, item ->
+            itemsIndexedKeyed(section.items, key = { _, it -> it.id }) { i, item ->
                 PosterCard(
                     item = item,
                     index = i,
@@ -533,7 +534,7 @@ private fun LazyListScope.shelfSection(
     when (section.layout) {
         // One lazy item per row, so a long list is not composed all at once.
         UiShelfLayout.ROWS -> {
-            itemsIndexed(section.items, key = { _, it -> "${section.id}_${it.id}" }) { i, item ->
+            itemsIndexedKeyed(section.items, key = { _, it -> "${section.id}_${it.id}" }) { i, item ->
                 StoreItemRow(item, i, onOpenItem, onInstallItem, installing[item.id], backend)
             }
         }
@@ -546,7 +547,7 @@ private fun LazyListScope.shelfSection(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                itemsIndexed(section.items, key = { _, it -> it.id }) { i, item ->
+                itemsIndexedKeyed(section.items, key = { _, it -> it.id }) { i, item ->
                     PosterCard(
                         item = item,
                         index = i,
@@ -565,7 +566,7 @@ private fun LazyListScope.shelfSection(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                itemsIndexed(section.items, key = { _, it -> it.id }) { i, item ->
+                itemsIndexedKeyed(section.items, key = { _, it -> it.id }) { i, item ->
                     FeaturedHeroCard(
                         title = item.title,
                         badge = item.kind.name,
@@ -584,7 +585,7 @@ private fun LazyListScope.shelfSection(
 
         UiShelfLayout.GRID -> {
             val rows = section.items.chunked(2)
-            itemsIndexed(rows, key = { i, _ -> "grid_${section.id}_$i" }) { rowIndex, row ->
+            itemsIndexedKeyed(rows, key = { i, _ -> "grid_${section.id}_$i" }) { rowIndex, row ->
                 Spacer(Modifier.height(12.dp))
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 20.dp),
@@ -664,7 +665,7 @@ private fun LazyListScope.categoriesGrid(
 ) {
     item("head_${section.id}") { SectionHeader(section.title) }
     val rows = section.categories.chunked(2)
-    itemsIndexed(rows, key = { i, _ -> "catrow_${section.id}_$i" }) { rowIndex, row ->
+    itemsIndexedKeyed(rows, key = { i, _ -> "catrow_${section.id}_$i" }) { rowIndex, row ->
         Spacer(Modifier.height(12.dp))
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp),
@@ -828,7 +829,7 @@ private fun ExploreEmpty(
                         subtitle = stringResource(Res.string.store_bundled_subtitle),
                     )
                 }
-                itemsIndexed(bundled, key = { _, it -> "bundled_${it.id}" }) { i, item ->
+                itemsIndexedKeyed(bundled, key = { _, it -> "bundled_${it.id}" }) { i, item ->
                     Spacer(Modifier.height(10.dp))
                     BundledTemplateRow(
                         title = item.title,
@@ -849,7 +850,7 @@ private fun ExploreEmpty(
             item("ghosts_head") { SectionHeader(stringResource(Res.string.store_ghost_next_title)) }
             // No progress counters here: at zero there is nothing to be partway toward, so each note
             // states the CONDITION that fills the shelf instead.
-            itemsIndexed(EMPTY_GHOSTS, key = { _, k -> "ghost_$k" }) { _, key ->
+            itemsIndexedKeyed(EMPTY_GHOSTS, key = { _, k -> "ghost_$k" }) { _, key ->
                 Spacer(Modifier.height(12.dp))
                 val spec = ghostSpec(key, need = 0)
                 GhostShelfCard(

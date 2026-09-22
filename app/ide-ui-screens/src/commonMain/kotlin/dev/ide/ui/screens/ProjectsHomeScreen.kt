@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.editor.preview.ProjectIconRaster
+import dev.ide.ui.itemsIndexedKeyed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import dev.ide.ui.components.AdSlot
@@ -267,7 +268,7 @@ fun ProjectsHomeScreen(
             }
 
             if (segment == HomeSegment.Projects && ordered.isNotEmpty()) {
-                itemsIndexed(ordered, key = { _, p -> p.rootPath }) { i, project ->
+                itemsIndexedKeyed(ordered, key = { _, p -> p.rootPath }) { i, project ->
                     LocalProjectCard(
                         project = project,
                         index = i,

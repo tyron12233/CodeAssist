@@ -59,6 +59,7 @@ import dev.ide.ui.generated.resources.store_unavailable
 import dev.ide.ui.generated.resources.store_unavailable_content
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.cardShape
 import dev.ide.ui.theme.tileShape
@@ -167,7 +168,7 @@ private fun StoreBrowse(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    itemsIndexed(catalog.featured, key = { _, it -> it.id }) { i, item ->
+                    itemsIndexedKeyed(catalog.featured, key = { _, it -> it.id }) { i, item ->
                         FeaturedHeroCard(
                             title = item.title,
                             badge = kindLabel(item.kind),
@@ -194,7 +195,7 @@ private fun StoreBrowse(
             // A LazyVerticalGrid cannot nest inside a LazyColumn, so the two-column grid is emitted as
             // chunked rows instead.
             val rows = catalog.categories.chunked(2)
-            itemsIndexed(rows, key = { i, _ -> "catRow$i" }) { rowIndex, row ->
+            itemsIndexedKeyed(rows, key = { i, _ -> "catRow$i" }) { rowIndex, row ->
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -245,7 +246,7 @@ private fun LazyListScope.storeRows(
     onOpenItem: (UiStoreItem) -> Unit,
     backend: IdeBackend,
 ) {
-    itemsIndexed(section.items, key = { _, it -> "${section.id}_${it.id}" }) { i, item ->
+    itemsIndexedKeyed(section.items, key = { _, it -> "${section.id}_${it.id}" }) { i, item ->
         StoreItemRow(item, i, onOpenItem, backend = backend)
     }
 }

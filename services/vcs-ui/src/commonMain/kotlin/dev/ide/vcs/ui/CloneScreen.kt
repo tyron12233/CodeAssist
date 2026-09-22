@@ -43,6 +43,7 @@ import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.ext.ScreenContext
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import dev.ide.vcs.ui.generated.resources.Res
 import dev.ide.vcs.ui.generated.resources.vcs_cancel
@@ -192,7 +193,7 @@ internal fun CloneScreen(ctx: ScreenContext) {
                     )
                 } else {
                     LazyColumn(Modifier.fillMaxSize()) {
-                        items(repos, key = { it.fullName }) { repo ->
+                        itemsKeyed(repos, key = { it.fullName }) { repo ->
                             RepoRow(repo) {
                                 url = repo.cloneUrl
                                 folder = repo.name

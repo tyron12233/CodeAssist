@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
@@ -190,7 +191,7 @@ private fun StorageContent(
                     modifier = Modifier.padding(start = 4.dp, top = 4.dp),
                 )
             }
-            items(report.projects, key = { it.rootPath }) { p ->
+            itemsKeyed(report.projects, key = { it.rootPath }) { p ->
                 ProjectRow(p, isOpen = p.rootPath == report.openProjectRootPath, busy = busy) { onRequestDeleteProject(p) }
             }
         }

@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.animateColorAsState
@@ -207,7 +208,7 @@ private fun SymbolList(
 ) {
     if (hits.isEmpty()) { if (!searching) Hint(empty); return }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 6.dp)) {
-        items(hits, key = { "${it.kind}:${it.name}:${it.filePath}:${it.offset}:${it.detail}" }) { hit ->
+        itemsKeyed(hits, key = { "${it.kind}:${it.name}:${it.filePath}:${it.offset}:${it.detail}" }) { hit ->
             val path = hit.filePath
             val off = hit.offset
             val canNav = navigable && path != null && off != null
@@ -249,7 +250,7 @@ private fun TextMatchList(matches: List<UiTextMatch>, codeFont: FontFamily, onOp
                     Chip("${hits.size}", fill = MaterialTheme.colorScheme.surfaceContainerHigh, textColor = MaterialTheme.colorScheme.outline)
                 }
             }
-            items(hits, key = { "${path}:${it.line}:${it.matchStart}" }) { m ->
+            itemsKeyed(hits, key = { "${path}:${it.line}:${it.matchStart}" }) { m ->
                 Row(
                     Modifier.fillMaxWidth().clickable { onOpenAt(m.filePath, m.offset) }
                         .padding(start = 22.dp, end = 14.dp, top = 4.dp, bottom = 4.dp),

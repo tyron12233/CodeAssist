@@ -46,6 +46,7 @@ import dev.ide.ui.backend.UiChallengeRank
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.platform.nowMillis
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
@@ -106,7 +107,7 @@ fun DailyChallengeScreen(
             item { ChallengeSectionHeader("Today's top", onAction = onOpenBoard, actionLabel = "Full board") }
             // Keyed on the position, not the rank: a tie is a legitimate leaderboard, and two rows sharing a
             // rank would be a duplicate lazy-list key, which throws out of the measure pass.
-            itemsIndexed(state.board.rows, key = { i, r -> "$i:${r.rank}" }) { _, row -> BoardRow(row) }
+            itemsIndexedKeyed(state.board.rows, key = { i, r -> "$i:${r.rank}" }) { _, row -> BoardRow(row) }
         }
 
         // Below the problem and the board, never above them: the point of the tab is today's problem, and
@@ -441,7 +442,7 @@ private fun ArchiveStrip(history: List<UiChallengeHistoryEntry>, onOpen: (String
     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         // Position-keyed for the same reason as the board above: the dates come from the server and a repeat
         // would take the screen down rather than draw twice.
-        itemsIndexed(history, key = { i, e -> "$i:${e.date}" }) { _, entry ->
+        itemsIndexedKeyed(history, key = { i, e -> "$i:${e.date}" }) { _, entry ->
             val pair = tonalPair(if (entry.solved) 1 else 0)
             val faded = if (entry.solved) 1f else 0.55f
             Column(

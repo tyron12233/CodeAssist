@@ -1,5 +1,6 @@
 package dev.ide.agent.ui
 
+
 import dev.ide.ui.components.*
 
 import androidx.compose.animation.Crossfade
@@ -70,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import dev.ide.ui.itemsKeyed
 import kotlinx.coroutines.delay
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAgentConfig
@@ -277,7 +279,7 @@ private fun Transcript(messages: List<UiAgentMessage>, onRetry: () -> Unit) {
         // Chat-app feel: content anchors to the bottom when short, newest message at the bottom.
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Bottom),
     ) {
-        items(messages, key = { it.id }) { msg ->
+        itemsKeyed(messages, key = { it.id }) { msg ->
             // Only the most recent failure offers a retry (it resumes the latest turn).
             val retry = if (msg.id == lastId && msg.isError && msg.canRetry) onRetry else null
             MessageItem(msg, retry)

@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiNotification
 import dev.ide.ui.backend.UiNotificationKind
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.notif_clear
@@ -152,7 +153,7 @@ fun NotificationsSheet(
                 return@Column
             }
             LazyColumn(Modifier.heightIn(max = 460.dp)) {
-                items(notifications, key = { it.id }) { n ->
+                itemsKeyed(notifications, key = { it.id }) { n ->
                     NotificationRow(
                         notification = n,
                         now = now,

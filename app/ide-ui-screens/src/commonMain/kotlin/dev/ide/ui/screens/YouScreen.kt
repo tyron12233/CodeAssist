@@ -50,6 +50,7 @@ import dev.ide.ui.components.StatFigure
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.*
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Symbol
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -166,7 +167,7 @@ fun YouScreen(
                             Muted(stringResource(Res.string.you_submissions_none))
                         }
                     }
-                    items(submissions, key = { "${it.itemId}:${it.version}" }) { submission ->
+                    itemsKeyed(submissions, key = { "${it.itemId}:${it.version}" }) { submission ->
                         SubmissionRow(
                             submission = submission,
                             onWithdraw = {
@@ -200,7 +201,7 @@ fun YouScreen(
                             Muted(stringResource(Res.string.you_published_none))
                         }
                     }
-                    items(published, key = { it.slug }) { item ->
+                    itemsKeyed(published, key = { it.slug }) { item ->
                         PublishedRow(backend, item) { onOpenItem(item.slug) }
                     }
                     item("actions") {

@@ -45,6 +45,7 @@ import dev.ide.ui.components.CenteredDialog
 import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.ext.ToolWindowContext
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.itemsKeyed
 import dev.ide.vcs.ui.generated.resources.Res
 import dev.ide.vcs.ui.generated.resources.vcs_hint_changes
 import dev.ide.vcs.ui.generated.resources.vcs_hint_commit
@@ -561,7 +562,7 @@ private fun ChangeList(
                 )
                 SectionHint(stringResource(Res.string.vcs_hint_conflicts))
             }
-            items(status.conflicted, key = { "c:${it.path}" }) { change ->
+            itemsKeyed(status.conflicted, key = { "c:${it.path}" }) { change ->
                 ChangeRow(
                     change = change,
                     onClick = { onOpenDiff(change) },
@@ -586,7 +587,7 @@ private fun ChangeList(
                 )
                 SectionHint(stringResource(Res.string.vcs_hint_staged))
             }
-            items(status.staged, key = { "s:${it.path}" }) { change ->
+            itemsKeyed(status.staged, key = { "s:${it.path}" }) { change ->
                 ChangeRow(
                     change = change,
                     onClick = { onOpenDiff(change) },
@@ -612,7 +613,7 @@ private fun ChangeList(
                 )
                 SectionHint(stringResource(Res.string.vcs_hint_changes))
             }
-            items(status.unstaged, key = { "u:${it.path}" }) { change ->
+            itemsKeyed(status.unstaged, key = { "u:${it.path}" }) { change ->
                 ChangeRow(
                     change = change,
                     onClick = { onOpenDiff(change) },

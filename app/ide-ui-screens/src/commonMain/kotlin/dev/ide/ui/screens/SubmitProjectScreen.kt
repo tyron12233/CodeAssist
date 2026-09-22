@@ -72,6 +72,7 @@ import dev.ide.ui.generated.resources.submit_sending
 import dev.ide.ui.generated.resources.submit_title
 import dev.ide.ui.editor.preview.ProjectIconRaster
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.platform.NotificationPermissionStatus
 import dev.ide.ui.platform.rememberNotificationPermissionController
 import kotlinx.coroutines.Dispatchers
@@ -287,7 +288,7 @@ fun SubmitProjectScreen(
                     if (projects.isEmpty()) {
                         item("none") { Body(stringResource(Res.string.submit_no_projects)) }
                     }
-                    items(projects, key = { it.rootPath }) { project ->
+                    itemsKeyed(projects, key = { it.rootPath }) { project ->
                         ProjectRow(project) { chosen = project }
                     }
                     return@LazyColumn

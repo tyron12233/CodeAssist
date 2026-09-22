@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -254,7 +255,7 @@ private fun ModulesList(backend: IdeBackend, codeFont: FontFamily, onOpen: (Stri
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(state.modules, key = { it.name }) { m ->
+                    itemsKeyed(state.modules, key = { it.name }) { m ->
                         ModuleListItem(m, onOpen = { onOpen(m.name) }, onRemove = { state.askRemove(m.name) })
                     }
                 }
@@ -369,7 +370,7 @@ private fun BuildFeaturesPane(backend: IdeBackend, moduleName: String, modifier:
                         color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                items(f.features, key = { it.id }) { feature ->
+                itemsKeyed(f.features, key = { it.id }) { feature ->
                     BuildFeatureRow(
                         feature = feature,
                         working = state.busyId == feature.id,
@@ -428,7 +429,7 @@ private fun CompilerPluginsPane(backend: IdeBackend, moduleName: String, modifie
                         color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                items(p.plugins, key = { it.id }) { plugin ->
+                itemsKeyed(p.plugins, key = { it.id }) { plugin ->
                     CompilerPluginRow(
                         plugin = plugin,
                         working = state.busyId == plugin.id,
@@ -572,7 +573,7 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
                         }
                     }
                 }
-                items(d.assignments, key = { it.buildType }) { a ->
+                itemsKeyed(d.assignments, key = { it.buildType }) { a ->
                     BuildTypeSigningRow(a, d.keystores, state.busy) { keystoreId -> state.assign(a.buildType, keystoreId) }
                 }
                 if (d.keystores.isEmpty()) item("empty") {
@@ -726,7 +727,7 @@ private fun NewModuleDialog(
                             }
                         }
                     }
-                    items(forms, key = { it.table }) { form -> FacetPanel(form, codeFont) }
+                    itemsKeyed(forms, key = { it.table }) { form -> FacetPanel(form, codeFont) }
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -855,7 +856,7 @@ private fun ConfigForm(
         }
 
         // ---- Facet panels (generic) ----
-        items(forms, key = { it.table }) { form -> FacetPanel(form, codeFont) }
+        itemsKeyed(forms, key = { it.table }) { form -> FacetPanel(form, codeFont) }
 
     }
         // Pinned, not the last row of the form: the Save button used to sit below every facet panel, so on an

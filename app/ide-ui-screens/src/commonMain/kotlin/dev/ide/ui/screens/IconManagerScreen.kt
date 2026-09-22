@@ -123,7 +123,9 @@ import dev.ide.ui.generated.resources.icons_tab_project
 import dev.ide.ui.generated.resources.icons_target
 import dev.ide.ui.generated.resources.icons_title
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ca
+import dev.ide.ui.uniqueKeysIndexed
 import org.jetbrains.compose.resources.stringResource
 
 /** The widest the content grows to before it stays centred, so a desktop window is not one giant grid row. */
@@ -306,7 +308,7 @@ private fun RepositoryFilters(state: IconManagerState) {
             vertical = Ca.spacing.s1,
         ),
     ) {
-        items(state.repositories, key = { it.id }) { repo ->
+        itemsKeyed(state.repositories, key = { it.id }) { repo ->
             FilterChip(
                 selected = repo.id == state.selectedRepoId,
                 onClick = { state.selectRepo(repo.id) },
@@ -443,6 +445,14 @@ private fun ComposeGrid(state: IconManagerState) {
     }
 }
 
+/**
+ * The icon tile grid.
+ *
+ * [key] is deduplicated the way [itemsKeyed] does it for lists, because every caller keys on an icon NAME and
+ * a name can legitimately repeat: one repository can carry the same glyph under two styles, and a project can
+ * hold the same resource name in two resource types. A repeated key throws out of the grid's measure pass and
+ * takes the screen down.
+ */
 @Composable
 private fun IconGrid(
     count: Int,
@@ -460,7 +470,8 @@ private fun IconGrid(
         horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
         verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
     ) {
-        items(count, key = key) { index -> tile(index) }
+        val keys = uniqueKeysIndexed(List(count) { it }) { _, index -> key(index) }
+        items(count, key = { keys[it] }) { index -> tile(index) }
     }
 }
 
@@ -833,7 +844,7 @@ private fun ImportControls(state: IconManagerState) {
             Column(verticalArrangement = Arrangement.spacedBy(Ca.spacing.s1)) {
                 FieldLabel(stringResource(Res.string.icons_target))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
-                    items(state.targets, key = { it.resDirPath }) { candidate ->
+                    itemsKeyed(state.targets, key = { it.resDirPath }) { candidate ->
                         FilterChip(
                             selected = candidate.resDirPath == state.target?.resDirPath,
                             onClick = { state.selectTarget(candidate) },

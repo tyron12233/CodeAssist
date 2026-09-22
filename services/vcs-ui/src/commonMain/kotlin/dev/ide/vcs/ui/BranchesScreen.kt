@@ -42,6 +42,7 @@ import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.ext.ScreenContext
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.itemsKeyed
 import dev.ide.vcs.ui.generated.resources.Res
 import dev.ide.vcs.ui.generated.resources.vcs_checkout_branch
 import dev.ide.vcs.ui.generated.resources.vcs_delete_branch
@@ -129,7 +130,7 @@ internal fun BranchesScreen(ctx: ScreenContext) {
                         item("local") {
                             SectionHeader(stringResource(Res.string.vcs_branches_local), local.size)
                         }
-                        items(local, key = { "l:${it.name}" }) { branch ->
+                        itemsKeyed(local, key = { "l:${it.name}" }) { branch ->
                             BranchRow(
                                 branch = branch,
                                 currentBranch = current,
@@ -143,7 +144,7 @@ internal fun BranchesScreen(ctx: ScreenContext) {
                         item("remote") {
                             SectionHeader(stringResource(Res.string.vcs_branches_remote), remote.size)
                         }
-                        items(remote, key = { "r:${it.name}" }) { branch ->
+                        itemsKeyed(remote, key = { "r:${it.name}" }) { branch ->
                             BranchRow(
                                 branch = branch,
                                 currentBranch = current,

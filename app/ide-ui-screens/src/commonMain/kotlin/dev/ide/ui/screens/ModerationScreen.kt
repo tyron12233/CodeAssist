@@ -52,6 +52,7 @@ import dev.ide.ui.components.PillChip
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.*
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Symbol
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -253,7 +254,7 @@ private fun ModerationTabs(
         contentPadding = PaddingValues(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(ModerationTab.entries, key = { it.name }) { t ->
+        itemsKeyed(ModerationTab.entries, key = { it.name }) { t ->
             // The count is in the label rather than on a badge: a moderator opening this wants to know
             // whether there is anything to do before deciding which tab to be on.
             val count = if (t == ModerationTab.Queue) waiting else reports
@@ -333,7 +334,7 @@ private fun QueueList(
                 }
             }
         }
-        items(queue.pending, key = { it.versionId }) { submission ->
+        itemsKeyed(queue.pending, key = { it.versionId }) { submission ->
             SubmissionCard(
                 backend = backend,
                 submission = submission,
@@ -352,7 +353,7 @@ private fun QueueList(
                 )
                 Spacer(Modifier.height(6.dp))
             }
-            items(queue.recent, key = { "done:" + it.versionId }) { submission ->
+            itemsKeyed(queue.recent, key = { "done:" + it.versionId }) { submission ->
                 DecidedRow(submission)
             }
         }
@@ -561,7 +562,7 @@ private fun ListingEdits(edits: List<UiListingEdit>) {
 @Composable
 private fun SubmissionShots(backend: IdeBackend, paths: List<String>) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(paths, key = { it }) { path ->
+        itemsKeyed(paths, key = { it }) { path ->
             val file by produceState<String?>(null, path) {
                 value = runCatching { backend.store.submissionImageFile(path) }.getOrNull()
             }
@@ -632,7 +633,7 @@ private fun ReportList(
         return
     }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
-        items(reports, key = { it.reportId }) { report ->
+        itemsKeyed(reports, key = { it.reportId }) { report ->
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = c.surfaceContainerLow,

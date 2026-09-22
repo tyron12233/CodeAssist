@@ -41,6 +41,7 @@ import dev.ide.ui.components.Chip
 import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.ext.ScreenContext
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import dev.ide.vcs.ui.generated.resources.Res
 import dev.ide.vcs.ui.generated.resources.vcs_commit_files
@@ -105,7 +106,7 @@ internal fun HistoryScreen(ctx: ScreenContext) {
                             )
                         }
                     }
-                    items(commits, key = { it.id }) { commit ->
+                    itemsKeyed(commits, key = { it.id }) { commit ->
                         CommitRow(
                             commit = commit,
                             expanded = expanded == commit.id,

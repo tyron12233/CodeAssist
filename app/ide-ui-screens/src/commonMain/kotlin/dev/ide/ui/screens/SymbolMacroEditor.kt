@@ -38,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import dev.ide.ui.itemsIndexedKeyed
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -292,7 +293,7 @@ private fun SymbolMacroEditorBody(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        itemsIndexed(items, key = { i, k -> "$i:${k.label}:${k.insert}:${k.action}" }) { index, key ->
+                        itemsIndexedKeyed(items, key = { i, k -> "$i:${k.label}:${k.insert}:${k.action}" }) { index, key ->
                             SymbolRow(
                                 key = key,
                                 canUp = index > 0,
@@ -341,7 +342,7 @@ private fun SymbolMacroEditorBody(
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         val defaultsById = defaultMacros.associateBy { macroKey(it) }
-                        itemsIndexed(macros, key = { i, m -> "$i:${m.abbreviation}:${m.languages}" }) { index, m ->
+                        itemsIndexedKeyed(macros, key = { i, m -> "$i:${m.abbreviation}:${m.languages}" }) { index, m ->
                             val default = defaultsById[macroKey(m)]
                             MacroRow(
                                 macro = m,

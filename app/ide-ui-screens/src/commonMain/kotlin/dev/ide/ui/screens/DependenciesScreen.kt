@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.itemsIndexedKeyed
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
@@ -370,7 +372,7 @@ private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modif
         // above the keyboard and never squish; on the desktop card it keeps its natural, capped height.
         val listMod = if (fillHeight) Modifier.fillMaxWidth().weight(1f) else Modifier.fillMaxWidth().heightIn(max = 240.dp)
         LazyColumn(listMod) {
-            items(state.repositories, key = { it.url }) { r -> RepoRow(r) { state.remove(r.url) } }
+            itemsKeyed(state.repositories, key = { it.url }) { r -> RepoRow(r) { state.remove(r.url) } }
         }
         Spacer(Modifier.height(12.dp))
         // add a custom repository
@@ -533,7 +535,7 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
                 // A module may declare the same coordinate more than once (two scopes, or one per variant),
                 // so the coordinate alone is not unique and a lazy list rejects a repeated key. The
                 // declaration index disambiguates, and declaration order is stable.
-                itemsIndexed(deps.declared, key = { i, node -> "decl:$i:${node.coordinate}" }) { i, node ->
+                itemsIndexedKeyed(deps.declared, key = { i, node -> "decl:$i:${node.coordinate}" }) { i, node ->
                     val rowKey = "decl:$i:${node.coordinate}"
                     val open = expanded[rowKey] == true
                     Column(Modifier.fillMaxWidth().animateItem()) {
@@ -575,7 +577,7 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
                     // lazy key throws in the measure pass. Matches the by-coordinate `nodesByCoord` map above.
                     val sorted = deps.nodes.distinctBy { it.coordinate }
                         .sortedWith(compareByDescending<UiDependencyNode> { it.declared }.thenBy { it.coordinate })
-                    items(sorted, key = { "graph:${it.coordinate}" }) { node -> Box(Modifier.animateItem()) { GraphRow(node, nodesByCoord, codeFont, conflictFor(node)) } }
+                    itemsKeyed(sorted, key = { "graph:${it.coordinate}" }) { node -> Box(Modifier.animateItem()) { GraphRow(node, nodesByCoord, codeFont, conflictFor(node)) } }
                 }
             }
         }
@@ -811,7 +813,7 @@ internal fun AddDependencyContent(
             } else if (state.mode == AddMode.Module) {
                 LazyColumn(listModifier) {
                     if (state.moduleTargets.isEmpty()) item { EmptyRow(stringResource(Res.string.dep_no_other_modules)) }
-                    items(state.moduleTargets, key = { it }) { target ->
+                    itemsKeyed(state.moduleTargets, key = { it }) { target ->
                         ModuleTargetRow(target, Modifier.animateItem()) { state.add(target) }
                     }
                 }
@@ -833,7 +835,7 @@ internal fun AddDependencyContent(
                     if (looksLikeCoordinate(typed)) item("direct:$typed") {
                         DirectAddRow(typed, codeFont, Modifier.animateItem()) { asPlatform -> state.add(typed, asPlatform) }
                     }
-                    items(state.results, key = { it.coordinate }) { hit ->
+                    itemsKeyed(state.results, key = { it.coordinate }) { hit ->
                         AddResultRow(hit, codeFont, Modifier.animateItem()) { state.add(hit.coordinate, hit.isBom) }
                     }
                     if (typed.length >= 2 && state.results.isEmpty() && !state.searching && !looksLikeCoordinate(typed)) item {
@@ -1093,7 +1095,7 @@ private fun LocalLibraryBody(
                 Text(stringResource(Res.string.dep_already_in_project), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
             }
-            items(candidates, key = { "local:$it" }) { path ->
+            itemsKeyed(candidates, key = { "local:$it" }) { path ->
                 LocalCandidateRow(path, codeFont, Modifier.animateItem()) { onAttach(path) }
             }
         }

@@ -93,6 +93,7 @@ import dev.ide.ui.generated.resources.appicon_themed
 import dev.ide.ui.generated.resources.appicon_title
 import dev.ide.ui.generated.resources.appicon_use_project_drawable
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 
@@ -287,7 +288,7 @@ private fun ForegroundCard(state: AppIconStudioState, onChooseIcon: () -> Unit, 
                 horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
                 contentPadding = PaddingValues(vertical = Ca.spacing.s1),
             ) {
-                items(state.projectIcons, key = { it.resType + "/" + it.name }) { icon ->
+                itemsKeyed(state.projectIcons, key = { it.resType + "/" + it.name }) { icon ->
                     val config = icon.configurations.firstOrNull { it.qualifier.isEmpty() }
                         ?: icon.configurations.first()
                     FilterChip(

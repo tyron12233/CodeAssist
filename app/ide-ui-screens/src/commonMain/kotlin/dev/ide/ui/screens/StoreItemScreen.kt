@@ -40,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.LocalTonalCardFills
 import dev.ide.ui.theme.LocalExpressiveShapeCycling
 import androidx.compose.runtime.CompositionLocalProvider
@@ -755,7 +756,7 @@ private fun TabRowPills(tabs: List<StoreTab>, selected: StoreTab, onSelect: (Sto
         contentPadding = PaddingValues(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(tabs, key = { it.name }) { t ->
+        itemsKeyed(tabs, key = { it.name }) { t ->
             PillChip(
                 label = stringResource(
                     when (t) {

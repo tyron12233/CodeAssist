@@ -47,6 +47,7 @@ import dev.ide.ui.generated.resources.profile_published
 import dev.ide.ui.generated.resources.profile_rating
 import dev.ide.ui.generated.resources.profile_unrated
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.theme.Symbol
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -147,7 +148,7 @@ fun PublisherProfileScreen(
                             )
                         }
                     }
-                    itemsIndexed(current.items, key = { _, it -> it.id }) { i, item ->
+                    itemsIndexedKeyed(current.items, key = { _, it -> it.id }) { i, item ->
                         // With no backend the row cannot fetch a listing's app icon and falls back to its
                         // glyph tile, which is what this page used to show for every project on it.
                         StoreItemRow(item, i, onOpenItem, backend = backend)

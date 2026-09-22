@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.core.animateFloatAsState
@@ -291,7 +292,7 @@ fun FileNavigator(
                 .padding(vertical = 6.dp),
         ) {
             LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                items(rows, key = { it.node.id }) { row ->
+                itemsKeyed(rows, key = { it.node.id }) { row ->
                     TreeRowContent(
                         row.node,
                         row.depth,

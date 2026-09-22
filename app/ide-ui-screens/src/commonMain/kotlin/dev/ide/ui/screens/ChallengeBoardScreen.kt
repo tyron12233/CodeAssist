@@ -33,6 +33,7 @@ import dev.ide.ui.backend.UiChallengeBoard
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.tonalPair
@@ -108,11 +109,11 @@ fun ChallengeBoardScreen(
                 // a rank were a duplicate lazy-list key, which throws out of the measure pass.
                 val head = loaded.rows.take(ROWS_BEFORE_AD)
                 val tail = loaded.rows.drop(ROWS_BEFORE_AD)
-                itemsIndexed(head, key = { i, r -> "h$i:${r.rank}" }) { _, row -> BoardRow(row) }
+                itemsIndexedKeyed(head, key = { i, r -> "h$i:${r.rank}" }) { _, row -> BoardRow(row) }
                 // One break in the list, after the part of the board anyone came to read. A short board
                 // puts it at the foot instead, which is where it belongs when there is nothing to break.
                 item("ad") { AdSlot(AdPlacement.CHALLENGE, Modifier.padding(vertical = 4.dp)) }
-                itemsIndexed(tail, key = { i, r -> "t$i:${r.rank}" }) { _, row -> BoardRow(row) }
+                itemsIndexedKeyed(tail, key = { i, r -> "t$i:${r.rank}" }) { _, row -> BoardRow(row) }
             }
         }
     }

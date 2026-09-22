@@ -77,4 +77,25 @@ class CrashFixesTest {
         val refreshed = OpenFile("/p/Same.kt", "Same.kt", "class A v2", tabId = a.tabId)
         assertEquals(a.tabId, refreshed.tabId, "an in-place tab refresh keeps the tab's strip identity")
     }
+
+    @Test
+    fun repeatedLazyKeysAreRenamedRatherThanCrashingTheMeasurePass() {
+        // The generic guard behind `itemsKeyed`: whatever a caller's key lambda returns, the list a lazy
+        // list is drawn with has no repeat, so `subcompose` can never throw "Key … was already used".
+        val keys = uniqueKeys(listOf("a", "b", "a", "a", "c")) { it }
+        assertEquals(keys.size, keys.toSet().size, "no repeated key survives")
+        assertEquals(listOf<Any>("a", "b"), keys.take(2), "the first claim on a key keeps it unchanged")
+
+        // Stable for the same content: an item does not lose its identity (or its animateItem) on recompose.
+        assertEquals(keys, uniqueKeys(listOf("a", "b", "a", "a", "c")) { it })
+
+        // The rename cannot collide with a natural key that already looks renamed.
+        val adversarial = uniqueKeys(listOf("a", "a\u00001", "a", "a")) { it }
+        assertEquals(adversarial.size, adversarial.toSet().size, "a key shaped like a rename is still safe")
+
+        // Mixed key types (the store feed keys on ids, the leaderboards on ranks) stay distinct.
+        val mixed = uniqueKeysIndexed(listOf(1, 1, 2)) { _, n -> n }
+        assertEquals(mixed.size, mixed.toSet().size)
+        assertEquals(1, mixed[0], "an unrepeated key keeps its original type")
+    }
 }

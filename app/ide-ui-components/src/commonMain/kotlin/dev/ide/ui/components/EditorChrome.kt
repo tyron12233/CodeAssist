@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedContent
@@ -1118,7 +1119,7 @@ fun TabsStrip(
             // Keyed by the tab's stable unique id, NOT its path: two tabs can transiently share a path
             // (a re-point after rename/move, or a concurrent open on a slow device), and a duplicate LazyRow
             // key hard-crashes the measure pass — an id per tab makes that impossible (see OpenFile.tabId).
-            itemsIndexed(openFiles, key = { _, f -> f.tabId }) { index, file ->
+            itemsIndexedKeyed(openFiles, key = { _, f -> f.tabId }) { index, file ->
                 EditorTab(
                     // Fade a newly-opened tab in, fade a closed one out, and slide the rest into place — so
                     // opening/closing tabs animates instead of snapping (LazyRow item animation, keyed by tab id).
