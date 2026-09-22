@@ -1127,20 +1127,17 @@ class KotlinTreeResolver(
             // (`getLocalTextStyle()`), so the binding records the facade (not the package) as the reflect owner.
             return RNode.PropertyGet(null, Binding.Property(name, prop.declaringClassFqn ?: prop.packageName, backingField = false), span(e))
         }
-        // A bare type name used as a VALUE is its singleton: an `object` (its `INSTANCE`) or a type with a
-        // companion (`Modifier` → `Modifier.Companion`, the empty modifier; `Color` for `Color.Red`). The
-        // interpreter materializes it reflectively from the runtime class. Gate on the resolved FQN actually
-        // being a TYPE: `resolveTypeName` also returns the FQN of a non-type explicit import (an extension
-        // property like `androidx.lifecycle.viewModelScope`), which must NOT be lowered as an object reference —
-        // that produces a hard "cannot load object" crash at render instead of a skippable gap.
-        val typeFqn = runCatching { service.resolveTypeName(name, resolver.fileContext) }.getOrNull()
-        if (typeFqn != null && runCatching { service.isKnownType(typeFqn) }.getOrDefault(false)) {
-            return RNode.Name(Binding.ObjectRef(typeFqn, name), span(e))
-        }
         // A bare ENUM ENTRY referenced from inside the enum's own body (`this == Small`, `when (x) { Small -> }`,
         // a companion/member method returning `Medium`): the entries are in scope unqualified within the enum
         // class. Resolve it like the qualified `EnumFqn.entry` — a read of the static entry member off the enum
         // type reference. (Jetsnack's Glance widgets hit this: "in Companion: unresolved name Small/Medium/Large".)
+        //
+        // This runs BEFORE the bare-type-name lookup below, because that is the Kotlin scope order: a
+        // classifier's own members sit closer than any import, including the `java.lang.*` every file gets
+        // for free. Otherwise an entry named after a JDK class binds that class and dies on the receiver
+        // with "has no object/companion instance", and `enum class DarkMode { System, Light, Dark }` is an
+        // ordinary way to spell a theme setting. It only bites where the class is RESOLVABLE, so it
+        // reproduces on device (android.jar is on the classpath) and not against a stdlib-only one.
         for (ctx in classStack.asReversed()) {
             // The enclosing enum is either this context itself or, inside the enum's own `companion object`
             // (fqn `<Enum>.Companion`), the parent — whose entries are still in scope unqualified. `fileClasses`
@@ -1152,6 +1149,16 @@ class KotlinTreeResolver(
                     return RNode.PropertyGet(enumRef, Binding.Property(name, enumFqn, backingField = false), span(e))
                 }
             }
+        }
+        // A bare type name used as a VALUE is its singleton: an `object` (its `INSTANCE`) or a type with a
+        // companion (`Modifier` → `Modifier.Companion`, the empty modifier; `Color` for `Color.Red`). The
+        // interpreter materializes it reflectively from the runtime class. Gate on the resolved FQN actually
+        // being a TYPE: `resolveTypeName` also returns the FQN of a non-type explicit import (an extension
+        // property like `androidx.lifecycle.viewModelScope`), which must NOT be lowered as an object reference —
+        // that produces a hard "cannot load object" crash at render instead of a skippable gap.
+        val typeFqn = runCatching { service.resolveTypeName(name, resolver.fileContext) }.getOrNull()
+        if (typeFqn != null && runCatching { service.isKnownType(typeFqn) }.getOrDefault(false)) {
+            return RNode.Name(Binding.ObjectRef(typeFqn, name), span(e))
         }
         // A bare read of a member an `import` brought in through an object or companion
         // (`import …KeyEventType.Companion.KeyUp` → `KeyUp`, `import …Dp.Companion.Unspecified`). Lowers to the
