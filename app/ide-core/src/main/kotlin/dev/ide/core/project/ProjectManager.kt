@@ -55,6 +55,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.StandardCopyOption
 import java.util.Properties
 import java.util.zip.ZipEntry
@@ -156,6 +157,8 @@ class ProjectManager private constructor(
     /** The running IDE's version, checked against an installed plugin's `minHostVersion`. */
     private val hostVersion: String? = null,
 ) {
+    private val log = dev.ide.platform.log.Log.logger("ide.projects")
+
     init {
         Files.createDirectories(projectsRoot)
     }
@@ -286,10 +289,16 @@ class ProjectManager private constructor(
      */
     fun list(): List<ProjectSummary> {
         if (!Files.isDirectory(projectsRoot)) return emptyList()
-        val dirs = Files.newDirectoryStream(projectsRoot).use { it.toList() }
+        // An unreadable projects root reads as "no projects", not as a crash. This runs on every render of
+        // the home screen, so a throw here (AccessDeniedException, seen in the field) escapes through
+        // ProjectBackend.projects into composition and takes the app down before it can draw anything --
+        // leaving no way back in. An empty picker is recoverable; a boot loop is not.
+        val dirs = runCatching { Files.newDirectoryStream(projectsRoot).use { it.toList() } }
+            .onFailure { log.warn("project list: $projectsRoot could not be read", it) }
+            .getOrElse { return emptyList() }
         val prefs = loadPrefs()
         return dirs
-            .filter { Files.isDirectory(it) && ModelPersistence.exists(it.toString()) }
+            .filter { runCatching { Files.isDirectory(it) && ModelPersistence.exists(it.toString()) }.getOrDefault(false) }
             .map { dir ->
                 val proj = runCatching { ModelPersistence.load(dir.toString()) }.getOrNull()?.projects?.firstOrNull()
                 ProjectSummary(
@@ -484,10 +493,28 @@ class ProjectManager private constructor(
 
     fun preference(key: String): String? = loadPrefs().getProperty(key)
 
+    /**
+     * Persist one app-global preference.
+     *
+     * Written through a temp file and renamed over the target, because this ONE file holds the analytics
+     * install id and consent, the onboarding flag, the disabled-plugin set and the last-opened timestamps:
+     * truncating it in place means a process death mid-write loses all of them, and a torn file reads back
+     * as a fresh install. Best-effort on top of that -- a preference that cannot be saved is worth a log,
+     * never a crash, since callers are UI toggles and background bookkeeping (a failing write was killing
+     * the process from `setPreference` in the field).
+     */
     fun setPreference(key: String, value: String) {
         val props = loadPrefs().apply { setProperty(key, value) }
-        Files.createDirectories(prefsFile.parent)
-        Files.newOutputStream(prefsFile).use { props.store(it, "CodeAssist preferences") }
+        runCatching {
+            Files.createDirectories(prefsFile.parent)
+            val tmp = prefsFile.resolveSibling("${prefsFile.fileName}.tmp")
+            Files.newOutputStream(tmp).use { props.store(it, "CodeAssist preferences") }
+            try {
+                Files.move(tmp, prefsFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(tmp, prefsFile, StandardCopyOption.REPLACE_EXISTING)
+            }
+        }.onFailure { log.warn("preference '$key' could not be saved to $prefsFile", it) }
     }
 
     // --- built-in plugin enable/disable (app-global; applied on the next launch) ---
@@ -524,7 +551,9 @@ class ProjectManager private constructor(
     fun appRestarter(): AppRestarter? = env.container.getServiceOrNull(APP_RESTARTER)
 
     private fun loadPrefs(): Properties = Properties().apply {
-        if (Files.exists(prefsFile)) Files.newInputStream(prefsFile).use { load(it) }
+        // Unreadable prefs mean defaults, not a failure to start: every caller has one.
+        runCatching { if (Files.exists(prefsFile)) Files.newInputStream(prefsFile).use { load(it) } }
+            .onFailure { log.warn("preferences at $prefsFile could not be read; using defaults", it) }
     }
 
     // --- backup ---
