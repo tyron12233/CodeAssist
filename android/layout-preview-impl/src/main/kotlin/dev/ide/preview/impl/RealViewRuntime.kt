@@ -44,6 +44,18 @@ class RealViewRequest(
      *  ART. [classpath] may then include class DIRECTORIES (the build's compiled `.class` output) as well as
      *  jars, and no `.dex` files. */
     val interpretClasses: Boolean = false,
+    /**
+     * The screen size in dp the resources resolve under: the previewed device frame, turned or widened by the
+     * previewed file's own folder qualifiers (see [dev.ide.preview.ResourceQualifiers]). Drives
+     * `Configuration.screenWidthDp`/`screenHeightDp`/`orientation`/`smallestScreenWidthDp`, which is what lets
+     * a `-land`, `-port`, `-wNNNdp`, `-hNNNdp` or `-swNNNdp` variant be the one selected. Zero keeps the host
+     * device's own screen size.
+     */
+    val screenWidthDp: Int = 0,
+    val screenHeightDp: Int = 0,
+    val smallestWidthDp: Int = 0,
+    /** Layout direction the resources resolve under, for `-ldrtl` variants. */
+    val rtl: Boolean = false,
 ) {
     /** Transient in-process callback for fine render stages ("Dexing"/"Inflating"/"Drawing"), for the status
      *  chip. NOT serialized across the `:preview` IPC — each side sets its own (the daemon forwards over the

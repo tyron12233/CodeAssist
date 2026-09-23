@@ -132,8 +132,12 @@ class PreviewSurfaceState {
     val heightPx: Int get() = (hdp * device.density).toInt()
 }
 
+/** [init] seeds the fresh state for a file, e.g. from the previewed resource folder's own qualifiers. */
 @Composable
-fun rememberPreviewSurfaceState(resetKey: Any?): PreviewSurfaceState = remember(resetKey) { PreviewSurfaceState() }
+fun rememberPreviewSurfaceState(
+    resetKey: Any?,
+    init: PreviewSurfaceState.() -> Unit = {},
+): PreviewSurfaceState = remember(resetKey) { PreviewSurfaceState().apply(init) }
 
 /** Localized display name for a built-in device profile. [PREVIEW_DEVICES] keeps its stable English labels
  *  (they double as device identifiers); a `@Preview(device=...)` override's own label falls through as-is. */

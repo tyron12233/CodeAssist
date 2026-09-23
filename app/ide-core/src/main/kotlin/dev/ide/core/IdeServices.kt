@@ -266,6 +266,7 @@ import dev.ide.plugin.impl.ActionManager
 import dev.ide.preview.LayoutPreviewResult
 import dev.ide.preview.PlaceholderRenderer
 import dev.ide.preview.RenderNode
+import dev.ide.preview.ResourceQualifiers
 import dev.ide.preview.impl.CustomViewRuntime
 import dev.ide.preview.impl.ProjectPreviewResources
 import dev.ide.preview.impl.RealViewRequest
@@ -291,6 +292,7 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
+import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -3307,6 +3309,10 @@ class IdeServices private constructor(
         )
     }
 
+    /** The logical dp of a pixel size at [density]: the preview frame is authored in dp and sent as pixels. */
+    private fun dpOf(px: Int, density: Float): Int =
+        if (density > 0f) (px / density).roundToInt() else px
+
     /**
      * Render [file] with the on-device real-view runtime (the real framework + the project's real libraries).
      * The build's aapt2-linked resources are relinked with the live editor buffer ([previewResourceLinker]) so
@@ -3442,19 +3448,33 @@ class IdeServices private constructor(
                 "externalJars=${externalJars.size} projectDirs=${projectClassDirs.size} rJar=${rJar != null} " +
                 "classpath=${classpath.size}"
         )
+        // The runtime resolves the layout by NAME, so the resource table picks whichever variant matches the
+        // render configuration. That configuration is the previewed device frame with the OPENED FILE's own
+        // folder qualifiers folded on top, which is what makes `res/layout-land/main.xml` render as itself
+        // rather than as the unqualified `res/layout/main.xml` sitting beside it.
+        val config = ResourceQualifiers.forFile(
+            file.toString(),
+            frameWidthDp = dpOf(request.widthPx, request.density),
+            frameHeightDp = dpOf(request.heightPx, request.density),
+            night = request.night,
+        )
         val req = RealViewRequest(
             layoutName = file.fileName.toString().substringBeforeLast('.'),
             layoutText = text,
             widthPx = request.widthPx,
             heightPx = request.heightPx,
             density = request.density,
-            night = request.night,
+            night = config.night,
             resourcesAp = resourcesAp,
             classpath = classpath,
             packageName = facet.namespace,
             themeName = themeName,
             minApi = facet.minSdk,
             interpretClasses = true,
+            screenWidthDp = config.screenWidthDp,
+            screenHeightDp = config.screenHeightDp,
+            smallestWidthDp = config.smallestWidthDp,
+            rtl = config.rtl,
         ).apply {
             stageListener = { _realViewProgress.value = PreviewProgress(it) }
         }
@@ -3472,7 +3492,7 @@ class IdeServices private constructor(
             )
         }
         val resources = ProjectPreviewResources(
-            repo, request.density, request.density, night = request.night, themeName = themeName
+            repo, request.density, request.density, night = config.night, themeName = themeName
         )
         val root = RenderNode()
             .apply { renderer = PlaceholderRenderer; tag = "real-view" }

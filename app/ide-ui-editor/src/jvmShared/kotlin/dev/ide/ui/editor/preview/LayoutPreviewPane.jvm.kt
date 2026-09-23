@@ -102,7 +102,10 @@ private fun PreviewStatusChip(stage: String, modifier: Modifier = Modifier) {
 
 @Composable
 actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, session: EditorSession, modifier: Modifier) {
-    val state = rememberPreviewSurfaceState(path)
+    // A layout opened from a qualified folder previews THAT variant (the backend renders it under a matching
+    // configuration), so the chrome starts on the matching orientation and day/night mode instead of showing
+    // a rotation and a theme the render does not use.
+    val state = rememberPreviewSurfaceState(path) { applyResourceQualifiers(path) }
     val scope = rememberCoroutineScope()
     var showChrome by remember { mutableStateOf(true) }
     var blueprint by remember { mutableStateOf(false) }

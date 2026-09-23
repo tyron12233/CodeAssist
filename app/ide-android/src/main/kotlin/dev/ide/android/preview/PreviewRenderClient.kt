@@ -104,6 +104,10 @@ class PreviewRenderClient(context: Context) {
         minApi: Int,
         interpretClasses: Boolean,
         outFile: String,
+        screenWidthDp: Int,
+        screenHeightDp: Int,
+        smallestWidthDp: Int,
+        rtl: Boolean,
     ): String? {
         val d = awaitDaemon(BIND_TIMEOUT_MS) ?: return null
         return runCatching {
@@ -119,7 +123,11 @@ class PreviewRenderClient(context: Context) {
                 themeName,
                 minApi,
                 interpretClasses,
-                outFile
+                outFile,
+                screenWidthDp,
+                screenHeightDp,
+                smallestWidthDp,
+                rtl,
             )
         }.getOrNull()
     }

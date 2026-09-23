@@ -18,8 +18,12 @@ interface IPreviewRenderer {
     // (pixels at [outFile]) or "err\t<message>" (→ the caller falls back to owned rendering). When
     // [interpretClasses] is true the non-framework classes on [classpath] (jars + class dirs) are interpreted by
     // the bytecode VM rather than dexed, so nothing downloaded/user-built is loaded into ART.
+    // [screenWidthDp]/[screenHeightDp]/[smallestWidthDp]/[rtl] are the configuration the resources resolve
+    // under (the previewed device frame folded with the previewed file's own folder qualifiers), so a
+    // `-land` / `-swNNNdp` / `-ldrtl` variant is the one the resource table selects.
     String render(
         String layoutName, int widthPx, int heightPx, float density, boolean night,
         String resourcesAp, in String[] classpath, String packageName, String themeName, int minApi,
-        boolean interpretClasses, String outFile);
+        boolean interpretClasses, String outFile,
+        int screenWidthDp, int screenHeightDp, int smallestWidthDp, boolean rtl);
 }

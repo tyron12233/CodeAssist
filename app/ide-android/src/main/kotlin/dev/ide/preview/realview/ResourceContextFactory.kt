@@ -10,6 +10,7 @@ import android.os.ParcelFileDescriptor
 import android.util.DisplayMetrics
 import android.view.LayoutInflater
 import java.io.File
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -41,6 +42,12 @@ internal object ResourceContextFactory {
          *  `getSystemService(LAYOUT_INFLATER_SERVICE)`), so the framework inflater instantiates non-framework
          *  tags through it — the interpret path's VM view factory. Null keeps the default class-loading inflater. */
         inflaterFactory: LayoutInflater.Factory2? = null,
+        /** The previewed screen size in dp (see [dev.ide.preview.impl.RealViewRequest.screenWidthDp]); zero
+         *  keeps the host device's own size. */
+        screenWidthDp: Int = 0,
+        screenHeightDp: Int = 0,
+        smallestWidthDp: Int = 0,
+        rtl: Boolean = false,
     ): PreviewContext {
         val config = Configuration(appContext.resources.configuration).apply {
             uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
@@ -50,6 +57,23 @@ internal object ResourceContextFactory {
             // configuration-context path via createConfigurationContext, the AssetManager path via the
             // Resources constructor's updateConfiguration (which rebuilds DisplayMetrics from densityDpi).
             densityDpi = (density * DisplayMetrics.DENSITY_DEFAULT).roundToInt()
+            // The previewed FRAME's screen size, not the host device's. Resources are resolved by name, so
+            // these are the fields that decide whether a `-land`, `-port` or size-qualified variant is the
+            // one selected; inheriting the host's would render the unqualified variant of every layout no
+            // matter which folder the previewed file sits in.
+            if (screenWidthDp > 0 && screenHeightDp > 0) {
+                this.screenWidthDp = screenWidthDp
+                this.screenHeightDp = screenHeightDp
+                smallestScreenWidthDp =
+                    if (smallestWidthDp > 0) smallestWidthDp else min(screenWidthDp, screenHeightDp)
+                orientation =
+                    if (screenWidthDp > screenHeightDp) Configuration.ORIENTATION_LANDSCAPE
+                    else Configuration.ORIENTATION_PORTRAIT
+                screenLayout = (screenLayout and Configuration.SCREENLAYOUT_SIZE_MASK.inv()) or
+                    sizeBucket(smallestScreenWidthDp)
+            }
+            screenLayout = (screenLayout and Configuration.SCREENLAYOUT_LAYOUTDIR_MASK.inv()) or
+                (if (rtl) Configuration.SCREENLAYOUT_LAYOUTDIR_RTL else Configuration.SCREENLAYOUT_LAYOUTDIR_LTR)
         }
         // Build an ISOLATED Resources/AssetManager over the project's `resources.ap_` so the project arsc is its
         // OWN package at id 0x7f and `getIdentifier(name, type, projectPackage)` resolves. The public
@@ -63,6 +87,15 @@ internal object ResourceContextFactory {
             if (Build.VERSION.SDK_INT >= 30) viaResourcesLoader(appContext, resourcesAp, classLoader, packageName, themeName, config, inflaterFactory)
             else throw e
         }
+    }
+
+    /** The `SCREENLAYOUT_SIZE_*` bucket a smallest-width belongs to, as the framework derives it, so the
+     *  legacy `-small`/`-normal`/`-large`/`-xlarge` folders resolve consistently with the dp size. */
+    private fun sizeBucket(smallestWidthDp: Int): Int = when {
+        smallestWidthDp >= 720 -> Configuration.SCREENLAYOUT_SIZE_XLARGE
+        smallestWidthDp >= 480 -> Configuration.SCREENLAYOUT_SIZE_LARGE
+        smallestWidthDp >= 320 -> Configuration.SCREENLAYOUT_SIZE_NORMAL
+        else -> Configuration.SCREENLAYOUT_SIZE_SMALL
     }
 
     /** API 30+: public `ResourcesLoader`. Augments a configuration-context's resources with the linked apk, and

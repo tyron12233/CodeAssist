@@ -73,6 +73,10 @@ class PreviewRenderService : Service() {
             minApi: Int,
             interpretClasses: Boolean,
             outFile: String?,
+            screenWidthDp: Int,
+            screenHeightDp: Int,
+            smallestWidthDp: Int,
+            rtl: Boolean,
         ): String {
             return runCatching {
                 val req = RealViewRequest(
@@ -85,6 +89,10 @@ class PreviewRenderService : Service() {
                     themeName = themeName,
                     minApi = minApi,
                     interpretClasses = interpretClasses,
+                    screenWidthDp = screenWidthDp,
+                    screenHeightDp = screenHeightDp,
+                    smallestWidthDp = smallestWidthDp,
+                    rtl = rtl,
                 ).apply {
                     stageListener = { stage -> runCatching { stageCallback?.onStage(stage) } }
                 }

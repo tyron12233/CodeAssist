@@ -79,6 +79,10 @@ class RemoteRealViewRuntime(
                 request.minApi,
                 request.interpretClasses,
                 outFile.absolutePath,
+                request.screenWidthDp,
+                request.screenHeightDp,
+                request.smallestWidthDp,
+                request.rtl,
             )
         } finally {
             currentStageListener = null

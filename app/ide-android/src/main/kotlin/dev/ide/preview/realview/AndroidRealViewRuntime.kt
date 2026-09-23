@@ -262,7 +262,9 @@ class AndroidRealViewRuntime(
         vmFactory: VmViewFactory?,
     ): ResourceContextFactory.PreviewContext = synchronized(lock) {
         val key =
-            "${resourcesAp.lastModified()}|${resourcesAp.length()}|${request.packageName}|${request.themeName}|${request.density}|${request.night}|$sig"
+            "${resourcesAp.lastModified()}|${resourcesAp.length()}|${request.packageName}|${request.themeName}|" +
+                "${request.density}|${request.night}|${request.screenWidthDp}x${request.screenHeightDp}|" +
+                "${request.smallestWidthDp}|${request.rtl}|$sig"
         contextCache?.let { (k, pc) -> if (k == key) return pc else runCatching { pc.close() } }
         ResourceContextFactory.create(
             context,
@@ -273,6 +275,10 @@ class AndroidRealViewRuntime(
             request.density,
             request.night,
             inflaterFactory = vmFactory,
+            screenWidthDp = request.screenWidthDp,
+            screenHeightDp = request.screenHeightDp,
+            smallestWidthDp = request.smallestWidthDp,
+            rtl = request.rtl,
         ).also { contextCache = key to it }
     }
 
