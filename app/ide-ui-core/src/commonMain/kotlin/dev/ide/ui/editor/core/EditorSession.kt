@@ -235,6 +235,15 @@ class EditorSession(
     private var pendingIme = false // an IME state push was deferred while a batch was open
     private var pendingImeText = false // ...and at least one of those deferred pushes was a text edit
     private var pendingRestart = false // an IME restart was deferred while a batch was open
+    // The batch's text edits folded into one covering span while they stay contiguous (each edit touches or
+    // overlaps the run so far), so [endBatch] can still push a PARTIAL extracted-text update. [batchSpanStart]
+    // and [batchSpanRemoved] are in pre-batch coordinates, [batchSpanAdded] is the run's current length.
+    // [batchSpanStart] is -1 before the first edit; [batchSpanContiguous] drops to false once an edit lands
+    // apart from the run, and the batch then falls back to a full refresh.
+    private var batchSpanStart = -1
+    private var batchSpanRemoved = 0
+    private var batchSpanAdded = 0
+    private var batchSpanContiguous = true
     // An IME commit ending in a symbol happened in the CURRENT batch — arms the split auto-space swallow
     // in [imeCommitText] (a bare " " commit in the same batch is the keyboard's, not the user's).
     private var batchImeSymbolCommit = false
@@ -440,9 +449,41 @@ class EditorSession(
         if (batchDepth > 0) {
             pendingIme = true
             pendingImeText = true
+            mergeBatchSpan(span)
             return
         }
         imeListener?.onTextChanged(span)
+    }
+
+    /** Fold [span] (in current coordinates) into the batch's covering span, see [batchSpanStart]. */
+    private fun mergeBatchSpan(span: EditSpan) {
+        if (!batchSpanContiguous) return
+        if (batchSpanStart < 0) {
+            batchSpanStart = span.start
+            batchSpanRemoved = span.removed
+            batchSpanAdded = span.added
+            return
+        }
+        val runEnd = batchSpanStart + batchSpanAdded
+        val editEnd = span.start + span.removed
+        if (editEnd < batchSpanStart || span.start > runEnd) {
+            batchSpanContiguous = false
+            return
+        }
+        val start = min(batchSpanStart, span.start)
+        val end = max(runEnd, editEnd) // union in current (pre-this-edit) coordinates
+        // Text before the run maps 1:1 to pre-batch offsets, text past it by the run's accumulated delta.
+        val oldEnd = batchSpanStart + batchSpanRemoved + (end - runEnd)
+        batchSpanRemoved = oldEnd - start
+        batchSpanAdded = end - start - span.removed + span.added
+        batchSpanStart = start
+    }
+
+    private fun resetBatchSpan() {
+        batchSpanStart = -1
+        batchSpanRemoved = 0
+        batchSpanAdded = 0
+        batchSpanContiguous = true
     }
 
     /** IME batch edits (and multi-edit completion accepts): one IME push for the whole group, and ONE undo step. */
@@ -454,6 +495,7 @@ class EditorSession(
         if (batchDepth == 0) {
             batchImeSymbolCommit = false
             batchImeSpaceDeleteOffset = -1
+            resetBatchSpan()
         }
         batchDepth++
     }
@@ -480,9 +522,20 @@ class EditorSession(
             } else if (pendingIme) {
                 pendingIme = false
                 val l = imeListener
-                if (pendingImeText) { pendingImeText = false; l?.onTextChanged(null) } // null span → full refresh
-                else l?.onStateChanged()
+                if (pendingImeText) {
+                    pendingImeText = false
+                    // One contiguous run still gets a partial update; scattered edits ask for a full refresh.
+                    val span = if (batchSpanContiguous && batchSpanStart >= 0) {
+                        EditSpan(batchSpanStart, batchSpanRemoved, batchSpanAdded)
+                    } else {
+                        null
+                    }
+                    l?.onTextChanged(span)
+                } else {
+                    l?.onStateChanged()
+                }
             }
+            resetBatchSpan()
         }
     }
 
