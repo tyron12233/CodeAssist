@@ -167,7 +167,7 @@ class JavaSourceAnalyzer private constructor(
             env,
             typeSearch = { prefix ->
                 // Read `indexService` lazily (host sets it after construction). Simple-name prefix → candidate types.
-                indexService?.prefixAll<ClassNameValue>(ClassNameIndex.ALL, prefix, 50)
+                indexService?.prefixAll<ClassNameValue>(ClassNameIndex.ALL, prefix, JavaCompletion.TYPE_SEARCH_LIMIT)
                     ?.map { JavaCompletion.IndexedType(it.value.fqn, it.value.kind) }
                     ?.toList()
                     ?: emptyList()

@@ -54,6 +54,7 @@ import dev.ide.build.ProgramInterpreter
 import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.core.IdeServices.Companion.openStore
 import dev.ide.core.actions.BuiltInActions
+import dev.ide.core.services.orDefaultUnlessPreempted
 import dev.ide.core.analysis.AnalyzerSourceDocs
 import dev.ide.core.analysis.CompilationContexts
 import dev.ide.core.analysis.IndexBackedSourceDocs
@@ -2152,13 +2153,13 @@ class IdeServices private constructor(
         // Refresh the analyzer's parse of the live buffer (the XML hint service reads the last parse; the JDT/
         // Kotlin services read their overlay, for which this reparse is a cheap no-op when text is unchanged).
         analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
-        return runCatching {
+        return orDefaultUnlessPreempted(emptyList()) {
             runSync {
                 service.hints(
                     vf, TextRange(startOffset, endOffset)
                 )
             }
-        }.getOrDefault(emptyList())
+        }
     }
 
     /** Type-aware semantic-highlight tokens for [text], bound to [file]'s module (empty if outside the project
@@ -2171,7 +2172,7 @@ class IdeServices private constructor(
         val vf = store.vfs.fileFor(file)
         // Refresh the analyzer's parse of the live buffer (the Kotlin highlighter reads the last parse).
         analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
-        return runCatching { runSync { service.highlight(vf) } }.getOrDefault(emptyList())
+        return orDefaultUnlessPreempted(emptyList()) { runSync { service.highlight(vf) } }
     }
 
     /** Foldable regions for [file]'s live buffer — imports, type/function bodies, block comments. */

@@ -39,7 +39,8 @@ internal class PreviewBackend(private val ctx: BackendContext) : PreviewService 
                 ctx.background { ctx.services.composePreviews(Paths.get(path), text) }
             }.map(::toUiPreview)
         } catch (e: EngineCanceledException) {
-            emptyList()
+            // Preempted, not empty: the host retries and keeps the markers it has meanwhile.
+            throw dev.ide.ui.backend.AnalysisPreempted()
         }
 
     override suspend fun runComposePreview(

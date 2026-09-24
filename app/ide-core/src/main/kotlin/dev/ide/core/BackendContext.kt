@@ -106,5 +106,5 @@ internal interface BackendContext {
 
     /** Record an editor-latency sample (completion/analysis) into the aggregated perf sampler (flushed by the
      *  aggregator on close). */
-    fun recordPerf(event: String, ms: Long)
+    fun recordPerf(event: String, ms: Long, dims: Map<String, String> = emptyMap(), queuedMs: Long? = null)
 }

@@ -47,7 +47,7 @@ object AndroidMemory {
      *  - leaving the screen ([ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN]) releases on a low-memory device
      *    only, since on a roomy one it would just make the return to the editor re-resolve for nothing;
      *  - entering the background list ([ComponentCallbacks2.TRIM_MEMORY_BACKGROUND] and above), or critical
-     *    pressure while visible, releases everywhere.
+     *    pressure while visible, releases everywhere. Lesser pressure while visible never does.
      */
     fun registerTrimHandler(context: Context, backend: IdeServicesBackend) {
         context.applicationContext.registerComponentCallbacks(object : ComponentCallbacks2 {
@@ -68,8 +68,9 @@ object AndroidMemory {
     private fun shouldRelease(level: Int): Boolean = when {
         level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> true
         level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> DeviceMemory.isLow
+        // While the IDE is on screen, only critical pressure releases: the caches are what keep the next
+        // completion and highlight warm, and a device that merely runs low reports that constantly.
         level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> true
-        level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> DeviceMemory.isLow
         else -> false
     }
 }

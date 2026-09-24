@@ -20,6 +20,7 @@ import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinType
+import dev.ide.platform.EngineCancellation
 import dev.ide.vfs.VirtualFile
 
 /**
@@ -52,6 +53,8 @@ class KotlinInlayHintService(
         fun walk(psi: KtElement) {
             val r = psi.textRange
             if (r.endOffset < range.start || r.startOffset > range.end) return
+            // Between nodes, never inside one resolution: a completion preempts the pass here.
+            EngineCancellation.checkCanceled()
             when (psi) {
                 is KtProperty -> localTypeHint(psi, resolver)?.let { out += it }
                 is KtLambdaExpression -> lambdaHints(psi, resolver, out)

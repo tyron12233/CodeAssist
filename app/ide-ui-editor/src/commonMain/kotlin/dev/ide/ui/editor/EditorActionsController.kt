@@ -104,8 +104,17 @@ internal class EditorActionsController(
         // now resolved ON DEMAND in [openMenu] (Alt-Enter), matching IntelliJ (no proactive lightbulb there).
         if (diag == null) { available = emptyList(); menuOpen = false; return }
         val len = session.doc.length
-        availStart = diag.startOffset.coerceIn(0, len)
-        availEnd = diag.endOffset.coerceIn(availStart, len)
+        val start = diag.startOffset.coerceIn(0, len)
+        val end = diag.endOffset.coerceIn(start, len)
+        // Actions resolved for a different diagnostic must not show (or apply) here while this one resolves.
+        if (start != availStart || end != availEnd) available = emptyList()
+        // Resolving the fixes runs a full-file analysis on the engine, so wait until the caret has rested:
+        // while typing, the caret line almost always carries a transient error (the half-typed name), and
+        // resolving on each pause would keep the engine busy ahead of the next completion. Any edit or caret
+        // move restarts this (the caller's effect is keyed on them), which also cancels a resolution in flight.
+        delay(ACTIONS_SETTLE_DELAY)
+        availStart = start
+        availEnd = end
         val result = runCatching { backend.editor.actionsAt(path, session.doc.text, availStart, availEnd) }.getOrNull().orEmpty()
         available = result
         when {
@@ -134,13 +143,20 @@ internal class EditorActionsController(
         dismissCompletion()
         menuSelected = 0
         menuOpen = true
-        // Off-diagnostic intentions are no longer pre-resolved (see [refreshAvailability]), so resolve them now,
-        // on explicit request. When the caret IS on a diagnostic, [available] is already populated — reuse it.
-        if (available.isEmpty() && caretDiagnostic == null) {
-            val sel = session.selection
+        // Off-diagnostic intentions are never pre-resolved, and a diagnostic's fixes only once the caret has
+        // rested (see [refreshAvailability]), so resolve whatever is missing now, on explicit request. When the
+        // caret IS on a diagnostic and its fixes already resolved, [available] is populated: reuse it.
+        if (available.isEmpty()) {
             val len = session.doc.length
-            availStart = sel.min.coerceIn(0, len)
-            availEnd = sel.max.coerceIn(availStart, len)
+            val diag = caretDiagnostic
+            if (diag != null) {
+                availStart = diag.startOffset.coerceIn(0, len)
+                availEnd = diag.endOffset.coerceIn(availStart, len)
+            } else {
+                val sel = session.selection
+                availStart = sel.min.coerceIn(0, len)
+                availEnd = sel.max.coerceIn(availStart, len)
+            }
             scope.launch {
                 available = runCatching {
                     backend.editor.actionsAt(path, session.doc.text, availStart, availEnd)
@@ -375,3 +391,7 @@ internal fun rememberEditorActionsController(
         )
     }
 }
+
+/** How long the caret must rest on a diagnostic, beyond the availability debounce, before its fixes are
+ *  resolved for the proactive lightbulb. */
+private val ACTIONS_SETTLE_DELAY = 750.milliseconds

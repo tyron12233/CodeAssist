@@ -94,6 +94,22 @@ class JavaServicesTest {
     }
 
     @Test
+    fun eachReferenceIsColoredOnce() {
+        val vf = writeFile(
+            """
+            package com.foo;
+            class Use {
+                int counter;
+                void run() { counter = counter + 1; run(); this.run(); }
+            }
+            """.trimIndent()
+        )
+        val tokens = runBlocking { analyzer.semanticHighlighter!!.highlight(vf) }
+        val starts = tokens.map { it.range.start }
+        assertEquals(starts.size, starts.toSet().size, "one token per name; got ${tokens.map { it.kind.id to it.range.start }}")
+    }
+
+    @Test
     fun highlightUsesTheLiveBufferNotDisk() {
         // On disk: one form. Live editor buffer: the same code shifted down by blank lines. The highlighter
         // must classify against the LIVE parse the host pushed through the incremental parser, so the token

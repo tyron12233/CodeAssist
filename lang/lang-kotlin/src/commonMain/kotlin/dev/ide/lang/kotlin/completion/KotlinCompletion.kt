@@ -245,6 +245,8 @@ class KotlinCompletion(
             resolver.composableContextAt(offset) == ComposableContext.COMPOSABLE
         }
 
+        // How many candidates matched the prefix before the page was cut to MAX_ITEMS (see isIncomplete).
+        var matchedCount = 0
         val candidates = KotlinPerf.span("rank") {
             val packageCompletion = pos.packageCompletion
             val expected = pos.expected
@@ -276,6 +278,7 @@ class KotlinCompletion(
                 )
             }
             out.sortWith(RANK)
+            matchedCount = out.size
             if (out.size > MAX_ITEMS) out.subList(MAX_ITEMS, out.size).clear()
             out
         }
@@ -325,8 +328,9 @@ class KotlinCompletion(
         // Reserve room so the (small) keyword/template/postfix tail is never starved by a large symbol set —
         // otherwise an empty-prefix popup (hundreds of in-scope symbols) would truncate the keywords away.
         val keep = (MAX_ITEMS - tail.size).coerceAtLeast(0)
+        val head = pos.extra.distinctBy { it.kind to it.label } + symbolItems
         val items =
-            ((pos.extra.distinctBy { it.kind to it.label } + symbolItems).take(keep) + tail)
+            (head.take(keep) + tail)
                 // Include `container` so two distinct types with the same simple name (different packages) both
                 // remain — otherwise this pass re-collapses the pair the symbol dedup above kept.
                 .distinctBy { Triple(it.kind, it.label, it.container) }
@@ -340,7 +344,16 @@ class KotlinCompletion(
             // segments are open so far, so a classpath type (`Modifier`, …) that indexes moments later is absent
             // — force a re-query on each keystroke until the index is ready, otherwise the editor caches this
             // pre-index page as complete and a fast typist never sees the type appear (cf. LearnBackend).
-            isIncomplete = raw.size > MAX_ITEMS || pos.capped || !service.classpathReady(),
+            //
+            // "Truncated" counts the candidates that MATCHED the prefix, not the raw set before filtering: a
+            // candidate the matcher rejects for this prefix cannot match any longer one (every tier it grades,
+            // prefix, camel hump and substring alike, only narrows as characters are added), so it is not a
+            // missing match. Counting the raw set marked nearly every page incomplete, which made the popup
+            // re-query the engine on every keystroke instead of narrowing locally.
+            // The one exception is the substring tier, which only switches on at MIN_SUBSTRING_QUERY typed
+            // chars: below that, the next character can admit a middle match this page rejected.
+            isIncomplete = matchedCount > MAX_ITEMS || head.size > keep || pos.capped ||
+                prefix.length < PrefixMatcher.MIN_SUBSTRING_QUERY || !service.classpathReady(),
             replacementRange = replaceRange,
         )
     }

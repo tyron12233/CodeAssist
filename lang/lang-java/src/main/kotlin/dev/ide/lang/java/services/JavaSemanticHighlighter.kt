@@ -76,9 +76,15 @@ class JavaSemanticHighlighter(private val psiFor: (VirtualFile) -> PsiJavaFile) 
                 super.visitReferenceExpression(expression)
             }
 
+            // A reference expression reaches both visit methods above (the platform's reference-expression
+            // visit delegates to the reference-element one), so remember which names were classified: each
+            // reference is then resolved once and colored once.
+            private val classified = HashSet<Int>()
+
             private fun classifyRef(ref: PsiJavaCodeReferenceElement) {
-                val target = ref.resolve() ?: return
                 val nameRange = ref.referenceNameElement?.textRange ?: return
+                if (!classified.add(nameRange.startOffset)) return
+                val target = ref.resolve() ?: return
                 out += token(nameRange, target, declaration = false)
             }
         })

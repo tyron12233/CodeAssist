@@ -32,6 +32,10 @@ object BufferWordsContributor : CompletionContributor {
         // Graded matching (prefix/camel-hump/substring) — hippie words are the pre-index fallback, so
         // `mDL` must reach a buffer's `myDynamicList` even before the symbol backends know the name.
         val matcher = dev.ide.lang.completion.PrefixMatcher(prefix)
+        // Below the substring threshold every tier anchors on the first character (a prefix, or a camel hump
+        // starting at the word's first letter), so a word starting elsewhere is rejected before it is copied.
+        val anchored = prefix.length < dev.ide.lang.completion.PrefixMatcher.MIN_SUBSTRING_QUERY
+        val first = prefix[0]
 
         val existing = HashSet<String>()
         result.elements.forEach { existing.add(it.label) }
@@ -45,7 +49,7 @@ object BufferWordsContributor : CompletionContributor {
                 var j = i + 1
                 while (j < len && isWordChar(text[j])) j++
                 val isCaretToken = caret in i..j // the very token under the caret — skip it
-                if (!isCaretToken && j - i >= prefix.length) {
+                if (!isCaretToken && j - i >= prefix.length && (!anchored || text[i].equals(first, ignoreCase = true))) {
                     val word = text.substring(i, j)
                     if (word !in existing && matcher.matches(word)) {
                         val dist = if (caret < i) i - caret else caret - j
@@ -56,10 +60,13 @@ object BufferWordsContributor : CompletionContributor {
                 i = j
             } else i++
         }
+        // Capped to the nearest few, so a page holding fewer words than matched is not the whole answer; nor
+        // is one below the substring threshold, where the next character can admit a middle match.
+        if (nearest.size > MAX_WORDS || anchored) result.markIncomplete()
         if (nearest.isEmpty()) return
 
         val baseSort = (result.elements.maxOfOrNull { it.sortPriority } ?: 0) + 1000
-        nearest.entries.sortedBy { it.value }.take(20).forEachIndexed { idx, e ->
+        nearest.entries.sortedBy { it.value }.take(MAX_WORDS).forEachIndexed { idx, e ->
             result.addElement(
                 CompletionItem(
                     label = e.key,
@@ -71,6 +78,9 @@ object BufferWordsContributor : CompletionContributor {
             )
         }
     }
+
+    /** Most buffer words offered per request, nearest to the caret first. */
+    private const val MAX_WORDS = 20
 
     private fun isWordStart(c: Char): Boolean = c.isLetter() || c == '_' || c == '$'
     private fun isWordChar(c: Char): Boolean = c.isLetterOrDigit() || c == '_' || c == '$'

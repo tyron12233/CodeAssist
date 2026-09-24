@@ -59,7 +59,10 @@ internal class SignatureHelpController(private val backend: IdeBackend, private 
             return
         }
         if (dismissed) return
-        delay(40.milliseconds)
+        // Long enough that typing an argument does not resolve per keystroke (each one parses and resolves the
+        // call on the engine, ahead of the completion the same keystroke asked for); the panel already showing
+        // stays up meanwhile, so the wait is only visible on first entering the parentheses.
+        delay(SIGNATURE_HELP_DELAY)
         val text = session.doc.text
         help = runCatching { backend.editor.signatureHelp(path, text, caret) }.getOrNull()
     }
@@ -68,3 +71,6 @@ internal class SignatureHelpController(private val backend: IdeBackend, private 
 @Composable
 internal fun rememberSignatureHelpController(path: String, backend: IdeBackend): SignatureHelpController =
     remember(path) { SignatureHelpController(backend, path) }
+
+/** Quiet period after the last edit or caret move inside a call before signature help is resolved. */
+private val SIGNATURE_HELP_DELAY = 150.milliseconds

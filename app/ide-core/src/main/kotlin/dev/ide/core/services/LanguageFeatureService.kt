@@ -46,7 +46,7 @@ internal class LanguageFeatureService(private val ctx: EngineContext) {
         val vf = ctx.store.vfs.fileFor(file)
         // Refresh the analyzer's parse of the live buffer (the folder reads the last parse).
         ctx.refreshParse(analyzer, file, text)
-        return runCatching { runSync { service.folds(vf) } }.getOrDefault(emptyList())
+        return orDefaultUnlessPreempted(emptyList()) { runSync { service.folds(vf) } }
     }
 
     /** Reformat the whole live buffer of [file] to [style]; minimal edits, or empty if the language has no
@@ -119,12 +119,12 @@ internal class LanguageFeatureService(private val ctx: EngineContext) {
         // Backend-neutral: derive the enclosing type/method chain from the SPI `fileStructure` (both the JDT
         // and IntelliJ-PSI Java backends implement it), so this isn't tied to a concrete analyzer type.
         val analyzer = ctx.analyzerFor(module, ctx.languageFor(file))
-        return runCatching {
+        return orDefaultUnlessPreempted(emptyList()) {
             analyzer.fileStructure(ctx.store.vfs.fileFor(file), text)
                 .filter { it.kind in BREADCRUMB_KINDS && offset in it.nameOffset..it.endOffset }
                 .sortedBy { it.depth }
                 .map { it.name }
-        }.getOrDefault(emptyList())
+        }
     }
 
     /** The file's declarations (for the structure/outline view + sticky scroll headers), via the language
@@ -133,7 +133,7 @@ internal class LanguageFeatureService(private val ctx: EngineContext) {
         val module = ctx.moduleForEditableFile(file) ?: return emptyList()
         val analyzer = ctx.analyzerFor(module, ctx.languageFor(file))
         val vf = ctx.store.vfs.fileFor(file)
-        return runCatching { analyzer.fileStructure(vf, text) }.getOrDefault(emptyList())
+        return orDefaultUnlessPreempted(emptyList()) { analyzer.fileStructure(vf, text) }
     }
 
     /** Quick documentation (signature + doc comment) for the symbol at [offset] in [file]'s buffer, or null.
@@ -143,6 +143,6 @@ internal class LanguageFeatureService(private val ctx: EngineContext) {
         ctx.updateDocument(file, text)
         val analyzer = ctx.analyzerFor(module, ctx.languageFor(file))
         val vf = ctx.store.vfs.fileFor(file)
-        return runCatching { runSync { analyzer.quickDoc(vf, text, offset) } }.getOrNull()
+        return orDefaultUnlessPreempted(null) { runSync { analyzer.quickDoc(vf, text, offset) } }
     }
 }
