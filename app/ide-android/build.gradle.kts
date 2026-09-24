@@ -841,6 +841,10 @@ configurations.configureEach {
 dependencies {
     implementation(project(":ide-ui"))
 
+    // Installs src/main/baseline-prof.txt (compiled into assets/dexopt/baseline.prof) on first launch when the
+    // APK was not installed by Play, so sideloaded installs AOT-compile the startup and editing hot paths too.
+    implementation(libs.androidx.profileinstaller)
+
     // The real on-device IDE engine, shared with :ide-desktop. ide-core pulls in lang-jdt (jdt.core +
     // ecj) transitively along with the Eclipse platform runtime jars (org.eclipse.core.runtime, etc.).
     // Those must be kept: even JDT's standalone ASTParser/completion path references base runtime types

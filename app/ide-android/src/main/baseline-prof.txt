@@ -1,24 +1,103 @@
 # Baseline profile for the installed IDE app (com.tyron.code).
 #
-# AGP compiles this into assets/dexopt/baseline.prof, and the package manager AOT-compiles the listed classes
-# at install time (dex2oat) instead of leaving them to interpret + JIT on first use. It targets the editor +
-# completion HOT PATH — the classes exercised on every keystroke — so typing/completion is fast from the first
-# launch rather than warming up over several sessions.
+# AGP compiles this file into assets/dexopt/baseline.prof. At install time the package manager AOT-compiles
+# the matched methods (dex2oat) instead of interpreting and JIT-compiling them on first use. Play installs
+# apply the profile directly; sideloaded installs apply it through androidx.profileinstaller on first launch.
 #
-# Scope note: this covers only classes in the MAIN app dex. The K2/FIR Analysis-API runtime lives in the
-# separate `aa.apk` asset loaded via DexClassLoader (NOT installed), so a profile cannot AOT it from here; that
-# runtime is warmed instead by KotlinAnalysisService.warmUp() at project open (which seeds ART's JIT profile so
-# background dexopt AOT-compiles the FIR hot path over time). See docs/kotlin-analysis-api.md.
+# Rules use the human-readable profile format with wildcards, expanded by profgen against the APK dex:
+#   HSPL<class>->**(**)**   every method of the matched classes is Hot, Startup and Post-startup
+#   L<class>                the matched classes are loaded and initialized at startup
+#   *                       matches within one package segment, ** matches across segments
 #
-# HRF wildcard rules (profgen expands them against the APK dex at build time): HSPL = Hot/Startup/Post-startup.
+# Scope: the IDE's own startup, editing and analysis paths, plus targeted third-party parser and tree builder
+# classes. Whole third-party trees (the IntelliJ platform, the Kotlin compiler, JDT) are deliberately left
+# out: compiling all of them bloats the odex, which costs more than it saves on low-storage devices.
+# AndroidX and Compose libraries ship their own baseline profiles, which AGP merges in automatically.
 
-# The Compose code editor: layout, gutter, completion popup + the extracted popup layers, diagnostics chips.
+# --- App startup and bootstrap ------------------------------------------------------------------------
+# MainActivity, AndroidIde bootstrap, device services and the Android-hosted editor adapters.
+HSPLdev/ide/android/*;->**(**)**
+Ldev/ide/android/*;
+HSPLdev/ide/android/plugins/**->**(**)**
+# Application environment, IdeServices, plugin registry and the scoped services they wire up.
+HSPLdev/ide/core/*;->**(**)**
+Ldev/ide/core/*;
+HSPLdev/ide/core/services/**->**(**)**
+HSPLdev/ide/core/plugins/**->**(**)**
+HSPLdev/ide/core/settings/**->**(**)**
+HSPLdev/ide/core/event/**->**(**)**
+HSPLdev/ide/plugin/impl/**->**(**)**
+HSPLdev/ide/platform/**->**(**)**
+Ldev/ide/platform/**;
+
+# --- Project open ---------------------------------------------------------------------------------------
+# ProjectManager, project model store, sync and the model to UI bridge.
+HSPLdev/ide/core/project/**->**(**)**
+HSPLdev/ide/core/sync/**->**(**)**
+HSPLdev/ide/model/**->**(**)**
+HSPLdev/ide/vfs/**->**(**)**
+
+# --- UI shell -------------------------------------------------------------------------------------------
+# Theme, platform host glue, navigation and the screens shown at launch and while editing.
+HSPLdev/ide/ui/*;->**(**)**
+HSPLdev/ide/ui/theme/**->**(**)**
+HSPLdev/ide/ui/platform/**->**(**)**
+HSPLdev/ide/ui/navigation/**->**(**)**
+HSPLdev/ide/ui/screens/**->**(**)**
+HSPLdev/ide/ui/components/**->**(**)**
+HSPLdev/ide/ui/actions/**->**(**)**
+
+# --- Editor rendering and input -------------------------------------------------------------------------
+# Canvas editor core (line buffer, layout, caret, input connection), gutter, folding, completion popup.
 HSPLdev/ide/ui/editor/**->**(**)**
-# The UI<->engine backend port (completion result mapping, DTOs the editor marshals).
+Ldev/ide/ui/editor/**;
+# UI to engine backend port and the engine-side editor backend and completion pipeline.
 HSPLdev/ide/ui/backend/**->**(**)**
-# The engine-side completion pipeline + editor backend (runs per keystroke to assemble/rank the popup).
-HSPLdev/ide/core/completion/**->**(**)**
+HSPLdev/ide/ui/concurrent/**->**(**)**
 HSPLdev/ide/core/backend/**->**(**)**
-# The Analysis-API client + neutral DTO/codec that marshal each completion request to the :aa process.
-HSPLdev/ide/lang/kotlin/aa/**->**(**)**
-HSPLdev/ide/android/aa/**->**(**)**
+HSPLdev/ide/core/completion/**->**(**)**
+HSPLdev/ide/core/analysis/**->**(**)**
+
+# --- Language SPI ---------------------------------------------------------------------------------------
+HSPLdev/ide/lang/*;->**(**)**
+HSPLdev/ide/lang/completion/**->**(**)**
+HSPLdev/ide/lang/dom/**->**(**)**
+HSPLdev/ide/lang/imports/**->**(**)**
+HSPLdev/ide/lang/signature/**->**(**)**
+HSPLdev/ide/analysis/**->**(**)**
+
+# --- Kotlin lexer, parser and syntax facade -------------------------------------------------------------
+# The vendored multiplatform Kotlin parser and the syntax-api tree builder it runs on.
+HSPLdev/ide/kotlin/syntax/**->**(**)**
+HSPLorg/jetbrains/kotlin/kmp/**->**(**)**
+HSPLcom/intellij/platform/syntax/**->**(**)**
+
+# --- Kotlin analysis, completion and highlighting -------------------------------------------------------
+# Compile and interpreter packages are excluded: they run on build and preview, not on every keystroke.
+HSPLdev/ide/lang/kotlin/*;->**(**)**
+HSPLdev/ide/lang/kotlin/analysis/**->**(**)**
+HSPLdev/ide/lang/kotlin/completion/**->**(**)**
+HSPLdev/ide/lang/kotlin/resolve/**->**(**)**
+HSPLdev/ide/lang/kotlin/symbols/**->**(**)**
+HSPLdev/ide/lang/kotlin/index/**->**(**)**
+HSPLdev/ide/lang/kotlin/parse/**->**(**)**
+HSPLdev/ide/lang/kotlin/synthetic/**->**(**)**
+
+# --- Java analysis --------------------------------------------------------------------------------------
+# IntelliJ-PSI Java backend and the JDT adapter.
+HSPLdev/ide/lang/java/**->**(**)**
+HSPLdev/ide/lang/jdt/*;->**(**)**
+HSPLdev/ide/lang/jdt/analysis/**->**(**)**
+HSPLdev/ide/lang/jdt/completion/**->**(**)**
+HSPLdev/ide/lang/jdt/highlight/**->**(**)**
+HSPLdev/ide/lang/jdt/resolve/**->**(**)**
+HSPLdev/ide/lang/jdt/env/**->**(**)**
+HSPLdev/ide/lang/jdt/dom/**->**(**)**
+# IntelliJ PSI builder and tree construction, and the Java lexer and parser on top of them.
+HSPLcom/intellij/lang/impl/**->**(**)**
+HSPLcom/intellij/psi/impl/source/tree/**->**(**)**
+HSPLcom/intellij/lang/java/lexer/**->**(**)**
+HSPLcom/intellij/lang/java/parser/**->**(**)**
+
+# --- Index query path -----------------------------------------------------------------------------------
+HSPLdev/ide/index/**->**(**)**
