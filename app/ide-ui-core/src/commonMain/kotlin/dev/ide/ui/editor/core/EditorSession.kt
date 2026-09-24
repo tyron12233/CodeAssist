@@ -188,6 +188,58 @@ class EditorSession(
     var onSnippetEdit: ((EditSpan) -> Unit)? = null
     /** Render-cache hook: lines at/after `fromOldLine` (pre-edit indices) shifted by `delta`. */
     var onLinesShifted: ((fromOldLine: Int, delta: Int) -> Unit)? = null
+
+    // Lines whose overlay spans (semantic tokens, inlay hints) need re-binning: every line an edit touched
+    // since the render layer last took them ([takeOverlayDirtyLines]), as one covering range in current line
+    // numbers ([overlayDirtyEnd] exclusive, -1 when clean). Lines outside it only moved, and the render cache
+    // splices those itself, so a keystroke re-bins the edited lines instead of the whole file.
+    private var overlayDirtyFirst = -1
+    private var overlayDirtyEnd = -1
+
+    /**
+     * Bumped whenever an overlay list (semantic tokens, inlay hints, a plugin's decorations or inlays) is
+     * replaced wholesale, or the whole buffer is. A live edit shifts those lists instead, so the render layer
+     * compares this to tell a fresh pass, which it re-bins in full, from an edit, which it re-bins per line.
+     */
+    var overlayGeneration: Int = 0
+        private set
+
+    /** The lines edited since the last call (clamped to the buffer), or null when none were; resets the range. */
+    fun takeOverlayDirtyLines(): IntRange? {
+        val first = overlayDirtyFirst
+        if (first < 0) return null
+        val end = overlayDirtyEnd.coerceAtMost(doc.lineCount)
+        overlayDirtyFirst = -1
+        overlayDirtyEnd = -1
+        return first until end
+    }
+
+    /** Fold the edit that replaced old lines `[first, first + removed)` with `inserted` lines into the range. */
+    private fun markOverlayLines(first: Int, removed: Int, inserted: Int) {
+        val newEnd = first + inserted
+        if (overlayDirtyFirst < 0) {
+            overlayDirtyFirst = first
+            overlayDirtyEnd = newEnd
+            return
+        }
+        // Carry the range already recorded through this edit, then take the union with the edited lines.
+        val oldEditEnd = first + removed
+        val delta = inserted - removed
+        val ds = overlayDirtyFirst
+        val de = overlayDirtyEnd
+        val mappedStart = when {
+            ds < first -> ds
+            ds >= oldEditEnd -> ds + delta
+            else -> first
+        }
+        val mappedEnd = when {
+            de <= first -> de
+            de >= oldEditEnd -> de + delta
+            else -> newEnd
+        }
+        overlayDirtyFirst = min(mappedStart, first)
+        overlayDirtyEnd = max(mappedEnd, newEnd)
+    }
     /**
      * Smart-Tab hook the editor surface registers: if the completion popup is showing, accept the highlighted
      * item and return true; otherwise return false. Lets a soft-keyboard Tab (the touch symbol bar, which has
@@ -306,6 +358,7 @@ class EditorSession(
         val removed = lastLine - firstLine + 1
         val inserted = breaks + 1
         styles.splice(doc, firstLine, removed, inserted)
+        markOverlayLines(firstLine, removed, inserted)
         if (inserted != removed) onLinesShifted?.invoke(firstLine + removed, inserted - removed)
         for (l in firstLine until firstLine + inserted) maxLineChars = max(maxLineChars, doc.lineLength(l))
         selection = newSelection.coercedIn(doc.length)
@@ -339,6 +392,7 @@ class EditorSession(
 
     /** Swap in fresh authoritative semantic-highlight tokens (aligned to the current text). Host calls debounced. */
     fun applySemanticTokens(result: List<UiSemanticToken>) {
+        if (result !== semanticTokens) overlayGeneration++
         semanticTokens = result
     }
 
@@ -349,6 +403,7 @@ class EditorSession(
 
     /** Swap in fresh inlay hints (aligned to the current text). The host calls this debounced (daemon pass). */
     fun applyInlayHints(result: List<UiInlayHint>) {
+        if (result !== inlayHints) overlayGeneration++
         inlayHints = result
     }
 
@@ -361,6 +416,7 @@ class EditorSession(
      * run. The render layer reads both.
      */
     fun applyDecorations(ranges: List<UiTextDecoration>, gutter: List<UiGutterMark>, inlays: List<UiInlayHint>) {
+        overlayGeneration++
         textDecorations = ranges
         // Resolve each mark's line to the offset it is really anchored to, so the live shift can track it (see
         // [UiGutterMark.anchorOffset]). A plugin supplies a line; the editor works in offsets.
@@ -648,6 +704,9 @@ class EditorSession(
     fun setText(text: String, selection: TextRange = TextRange(0)) {
         doc = EditorDocument.of(text)
         styles.reset(doc)
+        overlayGeneration++
+        overlayDirtyFirst = -1
+        overlayDirtyEnd = -1
         var m = 0
         for (i in 0 until doc.lineCount) m = max(m, doc.lineLength(i))
         maxLineChars = m
