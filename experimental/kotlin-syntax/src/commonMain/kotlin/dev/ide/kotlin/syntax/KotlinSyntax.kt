@@ -9,6 +9,7 @@ import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtTreeSession
 import dev.ide.kotlin.syntax.psi.LazyBodyParser
 import dev.ide.kotlin.syntax.psi.collapsedBodiesAreClosed
+import dev.ide.kotlin.syntax.psi.isCollapsedBody
 import org.jetbrains.kotlin.kmp.lexer.KDocLexer
 import org.jetbrains.kotlin.kmp.lexer.KotlinLexer
 import org.jetbrains.kotlin.kmp.lexer.KtTokens
@@ -151,6 +152,96 @@ object KotlinSyntax {
         // lazy grammar and the full one part ways; parse such a file in full.
         if (!collapsedBodiesAreClosed(lazyTree)) return KtTreeSession(parse(text, isScript), name).file
         return KtTreeSession(lazyTree, name, bodies = bodies).file
+    }
+
+    /**
+     * [previous], a file [parseFileLazily] built, updated to [newText] without parsing the file again; or null
+     * when that cannot be shown to give the same tree, and the caller should parse [newText] itself.
+     *
+     * It applies to the edit a keystroke almost always is: one that stays strictly inside a body the lazy
+     * parse collapsed. The grammar skipped such a body by counting braces, so as long as the new body still
+     * closes exactly at its end nothing outside it parses any differently. Only that body is parsed again
+     * (lazily, on its own), and the rest of the tree is carried over with its offsets moved. The check reads
+     * tokens rather than characters, because a brace inside a string or a comment is not a brace, and an
+     * unclosed string or comment runs to the end of the body and fails it.
+     */
+    fun reparseFileLazily(previous: KtFile, newText: CharSequence): KtFile? {
+        val session = previous.session
+        val bodies = session.bodies ?: return null
+        val tree = session.tree
+        val old = tree.source
+        if (old.length == newText.length && old.contentEquals(newText)) return previous
+        val limit = minOf(old.length, newText.length)
+        var prefix = 0
+        while (prefix < limit && old[prefix] == newText[prefix]) prefix++
+        var suffix = 0
+        while (suffix < limit - prefix && old[old.length - 1 - suffix] == newText[newText.length - 1 - suffix]) suffix++
+        val body = collapsedBodyAround(tree, tree.getRoot(), prefix, old.length - suffix) ?: return null
+        val type = tree.getType(body)
+        val start = tree.getStartOffset(body)
+        val end = tree.getEndOffset(body) + (newText.length - old.length)
+        // The body parsed lazily on its own, in the smallest context that parses it the way the file does, so
+        // it comes back in the same collapsed shape (the lazy grammar still groups `?.` and `?:` inside one).
+        val context = if (type == KtNodeTypes.BLOCK) "fun f()" else "val v = "
+        val sub = parse(StringBuilder(context.length + end - start).append(context).append(newText, start, end), lazy = true)
+        val subBody = nodeSpanning(sub, sub.getRoot(), type, context.length, context.length + end - start) ?: return null
+        if (!isCollapsedBody(sub, subBody, type) || !closesAtItsEnd(sub, subBody)) return null
+        val updated = tree.withReplacedSubtree(body, newText, sub, subBody) ?: return null
+        return KtTreeSession(updated, session.fileName, bodies = bodies).file
+    }
+
+    /** The composite of [type] under [node] spanning exactly [start, end), or null. */
+    private fun nodeSpanning(tree: LightSyntaxTree, node: LightNode, type: SyntaxElementType, start: Int, end: Int): LightNode? {
+        if (tree.isToken(node)) return null
+        val s = tree.getStartOffset(node)
+        val e = tree.getEndOffset(node)
+        if (s > start || e < end) return null
+        if (s == start && e == end && tree.getType(node) == type) return node
+        for (i in 0 until tree.childCount(node)) {
+            nodeSpanning(tree, LightNode(tree.childIndexAt(node, i)), type, start, end)?.let { return it }
+        }
+        return null
+    }
+
+    /** Whether [body]'s braces first return to depth zero at its last token, which is a `}`. */
+    private fun closesAtItsEnd(tree: LightSyntaxTree, body: LightNode): Boolean {
+        val tokens = tree.tokens
+        var first = -1
+        var last = -1
+        for (i in 0 until tokens.tokenCount) {
+            if (tokens.getTokenStart(i) < tree.getStartOffset(body)) continue
+            if (tokens.getTokenEnd(i) > tree.getEndOffset(body)) break
+            if (first < 0) first = i
+            last = i
+        }
+        if (first < 0 || tokens.getTokenType(first) != KtTokens.LBRACE) return false
+        var depth = 0
+        for (i in first..last) {
+            when (tokens.getTokenType(i)) {
+                KtTokens.LBRACE -> depth++
+                KtTokens.RBRACE -> {
+                    depth--
+                    if (depth == 0) return i == last
+                }
+            }
+        }
+        return false
+    }
+
+    /** The outermost collapsed body under [node] whose interior holds the old-text change [from, to). */
+    private fun collapsedBodyAround(tree: LightSyntaxTree, node: LightNode, from: Int, to: Int): LightNode? {
+        if (tree.isToken(node)) return null
+        val type = tree.getType(node)
+        if ((type == KtNodeTypes.BLOCK || type == KtNodeTypes.LAMBDA_EXPRESSION) && isCollapsedBody(tree, node, type)) {
+            // Strictly inside: the braces themselves are what the rest of the parse was decided by.
+            return node.takeIf { from > tree.getStartOffset(it) && to < tree.getEndOffset(it) }
+        }
+        for (i in 0 until tree.childCount(node)) {
+            val c = LightNode(tree.childIndexAt(node, i))
+            if (tree.isToken(c)) continue
+            if (tree.getStartOffset(c) <= from && to <= tree.getEndOffset(c)) return collapsedBodyAround(tree, c, from, to)
+        }
+        return null
     }
 
     /** Drives the vendored grammar's lambda rule, non-lazy, for the same reason as [BlockParser]. */

@@ -103,22 +103,19 @@ class KotlinCompletion(
     override val id = "kotlin.completion"
 
     // Single-slot completion working tree. Completion fires on every keystroke against a marker-spliced copy
-    // of the buffer; keeping the last spliced PSI lets us reparse only the changed span (the typed char + the
-    // moved marker) instead of re-parsing the whole file each keystroke (the per-keystroke parse cost on a
-    // large Compose file). Kept SEPARATE from the analyzer's lastByFile tree because this one carries the
-    // marker. Bounded to one file (the focused one); a different path full-parses and replaces it. Touched
-    // only on the single serialized engine worker (completion lane), so no synchronization beyond the parse
-    // lock that KotlinParserHost.tryReparse already takes.
+    // of the buffer; keeping the last spliced tree lets the next one parse only the body the typed character
+    // and the moved marker are in, instead of the whole file each keystroke. Kept SEPARATE from the
+    // analyzer's lastByFile tree because this one carries the marker. Bounded to one file (the focused one);
+    // a different path full-parses and replaces it. Touched only on the single serialized engine worker
+    // (completion lane).
     private var splicedPath: String? = null
     private var splicedTree: KtFile? = null
 
     /** Parse [spliced] (the marker-spliced buffer for [path]) and update the single-slot cache. */
     private fun parseSpliced(name: String, path: String, spliced: String): KtFile {
-        // Reuse the cached tree only when the buffer is character-identical. This used to reparse the prior
-        // spliced tree in place, which PSI's mutable tree allowed and the vendored parser's immutable one does
-        // not; see the note in KotlinSourceAnalyzer's incrementalParser for where that cost goes instead.
-        splicedTree?.takeIf { splicedPath == path && it.text.contentEquals(spliced) }?.let { return it }
-        val kt = KotlinParserHost.parse(name, spliced)
+        val previous = splicedTree?.takeIf { splicedPath == path }
+        if (previous != null && previous.text.contentEquals(spliced)) return previous
+        val kt = if (previous != null) KotlinParserHost.reparse(previous, name, spliced) else KotlinParserHost.parse(name, spliced)
         splicedPath = path
         splicedTree = kt
         return kt

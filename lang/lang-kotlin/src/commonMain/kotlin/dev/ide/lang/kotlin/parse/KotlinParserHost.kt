@@ -41,6 +41,15 @@ object KotlinParserHost {
         else KotlinSyntax.parseFile(text, isScript = isScript, name = fileName)
     }
 
+    /**
+     * [text] parsed as the next version of [previous], a file this host parsed: when the edit stays inside one
+     * function body or lambda, that body alone is parsed again and the rest of the tree is carried over
+     * (see [KotlinSyntax.reparseFileLazily]); otherwise the whole file is parsed. Either way the tree is the
+     * one [parse] would build.
+     */
+    fun reparse(previous: KtFile, name: String, text: CharSequence): KtFile =
+        (if (lazyBodies) KotlinSyntax.reparseFileLazily(previous, text) else null) ?: parse(name, text)
+
     /** Parse lazily with cached bodies (the default), or every file in full; the switch exists for A/B tests. */
     var lazyBodies: Boolean = true
 

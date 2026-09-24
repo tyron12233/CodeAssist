@@ -107,6 +107,96 @@ class LazyBlockParityTest {
         assertTrue(diverged.isEmpty(), diverged.take(10).joinToString("\n"))
     }
 
+    @Test
+    fun anEditInsideABodyReparsesToTheTreeAFreshParseBuilds() {
+        // reparseFileLazily carries the previous tree over and lexes only the edited body. Wherever it applies,
+        // the file must read exactly as a fresh lazy parse of the new text does, trivia and tokens included,
+        // and go on doing so across a run of edits each built on the last. Ordinary typing should almost always
+        // take it; edits that unbalance a body (a brace, a quote, a comment opener) must be refused or agree.
+        val typing = listOf("x", " ", "\n", "val y = 1\n", "(a, b)", "it.name", "{ x -> x }", "\"s\"")
+        val disruptive = listOf("{", "}", "(", ")", "\"", "'", "/*", "*/", "//", "\${", "{ x ->", "fun g() {")
+        val root = File(System.getProperty("kotlinSyntax.corpusRoot")!!)
+        val sources = File(root, "lang/lang-kotlin/src/commonMain").walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }.sortedBy { it.path }.toList()
+        // The compiler's parser corpus: every error-recovery shape it pins, scripts included.
+        val corpus = File(root, "experimental/kotlin-syntax/testData/kotlin-psi").walkTopDown()
+            .filter { it.isFile && (it.extension == "kt" || it.extension == "kts") }.sortedBy { it.path }.toList()
+        val (typedCases, typedApplied) = reparseRun(sources, typing, deletes = true, steps = 30)
+        val (brokenCases, brokenApplied) = reparseRun(sources, disruptive, deletes = false, steps = 30)
+        val (corpusCases, corpusApplied) = reparseRun(corpus, typing + disruptive, deletes = true, steps = 6)
+        println("lazy reparse: typing $typedApplied of $typedCases in-body edits in place; disruptive $brokenApplied of $brokenCases; parser corpus $corpusApplied of $corpusCases")
+        assertTrue(typedApplied > typedCases * 3 / 4, "ordinary typing should reparse in place; applied $typedApplied of $typedCases")
+    }
+
+    /** Runs chains of random [inserts] (and deletions) over corpus files, asserting parity. Answers how many edits
+     *  landed strictly inside a collapsed body of a lazily parsed file, and how many of those reparsed in place. */
+    private fun reparseRun(files: List<File>, inserts: List<String>, deletes: Boolean, steps: Int): Pair<Int, Int> {
+        val random = java.util.Random(11)
+        val uncached = dev.ide.kotlin.syntax.psi.LazyBodyParser.UNCACHED
+        val diverged = ArrayList<String>()
+        var applied = 0
+        var cases = 0
+        for (file in files) {
+            var text = file.readText().replace("\r\n", "\n")
+            if (text.isEmpty()) continue
+            val isScript = file.extension == "kts"
+            var current = KotlinSyntax.parseFileLazily(text, uncached, isScript)
+            var at = random.nextInt(text.length)
+            repeat(steps) { step ->
+                // Mostly keystrokes next to the last one, as typing is; now and then a jump elsewhere.
+                at = if (random.nextInt(5) == 0) random.nextInt(text.length) else at.coerceAtMost(text.length)
+                val editAt = at
+                val next = if (deletes && random.nextInt(4) == 0) {
+                    text.removeRange(at, (at + 1 + random.nextInt(3)).coerceAtMost(text.length))
+                } else {
+                    val ins = inserts[random.nextInt(inserts.size)]
+                    (text.substring(0, at) + ins + text.substring(at)).also { at += ins.length }
+                }
+                val inBody = insideCollapsedBody(current, editAt, text.length - next.length)
+                if (inBody) cases++
+                val reparsed = KotlinSyntax.reparseFileLazily(current, next)
+                val fresh = KotlinSyntax.parseFileLazily(next, uncached, isScript)
+                if (reparsed != null) {
+                    if (inBody) applied++
+                    (compare(fresh, reparsed) ?: sameTokens(fresh, reparsed))?.let { diverged += "${file.name}#$step@$at: $it" }
+                    if (reparsed.syntaxErrorRanges() != fresh.syntaxErrorRanges()) diverged += "${file.name}#$step@$at errors"
+                }
+                text = next
+                current = reparsed ?: fresh
+            }
+        }
+        assertTrue(diverged.isEmpty(), "${diverged.size} reparses diverge: ${diverged.take(10)}")
+        return cases to applied
+    }
+
+    /** Whether an edit at [at] removing [removed] characters (0 for an insertion) lies strictly inside a body
+     *  [file]'s lazy parse collapsed. */
+    private fun insideCollapsedBody(file: dev.ide.kotlin.syntax.psi.KtFile, at: Int, removed: Int): Boolean {
+        val tree = file.session.tree
+        if (file.session.bodies == null) return false
+        fun walk(n: LightNode): Boolean {
+            if (tree.isToken(n)) return false
+            if (dev.ide.kotlin.syntax.psi.isCollapsedBody(tree, n)) {
+                return at > tree.getStartOffset(n) && at + maxOf(removed, 0) < tree.getEndOffset(n) - 1
+            }
+            return tree.getChildren(n).any { walk(it) }
+        }
+        return walk(tree.getRoot())
+    }
+
+    /** Null when both files' trees hold the same tokens at the same offsets. */
+    private fun sameTokens(a: dev.ide.kotlin.syntax.psi.KtFile, b: dev.ide.kotlin.syntax.psi.KtFile): String? {
+        val ta = a.session.tree.tokens
+        val tb = b.session.tree.tokens
+        if (ta.tokenCount != tb.tokenCount) return "token count ${ta.tokenCount} vs ${tb.tokenCount}"
+        for (i in 0 until ta.tokenCount) {
+            if (ta.getTokenType(i) != tb.getTokenType(i) || ta.getTokenStart(i) != tb.getTokenStart(i) || ta.getTokenEnd(i) != tb.getTokenEnd(i)) {
+                return "token $i: ${ta.getTokenType(i)}@${ta.getTokenStart(i)} vs ${tb.getTokenType(i)}@${tb.getTokenStart(i)}"
+            }
+        }
+        return null
+    }
+
     /** Every error element's range, found by visiting each element: what [syntaxErrorRanges] must agree with. */
     private fun errorsByWalk(root: dev.ide.kotlin.syntax.psi.KtElement): List<dev.ide.kotlin.syntax.psi.TextRange> {
         val out = ArrayList<dev.ide.kotlin.syntax.psi.TextRange>()

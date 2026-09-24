@@ -8,12 +8,11 @@ import dev.ide.lang.incremental.IncrementalParser
 import dev.ide.lang.incremental.ReparseResult
 
 /**
- * Parsing strategy: full reparse of the edited file to PSI on every change. Parsing one file is fast and
- * PSI parsing is the only cost (resolution is skipped entirely), so incremental reparse is not implemented;
- * the backend does not advertise [BackendCapability.INCREMENTAL].
+ * Parsing strategy: [reparse] builds the new tree from the previous one, parsing only the edited function
+ * body or lambda when the edit stays inside one, and the whole file otherwise (see
+ * [KotlinParserHost.reparse]). The tree is the one a full parse builds either way.
  *
- * The reparse still honors the [IncrementalParser] contract: it returns a fresh tree at the new version,
- * reporting the whole file as the reparsed range and zero reused subtrees.
+ * The reparsed range is reported as the whole file: the tree is new, and nothing downstream reads the range.
  */
 class KotlinIncrementalParser : IncrementalParser {
 
@@ -27,7 +26,10 @@ class KotlinIncrementalParser : IncrementalParser {
         newSnapshot: DocumentSnapshot,
         edits: List<DocumentEdit>,
     ): ReparseResult {
-        val tree = parseFull(newSnapshot)
+        val prev = (previous as? KotlinParsedFile)?.ktFile
+        val tree = if (prev == null) parseFull(newSnapshot) else KotlinParsedFile(
+            KotlinParserHost.reparse(prev, newSnapshot.file.name, newSnapshot.text), newSnapshot.file, newSnapshot.version,
+        )
         return ReparseResult(
             tree = tree,
             reparsedRange = TextRange(0, newSnapshot.length()),
