@@ -302,6 +302,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         if (highlighterLazy.isInitialized()) highlighterLazy.value.clear()
         if (folderLazy.isInitialized()) folderLazy.value.clear()
         service.releaseMemory()
+        KotlinParserHost.releaseMemory()
     }
 
     override val incrementalParser: IncrementalParser = object : IncrementalParser {

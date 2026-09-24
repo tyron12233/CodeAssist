@@ -7,6 +7,8 @@ import com.intellij.platform.syntax.parser.SyntaxTreeBuilder
 import com.intellij.platform.syntax.parser.SyntaxTreeBuilderFactory
 import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtTreeSession
+import dev.ide.kotlin.syntax.psi.LazyBodyParser
+import dev.ide.kotlin.syntax.psi.collapsedBodiesAreClosed
 import org.jetbrains.kotlin.kmp.lexer.KDocLexer
 import org.jetbrains.kotlin.kmp.lexer.KotlinLexer
 import org.jetbrains.kotlin.kmp.lexer.KtTokens
@@ -14,6 +16,7 @@ import org.jetbrains.kotlin.kmp.parser.AbstractParser
 import org.jetbrains.kotlin.kmp.parser.KDocLinkParser
 import org.jetbrains.kotlin.kmp.parser.KDocParser
 import org.jetbrains.kotlin.kmp.parser.KotlinParser
+import org.jetbrains.kotlin.kmp.parser.KtNodeTypes
 import org.jetbrains.kotlin.kmp.parser.utils.KotlinParsing
 import org.jetbrains.kotlin.kmp.parser.utils.SemanticWhitespaceAwareSyntaxBuilderImpl
 import org.jetbrains.kotlin.kmp.tree.LightNode
@@ -64,6 +67,12 @@ object KotlinSyntax {
      * `IncrementalKotlinParse.blockAt` does the translation; see `ExpandedBlock`.
      */
     fun parseBlock(blockText: CharSequence): LightSyntaxTree = build(blockText, 0, BlockParser, null)
+
+    /**
+     * Parse one lambda literal in isolation, the interior of a `LAMBDA_EXPRESSION` a lazy parse collapsed.
+     * [lambdaText] is the literal's own text, braces included; offsets are relative to it, as with [parseBlock].
+     */
+    fun parseLambda(lambdaText: CharSequence): LightSyntaxTree = build(lambdaText, 0, LambdaParser, null)
 
     /**
      * Parse the text of a doc comment, `/**` and `*/` included.
@@ -126,17 +135,57 @@ object KotlinSyntax {
         name: String = "dummy.kt",
     ): KtFile = KtTreeSession(parse(text, isScript, lazy), name).file
 
-    /** Drives the vendored grammar's block rule rather than its file rule. */
-    private object BlockParser : AbstractParser() {
-        override val whitespaces: Set<SyntaxElementType> = KtTokens.WHITESPACES
-        override val comments: Set<SyntaxElementType> = KtTokens.COMMENTS
+    /**
+     * Parse [text] lazily and return it behind the facade, with every collapsed body parsed by [bodies] the
+     * first time anything looks inside it. Reads exactly like [parseFile] (the same tree, element for
+     * element, see `LazyBlockParityTest`), but a caller that never enters a body never pays for parsing it.
+     */
+    fun parseFileLazily(
+        text: CharSequence,
+        bodies: LazyBodyParser,
+        isScript: Boolean = false,
+        name: String = "dummy.kt",
+    ): KtFile {
+        val lazyTree = parse(text, isScript, lazy = true)
+        // A body left open to the end of the file (a brace or a comment not yet closed, mid-edit) is where the
+        // lazy grammar and the full one part ways; parse such a file in full.
+        if (!collapsedBodiesAreClosed(lazyTree)) return KtTreeSession(parse(text, isScript), name).file
+        return KtTreeSession(lazyTree, name, bodies = bodies).file
+    }
+
+    /** Drives the vendored grammar's lambda rule, non-lazy, for the same reason as [BlockParser]. */
+    private object LambdaParser : BodyParser() {
+        override fun parseBody(parsing: KotlinParsing) = parsing.parseLambdaExpression()
+    }
+
+    /**
+     * A body parsed on its own, shaped like a file parse so the tree matches the one the body would have in
+     * place: the same comment-binding policy as [KotlinParser], and the body wrapped in a FILE marker. The
+     * light tree treats the outermost marker as its synthetic root and drops comments directly under the
+     * root, so without the wrapper the body itself became the root and lost the comments between its
+     * statements.
+     */
+    private abstract class BodyParser : AbstractParser() {
+        private val file = KotlinParser(isScript = false, isLazy = false)
+        override val whitespaces: Set<SyntaxElementType> = file.whitespaces
+        override val comments: Set<SyntaxElementType> = file.comments
+        override val whitespaceOrCommentBindingPolicy = file.whitespaceOrCommentBindingPolicy
+
+        abstract fun parseBody(parsing: KotlinParsing)
 
         override fun parse(builder: SyntaxTreeBuilder) {
-            // Non-lazy on purpose: expanding a block and then collapsing the blocks inside it would defeat
-            // the point of having asked.
-            KotlinParsing.createForTopLevelNonLazy(SemanticWhitespaceAwareSyntaxBuilderImpl(builder))
-                .parseBlockExpression()
+            val root = builder.mark()
+            parseBody(KotlinParsing.createForTopLevelNonLazy(SemanticWhitespaceAwareSyntaxBuilderImpl(builder)))
+            while (!builder.eof()) builder.advanceLexer()
+            root.done(KtNodeTypes.FILE)
         }
+    }
+
+    /** Drives the vendored grammar's block rule rather than its file rule. */
+    private object BlockParser : BodyParser() {
+        // Non-lazy on purpose: expanding a block and then collapsing the blocks inside it would defeat the
+        // point of having asked.
+        override fun parseBody(parsing: KotlinParsing) = parsing.parseBlockExpression()
     }
 }
 

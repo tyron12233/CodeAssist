@@ -375,7 +375,7 @@ class KtWhenEntry internal constructor(session: KtTreeSession, node: LightNode) 
     val expression: KtExpression?
         get() {
             val arrow = session.tree.findChildByType(node, KtTokens.ARROW) ?: return null
-            val at = session.tree.getStartOffset(arrow)
+            val at = session.tree.getStartOffset(arrow) + session.baseOffset
             return children.firstOrNull { it.textOffset > at } as? KtExpression
         }
 }

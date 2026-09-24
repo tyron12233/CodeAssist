@@ -58,10 +58,30 @@ open class KtElement internal constructor(
      * list per node that anything actually looked at.
      */
     override val children: List<KtElement>
-        get() = childCache ?: session.childrenOf(node).map { session.psi(it) }.also { list ->
+        get() = childCache ?: run {
+            val e = expansion
+            if (e != null) e.session.childrenOf(e.node).map { e.session.psi(it) }
+            else session.childrenOf(node).map { session.psi(it) }
+        }.also { list ->
             for (i in list.indices) list[i].indexInParent = i
             childCache = list
         }
+
+    /**
+     * For a body a lazy parse collapsed, its own parse (see [KtTreeSession.expansionOf]); every read of this
+     * element's CHILDREN goes there, so the collapsed body reads exactly like a parsed one. Null otherwise,
+     * which is the case for every element of a full parse. Looked up once.
+     */
+    private val expansion: KtTreeSession.Expansion?
+        get() {
+            if (expansionChecked) return expansionValue
+            val e = session.expansionOf(node, this)
+            expansionValue = e
+            expansionChecked = true
+            return e
+        }
+    private var expansionChecked = session.bodies == null
+    private var expansionValue: KtTreeSession.Expansion? = null
 
     private var childCache: List<KtElement>? = null
 
@@ -77,7 +97,12 @@ open class KtElement internal constructor(
      * somewhere the caret can be, and asking what is at an offset through the trivia-free view answers with
      * whatever ENCLOSES the comment instead of the comment.
      */
-    val childrenWithTrivia: List<KtElement> get() = session.tree.getChildren(node).map { session.psi(it) }
+    val childrenWithTrivia: List<KtElement>
+        get() {
+            val e = expansion
+            return if (e != null) e.session.tree.getChildren(e.node).map { e.session.psi(it) }
+            else session.tree.getChildren(node).map { session.psi(it) }
+        }
 
     /**
      * The doc-comment tokens directly under this element, and empty for almost every element there is.
@@ -152,11 +177,17 @@ open class KtElement internal constructor(
     /** The same file under the name `PsiElement` gives it. */
     val containingFile: KtFile get() = session.file
 
-    internal fun child(type: SyntaxElementType): KtElement? =
-        session.tree.findChildByType(node, type)?.let { session.psi(it) }
+    internal fun child(type: SyntaxElementType): KtElement? {
+        val e = expansion
+        return if (e != null) e.session.tree.findChildByType(e.node, type)?.let { e.session.psi(it) }
+        else session.tree.findChildByType(node, type)?.let { session.psi(it) }
+    }
 
-    internal fun hasChild(type: SyntaxElementType): Boolean =
-        session.tree.findChildByType(node, type) != null
+    internal fun hasChild(type: SyntaxElementType): Boolean {
+        val e = expansion
+        return if (e != null) e.session.tree.findChildByType(e.node, type) != null
+        else session.tree.findChildByType(node, type) != null
+    }
 
     internal inline fun <reified T : KtElement> firstChildOfType(): T? = children.firstOrNull { it is T } as T?
 
@@ -612,7 +643,7 @@ class KtProperty internal constructor(session: KtTreeSession, node: LightNode) :
     val initializer: KtExpression?
         get() {
             val equals = session.tree.findChildByType(node, KtTokens.EQ) ?: return null
-            val at = session.tree.getStartOffset(equals)
+            val at = session.tree.getStartOffset(equals) + session.baseOffset
             return children.firstOrNull { it.textOffset > at } as? KtExpression
         }
 
@@ -692,7 +723,7 @@ class KtParameter internal constructor(session: KtTreeSession, node: LightNode) 
     val defaultValue: KtExpression?
         get() {
             val equals = session.tree.findChildByType(node, KtTokens.EQ) ?: return null
-            val at = session.tree.getStartOffset(equals)
+            val at = session.tree.getStartOffset(equals) + session.baseOffset
             return children.firstOrNull { it.textOffset > at } as? KtExpression
         }
 

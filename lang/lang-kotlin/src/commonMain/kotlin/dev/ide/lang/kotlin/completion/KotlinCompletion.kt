@@ -165,11 +165,13 @@ class KotlinCompletion(
         // Same-file freshness: a class/member declared in THIS buffer (`with(LocalClass()) { … }`) resolves from
         // the live PSI. Keyed by the marker-free text hash so it shares the focal entry analyze/highlight set
         // (a no-op when already synced); the marker sits at the caret, leaving referenced declarations intact.
-        runCatching {
-            service.syncFocal(document.file.path, original.hashCode()) {
-                SourceIndexBuilder.extractFrom(
-                    kt, parsed, document.file.path
-                )
+        KotlinPerf.span("focal") {
+            runCatching {
+                service.syncFocal(document.file.path, original.hashCode()) {
+                    SourceIndexBuilder.extractFrom(
+                        kt, parsed, document.file.path
+                    )
+                }
             }
         }
         val resolver = KotlinResolver(kt, parsed, service)

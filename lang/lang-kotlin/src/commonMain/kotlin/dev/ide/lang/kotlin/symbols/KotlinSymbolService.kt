@@ -518,9 +518,16 @@ class KotlinSymbolService(
             for ((p, t) in map) if (old[p] != t) changed += p
             for (p in old.keys) if (p !in map) changed += p
             overlay = map
+            // The focal file's buffer is the one being typed in, and the model never reads it from the overlay:
+            // it takes the live [focalSource] instead, and [syncFocal] decides what that edit invalidates.
+            // Treating it as changed here would drop the model and every source memo on each keystroke.
+            focalKey?.first?.let { focalPath ->
+                if (focalSource != null && changed.remove(focalPath)) fileCache.remove(focalPath)
+            }
             if (changed.isEmpty()) return@withLock
             changed.forEach { fileCache.remove(it); fileVersions[it] = ++versionClock }
             cachedModel = null
+            bodyMemoStale = true
             sourceSupertypeMemo =
                 ConcurrentMap() // only SOURCE chains can change; classpath memo stays warm
             sourceSupertypeArgTemplateMemo = ConcurrentMap()
@@ -541,11 +548,24 @@ class KotlinSymbolService(
     fun syncFocal(path: String, textHash: Int, build: () -> SourceFile?) {
         stateLock.withLock {
             if (focalKey == path to textHash) return@withLock
-            focalSource = runCatching { build() }.getOrNull()
+            val previous = focalSource.takeIf { focalKey?.first == path }
+            val next = runCatching { build() }.getOrNull()
+            focalSource = next
             focalKey = path to textHash
+            // The model always takes the new focal file: its declarations point into the new tree, and body
+            // inference reads through those pointers.
+            cachedModel = null
+            if (previous != null && next != null && sameDeclarations(previous, next)) {
+                // The edit changed no declaration (a keystroke inside a body). Every source memo keyed by NAME
+                // (type names, supertype chains, supertype arguments) still holds, and so does every other file's
+                // analysis, so neither is dropped. What goes is what points into the old tree: the source member
+                // lists (a subclass elsewhere inherits this file's members) and this file's inferred body types.
+                forgetDeclarationsOf(previous)
+                return@withLock
+            }
             fileVersions[path] =
                 ++versionClock // the focal file's content changed (matters to files depending on it)
-            cachedModel = null
+            bodyMemoStale = true
             sourceSupertypeMemo =
                 ConcurrentMap() // only SOURCE chains can change; classpath memo stays warm
             sourceSupertypeArgTemplateMemo = ConcurrentMap()
@@ -555,6 +575,22 @@ class KotlinSymbolService(
             trimMemos()
         }
     }
+
+    /** Drop the memo entries that point into [file]'s old tree (see [syncFocal]). */
+    private fun forgetDeclarationsOf(file: SourceFile) {
+        for (rc in file.topLevel) inferredBodyTypeMemo.remove(rc)
+        for (rc in file.extensions) inferredBodyTypeMemo.remove(rc)
+        for (c in file.classes) {
+            for (rc in c.members) inferredBodyTypeMemo.remove(rc)
+            for (rc in c.constructors) inferredBodyTypeMemo.remove(rc)
+        }
+        sourceOwnMembersMemo = ConcurrentMap()
+    }
+
+    /** Set when a model rebuild may carry changed declarations, so [buildModel] must drop every inferred body
+     *  type; a rebuild after a body-only focal edit keeps them (see [syncFocal]). */
+    @Volatile
+    private var bodyMemoStale = true
 
     /** A stamp over the content versions of every edited source file EXCEPT [exceptPath] — so a file's analyze
      *  cache can tell that a DIFFERENT file (a cross-file dependency) changed and invalidate itself, while its
@@ -574,7 +610,10 @@ class KotlinSymbolService(
     /** Aggregate the per-file [SourceFile]s into the module model, reusing unchanged files' cached parses and
      *  reparsing only those whose effective (overlay-or-disk) text changed since the last build. */
     private fun buildModel(): ModuleSourceModel {
-        inferredBodyTypeMemo.clear() // a rebuilt model may carry edited bodies; re-infer on demand
+        if (bodyMemoStale) {
+            inferredBodyTypeMemo.clear() // a rebuilt model may carry edited declarations; re-infer on demand
+            bodyMemoStale = false
+        }
         val ov = overlay
         val focal = focalSource
         val focalPath = focalKey?.first
