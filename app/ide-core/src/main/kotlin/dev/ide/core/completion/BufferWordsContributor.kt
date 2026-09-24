@@ -60,9 +60,8 @@ object BufferWordsContributor : CompletionContributor {
                 i = j
             } else i++
         }
-        // Capped to the nearest few, so a page holding fewer words than matched is not the whole answer; nor
-        // is one below the substring threshold, where the next character can admit a middle match.
-        if (nearest.size > MAX_WORDS || anchored) result.markIncomplete()
+        // Capped to the nearest few, so a page holding fewer words than matched is not the whole answer.
+        if (nearest.size > MAX_WORDS) result.markIncomplete()
         if (nearest.isEmpty()) return
 
         val baseSort = (result.elements.maxOfOrNull { it.sortPriority } ?: 0) + 1000

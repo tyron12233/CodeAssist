@@ -75,13 +75,23 @@ class EditorContentionBenchmark {
                 append("}\n\n")
             }
         }
-        // The typing site: a member access on a List inside a new function at the end, typed one character at
-        // a time, like completing `numbers.filterIndexed`.
-        val head = body + "fun typing(numbers: List<Int>) {\n    numbers."
+        // Two typing sites, typed one character at a time: a member access on a List (a small candidate set)
+        // and a bare name at statement start (every symbol in scope plus the type names, a large one).
+        report("member access `numbers.filterIndexed`", measure(backend, scope, path, file, body,
+            "fun typing(numbers: List<Int>) {\n    numbers.", "filterIndexed"))
+        report("bare name `println`", measure(backend, scope, path, file, body,
+            "fun typing(numbers: List<Int>) {\n    ", "println"))
+    }
+
+    private class Run(val samples: List<Long>, val incomplete: Int)
+
+    private fun measure(
+        backend: IdeServicesBackend, scope: CoroutineScope, path: String, file: java.nio.file.Path,
+        body: String, site: String, typed: String,
+    ): Run {
+        val head = body + site
         val tail = "\n}\n"
         Files.writeString(file, head + tail)
-
-        val typed = "filterIndexed"
         val samples = ArrayList<Long>()
         var incomplete = 0
         var daemon: Job? = null
@@ -128,28 +138,34 @@ class EditorContentionBenchmark {
                     }
                     samples += (System.nanoTime() - t0) / 1_000_000
                     if (result == null || result.isIncomplete) incomplete++
-                    // A burst of four keystrokes, then a pause long enough for the daemon to start its run.
-                    delay(if (n % 4 == 3) PAUSE_MS else KEYSTROKE_MS)
+                    // A burst of keystrokes, then a pause just past the daemon's debounce: the next keystroke
+                    // lands while its pass run is in flight, which is the moment a completion has to cut in.
+                    delay(if (n % 3 == 2) PAUSE_MS else KEYSTROKE_MS)
                 }
             }
+            daemon?.cancel()
         }
+        return Run(samples, incomplete)
+    }
 
+    private fun report(label: String, run: Run) {
+        val samples = run.samples
         val sorted = samples.sorted()
         fun pct(p: Double) = sorted[((sorted.size - 1) * p).toInt()]
         println(
-            "\n=== Completion while typing, daemon passes competing ===\n" +
+            "\n=== Completion while typing, daemon passes competing: $label ===\n" +
                 "completions: ${samples.size}\n" +
                 "p50: ${pct(0.50)}ms  p90: ${pct(0.90)}ms  p95: ${pct(0.95)}ms  max: ${sorted.last()}ms\n" +
-                "incomplete results (popup must re-query): $incomplete / ${samples.size}\n",
+                "incomplete results (popup must re-query): ${run.incomplete} / ${samples.size}\n",
         )
         assertTrue(samples.isNotEmpty())
     }
 
     private companion object {
-        const val FUNCTIONS = 250
+        const val FUNCTIONS = 1200
         const val ROUNDS = 3
         const val DAEMON_DEBOUNCE_MS = 300L
         const val KEYSTROKE_MS = 120L
-        const val PAUSE_MS = 450L
+        const val PAUSE_MS = 360L
     }
 }

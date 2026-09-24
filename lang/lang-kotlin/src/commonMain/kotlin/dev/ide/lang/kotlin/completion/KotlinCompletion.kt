@@ -350,10 +350,11 @@ class KotlinCompletion(
             // prefix, camel hump and substring alike, only narrows as characters are added), so it is not a
             // missing match. Counting the raw set marked nearly every page incomplete, which made the popup
             // re-query the engine on every keystroke instead of narrowing locally.
-            // The one exception is the substring tier, which only switches on at MIN_SUBSTRING_QUERY typed
-            // chars: below that, the next character can admit a middle match this page rejected.
-            isIncomplete = matchedCount > MAX_ITEMS || head.size > keep || pos.capped ||
-                prefix.length < PrefixMatcher.MIN_SUBSTRING_QUERY || !service.classpathReady(),
+            // The one gap is the substring tier, which only switches on at MIN_SUBSTRING_QUERY typed chars, so
+            // a page narrowed locally from a shorter prefix never gains a middle match. Accepted, and measured
+            // (EditorContentionBenchmark): a middle match is the lowest tier, and re-querying the first
+            // characters of every word to recover it cost more engine time than it was worth.
+            isIncomplete = matchedCount > MAX_ITEMS || head.size > keep || pos.capped || !service.classpathReady(),
             replacementRange = replaceRange,
         )
     }
