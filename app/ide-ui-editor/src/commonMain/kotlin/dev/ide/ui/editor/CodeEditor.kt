@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -240,6 +241,11 @@ private fun CodeEditorContent(
     val renderState =
         rememberEditorRenderState(session, measurer, density, colors, editorColors, typography, zoom, fontLigatures)
     val geometry = rememberEditorGeometry(session, renderState, editorIme, wordWrap, wrapIndent)
+    // Publish the visible lines for viewport-first work. Read in a snapshot flow, not in composition, so a
+    // scroll frame does not recompose the editor.
+    LaunchedEffect(session, geometry) {
+        snapshotFlow { geometry.visibleLineRange() }.collect { session.viewportLines = it }
+    }
     val interaction = rememberEditorInteraction(session, geometry, wordWrap)
     val metrics = renderState.metrics
     val gutterWidthPx = renderState.gutterWidthPx

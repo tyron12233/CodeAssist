@@ -123,6 +123,12 @@ class EditorSession(
         private set
 
     /**
+     * The lines the editor currently shows, published by the editor as it lays out and scrolls. Work that is
+     * only useful on screen (inlay hints) is asked for these lines first.
+     */
+    var viewportLines by mutableStateOf(0..0)
+
+    /**
      * A plugin's tinted ranges anchored to this buffer (`platform.editorDecoration`). Shifted in place on
      * each edit like [semanticTokens], so a coverage or diff tint keeps covering its text between debounced
      * daemon passes; the host refills the authoritative set via [applyDecorations].

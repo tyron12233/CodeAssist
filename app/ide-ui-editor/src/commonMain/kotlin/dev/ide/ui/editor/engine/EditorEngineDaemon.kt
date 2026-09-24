@@ -123,9 +123,21 @@ class EditorEngineDaemon(
     /** Reparse debounce in ms (Settings → Analysis → Advanced); defaults to the policy's value. */
     var autoReparseDelayMs: Int = policy.autoReparseDelay.inWholeMilliseconds.toInt()
 
+    /**
+     * The character range the INLAY pass asks hints for, or null for the whole file. The host points it at
+     * the visible lines plus a margin: inferring a type per `val` and lambda is the cost of that pass, and
+     * nothing outside the window is on screen. Read when the pass runs, so it follows the latest scroll.
+     */
+    var inlayWindow: () -> IntRange? = { null }
+
     @Volatile
     private var revision = 0
     private var job: Job? = null
+
+    /** The text of the latest completed run and the window its hints cover, for [viewportMoved]. */
+    private var lastRunText: String? = null
+    private var inlayCovered: IntRange? = null
+    private var inlayJob: Job? = null
 
     /** A document change: cancel the in-flight run and schedule a fresh one after the reparse delay. */
     fun restart(text: String) = restart { text }
@@ -138,6 +150,8 @@ class EditorEngineDaemon(
     fun restart(text: () -> String) {
         val myRev = ++revision
         job?.cancel()
+        inlayJob?.cancel()
+        lastRunText = null
         observer?.on(DaemonPhase.RESTARTED, null, myRev)
         job = scope.launch {
             delay(autoReparseDelayMs.milliseconds)
@@ -145,10 +159,33 @@ class EditorEngineDaemon(
         }
     }
 
+    /**
+     * The viewport moved (the host calls this once scrolling settles). If the new [inlayWindow] reaches past
+     * what the last run's hints cover, re-run only the INLAY pass for it. Nothing happens while a full run is
+     * pending or in flight: its own INLAY pass reads the window when it gets there.
+     */
+    fun viewportMoved() {
+        val text = lastRunText ?: return
+        if (job?.isActive == true || inlayJob?.isActive == true) return
+        if (!enabled(DaemonPass.INLAY)) return
+        val window = inlayWindow()?.let { clampWindow(it, text) } ?: return
+        val covered = inlayCovered
+        if (covered != null && window.first >= covered.first && window.last <= covered.last) return
+        val myRev = revision
+        inlayJob = scope.launch { runPass(DaemonPass.INLAY, text, myRev) }
+    }
+
     /** Stop the daemon (file closed / editor disposed). */
     fun close() {
         job?.cancel()
         job = null
+        inlayJob?.cancel()
+        inlayJob = null
+    }
+
+    private fun clampWindow(w: IntRange, text: String): IntRange {
+        val start = w.first.coerceIn(0, text.length)
+        return start..w.last.coerceIn(start, text.length)
     }
 
     private suspend fun runPasses(text: String, myRev: Int) {
@@ -158,6 +195,7 @@ class EditorEngineDaemon(
             // and decoupling it from a specific pass lets the passes run in any order (FOLDS now leads).
             backend.editor.updateDocument(path, text)
             for (pass in policy.passOrder) runPass(pass, text, myRev)
+            if (myRev == revision) lastRunText = text
             observer?.on(DaemonPhase.RUN_FINISHED, null, myRev)
         } catch (c: CancellationException) {
             observer?.on(DaemonPhase.RUN_CANCELLED, null, myRev)
@@ -205,8 +243,12 @@ class EditorEngineDaemon(
             }
 
             DaemonPass.INLAY -> {
-                val r = backend.editor.hintsAt(path, text, 0, text.length)
-                ifCurrent(myRev) { onInlayHints(r) }
+                val window = inlayWindow()?.let { clampWindow(it, text) } ?: (0..text.length)
+                val r = backend.editor.hintsAt(path, text, window.first, window.last)
+                ifCurrent(myRev) {
+                    inlayCovered = window
+                    onInlayHints(r)
+                }
             }
 
             DaemonPass.FOLDS -> {
