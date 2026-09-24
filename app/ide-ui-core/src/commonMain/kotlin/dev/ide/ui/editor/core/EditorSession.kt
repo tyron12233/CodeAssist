@@ -156,12 +156,16 @@ class EditorSession(
     private var foldModelRegions: List<FoldRegion>? = null
 
     /** The current folding projection (document ⇄ visual-row mapping + composites), rebuilt only when the
-     *  regions or the document change. [FoldModel.EMPTY]-equivalent when nothing folds. */
+     *  regions or the document change. [FoldModel.EMPTY]-equivalent when nothing folds. A rebuild that comes
+     *  out the same as the cached model (the usual keystroke: no fold boundary moved) keeps the cached
+     *  INSTANCE, so consumers that key on it (the wrap model, the composite layouts) keep their caches. */
     val foldModel: FoldModel
         get() {
             val d = doc; val r = foldRegions
-            if (foldModelCache == null || foldModelDoc !== d || foldModelRegions !== r) {
-                foldModelCache = FoldModel.build(d, r)
+            val cached = foldModelCache
+            if (cached == null || foldModelDoc !== d || foldModelRegions !== r) {
+                val built = FoldModel.build(d, r)
+                foldModelCache = if (cached != null && cached.sameAs(built)) cached else built
                 foldModelDoc = d; foldModelRegions = r
             }
             return foldModelCache!!

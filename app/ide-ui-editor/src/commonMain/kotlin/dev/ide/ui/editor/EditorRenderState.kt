@@ -18,6 +18,8 @@ import dev.ide.ui.editor.core.EditorDocument
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.InlayPiece
 import dev.ide.ui.editor.core.LineRenderCache
+import dev.ide.ui.editor.folding.FoldModel
+import dev.ide.ui.editor.folding.FoldedLineInfo
 import dev.ide.ui.theme.CaTypography
 import dev.ide.ui.theme.CodeAssistColors
 import dev.ide.ui.theme.colors.ResolvedColorScheme
@@ -56,7 +58,7 @@ internal class EditorRenderState(private val session: EditorSession) {
     var decoByLine: Map<Int, List<DecoSeg>> = emptyMap()
 
     internal lateinit var measurer: TextMeasurer
-    internal lateinit var compositeCache: HashMap<Int, TextLayoutResult>
+    internal lateinit var compositeCache: HashMap<Int, CompositeEntry>
     internal lateinit var gutterNumberCache: HashMap<Int, TextLayoutResult>
 
     /**
@@ -116,17 +118,45 @@ internal class EditorRenderState(private val session: EditorSession) {
             measurer.measure(AnnotatedString(n.toString()), style = gutterStyle, softWrap = false, maxLines = 1)
         }
 
+    /** A measured composite plus what it was built from, so an entry survives edits to other lines. */
+    internal class CompositeEntry(
+        val startRev: Int,
+        val endRev: Int,
+        val endLine: Int,
+        val prefixCol: Int,
+        val suffixCol: Int,
+        val placeholder: String,
+        val layout: TextLayoutResult,
+    )
+
     /**
      * A collapsed fold-start line renders its composite "prefix + placeholder + suffix" on one row (e.g.
-     * `fun f() {...}`). Measured on demand (only the handful of visible fold-start lines) and cached until the
-     * buffer or fold set changes; the placeholder run is dimmed + chip-tinted so it reads as foldable. The real
-     * lexical coloring is carried onto the composite so a folded line reads in the same syntax colors.
+     * `fun f() {...}`). Measured on demand (only the handful of visible fold-start lines) and cached against the
+     * [dev.ide.ui.editor.core.LineStyles] revisions of its start and end lines plus the fold's columns, so typing
+     * elsewhere keeps it; the placeholder run is dimmed + chip-tinted so it reads as foldable. The real lexical
+     * coloring is carried onto the composite so a folded line reads in the same syntax colors.
      */
-    fun compositeLayoutFor(line: Int): TextLayoutResult = compositeCache.getOrPut(line) {
+    fun compositeLayoutFor(line: Int): TextLayoutResult {
         val fm = session.foldModel
         val info = fm.foldStartingAt(line)
         val doc = session.doc
-        if (info == null) return@getOrPut renderCache.layoutFor(line, doc, session.styles)
+        if (info == null) return renderCache.layoutFor(line, doc, session.styles)
+        val startRev = session.styles.revOf(line)
+        val endRev = session.styles.revOf(info.endLine)
+        val prefixCol = info.prefixEnd - doc.lineStart(line)
+        val suffixCol = info.suffixStart - doc.lineStart(info.endLine)
+        compositeCache[line]?.let { e ->
+            if (e.startRev == startRev && e.endRev == endRev && e.endLine == info.endLine &&
+                e.prefixCol == prefixCol && e.suffixCol == suffixCol && e.placeholder == info.placeholder
+            ) return e.layout
+        }
+        val layout = measureComposite(line, info, fm, doc)
+        if (compositeCache.size >= COMPOSITE_CACHE_MAX) compositeCache.clear()
+        compositeCache[line] = CompositeEntry(startRev, endRev, info.endLine, prefixCol, suffixCol, info.placeholder, layout)
+        return layout
+    }
+
+    private fun measureComposite(line: Int, info: FoldedLineInfo, fm: FoldModel, doc: EditorDocument): TextLayoutResult {
         val text = fm.compositeText(line, doc)
         val prefixLen = (info.prefixEnd - doc.lineStart(line)).coerceIn(0, text.length)
         val phEnd = (prefixLen + info.placeholder.length).coerceAtMost(text.length)
@@ -152,7 +182,12 @@ internal class EditorRenderState(private val session: EditorSession) {
             )
         }
         ranges.add(AnnotatedString.Range(foldPlaceholderStyle, prefixLen, phEnd))
-        measurer.measure(AnnotatedString(text, spanStyles = ranges), style = codeStyle, softWrap = false, maxLines = 1)
+        return measurer.measure(AnnotatedString(text, spanStyles = ranges), style = codeStyle, softWrap = false, maxLines = 1)
+    }
+
+    private companion object {
+        /** Collapsed folds visible at once are few; this only bounds a file with a great many of them. */
+        const val COMPOSITE_CACHE_MAX = 256
     }
 }
 
@@ -263,9 +298,8 @@ internal fun rememberEditorRenderState(
         editorColors.foldPlaceholderStyle(colors.textTertiary, chipBg)
     }
     state.foldPlaceholderStyle = foldPlaceholderStyle
-    state.compositeCache = remember(session.doc, session.foldModel, codeStyle, foldPlaceholderStyle, palette) {
-        HashMap()
-    }
+    // Entries validate themselves against the lines they were built from, so only a style change drops them.
+    state.compositeCache = remember(measurer, codeStyle, foldPlaceholderStyle, palette) { HashMap() }
     state.foldableStartLines = remember(session.foldRegions, session.doc) {
         session.foldRegions.mapTo(HashSet()) { session.doc.lineForOffset(it.start) }
     }

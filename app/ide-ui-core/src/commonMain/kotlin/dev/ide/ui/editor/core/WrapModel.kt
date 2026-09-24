@@ -78,7 +78,12 @@ class WrapModel {
      * per-frame [setRows] corrections update the tree in place instead of coming through here.
      */
     fun ensure(fold: FoldModel) {
-        if (built && builtFold === fold) return
+        if (built) {
+            val prev = builtFold
+            if (prev === fold) return
+            // A model rebuilt for an edit that left every fold on the same lines contributes the same rows.
+            if (prev != null && prev.sameProjection(fold)) { builtFold = fold; return }
+        }
         val n = rows.size
         if (contrib.size != n) contrib = IntArray(n)
         if (tree.size != n + 1) tree = IntArray(n + 1) else tree.fill(0)
