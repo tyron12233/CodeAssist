@@ -238,7 +238,10 @@ open class KtElement internal constructor(
     override fun equals(other: Any?): Boolean =
         other is KtElement && other.session === session && other.node.index == node.index
 
-    override fun hashCode(): Int = node.index
+    // The index alone collides across sessions: every sub-parse (an expanded body, a doc comment) numbers its
+    // nodes from zero, and a file holds thousands of them, which turned the analysis engine's element-keyed
+    // maps into long collision chains. A sub-parse's base offset is distinct per session, so mix it in.
+    override fun hashCode(): Int = node.index xor (session.baseOffset * -0x61c88647)
 }
 
 /** An element with a name, mirroring `KtNamedDeclaration`. */

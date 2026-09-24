@@ -75,6 +75,8 @@ class EditorContentionBenchmark {
                 append("}\n\n")
             }
         }
+        report("idle pass run after a one-character edit", passRun(backend, path, file, body))
+
         // Two typing sites, typed one character at a time: a member access on a List (a small candidate set)
         // and a bare name at statement start (every symbol in scope plus the type names, a large one).
         report("member access `numbers.filterIndexed`", measure(backend, scope, path, file, body,
@@ -84,6 +86,26 @@ class EditorContentionBenchmark {
     }
 
     private class Run(val samples: List<Long>, val incomplete: Int)
+
+    /** One daemon pass run (folds, semantic tokens, diagnostics, inlays) over a freshly edited buffer, no
+     *  contention: what a pause costs the engine after each edit. */
+    private fun passRun(backend: IdeServicesBackend, path: String, file: java.nio.file.Path, body: String): Run {
+        val base = body + "fun typing(numbers: List<Int>) {\n    val x = 1\n}\n"
+        Files.writeString(file, base)
+        val samples = ArrayList<Long>()
+        runBlocking {
+            repeat(8) { i ->
+                val text = base.replace("val x = 1", "val x = $i")
+                val t0 = System.nanoTime()
+                backend.editor.codeFolds(path, text)
+                backend.editor.semanticTokens(path, text)
+                backend.editor.analyze(path, text)
+                backend.editor.hintsAt(path, text, 0, text.length)
+                if (i >= 3) samples += (System.nanoTime() - t0) / 1_000_000
+            }
+        }
+        return Run(samples, 0)
+    }
 
     private fun measure(
         backend: IdeServicesBackend, scope: CoroutineScope, path: String, file: java.nio.file.Path,
