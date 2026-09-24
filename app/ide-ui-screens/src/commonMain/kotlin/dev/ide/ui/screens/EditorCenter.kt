@@ -568,7 +568,9 @@ private fun EditorDaemonEffect(
         daemon.foldingEnabled = state.codeFoldingEnabled && !large
         daemon.analyzeEnabled = state.analyzeOnTheFly && !large
         daemon.autoReparseDelayMs = state.reparseDelayMs
-        daemon.restart(active.session.doc.text) // one lazy rope materialization per settled edit
+        // The document is an immutable snapshot; its text is materialized only if this run survives the delay.
+        val doc = active.session.doc
+        daemon.restart { doc.text }
     }
     // Re-run the daemon when the workspace index finishes building. A file opened (e.g. a restored tab) while
     // the index is still building is analyzed against an incomplete classpath/symbol index and can show stale
@@ -580,6 +582,9 @@ private fun EditorDaemonEffect(
     LaunchedEffect(active.path, indexStatus.building) {
         val prev = wasIndexing
         wasIndexing = indexStatus.building
-        if (prev == true && !indexStatus.building) daemon.restart(active.session.doc.text)
+        if (prev == true && !indexStatus.building) {
+            val doc = active.session.doc
+            daemon.restart { doc.text }
+        }
     }
 }

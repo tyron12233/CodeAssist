@@ -53,7 +53,6 @@ import dev.ide.lang.resolve.TypeRef
 import dev.ide.platform.ContentHash
 import dev.ide.platform.Disposable
 import dev.ide.vfs.VirtualFile
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -88,9 +87,10 @@ class JavaSourceAnalyzer private constructor(
      * a module whose Java files are never opened must not pay a full project environment for that.
      */
     private val envLazy = lazy {
-        createEnv().also {
-            it.syntheticProvider = syntheticProviderValue
-            it.overlayProvider = overlayProviderValue
+        createEnv().also { e ->
+            // Forward only what the host actually set here; an environment built by the caller keeps its own.
+            syntheticProviderValue?.let { e.syntheticProvider = it }
+            overlayProviderValue?.let { e.overlayProvider = it }
         }
     }
     private val env: JavaEnvironment by envLazy
@@ -141,22 +141,22 @@ class JavaSourceAnalyzer private constructor(
     /** Synthetic classes (Android R/BuildConfig/…) the facade should resolve, injected by the host. Forwarded
      *  to the env's injected element finder. */
     var syntheticClassProvider: () -> List<dev.ide.lang.synthetic.SyntheticClass>
-        get() = syntheticProviderValue
+        get() = if (envLazy.isInitialized()) env.syntheticProvider else syntheticProviderValue ?: { emptyList() }
         set(value) {
             syntheticProviderValue = value
             if (envLazy.isInitialized()) env.syntheticProvider = value
         }
-    private var syntheticProviderValue: () -> List<dev.ide.lang.synthetic.SyntheticClass> = { emptyList() }
+    private var syntheticProviderValue: (() -> List<dev.ide.lang.synthetic.SyntheticClass>)? = null
 
     /** Open-buffer overlay (FQN → live editor text) so a dependent resolves a not-yet-saved edit, injected by
      *  the host. Forwarded to the env's injected element finder. */
     var overlayProvider: () -> Map<String, CharArray>
-        get() = overlayProviderValue
+        get() = if (envLazy.isInitialized()) env.overlayProvider else overlayProviderValue ?: { emptyMap() }
         set(value) {
             overlayProviderValue = value
             if (envLazy.isInitialized()) env.overlayProvider = value
         }
-    private var overlayProviderValue: () -> Map<String, CharArray> = { emptyMap() }
+    private var overlayProviderValue: (() -> Map<String, CharArray>)? = null
 
     /** Inheritor lookup for `new`-position subtype completion, injected by the host (a subtype-index BFS over
      *  a supertype FQN). Default empty keeps completion working index-free. */
@@ -203,7 +203,15 @@ class JavaSourceAnalyzer private constructor(
     override val inlayHints: InlayHintService = JavaInlayHints(::psiFor)
 
     private val version = AtomicLong(0)
-    private val cache = ConcurrentHashMap<String, Pair<ContentHash, JavaParsedFile>>()
+    // On-disk parses by path, least recently used first out: a project-wide pass reaches every file, and each
+    // entry is a full PSI tree.
+    private val cacheLimit = dev.ide.platform.DeviceMemory.pick(normal = 32, low = 8)
+    private val cache: MutableMap<String, Pair<ContentHash, JavaParsedFile>> = java.util.Collections.synchronizedMap(
+        object : LinkedHashMap<String, Pair<ContentHash, JavaParsedFile>>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: Map.Entry<String, Pair<ContentHash, JavaParsedFile>>) =
+                size > cacheLimit
+        },
+    )
 
     /**
      * Drop cached synthetic/overlay class resolution (e.g. an Android `R` regenerated after a resource edit).
@@ -222,7 +230,19 @@ class JavaSourceAnalyzer private constructor(
      * warm PSI caches on each save.
      */
     override fun invalidateCaches(reason: CacheInvalidation) {
-        if (reason == CacheInvalidation.SYNTHETIC_CLASSES) invalidateSyntheticClasses()
+        when (reason) {
+            CacheInvalidation.SYNTHETIC_CLASSES -> invalidateSyntheticClasses()
+            // Memory pressure: the on-disk parse cache, every live parse but the file on screen, and the
+            // environment's resolve caches all rebuild on demand.
+            CacheInvalidation.MEMORY_PRESSURE -> {
+                cache.clear()
+                if (envLazy.isInitialized()) {
+                    javaIncrementalParser.trimToLatest()
+                    env.dropCaches()
+                }
+            }
+            else -> Unit
+        }
     }
 
     fun invalidateSyntheticClasses() {
@@ -315,8 +335,23 @@ class JavaSourceAnalyzer private constructor(
 
     // --- structure & quick-doc ----------------------------------------------------------------------------
 
+    /** The last [fileStructure] answer and the text it was built from. The sticky headers and the breadcrumb
+     *  both ask after every edit, and the breadcrumb again on every caret move, always for the same text. */
+    private class StructureMemo(val path: String, val text: String, val items: List<StructureItem>)
+
+    @Volatile
+    private var structureMemo: StructureMemo? = null
+
     override fun fileStructure(file: VirtualFile, text: CharSequence): List<StructureItem> {
-        val psi = env.parse(file.name, text)
+        structureMemo?.let { m ->
+            if (m.path == file.path && m.text.length == text.length && m.text.contentEquals(text)) return m.items
+        }
+        return computeFileStructure(file, text).also { structureMemo = StructureMemo(file.path, text.toString(), it) }
+    }
+
+    private fun computeFileStructure(file: VirtualFile, text: CharSequence): List<StructureItem> {
+        // Reuse the editor's own parse when it is of this exact text, instead of parsing again under the lock.
+        val psi = javaIncrementalParser.latestIfText(file.path, text)?.javaFile ?: env.parse(file.name, text)
         val out = ArrayList<StructureItem>()
         fun nameOffset(e: PsiElement): Int =
             (e as? PsiNameIdentifierOwner)?.nameIdentifier?.textOffset ?: e.textOffset

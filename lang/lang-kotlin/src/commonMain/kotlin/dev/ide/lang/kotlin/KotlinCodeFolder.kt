@@ -49,6 +49,14 @@ class KotlinCodeFolder(
     )
     private val cache = ConcurrentMap<String, Cached>()
 
+    /** Drop [path]'s cached folds; its next request recomputes them. */
+    fun forget(path: String) {
+        cache.remove(path)
+    }
+
+    /** Drop every file's cached folds (memory pressure). */
+    fun clear() = cache.clear()
+
     override suspend fun folds(file: VirtualFile): List<FoldRegion> {
         val parsed = parsedFor(file) ?: return emptyList()
         val ktFile = parsed.ktFile

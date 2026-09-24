@@ -58,9 +58,16 @@ open class KtElement internal constructor(
      * list per node that anything actually looked at.
      */
     override val children: List<KtElement>
-        get() = childCache ?: session.childrenOf(node).map { session.psi(it) }.also { childCache = it }
+        get() = childCache ?: session.childrenOf(node).map { session.psi(it) }.also { list ->
+            for (i in list.indices) list[i].indexInParent = i
+            childCache = list
+        }
 
     private var childCache: List<KtElement>? = null
+
+    /** This element's position in its parent's [children], stamped when the parent first computes them; -1
+     *  until then, and for trivia, which [children] leaves out. Makes a sibling step O(1). */
+    private var indexInParent = -1
 
     /**
      * Children INCLUDING whitespace and comments, which [children] leaves out.
@@ -92,6 +99,13 @@ open class KtElement internal constructor(
     val prevSibling: KtElement? get() = sibling(-1)
 
     private fun sibling(step: Int): KtElement? {
+        // The common case: step through the parent's cached child list by the index stamped into it, so a
+        // `firstChild` / `nextSibling` walk costs O(1) per step instead of refiltering the siblings each time.
+        val parentElement = parent ?: return null
+        val stamped = parentElement.children
+        if (indexInParent >= 0 && stamped.getOrNull(indexInParent) === this) {
+            return stamped.getOrNull(indexInParent + step)
+        }
         val parentNode = session.tree.getParent(node) ?: return null
         val siblings = session.childrenOf(parentNode)
         val index = siblings.indexOfFirst { it.index == node.index }
