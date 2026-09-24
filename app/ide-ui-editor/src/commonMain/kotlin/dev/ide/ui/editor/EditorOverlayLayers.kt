@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
@@ -32,6 +35,7 @@ import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.clipForClipboard
 import dev.ide.ui.editor.core.EditorDocument
 import dev.ide.ui.editor.core.EditorSession
+import dev.ide.ui.editor.folding.FoldModel
 import dev.ide.ui.ext.EditorAnchor
 import dev.ide.ui.ext.EditorLayerContext
 import dev.ide.ui.ext.EditorLayerRegistry
@@ -96,8 +100,13 @@ internal fun BoxScope.DiagnosticChipsLayer(
     hOffset: MutableFloatState,
     onOpenSheet: (UiDiagnostic) -> Unit,
     onChipExtent: (Float) -> Unit,
+    /** The document lines on screen. Read through a derived, bucketed window (see [chipWindow]), so a scroll
+     *  recomposes this layer only when it crosses a bucket, not per frame. */
+    visibleLinesOf: () -> IntRange,
 ) {
     val doc = session.doc
+    val currentVisibleLines by rememberUpdatedState(visibleLinesOf)
+    val window by remember(session) { derivedStateOf { chipWindow(currentVisibleLines()) } }
     // Per line: the most-severe Error/Warning plus how many diagnostics live there in total. Memoized on
     // (diagnostics, doc): a caret-only move leaves the buffer untouched, so this is a cache hit then, and it
     // changes only on an actual edit (or a fresh analysis).
@@ -121,31 +130,47 @@ internal fun BoxScope.DiagnosticChipsLayer(
     // ([EditorGeometry.contentWidth]) can grow to reveal it — otherwise a chip overhanging the longest line
     // is clipped at the viewport edge with no way to scroll to it. Measured (not just estimated) since the
     // chip text is proportional, not the editor's monospace; recomputed only when the chips/geometry change.
-    val measurer = rememberTextMeasurer()
+    //
+    // Lines near the viewport use their shaped layout (already cached for drawing); the rest are sized off the
+    // monospace advance, the same estimate the scroll extent already uses for the longest line, so an edit or
+    // a fresh analysis never shapes off-screen lines. Chip text widths are memoized per message: a keystroke
+    // shifts diagnostics but rarely changes what they say.
+    val measurer = rememberTextMeasurer(cacheSize = 0)
     val fontSize = render.codeStyle.fontSize
-    val chipExtent = remember(chipPerLine, fontSize, wordWrap, metrics.charWidth, density, session.foldRegions) {
+    val messageWidths = remember(measurer, fontSize, density) { HashMap<String, Float>() }
+    val digitWidths = remember(measurer, fontSize, density) { HashMap<Int, Float>() }
+    val chipExtent = remember(chipPerLine, fontSize, wordWrap, metrics.charWidth, density, session.foldRegions, window) {
         val em = with(density) { fontSize.toPx() }
         // Icon (em*0.95) + row spacing (em*0.35) + horizontal padding (em*0.5 each side) around the message.
         val chrome = em * (0.95f + 0.35f + 1.0f)
+        if (messageWidths.size > CHIP_WIDTH_MEMO_MAX) messageWidths.clear()
         var maxRight = 0f
         for ((ln, g) in chipPerLine) {
             if (fm.isHidden(ln)) continue
-            val chipLayout =
-                if (fm.foldStartingAt(ln) != null) render.compositeLayoutFor(ln) else render.layoutFor(ln)
-            val lastSub = if (wordWrap) (chipLayout.lineCount - 1).coerceAtLeast(0) else 0
-            val lineWidth = if (wordWrap) chipLayout.getLineRight(lastSub) else chipLayout.size.width.toFloat()
-            val textW = measurer.measure(
-                g.primary.message,
-                TextStyle(fontSize = fontSize, fontWeight = FontWeight.SemiBold),
-                maxLines = 1,
-            ).size.width.toFloat()
-            // The count badge (only when the line stacks several) adds its own gap + icon + padding + digits.
-            val badgeW = if (g.count > 1) {
-                val digits = measurer.measure(
-                    g.count.toString(),
-                    TextStyle(fontSize = fontSize * CountBadgeTextScale, fontWeight = FontWeight.Bold),
+            val lineWidth = if (ln in window) {
+                val chipLayout =
+                    if (fm.foldStartingAt(ln) != null) render.compositeLayoutFor(ln) else render.layoutFor(ln)
+                val lastSub = if (wordWrap) (chipLayout.lineCount - 1).coerceAtLeast(0) else 0
+                if (wordWrap) chipLayout.getLineRight(lastSub) else chipLayout.size.width.toFloat()
+            } else {
+                estimatedLineWidth(ln, doc, fm, render, metrics)
+            }
+            val textW = messageWidths.getOrPut(g.primary.message) {
+                measurer.measure(
+                    g.primary.message,
+                    TextStyle(fontSize = fontSize, fontWeight = FontWeight.SemiBold),
                     maxLines = 1,
                 ).size.width.toFloat()
+            }
+            // The count badge (only when the line stacks several) adds its own gap + icon + padding + digits.
+            val badgeW = if (g.count > 1) {
+                val digits = digitWidths.getOrPut(g.count) {
+                    measurer.measure(
+                        g.count.toString(),
+                        TextStyle(fontSize = fontSize * CountBadgeTextScale, fontWeight = FontWeight.Bold),
+                        maxLines = 1,
+                    ).size.width.toFloat()
+                }
                 em * (0.35f + 0.7f + 0.12f + 0.56f) + digits
             } else {
                 0f
@@ -166,6 +191,7 @@ internal fun BoxScope.DiagnosticChipsLayer(
         },
     ) {
         for ((ln, g) in chipPerLine) {
+            if (ln !in window) continue // far off screen: composed once a scroll brings its bucket near
             if (fm.isHidden(ln)) continue // diagnostic inside a collapsed region → no chip
             val d = g.primary
             // Place after the composite text on a fold-start line, else after the real line. When wrapping, sit
@@ -193,6 +219,42 @@ internal fun BoxScope.DiagnosticChipsLayer(
             )
         }
     }
+}
+
+/** Lines the chip window extends past the viewport on each side, and the granularity it moves in. */
+private const val CHIP_WINDOW_MARGIN = 32
+private const val CHIP_WINDOW_BUCKET = 32
+
+/** Messages whose measured chip width is kept; past this the memo starts over (a pathological file). */
+private const val CHIP_WIDTH_MEMO_MAX = 512
+
+/**
+ * The lines whose chips are composed: [visible] widened by [CHIP_WINDOW_MARGIN] and snapped outward to
+ * [CHIP_WINDOW_BUCKET] boundaries, so the window (and anything derived from it) changes only once a scroll
+ * crosses a bucket.
+ */
+internal fun chipWindow(visible: IntRange): IntRange {
+    val first = ((visible.first - CHIP_WINDOW_MARGIN).coerceAtLeast(0) / CHIP_WINDOW_BUCKET) * CHIP_WINDOW_BUCKET
+    val last = ((visible.last + CHIP_WINDOW_MARGIN) / CHIP_WINDOW_BUCKET + 1) * CHIP_WINDOW_BUCKET - 1
+    return first..last
+}
+
+/** A line's drawn width off the monospace advance, without shaping it: its visual columns (inlays included)
+ *  times the char width, or the composite's length on a collapsed fold-start line. */
+private fun estimatedLineWidth(
+    line: Int,
+    doc: EditorDocument,
+    fm: FoldModel,
+    render: EditorRenderState,
+    metrics: EditorMetrics,
+): Float {
+    val fold = fm.foldStartingAt(line)
+    val cols = if (fold != null) {
+        (fold.prefixEnd - doc.lineStart(line)) + fold.placeholder.length + (doc.lineEnd(fold.endLine) - fold.suffixStart)
+    } else {
+        render.renderCache.rawToVisual(line, doc.lineLength(line))
+    }
+    return cols.coerceAtLeast(0) * metrics.charWidth
 }
 
 /** Floating selection toolbar (touch): Copy / Cut / Paste / Select all above the selection. */
@@ -386,10 +448,13 @@ internal fun BoxScope.PluginEditorLayers(
     gutterWidthPx: Float,
     path: String,
     backend: IdeBackend,
-    visibleLines: IntRange,
+    /** Read only once a layer is registered: it reads the scroll offset, and the caller must not recompose per
+     *  scroll frame for a file no layer applies to. */
+    visibleLinesOf: () -> IntRange,
 ) {
     val layers = EditorLayerRegistry.forFile(path)
     if (layers.isEmpty()) return
+    val visibleLines = visibleLinesOf()
     val doc = session.doc
     val ctx = remember(path, session.textRevision, visibleLines, session.selection, backend) {
         object : EditorLayerContext {

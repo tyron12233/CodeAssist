@@ -53,6 +53,7 @@ import dev.ide.ui.backend.UiNavTarget
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.clipForClipboard
+import dev.ide.ui.editor.core.EditorDocument
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.MEASURER_CACHE_ENTRIES
 import dev.ide.ui.ext.KeymapHost
@@ -68,8 +69,10 @@ import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Ide
 import org.jetbrains.compose.resources.stringResource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 import dev.ide.ui.backend.UiTextEdit
@@ -683,13 +686,7 @@ private fun CodeEditorContent(
             }
         }
     }
-    val occurrences = remember(doc, occurrenceWord, largeFile) {
-        if (largeFile) return@remember emptyList<Match>() // a whole-file scan is too costly on a large buffer
-        val w = occurrenceWord ?: return@remember emptyList<Match>()
-        findMatches(doc.text, w, FindOptions(caseSensitive = true, wholeWord = true))
-            .takeIf { it.size >= 2 } // only meaningful when it appears more than once
-            ?: emptyList()
-    }
+    val occurrences = rememberOccurrences(editorSession, doc, occurrenceWord, largeFile)
 
     // ---- keyboard handling ----
     fun handleKey(ev: KeyEvent): Boolean {
@@ -1097,6 +1094,7 @@ private fun CodeEditorContent(
             hOffset = geometry.hOffset,
             onOpenSheet = { acts.openSheet(it) },
             onChipExtent = { geometry.chipExtent.floatValue = it },
+            visibleLinesOf = { geometry.visibleLineRange() },
         )
 
         SelectionToolbarLayer(
@@ -1158,7 +1156,7 @@ private fun CodeEditorContent(
             gutterWidthPx = gutterWidthPx,
             path = path,
             backend = backend,
-            visibleLines = geometry.visibleLineRange(),
+            visibleLinesOf = { geometry.visibleLineRange() },
         )
 
         PluginGutterMarksLayer(
@@ -1509,4 +1507,35 @@ private fun NavMenuLayer(
             NavMenu(state, actions, width, onOption, onAction, onPick, menu, onMenuAction)
         }
     }
+}
+
+/** Whole-word matches of [word] in [doc], and the exact document and word they were computed from. */
+private class OccurrenceResult(val doc: EditorDocument, val word: String, val matches: List<Match>)
+
+/** How long the caret and the text must stay put before the identifier under the caret is highlighted. */
+private const val OCCURRENCE_SETTLE_MS = 300L
+
+/**
+ * The textual occurrences of [word] (the identifier under the caret) in [doc], for the occurrence tint. The
+ * whole-file scan runs once the caret and the text have settled for [OCCURRENCE_SETTLE_MS], off the
+ * composition and off the main thread, so a keystroke inside an identifier never pays it. A result is shown
+ * only for the exact document and word it was computed from, so while typing the old highlights drop at once
+ * instead of drawing at stale offsets. Empty when there is no word, on a large file, or with fewer than two uses.
+ */
+@Composable
+private fun rememberOccurrences(session: EditorSession, doc: EditorDocument, word: String?, largeFile: Boolean): List<Match> {
+    var result by remember(session) { mutableStateOf<OccurrenceResult?>(null) }
+    LaunchedEffect(doc, word, largeFile) {
+        if (largeFile || word == null) return@LaunchedEffect // a whole-file scan is too costly on a large buffer
+        delay(OCCURRENCE_SETTLE_MS)
+        val text = doc.text // shared with the analysis pass, which reads the same revision
+        val found = withContext(Dispatchers.Default) {
+            findMatches(text, word, FindOptions(caseSensitive = true, wholeWord = true))
+                .takeIf { it.size >= 2 } // only meaningful when it appears more than once
+                ?: emptyList()
+        }
+        result = OccurrenceResult(doc, word, found)
+    }
+    val r = result ?: return emptyList()
+    return if (!largeFile && r.doc === doc && r.word == word) r.matches else emptyList()
 }
