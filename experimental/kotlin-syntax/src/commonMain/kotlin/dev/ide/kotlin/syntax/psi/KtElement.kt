@@ -4,6 +4,7 @@ import com.intellij.platform.syntax.SyntaxElementType
 import org.jetbrains.kotlin.kmp.lexer.KtTokens
 import org.jetbrains.kotlin.kmp.parser.KtNodeTypes
 import org.jetbrains.kotlin.kmp.tree.LightNode
+import org.jetbrains.kotlin.kmp.tree.LightSyntaxTree
 import org.jetbrains.kotlin.kmp.utils.SyntaxElementTypesWithIds
 
 /**
@@ -44,7 +45,11 @@ open class KtElement internal constructor(
             session.tree.getEndOffset(node) + session.baseOffset,
         )
 
-    override val parent: KtElement? get() = session.tree.getParent(node)?.let { session.psi(it) }
+    override val parent: KtElement?
+        get() {
+            val p = session.tree.parentIndex(node)
+            return if (p == LightSyntaxTree.NO_INDEX) null else session.psi(LightNode(p))
+        }
 
     /**
      * Children, trivia excluded, computed once per element.
@@ -60,8 +65,7 @@ open class KtElement internal constructor(
     override val children: List<KtElement>
         get() = childCache ?: run {
             val e = expansion
-            if (e != null) e.session.childrenOf(e.node).map { e.session.psi(it) }
-            else session.childrenOf(node).map { session.psi(it) }
+            if (e != null) e.session.childElements(e.node) else session.childElements(node)
         }.also { list ->
             for (i in list.indices) list[i].indexInParent = i
             childCache = list
@@ -179,14 +183,15 @@ open class KtElement internal constructor(
 
     internal fun child(type: SyntaxElementType): KtElement? {
         val e = expansion
-        return if (e != null) e.session.tree.findChildByType(e.node, type)?.let { e.session.psi(it) }
-        else session.tree.findChildByType(node, type)?.let { session.psi(it) }
+        val s = e?.session ?: session
+        val c = s.tree.childIndexByType(e?.node ?: node, type)
+        return if (c == LightSyntaxTree.NO_INDEX) null else s.psi(LightNode(c))
     }
 
     internal fun hasChild(type: SyntaxElementType): Boolean {
         val e = expansion
-        return if (e != null) e.session.tree.findChildByType(e.node, type) != null
-        else session.tree.findChildByType(node, type) != null
+        val s = e?.session ?: session
+        return s.tree.childIndexByType(e?.node ?: node, type) != LightSyntaxTree.NO_INDEX
     }
 
     internal inline fun <reified T : KtElement> firstChildOfType(): T? = children.firstOrNull { it is T } as T?
@@ -251,7 +256,18 @@ abstract class KtNamedDeclaration internal constructor(session: KtTreeSession, n
     /** The identifier token, or null when the name is missing (half-typed code, or an anonymous object). */
     open val nameIdentifier: KtElement? get() = child(KtTokens.IDENTIFIER)
 
-    open val name: String? get() = nameIdentifier?.text?.removeSurrounding("`")
+    // Read once per element: the tree is immutable, and resolution asks every declaration in scope for its
+    // name on each reference it looks up, which rebuilt the string each time.
+    open val name: String?
+        get() {
+            if (nameRead) return nameValue
+            val n = nameIdentifier?.text?.removeSurrounding("`")
+            nameValue = n
+            nameRead = true
+            return n
+        }
+    private var nameRead = false
+    private var nameValue: String? = null
 
     val nameAsName: Name? get() = name?.let { Name.identifier(it) }
 
@@ -316,16 +332,25 @@ abstract class KtCallableDeclaration internal constructor(session: KtTreeSession
     val receiverTypeReference: KtTypeReference?
         get() {
             val nameOffset = nameIdentifier?.textOffset ?: return null
-            return childrenOfType<KtTypeReference>().firstOrNull { it.textOffset < nameOffset }
+            return typeReferenceAround(nameOffset, before = true)
         }
 
     /** The declared return type, or null when it is inferred. */
     open val typeReference: KtTypeReference?
         get() {
-            val nameOffset = nameIdentifier?.textOffset
-                ?: return childrenOfType<KtTypeReference>().firstOrNull()
-            return childrenOfType<KtTypeReference>().firstOrNull { it.textOffset > nameOffset }
+            val nameOffset = nameIdentifier?.textOffset ?: return typeReferenceAround(-1, before = false)
+            return typeReferenceAround(nameOffset, before = false)
         }
+
+    // Read on every declaration of a file per scope query, so it walks the cached children without a list.
+    private fun typeReferenceAround(nameOffset: Int, before: Boolean): KtTypeReference? {
+        val cs = children
+        for (i in cs.indices) {
+            val c = cs[i] as? KtTypeReference ?: continue
+            if (if (before) c.textOffset < nameOffset else c.textOffset > nameOffset) return c
+        }
+        return null
+    }
 
     override val typeConstraintList: KtTypeConstraintList? get() = firstChildOfType()
 

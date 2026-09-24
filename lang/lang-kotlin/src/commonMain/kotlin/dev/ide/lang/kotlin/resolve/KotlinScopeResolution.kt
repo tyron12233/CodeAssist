@@ -647,7 +647,9 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
     // Top-level declarations in THIS live file (the module index is disk-based and may lag the buffer):
     // functions/properties AND classes/objects/typealiases (a same-file `object Foo` / `class Foo` is a
     // resolvable bare reference — `Foo()` / `Foo.bar` — before the index has caught up to the buffer).
-    if (ktFile.declarations.any { it is KtNamedDeclaration && it.name == name }) return true
+    val topNames = caches.topLevelNames
+        ?: ktFile.declarations.mapNotNullTo(HashSet()) { (it as? KtNamedDeclaration)?.name }.also { caches.topLevelNames = it }
+    if (name in topNames) return true
     // A project `typealias` declared in ANOTHER file (`typealias DiskFile = DiskVirtualFile`, used as
     // `DiskFile(path)` across the package). The same-file case is the live-buffer scan just above, which is
     // why only the cross-file one read as unresolved. Suppression only, so a genuinely missing import of an
@@ -962,9 +964,9 @@ fun KotlinResolver.scopeSymbolsAt(
 internal fun KotlinResolver.sameFileScopeSymbols(offset: Int): List<KotlinSymbol> {
     val out = ArrayList<KotlinSymbol>()
     for (d in ktFile.declarations) when (d) {
-        is KtNamedFunction -> if (d.receiverTypeReference == null) out += sameFileFunction(d, null)
-        is KtProperty -> if (d.receiverTypeReference == null) out += sameFileProperty(d, null)
-        is KtClassOrObject -> out += sameFileType(d)
+        is KtNamedFunction -> if (d.receiverTypeReference == null) out += cachedSameFileSymbol(d, null) { sameFileFunction(d, null) }
+        is KtProperty -> if (d.receiverTypeReference == null) out += cachedSameFileSymbol(d, null) { sameFileProperty(d, null) }
+        is KtClassOrObject -> out += cachedSameFileSymbol(d, null) { sameFileType(d) }
         else -> {}
     }
     var node: KtElement? = elementAt(offset)
@@ -972,15 +974,13 @@ internal fun KotlinResolver.sameFileScopeSymbols(offset: Int): List<KotlinSymbol
         if (node is KtClassOrObject) {
             val ownerFqn = node.fqName?.asString()
             for (d in node.declarations) when (d) {
-                is KtNamedFunction -> if (d.receiverTypeReference == null) out += sameFileFunction(
-                    d,
-                    ownerFqn
-                )
+                is KtNamedFunction -> if (d.receiverTypeReference == null) {
+                    out += cachedSameFileSymbol(d, ownerFqn) { sameFileFunction(d, ownerFqn) }
+                }
 
-                is KtProperty -> if (d.receiverTypeReference == null) out += sameFileProperty(
-                    d,
-                    ownerFqn
-                )
+                is KtProperty -> if (d.receiverTypeReference == null) {
+                    out += cachedSameFileSymbol(d, ownerFqn) { sameFileProperty(d, ownerFqn) }
+                }
 
                 else -> {}
             }
@@ -1002,6 +1002,21 @@ internal fun KotlinResolver.sameFileScopeSymbols(offset: Int): List<KotlinSymbol
         node = node.parent
     }
     return out
+}
+
+/**
+ * [build]'s symbol for [decl] under [ownerFqn], built once per snapshot ([KotlinResolverCaches.sameFileSymbols]).
+ * Not cached while a same-file property is being typed: a property symbol built then can carry that
+ * inference's re-entrant null, and pinning it would leave the property untyped for the snapshot.
+ */
+internal inline fun KotlinResolver.cachedSameFileSymbol(
+    decl: KtElement, ownerFqn: String?, build: () -> KotlinSymbol,
+): KotlinSymbol {
+    val key = KotlinResolverCaches.SameFileKey(decl, ownerFqn)
+    caches.sameFileSymbols[key]?.let { return it }
+    val sym = build()
+    if (caches.inferringSameFileProperty.isEmpty()) caches.sameFileSymbols[key] = sym
+    return sym
 }
 
 internal fun KotlinResolver.sameFileFunction(fn: KtNamedFunction, ownerFqn: String?): KotlinSymbol {

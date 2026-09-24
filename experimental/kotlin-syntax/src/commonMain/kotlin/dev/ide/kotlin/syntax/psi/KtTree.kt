@@ -126,6 +126,18 @@ class KtTreeSession internal constructor(
     internal fun childrenOf(node: LightNode): List<LightNode> =
         tree.getChildren(node).filter { !isTrivia(tree.getType(it)) }
 
+    /** [node]'s trivia-free children as elements, read by index so no node is boxed on the way. */
+    internal fun childElements(node: LightNode): List<KtElement> {
+        val n = tree.childCount(node)
+        if (n == 0) return emptyList()
+        val out = ArrayList<KtElement>(n)
+        for (i in 0 until n) {
+            val c = LightNode(tree.childIndexAt(node, i))
+            if (!isTrivia(tree.getType(c))) out += psi(c)
+        }
+        return out
+    }
+
     internal fun isTrivia(type: SyntaxElementType): Boolean =
         type in KtTokens.WHITESPACES || type in KtTokens.COMMENTS
 }
@@ -160,17 +172,21 @@ interface LazyBodyParser {
  * again into the same tree, which `LazyBlockParityTest` pins.
  */
 internal fun isCollapsedBody(tree: LightSyntaxTree, node: LightNode, type: SyntaxElementType = tree.getType(node)): Boolean {
+    // By index throughout: this runs on every block and lambda of a file, per parse.
     if (type == KtNodeTypes.LAMBDA_EXPRESSION) {
-        val literal = tree.findChildByType(node, KtNodeTypes.FUNCTION_LITERAL) ?: return false
-        return tree.findChildByType(literal, KtNodeTypes.BLOCK) == null
+        val literal = tree.childIndexByType(node, KtNodeTypes.FUNCTION_LITERAL)
+        if (literal == LightSyntaxTree.NO_INDEX) return false
+        return tree.childIndexByType(LightNode(literal), KtNodeTypes.BLOCK) == LightSyntaxTree.NO_INDEX
     }
     if (type != KtNodeTypes.BLOCK) return false
-    val children = tree.getChildren(node)
-    val first = children.firstOrNull() ?: return false
+    val n = tree.childCount(node)
+    if (n == 0) return false
+    val first = LightNode(tree.childIndexAt(node, 0))
     if (!tree.isToken(first) || tree.getType(first) != KtTokens.LBRACE) return false
-    for (c in children) {
+    for (i in 0 until n) {
+        val c = LightNode(tree.childIndexAt(node, i))
         if (tree.isToken(c)) continue
-        for (g in tree.getChildren(c)) if (!tree.isToken(g)) return false
+        for (j in 0 until tree.childCount(c)) if (!tree.isToken(LightNode(tree.childIndexAt(c, j)))) return false
     }
     return true
 }
@@ -184,10 +200,39 @@ internal fun collapsedBodiesAreClosed(tree: LightSyntaxTree, node: LightNode = t
     if (tree.isToken(node)) return true
     val type = tree.getType(node)
     if (isCollapsedBody(tree, node, type)) {
-        val holder = if (type == KtNodeTypes.LAMBDA_EXPRESSION) tree.findChildByType(node, KtNodeTypes.FUNCTION_LITERAL)!! else node
-        val last = tree.getChildren(holder).lastOrNull() ?: return false
+        val holder = if (type == KtNodeTypes.LAMBDA_EXPRESSION) LightNode(tree.childIndexByType(node, KtNodeTypes.FUNCTION_LITERAL)) else node
+        val n = tree.childCount(holder)
+        if (n == 0) return false
+        val last = LightNode(tree.childIndexAt(holder, n - 1))
         return tree.isToken(last) && tree.getType(last) == KtTokens.RBRACE
     }
-    for (c in tree.getChildren(node)) if (!collapsedBodiesAreClosed(tree, c)) return false
+    for (i in 0 until tree.childCount(node)) if (!collapsedBodiesAreClosed(tree, LightNode(tree.childIndexAt(node, i)))) return false
     return true
+}
+
+/**
+ * The range of every error element in the file, in document order: what a walk of the elements checking
+ * [KtElement.isErrorElement] finds, collapsed bodies included, without building an element per node.
+ */
+fun KtFile.syntaxErrorRanges(): List<TextRange> {
+    val out = ArrayList<TextRange>()
+    session.collectErrors(node, out)
+    return out
+}
+
+private fun KtTreeSession.collectErrors(node: LightNode, out: MutableList<TextRange>) {
+    val type = tree.getType(node)
+    if (type == com.intellij.platform.syntax.element.SyntaxTokenTypes.ERROR_ELEMENT) {
+        out += TextRange(tree.getStartOffset(node) + baseOffset, tree.getEndOffset(node) + baseOffset)
+    }
+    if (tree.isToken(node)) return
+    if (bodies != null && (type == KtNodeTypes.BLOCK || type == KtNodeTypes.LAMBDA_EXPRESSION)) {
+        // The element's children come from the body's own parse, so its errors do too.
+        val e = expansionOf(node, psi(node))
+        if (e != null) {
+            for (i in 0 until e.session.tree.childCount(e.node)) e.session.collectErrors(LightNode(e.session.tree.childIndexAt(e.node, i)), out)
+            return
+        }
+    }
+    for (i in 0 until tree.childCount(node)) collectErrors(LightNode(tree.childIndexAt(node, i)), out)
 }

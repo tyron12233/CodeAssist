@@ -90,6 +90,26 @@ class KotlinResolverCaches {
      * which types the NEXT property, which resolves its call, and so on.
      */
     val inferringSameFileProperty = HashSet<KtProperty>()
+
+    /**
+     * Symbols for this file's own declarations as the file scope offers them, keyed by declaration and owner.
+     * [dev.ide.lang.kotlin.resolve.sameFileScopeSymbols] runs per name resolution and rebuilt a symbol for
+     * every declaration in the file each time (a signature string, its parameter types): O(declarations) per
+     * reference, which on a large file was the biggest share of an analysis pass's garbage. Within a snapshot
+     * a declaration's symbol is a pure function of it, except a property typed by inference while another
+     * inference is in flight, which is not cached (see [dev.ide.lang.kotlin.resolve.cachedSameFileSymbol]).
+     */
+    val sameFileSymbols = HashMap<SameFileKey, KotlinSymbol>()
+
+    /** The names of this file's top-level declarations, for the per-reference "does a bare name resolve" test. */
+    var topLevelNames: Set<String>? = null
+
+    /** Key for [sameFileSymbols]: a declaration and the owner it is offered under. */
+    class SameFileKey(val decl: KtElement, val ownerFqn: String?) {
+        override fun hashCode(): Int = decl.hashCode() * 31 + (ownerFqn?.hashCode() ?: 0)
+        override fun equals(other: Any?): Boolean =
+            other is SameFileKey && other.decl == decl && other.ownerFqn == ownerFqn
+    }
 }
 
 /**

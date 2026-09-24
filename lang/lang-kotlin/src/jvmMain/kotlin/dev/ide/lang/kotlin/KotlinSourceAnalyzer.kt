@@ -287,6 +287,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         if (incrementalAnalysisLazy.isInitialized()) incrementalAnalysis.forget(path)
         if (highlighterLazy.isInitialized()) highlighterLazy.value.forget(path)
         if (folderLazy.isInitialized()) folderLazy.value.forget(path)
+        if (inlayLazy.isInitialized()) inlayLazy.value.forget(path)
     }
 
     /**
@@ -301,6 +302,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         if (incrementalAnalysisLazy.isInitialized()) incrementalAnalysis.clear()
         if (highlighterLazy.isInitialized()) highlighterLazy.value.clear()
         if (folderLazy.isInitialized()) folderLazy.value.clear()
+        if (inlayLazy.isInitialized()) inlayLazy.value.clear()
         service.releaseMemory()
         KotlinParserHost.releaseMemory()
     }
@@ -334,10 +336,12 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     override fun completionContributions(): List<CompletionContribution> =
         listOf(CompletionContribution(completionContributor))
 
-    override val inlayHints: dev.ide.lang.hints.InlayHintService by lazy {
+    override val inlayHints: dev.ide.lang.hints.InlayHintService get() = inlayLazy.value
+    private val inlayLazy = lazy {
         KotlinInlayHintService(
             parsedFor = { lastByFile[it.path] },
             resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service, sharedCachesFor(it)) },
+            externalStampFor = { service.externalContentStamp(it) },
         )
     }
 

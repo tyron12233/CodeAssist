@@ -1,5 +1,6 @@
 package dev.ide.kotlin.syntax
 
+import dev.ide.kotlin.syntax.psi.syntaxErrorRanges
 import org.jetbrains.kotlin.kmp.parser.KtNodeTypes
 import org.jetbrains.kotlin.kmp.tree.LightNode
 import org.jetbrains.kotlin.kmp.tree.LightSyntaxTree
@@ -74,6 +75,10 @@ class LazyBlockParityTest {
                 if (out.toString() != full) diverged += "${file.name}@$at"
                 compare(KotlinSyntax.parseFile(text), KotlinSyntax.parseFileLazily(text, dev.ide.kotlin.syntax.psi.LazyBodyParser.UNCACHED))
                     ?.let { diverged += "${file.name}@$at facade: $it" }
+                val fullFile = KotlinSyntax.parseFile(text)
+                val lazyFile = KotlinSyntax.parseFileLazily(text, dev.ide.kotlin.syntax.psi.LazyBodyParser.UNCACHED)
+                val walked = errorsByWalk(fullFile)
+                if (lazyFile.syntaxErrorRanges() != walked || fullFile.syntaxErrorRanges() != walked) diverged += "${file.name}@$at errors"
             }
         }
         println("lazy-block parity (edited): $cases cases, ${diverged.size} diverged: ${diverged.take(10)}")
@@ -100,6 +105,17 @@ class LazyBlockParityTest {
         }
         println("lazy facade parity: ${files.size} files, ${diverged.size} diverged ${diverged.take(5)}")
         assertTrue(diverged.isEmpty(), diverged.take(10).joinToString("\n"))
+    }
+
+    /** Every error element's range, found by visiting each element: what [syntaxErrorRanges] must agree with. */
+    private fun errorsByWalk(root: dev.ide.kotlin.syntax.psi.KtElement): List<dev.ide.kotlin.syntax.psi.TextRange> {
+        val out = ArrayList<dev.ide.kotlin.syntax.psi.TextRange>()
+        fun visit(e: dev.ide.kotlin.syntax.psi.KtElement) {
+            if (e.isErrorElement) out += e.textRange
+            e.children.forEach(::visit)
+        }
+        visit(root)
+        return out
     }
 
     private fun compare(a: dev.ide.kotlin.syntax.psi.KtElement, b: dev.ide.kotlin.syntax.psi.KtElement): String? {

@@ -450,9 +450,19 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
                 startOffset = t.range.start,
                 endOffset = t.range.end,
                 kind = t.kind.id,
-                modifiers = t.modifiers.mapTo(LinkedHashSet()) { mapHighlightModifier(it) },
+                modifiers = uiModifiers(t.modifiers),
             )
         }
+    }
+
+    // One shared set per single modifier: most tokens carry none or one, and a large file has tens of
+    // thousands of tokens per pass.
+    private val singleModifiers = HighlightModifier.entries.map { setOf(mapHighlightModifier(it)) }
+
+    private fun uiModifiers(m: Set<HighlightModifier>): Set<UiHighlightModifier> = when (m.size) {
+        0 -> emptySet()
+        1 -> singleModifiers[m.first().ordinal]
+        else -> m.mapTo(LinkedHashSet()) { mapHighlightModifier(it) }
     }
 
     override suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> {

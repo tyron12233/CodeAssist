@@ -163,6 +163,42 @@ class LightSyntaxTree(
         return null
     }
 
+    // Index-returning twins of [getParent], [findChildByType] and [getChildren]. A `LightNode?` is a boxed
+    // value, and so is every element read through a `List<LightNode>`, so the object-returning forms allocate
+    // on each call; a tree walk (every parent chain, every child scan) made that most of what a pass allocated.
+    // These answer [NO_INDEX] for "none" and never box.
+
+    /** The parent's node index, or [NO_INDEX] for the root. */
+    fun parentIndex(node: LightNode): Int {
+        if (node.index == Int.MIN_VALUE || isSyntheticRoot(node)) return NO_INDEX
+        return if (isComposite(node)) parentStartIndex[node.index] else tokenParentStart[-(node.index + 1)]
+    }
+
+    /** How many children [node] has. */
+    fun childCount(node: LightNode): Int {
+        val idx = node.index
+        if (idx < 0) return 0
+        // Branches rather than a `?.` chain: that one is typed `Int?` and boxes the answer.
+        val list = childrenByIndex[idx]
+        return if (list is ChildrenList) list.indices.size else list.size
+    }
+
+    /** The node index of [node]'s [i]th child. */
+    fun childIndexAt(node: LightNode, i: Int): Int {
+        val list = childrenByIndex[node.index]
+        return if (list is ChildrenList) list.indices[i] else list[i].index
+    }
+
+    /** The node index of [node]'s first child of [type], or [NO_INDEX]. */
+    fun childIndexByType(node: LightNode, type: SyntaxElementType): Int {
+        val n = childCount(node)
+        for (i in 0 until n) {
+            val c = childIndexAt(node, i)
+            if (getType(LightNode(c)) == type) return c
+        }
+        return NO_INDEX
+    }
+
     fun getChildrenByType(node: LightNode, type: SyntaxElementType): List<LightNode> {
         val children = getChildren(node)
         if (children.isEmpty()) return emptyList()
@@ -174,13 +210,16 @@ class LightSyntaxTree(
     companion object {
         /** Sentinel "no node" value for use as a not-computed marker in callers. */
         val NO_NODE: LightNode = LightNode(Int.MIN_VALUE)
+
+        /** The "no node" answer of the index-returning lookups. */
+        const val NO_INDEX: Int = Int.MIN_VALUE
     }
 }
 
 /**
  * Lightweight [List] view over a precomputed [IntArray] of child node indices.
  */
-private class ChildrenList(private val indices: IntArray) : AbstractList<LightNode>() {
+private class ChildrenList(val indices: IntArray) : AbstractList<LightNode>() {
     override val size: Int get() = indices.size
     override fun get(index: Int): LightNode = LightNode(indices[index])
 }
