@@ -261,7 +261,7 @@ private fun imeIgnoresNoSuggestions(context: Context): Boolean {
  *  `adb logcat -s EditorIme`. The only cost when off is the isLoggable check. */
 private const val IME_LOG_TAG = "EditorIme"
 private inline fun imeLog(message: () -> String) {
-    Log.d(IME_LOG_TAG, message())
+    if (Log.isLoggable(IME_LOG_TAG, Log.DEBUG)) Log.d(IME_LOG_TAG, message())
 }
 
 /**
