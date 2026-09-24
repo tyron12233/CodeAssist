@@ -208,3 +208,89 @@ private class Branch(val left: Rope, val right: Rope) : Rope() {
         }
     }
 }
+
+/** The leaf holding [index] (which must be in range), with that leaf's start offset written to [startOut]. */
+private fun Rope.leafAt(index: Int, startOut: IntArray): String {
+    var node: Rope = this
+    var i = index
+    var offset = 0
+    while (true) {
+        when (node) {
+            is Leaf -> {
+                startOut[0] = offset
+                return node.text
+            }
+            is Branch -> {
+                val ll = node.left.length
+                if (i < ll) {
+                    node = node.left
+                } else {
+                    i -= ll
+                    offset += ll
+                    node = node.right
+                }
+            }
+        }
+    }
+}
+
+/** A per-char callback for [scanForward]/[scanBackward]; returning true stops the scan at that index. */
+fun interface CharVisitor {
+    fun visit(index: Int, c: Char): Boolean
+}
+
+/**
+ * Visit the chars of `[start, end)` in ascending order, stopping at the first index where [visitor] returns
+ * true (returned), or -1 when it never does. Identical to an indexed loop, but on the editor's rope it reads
+ * each leaf's string directly instead of walking the tree once per char, so a long bracket scan costs a
+ * plain string loop. Any other [CharSequence] is indexed as usual.
+ */
+fun CharSequence.scanForward(start: Int, end: Int, visitor: CharVisitor): Int {
+    var i = start.coerceAtLeast(0)
+    val stop = end.coerceAtMost(length)
+    if (this !is Rope) {
+        while (i < stop) {
+            if (visitor.visit(i, this[i])) return i
+            i++
+        }
+        return -1
+    }
+    val leafStart = IntArray(1)
+    while (i < stop) {
+        val leaf = leafAt(i, leafStart)
+        val base = leafStart[0]
+        val leafStop = minOf(stop, base + leaf.length)
+        while (i < leafStop) {
+            if (visitor.visit(i, leaf[i - base])) return i
+            i++
+        }
+    }
+    return -1
+}
+
+/**
+ * Visit the chars from [from] down to [downTo] (both inclusive) in descending order, stopping at the first
+ * index where [visitor] returns true (returned), or -1. The backward twin of [scanForward].
+ */
+fun CharSequence.scanBackward(from: Int, downTo: Int, visitor: CharVisitor): Int {
+    var i = from.coerceAtMost(length - 1)
+    val stop = downTo.coerceAtLeast(0)
+    if (this !is Rope) {
+        while (i >= stop) {
+            if (visitor.visit(i, this[i])) return i
+            i--
+        }
+        return -1
+    }
+    val leafStart = IntArray(1)
+    while (i >= stop) {
+        val leaf = leafAt(i, leafStart)
+        val base = leafStart[0]
+        val leafStop = maxOf(stop, base)
+        while (i >= leafStop) {
+            if (visitor.visit(i, leaf[i - base])) return i
+            i--
+        }
+    }
+    return -1
+}

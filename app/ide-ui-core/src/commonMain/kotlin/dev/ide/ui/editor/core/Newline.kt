@@ -87,15 +87,12 @@ private fun matchingOpenerIndent(text: CharSequence, closerPos: Int): String? {
     val closer = text.charOrNull(closerPos) ?: return null
     val opener = CLOSE_TO_OPEN[closer] ?: return null
     var depth = 0
-    var i = closerPos
-    val limit = maxOf(0, closerPos - COMMENT_SCAN_LIMIT)
-    while (i >= limit) {
-        val c = text[i]
+    val found = text.scanBackward(closerPos, maxOf(0, closerPos - COMMENT_SCAN_LIMIT)) { _, c ->
         if (c == closer) depth++
-        else if (c == opener) { depth--; if (depth == 0) return leadingIndent(text, lineStartOf(text, i), i) }
-        i--
+        else if (c == opener) depth--
+        c == opener && depth == 0
     }
-    return null
+    return if (found < 0) null else leadingIndent(text, lineStartOf(text, found), found)
 }
 
 /** Index of the next non-blank char at or after [pos] on the same line (stops at a newline), or -1. */

@@ -78,11 +78,9 @@ private fun shouldInsertClosingBracket(text: CharSequence, open: Char): Boolean 
     if (n > BRACKET_SCAN_LIMIT) return true
     var opens = 0
     var closes = 0
-    var i = 0
-    while (i < n) {
-        val c = text[i]
+    text.scanForward(0, n) { _, c ->
         if (c == open) opens++ else if (c == close) closes++
-        i++
+        false
     }
     return opens >= closes
 }
@@ -300,23 +298,16 @@ private fun matchingOpenerIndent(text: CharSequence, closerPos: Int): String? {
     val closer = text.charOrNull(closerPos) ?: return null
     val opener = CLOSE_TO_OPEN[closer] ?: return null
     var depth = 0
-    var i = closerPos
-    val limit = maxOf(0, closerPos - CLOSER_SCAN_LIMIT)
-    while (i >= limit) {
-        val c = text[i]
+    val found = text.scanBackward(closerPos, maxOf(0, closerPos - CLOSER_SCAN_LIMIT)) { _, c ->
         if (c == closer) depth++
-        else if (c == opener) {
-            depth--
-            if (depth == 0) {
-                val ls = lineStartOf(text, i)
-                var k = ls
-                while (k < text.length && (text[k] == ' ' || text[k] == '\t')) k++
-                return text.subSequence(ls, k).toString()
-            }
-        }
-        i--
+        else if (c == opener) depth--
+        c == opener && depth == 0
     }
-    return null
+    if (found < 0) return null
+    val ls = lineStartOf(text, found)
+    var k = ls
+    while (k < text.length && (text[k] == ' ' || text[k] == '\t')) k++
+    return text.subSequence(ls, k).toString()
 }
 
 private const val CLOSER_SCAN_LIMIT = 100_000
@@ -356,24 +347,18 @@ private fun countCharIn(text: CharSequence, start: Int, end: Int, ch: Char): Int
 private fun matchingOpenerIndent(text: CharSequence, pos: Int, close: Char): String? {
     val open = CLOSE_TO_OPEN[close] ?: return null
     var depth = 0
-    var i = pos - 1
-    val limit = maxOf(0, pos - BRACKET_SCAN_LIMIT)
-    while (i >= limit) {
-        val c = text[i]
-        if (c == close) {
-            depth++
-        } else if (c == open) {
-            if (depth == 0) {
-                val ls = lineStartOf(text, i)
-                var k = ls
-                while (k < text.length && (text[k] == ' ' || text[k] == '\t')) k++
-                return text.subSequence(ls, k).toString()
-            }
-            depth--
+    val found = text.scanBackward(pos - 1, maxOf(0, pos - BRACKET_SCAN_LIMIT)) { _, c ->
+        when (c) {
+            close -> { depth++; false }
+            open -> if (depth == 0) true else { depth--; false }
+            else -> false
         }
-        i--
     }
-    return null
+    if (found < 0) return null
+    val ls = lineStartOf(text, found)
+    var k = ls
+    while (k < text.length && (text[k] == ' ' || text[k] == '\t')) k++
+    return text.subSequence(ls, k).toString()
 }
 
 /** Offset of the end of the line beginning at [lineStart] (the next '\n', or EOF). */
