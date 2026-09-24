@@ -116,6 +116,14 @@ interface EditorService {
     /** Diagnostics for the live buffer [text]. May throw [AnalysisPreempted] when completion took priority. */
     suspend fun analyze(path: String, text: String): List<UiDiagnostic>
 
+    /**
+     * Paths whose diagnostics changed outside a per-file [analyze] call: the project-wide sweep that runs
+     * after a settled pass reports findings for files it did not start from. The editor re-runs [analyze]
+     * for an open file named here to pick them up. Empty on a backend with no project-wide analysis.
+     */
+    val diagnosticsInvalidated: kotlinx.coroutines.flow.Flow<Set<String>>
+        get() = kotlinx.coroutines.flow.emptyFlow()
+
     /** Inlay hints for `[startOffset, endOffset)`. May throw [AnalysisPreempted]. */
     suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> = emptyList()
 

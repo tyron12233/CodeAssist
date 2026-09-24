@@ -2362,6 +2362,22 @@ class IdeServices private constructor(
         }
     }
 
+    /** Whether a project-wide analysis sweep ([analyzeProject]) would do anything: some enabled
+     *  [dev.ide.analysis.ProjectAnalyzer] to run, or stale project findings to clear. */
+    val hasProjectAnalysis: Boolean get() = analysisEngine.hasProjectWork
+
+    /**
+     * Run the project-tier analyzers once over every source file and publish their findings. The editor
+     * calls this after a settled per-file pass, on the engine thread, because the sweep reaches the same
+     * per-module analyzers the per-file pass does. Returns the paths whose diagnostics changed.
+     */
+    suspend fun analyzeProject(): List<String> =
+        try {
+            analysisEngine.analyzeProject().map { it.path }
+        } catch (e: LinkageError) {
+            emptyList()
+        }
+
     // --- Compose preview (editor integration; see docs/compose-interpreter.md) ---
 
     /** Optional on-device Compose render host (set by :ide-android after bootstrap). When null, a preview
@@ -4298,7 +4314,8 @@ class IdeServices private constructor(
                 if (!Files.isDirectory(root)) continue
                 runCatching {
                     Files.walk(root).use { s ->
-                        s.filter { it.toString().endsWith(".java") }
+                        // Every file the per-file pass would analyze (the same gate as targetFor), not just Java.
+                        s.filter { Files.isRegularFile(it) && isAnalyzable(it) }
                             .forEach { out += store.vfs.fileFor(it) }
                     }
                 }
@@ -4312,7 +4329,13 @@ class IdeServices private constructor(
             analysisEnvironment.targetFor(file, needsBindings = true)
                 ?: error("no analysis target for ${file.path}")
 
-        override fun checkCanceled() {}
+        // The sweep runs in the editor's background lane, so a completion request must be able to cut in.
+        override fun checkCanceled() = dev.ide.platform.EngineCancellation.checkCanceled()
+
+        private fun isAnalyzable(file: Path): Boolean {
+            val language = languageFor(file)
+            return hasLanguageBackend(language) || language in analyzedLanguages
+        }
     }
 
     override fun close() {

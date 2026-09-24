@@ -578,6 +578,16 @@ private fun EditorDaemonEffect(
     // re-runs on a settled edit — so nothing re-triggers it on its own when the index catches up. Fire on the
     // building true→false transition only; a file opened in the already-built steady state is already analyzed
     // against the ready index by the edit/open effect above (the initial null state never fires).
+    // Re-run when the project-wide sweep changed this file's findings. That sweep starts from whichever file
+    // was edited and may report on any other, so nothing else would bring its results into an open tab.
+    LaunchedEffect(daemon) {
+        state.backend.editor.diagnosticsInvalidated.collect { paths ->
+            if (active.path in paths) {
+                val doc = active.session.doc
+                daemon.restart { doc.text }
+            }
+        }
+    }
     var wasIndexing by remember(active.path) { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(active.path, indexStatus.building) {
         val prev = wasIndexing
