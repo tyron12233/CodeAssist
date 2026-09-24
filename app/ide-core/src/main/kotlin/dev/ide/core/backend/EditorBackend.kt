@@ -64,7 +64,17 @@ import dev.ide.ui.backend.UiTextEdit
 import dev.ide.ui.backend.UiTextRange
 import java.io.IOException
 import java.nio.file.Paths
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.ui.backend.UiActionEdits
 
@@ -74,6 +84,11 @@ import dev.ide.ui.backend.UiActionEdits
  * [BackendContext.background] for analysis/hints/etc.); a preemption surfaces as [AnalysisPreempted] for the
  * host to retry. Maps the framework results onto the neutral UI DTOs.
  */
+/** Quiet period after a per-file pass before the project-wide sweep runs, and its preemption retry policy. */
+private const val PROJECT_ANALYSIS_DELAY_MS = 800L
+private const val PROJECT_ANALYSIS_RETRY_MS = 150L
+private const val PROJECT_ANALYSIS_MAX_RETRIES = 8
+
 /** File extensions an engine-op label may carry. A closed set, so the label can never leak a file name. */
 private val REPORTABLE_EXTENSIONS = setOf(
     "kt", "kts", "java", "xml", "gradle", "toml", "json", "properties", "txt", "md", "pro", "cfg",
@@ -318,6 +333,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
             throw AnalysisPreempted() // preempted: don't record a (misleadingly short) latency sample
         }
         ctx.recordPerf(Events.ANALYSIS_PERF, (System.nanoTime() - t0) / 1_000_000)
+        scheduleProjectAnalysis(path)
         return diagnostics.map { d ->
             val (line, col) = lineColOf(text, d.range.start)
             UiDiagnostic(
@@ -336,6 +352,54 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
             )
         }
     }
+
+    /** Coalesced project-wide sweeps: each settled [analyze] restarts the debounce, so only the last runs. */
+    private val projectAnalysisScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    @Volatile private var projectAnalysisJob: Job? = null
+
+    /** Engine path (normalized) to the path the editor analyzed it under, for [diagnosticsInvalidated]. */
+    private val analyzedPaths = ConcurrentHashMap<String, String>()
+
+    private val invalidated = MutableSharedFlow<Set<String>>(extraBufferCapacity = 8)
+    override val diagnosticsInvalidated: Flow<Set<String>> get() = invalidated
+
+    /**
+     * Queue the project-tier analyzers to run once the editor has been quiet for [PROJECT_ANALYSIS_DELAY_MS].
+     * The sweep runs in the background lane, on the engine thread, since it reaches the same per-module
+     * analyzers as the per-file pass; completion preempts it like any other background pass. Files whose
+     * findings changed are announced on [diagnosticsInvalidated] so the editor re-pulls them.
+     */
+    private fun scheduleProjectAnalysis(path: String) {
+        val services = ctx.servicesOrNull ?: return
+        analyzedPaths[engineKey(path)] = path
+        if (!services.hasProjectAnalysis) return
+        projectAnalysisJob?.cancel()
+        projectAnalysisJob = projectAnalysisScope.launch {
+            delay(PROJECT_ANALYSIS_DELAY_MS)
+            var attempt = 0
+            while (ctx.servicesOrNull === services) {
+                try {
+                    val changed = ctx.background(op = "analysis:project") { services.analyzeProject() }
+                    val open = changed.mapNotNullTo(HashSet()) { analyzedPaths[engineKey(it)] }
+                    if (open.isNotEmpty()) invalidated.emit(open)
+                    return@launch
+                } catch (_: EngineCanceledException) {
+                    // A completion took the engine; retry a few times, then leave it to the next settled edit.
+                    if (++attempt >= PROJECT_ANALYSIS_MAX_RETRIES) return@launch
+                    delay(PROJECT_ANALYSIS_RETRY_MS)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: VirtualMachineError) {
+                    throw e
+                } catch (_: Throwable) {
+                    return@launch // already logged by the background lane; the next settled edit retries
+                }
+            }
+        }
+    }
+
+    private fun engineKey(path: String): String =
+        dev.ide.platform.normalizePath(Paths.get(path).toAbsolutePath().toString())
 
     override suspend fun hintsAt(
         path: String, text: String, startOffset: Int, endOffset: Int

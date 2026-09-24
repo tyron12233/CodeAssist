@@ -88,6 +88,14 @@ class IncrementalSemanticAnalysis(
     )
     private val analyzeCache = ConcurrentMap<String, AnalyzeCache>()
 
+    /** Drop [path]'s cached per-declaration diagnostics; its next analyze is a full one. */
+    fun forget(path: String) {
+        analyzeCache.remove(path)
+    }
+
+    /** Drop every file's cached diagnostics (memory pressure). */
+    fun clear() = analyzeCache.clear()
+
     /**
      * Semantic diagnostics, computed incrementally. Conservative to avoid false positives over an incomplete
      * (parse-only) symbol model. It flags:

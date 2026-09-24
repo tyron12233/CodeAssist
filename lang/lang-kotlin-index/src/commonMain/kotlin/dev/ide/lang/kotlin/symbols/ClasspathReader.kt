@@ -262,6 +262,18 @@ class ClasspathReader(
         return "${name}_${info.size}_${info.lastModified}".replace(Regex("[^A-Za-z0-9._-]"), "_")
     }
 
+    /** Drop the decoded metadata and jar-scan caches and close every open handle; each refills on demand. */
+    fun releaseMemory() {
+        cacheLock.withLock {
+            decodeCache.clear()
+            jarDataCache.clear()
+        }
+        zipLock.withLock {
+            zips.values.forEach { runCatching { it.source.close() } }
+            zips.clear()
+        }
+    }
+
     override fun close() = zipLock.withLock {
         zips.values.forEach { runCatching { it.source.close() } }
         zips.clear()

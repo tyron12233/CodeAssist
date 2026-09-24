@@ -184,7 +184,7 @@ class JavaEnvironment private constructor(
          * Dropping the unreadable jar degrades that library to "unresolved" instead. Class dirs / non-jars pass
          * through untouched; a valid jar is always kept (so this is inert on a healthy classpath, incl. desktop).
          */
-        private fun usableClasspath(classpath: List<File>): List<File> = classpath.filter { f ->
+        fun usableClasspath(classpath: List<File>): List<File> = classpath.filter { f ->
             if (!f.isFile || !f.name.endsWith(".jar", ignoreCase = true)) return@filter true
             jarUsable.getOrPut("${f.path}|${f.length()}|${f.lastModified()}") {
                 runCatching { java.util.zip.ZipFile(f).use { it.entries().hasMoreElements() } }

@@ -34,6 +34,10 @@ interface BuildRunner {
     fun setRunSurfaceSize(widthPx: Int, heightPx: Int)
     fun answerPermission(id: Int, decision: UiPermissionDecision)
     fun clearAppLog()
+
+    /** Warm the compiler this runner builds with, so the first Run does not pay its cold start. Called once,
+     *  when the runner is chosen for a project; a runner whose compiler lives elsewhere forwards it there. */
+    fun warmCompiler() {}
 }
 
 /**
@@ -41,7 +45,11 @@ interface BuildRunner {
  * behavior that existed before the seam. No logic moved here; this is purely the in-process arm of
  * [BuildRunner].
  */
-internal class InProcessBuildRunner(private val build: dev.ide.core.services.BuildService) : BuildRunner {
+internal class InProcessBuildRunner(
+    private val build: dev.ide.core.services.BuildService,
+    private val warm: () -> Unit = {},
+) : BuildRunner {
+    override fun warmCompiler() = warm()
     override val buildState: StateFlow<BuildState> get() = build.buildState
     override val runConsole: StateFlow<RunConsoleUi?> get() = build.runConsole
     override val permissionRequest: StateFlow<UiPermissionRequest?> get() = build.permissionRequest

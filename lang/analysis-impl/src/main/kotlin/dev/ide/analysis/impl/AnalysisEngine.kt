@@ -426,32 +426,96 @@ class AnalysisEngine(
         if (watch) watchdog.completed(analyzer, plugin, (nanoTime() - started) / 1_000_000)
     }
 
-    private suspend fun runProjectPass() {
+    /**
+     * Whether a project sweep has anything to do: an enabled [ProjectAnalyzer] to run, or findings from the
+     * previous sweep still to clear (the analyzer was since disabled). A host checks this before paying for
+     * a trip to its analysis thread.
+     */
+    val hasProjectWork: Boolean
+        get() = projectAnalyzers.any(::isEnabled) || lastProjectByPath.isNotEmpty()
+
+    /**
+     * Run the [ProjectAnalyzer]s once over [AnalysisEnvironment.projectScope] and publish what they report.
+     *
+     * The self-scheduling [fileChanged] path launches its sweep on the engine's [scope]; a host whose
+     * language backends are confined to one thread calls this instead, from that thread, after its own
+     * debounce. Returns the files whose published diagnostics changed, so the host can refresh them.
+     */
+    suspend fun analyzeProject(): List<VirtualFile> = runProjectPass()
+
+    private suspend fun runProjectPass(): List<VirtualFile> {
         val enabled = projectAnalyzers.filter(::isEnabled)
-        if (enabled.isEmpty() && lastProjectByPath.isEmpty()) return
+        if (enabled.isEmpty() && lastProjectByPath.isEmpty()) return emptyList()
         val pscope = environment.projectScope()
         val perFile = LinkedHashMap<String, MutableEntry>()
         for (analyzer in enabled) {
             pscope.checkCanceled()
-            analyzer.analyze(pscope, lintSink(analyzer, perFile))
+            val plugin = externalAnalyzers[analyzer.id]
+            if (plugin == null) analyzer.analyze(pscope, lintSink(analyzer, perFile))
+            else runExternalProject(analyzer, plugin, pscope, perFile)
         }
-        // Publish each reported file's PROJECT bucket (suppression-filtered).
+        val changed = ArrayList<VirtualFile>()
+        val previous = lastProjectByPath
+        val sweep = HashMap<String, ProjectFindings>()
+        // Publish each reported file's PROJECT bucket (suppression-filtered). A file counts as changed only
+        // when what the user would see differs: a sweep that re-reports the same findings (with freshly
+        // built fix objects) must not make the host refresh, or its refresh would schedule the next sweep.
         for (entry in perFile.values) {
             val kept = runCatching { SuppressionFilter.from(pscope.targetFor(entry.file).parsed) }
                 .getOrNull()?.retain(entry.diagnostics) ?: entry.diagnostics
-            if (published.record(entry.file, 0L, PublishedState.Bucket.PROJECT, kept)) notify(entry.file)
+            if (kept.isEmpty()) continue // all suppressed: cleared below like a file nothing reported on
+            val findings = ProjectFindings(entry.file, kept.map(::visibleKey))
+            sweep[entry.file.path] = findings
+            published.record(entry.file, 0L, PublishedState.Bucket.PROJECT, kept)
+            if (previous[entry.file.path]?.keys != findings.keys) changed += entry.file
         }
         // Clear PROJECT diagnostics for files that carried them last sweep but were not reported this time.
-        for ((path, file) in lastProjectByPath) {
-            if (path !in perFile.keys && published.record(file, 0L, PublishedState.Bucket.PROJECT, emptyList())) {
-                notify(file)
+        for ((path, last) in previous) {
+            if (path !in sweep && published.record(last.file, 0L, PublishedState.Bucket.PROJECT, emptyList())) {
+                changed += last.file
             }
         }
-        lastProjectByPath = perFile.values.associate { it.file.path to it.file }
+        lastProjectByPath = sweep
+        for (file in changed) notify(file)
+        return changed
     }
 
-    /** Files that carried project-tier diagnostics in the previous sweep (path → file), for stale-clearing. */
-    @Volatile private var lastProjectByPath: Map<String, VirtualFile> = emptyMap()
+    /** What a sweep published for one file, reduced to what the editor shows (see [visibleKey]). */
+    private class ProjectFindings(val file: VirtualFile, val keys: List<Any>)
+
+    /** A diagnostic minus its fixes, which are rebuilt on every run and compare by identity. */
+    private fun visibleKey(d: Diagnostic): Any = d.copy(fixes = emptyList())
+
+    /**
+     * One installed plugin's project [analyzer], contained the way [runExternal] contains a file analyzer:
+     * a throw costs the user that check (its partial findings are dropped) and counts toward the watchdog's
+     * failure limit. It is not held to the per-pass time budget, which is sized for a single file.
+     */
+    private suspend fun runExternalProject(
+        analyzer: ProjectAnalyzer,
+        plugin: PluginId,
+        pscope: ProjectAnalysisScope,
+        into: MutableMap<String, MutableEntry>,
+    ) {
+        val own = LinkedHashMap<String, MutableEntry>()
+        try {
+            analyzer.analyze(pscope, lintSink(analyzer, own))
+        } catch (e: VirtualMachineError) {
+            throw e
+        } catch (e: EngineCanceledException) {
+            throw e
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            loggerFor(plugin).warn("project analyzer '${analyzer.id.value}' failed", t)
+            watchdog.failed(analyzer, plugin)
+            return
+        }
+        for ((path, entry) in own) into.getOrPut(path) { MutableEntry(entry.file) }.diagnostics += entry.diagnostics
+    }
+
+    /** What the previous sweep published, by path: for stale-clearing and for telling a real change apart. */
+    @Volatile private var lastProjectByPath: Map<String, ProjectFindings> = emptyMap()
 
     // ---------------------------------------------------------------------- helpers
 

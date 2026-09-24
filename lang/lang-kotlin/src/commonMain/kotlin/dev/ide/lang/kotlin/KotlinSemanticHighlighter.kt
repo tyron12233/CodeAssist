@@ -105,6 +105,14 @@ class KotlinSemanticHighlighter(
 
     private val cache = ConcurrentMap<String, Snapshot>()
 
+    /** Drop [path]'s cached tokens; its next request recomputes them. */
+    fun forget(path: String) {
+        cache.remove(path)
+    }
+
+    /** Drop every file's cached tokens (memory pressure). */
+    fun clear() = cache.clear()
+
     override suspend fun highlight(file: VirtualFile): List<SemanticToken> =
         KotlinPerf.trace("kt.highlight") {
             val parsed = parsedFor(file) ?: return@trace emptyList()

@@ -338,6 +338,64 @@ class AnalysisEngineTest {
         assertTrue(report.all.any { it.code == "proj.dup" && it.source == DiagnosticSource.Analyzer(projectAnalyzer.id) })
     }
 
+    // ---- host-driven project sweep ----
+
+    @Test
+    fun analyzeProjectPublishesProjectFindingsAndReportsChangedFiles() {
+        runBlocking {
+            val a = FakeFile("/a.kt")
+            val b = FakeFile("/b.kt")
+            val targets = mapOf(a.path to target(a, "class A"), b.path to target(b, "class B"))
+            val projectAnalyzer = FakeProjectAnalyzer(AnalyzerId("proj"), "proj.dup")
+            val engine = engine(
+                analyzers = listOf(projectAnalyzer),
+                env = FakeEnv(targets.toMutableMap(), scopeProvider = { FakeScope(targets) }),
+            )
+            assertTrue(engine.hasProjectWork)
+
+            val changed = engine.analyzeProject()
+
+            assertEquals(setOf(a.path, b.path), changed.map { it.path }.toSet())
+            assertEquals(listOf("proj.dup"), engine.diagnostics(a).mapNotNull { it.code })
+            assertTrue(engine.analyzeProject().isEmpty(), "an unchanged second sweep changes nothing")
+        }
+    }
+
+    @Test
+    fun analyzeProjectContainsAThrowingPluginProjectAnalyzer() {
+        runBlocking {
+            val a = FakeFile("/a.kt")
+            val targets = mapOf(a.path to target(a, "class A"))
+            val good = FakeProjectAnalyzer(AnalyzerId("good"), "good")
+            val bad = object : ProjectAnalyzer {
+                override val id = AnalyzerId("bad")
+                override val displayName = "bad"
+                override val languages = setOf(LanguageId("kotlin"))
+                override val defaultSeverity = Severity.WARNING
+                override val tier = AnalyzerTier.PROJECT
+                override suspend fun analyze(scope: ProjectAnalysisScope, sink: ProjectDiagnosticSink) {
+                    sink.report(a, TextRange(0, 1), defaultSeverity, "partial", code = "bad")
+                    error("plugin bug")
+                }
+            }
+            val engine = engine(
+                analyzers = listOf(bad, good),
+                env = FakeEnv(targets.toMutableMap(), scopeProvider = { FakeScope(targets) }),
+                externalAnalyzers = mapOf(bad.id to PluginId("acme")),
+            )
+
+            engine.analyzeProject()
+
+            assertEquals(listOf("good"), engine.diagnostics(a).mapNotNull { it.code })
+        }
+    }
+
+    @Test
+    fun noProjectWorkWithoutProjectAnalyzers() {
+        val engine = engine(env = env())
+        assertTrue(!engine.hasProjectWork)
+    }
+
     // ---- scheduler ----
 
     @Test

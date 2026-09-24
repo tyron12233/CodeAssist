@@ -497,7 +497,9 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         postfixTemplates = postfixTemplates,
         wordCompletion = wordCompletion,
         analyzeOnTheFly = analyzeOnTheFly,
-        reparseDelayMs = reparseDelayMs,
+        // A low-memory device is usually a slow one too: waiting a little longer after the last keystroke
+        // means fewer analysis runs started and cancelled mid-burst. A longer user choice still wins.
+        reparseDelayMs = if (dev.ide.platform.DeviceMemory.isLow) maxOf(reparseDelayMs, LOW_MEMORY_MIN_REPARSE_DELAY_MS) else reparseDelayMs,
         wordWrap = wordWrap,
         wrapIndent = wrapIndent,
         horizontalScrollbar = horizontalScrollbar,
@@ -528,3 +530,6 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         else -> id.replaceFirstChar { it.uppercase() }
     }
 }
+
+/** The shortest reparse debounce the editor uses on a [dev.ide.platform.MemoryTier.LOW] device. */
+private const val LOW_MEMORY_MIN_REPARSE_DELAY_MS = 500

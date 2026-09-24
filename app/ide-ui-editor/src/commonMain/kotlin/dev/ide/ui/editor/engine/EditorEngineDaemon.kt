@@ -128,13 +128,20 @@ class EditorEngineDaemon(
     private var job: Job? = null
 
     /** A document change: cancel the in-flight run and schedule a fresh one after the reparse delay. */
-    fun restart(text: String) {
+    fun restart(text: String) = restart { text }
+
+    /**
+     * [restart] with the text supplied lazily, read only once the reparse delay has passed. The host restarts
+     * on every keystroke and most restarts are superseded inside the delay, so materializing the buffer up
+     * front would build a whole-file String per keystroke for runs that never start.
+     */
+    fun restart(text: () -> String) {
         val myRev = ++revision
         job?.cancel()
         observer?.on(DaemonPhase.RESTARTED, null, myRev)
         job = scope.launch {
             delay(autoReparseDelayMs.milliseconds)
-            runPasses(text, myRev)
+            runPasses(text(), myRev)
         }
     }
 

@@ -25,6 +25,8 @@ import dev.ide.kotlin.syntax.psi.collectDescendantsOfType
 import dev.ide.kotlin.syntax.psi.findElementAt
 import dev.ide.kotlin.syntax.psi.getParentOfType
 import dev.ide.lang.AnalysisResult
+import dev.ide.lang.CacheInvalidation
+import dev.ide.platform.DeviceMemory
 import dev.ide.lang.CompilationContext
 import dev.ide.lang.SourceAnalyzer
 import dev.ide.lang.completion.CompletionContribution
@@ -241,7 +243,14 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     }.getOrDefault(true)
 
     private val backing = KotlinIncrementalParser()
-    private val lastByFile = ConcurrentHashMap<String, KotlinParsedFile>()
+
+    /**
+     * The latest parse of each recently edited file, which every editor feature reads as "the current tree".
+     * Bounded, least-recently-used first out: every per-file cache in this analyzer (the shared resolver memos,
+     * the incremental diagnostics, folds and highlight tokens) is keyed by the same path and is dropped with
+     * its entry here, so none of them grows with the number of files a session happens to open.
+     */
+    private val lastByFile = RecentParses(DeviceMemory.pick(normal = 8, low = 4), ::forgetFile)
 
     // A single keystroke resolves the SAME snapshot from several passes — diagnostics (incrementalAnalysis),
     // semantic highlight (callee classification), inlay hints, and the Compose preview lowerer — each through its
@@ -270,6 +279,29 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         val c = KotlinResolverCaches()
         cachesBySnapshot[parsed.file.path] = CachesEntry(parsed, stamp, c)
         return c
+    }
+
+    /** Drop every per-file cache keyed by [path]; it fell out of [lastByFile]. */
+    private fun forgetFile(path: String) {
+        cachesBySnapshot.remove(path)
+        if (incrementalAnalysisLazy.isInitialized()) incrementalAnalysis.forget(path)
+        if (highlighterLazy.isInitialized()) highlighterLazy.value.forget(path)
+        if (folderLazy.isInitialized()) folderLazy.value.forget(path)
+    }
+
+    /**
+     * [CacheInvalidation.MEMORY_PRESSURE] drops everything rebuildable: the resolver memos, the per-file
+     * incremental caches, the symbol service's session memos, and every parse but the most recent (the file
+     * on screen, which features read without reparsing). The next pass pays one cold resolution.
+     */
+    override fun invalidateCaches(reason: CacheInvalidation) {
+        if (reason != CacheInvalidation.MEMORY_PRESSURE) return
+        lastByFile.trimTo(1)
+        cachesBySnapshot.clear()
+        if (incrementalAnalysisLazy.isInitialized()) incrementalAnalysis.clear()
+        if (highlighterLazy.isInitialized()) highlighterLazy.value.clear()
+        if (folderLazy.isInitialized()) folderLazy.value.clear()
+        service.releaseMemory()
     }
 
     override val incrementalParser: IncrementalParser = object : IncrementalParser {
@@ -312,7 +344,8 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         KotlinSignatureHelpService(service) { refreshOverlay() }
     }
 
-    override val semanticHighlighter: SemanticHighlightService by lazy {
+    override val semanticHighlighter: SemanticHighlightService get() = highlighterLazy.value
+    private val highlighterLazy = lazy {
         KotlinSemanticHighlighter(
             parsedFor = { lastByFile[it.path] },
             resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service, sharedCachesFor(it)) },
@@ -321,9 +354,8 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         )
     }
 
-    override val folding: FoldingService by lazy {
-        KotlinCodeFolder(parsedFor = { lastByFile[it.path] })
-    }
+    override val folding: FoldingService get() = folderLazy.value
+    private val folderLazy = lazy { KotlinCodeFolder(parsedFor = { lastByFile[it.path] }) }
 
     /** Re-indentation + whitespace cleanup over the parse-only PSI (no IntelliJ formatting model on ART). */
     override val formatting: FormattingService = KotlinFormatter()
@@ -472,12 +504,13 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     /** The incremental-analyze engine (runs the semantic checks with per-declaration caching). Holds the
      *  per-file analyze cache, so a single instance is kept for the analyzer's lifetime. */
-    private val incrementalAnalysis by lazy {
+    private val incrementalAnalysisLazy = lazy {
         IncrementalSemanticAnalysis(
             service,
             ::sharedCachesFor
         )
     }
+    private val incrementalAnalysis by incrementalAnalysisLazy
 
     override suspend fun analyze(file: VirtualFile): AnalysisResult =
         KotlinPerf.trace("kt.analyze") {
@@ -507,10 +540,23 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     /** The file's classes/objects/functions/properties in document order with nesting depth — for the
      *  structure view and sticky scroll headers. Purely syntactic (PSI), so it's safe before the index is ready. */
+    /** The last [fileStructure] answer and the text it was built from. The sticky headers and the breadcrumb
+     *  both ask after every edit, and the breadcrumb again on every caret move, always for the same text. */
+    private class StructureMemo(val path: String, val text: String, val items: List<StructureItem>)
+
+    @Volatile
+    private var structureMemo: StructureMemo? = null
+
     override fun fileStructure(file: VirtualFile, text: CharSequence): List<StructureItem> {
-        val ktFile = KotlinParserHost.parse(file.name, text)
+        structureMemo?.let { m ->
+            if (m.path == file.path && m.text.length == text.length && m.text.contentEquals(text)) return m.items
+        }
+        // Reuse the editor's own parse when it is of this exact text, instead of parsing again.
+        val ktFile = lastByFile[file.path]?.ktFile?.takeIf { it.text.contentEquals(text) }
+            ?: KotlinParserHost.parse(file.name, text)
         val out = ArrayList<StructureItem>()
         for (d in ktFile.declarations) collectStructure(d, 0, out)
+        structureMemo = StructureMemo(file.path, text.toString(), out)
         return out
     }
 
@@ -631,5 +677,38 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         override val enclosing: Scope? = null
         override fun symbols(filter: SymbolFilter): List<Symbol> = emptyList()
         override fun resolve(name: String): ResolveResult = ResolveResult.Unresolved
+    }
+}
+
+/**
+ * A bounded, access-ordered map from file path to its latest parse. Reading an entry refreshes it, so the file
+ * on screen (read by every feature on every pass) is never the one evicted. [onEvict] runs for each path that
+ * leaves, outside the lock.
+ */
+private class RecentParses(private val capacity: Int, private val onEvict: (String) -> Unit) {
+    private val map = java.util.LinkedHashMap<String, KotlinParsedFile>(16, 0.75f, /* accessOrder = */ true)
+
+    operator fun get(path: String): KotlinParsedFile? = synchronized(map) { map[path] }
+
+    operator fun set(path: String, parsed: KotlinParsedFile) {
+        val evicted = synchronized(map) {
+            map[path] = parsed
+            evictDownTo(capacity)
+        }
+        evicted.forEach(onEvict)
+    }
+
+    /** Keep only the [n] most recently used entries. */
+    fun trimTo(n: Int) {
+        synchronized(map) { evictDownTo(n) }.forEach(onEvict)
+    }
+
+    private fun evictDownTo(n: Int): List<String> {
+        if (map.size <= n) return emptyList()
+        val out = ArrayList<String>(map.size - n)
+        val it = map.keys.iterator()
+        while (map.size - out.size > n && it.hasNext()) out += it.next()
+        out.forEach { map.remove(it) }
+        return out
     }
 }

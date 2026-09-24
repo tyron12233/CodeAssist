@@ -568,7 +568,9 @@ private fun EditorDaemonEffect(
         daemon.foldingEnabled = state.codeFoldingEnabled && !large
         daemon.analyzeEnabled = state.analyzeOnTheFly && !large
         daemon.autoReparseDelayMs = state.reparseDelayMs
-        daemon.restart(active.session.doc.text) // one lazy rope materialization per settled edit
+        // The document is an immutable snapshot; its text is materialized only if this run survives the delay.
+        val doc = active.session.doc
+        daemon.restart { doc.text }
     }
     // Re-run the daemon when the workspace index finishes building. A file opened (e.g. a restored tab) while
     // the index is still building is analyzed against an incomplete classpath/symbol index and can show stale
@@ -576,10 +578,23 @@ private fun EditorDaemonEffect(
     // re-runs on a settled edit — so nothing re-triggers it on its own when the index catches up. Fire on the
     // building true→false transition only; a file opened in the already-built steady state is already analyzed
     // against the ready index by the edit/open effect above (the initial null state never fires).
+    // Re-run when the project-wide sweep changed this file's findings. That sweep starts from whichever file
+    // was edited and may report on any other, so nothing else would bring its results into an open tab.
+    LaunchedEffect(daemon) {
+        state.backend.editor.diagnosticsInvalidated.collect { paths ->
+            if (active.path in paths) {
+                val doc = active.session.doc
+                daemon.restart { doc.text }
+            }
+        }
+    }
     var wasIndexing by remember(active.path) { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(active.path, indexStatus.building) {
         val prev = wasIndexing
         wasIndexing = indexStatus.building
-        if (prev == true && !indexStatus.building) daemon.restart(active.session.doc.text)
+        if (prev == true && !indexStatus.building) {
+            val doc = active.session.doc
+            daemon.restart { doc.text }
+        }
     }
 }

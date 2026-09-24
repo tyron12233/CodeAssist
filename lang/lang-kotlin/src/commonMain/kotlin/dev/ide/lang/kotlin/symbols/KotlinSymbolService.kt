@@ -44,11 +44,14 @@ import dev.ide.lang.synthetic.SyntheticMethod
 import dev.ide.lang.synthetic.SyntheticModifier
 import dev.ide.lang.synthetic.SyntheticTypeKind
 import dev.ide.platform.ConcurrentMap
+import dev.ide.platform.DeviceMemory
 import dev.ide.platform.EngineCanceledException
 import dev.ide.platform.Lock
 import dev.ide.platform.ThreadLocalValue
 import dev.ide.vfs.VirtualFile
 import kotlin.concurrent.Volatile
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /**
  * The symbol/type hub. It unifies the two sources, project source (full fidelity, incl. extensions) and
@@ -339,14 +342,53 @@ class KotlinSymbolService(
     private val queryIndex: IndexQueries?
         get() = index?.takeIf { val s = it.status; !(s.settled && !s.ready) }
 
+    /** The session-stable classpath memos, which only an index (re)build otherwise empties. */
+    private val classpathMemos: List<ConcurrentMap<*, *>> get() = listOf(
+        classpathExtMemo, checkMembersMemo, companionMembersMemo, mappedStaticsMemo, classpathTypeExistsMemo,
+        classpathOwnMembersMemo, classpathSupertypeMemo, supertypeArgTemplateMemo, topLevelLibMemo,
+        topLevelBuiltinMemo, classpathShapeMemo, builtinShapeMemo, javaShapeCache,
+    )
+
+    private fun clearClasspathMemos() {
+        for (m in classpathMemos) m.clear()
+        typeNameMemo = ConcurrentMap()
+    }
+
+    /**
+     * Most entries a single session memo may hold before it is emptied and refilled on demand. The classpath
+     * memos are keyed by every name and type the session resolves, and a long session over a large classpath
+     * would otherwise only ever grow them. Emptying (rather than evicting one entry) keeps the hot lookup a
+     * plain map read; the refill costs a few cold resolutions, once.
+     */
+    private val memoCap = DeviceMemory.pick(normal = 16_384, low = 4_096)
+
+    /** Empty any memo past [memoCap]. Checked once per edit ([setOverlay] / [syncFocal]), not per lookup. */
+    private fun trimMemos() {
+        for (m in classpathMemos) if (m.size > memoCap) m.clear()
+        if (inferredBodyTypeMemo.size > memoCap) inferredBodyTypeMemo.clear()
+    }
+
+    /**
+     * Drop every session memo and the decoded classpath data, because the system is short of memory. The
+     * source model and its per-file parses stay: rebuilding those means re-reading every source file, and
+     * correctness never depended on the memos, only speed.
+     */
+    fun releaseMemory() {
+        clearClasspathMemos()
+        inferredBodyTypeMemo.clear()
+        stateLock.withLock {
+            sourceSupertypeMemo = ConcurrentMap()
+            sourceSupertypeArgTemplateMemo = ConcurrentMap()
+            sourceOwnMembersMemo = ConcurrentMap()
+        }
+        reader.releaseMemory()
+    }
+
     /** True when the classpath memos are safe to use: clears them on a (re)build start, never caches mid-build. */
     private fun classpathCacheUsable(idx: IndexQueries): Boolean {
         val status = idx.status
         val building = status.building
-        if (building && !extMemoBuilding) {
-            classpathExtMemo.clear(); checkMembersMemo.clear(); companionMembersMemo.clear(); mappedStaticsMemo.clear(); classpathTypeExistsMemo.clear(); classpathOwnMembersMemo.clear(); classpathSupertypeMemo.clear(); topLevelLibMemo.clear(); topLevelBuiltinMemo.clear()
-            classpathShapeMemo.clear(); builtinShapeMemo.clear(); typeNameMemo = ConcurrentMap()
-        }
+        if (building && !extMemoBuilding) clearClasspathMemos()
         extMemoBuilding = building
         // Not ready ⇒ queries return PARTIAL results (whatever segments are open) for progressive completion;
         // those must never enter the session memos or they'd keep serving the partial view after the build.
@@ -485,6 +527,7 @@ class KotlinSymbolService(
             sourceOwnMembersMemo =
                 ConcurrentMap() // a source type's members change on edit; classpath memo stays warm
             typeNameMemo = ConcurrentMap() // a name can now resolve to a different (source) class
+            trimMemos()
         }
     }
 
@@ -509,6 +552,7 @@ class KotlinSymbolService(
             sourceOwnMembersMemo =
                 ConcurrentMap() // a source type's members change on edit; classpath memo stays warm
             typeNameMemo = ConcurrentMap() // a name can now resolve to a different (source) class
+            trimMemos()
         }
     }
 
@@ -540,7 +584,7 @@ class KotlinSymbolService(
         // The focal file's LIVE version is appended below — skip its disk/overlay copy so it isn't read twice
         // (and so a not-yet-saved focal file, absent from disk, still contributes its declarations).
         if (focal != null && focalPath != null) seen.add(focalPath)
-        for (root in sourceRoots) walkKt(root) { vf ->
+        for (vf in sourceKtFiles()) {
             if (seen.add(vf.path)) {
                 vfByPath[vf.path] = vf
                 sourceFileFor(vf, ov)?.let(files::add)
@@ -624,6 +668,26 @@ class KotlinSymbolService(
         val sf = SourceIndexBuilder.extract(vf, text)
         fileCache[path] = CachedFile(text.hashCode(), sf)
         return sf
+    }
+
+    /** The last walk of the source roots and when it was taken (see [sourceKtFiles]). */
+    private class WalkedSources(val files: List<VirtualFile>, val at: TimeSource.Monotonic.ValueTimeMark)
+
+    @Volatile
+    private var walkedSources: WalkedSources? = null
+
+    /**
+     * Every `.kt` file under the source roots. The model is rebuilt after each edit, and re-walking every
+     * directory of the module per keystroke was a full tree traversal for a set that almost never changes:
+     * creating, deleting or moving a source file replaces this whole service. The walk is still reused for
+     * only [SOURCE_WALK_TTL], so a file written without an event (a generator's output) appears promptly.
+     */
+    private fun sourceKtFiles(): List<VirtualFile> {
+        walkedSources?.let { if (it.at.elapsedNow() < SOURCE_WALK_TTL) return it.files }
+        val out = ArrayList<VirtualFile>()
+        for (root in sourceRoots) walkKt(root) { out += it }
+        walkedSources = WalkedSources(out, TimeSource.Monotonic.markNow())
+        return out
     }
 
     private fun walkKt(file: VirtualFile, onFile: (VirtualFile) -> Unit) {
@@ -3883,3 +3947,6 @@ class KotlinSymbolService(
         )
     }
 }
+
+/** How long [KotlinSymbolService]'s walk of its source roots is reused before the tree is walked again. */
+private val SOURCE_WALK_TTL = 2.seconds

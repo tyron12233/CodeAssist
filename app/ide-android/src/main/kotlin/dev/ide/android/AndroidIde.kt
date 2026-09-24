@@ -9,7 +9,6 @@ import dev.ide.analytics.DeviceInfo
 import dev.ide.analytics.EventCategory
 import dev.ide.analytics.Events
 import dev.ide.android.fork.ForkedKotlinCompiler
-import dev.ide.android.fork.ProcessIdentity
 import dev.ide.android.plugins.ApkPluginSource
 import dev.ide.android.plugins.PluginPackageWatcher
 import dev.ide.android.preview.SwingAwareProgramInterpreter
@@ -153,6 +152,7 @@ object AndroidIde {
         // Process-wide uncaught-exception handler: report app_crash + surface the non-fatal dialog + keep the
         // app alive (the MainActivity main-thread guard handles the UI looper). See IdeServicesBackend.
         backend.installCrashReporting()
+        AndroidMemory.registerTrimHandler(appContext, backend)
         // Plugins load once per process, so applying an installed plugin's change means starting again. Both
         // halves of that are wired here, and only in the UI process: the restart itself, and the watch that
         // notices a plugin app being installed, updated or uninstalled while the IDE is running (the `:build`
@@ -187,6 +187,9 @@ object AndroidIde {
      * provisions that process correctly even though the main process already did so for its own.
      */
     fun createProjectManager(context: Context): ProjectManager {
+        // Classify the device first, in every process that stands up a manager, so caches sized at
+        // construction already see the tier.
+        AndroidMemory.detect(context)
         val home = appHomeDir(context).apply { mkdirs() }
         val androidJar = copyAsset(context, "android.jar", File(home, "android.jar"))
         // The Java 9+ desugar stubs (`java.lang.invoke.StringConcatFactory`/`LambdaMetafactory`): `android.jar`
@@ -294,13 +297,6 @@ object AndroidIde {
         // worker is started once and reused. The in-process compiler it wraps is the fallback for every failure
         // path, and it carries the same ART plugin loader so a runtime compiler plugin still loads either way.
         val separateProcessKey = settingsPrefix + BuiltInSettingsPages.SEPARATE_PROCESS
-        // Only the process that actually builds may hold a compiler VM: this engine is stood up in BOTH the
-        // IDE process and the `:build` daemon, and the daemon is where compiles land unless the user turned
-        // separate-process builds off.
-        val isBuildProcess = ProcessIdentity.isBuildProcess()
-        val hostsBuilds = {
-            isBuildProcess || managerRef.get()?.preference(separateProcessKey)?.trim() == "false"
-        }
         val kotlincModeKey = settingsPrefix + BuiltInSettingsPages.KOTLINC_MODE
         val kotlincHeapKey = settingsPrefix + BuiltInSettingsPages.KOTLINC_MAX_HEAP
         val kotlincWorkersKey = settingsPrefix + BuiltInSettingsPages.KOTLINC_WORKERS
@@ -309,7 +305,6 @@ object AndroidIde {
             modeProvider = { managerRef.get()?.preference(kotlincModeKey)?.trim() },
             maxHeapMbProvider = { managerRef.get()?.preference(kotlincHeapKey)?.trim()?.toIntOrNull() },
             workerCountProvider = { managerRef.get()?.preference(kotlincWorkersKey)?.trim()?.toIntOrNull() },
-            hostsBuilds = hostsBuilds,
             androidJar = androidJar.toPath(),
             minApi = minOf(Build.VERSION.SDK_INT, 36),
             fallback = KotlinJvmCompiler(pluginLoader = kotlinPluginLoader),
@@ -375,7 +370,10 @@ object AndroidIde {
             // read-only APK the system already installed and optimised.
             pluginSources = listOf(ApkPluginSource(context)),
             hostVersion = BuildConfig.VERSION_NAME,
-        ).also { managerRef.set(it) }
+        ).also {
+            managerRef.set(it)
+            it.applyMemoryMode()
+        }
     }
 
     /**

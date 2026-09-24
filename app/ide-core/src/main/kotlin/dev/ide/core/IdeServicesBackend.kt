@@ -130,7 +130,11 @@ class IdeServicesBackend(
         synchronized(runnerCache) {
             runnerCache.getOrPut(services) {
                 val factory = buildRunnerFactory
-                if (factory != null && separateBuildProcessEnabled()) factory(services) else services.buildRunner
+                val runner = if (factory != null && separateBuildProcessEnabled()) factory(services) else services.buildRunner
+                // Only the chosen runner warms its compiler: the in-process one here, the remote one in the
+                // `:build` process. Warming both would leave a second compiler resident that never compiles.
+                runCatching { runner.warmCompiler() }
+                runner
             }
         }
 
@@ -714,6 +718,20 @@ class IdeServicesBackend(
     override fun timeLabel(): String = runCatching { java.time.LocalTime.now().withNano(0).toString() }.getOrDefault("")
 
     /** Close the active engine — the host calls this on teardown (window close / activity destroy). */
+    /**
+     * Release the active engine's rebuildable caches under memory pressure (the host calls this from the
+     * system's trim callback). Runs on the engine worker, so it never clears a cache out from under an
+     * editor pass mid-flight. [collect] then asks the runtime to collect, for a process that has left the
+     * screen: freed objects only shrink its footprint once they are actually collected.
+     */
+    fun releaseMemory(collect: Boolean) {
+        val services = activeServices ?: return
+        engineScope.launch(engineDispatcher) {
+            runCatching { services.releaseMemory() }
+            if (collect) Runtime.getRuntime().gc()
+        }
+    }
+
     fun close() {
         runCatching { Log.removeSink(errorDialogSink) }
         runCatching { analyticsScope.cancel() }

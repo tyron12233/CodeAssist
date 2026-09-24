@@ -48,13 +48,6 @@ class ForkedKotlinCompiler(
     private val maxHeapMbProvider: () -> Int? = { null },
     /** The "Kotlin compiler VMs" setting: how many workers may run at once. Null/0 → [DEFAULT_WORKERS]. */
     private val workerCountProvider: () -> Int? = { null },
-    /**
-     * Whether THIS process is the one that runs builds. `AndroidIde.createProjectManager` stands up an engine
-     * in both the IDE process and the `:build` daemon, and only one of them compiles; a worker is far too
-     * expensive to start speculatively in the other. Consulted by [warmUp] only, since a compile arriving at
-     * all proves this process builds.
-     */
-    private val hostsBuilds: () -> Boolean = { true },
     /** Android SDK jar, so a worker can dex a runtime compiler plugin (the ART plugin loader). */
     private val androidJar: Path,
     private val minApi: Int,
@@ -99,9 +92,9 @@ class ForkedKotlinCompiler(
     }
 
     override fun warmUp(bootClasspath: List<Path>) {
-        // A process that will not build must not hold a compiler VM open for a compile that never comes. It
-        // still warms the in-process compiler, which is what it would fall back to anyway.
-        if (unusableReason() != null || !hostsBuilds()) {
+        // Only the process that builds calls this (its build runner does, once, at project open), so warm the
+        // path its compiles will take: the worker, or the in-process fallback when forking is unusable.
+        if (unusableReason() != null) {
             fallback.warmUp(bootClasspath)
             return
         }

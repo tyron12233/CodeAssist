@@ -5,6 +5,7 @@ import dev.ide.core.applog.AppLogLevel
 import dev.ide.core.applog.AppLogSnapshot
 import dev.ide.core.build.BuildRunner
 import dev.ide.core.IdeServices
+import dev.ide.platform.DeviceMemory
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.AppLogLineUi
 import dev.ide.ui.backend.AppLogUi
@@ -216,8 +217,30 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
     )
 
     init {
-        // Bind eagerly when the project opens, so the daemon is up before the first build.
-        client.bind {}
+        // Bind eagerly when the project opens, so the daemon is up before the first build. A low-memory device
+        // binds on the first Run instead: an idle :build process is a whole second runtime the system would
+        // otherwise have to find room for while the user is only editing.
+        if (!DeviceMemory.isLow) client.bind {}
+    }
+
+    /** Set when the project wants the daemon's compiler warm; sent on the next connect, then cleared, so a
+     *  daemon restarted after running out of memory is not immediately loaded up again. */
+    @Volatile
+    private var warmPending = false
+
+    override fun warmCompiler() {
+        if (DeviceMemory.isLow || !client.isBound) return
+        scope.launch(Dispatchers.IO) {
+            if (!services.hasKotlinSources()) return@launch
+            warmPending = true
+            if (connected) sendWarm()
+        }
+    }
+
+    private fun sendWarm() {
+        if (!warmPending) return
+        warmPending = false
+        client.warmCompiler()
     }
 
     /** Task list is a pure model query — answer it locally; only execution crosses to the daemon. */
@@ -259,6 +282,7 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
      *  reference [client] — which isn't yet assigned inside its own initializer.) */
     private fun onDaemonConnected() {
         connected = true
+        sendWarm()
         pending?.let { p -> runCatching { client.open(workspaceRoot, services.modelGeneration, p.id) } }
     }
 
@@ -278,6 +302,9 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         )
         synchronized(pendingLock) { pending = PendingRun(id, action) }
         noteActivity()
+        // Not bound yet (a low-memory device defers the bind to the first Run): binding now connects, and
+        // onDaemonConnected drives the pending build.
+        if (!client.isBound) client.bind {}
         // Pass the current model revision: if the UI committed a config change (e.g. minifyEnabled) since the
         // daemon last opened, this differs and the daemon reloads module.toml before building — otherwise the
         // build would run against the daemon's stale, frozen-at-first-open model.

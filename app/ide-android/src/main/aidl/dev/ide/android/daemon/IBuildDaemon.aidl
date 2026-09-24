@@ -20,6 +20,11 @@ interface IBuildDaemon {
     // a reply to a superseded open (a retry raced it) must not trigger the newer request's queued build.
     void open(String workspaceDir, int modelGeneration, int requestId);
 
+    // Pre-start this process's Kotlin compiler (the forked compiler VM) so the first Run does not pay its cold
+    // start. Sent once at project open, only for a Kotlin project and never on a low-memory device. Needs no
+    // open project: the compiler is application-scoped.
+    oneway void warmCompiler();
+
     // The runnable tasks for the open project, each encoded "id\tlabel\tgroup". Valid after onOpened(true).
     String[] runTasks();
 
