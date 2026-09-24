@@ -382,7 +382,7 @@ private fun CodeEditorContent(
     val wordExtra = extraWordChars(path)
     val liveCompletion = completion.current?.takeIf { it.coversCaret(doc.chars, caretOffset, wordExtra) }
     val activePrefix = liveCompletion?.let { doc.substring(it.tokenStart, caretOffset) } ?: ""
-    val displayed = liveCompletion?.filtered(activePrefix) ?: emptyList()
+    val displayed = completion.displayedFor(liveCompletion, activePrefix)
     val showPopup = !completion.dismissed && displayed.isNotEmpty()
     val safeSelected = completion.selected.coerceIn(0, (displayed.size - 1).coerceAtLeast(0))
 
@@ -392,9 +392,11 @@ private fun CodeEditorContent(
     LaunchedEffect(completion.dismissed, onToken, hasItems) {
         completion.updatePopupVisibility(onToken, hasItems)
     }
+    // The state this composition renders, handed straight to the popup so a keystroke's narrowed list (and the
+    // first open) shows in the same frame; the SideEffect keeps it as the last good state for the keep-alive.
+    val shownNow = if (liveCompletion != null && hasItems) completion.shownForDisplayed() else null
     SideEffect {
-        val live = liveCompletion
-        if (live != null && hasItems) completion.snapshotShown(live.tokenStart, displayed, activePrefix)
+        if (shownNow != null) completion.snapshotShown(shownNow)
     }
 
     // Apply completion [edits] but keep the viewport visually stationary when they insert line(s) ABOVE the
@@ -1108,6 +1110,8 @@ private fun CodeEditorContent(
         // completion popup, anchored at the token start (extracted so ART can compile these emission blocks).
         CompletionPopupLayer(
             completion = completion,
+            shownNow = shownNow,
+            onToken = onToken,
             engaged = engaged,
             docLength = docLength,
             caretGeometry = { geometry.caretGeometry(it) },
@@ -1288,6 +1292,8 @@ private fun CodeEditorContent(
 @Composable
 private fun CompletionPopupLayer(
     completion: CompletionController,
+    shownNow: ShownCompletion?,
+    onToken: Boolean,
     engaged: Boolean,
     docLength: Int,
     caretGeometry: (Int) -> Triple<Int, Float, Float>,
@@ -1298,8 +1304,16 @@ private fun CompletionPopupLayer(
     safeSelected: Int,
     onAccept: (UiCompletionItem?) -> Unit,
 ) {
-    val shown = completion.shown
-    if (completion.popupVisible && shown != null && engaged) {
+    // What the keep-alive latch will settle on for this frame (see [CompletionController.updatePopupVisibility]),
+    // read now so the popup opens with its first items instead of a frame later; the latch still holds the
+    // window open across a transient empty list.
+    val visible = when {
+        completion.dismissed || !onToken -> false
+        shownNow != null -> true
+        else -> completion.popupVisible
+    }
+    val shown = shownNow ?: completion.shown
+    if (visible && shown != null && engaged) {
         val density = LocalDensity.current
         val anchor = shown.tokenStart.coerceIn(0, docLength)
         val (_, anchorX, anchorTop) = caretGeometry(anchor)
