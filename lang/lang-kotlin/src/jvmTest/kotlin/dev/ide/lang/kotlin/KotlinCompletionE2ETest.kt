@@ -465,6 +465,16 @@ class KotlinCompletionE2ETest {
     }
 
     @Test
+    fun unusedPrivateIsFoundWhereverTheKeywordIs() {
+        // Found from the keyword's position in the text: inside a body, not fooled by the word elsewhere.
+        fun count(src: String) = diagnostics(src).count { it.code == "kt.unusedPrivate" }
+        assertEquals(1, count("fun f() {\n  class L { private fun g() {} }\n}"), "a local class's private member")
+        assertEquals(0, count("fun f() { println(\"private val x = 1\") }"), "the word inside a string")
+        assertEquals(0, count("class C { var x = 1\n  private set\n}"), "a private setter is not a declaration")
+        assertEquals(2, count("private val a = 1\nprivate fun b() {}\nfun f() {}"), "each unused private once")
+    }
+
+    @Test
     fun varThatCouldBeValIsHinted() {
         assertTrue("kt.varCouldBeVal" in codes("fun f() { var x = 1\n  println(x) }"), "never reassigned")
         assertTrue("kt.varCouldBeVal" !in codes("fun f() { var x = 1\n  x = 2\n  println(x) }"), "reassigned with =")

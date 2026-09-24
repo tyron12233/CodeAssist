@@ -30,6 +30,35 @@ class PerfSamplerTest {
     }
 
     @Test
+    fun dimensionsSplitWindowsAndRideAlong() {
+        val events = mutableListOf<Pair<String, Map<String, String>>>()
+        val sampler = PerfSampler(windowSize = 2) { name, props -> events += name to props }
+
+        sampler.record("pass_perf", 5L, mapOf("pass" to "semantic", "lang" to "kt"), queuedMs = 1L)
+        sampler.record("pass_perf", 7L, mapOf("pass" to "folds", "lang" to "kt"), queuedMs = 2L)
+        assertTrue(events.isEmpty(), "different dimensions are different windows")
+        sampler.record("pass_perf", 9L, mapOf("lang" to "kt", "pass" to "semantic"), queuedMs = 3L)
+
+        val (name, props) = events.single()
+        assertEquals("pass_perf", name)
+        assertEquals("semantic", props["pass"])
+        assertEquals("kt", props["lang"])
+        assertEquals("2", props["count"])
+        assertEquals("3", props["queue_max_ms"])
+    }
+
+    @Test
+    fun overCountTalliesSamplesAboveTheThreshold() {
+        val events = mutableListOf<Map<String, String>>()
+        val sampler = PerfSampler(windowSize = 3) { _, props -> events += props }
+
+        listOf(10L, 20L, 40L).forEach { sampler.record("frame_perf", it, overMs = 16L) }
+
+        assertEquals("2", events.single()["over_count"])
+        assertTrue("queue_p50_ms" !in events.single(), "no queue keys when nothing was queued")
+    }
+
+    @Test
     fun windowCarriesTheHeapItSaw() {
         val events = mutableListOf<Map<String, String>>()
         val sampler = PerfSampler(windowSize = 2) { _, props -> events += props }

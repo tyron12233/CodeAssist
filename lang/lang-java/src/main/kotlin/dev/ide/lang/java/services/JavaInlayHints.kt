@@ -1,6 +1,7 @@
 package dev.ide.lang.java.services
 
 import com.intellij.psi.PsiCallExpression
+import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiForeachStatement
 import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.PsiLambdaExpression
@@ -17,6 +18,7 @@ import dev.ide.lang.hints.InlayHintKind
 import dev.ide.lang.hints.InlayHintPart
 import dev.ide.lang.hints.InlayHintService
 import dev.ide.lang.java.resolve.JavaSymbol
+import dev.ide.platform.EngineCancellation
 import dev.ide.psi.IntellijPsiHost
 import dev.ide.vfs.VirtualFile
 
@@ -37,23 +39,33 @@ class JavaInlayHints(private val psiFor: (VirtualFile) -> PsiJavaFile) : InlayHi
     override suspend fun hints(file: VirtualFile, range: TextRange): List<InlayHint> = IntellijPsiHost.withParseLock {
         val psi = psiFor(file)
         val out = ArrayList<InlayHint>()
-        collectTypeHints(psi, out)
-        collectParameterHints(psi, out)
-        collectChainingHints(psi, out)
+        // Resolve only what intersects the requested window (the editor asks for the visible lines): each
+        // hint is a method or type resolution, and an element outside the window cannot yield a hint in it.
+        val inRange = { e: PsiElement ->
+            EngineCancellation.checkCanceled()
+            val r = e.textRange
+            r != null && r.endOffset >= range.start && r.startOffset <= range.end
+        }
+        collectTypeHints(psi, inRange, out)
+        collectParameterHints(psi, inRange, out)
+        collectChainingHints(psi, inRange, out)
         out.filter { it.offset in range.start..range.end }.sortedBy { it.offset }
     }
 
     // --- inferred-type hints (var locals / enhanced-for / untyped lambda params) ---------------------------
 
-    private fun collectTypeHints(psi: PsiJavaFile, out: MutableList<InlayHint>) {
+    private fun collectTypeHints(psi: PsiJavaFile, inRange: (PsiElement) -> Boolean, out: MutableList<InlayHint>) {
         PsiTreeUtil.collectElementsOfType(psi, PsiLocalVariable::class.java).forEach { v ->
+            if (!inRange(v)) return@forEach
             if (v.typeElement?.isInferredType == true) typeHint(v.nameIdentifier?.textRange?.endOffset, v.type, out)
         }
         PsiTreeUtil.collectElementsOfType(psi, PsiForeachStatement::class.java).forEach { fe ->
+            if (!inRange(fe)) return@forEach
             val p = fe.iterationParameter
             if (p.typeElement?.isInferredType == true) typeHint(p.nameIdentifier?.textRange?.endOffset, p.type, out)
         }
         PsiTreeUtil.collectElementsOfType(psi, PsiLambdaExpression::class.java).forEach { lambda ->
+            if (!inRange(lambda)) return@forEach
             lambda.parameterList.parameters.forEach { p ->
                 // An untyped lambda parameter has no type element; show its inferred type.
                 if (p.typeElement == null) typeHint(p.nameIdentifier?.textRange?.endOffset, p.type, out)
@@ -74,8 +86,9 @@ class JavaInlayHints(private val psiFor: (VirtualFile) -> PsiJavaFile) : InlayHi
 
     // --- parameter-name hints ------------------------------------------------------------------------------
 
-    private fun collectParameterHints(psi: PsiJavaFile, out: MutableList<InlayHint>) {
+    private fun collectParameterHints(psi: PsiJavaFile, inRange: (PsiElement) -> Boolean, out: MutableList<InlayHint>) {
         PsiTreeUtil.collectElementsOfType(psi, PsiCallExpression::class.java).forEach { call ->
+            if (!inRange(call)) return@forEach
             val args = call.argumentList?.expressions ?: return@forEach
             if (args.isEmpty()) return@forEach
             val params = call.resolveMethod()?.parameterList?.parameters ?: return@forEach
@@ -98,14 +111,15 @@ class JavaInlayHints(private val psiFor: (VirtualFile) -> PsiJavaFile) : InlayHi
     // --- chaining hints ------------------------------------------------------------------------------------
 
     /** At a fluent chain spanning lines, show the receiver call's result type before the next `.`. */
-    private fun collectChainingHints(psi: PsiJavaFile, out: MutableList<InlayHint>) {
+    private fun collectChainingHints(psi: PsiJavaFile, inRange: (PsiElement) -> Boolean, out: MutableList<InlayHint>) {
         val text = psi.text
         PsiTreeUtil.collectElementsOfType(psi, PsiMethodCallExpression::class.java).forEach { call ->
+            if (!inRange(call)) return@forEach
             val recv = call.methodExpression.qualifierExpression as? PsiMethodCallExpression ?: return@forEach
             val recvEnd = recv.textRange.endOffset
             val nameStart = call.methodExpression.referenceNameElement?.textRange?.startOffset ?: return@forEach
             // Only when the next call is on a later line (multi-line chain) — otherwise it's just noise.
-            if (lineOf(text, recvEnd) == lineOf(text, nameStart)) return@forEach
+            if (!hasLineBreak(text, recvEnd, nameStart)) return@forEach
             val t = recv.type ?: return@forEach
             out += InlayHint(
                 offset = recvEnd,
@@ -116,10 +130,10 @@ class JavaInlayHints(private val psiFor: (VirtualFile) -> PsiJavaFile) : InlayHi
         }
     }
 
-    private fun lineOf(text: CharSequence, offset: Int): Int {
-        var line = 0
-        val end = offset.coerceIn(0, text.length)
-        for (i in 0 until end) if (text[i] == '\n') line++
-        return line
+    /** Whether a line break lies between [from] and [to]: the scan covers the gap, not the file up to it. */
+    private fun hasLineBreak(text: CharSequence, from: Int, to: Int): Boolean {
+        val end = to.coerceIn(0, text.length)
+        for (i in from.coerceIn(0, end) until end) if (text[i] == '\n') return true
+        return false
     }
 }

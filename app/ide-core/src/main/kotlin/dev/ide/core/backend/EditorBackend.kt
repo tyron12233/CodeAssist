@@ -119,6 +119,36 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         return if (ext in REPORTABLE_EXTENSIONS) "$pass:$ext" else pass
     }
 
+    /** The file-type dimension of a perf sample: the extension when it is a reportable one, else `other`. */
+    private fun langOf(path: String): String {
+        val ext = path.substringAfterLast('.', "").lowercase()
+        return if (ext in REPORTABLE_EXTENSIONS) ext else "other"
+    }
+
+    /**
+     * Run [block] on the background lane and record how long it took as [event], split into the time spent
+     * waiting for the engine and the total, keyed by [pass] (when given) and the file's language. A preempted
+     * run throws before recording, so a cut-short pass never reads as a fast one.
+     */
+    private suspend fun <T> measuredBackground(
+        event: String, pass: String?, path: String, opName: String, block: suspend () -> T,
+    ): T {
+        val t0 = System.nanoTime()
+        var started = 0L
+        val r = ctx.background(op = op(opName, path)) {
+            started = System.nanoTime()
+            block()
+        }
+        recordLatency(event, pass, path, t0, started)
+        return r
+    }
+
+    private fun recordLatency(event: String, pass: String?, path: String, t0: Long, started: Long) {
+        val end = System.nanoTime()
+        val dims = if (pass == null) mapOf("lang" to langOf(path)) else mapOf("pass" to pass, "lang" to langOf(path))
+        ctx.recordPerf(event, (end - t0) / 1_000_000, dims, queuedMs = ((started - t0) / 1_000_000).coerceAtLeast(0))
+    }
+
     override suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> = try {
         ctx.background(op = op("docBreadcrumb", path)) { ctx.services.breadcrumbAt(Paths.get(path), text, offset) }
     } catch (_: EngineCanceledException) {
@@ -281,12 +311,16 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
         val t0 = System.nanoTime()
+        var started = 0L
         val result = try {
-            ctx.interactive(op = op("completion", path)) { ctx.services.complete(Paths.get(path), text, offset) }
+            ctx.interactive(op = op("completion", path)) {
+                started = System.nanoTime()
+                ctx.services.complete(Paths.get(path), text, offset)
+            }
         } catch (_: EngineCanceledException) {
             throw AnalysisPreempted()
         }
-        ctx.recordPerf(Events.COMPLETION_PERF, (System.nanoTime() - t0) / 1_000_000)
+        recordLatency(Events.COMPLETION_PERF, null, path, t0, started)
         return UiCompletionResult(
             items = result.items.map { item ->
                 UiCompletionItem(
@@ -324,15 +358,15 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         // (the JDT compiler, the hand-rolled Kotlin checks, the XML lint) plus the analyzers, merged,
         // suppression-filtered, and profile-adjusted into one set. Runs in the preemptible lane so a
         // completion request can cut ahead; a preempted pass surfaces as AnalysisPreempted for the host to retry.
-        val t0 = System.nanoTime()
         val diagnostics = try {
             timedPass("diagnostics", path, { it.size }) {
-                ctx.background(op = op("analysis", path)) { ctx.services.analyzeDiagnostics(Paths.get(path), text) }
+                measuredBackground(Events.ANALYSIS_PERF, null, path, "analysis") {
+                    ctx.services.analyzeDiagnostics(Paths.get(path), text)
+                }
             }
         } catch (_: EngineCanceledException) {
             throw AnalysisPreempted() // preempted: don't record a (misleadingly short) latency sample
         }
-        ctx.recordPerf(Events.ANALYSIS_PERF, (System.nanoTime() - t0) / 1_000_000)
         scheduleProjectAnalysis(path)
         return diagnostics.map { d ->
             val (line, col) = lineColOf(text, d.range.start)
@@ -406,7 +440,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     ): List<UiInlayHint> {
         val hints = try {
             timedPass("inlay", path, { it.size }) {
-                ctx.background(op = op("inlay", path)) {
+                measuredBackground(Events.PASS_PERF, "inlay", path, "inlay") {
                     ctx.services.inlayHints(
                         Paths.get(path), text, startOffset, endOffset
                     )
@@ -439,7 +473,9 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         // Background lane: completion (interactive) preempts it. A preemption just means "no panel this round";
         // the editor re-queries on the next caret move / edit, so swallowing it to null is correct (no retry needed).
         val help = try {
-            ctx.background(op = op("signature", path)) { ctx.services.signatureHelp(Paths.get(path), text, offset) }
+            measuredBackground(Events.PASS_PERF, "signature", path, "signature") {
+                ctx.services.signatureHelp(Paths.get(path), text, offset)
+            }
         } catch (_: EngineCanceledException) {
             return null
         } ?: return null
@@ -464,7 +500,9 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> {
         val tokens = try {
             timedPass("semantic", path, { it.size }) {
-                ctx.background(op = op("semantic", path)) { ctx.services.semanticTokens(Paths.get(path), text) }
+                measuredBackground(Events.PASS_PERF, "semantic", path, "semantic") {
+                    ctx.services.semanticTokens(Paths.get(path), text)
+                }
             }
         } catch (_: EngineCanceledException) {
             // Preempted by completion on the shared engine thread — surface it so the host retries and keeps
@@ -476,15 +514,27 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
                 startOffset = t.range.start,
                 endOffset = t.range.end,
                 kind = t.kind.id,
-                modifiers = t.modifiers.mapTo(LinkedHashSet()) { mapHighlightModifier(it) },
+                modifiers = uiModifiers(t.modifiers),
             )
         }
+    }
+
+    // One shared set per single modifier: most tokens carry none or one, and a large file has tens of
+    // thousands of tokens per pass.
+    private val singleModifiers = HighlightModifier.entries.map { setOf(mapHighlightModifier(it)) }
+
+    private fun uiModifiers(m: Set<HighlightModifier>): Set<UiHighlightModifier> = when (m.size) {
+        0 -> emptySet()
+        1 -> singleModifiers[m.first().ordinal]
+        else -> m.mapTo(LinkedHashSet()) { mapHighlightModifier(it) }
     }
 
     override suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> {
         val folds = try {
             timedPass("folds", path, { it.size }) {
-                ctx.background(op = op("folding", path)) { ctx.services.codeFolds(Paths.get(path), text) }
+                measuredBackground(Events.PASS_PERF, "folds", path, "folding") {
+                    ctx.services.codeFolds(Paths.get(path), text)
+                }
             }
         } catch (_: EngineCanceledException) {
             throw AnalysisPreempted() // preempted by completion — host retries, keeps current folds meanwhile
@@ -555,18 +605,25 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override suspend fun actionsAt(
         path: String, text: String, selStart: Int, selEnd: Int
     ): List<UiAction> {
-        val fixes = timedPass("actions", path, { it.size }) {
-            // Timed like a daemon pass because a CPU trace showed THIS (lightbulb / import quick-fixes → full
-            // diagnostics → deep inference) as a heavy entry point, yet it was invisible in the perf timeline.
-            withContext(ctx.engineDispatcher) {
-                ctx.services.editorActions(Paths.get(path), text, selStart, selEnd)
+        // Background lane, not the raw engine dispatcher: resolving the fixes runs full-file diagnostics, and a
+        // completion must be able to cut in rather than wait for it. A preempted resolution answers "none this
+        // round"; the lightbulb resolves again once the caret next rests.
+        val fixes = try {
+            timedPass("actions", path, { it.size }) {
+                // Timed like a daemon pass because a CPU trace showed THIS (lightbulb / import quick-fixes →
+                // full diagnostics → deep inference) as a heavy entry point, invisible in the perf timeline.
+                measuredBackground(Events.PASS_PERF, "actions", path, "actions") {
+                    ctx.services.editorActions(Paths.get(path), text, selStart, selEnd)
+                }
             }
+        } catch (_: EngineCanceledException) {
+            return emptyList()
         }.mapIndexed { i, fix -> UiAction(i, fix.title, mapActionKind(fix.kind)) }
 
         // The plugin tier: actions placed on EDITOR, resolved against the same caret. Listed after the
         // analysis fixes and intentions, so a popup opened on a squiggle leads with the fix for it.
         // Their ids continue the same index space so a UI can key a row on `id` regardless of tier.
-        val plugin = withContext(ctx.engineDispatcher) {
+        val plugin = runCatching { ctx.background(op = op("actions", path)) {
             val caret = ctx.services.caretSnapshot(Paths.get(path), text, selStart)
             val actionCtx = toPluginActionContext(
                 UiActionContext(
@@ -589,7 +646,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
                         iconId = action.iconId,
                     )
                 }
-        }
+        } }.getOrElse { e -> if (e is EngineCanceledException) emptyList() else throw e }
         return fixes + plugin
     }
 

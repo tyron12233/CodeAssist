@@ -38,6 +38,7 @@ import dev.ide.kotlin.syntax.psi.KtLambdaArgument
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
 import dev.ide.kotlin.syntax.psi.KtLiteralStringTemplateEntry
 import dev.ide.kotlin.syntax.psi.KtModifierKeywordToken
+import dev.ide.kotlin.syntax.psi.KtModifierList
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedDeclaration
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
@@ -80,6 +81,7 @@ import dev.ide.kotlin.syntax.psi.KtWhenConditionIsPattern
 import dev.ide.kotlin.syntax.psi.KtWhenConditionWithExpression
 import dev.ide.kotlin.syntax.psi.KtWhenExpression
 import dev.ide.kotlin.syntax.psi.KtWhileExpression
+import dev.ide.kotlin.syntax.psi.findElementAt
 import dev.ide.kotlin.syntax.psi.getStrictParentOfType
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.Severity
@@ -115,8 +117,10 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
 
     /** The whole-file checks (duplicate declarations, unused/conflicting imports, unused privates). Cheap (no
      *  type resolution), so [IncrementalSemanticAnalysis] recomputes them every analyze rather than caching. */
-    fun fileLevelDiagnostics(ktFile: KtFile): List<Diagnostic> {
-        val refNames = referencedNames(ktFile) // names used in the body, for unused-import / unused-private
+    fun fileLevelDiagnostics(ktFile: KtFile, referenced: Set<String>? = null): List<Diagnostic> {
+        // Names used in the body, for unused-import / unused-private: [referenced] when the caller already
+        // gathered them (per declaration, across edits), else a walk of the whole file.
+        val refNames = referenced ?: referencedNames(ktFile)
         val out = ArrayList<Diagnostic>()
         out += duplicateDeclarations(ktFile.declarations)
         out += unusedImports(ktFile, refNames)
@@ -727,28 +731,40 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
     /** Unused `private` declarations — a whole-file check (its used-ness depends on references ANYWHERE in the
      *  file, so it can't be cached per declaration). Recurses the file flagging each private decl absent from
      *  [refNames]; locals can't carry a visibility modifier, so only top-level/member declarations match. */
-    private fun unusedPrivateDeclarations(root: KtElement, refNames: Set<String>, out: MutableList<Diagnostic>) {
-        if (root is KtNamedDeclaration && (root is KtProperty || root is KtNamedFunction) && isPrivateDeclaration(root)) {
-            unusedPrivate(root, refNames)?.let { out += it }
+    private fun unusedPrivateDeclarations(file: KtFile, refNames: Set<String>, out: MutableList<Diagnostic>) {
+        // Found from each `private` keyword in the text rather than by walking the tree: a walk reads every
+        // function body in the file (a local class's members can be private too), and on a lazily parsed file
+        // that expands all of them on every edit. The keywords come in document order, as the walk visited them.
+        val text = file.text
+        var last: KtElement? = null
+        var at = text.indexOf(PRIVATE, 0)
+        while (at >= 0) {
+            var token = file.findElementAt(at)
+            if (token != null && token.textOffset == at && token.elementType == KtTokens.PRIVATE_KEYWORD) {
+                // The keyword token sits in a node of its own type, which the modifier list holds.
+                while (token!!.parent?.elementType == KtTokens.PRIVATE_KEYWORD) token = token.parent
+                val decl = (token.parent as? KtModifierList)?.parent
+                if (decl !== last && decl is KtNamedDeclaration && (decl is KtProperty || decl is KtNamedFunction) && isPrivateDeclaration(decl)) {
+                    last = decl
+                    unusedPrivate(decl, refNames)?.let { out += it }
+                }
+            }
+            at = text.indexOf(PRIVATE, at + PRIVATE.length)
         }
-        var c = root.firstChild
-        while (c != null) { unusedPrivateDeclarations(c, refNames, out); c = c.nextSibling }
     }
 
     /** Every identifier referenced in the file body (outside import/package directives), for the
      *  unused-import and unused-private checks. A declaration's own name identifier is NOT a reference. */
-    private fun referencedNames(file: KtFile): Set<String> {
-        val names = HashSet<String>()
-        fun rec(p: KtElement) {
-            if (p is KtImportDirective || p is KtPackageDirective) return
-            // KtSimpleNameExpression covers plain references AND operation references (`a shl b` → `shl`),
-            // so an infix function imported and used as an operator still counts as referenced.
-            if (p is KtSimpleNameExpression) names += p.getReferencedName()
-            var c = p.firstChild
-            while (c != null) { rec(c); c = c.nextSibling }
-        }
-        rec(file)
-        return names
+    private fun referencedNames(file: KtFile): Set<String> = HashSet<String>().also { referencedNamesIn(file, it) }
+
+    /** [referencedNames] over [root]'s subtree, into [names]. */
+    fun referencedNamesIn(root: KtElement, names: MutableSet<String>) {
+        if (root is KtImportDirective || root is KtPackageDirective) return
+        // KtSimpleNameExpression covers plain references AND operation references (`a shl b` → `shl`),
+        // so an infix function imported and used as an operator still counts as referenced.
+        if (root is KtSimpleNameExpression) names += root.getReferencedName()
+        var c = root.firstChild
+        while (c != null) { referencedNamesIn(c, names); c = c.nextSibling }
     }
 
     /**
@@ -2155,17 +2171,24 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      *  - if a unique most-specific candidate exists ([uniqueMostSpecific]) the call resolves — not flagged.
      */
     private fun overloadAmbiguity(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
-        if (call.valueArguments.any { it.getSpreadElement() != null }) return null
-        if (call.valueArguments.any { it.getArgumentName() != null }) return null // named args → positional map invalid; back off
+        val args = call.valueArguments
+        for (a in args) {
+            if (a.getSpreadElement() != null) return null
+            if (a.getArgumentName() != null) return null // named args → positional map invalid; back off
+            // A lambda or an empty argument is never judged below; deciding it first skips resolving the call.
+            if (a is KtLambdaArgument || a.getArgumentExpression() == null) return null
+        }
+        val n = args.size
         val candidates = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
             .filter { it.kind == SymbolKind.METHOD }
         if (candidates.size < 2) return null
+        // Only exact-arity, non-vararg overloads are compared; fewer than two of them can never be ambiguous.
+        if (candidates.count { it.paramTypes.size == n && it.varargParamIndex < 0 } < 2) return null
         val applicable = ArrayList<KotlinSymbol>()
         for (c in candidates) {
             val v = applicability(c, call, resolver) ?: return null // unjudgeable → back off
             if (v is Applicability.Ok) applicable += c
         }
-        val n = call.valueArguments.size
         var distinct = applicable
             .filter { it.paramTypes.size == n && it.varargParamIndex < 0 }
             .distinctBy { c -> c.paramTypes.joinToString(",") { (it as? KotlinType)?.qualifiedName ?: "?" } }
@@ -2173,8 +2196,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         // Every compared parameter must be precisely comparable, else specificity isn't decidable → back off.
         if (distinct.any { c -> c.paramTypes.any { p -> p !is KotlinType || p.isTypeParameter || isFunctional(p) || !service.isKnownType(p.qualifiedName) } }) return null
         // Every argument must be a null literal or a concretely-typed value (applicability skips unknown/functional).
-        val argTypes = call.valueArguments.map { a ->
-            if (a is KtLambdaArgument) return null
+        val argTypes = args.map { a ->
             val e = a.getArgumentExpression() ?: return null
             if (isNullLiteral(e)) null
             else resolver.inferType(e)?.takeIf { !it.isTypeParameter && !isFunctional(it) && service.isKnownType(it.qualifiedName) } ?: return null
@@ -2648,6 +2670,8 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
 
     // Convention/operator function names: imported for use via `+`, `[]`, `in`, `by`, destructuring, etc.,
     // which don't surface the name as a textual reference — so an unused-import check must not flag them.
+    private val PRIVATE = "private"
+
     private val OPERATOR_NAMES = setOf(
         "plus", "minus", "times", "div", "rem", "mod", "plusAssign", "minusAssign", "timesAssign", "divAssign",
         "remAssign", "inc", "dec", "unaryPlus", "unaryMinus", "not", "get", "set", "invoke", "contains",

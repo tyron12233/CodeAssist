@@ -48,6 +48,7 @@ import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.java.parse.JavaDiagnosticCodes
+import dev.ide.platform.EngineCancellation
 import dev.ide.psi.IntellijPsiHost
 
 /**
@@ -85,6 +86,15 @@ internal object JavaSemanticDiagnostics {
     fun of(psi: PsiJavaFile): List<Diagnostic> = IntellijPsiHost.withParseLock {
         val out = ArrayList<Diagnostic>()
         psi.accept(object : JavaRecursiveElementVisitor() {
+            private var seen = 0
+
+            // Poll between nodes (the whole pass holds the exclusive parse lock), so a completion preempts it
+            // instead of waiting for every reference in the file to resolve.
+            override fun visitElement(element: PsiElement) {
+                if (seen++ % 64 == 0) EngineCancellation.checkCanceled()
+                super.visitElement(element)
+            }
+
             // The platform's visitReferenceExpression delegates to visitReferenceElement, so overriding just
             // this one catches BOTH plain code references (types/imports) AND reference expressions (names/
             // member access / calls) exactly once.

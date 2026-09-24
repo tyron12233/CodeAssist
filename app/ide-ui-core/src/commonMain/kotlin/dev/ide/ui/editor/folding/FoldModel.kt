@@ -98,6 +98,32 @@ class FoldModel private constructor(
         return prefix + info.placeholder + suffix
     }
 
+    /**
+     * Whether [other] maps document lines to visual rows exactly as this model does: same line count, same
+     * hidden intervals, same fold-start lines. A consumer that caches only the row mapping (the wrap model)
+     * can keep its cache across a model rebuilt for an edit that moved no fold boundary across a line.
+     */
+    fun sameProjection(other: FoldModel): Boolean =
+        this === other || (
+            docLineCount == other.docLineCount &&
+                hiddenStart.contentEquals(other.hiddenStart) &&
+                hiddenEnd.contentEquals(other.hiddenEnd) &&
+                foldByStartLine.keys == other.foldByStartLine.keys
+            )
+
+    /** [sameProjection], and every fold-start line also renders the same composite (same offsets and placeholder). */
+    fun sameAs(other: FoldModel): Boolean {
+        if (this === other) return true
+        if (!sameProjection(other)) return false
+        for ((line, a) in foldByStartLine) {
+            val b = other.foldByStartLine[line] ?: return false
+            if (a.endLine != b.endLine || a.prefixEnd != b.prefixEnd || a.suffixStart != b.suffixStart ||
+                a.placeholder != b.placeholder
+            ) return false
+        }
+        return true
+    }
+
     /** The interval whose start is the greatest ≤ [line], or -1. Linear in interval count (few folds). */
     private fun intervalIndexFor(line: Int): Int {
         var ans = -1

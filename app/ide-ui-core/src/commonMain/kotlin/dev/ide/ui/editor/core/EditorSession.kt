@@ -123,6 +123,12 @@ class EditorSession(
         private set
 
     /**
+     * The lines the editor currently shows, published by the editor as it lays out and scrolls. Work that is
+     * only useful on screen (inlay hints) is asked for these lines first.
+     */
+    var viewportLines by mutableStateOf(0..0)
+
+    /**
      * A plugin's tinted ranges anchored to this buffer (`platform.editorDecoration`). Shifted in place on
      * each edit like [semanticTokens], so a coverage or diff tint keeps covering its text between debounced
      * daemon passes; the host refills the authoritative set via [applyDecorations].
@@ -156,12 +162,16 @@ class EditorSession(
     private var foldModelRegions: List<FoldRegion>? = null
 
     /** The current folding projection (document ⇄ visual-row mapping + composites), rebuilt only when the
-     *  regions or the document change. [FoldModel.EMPTY]-equivalent when nothing folds. */
+     *  regions or the document change. [FoldModel.EMPTY]-equivalent when nothing folds. A rebuild that comes
+     *  out the same as the cached model (the usual keystroke: no fold boundary moved) keeps the cached
+     *  INSTANCE, so consumers that key on it (the wrap model, the composite layouts) keep their caches. */
     val foldModel: FoldModel
         get() {
             val d = doc; val r = foldRegions
-            if (foldModelCache == null || foldModelDoc !== d || foldModelRegions !== r) {
-                foldModelCache = FoldModel.build(d, r)
+            val cached = foldModelCache
+            if (cached == null || foldModelDoc !== d || foldModelRegions !== r) {
+                val built = FoldModel.build(d, r)
+                foldModelCache = if (cached != null && cached.sameAs(built)) cached else built
                 foldModelDoc = d; foldModelRegions = r
             }
             return foldModelCache!!
@@ -184,6 +194,58 @@ class EditorSession(
     var onSnippetEdit: ((EditSpan) -> Unit)? = null
     /** Render-cache hook: lines at/after `fromOldLine` (pre-edit indices) shifted by `delta`. */
     var onLinesShifted: ((fromOldLine: Int, delta: Int) -> Unit)? = null
+
+    // Lines whose overlay spans (semantic tokens, inlay hints) need re-binning: every line an edit touched
+    // since the render layer last took them ([takeOverlayDirtyLines]), as one covering range in current line
+    // numbers ([overlayDirtyEnd] exclusive, -1 when clean). Lines outside it only moved, and the render cache
+    // splices those itself, so a keystroke re-bins the edited lines instead of the whole file.
+    private var overlayDirtyFirst = -1
+    private var overlayDirtyEnd = -1
+
+    /**
+     * Bumped whenever an overlay list (semantic tokens, inlay hints, a plugin's decorations or inlays) is
+     * replaced wholesale, or the whole buffer is. A live edit shifts those lists instead, so the render layer
+     * compares this to tell a fresh pass, which it re-bins in full, from an edit, which it re-bins per line.
+     */
+    var overlayGeneration: Int = 0
+        private set
+
+    /** The lines edited since the last call (clamped to the buffer), or null when none were; resets the range. */
+    fun takeOverlayDirtyLines(): IntRange? {
+        val first = overlayDirtyFirst
+        if (first < 0) return null
+        val end = overlayDirtyEnd.coerceAtMost(doc.lineCount)
+        overlayDirtyFirst = -1
+        overlayDirtyEnd = -1
+        return first until end
+    }
+
+    /** Fold the edit that replaced old lines `[first, first + removed)` with `inserted` lines into the range. */
+    private fun markOverlayLines(first: Int, removed: Int, inserted: Int) {
+        val newEnd = first + inserted
+        if (overlayDirtyFirst < 0) {
+            overlayDirtyFirst = first
+            overlayDirtyEnd = newEnd
+            return
+        }
+        // Carry the range already recorded through this edit, then take the union with the edited lines.
+        val oldEditEnd = first + removed
+        val delta = inserted - removed
+        val ds = overlayDirtyFirst
+        val de = overlayDirtyEnd
+        val mappedStart = when {
+            ds < first -> ds
+            ds >= oldEditEnd -> ds + delta
+            else -> first
+        }
+        val mappedEnd = when {
+            de <= first -> de
+            de >= oldEditEnd -> de + delta
+            else -> newEnd
+        }
+        overlayDirtyFirst = min(mappedStart, first)
+        overlayDirtyEnd = max(mappedEnd, newEnd)
+    }
     /**
      * Smart-Tab hook the editor surface registers: if the completion popup is showing, accept the highlighted
      * item and return true; otherwise return false. Lets a soft-keyboard Tab (the touch symbol bar, which has
@@ -235,6 +297,15 @@ class EditorSession(
     private var pendingIme = false // an IME state push was deferred while a batch was open
     private var pendingImeText = false // ...and at least one of those deferred pushes was a text edit
     private var pendingRestart = false // an IME restart was deferred while a batch was open
+    // The batch's text edits folded into one covering span while they stay contiguous (each edit touches or
+    // overlaps the run so far), so [endBatch] can still push a PARTIAL extracted-text update. [batchSpanStart]
+    // and [batchSpanRemoved] are in pre-batch coordinates, [batchSpanAdded] is the run's current length.
+    // [batchSpanStart] is -1 before the first edit; [batchSpanContiguous] drops to false once an edit lands
+    // apart from the run, and the batch then falls back to a full refresh.
+    private var batchSpanStart = -1
+    private var batchSpanRemoved = 0
+    private var batchSpanAdded = 0
+    private var batchSpanContiguous = true
     // An IME commit ending in a symbol happened in the CURRENT batch — arms the split auto-space swallow
     // in [imeCommitText] (a bare " " commit in the same batch is the keyboard's, not the user's).
     private var batchImeSymbolCommit = false
@@ -293,6 +364,7 @@ class EditorSession(
         val removed = lastLine - firstLine + 1
         val inserted = breaks + 1
         styles.splice(doc, firstLine, removed, inserted)
+        markOverlayLines(firstLine, removed, inserted)
         if (inserted != removed) onLinesShifted?.invoke(firstLine + removed, inserted - removed)
         for (l in firstLine until firstLine + inserted) maxLineChars = max(maxLineChars, doc.lineLength(l))
         selection = newSelection.coercedIn(doc.length)
@@ -326,6 +398,7 @@ class EditorSession(
 
     /** Swap in fresh authoritative semantic-highlight tokens (aligned to the current text). Host calls debounced. */
     fun applySemanticTokens(result: List<UiSemanticToken>) {
+        if (result !== semanticTokens) overlayGeneration++
         semanticTokens = result
     }
 
@@ -336,6 +409,7 @@ class EditorSession(
 
     /** Swap in fresh inlay hints (aligned to the current text). The host calls this debounced (daemon pass). */
     fun applyInlayHints(result: List<UiInlayHint>) {
+        if (result !== inlayHints) overlayGeneration++
         inlayHints = result
     }
 
@@ -348,6 +422,7 @@ class EditorSession(
      * run. The render layer reads both.
      */
     fun applyDecorations(ranges: List<UiTextDecoration>, gutter: List<UiGutterMark>, inlays: List<UiInlayHint>) {
+        overlayGeneration++
         textDecorations = ranges
         // Resolve each mark's line to the offset it is really anchored to, so the live shift can track it (see
         // [UiGutterMark.anchorOffset]). A plugin supplies a line; the editor works in offsets.
@@ -440,9 +515,41 @@ class EditorSession(
         if (batchDepth > 0) {
             pendingIme = true
             pendingImeText = true
+            mergeBatchSpan(span)
             return
         }
         imeListener?.onTextChanged(span)
+    }
+
+    /** Fold [span] (in current coordinates) into the batch's covering span, see [batchSpanStart]. */
+    private fun mergeBatchSpan(span: EditSpan) {
+        if (!batchSpanContiguous) return
+        if (batchSpanStart < 0) {
+            batchSpanStart = span.start
+            batchSpanRemoved = span.removed
+            batchSpanAdded = span.added
+            return
+        }
+        val runEnd = batchSpanStart + batchSpanAdded
+        val editEnd = span.start + span.removed
+        if (editEnd < batchSpanStart || span.start > runEnd) {
+            batchSpanContiguous = false
+            return
+        }
+        val start = min(batchSpanStart, span.start)
+        val end = max(runEnd, editEnd) // union in current (pre-this-edit) coordinates
+        // Text before the run maps 1:1 to pre-batch offsets, text past it by the run's accumulated delta.
+        val oldEnd = batchSpanStart + batchSpanRemoved + (end - runEnd)
+        batchSpanRemoved = oldEnd - start
+        batchSpanAdded = end - start - span.removed + span.added
+        batchSpanStart = start
+    }
+
+    private fun resetBatchSpan() {
+        batchSpanStart = -1
+        batchSpanRemoved = 0
+        batchSpanAdded = 0
+        batchSpanContiguous = true
     }
 
     /** IME batch edits (and multi-edit completion accepts): one IME push for the whole group, and ONE undo step. */
@@ -454,6 +561,7 @@ class EditorSession(
         if (batchDepth == 0) {
             batchImeSymbolCommit = false
             batchImeSpaceDeleteOffset = -1
+            resetBatchSpan()
         }
         batchDepth++
     }
@@ -480,9 +588,20 @@ class EditorSession(
             } else if (pendingIme) {
                 pendingIme = false
                 val l = imeListener
-                if (pendingImeText) { pendingImeText = false; l?.onTextChanged(null) } // null span → full refresh
-                else l?.onStateChanged()
+                if (pendingImeText) {
+                    pendingImeText = false
+                    // One contiguous run still gets a partial update; scattered edits ask for a full refresh.
+                    val span = if (batchSpanContiguous && batchSpanStart >= 0) {
+                        EditSpan(batchSpanStart, batchSpanRemoved, batchSpanAdded)
+                    } else {
+                        null
+                    }
+                    l?.onTextChanged(span)
+                } else {
+                    l?.onStateChanged()
+                }
             }
+            resetBatchSpan()
         }
     }
 
@@ -591,6 +710,9 @@ class EditorSession(
     fun setText(text: String, selection: TextRange = TextRange(0)) {
         doc = EditorDocument.of(text)
         styles.reset(doc)
+        overlayGeneration++
+        overlayDirtyFirst = -1
+        overlayDirtyEnd = -1
         var m = 0
         for (i in 0 until doc.lineCount) m = max(m, doc.lineLength(i))
         maxLineChars = m

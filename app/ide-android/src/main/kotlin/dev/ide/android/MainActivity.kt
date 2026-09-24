@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 runCatching { withContext(Dispatchers.IO) { AndroidIde.bootstrap(applicationContext) } }.onSuccess { s ->
                     session = s; backend = s.backend
+                    AndroidFrameMetrics.register(this@MainActivity, s.backend)
                     // A redirect that landed mid-bootstrap now has somewhere to go.
                     deliverAuthRedirect()
                 }.onFailure { e -> error = e.stackTraceToString() }

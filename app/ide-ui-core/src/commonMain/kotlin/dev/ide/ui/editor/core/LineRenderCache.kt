@@ -70,6 +70,12 @@ class LineRenderCache(
         semantic.update(newSpans)
     }
 
+    /** Replace one line's semantic spans (empty = none), bumping its stamp only if they changed. The per-edit
+     *  path: an edit re-bins just the lines it touched, the rest having moved with [shiftKeys]. */
+    fun setSemanticLine(line: Int, spans: List<SemSpan>) {
+        semantic.setLine(line, spans)
+    }
+
     /** Widest line laid out so far, px — feeds the horizontal scroll range as lines get measured. */
     var measuredMaxWidth = 0f
         private set
@@ -132,6 +138,12 @@ class LineRenderCache(
     fun setInlays(newInlays: Map<Int, List<InlayPiece>>, style: SpanStyle) {
         inlayStyle = style
         inlayRevs.update(newInlays)
+    }
+
+    /** Replace one line's inlay pieces (empty = none), bumping its stamp only if they changed; see
+     *  [setSemanticLine]. */
+    fun setInlayLine(line: Int, pieces: List<InlayPiece>) {
+        inlayRevs.setLine(line, pieces)
     }
 
     /** Document column → visual (laid-out) column for [line] — accounts for inlays inserted before [rawCol]. */
@@ -366,6 +378,26 @@ internal class LineOverlay<T> {
     }
 
     /**
+     * Set one line's value ([normalize]d like [update]; an empty list clears it), bumping its stamp only when
+     * it differs from what the line holds. The per-edit counterpart of [update]: the caller re-bins just the
+     * lines an edit touched, after [splice] has moved the rest.
+     */
+    fun setLine(line: Int, newValue: List<T>, normalize: ((List<T>) -> List<T>)? = null) {
+        if (line < 0) return
+        val value: List<T>? = if (newValue.isEmpty()) null else (normalize?.invoke(newValue) ?: newValue)
+        source = null // the arrays no longer describe the last adopted map
+        if (line >= length) {
+            if (value == null) return
+            ensureCapacity(line + 1)
+            length = line + 1
+        }
+        if (values[line] != value) {
+            values[line] = value
+            stamps[line] = ++stamp
+        }
+    }
+
+    /**
      * Mirror a document line splice: lines at/after [fromLine] move by [delta], carrying their stamps, and any
      * pushed below zero are dropped. Two region copies, no allocation beyond a grow.
      */
@@ -436,8 +468,13 @@ internal class InlayRevisions {
     fun piecesFor(line: Int): List<InlayPiece> = overlay.valueAt(line)
 
     /** Adopt [newInlays], bumping the stamp for each line whose pieces changed, were added, or were removed. */
-    fun update(newInlays: Map<Int, List<InlayPiece>>) =
-        overlay.update(newInlays) { pieces -> if (pieces.size < 2) pieces else pieces.sortedBy { it.col } }
+    fun update(newInlays: Map<Int, List<InlayPiece>>) = overlay.update(newInlays, ::inColumnOrder)
+
+    /** Replace one line's pieces, bumping its stamp only if they changed. */
+    fun setLine(line: Int, pieces: List<InlayPiece>) = overlay.setLine(line, pieces, ::inColumnOrder)
+
+    private fun inColumnOrder(pieces: List<InlayPiece>): List<InlayPiece> =
+        if (pieces.size < 2) pieces else pieces.sortedBy { it.col }
 
     /** Mirror a line splice so a moved line keeps its stamp and its pieces. */
     fun shift(fromOldLine: Int, delta: Int) = overlay.splice(fromOldLine, delta)
@@ -458,6 +495,9 @@ internal class SemanticSpansByLine {
 
     /** Adopt [newSpans], bumping the stamp for each line whose spans changed, were added, or were removed. */
     fun update(newSpans: Map<Int, List<SemSpan>>) = overlay.update(newSpans)
+
+    /** Replace one line's spans, bumping its stamp only if they changed. */
+    fun setLine(line: Int, spans: List<SemSpan>) = overlay.setLine(line, spans)
 
     /** Mirror a line splice so a moved line keeps its stamp and its spans. */
     fun shift(fromOldLine: Int, delta: Int) = overlay.splice(fromOldLine, delta)

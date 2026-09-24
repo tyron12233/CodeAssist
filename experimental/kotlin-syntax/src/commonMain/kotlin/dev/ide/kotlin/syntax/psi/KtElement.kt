@@ -4,6 +4,7 @@ import com.intellij.platform.syntax.SyntaxElementType
 import org.jetbrains.kotlin.kmp.lexer.KtTokens
 import org.jetbrains.kotlin.kmp.parser.KtNodeTypes
 import org.jetbrains.kotlin.kmp.tree.LightNode
+import org.jetbrains.kotlin.kmp.tree.LightSyntaxTree
 import org.jetbrains.kotlin.kmp.utils.SyntaxElementTypesWithIds
 
 /**
@@ -44,7 +45,11 @@ open class KtElement internal constructor(
             session.tree.getEndOffset(node) + session.baseOffset,
         )
 
-    override val parent: KtElement? get() = session.tree.getParent(node)?.let { session.psi(it) }
+    override val parent: KtElement?
+        get() {
+            val p = session.tree.parentIndex(node)
+            return if (p == LightSyntaxTree.NO_INDEX) null else session.psi(LightNode(p))
+        }
 
     /**
      * Children, trivia excluded, computed once per element.
@@ -58,10 +63,29 @@ open class KtElement internal constructor(
      * list per node that anything actually looked at.
      */
     override val children: List<KtElement>
-        get() = childCache ?: session.childrenOf(node).map { session.psi(it) }.also { list ->
+        get() = childCache ?: run {
+            val e = expansion
+            if (e != null) e.session.childElements(e.node) else session.childElements(node)
+        }.also { list ->
             for (i in list.indices) list[i].indexInParent = i
             childCache = list
         }
+
+    /**
+     * For a body a lazy parse collapsed, its own parse (see [KtTreeSession.expansionOf]); every read of this
+     * element's CHILDREN goes there, so the collapsed body reads exactly like a parsed one. Null otherwise,
+     * which is the case for every element of a full parse. Looked up once.
+     */
+    private val expansion: KtTreeSession.Expansion?
+        get() {
+            if (expansionChecked) return expansionValue
+            val e = session.expansionOf(node, this)
+            expansionValue = e
+            expansionChecked = true
+            return e
+        }
+    private var expansionChecked = session.bodies == null
+    private var expansionValue: KtTreeSession.Expansion? = null
 
     private var childCache: List<KtElement>? = null
 
@@ -77,7 +101,12 @@ open class KtElement internal constructor(
      * somewhere the caret can be, and asking what is at an offset through the trivia-free view answers with
      * whatever ENCLOSES the comment instead of the comment.
      */
-    val childrenWithTrivia: List<KtElement> get() = session.tree.getChildren(node).map { session.psi(it) }
+    val childrenWithTrivia: List<KtElement>
+        get() {
+            val e = expansion
+            return if (e != null) e.session.tree.getChildren(e.node).map { e.session.psi(it) }
+            else session.tree.getChildren(node).map { session.psi(it) }
+        }
 
     /**
      * The doc-comment tokens directly under this element, and empty for almost every element there is.
@@ -152,11 +181,18 @@ open class KtElement internal constructor(
     /** The same file under the name `PsiElement` gives it. */
     val containingFile: KtFile get() = session.file
 
-    internal fun child(type: SyntaxElementType): KtElement? =
-        session.tree.findChildByType(node, type)?.let { session.psi(it) }
+    internal fun child(type: SyntaxElementType): KtElement? {
+        val e = expansion
+        val s = e?.session ?: session
+        val c = s.tree.childIndexByType(e?.node ?: node, type)
+        return if (c == LightSyntaxTree.NO_INDEX) null else s.psi(LightNode(c))
+    }
 
-    internal fun hasChild(type: SyntaxElementType): Boolean =
-        session.tree.findChildByType(node, type) != null
+    internal fun hasChild(type: SyntaxElementType): Boolean {
+        val e = expansion
+        val s = e?.session ?: session
+        return s.tree.childIndexByType(e?.node ?: node, type) != LightSyntaxTree.NO_INDEX
+    }
 
     internal inline fun <reified T : KtElement> firstChildOfType(): T? = children.firstOrNull { it is T } as T?
 
@@ -207,7 +243,10 @@ open class KtElement internal constructor(
     override fun equals(other: Any?): Boolean =
         other is KtElement && other.session === session && other.node.index == node.index
 
-    override fun hashCode(): Int = node.index
+    // The index alone collides across sessions: every sub-parse (an expanded body, a doc comment) numbers its
+    // nodes from zero, and a file holds thousands of them, which turned the analysis engine's element-keyed
+    // maps into long collision chains. A sub-parse's base offset is distinct per session, so mix it in.
+    override fun hashCode(): Int = node.index xor (session.baseOffset * -0x61c88647)
 }
 
 /** An element with a name, mirroring `KtNamedDeclaration`. */
@@ -217,7 +256,18 @@ abstract class KtNamedDeclaration internal constructor(session: KtTreeSession, n
     /** The identifier token, or null when the name is missing (half-typed code, or an anonymous object). */
     open val nameIdentifier: KtElement? get() = child(KtTokens.IDENTIFIER)
 
-    open val name: String? get() = nameIdentifier?.text?.removeSurrounding("`")
+    // Read once per element: the tree is immutable, and resolution asks every declaration in scope for its
+    // name on each reference it looks up, which rebuilt the string each time.
+    open val name: String?
+        get() {
+            if (nameRead) return nameValue
+            val n = nameIdentifier?.text?.removeSurrounding("`")
+            nameValue = n
+            nameRead = true
+            return n
+        }
+    private var nameRead = false
+    private var nameValue: String? = null
 
     val nameAsName: Name? get() = name?.let { Name.identifier(it) }
 
@@ -282,16 +332,25 @@ abstract class KtCallableDeclaration internal constructor(session: KtTreeSession
     val receiverTypeReference: KtTypeReference?
         get() {
             val nameOffset = nameIdentifier?.textOffset ?: return null
-            return childrenOfType<KtTypeReference>().firstOrNull { it.textOffset < nameOffset }
+            return typeReferenceAround(nameOffset, before = true)
         }
 
     /** The declared return type, or null when it is inferred. */
     open val typeReference: KtTypeReference?
         get() {
-            val nameOffset = nameIdentifier?.textOffset
-                ?: return childrenOfType<KtTypeReference>().firstOrNull()
-            return childrenOfType<KtTypeReference>().firstOrNull { it.textOffset > nameOffset }
+            val nameOffset = nameIdentifier?.textOffset ?: return typeReferenceAround(-1, before = false)
+            return typeReferenceAround(nameOffset, before = false)
         }
+
+    // Read on every declaration of a file per scope query, so it walks the cached children without a list.
+    private fun typeReferenceAround(nameOffset: Int, before: Boolean): KtTypeReference? {
+        val cs = children
+        for (i in cs.indices) {
+            val c = cs[i] as? KtTypeReference ?: continue
+            if (if (before) c.textOffset < nameOffset else c.textOffset > nameOffset) return c
+        }
+        return null
+    }
 
     override val typeConstraintList: KtTypeConstraintList? get() = firstChildOfType()
 
@@ -612,7 +671,7 @@ class KtProperty internal constructor(session: KtTreeSession, node: LightNode) :
     val initializer: KtExpression?
         get() {
             val equals = session.tree.findChildByType(node, KtTokens.EQ) ?: return null
-            val at = session.tree.getStartOffset(equals)
+            val at = session.tree.getStartOffset(equals) + session.baseOffset
             return children.firstOrNull { it.textOffset > at } as? KtExpression
         }
 
@@ -692,7 +751,7 @@ class KtParameter internal constructor(session: KtTreeSession, node: LightNode) 
     val defaultValue: KtExpression?
         get() {
             val equals = session.tree.findChildByType(node, KtTokens.EQ) ?: return null
-            val at = session.tree.getStartOffset(equals)
+            val at = session.tree.getStartOffset(equals) + session.baseOffset
             return children.firstOrNull { it.textOffset > at } as? KtExpression
         }
 

@@ -54,6 +54,9 @@ fun identifierPrefixBefore(text: CharSequence, offset: Int): String {
 
 /** Simple names of every `typealias` declared anywhere in [file] (the live buffer the disk model may lag). */
 fun typeAliasNamesIn(file: KtFile): Set<String> {
+    // Walking the tree reads every body of the file, expanding each lazily parsed one; without the keyword in
+    // the text there is nothing to find.
+    if (!file.text.contains("typealias")) return emptySet()
     val out = HashSet<String>()
     fun rec(p: KtElement) {
         if (p is KtTypeAlias) p.name?.let { out += it }

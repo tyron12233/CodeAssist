@@ -456,12 +456,13 @@ class JavaCompletion(
         ctx: TypeCtx = TypeCtx.ANY,
         leaf: PsiElement? = null,
     ) {
-        // The index-backed (unimported) candidates are prefix-DEPENDENT and truncated (top-N per query), so the
-        // set for `Li` isn't a superset of the set for `Lis` — the editor must re-query as the prefix grows,
-        // not narrow a stale list client-side. Marking the result incomplete drives that re-query. (Without it,
-        // fast-typing `Lis` kept the truncated `Li` list, so unimported types like `List` never surfaced until
-        // a cursor move forced a fresh query.)
-        result.markIncomplete()
+        // The index-backed (unimported) candidates are prefix-DEPENDENT and truncated (top-N per query), so a
+        // TRUNCATED set for `Li` isn't a superset of the set for `Lis`: the editor must re-query as the prefix
+        // grows, not narrow a stale list client-side. [emitIndexedTypes] marks the result incomplete exactly
+        // then (a short prefix it skips, or a query that hit its cap). (Without it, fast-typing `Lis` kept the
+        // truncated `Li` list, so unimported types like `List` never surfaced until a cursor move re-queried.)
+        // A set that was not truncated is complete for every longer prefix, so the popup narrows it locally.
+        if (params.prefix.isEmpty()) result.markIncomplete() // the bulk visible types are only listed past it
         val offered = HashSet<String>() // FQNs already offered, so index-backed types don't duplicate them
         visibleTypes(psi, includeBulk = params.prefix.isNotEmpty())
             .filter { it.name != null && params.prefixMatches(it.name!!) && ctx.accepts(it) }
@@ -479,9 +480,14 @@ class JavaCompletion(
         result: CompletionResultSet,
         ctx: TypeCtx = TypeCtx.ANY,
     ) {
-        if (params.prefix.length < 2) return // avoid dumping the world on a 1-char prefix
+        if (params.prefix.length < 2) { // avoid dumping the world on a 1-char prefix
+            result.markIncomplete() // ...so the second character must re-query to bring them in
+            return
+        }
         val pkg = psi.packageName
-        typeSearch(params.prefix).forEach { t ->
+        val found = typeSearch(params.prefix)
+        if (found.size >= TYPE_SEARCH_LIMIT) result.markIncomplete()
+        found.forEach { t ->
             if (!ctx.acceptsKind(t.kind)) return@forEach
             if (!offered.add(t.fqn)) return@forEach
             val simple = t.fqn.substringAfterLast('.')
@@ -950,6 +956,9 @@ class JavaCompletion(
     private fun scope() = GlobalSearchScope.allScope(env.project)
 
     companion object {
+        /** Most index-backed types one [typeSearch] returns; a full page means more matches exist. */
+        const val TYPE_SEARCH_LIMIT = 50
+
         /** IntelliJ's canonical completion marker — a valid identifier the parser treats as a real name. */
         private const val DUMMY = "IntellijIdeaRulezzz"
         // Keyword completion is scope-gated in JavaKeywords (the flat reserved-word list was position-blind).

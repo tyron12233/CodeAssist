@@ -43,17 +43,28 @@ data class CompletionSession(
         //      a case-insensitive-exact word `text` jumping above the prefix-matching symbol `TextField`).
         //   2. Within each group, float exact matches over prefix fuzzy (case-sensitive winning each pair).
         // The sort is stable, so the backend's semantic ranking (expected type, proximity) survives within a tier.
-        return base.asSequence()
-            .filter { matchPositions(it.label, prefix) != null }
-            .sortedWith(
-                compareBy({ if (it.kind == UiCompletionKind.Word) 1 else 0 }, { matchTier(it.label, prefix) }),
-            )
-            .toList()
+        // Each (group, tier) key is computed once per item and the stable sort is a bucket pass over the few
+        // possible keys, so a keystroke costs one match test and one tier test per candidate.
+        val buckets = arrayOfNulls<ArrayList<UiCompletionItem>>(SORT_KEYS)
+        for (item in base) {
+            if (!fuzzyMatches(item.label, prefix)) continue
+            val group = if (item.kind == UiCompletionKind.Word) 1 else 0
+            val key = group * TIER_COUNT + matchTier(item.label, prefix)
+            (buckets[key] ?: ArrayList<UiCompletionItem>().also { buckets[key] = it }).add(item)
+        }
+        val out = ArrayList<UiCompletionItem>()
+        for (b in buckets) if (b != null) out.addAll(b)
+        return out
     }
 
     companion object {
         fun from(result: UiCompletionResult): CompletionSession =
             CompletionSession(result.replaceStart, result.items, result.mayFilterLocally, result.isIncomplete)
+
+        /** Distinct [matchTier] values (0..4). */
+        private const val TIER_COUNT = 5
+        /** Two groups (semantic items, then buffer words) times the tiers. */
+        private const val SORT_KEYS = 2 * TIER_COUNT
     }
 }
 
@@ -126,9 +137,19 @@ internal fun CompletionSession.coversCaret(text: CharSequence, caret: Int, extra
     return true
 }
 
-/** Case-insensitive prefix match, falling back to a fuzzy (camel-hump / subsequence) match. */
-internal fun fuzzyMatches(candidate: String, query: String): Boolean =
-    matchPositions(candidate, query) != null
+/** Case-insensitive prefix match, falling back to a fuzzy (camel-hump / subsequence) match. Accepts exactly
+ *  what [matchPositions] does, without allocating the positions. */
+internal fun fuzzyMatches(candidate: String, query: String): Boolean {
+    if (query.isEmpty()) return true
+    if (candidate.startsWith(query, ignoreCase = true)) return true
+    var ci = 0
+    var qi = 0
+    while (qi < query.length && ci < candidate.length) {
+        if (candidate[ci].lowercaseChar() == query[qi].lowercaseChar()) qi++
+        ci++
+    }
+    return qi == query.length
+}
 
 /**
  * The indices of [candidate] that [query] matches, or `null` if it doesn't match at all. A case-insensitive
@@ -164,10 +185,14 @@ internal fun matchPositions(candidate: String, query: String): IntArray? {
  */
 internal fun matchTier(candidate: String, query: String): Int {
     if (query.isEmpty()) return 0
-    val name = candidate.takeWhile { isIdentifierChar(it) } // "Text(text: String)" -> "Text"
+    // Length of the leading identifier ("Text(text: String)" -> 4), measured in place rather than copied out.
+    var nameLen = 0
+    while (nameLen < candidate.length && isIdentifierChar(candidate[nameLen])) nameLen++
+    val nameIsQueryLength = nameLen == query.length
     return when {
-        candidate == query || name == query -> 0                 // exact (case-sensitive): the user typed it whole
-        candidate.equals(query, ignoreCase = true) || name.equals(query, ignoreCase = true) -> 1 // exact, case only
+        candidate == query || (nameIsQueryLength && candidate.startsWith(query)) -> 0 // exact (case-sensitive): the user typed it whole
+        candidate.equals(query, ignoreCase = true) ||
+            (nameIsQueryLength && candidate.startsWith(query, ignoreCase = true)) -> 1 // exact, case only
         candidate.startsWith(query) -> 2                          // case-sensitive prefix
         candidate.startsWith(query, ignoreCase = true) -> 3       // case-insensitive prefix
         else -> 4                                                 // fuzzy (camel-hump / subsequence)

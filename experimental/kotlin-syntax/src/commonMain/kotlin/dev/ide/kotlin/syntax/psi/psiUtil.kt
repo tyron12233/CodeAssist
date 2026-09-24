@@ -83,11 +83,24 @@ fun KtElement.hasErrorElements(): Boolean =
  */
 fun KtFile.findElementAt(offset: Int): KtElement? {
     var current: KtElement = this
-    if (offset !in current.textRange) return null
+    if (!covers(current, offset)) return null
     while (true) {
-        val next = current.children.firstOrNull { offset in it.textRange } ?: return current
-        current = next
+        // Indexed, on plain offsets: this runs per caret query and per resolution step, and the iterator plus
+        // a TextRange per child per level were most of what it allocated.
+        val children = current.children
+        var next: KtElement? = null
+        for (i in children.indices) {
+            val c = children[i]
+            if (covers(c, offset)) { next = c; break }
+        }
+        current = next ?: return current
     }
+}
+
+/** `offset in element.textRange`, without building the range. */
+private fun covers(e: KtElement, offset: Int): Boolean {
+    val start = e.textOffset
+    return offset >= start && offset < start + e.textLength
 }
 
 /**

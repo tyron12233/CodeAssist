@@ -96,15 +96,36 @@ fun shiftDiagnostics(diagnostics: List<UiDiagnostic>, old: String, new: String):
 fun shiftDiagnostics(diagnostics: List<UiDiagnostic>, edit: EditSpan, doc: EditorDocument): List<UiDiagnostic> {
     if (diagnostics.isEmpty() || edit.isNoOp) return diagnostics
     val len = doc.length
-    val out = ArrayList<UiDiagnostic>(diagnostics.size)
-    for (d in diagnostics) {
+    return mapPreserving(diagnostics) { d ->
         val start = mapStart(d.startOffset, edit).coerceIn(0, len)
         val end = mapEnd(d.endOffset, edit).coerceIn(start, len)
-        if (end <= start && d.endOffset > d.startOffset) continue // the edit consumed the whole range
+        if (end <= start && d.endOffset > d.startOffset) return@mapPreserving null // the edit consumed the whole range
         val ln = doc.lineForOffset(start)
-        out.add(d.copy(startOffset = start, endOffset = end, line = ln + 1, col = start - doc.lineStart(ln) + 1))
+        val line = ln + 1
+        val col = start - doc.lineStart(ln) + 1
+        if (start == d.startOffset && end == d.endOffset && line == d.line && col == d.col) d
+        else d.copy(startOffset = start, endOffset = end, line = line, col = col)
     }
-    return out
+}
+
+/**
+ * [list] with [transform] applied to each element (null drops it), returning [list] ITSELF when every element
+ * came back identical. The live shifts run on every keystroke, and an edit past the last anchored item (typing
+ * at the end of a file) moves nothing, so this skips the copy and lets the state write see the same instance.
+ */
+internal inline fun <T : Any> mapPreserving(list: List<T>, transform: (T) -> T?): List<T> {
+    var out: ArrayList<T>? = null
+    for (i in list.indices) {
+        val item = list[i]
+        val mapped = transform(item)
+        if (out == null) {
+            if (mapped === item) continue
+            out = ArrayList(list.size)
+            for (k in 0 until i) out.add(list[k])
+        }
+        if (mapped != null) out.add(mapped)
+    }
+    return out ?: list
 }
 
 /**
@@ -114,14 +135,15 @@ fun shiftDiagnostics(diagnostics: List<UiDiagnostic>, edit: EditSpan, doc: Edito
  */
 fun shiftSemanticTokens(tokens: List<UiSemanticToken>, edit: EditSpan, docLength: Int): List<UiSemanticToken> {
     if (tokens.isEmpty() || edit.isNoOp) return tokens
-    val out = ArrayList<UiSemanticToken>(tokens.size)
-    for (t in tokens) {
+    return mapPreserving(tokens) { t ->
         val start = mapStart(t.startOffset, edit).coerceIn(0, docLength)
         val end = mapEnd(t.endOffset, edit).coerceIn(start, docLength)
-        if (end <= start) continue
-        out.add(t.copy(startOffset = start, endOffset = end))
+        when {
+            end <= start -> null
+            start == t.startOffset && end == t.endOffset -> t
+            else -> t.copy(startOffset = start, endOffset = end)
+        }
     }
-    return out
 }
 
 /**
@@ -131,7 +153,10 @@ fun shiftSemanticTokens(tokens: List<UiSemanticToken>, edit: EditSpan, docLength
  */
 fun shiftComposePreviews(markers: List<UiComposePreview>, edit: EditSpan, docLength: Int): List<UiComposePreview> {
     if (markers.isEmpty() || edit.isNoOp) return markers
-    return markers.map { it.copy(offset = mapStart(it.offset, edit).coerceIn(0, docLength)) }
+    return mapPreserving(markers) { m ->
+        val offset = mapStart(m.offset, edit).coerceIn(0, docLength)
+        if (offset == m.offset) m else m.copy(offset = offset)
+    }
 }
 
 /**
@@ -141,14 +166,15 @@ fun shiftComposePreviews(markers: List<UiComposePreview>, edit: EditSpan, docLen
  */
 fun shiftFoldRegions(regions: List<FoldRegion>, edit: EditSpan, docLength: Int): List<FoldRegion> {
     if (regions.isEmpty() || edit.isNoOp) return regions
-    val out = ArrayList<FoldRegion>(regions.size)
-    for (r in regions) {
+    return mapPreserving(regions) { r ->
         val start = mapStart(r.start, edit).coerceIn(0, docLength)
         val end = mapEnd(r.end, edit).coerceIn(start, docLength)
-        if (end <= start) continue
-        out.add(r.copy(start = start, end = end))
+        when {
+            end <= start -> null
+            start == r.start && end == r.end -> r
+            else -> r.copy(start = start, end = end)
+        }
     }
-    return out
 }
 
 /**
@@ -159,10 +185,13 @@ fun shiftFoldRegions(regions: List<FoldRegion>, edit: EditSpan, docLength: Int):
 fun shiftInlayHints(hints: List<UiInlayHint>, edit: EditSpan, docLength: Int): List<UiInlayHint> {
     if (hints.isEmpty() || edit.isNoOp) return hints
     val removedEnd = edit.start + edit.removed
-    return hints.mapNotNull { h ->
+    return mapPreserving(hints) { h ->
         when {
             h.offset <= edit.start -> h
-            h.offset >= removedEnd -> h.copy(offset = (h.offset + edit.delta).coerceIn(0, docLength))
+            h.offset >= removedEnd -> {
+                val offset = (h.offset + edit.delta).coerceIn(0, docLength)
+                if (offset == h.offset) h else h.copy(offset = offset)
+            }
             else -> null
         }
     }
@@ -175,14 +204,15 @@ fun shiftInlayHints(hints: List<UiInlayHint>, edit: EditSpan, docLength: Int): L
  */
 fun shiftTextDecorations(decorations: List<UiTextDecoration>, edit: EditSpan, docLength: Int): List<UiTextDecoration> {
     if (decorations.isEmpty() || edit.isNoOp) return decorations
-    val out = ArrayList<UiTextDecoration>(decorations.size)
-    for (d in decorations) {
+    return mapPreserving(decorations) { d ->
         val start = mapStart(d.startOffset, edit).coerceIn(0, docLength)
         val end = mapEnd(d.endOffset, edit).coerceIn(start, docLength)
-        if (end <= start) continue
-        out.add(d.copy(startOffset = start, endOffset = end))
+        when {
+            end <= start -> null
+            start == d.startOffset && end == d.endOffset -> d
+            else -> d.copy(startOffset = start, endOffset = end)
+        }
     }
-    return out
 }
 
 /**
@@ -202,8 +232,9 @@ fun shiftTextDecorations(decorations: List<UiTextDecoration>, edit: EditSpan, do
  */
 fun shiftGutterMarks(marks: List<UiGutterMark>, edit: EditSpan, doc: EditorDocument): List<UiGutterMark> {
     if (marks.isEmpty() || edit.isNoOp) return marks
-    return marks.map { m ->
+    return mapPreserving(marks) { m ->
         val offset = mapStart(m.anchorOffset, edit).coerceIn(0, doc.length)
-        m.copy(anchorOffset = offset, line = doc.lineForOffset(offset))
+        val line = doc.lineForOffset(offset)
+        if (offset == m.anchorOffset && line == m.line) m else m.copy(anchorOffset = offset, line = line)
     }
 }

@@ -103,22 +103,19 @@ class KotlinCompletion(
     override val id = "kotlin.completion"
 
     // Single-slot completion working tree. Completion fires on every keystroke against a marker-spliced copy
-    // of the buffer; keeping the last spliced PSI lets us reparse only the changed span (the typed char + the
-    // moved marker) instead of re-parsing the whole file each keystroke (the per-keystroke parse cost on a
-    // large Compose file). Kept SEPARATE from the analyzer's lastByFile tree because this one carries the
-    // marker. Bounded to one file (the focused one); a different path full-parses and replaces it. Touched
-    // only on the single serialized engine worker (completion lane), so no synchronization beyond the parse
-    // lock that KotlinParserHost.tryReparse already takes.
+    // of the buffer; keeping the last spliced tree lets the next one parse only the body the typed character
+    // and the moved marker are in, instead of the whole file each keystroke. Kept SEPARATE from the
+    // analyzer's lastByFile tree because this one carries the marker. Bounded to one file (the focused one);
+    // a different path full-parses and replaces it. Touched only on the single serialized engine worker
+    // (completion lane).
     private var splicedPath: String? = null
     private var splicedTree: KtFile? = null
 
     /** Parse [spliced] (the marker-spliced buffer for [path]) and update the single-slot cache. */
     private fun parseSpliced(name: String, path: String, spliced: String): KtFile {
-        // Reuse the cached tree only when the buffer is character-identical. This used to reparse the prior
-        // spliced tree in place, which PSI's mutable tree allowed and the vendored parser's immutable one does
-        // not; see the note in KotlinSourceAnalyzer's incrementalParser for where that cost goes instead.
-        splicedTree?.takeIf { splicedPath == path && it.text.contentEquals(spliced) }?.let { return it }
-        val kt = KotlinParserHost.parse(name, spliced)
+        val previous = splicedTree?.takeIf { splicedPath == path }
+        if (previous != null && previous.text.contentEquals(spliced)) return previous
+        val kt = if (previous != null) KotlinParserHost.reparse(previous, name, spliced) else KotlinParserHost.parse(name, spliced)
         splicedPath = path
         splicedTree = kt
         return kt
@@ -165,11 +162,13 @@ class KotlinCompletion(
         // Same-file freshness: a class/member declared in THIS buffer (`with(LocalClass()) { … }`) resolves from
         // the live PSI. Keyed by the marker-free text hash so it shares the focal entry analyze/highlight set
         // (a no-op when already synced); the marker sits at the caret, leaving referenced declarations intact.
-        runCatching {
-            service.syncFocal(document.file.path, original.hashCode()) {
-                SourceIndexBuilder.extractFrom(
-                    kt, parsed, document.file.path
-                )
+        KotlinPerf.span("focal") {
+            runCatching {
+                service.syncFocal(document.file.path, original.hashCode()) {
+                    SourceIndexBuilder.extractFrom(
+                        kt, parsed, document.file.path
+                    )
+                }
             }
         }
         val resolver = KotlinResolver(kt, parsed, service)
@@ -245,6 +244,8 @@ class KotlinCompletion(
             resolver.composableContextAt(offset) == ComposableContext.COMPOSABLE
         }
 
+        // How many candidates matched the prefix before the page was cut to MAX_ITEMS (see isIncomplete).
+        var matchedCount = 0
         val candidates = KotlinPerf.span("rank") {
             val packageCompletion = pos.packageCompletion
             val expected = pos.expected
@@ -276,6 +277,7 @@ class KotlinCompletion(
                 )
             }
             out.sortWith(RANK)
+            matchedCount = out.size
             if (out.size > MAX_ITEMS) out.subList(MAX_ITEMS, out.size).clear()
             out
         }
@@ -325,8 +327,9 @@ class KotlinCompletion(
         // Reserve room so the (small) keyword/template/postfix tail is never starved by a large symbol set —
         // otherwise an empty-prefix popup (hundreds of in-scope symbols) would truncate the keywords away.
         val keep = (MAX_ITEMS - tail.size).coerceAtLeast(0)
+        val head = pos.extra.distinctBy { it.kind to it.label } + symbolItems
         val items =
-            ((pos.extra.distinctBy { it.kind to it.label } + symbolItems).take(keep) + tail)
+            (head.take(keep) + tail)
                 // Include `container` so two distinct types with the same simple name (different packages) both
                 // remain — otherwise this pass re-collapses the pair the symbol dedup above kept.
                 .distinctBy { Triple(it.kind, it.label, it.container) }
@@ -340,7 +343,17 @@ class KotlinCompletion(
             // segments are open so far, so a classpath type (`Modifier`, …) that indexes moments later is absent
             // — force a re-query on each keystroke until the index is ready, otherwise the editor caches this
             // pre-index page as complete and a fast typist never sees the type appear (cf. LearnBackend).
-            isIncomplete = raw.size > MAX_ITEMS || pos.capped || !service.classpathReady(),
+            //
+            // "Truncated" counts the candidates that MATCHED the prefix, not the raw set before filtering: a
+            // candidate the matcher rejects for this prefix cannot match any longer one (every tier it grades,
+            // prefix, camel hump and substring alike, only narrows as characters are added), so it is not a
+            // missing match. Counting the raw set marked nearly every page incomplete, which made the popup
+            // re-query the engine on every keystroke instead of narrowing locally.
+            // The one gap is the substring tier, which only switches on at MIN_SUBSTRING_QUERY typed chars, so
+            // a page narrowed locally from a shorter prefix never gains a middle match. Accepted, and measured
+            // (EditorContentionBenchmark): a middle match is the lowest tier, and re-querying the first
+            // characters of every word to recover it cost more engine time than it was worth.
+            isIncomplete = matchedCount > MAX_ITEMS || head.size > keep || pos.capped || !service.classpathReady(),
             replacementRange = replaceRange,
         )
     }

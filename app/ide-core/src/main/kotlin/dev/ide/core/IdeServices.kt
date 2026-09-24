@@ -54,6 +54,7 @@ import dev.ide.build.ProgramInterpreter
 import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.core.IdeServices.Companion.openStore
 import dev.ide.core.actions.BuiltInActions
+import dev.ide.core.services.orDefaultUnlessPreempted
 import dev.ide.core.analysis.AnalyzerSourceDocs
 import dev.ide.core.analysis.CompilationContexts
 import dev.ide.core.analysis.IndexBackedSourceDocs
@@ -2082,20 +2083,19 @@ class IdeServices private constructor(
         // Preemption is NOT a failure: a superseded request surfaces as EngineCanceledException and must
         // reach the host (which keeps the current popup) rather than degrade to an empty list that clobbers it.
         return try {
-            // Parse the LIVE snapshot (not the cached lastByFile tree, which can lag the just-typed buffer)
-            // so `position`/`parsedFile` reflect the completion buffer — the receiver-type-driven postfix
-            // contributor depends on it. parseFull reuses the cached parse when the text is unchanged.
-            val parsed =
-                analyzer?.let { runCatching { it.incrementalParser.parseFull(snapshot) }.getOrNull() }
-            val params = CompletionParams(
+            // The LIVE snapshot's parse (not the cached lastByFile tree, which can lag the just-typed buffer)
+            // backs `position`/`parsedFile` — the receiver-type-driven postfix contributor depends on it. It is
+            // made on first use: the language's own contributor parses the buffer its own way, and most
+            // keystrokes reach no contributor that reads the host's tree, so it would be a second parse of the
+            // whole file per keystroke for nothing. parseFull reuses the cached parse when the text is unchanged.
+            val params = CompletionParams.lazilyParsed(
                 document = snapshot,
                 offset = safeOffset,
                 prefix = prefix,
                 language = lang,
                 trigger = CompletionTrigger.Explicit,
                 replacementRange = replaceRange,
-                position = parsed?.nodeAt(safeOffset),
-                parsedFile = parsed,
+                parse = { analyzer?.let { runCatching { it.incrementalParser.parseFull(snapshot) }.getOrNull() } },
                 typeResolver = analyzer?.let { a -> { node -> runCatching { a.resolveType(node) }.getOrNull() } },
             )
             completionEngine.complete(
@@ -2152,13 +2152,13 @@ class IdeServices private constructor(
         // Refresh the analyzer's parse of the live buffer (the XML hint service reads the last parse; the JDT/
         // Kotlin services read their overlay, for which this reparse is a cheap no-op when text is unchanged).
         analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
-        return runCatching {
+        return orDefaultUnlessPreempted(emptyList()) {
             runSync {
                 service.hints(
                     vf, TextRange(startOffset, endOffset)
                 )
             }
-        }.getOrDefault(emptyList())
+        }
     }
 
     /** Type-aware semantic-highlight tokens for [text], bound to [file]'s module (empty if outside the project
@@ -2171,7 +2171,7 @@ class IdeServices private constructor(
         val vf = store.vfs.fileFor(file)
         // Refresh the analyzer's parse of the live buffer (the Kotlin highlighter reads the last parse).
         analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
-        return runCatching { runSync { service.highlight(vf) } }.getOrDefault(emptyList())
+        return orDefaultUnlessPreempted(emptyList()) { runSync { service.highlight(vf) } }
     }
 
     /** Foldable regions for [file]'s live buffer — imports, type/function bodies, block comments. */

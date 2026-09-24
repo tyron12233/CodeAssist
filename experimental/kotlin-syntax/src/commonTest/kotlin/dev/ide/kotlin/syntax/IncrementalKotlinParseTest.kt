@@ -77,7 +77,7 @@ class IncrementalKotlinParseTest {
 
         assertEquals(
             renderFrom(full, counterpart),
-            renderFrom(expanded.tree, expanded.tree.getRoot()),
+            renderFrom(expanded.tree, expanded.root),
             "an expanded body must be the tree a full parse would have built",
         )
     }
@@ -88,7 +88,7 @@ class IncrementalKotlinParseTest {
         val incremental = IncrementalKotlinParse(source)
         val caret = source.indexOf("val parts")
         val expanded = assertNotNull(incremental.blockAt(caret))
-        val root = expanded.tree.getRoot()
+        val root = expanded.root
         assertTrue(
             caret in expanded.startOf(root)..expanded.endOf(root),
             "translated through ExpandedBlock, the caret falls inside the body it came from",

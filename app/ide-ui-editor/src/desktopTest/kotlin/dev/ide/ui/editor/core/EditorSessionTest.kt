@@ -720,6 +720,81 @@ class EditorSessionTest {
         assertEquals(0, partials, "edits inside a batch don't each push a partial")
     }
 
+    /** Run [build] inside one IME batch and return every span pushed through [EditorSession.ImeListener.onTextChanged]. */
+    private fun batchSpans(s: EditorSession, build: (EditorSession) -> Unit): List<EditSpan?> {
+        val spans = ArrayList<EditSpan?>()
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onTextChanged(span: EditSpan?) { spans.add(span) }
+            override fun onRestartInput() {}
+        }
+        s.beginBatch()
+        build(s)
+        s.endBatch()
+        return spans
+    }
+
+    private fun assertSpanReproduces(before: String, s: EditorSession, span: EditSpan) {
+        val snap = s.partialExtractedSnapshot(span)
+        val reconstructed = before.substring(0, snap.partialStartOffset) + snap.text + before.substring(snap.partialEndOffset)
+        assertEquals(s.doc.text, reconstructed, "the partial update reproduces our buffer in the IME's mirror")
+    }
+
+    @Test
+    fun singleEditBatchPushesAPartialUpdate() {
+        // A keyboard that wraps every commit in a batch (SwiftKey) must still get a partial extracted-text update,
+        // not a full snapshot of the document per keystroke.
+        val before = "val a = 1\nval b = 2\n"
+        val s = session(before, 13)
+        val spans = batchSpans(s) { it.imeCommitText("x", 1) }
+        assertEquals(1, spans.size, "one push at the end of the batch")
+        val sp = assertNotNull(spans[0], "a batch with one edit carries its span")
+        assertEquals(13, sp.start)
+        assertEquals(0, sp.removed)
+        assertEquals(1, sp.added)
+        assertSpanReproduces(before, s, sp)
+    }
+
+    @Test
+    fun contiguousBatchEditsMergeIntoOnePartialUpdate() {
+        // delete-then-commit at the caret (a keyboard replacing the word it just typed) is one contiguous run.
+        val before = "foo bar baz"
+        val s = session(before, 7)
+        val spans = batchSpans(s) {
+            it.imeDeleteSurrounding(3, 0)
+            it.imeCommitText("qux", 1)
+        }
+        assertEquals(1, spans.size)
+        val sp = assertNotNull(spans[0], "contiguous edits merge into one covering span")
+        assertEquals("foo qux baz", s.doc.text)
+        assertSpanReproduces(before, s, sp)
+    }
+
+    @Test
+    fun mergedBatchSpanReproducesTheBufferForRandomContiguousEdits() {
+        val rnd = kotlin.random.Random(42)
+        repeat(300) { iteration ->
+            val before = buildString { repeat(rnd.nextInt(0, 40)) { append("ab\n cd"[rnd.nextInt(6)]) } }
+            val s = session(before, 0)
+            var anchor = rnd.nextInt(0, before.length + 1)
+            val spans = batchSpans(s) {
+                repeat(rnd.nextInt(1, 5)) {
+                    val len = s.doc.length
+                    // Every edit touches the run so far: it starts inside or at an edge of the current anchor area.
+                    val start = (anchor + rnd.nextInt(-2, 3)).coerceIn(0, len)
+                    val end = (start + rnd.nextInt(0, 4)).coerceAtMost(len)
+                    val text = buildString { repeat(rnd.nextInt(0, 4)) { append("xy\n"[rnd.nextInt(3)]) } }
+                    s.replaceRange(start, end, text, TextRange(start + text.length))
+                    anchor = start + text.length
+                }
+            }
+            if (spans.isEmpty()) return@repeat // every edit was a no-op
+            assertEquals(1, spans.size, "iteration $iteration")
+            val sp = spans[0] ?: return@repeat // edits that drifted apart fall back to a full refresh
+            assertSpanReproduces(before, s, sp)
+        }
+    }
+
     @Test
     fun monitoringImeIsNotRestartedOnSmartEdit() {
         // The whole point of the upgrade: an IME that mirrors our text stays coherent through the per-edit push,

@@ -49,6 +49,7 @@ import dev.ide.lang.resolve.SymbolKind
 import dev.ide.platform.ConcurrentMap
 import dev.ide.platform.EngineCancellation
 import dev.ide.vfs.VirtualFile
+import kotlin.concurrent.Volatile
 
 /**
  * Type-aware Kotlin coloring. One PSI walk over the live parse (the same model
@@ -86,14 +87,20 @@ class KotlinSemanticHighlighter(
     // Per-top-level-declaration token cache (see [IncrementalDecls]). An edit re-colors only the changed
     // declaration and reuses every other declaration's tokens, re-anchored to its shifted offset — so a
     // keystroke no longer re-resolves the WHOLE file. One instance per analyzer (this cache is its state).
+    // [anchored] holds absolute tokens, as of the declaration's start then. Re-anchored only when the declaration
+    // moved: every declaration before the edit keeps its offset, and rebuilding its tokens anyway was most of
+    // what a keystroke allocated here once resolution was reused.
     private class DeclTokens(
         val facts: IncrementalDecls.Facts,
-        val rel: List<SemanticToken>,
+        @Volatile var anchored: Anchored,
         /** Per-MEMBER tokens for a top-level class/object (relative to each member's own start), so a keystroke
          *  in one method re-colors that method alone instead of the whole class — which, for the common
          *  one-class-per-file shape, was the whole file. Null for any other declaration. */
         val members: List<MemberTokens>? = null,
     )
+
+    /** A declaration's absolute tokens and the start offset they are anchored at, swapped as one. */
+    private class Anchored(val tokens: List<SemanticToken>, val base: Int)
 
     private class MemberTokens(val text: String, val rel: List<SemanticToken>)
     private class Snapshot(
@@ -154,7 +161,13 @@ class KotlinSemanticHighlighter(
                     if (recompute != null && i !in recompute) {
                         val cached =
                             prev!!.decls[i] // unaffected → reuse this declaration's tokens, re-anchored
-                        cached.rel.forEach { out += shift(it, base) }
+                        var anchored = cached.anchored
+                        if (anchored.base != base) {
+                            val delta = base - anchored.base
+                            anchored = Anchored(anchored.tokens.map { shift(it, delta) }, base)
+                            cached.anchored = anchored
+                        }
+                        out += anchored.tokens
                         newEntries += cached
                     } else if (d is KtClassOrObject && d.declarations.isNotEmpty()) {
                         // A class re-colors member by member. Its unchanged members are reused ONLY when this
@@ -166,16 +179,14 @@ class KotlinSemanticHighlighter(
                         out += abs
                         newEntries += DeclTokens(
                             IncrementalDecls.factsOf(d),
-                            abs.map { shift(it, -base) },
+                            Anchored(abs, base),
                             members = members,
                         )
                     } else {
                         val abs = ArrayList<SemanticToken>()
                         collectInto(d, resolver, abs)
                         out += abs
-                        newEntries += DeclTokens(
-                            IncrementalDecls.factsOf(d),
-                            abs.map { shift(it, -base) })
+                        newEntries += DeclTokens(IncrementalDecls.factsOf(d), Anchored(abs, base))
                     }
                 }
             }

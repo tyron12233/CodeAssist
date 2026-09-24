@@ -402,6 +402,32 @@ class LineStylesTest {
     }
 
     @Test
+    fun inLineEditLeavesTheFollowingLineRevisionAlone() {
+        // Typing inside a line whose exit state doesn't change must not re-lay-out the line below it.
+        val doc = EditorDocument.of("val a = 1\nval b = 2\nval c = 3")
+        val styles = LineStyles(CodeLanguage.Kotlin)
+        styles.reset(doc)
+        val r2 = styles.revOf(2)
+        val l1 = doc.lineStart(1)
+        edit(doc, styles, l1, l1, "x")
+        assertEquals(r2, styles.revOf(2), "the line after an in-line edit keeps its revision")
+    }
+
+    @Test
+    fun rippledLinesGetFreshRevisionsWhenTheirSpansChange() {
+        // Opening a block comment recolors the lines below it, so their revisions must move.
+        var doc = EditorDocument.of("int a;\nint b;\nint c;")
+        val styles = LineStyles(CodeLanguage.Java)
+        styles.reset(doc)
+        val r1 = styles.revOf(1)
+        val r2 = styles.revOf(2)
+        doc = edit(doc, styles, 0, 0, "/" + "*")
+        assertTrue(styles.revOf(1) != r1, "a recolored line gets a fresh revision")
+        assertTrue(styles.revOf(2) != r2, "a recolored line gets a fresh revision")
+        assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Java)
+    }
+
+    @Test
     fun fuzzLazyInterleavedEqualsFresh() {
         // Like the other fuzz, but between edits we query only a RANDOM single line (keeping the tokenized
         // prefix partial), so edits frequently reach past the high-water mark — the lazy-tokenization edge.

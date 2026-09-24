@@ -294,6 +294,15 @@ class KotlinSymbolService(
     @Volatile
     private var typeNameMemo = ConcurrentMap<TypeNameKey, Holder<String>>()
 
+    // Memo of [typeFromText], on the same key and dropped at exactly the same points as [typeNameMemo].
+    @Volatile
+    private var typeTextMemo = ConcurrentMap<TypeNameKey, Holder<KotlinType>>()
+
+    // Names [isKnownType] found in no index as a project Java source class. Dropped with [typeNameMemo], whose
+    // answers already depend on the same source index, so a class added mid-edit is seen at the same point.
+    @Volatile
+    private var sourceTypeMissMemo = ConcurrentMap<String, Boolean>()
+
     // Per-fqn memo of a type's FULL own+inherited member list (the recursive [ownAndInherited] walk) — the
     // dominant editor cost on a member-heavy file (every `view.x`, `canvas.drawBitmap`, `bmp.width` otherwise
     // re-walks the whole View/Canvas/Bitmap member+supertype closure). Only the UNBOUND (no-type-args) list is
@@ -302,6 +311,9 @@ class KotlinSymbolService(
     // origin like the supertype memo — a classpath type's members can't change without a re-index (session-
     // stable, dropped on build-start via [classpathCacheUsable]); a SOURCE type's change on edit.
     private val classpathOwnMembersMemo = ConcurrentMap<String, List<KotlinSymbol>>()
+
+    // The same member lists bound to a generic receiver's plain type arguments (see [boundMembersCached]).
+    private val classpathBoundMembersMemo = ConcurrentMap<String, List<KotlinSymbol>>()
     @Volatile
     private var sourceOwnMembersMemo = ConcurrentMap<String, List<KotlinSymbol>>()
 
@@ -345,13 +357,15 @@ class KotlinSymbolService(
     /** The session-stable classpath memos, which only an index (re)build otherwise empties. */
     private val classpathMemos: List<ConcurrentMap<*, *>> get() = listOf(
         classpathExtMemo, checkMembersMemo, companionMembersMemo, mappedStaticsMemo, classpathTypeExistsMemo,
-        classpathOwnMembersMemo, classpathSupertypeMemo, supertypeArgTemplateMemo, topLevelLibMemo,
+        classpathOwnMembersMemo, classpathBoundMembersMemo, classpathSupertypeMemo, supertypeArgTemplateMemo, topLevelLibMemo,
         topLevelBuiltinMemo, classpathShapeMemo, builtinShapeMemo, javaShapeCache,
     )
 
     private fun clearClasspathMemos() {
         for (m in classpathMemos) m.clear()
         typeNameMemo = ConcurrentMap()
+        typeTextMemo = ConcurrentMap()
+        sourceTypeMissMemo = ConcurrentMap()
     }
 
     /**
@@ -366,6 +380,8 @@ class KotlinSymbolService(
     private fun trimMemos() {
         for (m in classpathMemos) if (m.size > memoCap) m.clear()
         if (inferredBodyTypeMemo.size > memoCap) inferredBodyTypeMemo.clear()
+        if (typeTextMemo.size > memoCap) typeTextMemo = ConcurrentMap()
+        if (sourceTypeMissMemo.size > memoCap) sourceTypeMissMemo = ConcurrentMap()
     }
 
     /**
@@ -518,15 +534,24 @@ class KotlinSymbolService(
             for ((p, t) in map) if (old[p] != t) changed += p
             for (p in old.keys) if (p !in map) changed += p
             overlay = map
+            // The focal file's buffer is the one being typed in, and the model never reads it from the overlay:
+            // it takes the live [focalSource] instead, and [syncFocal] decides what that edit invalidates.
+            // Treating it as changed here would drop the model and every source memo on each keystroke.
+            focalKey?.first?.let { focalPath ->
+                if (focalSource != null && changed.remove(focalPath)) fileCache.remove(focalPath)
+            }
             if (changed.isEmpty()) return@withLock
             changed.forEach { fileCache.remove(it); fileVersions[it] = ++versionClock }
             cachedModel = null
+            bodyMemoStale = true
             sourceSupertypeMemo =
                 ConcurrentMap() // only SOURCE chains can change; classpath memo stays warm
             sourceSupertypeArgTemplateMemo = ConcurrentMap()
             sourceOwnMembersMemo =
                 ConcurrentMap() // a source type's members change on edit; classpath memo stays warm
             typeNameMemo = ConcurrentMap() // a name can now resolve to a different (source) class
+            typeTextMemo = ConcurrentMap()
+            sourceTypeMissMemo = ConcurrentMap()
             trimMemos()
         }
     }
@@ -541,20 +566,51 @@ class KotlinSymbolService(
     fun syncFocal(path: String, textHash: Int, build: () -> SourceFile?) {
         stateLock.withLock {
             if (focalKey == path to textHash) return@withLock
-            focalSource = runCatching { build() }.getOrNull()
+            val previous = focalSource.takeIf { focalKey?.first == path }
+            val next = runCatching { build() }.getOrNull()
+            focalSource = next
             focalKey = path to textHash
+            // The model always takes the new focal file: its declarations point into the new tree, and body
+            // inference reads through those pointers.
+            cachedModel = null
+            if (previous != null && next != null && sameDeclarations(previous, next)) {
+                // The edit changed no declaration (a keystroke inside a body). Every source memo keyed by NAME
+                // (type names, supertype chains, supertype arguments) still holds, and so does every other file's
+                // analysis, so neither is dropped. What goes is what points into the old tree: the source member
+                // lists (a subclass elsewhere inherits this file's members) and this file's inferred body types.
+                forgetDeclarationsOf(previous)
+                return@withLock
+            }
             fileVersions[path] =
                 ++versionClock // the focal file's content changed (matters to files depending on it)
-            cachedModel = null
+            bodyMemoStale = true
             sourceSupertypeMemo =
                 ConcurrentMap() // only SOURCE chains can change; classpath memo stays warm
             sourceSupertypeArgTemplateMemo = ConcurrentMap()
             sourceOwnMembersMemo =
                 ConcurrentMap() // a source type's members change on edit; classpath memo stays warm
             typeNameMemo = ConcurrentMap() // a name can now resolve to a different (source) class
+            typeTextMemo = ConcurrentMap()
+            sourceTypeMissMemo = ConcurrentMap()
             trimMemos()
         }
     }
+
+    /** Drop the memo entries that point into [file]'s old tree (see [syncFocal]). */
+    private fun forgetDeclarationsOf(file: SourceFile) {
+        for (rc in file.topLevel) inferredBodyTypeMemo.remove(rc)
+        for (rc in file.extensions) inferredBodyTypeMemo.remove(rc)
+        for (c in file.classes) {
+            for (rc in c.members) inferredBodyTypeMemo.remove(rc)
+            for (rc in c.constructors) inferredBodyTypeMemo.remove(rc)
+        }
+        sourceOwnMembersMemo = ConcurrentMap()
+    }
+
+    /** Set when a model rebuild may carry changed declarations, so [buildModel] must drop every inferred body
+     *  type; a rebuild after a body-only focal edit keeps them (see [syncFocal]). */
+    @Volatile
+    private var bodyMemoStale = true
 
     /** A stamp over the content versions of every edited source file EXCEPT [exceptPath] — so a file's analyze
      *  cache can tell that a DIFFERENT file (a cross-file dependency) changed and invalidate itself, while its
@@ -574,7 +630,10 @@ class KotlinSymbolService(
     /** Aggregate the per-file [SourceFile]s into the module model, reusing unchanged files' cached parses and
      *  reparsing only those whose effective (overlay-or-disk) text changed since the last build. */
     private fun buildModel(): ModuleSourceModel {
-        inferredBodyTypeMemo.clear() // a rebuilt model may carry edited bodies; re-infer on demand
+        if (bodyMemoStale) {
+            inferredBodyTypeMemo.clear() // a rebuilt model may carry edited declarations; re-infer on demand
+            bodyMemoStale = false
+        }
         val ov = overlay
         val focal = focalSource
         val focalPath = focalKey?.first
@@ -722,6 +781,8 @@ class KotlinSymbolService(
         // appeared or gone, and a simple name can resolve to one (step 6 of [resolveTypeName]). Drop the
         // type-name memo so it isn't answered from the previous resource epoch.
         typeNameMemo = ConcurrentMap()
+        typeTextMemo = ConcurrentMap()
+        sourceTypeMissMemo = ConcurrentMap()
         if (current.isEmpty()) return SyntheticIndex.EMPTY.also {
             syntheticCache = it; syntheticCacheKey = current
         }
@@ -856,6 +917,21 @@ class KotlinSymbolService(
     /** Resolve a (possibly generic / nullable / qualified) type TEXT to a [KotlinType]. */
     fun typeFromText(text: String?, ctx: FileContext?, enclosingClassFqn: String? = null): KotlinType? {
         if (text.isNullOrBlank()) return null
+        // Memoized on the same inputs as [resolveTypeName] (the text, the file scope, the enclosing class) and
+        // dropped with it: the same declared types are read again for every reference to a member, and parsing
+        // the text each time (splitting type arguments, rebuilding the type) was a large share of what an
+        // analysis pass allocated. Only at the top of an alias chain, where [aliasExpandDepth] is zero, since the
+        // depth guard can change a nested answer.
+        if (aliasExpandDepth.get().value != 0) return typeFromTextUncached(text, ctx, enclosingClassFqn)
+        val key = TypeNameKey(ctx?.scopeKey ?: "", enclosingClassFqn, text)
+        val memo = typeTextMemo
+        memo[key]?.let { return it.value }
+        val t = typeFromTextUncached(text, ctx, enclosingClassFqn)
+        memo[key] = Holder(t)
+        return t
+    }
+
+    private fun typeFromTextUncached(text: String, ctx: FileContext?, enclosingClassFqn: String?): KotlinType? {
         val trimmed = text.trim()
         // A function type (`(A) -> B`, `T.() -> R`, `suspend (…) -> …`, `@Composable (…) -> …`) maps to a
         // `kotlin.FunctionN` carrying the extension-receiver / composable flags — so a content-lambda parameter
@@ -1391,12 +1467,59 @@ class KotlinSymbolService(
      * Classpath types cache session-stable (dropped on build-start / withheld mid-build, like the other
      * classpath memos); source types cache into the edit-dropped memo.
      */
+    /**
+     * The members of a GENERIC library receiver bound to [typeArgs] (`List<Int>`), memoized per receiver type.
+     * Binding substitutes the type arguments into every member of the type, and a file full of `xs.map { }`
+     * over the same `List<Int>` rebound all of `List` per reference: the largest single source of what an
+     * analysis pass allocated. Only a library type (whose members cannot change without a re-index, dropped
+     * with the sibling classpath memos) with PLAIN arguments ([plainTypeKey]) is memoized; anything else binds
+     * fresh as before.
+     */
+    private fun boundMembersCached(fqn: String, typeArgs: List<TypeRef>): List<KotlinSymbol> {
+        val kfqn = Builtins.kotlinTypeFor(fqn) ?: fqn
+        val idx = index
+        val cacheable = !model().classByFqn.containsKey(kfqn) && !isSyntheticType(kfqn) &&
+            (idx == null || classpathCacheUsable(idx))
+        val key = if (cacheable) boundKey(kfqn, typeArgs) else null
+        if (key == null) return ownAndInherited(fqn, typeArgs, HashSet())
+        classpathBoundMembersMemo[key]?.let { return it }
+        val members = ownAndInherited(fqn, typeArgs, HashSet())
+        if (!isJavaSourceType(kfqn)) classpathBoundMembersMemo[key] = members
+        return members
+    }
+
+    private fun boundKey(fqn: String, typeArgs: List<TypeRef>): String? {
+        val sb = StringBuilder(fqn).append('<')
+        for ((i, a) in typeArgs.withIndex()) {
+            if (i > 0) sb.append(',')
+            if (!plainTypeKey(a, sb)) return null
+        }
+        return sb.append('>').toString()
+    }
+
+    /**
+     * Append [t]'s key when it is a plain type: a named class, possibly nullable, whose arguments are plain too.
+     * A type parameter, a projection or a function-type flag carries meaning beyond its name, so such a type is
+     * reported not plain (and its receiver is bound fresh) rather than risk two different types sharing a key.
+     */
+    private fun plainTypeKey(t: TypeRef, sb: StringBuilder): Boolean {
+        if (t !is KotlinType) return false
+        if (t.isTypeParameter || t.isExtensionFunctionType || t.isComposable || t.projection.isNotEmpty()) return false
+        sb.append(t.qualifiedName)
+        if (t.nullable) sb.append('?')
+        if (t.typeArguments.isNotEmpty()) {
+            sb.append('<')
+            for ((i, a) in t.typeArguments.withIndex()) {
+                if (i > 0) sb.append(',')
+                if (!plainTypeKey(a, sb)) return false
+            }
+            sb.append('>')
+        }
+        return true
+    }
+
     private fun ownAndInheritedCached(fqn: String, typeArgs: List<TypeRef>): List<KotlinSymbol> {
-        if (typeArgs.isNotEmpty()) return ownAndInherited(
-            fqn,
-            typeArgs,
-            HashSet()
-        ) // generic receiver → bind fresh
+        if (typeArgs.isNotEmpty()) return boundMembersCached(fqn, typeArgs)
         val kfqn = Builtins.kotlinTypeFor(fqn) ?: fqn
         val idx = index
         return when {
@@ -3582,9 +3705,22 @@ class KotlinSymbolService(
         // Classpath BINARY existence (type-shape index / live read) — session-stable, so memoized per fqn.
         if (classpathTypeExists(fqn)) return true
         // A project Java SOURCE class (no `.class` on disk while editing) — known via the index, SOURCE origin.
-        // Left UNCACHED: a class added mid-edit must resolve without waiting for an index rebuild.
-        return index?.exactAll<ClassNameValue>(CLASS_NAMES, fqn.substringAfterLast('.'))
-            ?.any { it.fqn == fqn && it.origin == IndexOrigin.SOURCE } == true
+        // A miss is remembered only until the source memos next drop, so a class added mid-edit still resolves
+        // without waiting for an index rebuild.
+        if (!isQualifiedName(fqn)) return false
+        val idx = index ?: return false
+        if (sourceTypeMissMemo[fqn] == true) return false
+        val found = idx.exactAll<ClassNameValue>(CLASS_NAMES, fqn.substringAfterLast('.'))
+            .any { it.fqn == fqn && it.origin == IndexOrigin.SOURCE }
+        if (!found) sourceTypeMissMemo[fqn] = true
+        return found
+    }
+
+    /** Whether [s] can name a class at all: callers also pass expression text (`xs.map { it }`), which cannot. */
+    private fun isQualifiedName(s: String): Boolean {
+        if (s.isEmpty()) return false
+        for (c in s) if (!(c.isLetterOrDigit() || c == '.' || c == '_' || c == '$')) return false
+        return true
     }
 
     /** Classpath-binary existence of [fqn] (the [typeShape] presence test), memoized for a wired+ready index. */

@@ -40,7 +40,7 @@ import kotlin.test.assertTrue
 class EditorEngineDaemonTest {
 
     /** A backend that records pass calls in order and simulates per-pass engine latency; can preempt a pass. */
-    private class FakeEngine(
+    private open class FakeEngine(
         private val latencyMs: Long = 10,
     ) : StubBackend() {
         val calls = CopyOnWriteArrayList<String>()
@@ -155,6 +155,35 @@ class EditorEngineDaemonTest {
         advanceUntilIdle()
         println("\n=== daemon timeline (one keystroke, SEMANTIC preempted once) ===")
         println(rec.render())
+        daemon.close()
+    }
+
+    @Test
+    fun inlayPassAsksForTheWindowAndRerunsOnlyWhenScrolledPastIt() = runTest {
+        val ranges = CopyOnWriteArrayList<IntRange>()
+        val fake = object : FakeEngine() {
+            override suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> {
+                ranges += startOffset..endOffset
+                return super.hintsAt(path, text, startOffset, endOffset)
+            }
+        }
+        val daemon = EditorEngineDaemon(this, fake, "App.kt", policy)
+        var window = 0..10
+        daemon.inlayWindow = { window }
+        daemon.restart("x".repeat(100))
+        advanceUntilIdle()
+        assertEquals(listOf(0..10), ranges.toList(), "the run asks hints for the window, not the whole file")
+
+        window = 2..8
+        daemon.viewportMoved()
+        advanceUntilIdle()
+        assertEquals(1, ranges.size, "a window inside what the hints cover needs no new pass")
+
+        window = 50..60
+        daemon.viewportMoved()
+        advanceUntilIdle()
+        assertEquals(listOf(0..10, 50..60), ranges.toList(), "scrolling past the covered window re-runs only INLAY")
+        assertEquals(1, fake.calls.count { it == "SEMANTIC" }, "no other pass re-runs on a scroll")
         daemon.close()
     }
 }

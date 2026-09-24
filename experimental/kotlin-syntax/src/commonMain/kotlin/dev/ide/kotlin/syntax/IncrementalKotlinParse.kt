@@ -14,6 +14,10 @@ import org.jetbrains.kotlin.kmp.tree.LightSyntaxTree
  * completely unrelated bug three layers up.
  */
 class ExpandedBlock(val tree: LightSyntaxTree, val fileOffset: Int) {
+    /** The block itself: [tree]'s root is the file-shaped wrapper [KotlinSyntax.parseBlock] parses it under. */
+    val root: LightNode = tree.getChildren(tree.getRoot()).firstOrNull { tree.getType(it) == KtNodeTypes.BLOCK }
+        ?: tree.getRoot()
+
     /** [node]'s start, in the FILE's coordinates. */
     fun startOf(node: LightNode): Int = tree.getStartOffset(node) + fileOffset
 

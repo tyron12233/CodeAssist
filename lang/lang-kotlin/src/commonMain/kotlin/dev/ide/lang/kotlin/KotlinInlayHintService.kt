@@ -20,6 +20,8 @@ import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinType
+import dev.ide.platform.ConcurrentMap
+import dev.ide.platform.EngineCancellation
 import dev.ide.vfs.VirtualFile
 
 /**
@@ -38,31 +40,101 @@ import dev.ide.vfs.VirtualFile
 class KotlinInlayHintService(
     private val parsedFor: (VirtualFile) -> KotlinParsedFile?,
     private val resolverFor: (KotlinParsedFile) -> KotlinResolver,
+    /** The cross-file content stamp for a path: a change means another file this one resolves against moved. */
+    private val externalStampFor: (String) -> Long = { 0L },
 ) : InlayHintService {
 
+    /** One top-level declaration's hints, relative to its start; null until the declaration was in a window. */
+    private class DeclHints(val facts: IncrementalDecls.Facts, val rel: List<InlayHint>?)
+
+    private class Snapshot(
+        val imports: IncrementalDecls.Imports,
+        val fileText: String,
+        val externalStamp: Long,
+        val decls: List<DeclHints>,
+    )
+
+    private val cache = ConcurrentMap<String, Snapshot>()
+
+    /** Drop [path]'s cached hints; its next request recomputes them. */
+    fun forget(path: String) {
+        cache.remove(path)
+    }
+
+    /** Drop every file's cached hints (memory pressure). */
+    fun clear() = cache.clear()
+
+    /**
+     * Hints for [range], incremental per top-level declaration like the highlighter and the diagnostics: a
+     * declaration the edit cannot affect (the shared [IncrementalDecls] plan) keeps its hints, re-anchored, and
+     * only the changed ones and their dependents infer again. Inferring a type per `val` and lambda is the cost
+     * of this pass, and every keystroke used to redo it for the whole window.
+     */
     override suspend fun hints(file: VirtualFile, range: TextRange): List<InlayHint> {
         val parsed = parsedFor(file) ?: return emptyList()
         val resolver = resolverFor(parsed)
+        val ktFile = parsed.ktFile
+        val topDecls = ktFile.declarations
+        val curImports = IncrementalDecls.importsOf(ktFile)
+        val curFileText = ktFile.text
+        val externalStamp = externalStampFor(file.path)
+        val prev = cache[file.path]?.takeIf { it.externalStamp == externalStamp }
+        val plan = IncrementalDecls.plan(
+            prev?.decls?.map { it.facts }, prev?.imports, prev?.fileText, topDecls, curImports, curFileText,
+        )
+        val recompute: Set<Int>? = (plan as? IncrementalDecls.Plan.Partial)?.recompute
         val out = ArrayList<InlayHint>()
-
-        // Only descend into nodes whose text range intersects the requested window. Type inference per
-        // val/lambda is the cost here, so skipping the off-screen subtrees (the editor asks for the visible
-        // range) keeps the pass proportional to what's shown, not to file size. A node fully outside the
-        // window can't contain an in-window hint, so pruning its subtree is exact, not a heuristic.
-        fun walk(psi: KtElement) {
-            val r = psi.textRange
-            if (r.endOffset < range.start || r.startOffset > range.end) return
-            when (psi) {
-                is KtProperty -> localTypeHint(psi, resolver)?.let { out += it }
-                is KtLambdaExpression -> lambdaHints(psi, resolver, out)
-                is KtCallExpression -> parameterNameHints(psi, resolver, out)
-                else -> {}
+        val entries = ArrayList<DeclHints>(topDecls.size)
+        for ((i, d) in topDecls.withIndex()) {
+            val base = d.textRange.startOffset
+            val end = base + d.textLength
+            val inWindow = end >= range.start && base <= range.end
+            val reusable = recompute != null && i !in recompute
+            val cached = if (reusable) prev!!.decls[i].rel else null
+            // A declaration far larger than the window (a class that is the whole file) is walked only where
+            // it meets the window, as before, and left uncached: computing all of it to cache it would cost
+            // more per edit than the window it serves.
+            val oversized = end - base > OVERSIZED_FACTOR * (range.end - range.start + 1)
+            val rel = when {
+                cached != null -> cached
+                inWindow && oversized -> {
+                    walk(d, resolver, out, range)
+                    null
+                }
+                inWindow -> {
+                    // A whole declaration at a time, so the entry is complete for any later window.
+                    val abs = ArrayList<InlayHint>()
+                    walk(d, resolver, abs, null)
+                    abs.map { it.copy(offset = it.offset - base) }
+                }
+                else -> null // off screen and not reusable: computed when it is next in a window
             }
-            var c = psi.firstChild
-            while (c != null) { walk(c); c = c.nextSibling }
+            // A reusable declaration's text is unchanged, so its facts are too; walking it for them again would
+            // read every body in the file on each edit.
+            val facts = if (reusable) prev!!.decls[i].facts else IncrementalDecls.factsOf(d)
+            entries += DeclHints(facts, rel)
+            if (inWindow && rel != null) for (h in rel) out += h.copy(offset = h.offset + base)
         }
-        walk(parsed.ktFile)
+        cache[file.path] = Snapshot(curImports, curFileText, externalStamp, entries)
         return out.filter { it.offset in range.start..range.end }.sortedBy { it.offset }
+    }
+
+    /** Collect [psi]'s hints; with a [window], only from the subtrees that intersect it. */
+    private fun walk(psi: KtElement, resolver: KotlinResolver, out: MutableList<InlayHint>, window: TextRange?) {
+        if (window != null) {
+            val start = psi.textOffset
+            if (start + psi.textLength < window.start || start > window.end) return
+        }
+        // Between nodes, never inside one resolution: a completion preempts the pass here.
+        EngineCancellation.checkCanceled()
+        when (psi) {
+            is KtProperty -> localTypeHint(psi, resolver)?.let { out += it }
+            is KtLambdaExpression -> lambdaHints(psi, resolver, out)
+            is KtCallExpression -> parameterNameHints(psi, resolver, out)
+            else -> {}
+        }
+        var c = psi.firstChild
+        while (c != null) { walk(c, resolver, out, window); c = c.nextSibling }
     }
 
     /** A LOCAL `val`/`var` with an initializer but NO explicit type → the inferred type after its name. */
@@ -208,3 +280,6 @@ class KotlinInlayHintService(
         else -> false
     }
 }
+
+/** How many times larger than the requested window a changed declaration may be and still be hinted whole. */
+private const val OVERSIZED_FACTOR = 2

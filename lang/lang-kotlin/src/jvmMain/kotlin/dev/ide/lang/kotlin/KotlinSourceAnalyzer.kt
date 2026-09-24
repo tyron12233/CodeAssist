@@ -287,6 +287,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         if (incrementalAnalysisLazy.isInitialized()) incrementalAnalysis.forget(path)
         if (highlighterLazy.isInitialized()) highlighterLazy.value.forget(path)
         if (folderLazy.isInitialized()) folderLazy.value.forget(path)
+        if (inlayLazy.isInitialized()) inlayLazy.value.forget(path)
     }
 
     /**
@@ -301,7 +302,9 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         if (incrementalAnalysisLazy.isInitialized()) incrementalAnalysis.clear()
         if (highlighterLazy.isInitialized()) highlighterLazy.value.clear()
         if (folderLazy.isInitialized()) folderLazy.value.clear()
+        if (inlayLazy.isInitialized()) inlayLazy.value.clear()
         service.releaseMemory()
+        KotlinParserHost.releaseMemory()
     }
 
     override val incrementalParser: IncrementalParser = object : IncrementalParser {
@@ -311,13 +314,14 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             // unchanged instead of re-running the parser each time.
             val prev = lastByFile[snapshot.file.path]
             if (prev != null && prev.ktFile.text.contentEquals(snapshot.text)) return prev
-            // Text changed: parse it again. The in-place subtree reparse that used to sit here was a property
-            // of PSI's mutable tree, and the vendored parser builds an immutable one. Its own answer to the
-            // same cost is `IncrementalKotlinParse` (lazy bodies, expand on demand, skip the file parse when
-            // the edit provably stays inside one body), which is a separate change and not wired here yet.
-            return (backing.parseFull(snapshot) as KotlinParsedFile).also {
-                lastByFile[snapshot.file.path] = it
+            // Text changed: build the new tree from the last one, which parses only the edited body when the
+            // edit stays inside one (a keystroke almost always does), and the whole file otherwise.
+            val parsed = if (prev != null) {
+                KotlinParsedFile(KotlinParserHost.reparse(prev.ktFile, snapshot.file.name, snapshot.text), snapshot.file, snapshot.version)
+            } else {
+                backing.parseFull(snapshot) as KotlinParsedFile
             }
+            return parsed.also { lastByFile[snapshot.file.path] = it }
         }
 
         override fun reparse(
@@ -333,10 +337,12 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     override fun completionContributions(): List<CompletionContribution> =
         listOf(CompletionContribution(completionContributor))
 
-    override val inlayHints: dev.ide.lang.hints.InlayHintService by lazy {
+    override val inlayHints: dev.ide.lang.hints.InlayHintService get() = inlayLazy.value
+    private val inlayLazy = lazy {
         KotlinInlayHintService(
             parsedFor = { lastByFile[it.path] },
             resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service, sharedCachesFor(it)) },
+            externalStampFor = { service.externalContentStamp(it) },
         )
     }
 

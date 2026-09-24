@@ -320,7 +320,16 @@ class IdeServicesBackend(
 
     /** Aggregates per-keystroke latencies (completion/analysis) into periodic summary events. */
     private val perf = PerfSampler { name, props -> track(name, props) }
-    override fun recordPerf(event: String, ms: Long) = perf.record(event, ms)
+    override fun recordPerf(event: String, ms: Long, dims: Map<String, String>, queuedMs: Long?) =
+        perf.record(event, ms, dims, queuedMs)
+
+    /** Frame durations summarized over a much longer window than the latency metrics: a busy UI draws dozens
+     *  of frames a second, and one event per few hundred frames is enough to see jank trend by version. */
+    private val frames = PerfSampler(windowSize = FRAME_WINDOW) { name, props -> track(name, props) }
+
+    /** One drawn frame of [totalMs] against a [budgetMs] vsync budget (the host decides which frames count). */
+    fun recordFrame(totalMs: Long, budgetMs: Long) =
+        frames.record(dev.ide.analytics.Events.FRAME_PERF, totalMs, overMs = budgetMs)
 
     // ---- critical-error surface (non-fatal dialog, fed by the logging facade) ----
 
@@ -737,6 +746,7 @@ class IdeServicesBackend(
         runCatching { analyticsScope.cancel() }
         runCatching { engineScope.cancel() }
         runCatching { perf.flushAll() } // drain partial latency windows so the last session's samples ship
+        runCatching { frames.flushAll() }
         runCatching { analytics.flush() }
         runCatching { analytics.close() }
         // The version-control backend holds an open repository handle and its own refresh coroutine.
@@ -797,3 +807,6 @@ private fun renderStandaloneLayout(
         night = request.night,
     )
 }.getOrNull()
+
+/** Frames per [IdeServicesBackend.recordFrame] summary event. */
+private const val FRAME_WINDOW = 600

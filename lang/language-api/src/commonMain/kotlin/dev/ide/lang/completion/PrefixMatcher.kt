@@ -100,8 +100,11 @@ class PrefixMatcher(val prefix: String) {
         return c.isUpperCase() || !prev.isLetterOrDigit() || (c.isDigit() && !prev.isDigit())
     }
 
-    private companion object {
-        val EMPTY = IntArray(0)
+    companion object {
+        private val EMPTY = IntArray(0)
+
+        /** Fewest typed chars at which a middle ([Grade.SUBSTRING]) match counts. Below it every tier anchors
+         *  on the name's first character, and the next character can admit a match this one rejected. */
         const val MIN_SUBSTRING_QUERY = 3
     }
 }

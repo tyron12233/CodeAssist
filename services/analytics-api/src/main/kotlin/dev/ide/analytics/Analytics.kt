@@ -99,7 +99,9 @@ object Events {
     // Aggregated latency summaries (count + mean/p50/p95/max over a window), NOT one event per keystroke.
     // The `_perf` suffix is what [categoryOf] keys on, so new latency metrics classify as PERFORMANCE for free.
     const val COMPLETION_PERF = "completion_perf"
-    const val ANALYSIS_PERF = "analysis_perf"
+    const val ANALYSIS_PERF = "analysis_perf"     // the diagnostics pass (props `lang`, `queue_*`)
+    const val PASS_PERF = "pass_perf"             // every other editor pass (props `pass`, `lang`, `queue_*`)
+    const val FRAME_PERF = "frame_perf"           // editor frame times while typing (`over_count` = janky frames)
 
     // crash / stability
     const val APP_CRASH = "app_crash"       // uncaught exception (fatal path)

@@ -107,6 +107,7 @@ import dev.ide.kotlin.syntax.psi.KtWhenExpression
 import dev.ide.kotlin.syntax.psi.KtWhileExpression
 import dev.ide.kotlin.syntax.psi.findElementAt
 import dev.ide.kotlin.syntax.psi.parsedKDoc
+import dev.ide.kotlin.syntax.psi.syntaxErrorRanges
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.NodeKind
@@ -336,25 +337,17 @@ class KotlinParsedFile(
         return out.asSequence()
     }
 
-    private fun collectDiagnostics(root: KtElement): List<Diagnostic> {
-        val out = ArrayList<Diagnostic>()
-        fun visit(psi: KtElement) {
-            if (psi.isErrorElement) {
-                val r = psi.textRange
-                out += Diagnostic(
-                    range = TextRange(r.startOffset, r.endOffset),
-                    severity = Severity.ERROR,
-                    // The light tree records that the parser recovered here, not what it wanted instead, so
-                    // there is no per-site message to report the way `PsiErrorElement.errorDescription` gave one.
-                    message = "Syntax error",
-                    code = KotlinDiagnosticCodes.SYNTAX,
-                )
-            }
-            var c = psi.firstChild
-            while (c != null) { visit(c); c = c.nextSibling }
-        }
-        visit(root)
-        return out
+    // Read off the tree rather than by visiting every element: on a lazily parsed file that visit built a
+    // wrapper for every node and expanded every body, on each edit.
+    private fun collectDiagnostics(root: KtFile): List<Diagnostic> = root.syntaxErrorRanges().map { r ->
+        Diagnostic(
+            range = TextRange(r.startOffset, r.endOffset),
+            severity = Severity.ERROR,
+            // The light tree records that the parser recovered here, not what it wanted instead, so
+            // there is no per-site message to report the way `PsiErrorElement.errorDescription` gave one.
+            message = "Syntax error",
+            code = KotlinDiagnosticCodes.SYNTAX,
+        )
     }
 }
 

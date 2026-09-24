@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import dev.ide.ui.EditorViewMode
 import dev.ide.ui.IdeUiState
@@ -61,6 +62,8 @@ import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
 import dev.ide.ui.actions.applyWorkspaceEdits
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 /**
  * Top bar + deps progress + tabs + breadcrumb row + the code canvas — the editor column shared by both
@@ -524,6 +527,23 @@ private fun EditorDaemonEffect(
     daemon.onDiagnostics = { active.session.applyAnalysis(it); active.recomputeDirty() }
     daemon.onSemanticTokens = { active.session.applySemanticTokens(it) }
     daemon.onInlayHints = { active.session.applyInlayHints(it) }
+    // Inlay hints for the visible lines plus one screen either side, rather than the whole file; scrolling
+    // past that re-runs the inlay pass once the viewport settles.
+    daemon.inlayWindow = {
+        val session = active.session
+        val doc = session.doc
+        val visible = session.viewportLines
+        val margin = visible.last - visible.first + 1
+        val last = (visible.last + margin).coerceAtMost(doc.lineCount - 1).coerceAtLeast(0)
+        val first = (visible.first - margin).coerceIn(0, last)
+        doc.lineStart(first)..doc.lineEnd(last)
+    }
+    LaunchedEffect(daemon) {
+        snapshotFlow { active.session.viewportLines }.collectLatest {
+            delay(150)
+            daemon.viewportMoved()
+        }
+    }
     daemon.onCodeFolds = { folds ->
         active.session.applyCodeFolds(folds.map {
             FoldRegion(

@@ -35,11 +35,11 @@ class PostfixContributor(private val extensions: ExtensionRegistry) : Completion
     override suspend fun fillCompletionVariants(params: CompletionParams, result: CompletionResultSet) {
         val templates = extensions.extensions(POSTFIX_TEMPLATE_EP)
         if (templates.isEmpty()) return
-        val parsed = params.parsedFile ?: return
         val text = params.document.text
         val keyStart = params.replacementRange.start
 
         val dot = dotBefore(text, keyStart) ?: return
+        val parsed = params.parsedFile ?: return // after the dot check: reading the tree may parse the buffer
         val recvStart = receiverStart(text, dot)
         if (recvStart >= dot) return
         val receiverText = text.subSequence(recvStart, dot).toString().trim()

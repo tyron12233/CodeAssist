@@ -101,12 +101,9 @@ class EditorDocument private constructor(
             if (replacement[i] == '\n') out[w++] = s + i + 1
             i++
         }
-        // shifted suffix
-        var r = lastLine + 1
-        while (r < lineStarts.size) {
-            out[w++] = lineStarts[r] + delta
-            r++
-        }
+        // shifted suffix: one bulk copy, then the delta applied in place (skipped for a same-length replace)
+        lineStarts.copyInto(out, w, lastLine + 1, lineStarts.size)
+        if (delta != 0) for (k in w until out.size) out[k] += delta
         return EditorDocument(newBuffer, out, null)
     }
 

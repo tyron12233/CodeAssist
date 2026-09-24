@@ -2,6 +2,7 @@ package dev.ide.lang.kotlin
 
 import dev.ide.kotlin.syntax.psi.KtClassOrObject
 import dev.ide.kotlin.syntax.psi.KtDeclaration
+import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.TextRange
@@ -70,9 +71,12 @@ class IncrementalSemanticAnalysis(
     // declaration that is neither (a top-level property, a typealias).
     // [facts] carries the declaration's change-detection key plus its dependency surface (provided/referenced
     // names) so [IncrementalDecls.plan] can invalidate only the declarations a change actually affects.
+    // [names] = the names the declaration references, for the file-level unused-import / unused-private checks:
+    // syntactic, so a reused declaration's are still right and the whole file need not be walked for them.
     private class DeclDiags(
         val facts: IncrementalDecls.Facts,
         val rel: List<Diagnostic>,
+        val names: Set<String>,
         val bodyStmts: List<StmtDiags>? = null,
         val members: List<MemberDiags>? = null,
     )
@@ -147,8 +151,6 @@ class IncrementalSemanticAnalysis(
         // The read-only session shared by every checker this pass. `resolveReady` is read once here (it can't
         // flip mid-pass on the single engine thread), gating the classpath-dependent checks in "dumb mode".
         val session = KotlinAnalysisSession(resolver, service, localAliases, resolveReady())
-        val fileLevel = KotlinPerf.span("fileLevel") { checks.fileLevelDiagnostics(ktFile) }
-
         val topDecls = ktFile.declarations
         val curImports = IncrementalDecls.importsOf(ktFile)
         val curFileText = ktFile.text
@@ -182,29 +184,51 @@ class IncrementalSemanticAnalysis(
                 val prevEntry = if (fineReuseIndex == i) prev?.decls?.getOrNull(i) else null
                 fun rel(diags: List<Diagnostic>) =
                     diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) }
+                val names = HashSet<String>().also { checks.referencedNamesIn(d, it) }
                 val fn = d as? KtNamedFunction
                 if (fn != null && fn.bodyBlockExpression != null) {
                     val (diags, stmts) = analyzeFunctionBody(fn, prevEntry?.bodyStmts, session)
                     perDecl += diags
-                    newEntries += DeclDiags(IncrementalDecls.factsOf(d), rel(diags), bodyStmts = stmts)
+                    newEntries += DeclDiags(IncrementalDecls.factsOf(d), rel(diags), names, bodyStmts = stmts)
                 } else if (d is KtClassOrObject && d.declarations.isNotEmpty()) {
                     val (diags, members) = analyzeClassBody(d, prevEntry?.members, session)
                     perDecl += diags
-                    newEntries += DeclDiags(IncrementalDecls.factsOf(d), rel(diags), members = members)
+                    newEntries += DeclDiags(IncrementalDecls.factsOf(d), rel(diags), names, members = members)
                 } else {
                     val reporter = DiagnosticReporter()
                     driver.run(d, session, reporter)
                     val diags = reporter.drain()
                     perDecl += diags
-                    newEntries += DeclDiags(IncrementalDecls.factsOf(d), rel(diags))
+                    newEntries += DeclDiags(IncrementalDecls.factsOf(d), rel(diags), names)
                 }
             }
         } }
         analyzeCache[parsed.file.path] = AnalyzeCache(curImports, curFileText, externalStamp, newEntries)
+        val fileLevel = KotlinPerf.span("fileLevel") {
+            checks.fileLevelDiagnostics(ktFile, referencedNames(ktFile, topDecls, newEntries))
+        }
 
         val result = ArrayList<Diagnostic>(fileLevel)
         perDecl.forEach { result += it }
         return result
+    }
+
+    /**
+     * The names referenced anywhere in [ktFile]: each declaration's from its [DeclDiags.names], plus whatever
+     * sits between the declarations (a file annotation, an error element). Null when the declarations are not
+     * all direct children of the file (a script), so the checks walk it themselves.
+     */
+    private fun referencedNames(ktFile: KtFile, topDecls: List<KtDeclaration>, entries: List<DeclDiags>): Set<String>? {
+        if (topDecls.any { it.parent !== ktFile }) return null
+        val names = HashSet<String>()
+        entries.forEach { names += it.names }
+        val decls = topDecls.toHashSet()
+        var c = ktFile.firstChild
+        while (c != null) {
+            if (c !in decls) checks.referencedNamesIn(c, names)
+            c = c.nextSibling
+        }
+        return names
     }
 
     /**

@@ -102,4 +102,34 @@ class FoldModelTest {
         assertEquals("import ...", m.compositeText(1, d))
         assertEquals(4, m.docLineForVisual(2)) // row 0=pkg,1=composite imports,2=class X
     }
+
+    @Test
+    fun rebuildAfterAnEditBelowTheFoldIsTheSameModel() {
+        // Typing below a collapsed fold moves none of its offsets, so the rebuilt model is interchangeable.
+        val before = FoldModel.build(doc, listOf(bodyFold()))
+        val edited = doc.replace(code.length - 2, code.length - 2, "x")
+        val after = FoldModel.build(edited, listOf(bodyFold()))
+        assertTrue(before.sameAs(after))
+        assertTrue(before.sameProjection(after))
+    }
+
+    @Test
+    fun editAboveTheFoldKeepsTheProjectionButNotTheComposite() {
+        // Typing on a line before the fold shifts its offsets (so composites differ) but hides the same lines.
+        val shifted = "x" + code
+        val region = FoldRegion(shifted.indexOf('{') + 1, shifted.indexOf('}'), "...", "functionBody", true)
+        val before = FoldModel.build(doc, listOf(bodyFold()))
+        val after = FoldModel.build(EditorDocument.of(shifted), listOf(region))
+        assertTrue(before.sameProjection(after))
+        assertFalse(before.sameAs(after))
+    }
+
+    @Test
+    fun aNewLineInsideTheFoldChangesTheProjection() {
+        val grown = code.replace("  print(x)\n", "  print(x)\n  print(x)\n")
+        val region = FoldRegion(grown.indexOf('{') + 1, grown.indexOf('}'), "...", "functionBody", true)
+        val before = FoldModel.build(doc, listOf(bodyFold()))
+        val after = FoldModel.build(EditorDocument.of(grown), listOf(region))
+        assertFalse(before.sameProjection(after))
+    }
 }

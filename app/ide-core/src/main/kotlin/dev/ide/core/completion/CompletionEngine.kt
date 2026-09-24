@@ -1,5 +1,6 @@
 package dev.ide.core.completion
 
+import dev.ide.lang.patterns.DomPatterns
 import dev.ide.lang.LanguageExtensionIndex
 import dev.ide.lang.LanguageId
 import dev.ide.lang.appliesTo
@@ -48,7 +49,9 @@ class CompletionEngine(private val extensions: ExtensionRegistry) {
         // keystroke, and the registered set is the same from one completion to the next, so the index is
         // built once and reused until the registry actually changes.
         val runList = (contributorsFor(params.language) + perCall.filter { it.appliesTo(params.language) })
-            .filter { params.position == null || it.pattern.accepts(params.position) }
+            // A contributor that accepts any position is not asked about this one, so the position (and the
+            // parse behind it) is only computed when some contributor's pattern actually needs it.
+            .filter { DomPatterns.isAnyNode(it.pattern) || params.position == null || it.pattern.accepts(params.position) }
             .filter { options.allows(it.contributor.id) }
             .sortedBy { it.order }
 
@@ -100,15 +103,21 @@ class CompletionEngine(private val extensions: ExtensionRegistry) {
     private fun rank(items: List<CompletionItem>, params: CompletionParams): List<CompletionItem> {
         if (items.isEmpty()) return items
         val weighers = (BUILT_IN_WEIGHERS + extensions.extensions(COMPLETION_WEIGHER_EP)).sortedBy { it.order }
-        val comparator = Comparator<CompletionItem> { a, b ->
-            for (w in weighers) {
-                val wa = w.weigh(a, params)
-                val wb = w.weigh(b, params)
-                if (wa != wb) return@Comparator wb.compareTo(wa) // higher weight ranks earlier
+        // Weigh each item once up front: a comparison sort calls the comparator O(n log n) times, and weighing
+        // inside it re-ran every weigher for both sides of every comparison.
+        val n = items.size
+        val w = weighers.size
+        val weights = DoubleArray(n * w)
+        for (i in 0 until n) for (k in 0 until w) weights[i * w + k] = weighers[k].weigh(items[i], params)
+        val order = (0 until n).sortedWith { a, b ->
+            for (k in 0 until w) {
+                val wa = weights[a * w + k]
+                val wb = weights[b * w + k]
+                if (wa != wb) return@sortedWith wb.compareTo(wa) // higher weight ranks earlier
             }
             0
         }
-        return items.sortedWith(comparator)
+        return order.map { items[it] }
     }
 
     companion object {

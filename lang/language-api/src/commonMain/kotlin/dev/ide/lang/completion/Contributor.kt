@@ -40,7 +40,7 @@ interface CompletionContributor {
  * caret (the pattern-matching subject); [scope] / [expectedType] are resolved lazily by the engine from the
  * language analyzer and may be null on a backend that can't supply them.
  */
-class CompletionParams(
+class CompletionParams private constructor(
     val document: DocumentSnapshot,
     val offset: Int,
     val prefix: String,
@@ -48,18 +48,63 @@ class CompletionParams(
     val trigger: CompletionTrigger,
     /** Range the accepted item replaces (the identifier under the caret). */
     val replacementRange: TextRange,
-    /** Deepest DOM node containing the caret; null if the file couldn't be parsed. */
-    val position: DomNode?,
-    val parsedFile: ParsedFile?,
+    private val parsed: Lazy<ParsedFile?>,
+    private val positionAt: Lazy<DomNode?>,
     /** Visible names at the caret (name-reference candidates); null if unavailable. */
-    val scope: Scope? = null,
+    val scope: Scope?,
     /** Type the context expects, for ranking; null if unavailable. */
-    val expectedType: TypeRef? = null,
+    val expectedType: TypeRef?,
     /** Resolve the *produced* type of a DOM node (the language analyzer's `resolveType`), for contributors
      *  that need a receiver's type — e.g. postfix templates gated on Boolean/Iterable. Null when the backend
      *  can't resolve types or the file didn't parse. */
-    val typeResolver: ((DomNode) -> TypeRef?)? = null,
+    val typeResolver: ((DomNode) -> TypeRef?)?,
 ) {
+    constructor(
+        document: DocumentSnapshot,
+        offset: Int,
+        prefix: String,
+        language: LanguageId,
+        trigger: CompletionTrigger,
+        replacementRange: TextRange,
+        position: DomNode?,
+        parsedFile: ParsedFile?,
+        scope: Scope? = null,
+        expectedType: TypeRef? = null,
+        typeResolver: ((DomNode) -> TypeRef?)? = null,
+    ) : this(
+        document, offset, prefix, language, trigger, replacementRange,
+        lazyOf(parsedFile), lazyOf(position), scope, expectedType, typeResolver,
+    )
+
+    /** Deepest DOM node containing the caret; null if the file couldn't be parsed. */
+    val position: DomNode? get() = positionAt.value
+
+    val parsedFile: ParsedFile? get() = parsed.value
+
+    companion object {
+        /**
+         * Params whose [parsedFile] (and so [position]) is produced by [parse] the first time a contributor
+         * asks for it. A language backend that parses the buffer its own way does not need the host's tree,
+         * and most keystrokes reach no contributor that reads it, so the host's parse is paid only when one does.
+         */
+        fun lazilyParsed(
+            document: DocumentSnapshot,
+            offset: Int,
+            prefix: String,
+            language: LanguageId,
+            trigger: CompletionTrigger,
+            replacementRange: TextRange,
+            parse: () -> ParsedFile?,
+            typeResolver: ((DomNode) -> TypeRef?)? = null,
+        ): CompletionParams {
+            val parsed = lazy(parse)
+            return CompletionParams(
+                document, offset, prefix, language, trigger, replacementRange,
+                parsed, lazy { parsed.value?.nodeAt(offset) }, null, null, typeResolver,
+            )
+        }
+    }
+
     /** The graded matcher for [prefix] — exact / prefix / camel-hump / substring. Contributors gate
      *  candidates through this (not a raw `startsWith`) so `mDL` completes `myDynamicList` uniformly. */
     val matcher: PrefixMatcher = PrefixMatcher(prefix)

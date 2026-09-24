@@ -236,18 +236,30 @@ class JavaCompletionTest {
     }
 
     @Test
-    fun typeCompletionIsIncompleteForReQuery() {
-        // Type/name completion consults the prefix-dependent, truncated index, so it must report incomplete —
+    fun typeCompletionIsIncompleteOnlyWhenTheIndexPageWasCut() {
+        // Type/name completion consults the prefix-dependent, TRUNCATED index. A cut page must report incomplete,
         // else the editor narrows a stale list client-side and unimported types (`List`) never surface while
-        // typing fast (they only appeared after a cursor move forced a re-query).
-        val src = "package com.foo;\nclass Use { void m() { Lis| } }"
-        val offset = src.indexOf('|')
-        val text = src.removeRange(offset, offset + 1)
+        // typing fast. A page that was not cut is complete for every longer prefix, and narrowing it locally
+        // is what spares the engine a re-query on each keystroke.
         val vf = fs.fileFor(File(srcRoot, "com/foo/Use.java").toPath())
-        val res = runBlocking {
-            analyzer.complete(CompletionRequest(Snap(vf, text), offset, CompletionTrigger.Explicit), JavaLanguageBackend.LANGUAGE_ID)
+        fun incompleteAt(marked: String, indexed: Int): Boolean {
+            val offset = marked.indexOf('|')
+            val text = marked.removeRange(offset, offset + 1)
+            val comp = dev.ide.lang.java.completion.JavaCompletion(
+                env,
+                typeSearch = { prefix ->
+                    List(indexed) { i -> dev.ide.lang.java.completion.JavaCompletion.IndexedType("lib.${prefix}T$i", "class") }
+                },
+            )
+            val res = runBlocking {
+                comp.complete(CompletionRequest(Snap(vf, text), offset, CompletionTrigger.Explicit), JavaLanguageBackend.LANGUAGE_ID)
+            }
+            return res.isIncomplete
         }
-        assertTrue(res.isIncomplete, "a type/name-position result must be incomplete so the editor re-queries the index per keystroke")
+        val full = dev.ide.lang.java.completion.JavaCompletion.TYPE_SEARCH_LIMIT
+        assertTrue(incompleteAt("package com.foo;\nclass Use { void m() { L| } }", 0), "a 1-char prefix skips the index, so the next char must re-query")
+        assertTrue(incompleteAt("package com.foo;\nclass Use { void m() { Lis| } }", full), "a full index page was cut, so it must re-query")
+        assertFalse(incompleteAt("package com.foo;\nclass Use { void m() { Lis| } }", 3), "an uncut page narrows locally")
     }
 
     @Test

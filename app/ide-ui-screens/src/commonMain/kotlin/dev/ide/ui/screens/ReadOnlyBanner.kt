@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -53,7 +56,11 @@ internal fun readOnlyNotice(state: IdeUiState, active: OpenFile): EditorNotice? 
  */
 @Composable
 internal fun largeFileNotice(active: OpenFile): EditorNotice? {
-    if (!active.session.doc.isLarge()) return null
+    // Derived so the caller's scope observes only the flag: reading the document itself here would recompose
+    // the whole editor chrome on every keystroke.
+    val session = active.session
+    val large by remember(session) { derivedStateOf { session.doc.isLarge() } }
+    if (!large) return null
     return EditorNotice(
         id = "largefile",
         level = NoticeLevel.Info,

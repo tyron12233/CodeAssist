@@ -163,6 +163,42 @@ class LightSyntaxTree(
         return null
     }
 
+    // Index-returning twins of [getParent], [findChildByType] and [getChildren]. A `LightNode?` is a boxed
+    // value, and so is every element read through a `List<LightNode>`, so the object-returning forms allocate
+    // on each call; a tree walk (every parent chain, every child scan) made that most of what a pass allocated.
+    // These answer [NO_INDEX] for "none" and never box.
+
+    /** The parent's node index, or [NO_INDEX] for the root. */
+    fun parentIndex(node: LightNode): Int {
+        if (node.index == Int.MIN_VALUE || isSyntheticRoot(node)) return NO_INDEX
+        return if (isComposite(node)) parentStartIndex[node.index] else tokenParentStart[-(node.index + 1)]
+    }
+
+    /** How many children [node] has. */
+    fun childCount(node: LightNode): Int {
+        val idx = node.index
+        if (idx < 0) return 0
+        // Branches rather than a `?.` chain: that one is typed `Int?` and boxes the answer.
+        val list = childrenByIndex[idx]
+        return if (list is ChildrenList) list.indices.size else list.size
+    }
+
+    /** The node index of [node]'s [i]th child. */
+    fun childIndexAt(node: LightNode, i: Int): Int {
+        val list = childrenByIndex[node.index]
+        return if (list is ChildrenList) list.indices[i] else list[i].index
+    }
+
+    /** The node index of [node]'s first child of [type], or [NO_INDEX]. */
+    fun childIndexByType(node: LightNode, type: SyntaxElementType): Int {
+        val n = childCount(node)
+        for (i in 0 until n) {
+            val c = childIndexAt(node, i)
+            if (getType(LightNode(c)) == type) return c
+        }
+        return NO_INDEX
+    }
+
     fun getChildrenByType(node: LightNode, type: SyntaxElementType): List<LightNode> {
         val children = getChildren(node)
         if (children.isEmpty()) return emptyList()
@@ -171,16 +207,198 @@ class LightSyntaxTree(
 
     fun hasChildOfType(node: LightNode, type: SyntaxElementType): Boolean = findChildByType(node, type) != null
 
+    /**
+     * This tree over [newSource], with [node]'s subtree replaced by [subNode]'s from [sub], a parse of
+     * [node]'s new text in a context that builds it the way this file's parse would. [newSource] differs
+     * from [source] only strictly inside [node].
+     *
+     * Markers outside [node] keep their types and their order, and every offset past it moves by the length
+     * change; indices past it move by the change in marker and token counts. The caller proves the result is
+     * the tree a parse of [newSource] builds (for a body the lazy grammar skipped by counting braces: that it
+     * still closes exactly at its end, so nothing outside it reads differently). This checks only that the
+     * shapes line up, and answers null when they do not.
+     */
+    fun withReplacedSubtree(node: LightNode, newSource: CharSequence, sub: LightSyntaxTree, subNode: LightNode): LightSyntaxTree? {
+        val b = node.index
+        if (b < 0 || b >= rootIndex || subNode.index < 0 || subNode.index >= sub.rootIndex) return null
+        if (compositeTypes[b] != sub.compositeTypes[subNode.index]) return null
+        val firstToken = edgeToken(node, first = true)
+        val lastToken = edgeToken(node, first = false)
+        val subFirst = sub.edgeToken(subNode, first = true)
+        val subLast = sub.edgeToken(subNode, first = false)
+        if (firstToken < 0 || lastToken < 0 || subFirst < 0 || subLast < 0) return null
+        val bodyStart = compositeStartOffsets[b]
+        val oldBodyEnd = compositeEndOffsets[b]
+        val delta = newSource.length - source.length
+        val subStart = sub.compositeStartOffsets[subNode.index]
+        if (tokens.getTokenStart(firstToken) != bodyStart || tokens.getTokenEnd(lastToken) != oldBodyEnd) return null
+        if (sub.tokens.getTokenStart(subFirst) != subStart ||
+            sub.tokens.getTokenEnd(subLast) - subStart != oldBodyEnd + delta - bodyStart) return null
+
+        // The markers inside [node]: every index from it to its last descendant's, in production order.
+        var lastInner = b
+        fun maxInner(i: Int) {
+            val list = childrenByIndex[i]
+            for (k in list.indices) {
+                val c = list[k].index
+                if (c >= 0) { if (c > lastInner) lastInner = c; maxInner(c) }
+            }
+        }
+        maxInner(b)
+        // The replacement's markers, numbered in pre-order right after [node].
+        val subSlots = HashMap<Int, Int>()
+        val subOrder = ArrayList<Int>()
+        fun number(i: Int) {
+            val list = sub.childrenByIndex[i]
+            for (k in list.indices) {
+                val c = list[k].index
+                if (c >= 0) { subSlots[c] = b + 1 + subOrder.size; subOrder += c; number(c) }
+            }
+        }
+        number(subNode.index)
+        val markerShift = subOrder.size - (lastInner - b)
+        fun marker(i: Int): Int = if (i > lastInner) i + markerShift else i
+
+        val oldCount = tokens.tokenCount
+        val m = subLast - subFirst + 1
+        val tokenShift = m - (lastToken - firstToken + 1)
+        fun token(t: Int): Int = if (t > lastToken) t + tokenShift else t
+        fun subToken(t: Int): Int = firstToken + (t - subFirst)
+        fun child(c: Int): Int = if (c >= 0) marker(c) else -(token(-(c + 1)) + 1)
+        fun subChild(c: Int): Int = if (c >= 0) subSlots.getValue(c) else -(subToken(-(c + 1)) + 1)
+
+        val newRoot = rootIndex + markerShift
+        val parents = IntArray(newRoot)
+        val types = arrayOfNulls<SyntaxElementType>(newRoot)
+        val starts = IntArray(newRoot)
+        val ends = IntArray(newRoot)
+        @Suppress("UNCHECKED_CAST")
+        val children = arrayOfNulls<List<LightNode>>(newRoot + 1) as Array<List<LightNode>>
+        for (i in 0 until rootIndex) {
+            if (i in (b + 1)..lastInner) continue
+            val j = marker(i)
+            parents[j] = marker(parentStartIndex[i])
+            types[j] = compositeTypes[i]
+            starts[j] = compositeStartOffsets[i].let { if (it >= oldBodyEnd) it + delta else it }
+            ends[j] = compositeEndOffsets[i].let { if (it >= oldBodyEnd) it + delta else it }
+            children[j] = remapped(childrenByIndex[i], lastInner, lastToken, ::child)
+        }
+        children[newRoot] = remapped(childrenByIndex[rootIndex], lastInner, lastToken, ::child)
+        for (i in subOrder) {
+            val j = subSlots.getValue(i)
+            val p = sub.parentStartIndex[i]
+            parents[j] = if (p == subNode.index) b else subSlots.getValue(p)
+            types[j] = sub.compositeTypes[i]
+            starts[j] = sub.compositeStartOffsets[i] - subStart + bodyStart
+            ends[j] = sub.compositeEndOffsets[i] - subStart + bodyStart
+            val list = sub.childrenByIndex[i]
+            children[j] = if (list.isEmpty()) list else ChildrenList(IntArray(list.size) { subChild(list[it].index) })
+        }
+        val bodyChildren = sub.childrenByIndex[subNode.index]
+        children[b] = ChildrenList(IntArray(bodyChildren.size) { subChild(bodyChildren[it].index) })
+
+        val newCount = oldCount + tokenShift
+        val tokenTypes = arrayOfNulls<SyntaxElementType>(newCount)
+        val tokenStarts = IntArray(newCount)
+        val tokenEnds = IntArray(newCount)
+        val tokenParents = IntArray(newCount)
+        for (t in 0 until firstToken) {
+            tokenTypes[t] = tokens.getTokenType(t)
+            tokenStarts[t] = tokens.getTokenStart(t)
+            tokenEnds[t] = tokens.getTokenEnd(t)
+            tokenParents[t] = marker(tokenParentStart[t])
+        }
+        for (st in subFirst..subLast) {
+            val t = subToken(st)
+            tokenTypes[t] = sub.tokens.getTokenType(st)
+            tokenStarts[t] = sub.tokens.getTokenStart(st) - subStart + bodyStart
+            tokenEnds[t] = sub.tokens.getTokenEnd(st) - subStart + bodyStart
+            val p = sub.tokenParentStart[st]
+            tokenParents[t] = if (p == subNode.index) b else subSlots[p] ?: newRoot
+        }
+        for (t in lastToken + 1 until oldCount) {
+            val j = t + tokenShift
+            tokenTypes[j] = tokens.getTokenType(t)
+            tokenStarts[j] = tokens.getTokenStart(t) + delta
+            tokenEnds[j] = tokens.getTokenEnd(t) + delta
+            tokenParents[j] = marker(tokenParentStart[t])
+        }
+
+        return LightSyntaxTree(
+            tokens = ArrayTokenList(newSource, tokenTypes, tokenStarts, tokenEnds),
+            source = newSource,
+            parentStartIndex = parents,
+            tokenParentStart = tokenParents,
+            rootIndex = newRoot,
+            rootNodeType = rootNodeType,
+            compositeTypes = types,
+            childrenByIndex = children,
+            compositeEndOffsets = ends,
+            compositeStartOffsets = starts,
+            buildLanguageSpecificTreeStructure = { it },
+        )
+    }
+
+    /** [list] with [child] applied to each entry, or [list] itself when no entry lies past the replaced range. */
+    private inline fun remapped(list: List<LightNode>, lastInner: Int, lastToken: Int, child: (Int) -> Int): List<LightNode> {
+        if (list !is ChildrenList) return list
+        val ints = list.indices
+        var needs = false
+        for (c in ints) if ((c >= 0 && c > lastInner) || (c < 0 && -(c + 1) > lastToken)) { needs = true; break }
+        if (!needs) return list
+        return ChildrenList(IntArray(ints.size) { child(ints[it]) })
+    }
+
+    /** The token index at [node]'s left or right edge, or -1 when there is none. */
+    private fun edgeToken(node: LightNode, first: Boolean): Int {
+        var n = node.index
+        while (n >= 0) {
+            val list = childrenByIndex[n]
+            if (list.isEmpty()) return -1
+            n = (if (first) list[0] else list[list.size - 1]).index
+        }
+        return if (n == Int.MIN_VALUE) -1 else -(n + 1)
+    }
+
     companion object {
         /** Sentinel "no node" value for use as a not-computed marker in callers. */
         val NO_NODE: LightNode = LightNode(Int.MIN_VALUE)
+
+        /** The "no node" answer of the index-returning lookups. */
+        const val NO_INDEX: Int = Int.MIN_VALUE
+    }
+}
+
+/** A [TokenList] over plain arrays: what [LightSyntaxTree.withRelexedBody] assembles. */
+private class ArrayTokenList(
+    override val tokenizedText: CharSequence,
+    private val types: Array<SyntaxElementType?>,
+    private val starts: IntArray,
+    private val ends: IntArray,
+) : TokenList {
+    override val tokenCount: Int get() = types.size
+    override fun getTokenStart(index: Int): Int = starts[index]
+    override fun getTokenEnd(index: Int): Int = ends[index]
+    override fun getTokenType(index: Int): SyntaxElementType? = if (index < 0 || index >= types.size) null else types[index]
+    override fun slice(start: Int, end: Int): TokenList {
+        val base = if (start < end) starts[start] else 0
+        val limit = if (start < end) ends[end - 1] else 0
+        return ArrayTokenList(
+            tokenizedText.subSequence(base, limit),
+            types.copyOfRange(start, end),
+            IntArray(end - start) { starts[start + it] - base },
+            IntArray(end - start) { ends[start + it] - base },
+        )
+    }
+    override fun remap(index: Int, newValue: SyntaxElementType) {
+        types[index] = newValue
     }
 }
 
 /**
  * Lightweight [List] view over a precomputed [IntArray] of child node indices.
  */
-private class ChildrenList(private val indices: IntArray) : AbstractList<LightNode>() {
+private class ChildrenList(val indices: IntArray) : AbstractList<LightNode>() {
     override val size: Int get() = indices.size
     override fun get(index: Int): LightNode = LightNode(indices[index])
 }
