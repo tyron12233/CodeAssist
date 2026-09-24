@@ -72,7 +72,8 @@ internal class CompletionController(
      *  and [canNarrowLocally] keeps failing. Skipped for [immediate] (Ctrl-Space) and on a token change (a
      *  fresh context — e.g. after `.` — genuinely needs a new query). */
     fun refresh(immediate: Boolean = false) {
-        val tokenStart = tokenStartAt(session.doc.text, session.selection.start)
+        // Read the rope directly: this runs before the debounce on every keystroke, so it must not build the text.
+        val tokenStart = tokenStartAt(session.doc.chars, session.selection.start)
         if (!immediate && job?.isActive == true && inFlightTokenStart == tokenStart) return
         job?.cancel()
         inFlightTokenStart = tokenStart
