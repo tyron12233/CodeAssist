@@ -149,4 +149,12 @@ enum class CacheInvalidation {
      * changed on disk outside the editor. Trees stay valid; what they resolved TO may not.
      */
     BINDINGS,
+
+    /**
+     * Nothing is stale, but the system is short of memory: drop every cache that can be rebuilt on demand
+     * (parse trees of files not being edited, resolution memos, decoded library symbols). Raised when the IDE
+     * leaves the screen or the OS reports memory pressure. The next request pays the rebuild, so a backend
+     * keeps what correctness needs and nothing more; it must never tear down state that cannot be recomputed.
+     */
+    MEMORY_PRESSURE,
 }

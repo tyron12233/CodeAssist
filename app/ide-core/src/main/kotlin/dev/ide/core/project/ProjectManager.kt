@@ -342,10 +342,18 @@ class ProjectManager private constructor(
 
     /** Open the existing project at [rootPath]; returns the opened engine. [buildOnly] opens a headless
      *  build engine (the `:build` daemon) that skips the editor cold-start — see [IdeServices]. */
-    fun open(rootPath: String, buildOnly: Boolean = false): IdeServices =
-        IdeServices.openAt(Paths.get(rootPath), sdk(), sharedCachesRoot = homeDir, env = env, buildOnly = buildOnly)
+    /** Apply the user's "Low memory mode" override to [dev.ide.platform.DeviceMemory]. Read at every project
+     *  open, so a changed setting takes effect with the next project. */
+    fun applyMemoryMode() {
+        dev.ide.platform.DeviceMemory.applyMode(preference(dev.ide.core.settings.BuiltInSettingsPages.LOW_MEMORY_MODE_KEY))
+    }
+
+    fun open(rootPath: String, buildOnly: Boolean = false): IdeServices {
+        applyMemoryMode()
+        return IdeServices.openAt(Paths.get(rootPath), sdk(), sharedCachesRoot = homeDir, env = env, buildOnly = buildOnly)
             // A build-only daemon open isn't a user "access" — don't let a background build reorder the picker.
             .also { if (!buildOnly) recordOpened(Paths.get(rootPath)) }
+    }
 
     // --- learning scratch projects (hidden; used to compile + run Learn exercises) ---
 
@@ -487,6 +495,18 @@ class ProjectManager private constructor(
         Files.walk(dir).use { stream ->
             stream.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
         }
+    }
+
+    /**
+     * Warm the host's Kotlin compiler with no project open, for a process that will compile but has not
+     * opened its project yet (the `:build` daemon at the IDE's project open). The compiler is
+     * application-scoped, so the engine the daemon opens later compiles on the warm one. No-op without a
+     * host compiler.
+     */
+    fun warmKotlinCompiler() {
+        val compiler = kotlinCompiler ?: return
+        val boot = listOfNotNull(androidTools?.androidJar) + (androidTools?.desugarStubs ?: emptyList())
+        runCatching { compiler.warmUp(boot) }
     }
 
     // --- preferences (onboarding flag, last project, …) ---

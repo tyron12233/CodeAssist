@@ -148,6 +148,17 @@ class BuildDaemonService : Service() {
             }
         }
 
+        override fun warmCompiler() {
+            scope.launch {
+                // The manager is created under the open lock so a Run arriving now never builds a second one.
+                val mgr = openMutex.withLock {
+                    manager ?: AndroidIde.createProjectManager(this@BuildDaemonService).also { manager = it }
+                }
+                mgr.warmKotlinCompiler()
+                log.info("daemon(pid=${Process.myPid()}): Kotlin compiler warmed")
+            }
+        }
+
         override fun runTasks(): Array<String> {
             val svc = services ?: return emptyArray()
             return runCatching {

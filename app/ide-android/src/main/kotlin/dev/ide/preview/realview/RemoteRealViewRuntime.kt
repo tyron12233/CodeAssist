@@ -54,8 +54,9 @@ class RemoteRealViewRuntime(
 
     init {
         client.onStage = { stage -> currentStageListener?.invoke(stage) }
-        // Eagerly fork + bind :preview at project open, so the first render doesn't pay the bind latency.
-        client.warmUp()
+        // No eager bind: this runtime is built with the project manager in every process, at app start, and
+        // most sessions never open a layout preview. The first render binds (see PreviewRenderClient.render),
+        // paying the fork once, when a preview actually needs the process.
     }
 
     override fun render(request: RealViewRequest): RealViewResult {

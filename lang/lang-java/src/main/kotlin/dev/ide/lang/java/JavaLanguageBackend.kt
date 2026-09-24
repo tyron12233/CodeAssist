@@ -59,8 +59,9 @@ class JavaLanguageBackend : LanguageBackend {
         val jdkHome = jdkImage?.toFile()
             ?: if (!hasAndroidJar) File(System.getProperty("java.home")).takeIf { it.exists() } else null
 
-        val env = JavaEnvironment.create(classpath, sourceRoots, jdkHome)
-        return JavaSourceAnalyzer(env).also {
+        // Deferred: the host builds an analyzer per module to read its index scope, and the IntelliJ
+        // environment behind it is only worth standing up once a Java file is actually parsed.
+        return JavaSourceAnalyzer.deferred(classpath, sourceRoots, jdkHome).also {
             // The library `-sources.jar`s the model declares, plus the JDK `src.zip` / Android framework
             // sources derived from the boot classpath. This is what the source-doc index and its live-parse
             // fallback read for real parameter names + javadoc, so leaving it empty renders every library

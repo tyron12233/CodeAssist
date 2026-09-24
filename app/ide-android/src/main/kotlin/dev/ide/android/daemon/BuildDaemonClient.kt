@@ -98,8 +98,13 @@ class BuildDaemonClient(
         }
     }
 
+    @Volatile
+    var isBound: Boolean = false
+        private set
+
     /** Bind the daemon; [onReady] runs once connected, with the live [IBuildDaemon]. */
     fun bind(onReady: (IBuildDaemon) -> Unit) {
+        isBound = true
         this.onReady = onReady
         val ok = appContext.bindService(
             Intent(appContext, BuildDaemonService::class.java),
@@ -111,6 +116,7 @@ class BuildDaemonClient(
 
     fun open(workspaceDir: String, modelGeneration: Int, requestId: Int) =
         runCatching { daemon?.open(workspaceDir, modelGeneration, requestId) }
+    fun warmCompiler() = runCatching { daemon?.warmCompiler() }
     fun runTasks(): List<String> = runCatching { daemon?.runTasks()?.toList() }.getOrNull().orEmpty()
     fun runTask(id: String) = runCatching { daemon?.runTask(id) }
     fun runBuild() = runCatching { daemon?.runBuild() }
@@ -123,5 +129,5 @@ class BuildDaemonClient(
     fun setRunSurfaceSize(widthPx: Int, heightPx: Int) = runCatching { daemon?.setRunSurfaceSize(widthPx, heightPx) }
     fun answerPermission(id: Int, decision: Int) = runCatching { daemon?.answerPermission(id, decision) }
     fun clearAppLog() = runCatching { daemon?.clearAppLog() }
-    fun unbind() = runCatching { appContext.unbindService(connection) }
+    fun unbind() = runCatching { isBound = false; appContext.unbindService(connection) }
 }

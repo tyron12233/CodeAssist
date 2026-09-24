@@ -52,7 +52,6 @@ import dev.ide.block.impl.JavaBlockMapping
 import dev.ide.build.RunCapture
 import dev.ide.build.ProgramInterpreter
 import dev.ide.build.jvm.run.VmProgramInterpreter
-import dev.ide.core.IdeServices.Companion.PARSER_WARMUP_MIN_FREE_BYTES
 import dev.ide.core.IdeServices.Companion.openStore
 import dev.ide.core.actions.BuiltInActions
 import dev.ide.core.analysis.AnalyzerSourceDocs
@@ -188,7 +187,6 @@ import dev.ide.lang.kotlin.index.KotlinSourceSubtypeIndex
 import dev.ide.lang.kotlin.index.KotlinTypeShapeIndex
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
-import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.synthetic.KotlinSyntheticClassProvider
 import dev.ide.lang.resolve.SourceDocProvider
 import dev.ide.lang.signature.SignatureHelp
@@ -250,6 +248,7 @@ import dev.ide.model.sync.SyncSeverity
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateArgs
 import dev.ide.model.template.TemplateId
+import dev.ide.platform.DeviceMemory
 import dev.ide.platform.Disposable
 import dev.ide.platform.EngineCanceledException
 import dev.ide.platform.ExtensionRegistry
@@ -297,6 +296,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -383,7 +383,7 @@ class IdeServices private constructor(
      *  routes all build/run calls through this rather than calling the build methods directly. `by lazy`
      *  defers creation past construction so it never participates in field init-order. Public so the
      *  on-device build daemon (:ide-android BuildDaemonService) can drive a headless build through it. */
-    val buildRunner: BuildRunner by lazy { InProcessBuildRunner(build) }
+    val buildRunner: BuildRunner by lazy { InProcessBuildRunner(build, warm = ::warmKotlinCompiler) }
 
     // Language backends are contributed through the `platform.languageBackend` EP (registered ONCE, app-global,
     // in [registerStaticPlugins]) and selected per file by matching the file's LanguageId against each
@@ -463,6 +463,10 @@ class IdeServices private constructor(
         if (dev.ide.platform.RuntimeInfo.is32Bit) Dispatchers.Default.limitedParallelism(1)
         else Dispatchers.Default
     private val indexScope = CoroutineScope(SupervisorJob() + indexDispatcher)
+
+    /** The project-open index build, so work that must not overlap its memory peak can wait for it. */
+    @Volatile
+    private var openJob: Job? = null
 
     /** The workspace index (class names, packages, members, source symbols). Built in the background. The index
      *  extensions are contributed app-global (see [registerStaticPlugins]); this just queries them. */
@@ -820,45 +824,20 @@ class IdeServices private constructor(
                 },
             )
         }
-        // Cold-start sequencing — memory safety vs editor latency. The index build and the two Kotlin warm-ups
-        // are each heavy, and the warm-ups deliberately RETAIN their environments (KotlinEnvironmentKeepAlive),
-        // so firing all THREE at project open stacks their peaks on top of each other. On a tight-heap device
-        // (ART/emulator) that storm drove the whole system into the kernel low-memory killer mid-index: the app
-        // was SIGKILLed (no catchable exception — the index's runCatching guards can't stop an OS kill), which
-        // users saw as "the app crashes after indexing" with the index dialog frozen on whatever file was
-        // current. So on device we do NOT fire all three at once. The COMPILER warm-up (the heap-heavy one,
-        // needed only for the first Run/build) stays sequenced AFTER the index. But the PARSER warm-up sits on
-        // the EDITOR critical path — the highlighting daemon's first FOLDS/SEMANTIC/DIAGNOSTICS pass parses
-        // through KotlinParserHost — so gating it behind a multi-second index build means a file opened during
-        // indexing pays the cold KotlinCoreEnvironment standup on the engine thread (folding/coloring stalls).
-        // It's also the LIGHTER of the two. So we overlap ONLY the parser warm-up with the index (two peaks, not
-        // three — strictly less than the storm that OOM'd), still heap-guarded so a tight device skips it and
-        // falls back to the lazy standup. Desktop has ample heap and overlaps both warm-ups with the index.
+        // Cold-start sequencing. The index build is the one heavy job project open always runs; nothing else
+        // stands up with it. The Kotlin parser needs no environment (it is the vendored multiplatform parser),
+        // and the Kotlin COMPILER is warmed only by whichever runner will actually compile, through
+        // [warmKotlinCompiler], and then only after this index build. Stacking the compiler's retained
+        // environment on the index build's peak is what once drove a tight device into the low-memory killer
+        // mid-index.
         if (buildOnly) {
-            // Headless build engine (the :build daemon): skip the editor cold-start (symbol index + Kotlin
-            // warm-ups). A build uses only the model/classpath/compilers, never the editor index, and the
-            // warm-ups are editor-latency optimizations — dropping them frees that baseline for the dexer/R8.
-            memLog.info("build-only engine: skipping editor index + Kotlin warm-ups")
+            // Headless build engine (the :build daemon): skip the editor index. A build uses only the
+            // model/classpath/compilers, never the editor index, so that baseline is left free for the dexer/R8.
+            memLog.info("build-only engine: skipping editor index")
         } else if (androidTools != null) {
-            val hasKotlin = projectHasKotlin()
-            // Parser warm-up OVERLAPS the index build (editor critical path; see the sequencing note above).
-            // Heap-guarded so a tight device skips it and falls back to the lazy standup on the first parse.
-            if (hasKotlin) indexScope.launch {
-                if (freeHeapBytes() >= PARSER_WARMUP_MIN_FREE_BYTES) {
-                    runCatching { KotlinParserHost.warmUp() }
-                    memLog.info(
-                        "after Kotlin parser warm-up (parallel with index): ${
-                            MemSample.now().fmt()
-                        }"
-                    )
-                } else memLog.warn("skipped Kotlin parser warm-up (headroom ${MemSample.now().headroomMb}MB < ${PARSER_WARMUP_MIN_FREE_BYTES / MB_BYTES}MB floor)")
-            }
-            indexScope.launch {
+            openJob = indexScope.launch {
                 // Phase-0 build-process-isolation instrumentation (docs/build-process-isolation.md): track the
-                // project-open memory storm (index + the retained Kotlin warm-ups) so its peak can be compared
-                // against a build's peak — that comparison decides whether a separate build process targets the
-                // dominant OOM. A periodic sampler catches the storm's true intra-phase peak (incl. the parser
-                // warm-up now overlapping this build).
+                // project-open memory peak so it can be compared against a build's peak.
                 val openPeak = PeakHeap().also { it.record() }
                 val sampler = launch {
                     while (isActive) {
@@ -866,17 +845,9 @@ class IdeServices private constructor(
                     }
                 }
                 try {
-                    memLog.info("project open (before index): ${MemSample.now().fmt()}")
+                    memLog.info("project open (before index): ${MemSample.now().fmt()} tier=${DeviceMemory.tier}")
                     runCatching { indexService.ensureUpToDate(buildIndexScope()) }
                     memLog.info("after index build: ${MemSample.now().fmt()}")
-                    // Compiler warm-up is the heap-heavy one and is only needed for the first Run/build (never for
-                    // editing), so keep it AFTER the index build to bound the project-open peak.
-                    if (hasKotlin) {
-                        if (freeHeapBytes() >= COMPILER_WARMUP_MIN_FREE_BYTES) {
-                            runCatching { kotlinJvmCompiler.warmUp(compileBootClasspath) }
-                            memLog.info("after Kotlin compiler warm-up: ${MemSample.now().fmt()}")
-                        } else memLog.warn("skipped Kotlin compiler warm-up (headroom ${MemSample.now().headroomMb}MB < ${COMPILER_WARMUP_MIN_FREE_BYTES / MB_BYTES}MB floor)")
-                    }
                 } finally {
                     sampler.cancel()
                     lastOpenPeak = openPeak.peak()
@@ -884,24 +855,9 @@ class IdeServices private constructor(
                 }
             }
         } else {
-            indexScope.launch {
-                runCatching { indexService.ensureUpToDate(buildIndexScope()) }; memLog.info(
-                "after index build: ${MemSample.now().fmt()}"
-            )
-            }
-            // Pre-warm the Kotlin parser environment (the ~200ms KotlinCoreEnvironment standup) off-thread, so
-            // the first Kotlin completion/diagnostics/preview doesn't pay it on the interaction path. Gated on
-            // the project actually containing Kotlin so a pure-Java project never stands up the Kotlin frontend.
-            indexScope.launch { runCatching { if (projectHasKotlin()) KotlinParserHost.warmUp() } }
-            // Also pre-warm the COMPILE path (the ~1s first-build cold start: class-loading the embeddable
-            // compiler + standing up its environment). The parser-host warm-up above only loads the parse
-            // classes; a throwaway compile loads the frontend + JVM backend, so the first real Run is warm.
-            indexScope.launch {
-                runCatching {
-                    if (projectHasKotlin()) kotlinJvmCompiler.warmUp(
-                        compileBootClasspath
-                    )
-                }
+            openJob = indexScope.launch {
+                runCatching { indexService.ensureUpToDate(buildIndexScope()) }
+                memLog.info("after index build: ${MemSample.now().fmt()}")
             }
         }
         // Arm the event hub's reactions only now: init's own commits (ensureKotlinStdlib) must not trigger
@@ -924,8 +880,32 @@ class IdeServices private constructor(
         return rt.maxMemory() - (rt.totalMemory() - rt.freeMemory())
     }
 
+    /**
+     * Warm the Kotlin compiler so the first Run does not pay its cold start. Called by the build runner of
+     * the process that will compile (the in-process runner here, or the `:build` daemon for its own engine),
+     * never speculatively at project open: a compiler warmed in a process that never compiles is only
+     * retained heap. Waits for the project-open index build so the two peaks never stack, and does nothing
+     * on a [DeviceMemory.isLow] device or a project without Kotlin sources.
+     */
+    fun warmKotlinCompiler() {
+        if (DeviceMemory.isLow) {
+            memLog.info("skipped Kotlin compiler warm-up (low-memory tier)")
+            return
+        }
+        indexScope.launch {
+            openJob?.join()
+            if (!hasKotlinSources()) return@launch
+            if (androidTools != null && freeHeapBytes() < COMPILER_WARMUP_MIN_FREE_BYTES) {
+                memLog.warn("skipped Kotlin compiler warm-up (headroom ${MemSample.now().headroomMb}MB < ${COMPILER_WARMUP_MIN_FREE_BYTES / MB_BYTES}MB floor)")
+                return@launch
+            }
+            runCatching { kotlinJvmCompiler.warmUp(compileBootClasspath) }
+            memLog.info("after Kotlin compiler warm-up: ${MemSample.now().fmt()}")
+        }
+    }
+
     /** Cheap check (bounded, short-circuiting) for any `.kt` under the project's source roots. */
-    private fun projectHasKotlin(): Boolean = runCatching {
+    fun hasKotlinSources(): Boolean = runCatching {
         modules().any { m ->
             sourceRoots(m).any { root ->
                 Files.exists(root) && Files.walk(root)
@@ -1428,6 +1408,22 @@ class IdeServices private constructor(
     /** Tell every ALREADY-BUILT analyzer in every live module to drop what [reason] invalidates. Neutral by
      *  design: the host names the event, and each backend decides what that costs it, so a backend the host
      *  has never heard of participates exactly like the built-ins. Never builds an analyzer. */
+    /**
+     * Drop every cache this engine can rebuild on demand, because the system is short of memory: each live
+     * analyzer's parse trees and resolution memos ([CacheInvalidation.MEMORY_PRESSURE]) and the engine's own
+     * derived resource state (the parsed resource repositories, the rendered synthetic classes, the
+     * custom-view factories). All are keyed on content fingerprints, so the next request recomputes exactly
+     * what was there. Nothing the user has typed lives in any of them.
+     */
+    fun releaseMemory() {
+        invalidateAnalyzerCaches(CacheInvalidation.MEMORY_PRESSURE)
+        syntheticCache = null
+        kotlinSyntheticCache.clear()
+        repoCache.clear()
+        customViewCache.clear()
+        frameworkResCache.clear()
+    }
+
     private fun invalidateAnalyzerCaches(reason: CacheInvalidation) {
         store.liveModuleContainers().forEach { it.peekService(MODULE_ANALYZERS)?.invalidateCaches(reason) }
     }
@@ -4355,14 +4351,9 @@ class IdeServices private constructor(
             listOf("kotlin-ext", "custom-views", "preview", "preview-libs", "build", "source-index")
 
 
-        /** Free-heap floor (on device) below which the Kotlin parser-env warm-up is skipped at project open; it
-         *  then stands up lazily on the first Kotlin file instead. Keeps cold start from tipping a tight device
-         *  into the low-memory killer. */
-        private const val PARSER_WARMUP_MIN_FREE_BYTES = 96L * 1024 * 1024
-
-        /** Free-heap floor (on device) below which the heavier Kotlin COMPILE warm-up — a throwaway compile that
-         *  loads and RETAINS the frontend + JVM backend — is skipped; the first real build pays its ~1s cold
-         *  start instead. Higher than [PARSER_WARMUP_MIN_FREE_BYTES] because the compile path costs far more. */
+        /** Free-heap floor below which the in-process Kotlin COMPILE warm-up (a throwaway compile that loads
+         *  and RETAINS the frontend + JVM backend) is skipped; the first real build pays its cold start
+         *  instead. */
         private const val COMPILER_WARMUP_MIN_FREE_BYTES = 224L * 1024 * 1024
 
 

@@ -51,6 +51,7 @@ import dev.ide.lang.resolve.Scope
 import dev.ide.lang.resolve.StructureItem
 import dev.ide.lang.resolve.TypeRef
 import dev.ide.platform.ContentHash
+import dev.ide.platform.Disposable
 import dev.ide.vfs.VirtualFile
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -63,21 +64,56 @@ import java.util.concurrent.atomic.AtomicLong
  * This first cut lands parse + DOM + resolution + structure/quick-doc. Semantic diagnostics beyond syntax,
  * completion, and the editor-QoL services (folding, highlight, signature, formatting) layer on next.
  */
-class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, JvmIndexScopeProvider {
+class JavaSourceAnalyzer private constructor(
+    classpath: List<java.io.File>,
+    sourceRoots: List<java.io.File>,
+    jdkHome: java.io.File?,
+    createEnv: () -> JavaEnvironment,
+) : SourceAnalyzer, JvmIndexScopeProvider, Disposable {
 
-    private val javaIncrementalParser = JavaIncrementalParser(env)
+    /** An analyzer over an already-built [env]. */
+    constructor(env: JavaEnvironment) : this(env.classpath, env.sourceRoots, env.jdkHome, { env })
+
+    companion object {
+        /** An analyzer whose environment is created by [JavaEnvironment.create] on first use. */
+        fun deferred(classpath: List<java.io.File>, sourceRoots: List<java.io.File>, jdkHome: java.io.File?) =
+            JavaSourceAnalyzer(classpath, sourceRoots, jdkHome) {
+                JavaEnvironment.create(classpath, sourceRoots, jdkHome)
+            }
+    }
+
+    /**
+     * The IntelliJ environment, built on the first request that needs PSI rather than with the analyzer. The
+     * host builds an analyzer per module just to read its index scope (the jars and source roots below), and
+     * a module whose Java files are never opened must not pay a full project environment for that.
+     */
+    private val envLazy = lazy {
+        createEnv().also {
+            it.syntheticProvider = syntheticProviderValue
+            it.overlayProvider = overlayProviderValue
+        }
+    }
+    private val env: JavaEnvironment by envLazy
+
+    private val javaIncrementalParser by lazy { JavaIncrementalParser(env) }
     override val incrementalParser: IncrementalParser get() = javaIncrementalParser
 
     // --- JvmIndexScopeProvider: the roots this analyzer contributes to the workspace index scope ----------
 
     /** Library jars on the classpath (dirs / non-jar entries are excluded — those index via source roots). */
-    override val classpathJarPaths: List<java.nio.file.Path> =
-        env.classpath.filter { it.isFile && it.name.endsWith(".jar") }.map { it.toPath() }
+    override val classpathJarPaths: List<java.nio.file.Path> by lazy {
+        JavaEnvironment.usableClasspath(classpath).filter { it.isFile && it.name.endsWith(".jar") }.map { it.toPath() }
+    }
 
     override val sourceRootPaths: List<java.nio.file.Path> =
-        env.sourceRoots.filter { it.isDirectory }.map { it.toPath() }
+        sourceRoots.filter { it.isDirectory }.map { it.toPath() }
 
-    override val jdkHome: java.nio.file.Path? = env.jdkHome?.toPath()
+    override val jdkHome: java.nio.file.Path? = jdkHome?.toPath()
+
+    /** Close the environment if one was ever built; an analyzer that only served its index scope has none. */
+    override fun dispose() {
+        if (envLazy.isInitialized()) IntellijPsiHost.withParseLock { runCatching { env.close() } }
+    }
 
     /** Attached library/SDK SOURCE archives. Seeded by [JavaLanguageBackend] from the compilation context
      *  (`-sources.jar`s + the derived JDK `src.zip` / Android `sources/`) and grown by the host via
@@ -105,30 +141,40 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
     /** Synthetic classes (Android R/BuildConfig/…) the facade should resolve, injected by the host. Forwarded
      *  to the env's injected element finder. */
     var syntheticClassProvider: () -> List<dev.ide.lang.synthetic.SyntheticClass>
-        get() = env.syntheticProvider
-        set(value) { env.syntheticProvider = value }
+        get() = syntheticProviderValue
+        set(value) {
+            syntheticProviderValue = value
+            if (envLazy.isInitialized()) env.syntheticProvider = value
+        }
+    private var syntheticProviderValue: () -> List<dev.ide.lang.synthetic.SyntheticClass> = { emptyList() }
 
     /** Open-buffer overlay (FQN → live editor text) so a dependent resolves a not-yet-saved edit, injected by
      *  the host. Forwarded to the env's injected element finder. */
     var overlayProvider: () -> Map<String, CharArray>
-        get() = env.overlayProvider
-        set(value) { env.overlayProvider = value }
+        get() = overlayProviderValue
+        set(value) {
+            overlayProviderValue = value
+            if (envLazy.isInitialized()) env.overlayProvider = value
+        }
+    private var overlayProviderValue: () -> Map<String, CharArray> = { emptyMap() }
 
     /** Inheritor lookup for `new`-position subtype completion, injected by the host (a subtype-index BFS over
      *  a supertype FQN). Default empty keeps completion working index-free. */
     var subtypeIndexQuery: (String) -> List<JavaCompletion.IndexedType> = { emptyList() }
 
-    private val completion: JavaCompletion = JavaCompletion(
-        env,
-        typeSearch = { prefix ->
-            // Read `indexService` lazily (host sets it after construction). Simple-name prefix → candidate types.
-            indexService?.prefixAll<ClassNameValue>(ClassNameIndex.ALL, prefix, 50)
-                ?.map { JavaCompletion.IndexedType(it.value.fqn, it.value.kind) }
-                ?.toList()
-                ?: emptyList()
-        },
-        subtypeSearch = { superFqn -> subtypeIndexQuery(superFqn) },
-    )
+    private val completion: JavaCompletion by lazy {
+        JavaCompletion(
+            env,
+            typeSearch = { prefix ->
+                // Read `indexService` lazily (host sets it after construction). Simple-name prefix → candidate types.
+                indexService?.prefixAll<ClassNameValue>(ClassNameIndex.ALL, prefix, 50)
+                    ?.map { JavaCompletion.IndexedType(it.value.fqn, it.value.kind) }
+                    ?.toList()
+                    ?: emptyList()
+            },
+            subtypeSearch = { superFqn -> subtypeIndexQuery(superFqn) },
+        )
+    }
 
     override fun completionContributions(): List<CompletionContribution> =
         listOf(CompletionContribution(completion))
@@ -150,10 +196,10 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
     ): List<dev.ide.lang.dom.TextRange> =
         IntellijPsiHost.withParseLock { dev.ide.lang.java.rename.JavaRename.referencesIn(env.parse(name, text), target) }
 
-    override val importOrganizer: dev.ide.lang.imports.ImportOrganizerService = JavaImportOrganizer(env::parse)
+    override val importOrganizer: dev.ide.lang.imports.ImportOrganizerService = JavaImportOrganizer { name, text -> env.parse(name, text) }
     override val folding: FoldingService = JavaFolder(::psiFor)
     override val semanticHighlighter: SemanticHighlightService = JavaSemanticHighlighter(::psiFor)
-    override val signatureHelp: SignatureHelpService = JavaSignatureHelp(env)
+    override val signatureHelp: SignatureHelpService by lazy { JavaSignatureHelp(env) }
     override val inlayHints: InlayHintService = JavaInlayHints(::psiFor)
 
     private val version = AtomicLong(0)
@@ -181,7 +227,7 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
 
     fun invalidateSyntheticClasses() {
         cache.clear()
-        env.dropCaches()
+        if (envLazy.isInitialized()) env.dropCaches()
     }
 
     /** Parse (and cache) [file] from its current on-disk bytes; re-parses when the content hash changes. */

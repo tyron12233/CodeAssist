@@ -167,7 +167,6 @@ class ForkedKotlinCompilerTest {
         modeProvider = { mode },
         maxHeapMbProvider = { heapMb },
         workerCountProvider = { 1 },
-        hostsBuilds = { true },
         androidJar = fixture.androidJar.toPath(),
         minApi = 26,
         fallback = fallback,

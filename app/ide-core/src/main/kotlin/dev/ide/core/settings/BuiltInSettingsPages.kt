@@ -26,6 +26,13 @@ object BuiltInSettingsPages {
     /** Project-scoped Compose Preview page — the interpreter sandbox toggles (see `PreviewSandboxPolicy`). */
     const val PREVIEW = "preview"
 
+    /** Choice key on the [BUILD_RUNTIME] page: the "Low memory mode" override of the detected device tier
+     *  (`auto` / `on` / `off`, see [dev.ide.platform.DeviceMemory]). Applied when a project opens. */
+    const val LOW_MEMORY_MODE = "lowMemoryMode"
+
+    /** Full preference key of [LOW_MEMORY_MODE]. */
+    const val LOW_MEMORY_MODE_KEY = "settings.$BUILD_RUNTIME.$LOW_MEMORY_MODE"
+
     /** Toggle key on the [BUILD_RUNTIME] page: route builds/runs through the isolated `:build` process. */
     const val SEPARATE_PROCESS = "separateProcess"
 
@@ -258,6 +265,16 @@ object BuiltInSettingsPages {
     // by the backend (it reads `settings.buildRuntime.separateProcess`); see docs/build-process-isolation.md.
     private val buildRuntime = page(BUILD_RUNTIME, "Build Runtime", "hammer", 45) {
         listOf(
+            SettingControl.Choice(
+                LOW_MEMORY_MODE, "Low memory mode",
+                "Use smaller caches, skip background warm-ups, and free memory whenever the IDE leaves the screen, so the system is less likely to close it. Auto turns this on for devices with little memory. Takes effect the next time you open a project.",
+                default = dev.ide.platform.DeviceMemory.MODE_AUTO,
+                options = listOf(
+                    SettingControl.Choice.Option(dev.ide.platform.DeviceMemory.MODE_AUTO, "Auto"),
+                    SettingControl.Choice.Option(dev.ide.platform.DeviceMemory.MODE_ON, "On"),
+                    SettingControl.Choice.Option(dev.ide.platform.DeviceMemory.MODE_OFF, "Off"),
+                ),
+            ),
             SettingControl.Toggle(
                 SEPARATE_PROCESS, "Build in a separate process",
                 "Run builds and your program in an isolated process so an out-of-memory crash can't take down the IDE. Off = build in-process (uses less memory, no isolation). Takes effect the next time you open a project.",
