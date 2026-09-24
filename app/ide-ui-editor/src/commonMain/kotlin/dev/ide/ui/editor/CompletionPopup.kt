@@ -33,8 +33,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -132,11 +134,18 @@ private fun CompletionListPanel(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             )
         } else {
+            // Row text styles: a notch smaller than the editor's code style, with tight line height so the two
+            // stacked lines stay compact. Built once per theme here rather than per row per recomposition.
+            val codeType = Ide.type.code
+            val codeSmallType = Ide.type.codeSmall
+            val labelStyle = remember(codeType) { codeType.copy(fontSize = 12.sp, lineHeight = 15.sp) }
+            val detailStyle = remember(codeSmallType) { codeSmallType.copy(fontSize = 11.sp, lineHeight = 13.sp) }
+            val keys = remember(items) { completionRowKeys(items) }
             LazyColumn(state = listState, modifier = Modifier.heightIn(max = maxListHeight)) {
-                itemsIndexed(items) { index, item ->
+                itemsIndexed(items, key = { index, _ -> keys[index] }) { index, item ->
                     val sel = index == selectedIndex
                     CompletionRow(
-                        item, prefix, sel,
+                        item, prefix, sel, labelStyle, detailStyle,
                         onPick = { onPick(item) }, onHover = { onHover(index) },
                         onInfo = if (sel) onInfo else null,
                     )
@@ -186,20 +195,33 @@ private fun DocPanel(item: UiCompletionItem, doc: String, maxHeight: Dp, modifie
     }
 }
 
+/**
+ * One stable, unique LazyColumn key per row, so a narrowing keystroke keeps the rows that survive instead of
+ * recomposing every slot by position. Built from the item's identity fields; overloads and other items that
+ * agree on all of them get an occurrence suffix, because a repeated key crashes the list.
+ */
+internal fun completionRowKeys(items: List<UiCompletionItem>): List<String> {
+    val seen = HashMap<String, Int>(items.size * 2)
+    return items.map { item ->
+        val base = item.kind.name + "|" + item.label + "|" + (item.detail ?: "") + "|" + (item.container ?: "")
+        val n = seen[base] ?: 0
+        seen[base] = n + 1
+        if (n == 0) base else base + "#" + n
+    }
+}
+
 @Composable
 private fun CompletionRow(
     item: UiCompletionItem,
     prefix: String,
     selected: Boolean,
+    labelStyle: TextStyle,
+    detailStyle: TextStyle,
     onPick: () -> Unit,
     onHover: () -> Unit,
     // Non-null on the selected row when docs are reachable via flip (narrow screens): shows a tappable ⓘ.
     onInfo: (() -> Unit)? = null,
 ) {
-    // Row text styles: a notch smaller than the editor's code style, with tight line height so the two stacked
-    // lines stay compact. Kept local so the editor's own Ide.type.code is untouched.
-    val labelStyle = Ide.type.code.copy(fontSize = 12.sp, lineHeight = 15.sp)
-    val detailStyle = Ide.type.codeSmall.copy(fontSize = 11.sp, lineHeight = 13.sp)
     Row(
         Modifier
             .fillMaxWidth()
@@ -269,11 +291,16 @@ private fun CompletionRow(
  * bolds each matched letter, adjacent ones merged into one span so the rendered runs stay legible.
  */
 @Composable
-private fun highlightMatch(label: String, prefix: String): AnnotatedString = buildAnnotatedString {
+private fun highlightMatch(label: String, prefix: String): AnnotatedString {
+    val accent = MaterialTheme.colorScheme.primary
+    return remember(label, prefix, accent) { buildHighlightedLabel(label, prefix, accent) }
+}
+
+private fun buildHighlightedLabel(label: String, prefix: String, accent: Color): AnnotatedString = buildAnnotatedString {
     append(label)
     if (prefix.isEmpty()) return@buildAnnotatedString
     val pos = matchPositions(label, prefix) ?: return@buildAnnotatedString
-    val style = SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+    val style = SpanStyle(color = accent, fontWeight = FontWeight.Bold)
     var k = 0
     while (k < pos.size) {
         val runStart = pos[k]

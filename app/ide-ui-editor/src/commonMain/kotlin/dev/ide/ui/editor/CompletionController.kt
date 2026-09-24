@@ -72,7 +72,8 @@ internal class CompletionController(
      *  and [canNarrowLocally] keeps failing. Skipped for [immediate] (Ctrl-Space) and on a token change (a
      *  fresh context — e.g. after `.` — genuinely needs a new query). */
     fun refresh(immediate: Boolean = false) {
-        val tokenStart = tokenStartAt(session.doc.text, session.selection.start)
+        // Read the rope directly: this runs before the debounce on every keystroke, so it must not build the text.
+        val tokenStart = tokenStartAt(session.doc.chars, session.selection.start)
         if (!immediate && job?.isActive == true && inFlightTokenStart == tokenStart) return
         job?.cancel()
         inFlightTokenStart = tokenStart
@@ -139,8 +140,35 @@ internal class CompletionController(
         }
     }
 
-    fun snapshotShown(tokenStart: Int, items: List<UiCompletionItem>, prefix: String) {
-        shown = ShownCompletion(tokenStart, items, prefix)
+    /** Remember [snapshot] as the last good render state. The same instance arriving again writes nothing. */
+    fun snapshotShown(snapshot: ShownCompletion) {
+        shown = snapshot
+    }
+
+    // Memo of the last filter: the editor asks for the displayed items on every recomposition (a scroll frame, a
+    // caret blink of an overlay), and the answer only changes with the session or the typed prefix.
+    private var memoSession: CompletionSession? = null
+    private var memoPrefix: String? = null
+    private var memoItems: List<UiCompletionItem> = emptyList()
+    private var memoShown: ShownCompletion? = null
+
+    /** [live]'s items narrowed to [prefix], the same list instance for as long as neither changes. */
+    fun displayedFor(live: CompletionSession?, prefix: String): List<UiCompletionItem> {
+        if (live == null) return emptyList()
+        if (live !== memoSession || prefix != memoPrefix) {
+            memoItems = live.filtered(prefix)
+            memoSession = live
+            memoPrefix = prefix
+            memoShown = null
+        }
+        return memoItems
+    }
+
+    /** The render state for the last [displayedFor] answer, or null when it had no items. Stable per answer. */
+    fun shownForDisplayed(): ShownCompletion? {
+        val live = memoSession ?: return null
+        if (memoItems.isEmpty()) return null
+        return memoShown ?: ShownCompletion(live.tokenStart, memoItems, memoPrefix.orEmpty()).also { memoShown = it }
     }
 }
 

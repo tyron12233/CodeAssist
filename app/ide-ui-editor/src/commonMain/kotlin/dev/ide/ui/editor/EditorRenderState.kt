@@ -16,8 +16,9 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiFileSymbol
 import dev.ide.ui.editor.core.EditorDocument
 import dev.ide.ui.editor.core.EditorSession
-import dev.ide.ui.editor.core.InlayPiece
 import dev.ide.ui.editor.core.LineRenderCache
+import dev.ide.ui.editor.folding.FoldModel
+import dev.ide.ui.editor.folding.FoldedLineInfo
 import dev.ide.ui.theme.CaTypography
 import dev.ide.ui.theme.CodeAssistColors
 import dev.ide.ui.theme.colors.ResolvedColorScheme
@@ -55,8 +56,11 @@ internal class EditorRenderState(private val session: EditorSession) {
      */
     var decoByLine: Map<Int, List<DecoSeg>> = emptyMap()
 
+    /** Keeps the render cache's semantic / inlay / decoration overlays in step with the session. */
+    internal val overlays = OverlayBinner()
+
     internal lateinit var measurer: TextMeasurer
-    internal lateinit var compositeCache: HashMap<Int, TextLayoutResult>
+    internal lateinit var compositeCache: HashMap<Int, CompositeEntry>
     internal lateinit var gutterNumberCache: HashMap<Int, TextLayoutResult>
 
     /**
@@ -116,17 +120,45 @@ internal class EditorRenderState(private val session: EditorSession) {
             measurer.measure(AnnotatedString(n.toString()), style = gutterStyle, softWrap = false, maxLines = 1)
         }
 
+    /** A measured composite plus what it was built from, so an entry survives edits to other lines. */
+    internal class CompositeEntry(
+        val startRev: Int,
+        val endRev: Int,
+        val endLine: Int,
+        val prefixCol: Int,
+        val suffixCol: Int,
+        val placeholder: String,
+        val layout: TextLayoutResult,
+    )
+
     /**
      * A collapsed fold-start line renders its composite "prefix + placeholder + suffix" on one row (e.g.
-     * `fun f() {...}`). Measured on demand (only the handful of visible fold-start lines) and cached until the
-     * buffer or fold set changes; the placeholder run is dimmed + chip-tinted so it reads as foldable. The real
-     * lexical coloring is carried onto the composite so a folded line reads in the same syntax colors.
+     * `fun f() {...}`). Measured on demand (only the handful of visible fold-start lines) and cached against the
+     * [dev.ide.ui.editor.core.LineStyles] revisions of its start and end lines plus the fold's columns, so typing
+     * elsewhere keeps it; the placeholder run is dimmed + chip-tinted so it reads as foldable. The real lexical
+     * coloring is carried onto the composite so a folded line reads in the same syntax colors.
      */
-    fun compositeLayoutFor(line: Int): TextLayoutResult = compositeCache.getOrPut(line) {
+    fun compositeLayoutFor(line: Int): TextLayoutResult {
         val fm = session.foldModel
         val info = fm.foldStartingAt(line)
         val doc = session.doc
-        if (info == null) return@getOrPut renderCache.layoutFor(line, doc, session.styles)
+        if (info == null) return renderCache.layoutFor(line, doc, session.styles)
+        val startRev = session.styles.revOf(line)
+        val endRev = session.styles.revOf(info.endLine)
+        val prefixCol = info.prefixEnd - doc.lineStart(line)
+        val suffixCol = info.suffixStart - doc.lineStart(info.endLine)
+        compositeCache[line]?.let { e ->
+            if (e.startRev == startRev && e.endRev == endRev && e.endLine == info.endLine &&
+                e.prefixCol == prefixCol && e.suffixCol == suffixCol && e.placeholder == info.placeholder
+            ) return e.layout
+        }
+        val layout = measureComposite(line, info, fm, doc)
+        if (compositeCache.size >= COMPOSITE_CACHE_MAX) compositeCache.clear()
+        compositeCache[line] = CompositeEntry(startRev, endRev, info.endLine, prefixCol, suffixCol, info.placeholder, layout)
+        return layout
+    }
+
+    private fun measureComposite(line: Int, info: FoldedLineInfo, fm: FoldModel, doc: EditorDocument): TextLayoutResult {
         val text = fm.compositeText(line, doc)
         val prefixLen = (info.prefixEnd - doc.lineStart(line)).coerceIn(0, text.length)
         val phEnd = (prefixLen + info.placeholder.length).coerceAtMost(text.length)
@@ -152,7 +184,12 @@ internal class EditorRenderState(private val session: EditorSession) {
             )
         }
         ranges.add(AnnotatedString.Range(foldPlaceholderStyle, prefixLen, phEnd))
-        measurer.measure(AnnotatedString(text, spanStyles = ranges), style = codeStyle, softWrap = false, maxLines = 1)
+        return measurer.measure(AnnotatedString(text, spanStyles = ranges), style = codeStyle, softWrap = false, maxLines = 1)
+    }
+
+    private companion object {
+        /** Collapsed folds visible at once are few; this only bounds a file with a great many of them. */
+        const val COMPOSITE_CACHE_MAX = 256
     }
 }
 
@@ -224,37 +261,14 @@ internal fun rememberEditorRenderState(
 
     // Inlay hints, semantic tokens, folds and @Preview markers are produced by the highlighting daemon and live
     // on the session (shifted in place between passes); the render cache re-shapes only the lines whose spans
-    // actually changed (per-line stamp), so we push the current overlay maps to it each recomposition.
+    // actually changed (per-line stamp). The binner pushes a fresh pass over the whole file and an edit over
+    // just the lines it touched (see [OverlayBinner]). The language backend's hints and the plugin tier's are
+    // held separately on the session and render as one run of phantom text; a plugin's recoloring and
+    // strikethrough decorations layer OVER the semantic tokens (see mergeSpanLayers), and its geometric ones
+    // go to the canvas as `decoByLine`.
     val inlayStyle = remember(editorColors, colors) { editorColors.inlayHintStyle(colors.textTertiary) }
-    // The language backend's hints and the plugin tier's are held separately on the session (each pass
-    // replaces its own list wholesale), and are one map here because they render as one run of phantom text.
-    val inlayHints = session.inlayHints
-    val pluginInlays = session.pluginInlays
-    val perLineInlays = remember(inlayHints, pluginInlays, session.doc) {
-        if (inlayHints.isEmpty() && pluginInlays.isEmpty()) emptyMap() else buildMap<Int, MutableList<InlayPiece>> {
-            val d = session.doc
-            for (h in inlayHints + pluginInlays) {
-                val off = h.offset.coerceIn(0, d.length)
-                val line = d.lineForOffset(off)
-                val col = off - d.lineStart(line)
-                val txt = (if (h.paddingLeft) " " else "") + h.text + (if (h.paddingRight) " " else "")
-                getOrPut(line) { ArrayList() }.add(InlayPiece(col, txt))
-            }
-        }
-    }
-    state.renderCache.setInlays(perLineInlays, inlayStyle)
-    val perLineSemantic = remember(session.semanticTokens, session.doc, editorColors) {
-        perLineSemanticSpans(session.semanticTokens, session.doc, editorColors)
-    }
-    // A plugin's recoloring/strikethrough decorations layer OVER the semantic tokens (see mergeSpanLayers);
-    // its geometric ones go to the canvas as `decoByLine` below.
-    val perLineDecoSpans = remember(session.textDecorations, session.doc, colors) {
-        perLineDecorationSpans(session.textDecorations, session.doc, colors)
-    }
-    state.renderCache.setSemanticSpans(mergeSpanLayers(perLineSemantic, perLineDecoSpans))
-    state.decoByLine = remember(session.textDecorations, session.doc, colors) {
-        perLineDecorationSegs(session.textDecorations, session.doc, colors)
-    }
+    state.overlays.sync(session, state.renderCache, editorColors, colors, inlayStyle)
+    state.decoByLine = state.overlays.decoByLine
 
     val foldPlaceholderStyle = remember(editorColors, colors) {
         // A faint chip behind `...` — a low-alpha overlay (NOT hairline.copy(alpha=…), which would replace the
@@ -263,9 +277,8 @@ internal fun rememberEditorRenderState(
         editorColors.foldPlaceholderStyle(colors.textTertiary, chipBg)
     }
     state.foldPlaceholderStyle = foldPlaceholderStyle
-    state.compositeCache = remember(session.doc, session.foldModel, codeStyle, foldPlaceholderStyle, palette) {
-        HashMap()
-    }
+    // Entries validate themselves against the lines they were built from, so only a style change drops them.
+    state.compositeCache = remember(measurer, codeStyle, foldPlaceholderStyle, palette) { HashMap() }
     state.foldableStartLines = remember(session.foldRegions, session.doc) {
         session.foldRegions.mapTo(HashSet()) { session.doc.lineForOffset(it.start) }
     }

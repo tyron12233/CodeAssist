@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -466,11 +467,17 @@ internal fun CompactLayout(
                     // While the keyboard is up: a coding-symbol accessory bar sits directly above it. Off-keyboard,
                     // the dock's collapsed bar takes the slot instead.
                     if (keyboardOpen && state.active != null) {
+                        // Derived: the diagnostics list is replaced on every edit, and this scope should
+                        // recompose only when the jump key appears or goes away.
+                        val activeSession = state.active?.session
+                        val hasDiagnostics by remember(activeSession) {
+                            derivedStateOf { activeSession?.diagnostics?.isNotEmpty() == true }
+                        }
                         EditorSymbolBar(
                             symbols = state.symbolKeys.ifEmpty { DEFAULT_SYMBOL_KEYS },
                             onSymbol = { sym -> state.active?.session?.commitText(sym) },
                             onAction = { id -> dispatchSymbolAction(state, id) },
-                            showDiagnosticJump = state.active?.session?.diagnostics?.isNotEmpty() == true,
+                            showDiagnosticJump = hasDiagnostics,
                             // No gear here — the Symbols & Macros editor lives in Settings ▸ Symbols & Macros.
                             // The dismiss key only where the platform offers no way out of the keyboard
                             // itself; Android's back already does it. See [hasSystemBack].

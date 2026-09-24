@@ -149,4 +149,27 @@ class LineRenderCacheTest {
             assertEquals(model[line].orEmpty(), revs.piecesFor(line), "line $line after $edits")
         }
     }
+
+    @Test
+    fun setLineBumpsOnlyOnAChangeAndClearsWithAnEmptyList() {
+        val revs = InlayRevisions()
+        revs.update(mapOf(0 to listOf(InlayPiece(1, "a")), 3 to listOf(InlayPiece(2, "b"))))
+        val s0 = revs.stampOf(0)
+        val s3 = revs.stampOf(3)
+        revs.setLine(3, listOf(InlayPiece(2, "b"))) // same pieces
+        assertEquals(s3, revs.stampOf(3), "an unchanged line keeps its stamp")
+        revs.setLine(3, listOf(InlayPiece(4, "z"), InlayPiece(1, "y")))
+        assertNotEquals(s3, revs.stampOf(3))
+        assertEquals(listOf(InlayPiece(1, "y"), InlayPiece(4, "z")), revs.piecesFor(3), "normalized to column order")
+        revs.setLine(0, emptyList())
+        assertNotEquals(s0, revs.stampOf(0), "clearing a line bumps it")
+        assertTrue(revs.piecesFor(0).isEmpty())
+        revs.setLine(9, listOf(InlayPiece(0, "far")))
+        assertEquals(listOf(InlayPiece(0, "far")), revs.piecesFor(9), "a line past the end grows the store")
+        val s9 = revs.stampOf(9)
+        // A full update afterwards still diffs against what the lines hold now.
+        revs.update(mapOf(9 to listOf(InlayPiece(0, "far"))))
+        assertEquals(s9, revs.stampOf(9))
+        assertTrue(revs.piecesFor(3).isEmpty())
+    }
 }

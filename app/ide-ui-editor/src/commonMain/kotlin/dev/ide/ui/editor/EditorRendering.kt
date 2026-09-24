@@ -290,8 +290,12 @@ internal fun DrawScope.drawEditor(
 
         // occurrence highlights (lowest layer): every textual use of the identifier under the caret, tinted
         // subtly. The selection / find layers paint over the current one.
+        // Both match lists are sorted and non-overlapping, so only the visible slice is walked, not the file's.
+        val visibleFrom = doc.lineStart(firstVisible)
+        val visibleTo = doc.lineEnd(lastVisible)
         if (occurrences.isNotEmpty()) {
-            for (m in occurrences) {
+            for (idx in visibleMatchIndices(occurrences, visibleFrom, visibleTo)) {
+                val m = occurrences[idx]
                 val sLine = doc.lineForOffset(m.start)
                 val eLine = doc.lineForOffset(m.end)
                 if (eLine < firstVisible || sLine > lastVisible) continue
@@ -306,7 +310,8 @@ internal fun DrawScope.drawEditor(
 
         // find-match highlights (under the selection/text): every match tinted, the current one stronger.
         if (findMatches.isNotEmpty()) {
-            for ((idx, m) in findMatches.withIndex()) {
+            for (idx in visibleMatchIndices(findMatches, visibleFrom, visibleTo)) {
+                val m = findMatches[idx]
                 val sLine = doc.lineForOffset(m.start)
                 val eLine = doc.lineForOffset(m.end)
                 if (eLine < firstVisible || sLine > lastVisible) continue
@@ -595,6 +600,28 @@ internal fun DrawScope.drawEditor(
 }
 
 /** Cap on pinned sticky-header rows (deeper nesting drops the outermost), so they never eat the viewport. */
+/**
+ * The index range of [matches] (sorted by start, non-overlapping, so their ends are sorted too) that can touch
+ * the document range `[from, to]`: every match ending at or after [from] and starting at or before [to]. Two
+ * binary searches, so a frame over a file with thousands of matches visits only the visible handful.
+ */
+internal fun visibleMatchIndices(matches: List<Match>, from: Int, to: Int): IntRange {
+    var lo = 0
+    var hi = matches.size
+    while (lo < hi) { // first match whose end reaches [from]
+        val mid = (lo + hi) ushr 1
+        if (matches[mid].end < from) lo = mid + 1 else hi = mid
+    }
+    val first = lo
+    lo = first
+    hi = matches.size
+    while (lo < hi) { // first match starting past [to]
+        val mid = (lo + hi) ushr 1
+        if (matches[mid].start <= to) lo = mid + 1 else hi = mid
+    }
+    return first until lo
+}
+
 internal const val STICKY_MAX = 3
 
 /** Tab width the indent-guide layer counts each `\t` as (a flat advance, matching the original guide code). */

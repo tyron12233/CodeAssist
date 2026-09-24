@@ -89,6 +89,9 @@ class LineStyles(private val language: CodeLanguage) {
         if (firstLine > 0) ensureTokenized(firstLine - 1)
         val oldHigh = highWater
         val lastRemovedOld = firstLine + removed - 1 // old index of the last removed line
+        // The entry state the first line after the edit was lexed with, when it was lexed at all. If the edited
+        // lines still exit in that state, that line (and so everything after it) is unchanged.
+        val oldEntryAfterEdit = if (lastRemovedOld <= oldHigh) exits[lastRemovedOld] else -1
 
         // Resize the parallel arrays at the edit point, shifting the tail exactly ONCE. The old code did a
         // single add(firstLine)/removeAt(firstLine) per line, each of which moves the whole tail — so a bulk
@@ -124,13 +127,27 @@ class LineStyles(private val language: CodeLanguage) {
         var i = firstLine
         while (i <= highWater) {
             val fresh = i < firstLine + inserted // directly edited lines: always re-tokenize
+            // The first untouched line lexed from the same entry state as before: nothing below changed.
+            if (i == firstLine + inserted && entry == oldEntryAfterEdit) break
             val oldExit = if (fresh) -1 else exits[i]
             val res = styleLine(doc.lineText(i), entry, language)
-            spans[i] = res.spans; exits[i] = res.exitState; revs[i] = ++stamp
+            // A rippled line keeps its revision when its spans came out the same, so the render cache keeps
+            // its layout; an edited line always gets a fresh one.
+            if (fresh || !sameSpans(spans[i], res.spans)) revs[i] = ++stamp
+            spans[i] = res.spans; exits[i] = res.exitState
             entry = res.exitState
             i++
             if (!fresh && res.exitState == oldExit) break // state stabilized; lines below are still valid
         }
         return i
+    }
+
+    private fun sameSpans(a: List<LineSpan>, b: List<LineSpan>): Boolean {
+        if (a.size != b.size) return false
+        for (k in a.indices) {
+            val x = a[k]; val y = b[k]
+            if (x.start != y.start || x.end != y.end || x.type != y.type) return false
+        }
+        return true
     }
 }

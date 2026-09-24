@@ -3,6 +3,8 @@ package dev.ide.ui.editor
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import dev.ide.ui.editor.core.newlineHandlerFor
+import dev.ide.ui.editor.core.scanBackward
+import dev.ide.ui.editor.core.scanForward
 
 private val OPEN_TO_CLOSE = mapOf('(' to ')', '[' to ']', '{' to '}')
 private val CLOSE_TO_OPEN = OPEN_TO_CLOSE.entries.associate { (k, v) -> v to k }
@@ -122,26 +124,23 @@ fun matchingBracket(text: CharSequence, caret: Int): Pair<Int, Int>? {
     for (probe in intArrayOf(caret - 1, caret)) {
         if (probe < 0 || probe >= text.length) continue
         val ch = text[probe]
+        // The scans read the rope leaf by leaf (see [scanForward]); this runs on every caret move beside a bracket.
         if (ch in OPEN_TO_CLOSE) {
             val close = OPEN_TO_CLOSE.getValue(ch)
             var depth = 0
-            var i = probe
-            val limit = minOf(text.length, probe + BRACKET_SCAN_LIMIT)
-            while (i < limit) {
-                val c = text[i]
-                if (c == ch) depth++ else if (c == close) { depth--; if (depth == 0) return probe to i }
-                i++
+            val found = text.scanForward(probe, minOf(text.length, probe + BRACKET_SCAN_LIMIT)) { _, c ->
+                if (c == ch) depth++ else if (c == close) depth--
+                c == close && depth == 0
             }
+            if (found >= 0) return probe to found
         } else if (ch in CLOSE_TO_OPEN) {
             val open = CLOSE_TO_OPEN.getValue(ch)
             var depth = 0
-            var i = probe
-            val limit = maxOf(0, probe - BRACKET_SCAN_LIMIT)
-            while (i >= limit) {
-                val c = text[i]
-                if (c == ch) depth++ else if (c == open) { depth--; if (depth == 0) return i to probe }
-                i--
+            val found = text.scanBackward(probe, maxOf(0, probe - BRACKET_SCAN_LIMIT)) { _, c ->
+                if (c == ch) depth++ else if (c == open) depth--
+                c == open && depth == 0
             }
+            if (found >= 0) return found to probe
         }
     }
     return null
