@@ -144,7 +144,12 @@ object DomPatterns {
     fun invocation(name: String): DomNodePattern = invocation().withCalleeNamed(name)
 
     /** Matches any non-null node — the default "applies everywhere" pattern. */
-    fun anyNode(): ElementPattern<DomNode> = ElementPattern { it != null }
+    fun anyNode(): ElementPattern<DomNode> = ANY_NODE
+
+    /** Whether [pattern] is [anyNode]: it accepts every position, so a caller can skip computing one for it. */
+    fun isAnyNode(pattern: ElementPattern<DomNode>): Boolean = pattern === ANY_NODE
+
+    private val ANY_NODE = ElementPattern<DomNode> { it != null }
 }
 
 /** Logical combinators over any [ElementPattern]. */

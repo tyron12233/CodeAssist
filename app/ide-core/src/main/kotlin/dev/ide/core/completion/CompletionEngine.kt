@@ -1,5 +1,6 @@
 package dev.ide.core.completion
 
+import dev.ide.lang.patterns.DomPatterns
 import dev.ide.lang.LanguageExtensionIndex
 import dev.ide.lang.LanguageId
 import dev.ide.lang.appliesTo
@@ -48,7 +49,9 @@ class CompletionEngine(private val extensions: ExtensionRegistry) {
         // keystroke, and the registered set is the same from one completion to the next, so the index is
         // built once and reused until the registry actually changes.
         val runList = (contributorsFor(params.language) + perCall.filter { it.appliesTo(params.language) })
-            .filter { params.position == null || it.pattern.accepts(params.position) }
+            // A contributor that accepts any position is not asked about this one, so the position (and the
+            // parse behind it) is only computed when some contributor's pattern actually needs it.
+            .filter { DomPatterns.isAnyNode(it.pattern) || params.position == null || it.pattern.accepts(params.position) }
             .filter { options.allows(it.contributor.id) }
             .sortedBy { it.order }
 

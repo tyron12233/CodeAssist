@@ -2083,20 +2083,19 @@ class IdeServices private constructor(
         // Preemption is NOT a failure: a superseded request surfaces as EngineCanceledException and must
         // reach the host (which keeps the current popup) rather than degrade to an empty list that clobbers it.
         return try {
-            // Parse the LIVE snapshot (not the cached lastByFile tree, which can lag the just-typed buffer)
-            // so `position`/`parsedFile` reflect the completion buffer — the receiver-type-driven postfix
-            // contributor depends on it. parseFull reuses the cached parse when the text is unchanged.
-            val parsed =
-                analyzer?.let { runCatching { it.incrementalParser.parseFull(snapshot) }.getOrNull() }
-            val params = CompletionParams(
+            // The LIVE snapshot's parse (not the cached lastByFile tree, which can lag the just-typed buffer)
+            // backs `position`/`parsedFile` — the receiver-type-driven postfix contributor depends on it. It is
+            // made on first use: the language's own contributor parses the buffer its own way, and most
+            // keystrokes reach no contributor that reads the host's tree, so it would be a second parse of the
+            // whole file per keystroke for nothing. parseFull reuses the cached parse when the text is unchanged.
+            val params = CompletionParams.lazilyParsed(
                 document = snapshot,
                 offset = safeOffset,
                 prefix = prefix,
                 language = lang,
                 trigger = CompletionTrigger.Explicit,
                 replacementRange = replaceRange,
-                position = parsed?.nodeAt(safeOffset),
-                parsedFile = parsed,
+                parse = { analyzer?.let { runCatching { it.incrementalParser.parseFull(snapshot) }.getOrNull() } },
                 typeResolver = analyzer?.let { a -> { node -> runCatching { a.resolveType(node) }.getOrNull() } },
             )
             completionEngine.complete(

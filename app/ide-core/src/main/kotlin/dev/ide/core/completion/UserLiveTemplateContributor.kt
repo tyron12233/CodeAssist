@@ -71,17 +71,19 @@ class UserLiveTemplateContributor(
         val keyStart = params.replacementRange.start
         val dot = dotBefore(text, keyStart)
         val receiverText: String
-        val receiverType: TypeRef?
         val recvStart: Int
         if (dot != null) {
             recvStart = receiverStart(text, dot)
             receiverText = text.subSequence(recvStart.coerceAtMost(dot), dot).toString().trim()
-            val node = params.parsedFile?.nodeAt((dot - 1).coerceIn(0, (text.length - 1).coerceAtLeast(0)))
-            receiverType = node?.let { params.typeResolver?.invoke(it) }
         } else {
             receiverText = ""
-            receiverType = null
             recvStart = -1
+        }
+        // Resolved only for a macro that tests it: reading the tree may parse the buffer.
+        val receiverType: TypeRef? by lazy {
+            if (dot == null) null
+            else params.parsedFile?.nodeAt((dot - 1).coerceIn(0, (text.length - 1).coerceAtLeast(0)))
+                ?.let { params.typeResolver?.invoke(it) }
         }
 
         for (m in user) {
@@ -91,7 +93,7 @@ class UserLiveTemplateContributor(
                 if (!m.abbreviation.startsWith(prefix, ignoreCase = true)) continue
                 val fqn = m.receiverType!!
                 val matches = if (m.static) staticMatches(receiverText, fqn)
-                else receiverType != null && typeMatches(receiverType, fqn)
+                else receiverType?.let { typeMatches(it, fqn) } == true
                 if (!matches) continue
                 if (result.elements.any { it.label == m.abbreviation }) continue
                 val exp = expand(m) ?: continue
