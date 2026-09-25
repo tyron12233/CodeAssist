@@ -90,6 +90,18 @@ interface FileActions {
      */
     fun installApk(path: String) = Unit
 
+    companion object {
+        /**
+         * Whether [path] is an APK the IDE's own build wrote: one under a module's `build/outputs/apk/`.
+         * Only those are offered to the installer. An `.apk` anywhere else in a project arrived from outside
+         * it (a clone, a copied file) and is revealed instead, like any other binary.
+         */
+        fun isBuiltApk(path: String): Boolean {
+            val p = path.replace('\\', '/')
+            return p.endsWith(".apk", ignoreCase = true) && "/build/outputs/apk/" in p
+        }
+    }
+
     /** A no-op bridge for hosts without file integration (the default). */
     object None : FileActions {
         override val canImport: Boolean = false

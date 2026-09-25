@@ -19,8 +19,10 @@ import java.io.File
  */
 internal class AndroidFileOps(private val activity: ComponentActivity) {
 
-    /** Hand the APK at [path] to the system package installer (the OS install-confirmation UI). */
+    /** Hand the APK at [path] to the system package installer (the OS install-confirmation UI). Only an APK
+     *  the IDE's build wrote is accepted; see [dev.ide.ui.backend.FileActions.isBuiltApk]. */
     fun promptInstall(path: String) = runCatching {
+        require(dev.ide.ui.backend.FileActions.isBuiltApk(path)) { "not a build output: $path" }
         val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", File(path))
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")

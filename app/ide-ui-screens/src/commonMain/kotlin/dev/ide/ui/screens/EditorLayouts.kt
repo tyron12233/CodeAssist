@@ -96,15 +96,16 @@ private val LeftPaneWidth = 320.dp
 private val RightPaneWidth = 420.dp
 
 /**
- * Open a file tapped in the tree. A built `.apk` goes to the platform package installer (or reveal if the
- * host can't install, e.g. desktop); an `.aab` is revealed (it can't be installed directly); anything else
- * opens in the editor via [open]. Keeps binary build artifacts out of the text editor.
+ * Open a file tapped in the tree. An `.apk` the IDE built goes to the platform package installer (or reveal
+ * if the host can't install, e.g. desktop); any other `.apk` and an `.aab` are revealed (see
+ * [FileActions.isBuiltApk]); anything else opens in the editor via [open]. Keeps binary build artifacts out
+ * of the text editor.
  */
 internal fun openTreeFile(node: TreeNode, fileActions: FileActions, open: (String, String) -> Unit) {
     val path = node.filePath ?: return
     when {
         path.endsWith(".apk", ignoreCase = true) ->
-            if (fileActions.canInstallApk) fileActions.installApk(path)
+            if (fileActions.canInstallApk && FileActions.isBuiltApk(path)) fileActions.installApk(path)
             else if (fileActions.canReveal) fileActions.reveal(path)
             else open(path, node.name)
         path.endsWith(".aab", ignoreCase = true) ->
