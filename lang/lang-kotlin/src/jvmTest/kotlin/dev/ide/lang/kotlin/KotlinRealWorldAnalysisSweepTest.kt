@@ -301,12 +301,7 @@ class KotlinRealWorldAnalysisSweepTest {
                 .map { java.nio.file.Paths.get(it) }
                 .filter { java.nio.file.Files.isRegularFile(it) } +
                 listOfNotNull(
-                    dev.ide.testkit.TestJars.jdkBaseJar(
-                        java.nio.file.Paths.get(
-                            System.getProperty("kt.repoRoot").orEmpty(),
-                            "lang/lang-kotlin/build/tmp/sweep-jdk",
-                        ),
-                    ),
+                    dev.ide.testkit.TestJars.jdkBaseJar(buildTmp("sweep-jdk")),
                 )
 
         /**
@@ -334,11 +329,20 @@ class KotlinRealWorldAnalysisSweepTest {
                 // analyzed. `ClasspathReader` persists each jar's scan here content-keyed, which is what the
                 // product does through `analyzerFor`; the harness simply never passed one. Under the build
                 // directory so it survives between runs and is cleaned with everything else.
-                extensionCacheDir = java.nio.file.Paths.get(
-                    System.getProperty("kt.repoRoot").orEmpty(),
-                    "lang/lang-kotlin/build/tmp/sweep-extension-cache",
-                ).also { java.nio.file.Files.createDirectories(it) }
+                extensionCacheDir = buildTmp("sweep-extension-cache").also { java.nio.file.Files.createDirectories(it) }
             }
+        }
+
+        /**
+         * `<this module>/build/tmp/<name>`. Resolved from `kt.repoRoot` when it is set; otherwise from the
+         * working directory, which a test run starts in this module's directory. Joining the repo-relative
+         * path onto an empty root instead put the files at `lang/lang-kotlin/lang/lang-kotlin/build`, where
+         * the ignore rules do not reach.
+         */
+        private fun buildTmp(name: String): java.nio.file.Path {
+            val root = System.getProperty("kt.repoRoot").orEmpty()
+            return if (root.isNotEmpty()) java.nio.file.Paths.get(root, "lang/lang-kotlin/build/tmp", name)
+            else java.nio.file.Paths.get("build/tmp", name).toAbsolutePath()
         }
     }
 }
