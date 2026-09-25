@@ -70,6 +70,28 @@ class PayloadExtractorTest {
         assertTrue(File(dir, "app/src/main/kotlin/Main.kt").exists(), "sources must survive")
     }
 
+    /** A store download is source: a packaged app, dex, jar, native library or class in the archive never
+     *  lands on disk, whatever its case or folder. */
+    @Test
+    fun executableEntriesAreNotInstalled() {
+        val parent = tempDir("ca-extract-exec-")
+        val zip = zipOf(
+            "app/build/outputs/apk/debug/app-debug.apk" to "PK",
+            "Payload.APK" to "PK",
+            "app/libs/helper.jar" to "PK",
+            "app/libs/widget.aar" to "PK",
+            "app/src/main/jniLibs/arm64-v8a/libnative.so" to "ELF",
+            "classes.dex" to "dex",
+            "out/Main.class" to "cafebabe",
+            "app/src/main/kotlin/Main.kt" to "fun main() {}",
+        )
+        val r = PayloadExtractor().extract(zip.absolutePath, parent.absolutePath, "exec")
+        assertTrue(r is StoreResult.Ok, "extract should succeed: $r")
+        val dir = File((r as StoreResult.Ok).value)
+        val installed = dir.walkTopDown().filter { it.isFile }.map { it.relativeTo(dir).path.replace('\\', '/') }.toSet()
+        assertEquals(setOf("app/src/main/kotlin/Main.kt"), installed)
+    }
+
     /** A `./`-prefixed or backslash-separated entry names the same file; the strip matches on the
      *  normalized path so an archive written by another zip tool cannot slip one through. */
     @Test

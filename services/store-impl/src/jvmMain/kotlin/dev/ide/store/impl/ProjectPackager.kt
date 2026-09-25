@@ -170,7 +170,9 @@ class ProjectPackager(
         private val EXCLUDED_SUFFIXES = listOf(
             // `.ks` is the extension the IDE's own bundled debug keystore uses (`.platform/debug.ks`), so it
             // has to be here beside `.jks`/`.keystore` or signing material ships with the project.
-            ".jks", ".keystore", ".ks", ".p12", ".pem", ".apk", ".aab", ".dex", ".class", ".jar", ".iml", ".log",
+            ".jks", ".keystore", ".ks", ".p12", ".pem", ".iml", ".log",
+            // Runnable code: a store project is source, and PayloadExtractor drops these on install anyway.
+            ".apk", ".apks", ".aab", ".xapk", ".dex", ".class", ".jar", ".aar", ".so",
         )
     }
 }
