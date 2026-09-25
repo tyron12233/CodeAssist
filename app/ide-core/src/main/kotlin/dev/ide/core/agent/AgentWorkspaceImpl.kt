@@ -328,11 +328,27 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
 
     // ---- build & dependencies -------------------------------------------------------------------
 
+    // Installing an app on the device is left to the user. On a device the Android Run task builds, installs
+    // and launches, so the agent is offered the same build stopped at assemble instead: it can still tell
+    // whether the app builds, and the install stays one tap of the user's.
     override suspend fun listTasks(): List<TaskInfo> = ctx.background {
-        engine().build.runTasks().map { TaskInfo(it.id, it.label, it.group) }
+        engine().build.runTasks().map { t ->
+            val assemble = assembleFor(t.id)
+            if (assemble == null) TaskInfo(t.id, t.label, t.group)
+            else {
+                val (module, variant) = assemble.removePrefix("assemble:").split(":").let { it[0] to it.getOrElse(1) { "" } }
+                TaskInfo(assemble, "assemble${variant.replaceFirstChar { it.uppercase() }} · $module", t.group)
+            }
+        }.distinctBy { it.id }
     }
 
     override suspend fun runTask(id: String): TaskRunResult {
+        assembleFor(id)?.let { assemble ->
+            return TaskRunResult(
+                false, "refused", "",
+                listOf("Installing on the device is left to the user. Run $assemble to check that it builds."),
+            )
+        }
         val build = engine().build
         build.runTask(id)
         // Wait for a terminal status, dropping any stale terminal/idle state left by a previous run first, so
@@ -505,7 +521,12 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
         }
     }
 
+    /** The `assemble:` task for an Android Run task id (`androidRun:<module>:<variant>`), else null. */
+    private fun assembleFor(id: String): String? =
+        if (id.startsWith(ANDROID_RUN)) "assemble:" + id.removePrefix(ANDROID_RUN) else null
+
     private companion object {
+        const val ANDROID_RUN = "androidRun:"
         /** Cap an agent-triggered run so a long-running or blocked program can't stall the turn. */
         const val RUN_TIMEOUT_MS = 120_000L
 
