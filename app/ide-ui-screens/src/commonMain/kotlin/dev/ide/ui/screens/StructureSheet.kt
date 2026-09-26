@@ -135,8 +135,8 @@ private fun StructureRow(sym: UiFileSymbol, onClick: () -> Unit) {
     ) {
         KindBadge(sym.kind)
         Text(sym.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-        if (!sym.detail.isNullOrEmpty()) {
-            Text(sym.detail!!, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+        sym.detail?.takeIf { it.isNotEmpty() }?.let { detail ->
+            Text(detail, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, maxLines = 1)
         }
     }
 }

@@ -662,7 +662,7 @@ private fun DependencyRow(
             when {
                 unresolved -> Text(stringResource(Res.string.dep_not_resolved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 !node.compatible && node.incompatibleReason != null ->
-                    Text(node.incompatibleReason!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    node.incompatibleReason?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 cycle -> Text(stringResource(Res.string.dep_cycle_shown_above), color = Ide.colors.warning, style = MaterialTheme.typography.labelSmall)
                 else -> DepSubtitle(node)
             }
