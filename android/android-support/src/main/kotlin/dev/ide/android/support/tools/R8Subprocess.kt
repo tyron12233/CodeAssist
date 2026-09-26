@@ -42,8 +42,10 @@ class R8Subprocess(
                 val f = Files.createTempFile("r8-inline", ".pro").also { Files.write(it, inline) }
                 temp.add(f); keepFiles.add(f)
             }
-            val cmd = buildList {
-                add(javaLauncher.toString()); addAll(vmArgs); add("-cp"); add(classpath); add("com.android.tools.r8.R8")
+            // R8's own arguments go through an argument file ([ToolArgFile]): a whole-program run names every
+            // program jar and `--classpath` entry, which on a dependency-heavy app overflows the OS argv limit when
+            // launching the forked VM ("error=7, Argument list too long").
+            val r8Args = buildList {
                 if (request.release) add("--release") else add("--debug")
                 add("--min-api"); add(request.minApi.toString())
                 if (!request.fullMode) add("--pg-compat")
@@ -63,8 +65,11 @@ class R8Subprocess(
                 add("--output"); add(request.outDir.toString())
                 addAll(existing.map { it.toString() })
             }
-            // A failed forked R8 dumps the process stderr (a Java stack trace); humanize it to the actual cause.
-            Subprocess.run(cmd).let { it.copy(log = DexDiagnostics.humanize(it.log)) }
+            ToolArgFile.withArgFile(request.outDir, r8Args) { argFile ->
+                val cmd = listOf(javaLauncher.toString()) + vmArgs + listOf("-cp", classpath, "com.android.tools.r8.R8", argFile)
+                // A failed forked R8 dumps the process stderr (a Java stack trace); humanize it to the actual cause.
+                Subprocess.run(cmd).let { it.copy(log = DexDiagnostics.humanize(it.log)) }
+            }
         } finally {
             temp.forEach { runCatching { Files.deleteIfExists(it) } }
         }
@@ -76,8 +81,7 @@ class R8Subprocess(
         // Shrink the runtime only with keep rules in a release build; otherwise keep all of it (see the
         // in-process L8 for why release-shrinking against R8's keep rules is avoided).
         val shrink = request.release && Files.exists(request.keepRules)
-        val cmd = buildList {
-            add(javaLauncher.toString()); addAll(vmArgs); add("-cp"); add(classpath); add("com.android.tools.r8.L8")
+        val l8Args = buildList {
             if (shrink) add("--release") else add("--debug")
             add("--min-api"); add(request.minApi.toString())
             if (Files.exists(request.library)) { add("--lib"); add(request.library.toString()) }
@@ -86,6 +90,9 @@ class R8Subprocess(
             add("--output"); add(request.outDir.toString())
             add(request.desugarJdkLibs.toString())
         }
-        return Subprocess.run(cmd).let { it.copy(log = DexDiagnostics.humanize(it.log)) }
+        return ToolArgFile.withArgFile(request.outDir, l8Args) { argFile ->
+            val cmd = listOf(javaLauncher.toString()) + vmArgs + listOf("-cp", classpath, "com.android.tools.r8.L8", argFile)
+            Subprocess.run(cmd).let { it.copy(log = DexDiagnostics.humanize(it.log)) }
+        }
     }
 }
