@@ -68,14 +68,16 @@ internal class InjectAppLogProviderTask(
         }
 
         // An app that declares it has no code is one the platform loads no dex for, so a <provider> naming a
-        // Java class cannot resolve and the app dies on launch with ClassNotFoundException before any of its
-        // own code runs. A NativeActivity app is exactly that shape. Logs are worth having; an app that will
-        // not start is not, so the manifest passes through untouched.
+        // Java class would not resolve and the app would die on launch with ClassNotFoundException. A
+        // NativeActivity app is exactly that shape, and it is also the app that needs the bridge most: every
+        // line it logs goes through `__android_log_print`, which only the bridge's logcat reader can forward.
+        // This task only runs when the bridge's runtime is dexed into the APK, so the debug APK does carry
+        // code; saying so is what lets the platform load the bridge. NativeActivity itself is a framework
+        // class and runs the same either way. Release builds are never instrumented and keep the attribute.
         if (application.androidAttr("hasCode") == "false") {
-            outManifest.parent?.let { Files.createDirectories(it) }
-            Files.copy(mergedManifest, outManifest, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-            ctx.debug("injectAppLogProvider: android:hasCode=\"false\" — no dex to load the bridge from, skipped")
-            return TaskResult.Success
+            if (application.hasAttribute("android:hasCode")) application.setAttribute("android:hasCode", "true")
+            if (application.hasAttribute("hasCode")) application.setAttribute("hasCode", "true")
+            ctx.debug("injectAppLogProvider: android:hasCode=\"false\" set to true, the bridge's dex is packaged")
         }
 
         // Idempotent: don't add a second provider if one is already present (e.g. a hand-edited manifest).

@@ -23,12 +23,14 @@ import kotlin.test.assertTrue
 class InjectAppLogProviderTaskTest {
 
     /**
-     * An app declaring `hasCode="false"` loads no dex, so a `<provider>` naming a Java class cannot resolve
-     * and the app dies on launch with `ClassNotFoundException` before a line of its own code runs. That is
-     * the shape of every NativeActivity app, so this is not a corner case; it is the native template.
+     * An app declaring `hasCode="false"` loads no dex, so the provider alone would name a class the platform
+     * never looks for and the app would die on launch with `ClassNotFoundException`. That is the shape of
+     * every NativeActivity app, and those apps log only through `__android_log_print`, so skipping them
+     * left the Logcat tab empty for every native app. The debug build dexes the bridge in, so the
+     * instrumented manifest says the app has code.
      */
     @Test
-    fun aNativeActivityAppIsLeftAlone() {
+    fun aNativeActivityAppIsInstrumentedAndDeclaresCode() {
         val out = run(
             """
             <?xml version="1.0" encoding="utf-8"?>
@@ -41,9 +43,11 @@ class InjectAppLogProviderTaskTest {
             </manifest>
             """.trimIndent()
         )
-        assertFalse(PROVIDER in out, "a hasCode=false app must not be given a provider it cannot load:\n$out")
-        assertFalse("<queries>" in out, "nothing is added to a manifest that is passed through")
-        assertTrue("android.app.NativeActivity" in out, "the manifest is passed through, not emptied")
+        assertTrue(PROVIDER in out, "a NativeActivity app gets the log bridge:\n$out")
+        assertTrue(SINK_ACTION in out, "and the <queries> intent that makes the sink visible on API 30+")
+        assertFalse("hasCode=\"false\"" in out, "the provider's class must be loadable:\n$out")
+        assertTrue("android:hasCode=\"true\"" in out, out)
+        assertTrue("android.app.NativeActivity" in out, "the activity is kept as declared")
     }
 
     @Test

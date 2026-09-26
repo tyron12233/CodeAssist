@@ -82,6 +82,40 @@ class AppLogInjectTest {
         }
     }
 
+    /**
+     * A NativeActivity app has no sources of its own and declares `hasCode="false"`. Its debug APK must
+     * still carry the bridge in a dex the platform loads, or the Logcat tab stays empty for it.
+     */
+    @Test
+    fun instrumentsAnAppWithNoCodeOfItsOwn() {
+        val sdk = assumeAndroidSdk()
+        val runtimeJar = resolveRuntimeJar()
+        assumeTrue(runtimeJar != null, "applog-runtime jar not provided (-Dapplog.runtime.jar); skipping")
+        runtimeJar!!
+
+        val runtime = AndroidAppLogRuntime(
+            runtimeJar,
+            AndroidAppLogRuntime.DEFAULT_PROVIDER_CLASS,
+            AndroidAppLogRuntime.DEFAULT_AUTHORITY_SUFFIX,
+        )
+        testEnv("android-applog-native") { env ->
+            val dir = env.dir
+            val store = buildAppWorkspace(dir, env.platform, manifest = NATIVE_MANIFEST, activity = null)
+            val project = store.workspace.projects.single()
+            val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
+            val buildSystem = AndroidBuildSystem.subprocess(sdk, signing, appLogRuntime = { runtime })
+            val cache = BuildCache(dir.resolve(".caches/build"))
+
+            buildVariant(buildSystem, project, "debug", cache)
+            val debugApk = dir.resolve("app/build/outputs/apk/debug/app-debug.apk")
+            val instrumented = dir.resolve("app/build/intermediates/android/debug/instrumented-manifest/AndroidManifest.xml")
+            val manifestXml = Files.readString(instrumented)
+            assertTrue(PROVIDER in manifestXml, "instrumented manifest lacks the log-bridge provider:\n$manifestXml")
+            assertTrue("hasCode=\"false\"" !in manifestXml, "the bridge's dex must be loadable:\n$manifestXml")
+            assertTrue(dexContainsType(debugApk, PROVIDER_DESC), "debug APK dex lacks $PROVIDER")
+        }
+    }
+
     private fun buildVariant(buildSystem: AndroidBuildSystem, project: dev.ide.model.Project, variant: String, cache: BuildCache) {
         val graph = buildSystem.createBuildGraph(
             project, BuildRequest(listOf(ModuleId("app")), VariantSelector(variant), BuildGoal.PACKAGE),
@@ -119,7 +153,12 @@ class AppLogInjectTest {
         return -1
     }
 
-    private fun buildAppWorkspace(dir: Path, platform: PlatformCore): ProjectModelStore {
+    private fun buildAppWorkspace(
+        dir: Path,
+        platform: PlatformCore,
+        manifest: String = MANIFEST,
+        activity: String? = ACTIVITY,
+    ): ProjectModelStore {
         val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
         ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
         val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
@@ -135,9 +174,9 @@ class AppLogInjectTest {
             commit()
         }
 
-        dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+        dir.writeSource("app/src/main/AndroidManifest.xml", manifest)
         dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
-        dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+        if (activity != null) dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", activity)
         return store
     }
 
@@ -151,6 +190,17 @@ class AppLogInjectTest {
             <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
                 <application android:label="@string/app_name">
                     <activity android:name=".MainActivity" android:exported="true"/>
+                </application>
+            </manifest>
+        """
+
+        val NATIVE_MANIFEST = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
+                <application android:label="@string/app_name" android:hasCode="false">
+                    <activity android:name="android.app.NativeActivity" android:exported="true">
+                        <meta-data android:name="android.app.lib_name" android:value="demo"/>
+                    </activity>
                 </application>
             </manifest>
         """
