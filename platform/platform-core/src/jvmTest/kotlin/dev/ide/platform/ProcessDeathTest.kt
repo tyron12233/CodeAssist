@@ -37,4 +37,23 @@ class ProcessDeathTest {
         assertFalse(ProcessDeath.isSystemKill(reason = 5, status = 9, hasTombstone = false))
         assertFalse(ProcessDeath.isSystemKill(reason = 5, status = 0, hasTombstone = false))
     }
+
+    @Test
+    fun `a build process death names the low-memory killer, a Java crash and a native crash apart`() {
+        val lmk = ProcessDeath.describeBuildProcessExit(3, 0, "lmk", rssKb = 900 * 1024L, heapLimitMb = 512)
+        assertTrue("low-memory killer" in lmk && "900MB" in lmk && "(lmk)" in lmk, lmk)
+
+        val kill = ProcessDeath.describeBuildProcessExit(2, 9, null, rssKb = 0, heapLimitMb = 512)
+        assertTrue("SIGKILL" in kill && "low-memory" in kill && "using" !in kill, kill)
+
+        val java = ProcessDeath.describeBuildProcessExit(4, 0, "crash", rssKb = 600 * 1024L, heapLimitMb = 512)
+        assertTrue("uncaught error" in java && "512MB" in java && "OutOfMemoryError" in java, java)
+
+        val native = ProcessDeath.describeBuildProcessExit(5, 11, null, rssKb = 0, heapLimitMb = 0)
+        assertTrue("native code (SIGSEGV)" in native, native)
+        val abort = ProcessDeath.describeBuildProcessExit(2, 6, null, rssKb = 0, heapLimitMb = 0)
+        assertTrue("native code (SIGABRT)" in abort, abort)
+
+        for (line in listOf(lmk, kill, java, native, abort)) assertFalse('\u2014' in line, "em dash in: $line")
+    }
 }

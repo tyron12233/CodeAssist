@@ -35,4 +35,57 @@ object ProcessDeath {
      */
     fun isSystemKill(reason: Int, status: Int, hasTombstone: Boolean): Boolean =
         reason == REASON_SIGNALED && status == SIGKILL && !hasTombstone
+
+    /** `ApplicationExitInfo.REASON_LOW_MEMORY`: the low-memory killer, on devices that attribute it. */
+    const val REASON_LOW_MEMORY: Int = 3
+
+    /** `ApplicationExitInfo.REASON_CRASH`: an uncaught Java exception. */
+    const val REASON_CRASH: Int = 4
+
+    /** `ApplicationExitInfo.REASON_CRASH_NATIVE`: a native crash; `status` is the signal. */
+    const val REASON_CRASH_NATIVE: Int = 5
+
+    /** `ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE`: the system judged the process too costly. */
+    const val REASON_EXCESSIVE_RESOURCE_USAGE: Int = 9
+
+    /**
+     * One console line saying why the `:build` process ended, from its OS death record, so a build that stops
+     * with "Build process stopped" also says whether the system reclaimed the memory, the build's Java heap ran
+     * out, or native code crashed. Those three have different remedies, and the bare message cannot tell them
+     * apart.
+     *
+     * [rssKb] is the process's resident size when it died (0 when unknown), and [heapLimitMb] the app's Java
+     * heap limit, which the `:build` process shares with the IDE (0 when unknown).
+     */
+    fun describeBuildProcessExit(
+        reason: Int,
+        status: Int,
+        description: String?,
+        rssKb: Long,
+        heapLimitMb: Long,
+    ): String {
+        val using = if (rssKb > 0) ", while using ${rssKb / 1024}MB" else ""
+        val detail = description?.trim()?.takeIf { it.isNotEmpty() }?.let { " ($it)" } ?: ""
+        return when {
+            reason == REASON_LOW_MEMORY ->
+                "Cause: Android's low-memory killer stopped the build process$using$detail. Other apps and the " +
+                    "device itself needed the memory; closing apps frees it."
+            reason == REASON_SIGNALED && status == SIGKILL ->
+                "Cause: the build process was killed (SIGKILL)$using$detail, usually by Android's low-memory " +
+                    "killer. Closing other apps frees memory for the next build."
+            reason == REASON_CRASH ->
+                "Cause: the build process crashed with an uncaught error$detail" +
+                    (if (heapLimitMb > 0) ". Its Java heap is limited to ${heapLimitMb}MB; an OutOfMemoryError there means the build needed more." else ".")
+            reason == REASON_CRASH_NATIVE || reason == REASON_SIGNALED ->
+                "Cause: the build process crashed in native code (${signalName(status)})$using$detail."
+            reason == REASON_EXCESSIVE_RESOURCE_USAGE ->
+                "Cause: Android stopped the build process for excessive resource use$using$detail."
+            else -> "Cause: the build process ended (exit reason $reason, status $status)$using$detail."
+        }
+    }
+
+    private fun signalName(signal: Int): String = when (signal) {
+        4 -> "SIGILL"; 6 -> "SIGABRT"; 7 -> "SIGBUS"; 8 -> "SIGFPE"; 9 -> "SIGKILL"; 11 -> "SIGSEGV"
+        else -> "signal $signal"
+    }
 }

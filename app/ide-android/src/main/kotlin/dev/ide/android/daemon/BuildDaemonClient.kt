@@ -36,20 +36,25 @@ class BuildDaemonClient(
     /** Fires on EVERY (re)connect — including the auto-restart after the daemon dies — so a client can
      *  re-drive in-flight work. (Distinct from [bind]'s one-shot `onReady`, which fires only the first time.) */
     private val onConnected: () -> Unit = {},
-    private val onDeath: () -> Unit = {},
+    /** The daemon died; [pid] is the process that died (-1 when it never reported one), for its OS death record. */
+    private val onDeath: (pid: Int) -> Unit = {},
 ) {
     private val appContext = context.applicationContext
     private val log = Log.logger("ide.daemon")
 
     @Volatile
     private var daemon: IBuildDaemon? = null
+
+    /** The connected daemon's pid, kept past its death so the death can be looked up. */
+    @Volatile
+    private var daemonPid: Int = -1
     private var onReady: ((IBuildDaemon) -> Unit)? = null
 
     private val deathRecipient = object : IBinder.DeathRecipient {
         override fun binderDied() {
             log.warn("ui(pid=${Process.myPid()}): daemon died (binderDied) — IDE SURVIVED.")
             daemon = null
-            onDeath()
+            onDeath(daemonPid)
         }
     }
 
@@ -82,7 +87,7 @@ class BuildDaemonClient(
             daemon = d
             runCatching { service?.linkToDeath(deathRecipient, 0) }
             runCatching { d.registerCallback(callback) }
-            val daemonPid = runCatching { d.pid() }.getOrDefault(-1)
+            daemonPid = runCatching { d.pid() }.getOrDefault(-1)
             log.info(
                 "ui(pid=${Process.myPid()}): connected to daemon(pid=$daemonPid) — " +
                     "separate process = ${daemonPid != Process.myPid()}",

@@ -1,11 +1,15 @@
 package dev.ide.android.daemon
 
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
+import android.os.Build
 import dev.ide.core.applog.AppLogLevel
 import dev.ide.core.applog.AppLogSnapshot
 import dev.ide.core.build.BuildRunner
 import dev.ide.core.IdeServices
 import dev.ide.platform.DeviceMemory
+import dev.ide.platform.ProcessDeath
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.AppLogLineUi
 import dev.ide.ui.backend.AppLogUi
@@ -204,15 +208,18 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         // App-log deltas are no longer streamed from the daemon — the UI channel is fed directly by the sink and
         // read via `services` above (BuildDaemonClient's onAppLog/onAppLogState default to no-ops).
         onConnected = ::onDaemonConnected,
-        onDeath = {
+        onDeath = { pid ->
+            var failedBuild = false
             _buildState.update {
                 if (it.status == RunStatus.Running) {
+                    failedBuild = true
                     it.copy(status = RunStatus.Failed, log = it.log + line("Build process stopped (out of memory?). The IDE is unaffected — press Run to retry."))
                 } else {
                     it
                 }
             }
             connected = false // the binding auto-restarts the service; onConnected re-drives any pending build
+            if (failedBuild) explainDeath(pid)
         },
     )
 
@@ -221,6 +228,42 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         // binds on the first Run instead: an idle :build process is a whole second runtime the system would
         // otherwise have to find room for while the user is only editing.
         if (!DeviceMemory.isLow) client.bind {}
+    }
+
+    /**
+     * Follow a build-killing daemon death with the reason the OS recorded for it: the low-memory killer, an
+     * uncaught error (a Java OutOfMemoryError among them) or a native crash. The line the death recipient writes
+     * cannot tell those apart, and they call for different remedies. The record is filed shortly after the
+     * process is gone, so it is polled for briefly; nothing is added when it never appears (API < 30, or a ROM
+     * that keeps no history), and nothing once another build has started.
+     */
+    private fun explainDeath(pid: Int) {
+        if (pid <= 0 || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val buildAtDeath = requestSeq.get()
+        val am = appContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return
+        scope.launch(Dispatchers.IO) {
+            var exit: ApplicationExitInfo? = null
+            for (attempt in 0 until DEATH_RECORD_POLLS) {
+                exit = runCatching { am.getHistoricalProcessExitReasons(appContext.packageName, pid, 1).firstOrNull() }.getOrNull()
+                if (exit != null) break
+                delay(DEATH_RECORD_POLL_MS)
+            }
+            val e = exit ?: return@launch
+            log.warn(
+                "ui: daemon(pid=$pid) exit record: reason=${e.reason} status=${e.status} " +
+                    "description=${e.description} pss=${e.pss}KB rss=${e.rss}KB",
+            )
+            val heapLimitMb = Runtime.getRuntime().maxMemory() / (1024 * 1024)
+            val cause = ProcessDeath.describeBuildProcessExit(e.reason, e.status, e.description, e.rss, heapLimitMb)
+            // A Java crash's record does not say which error it was; the daemon left that behind itself.
+            val error = if (e.reason == ApplicationExitInfo.REASON_CRASH) {
+                DaemonCrashNote.readSince(appContext, e.timestamp - CRASH_NOTE_SLACK_MS)?.let { "Error: $it" }
+            } else null
+            if (requestSeq.get() != buildAtDeath) return@launch
+            _buildState.update {
+                if (it.status == RunStatus.Failed) it.copy(log = it.log + listOfNotNull(cause, error).map(::line)) else it
+            }
+        }
     }
 
     /** Set when the project wants the daemon's compiler warm; sent on the next connect, then cleared, so a
@@ -385,5 +428,14 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         // this even on a slow phone, and the daemon logs "loading project…" at open start, resetting the clock.
         const val WATCHDOG_POLL_MS = 15_000L
         const val WATCHDOG_SILENCE_MS = 120_000L
+
+        // The OS files a dead process's exit record a moment after its binder dies: poll for it this often, this
+        // many times (about 3s) before giving up.
+        const val DEATH_RECORD_POLL_MS = 250L
+        const val DEATH_RECORD_POLLS = 12
+
+        // How far before the OS's death timestamp the daemon's own crash note may be written and still belong
+        // to that death (the note is written first, and the two clocks are read at different moments).
+        const val CRASH_NOTE_SLACK_MS = 30_000L
     }
 }
