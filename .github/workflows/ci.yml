@@ -193,11 +193,21 @@ jobs:
   # The tests RUN, on a simulator the Kotlin plugin picks itself (it shells out to `xcrun simctl list
   # devices available`), so no device is pinned here — a runner image bump changes the device list and a
   # pinned name would fail on it.
+  #
+  # The runner must carry the iOS 26 SDK (Xcode 26 or newer). Compose Multiplatform 1.11's `ui-uikit`
+  # references `UIViewLayoutRegion`, a UIKit class that first ships in that SDK, so every link that pulls
+  # Compose in fails with an undefined `_OBJC_CLASS_$_UIViewLayoutRegion` on macos-15, whose default
+  # Xcode 16.4 has only the iOS 18.5 SDK. The Compose-free framework suites link there either way.
   ios:
     name: iOS simulator suites
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+
+      - name: Show the Xcode and SDKs in use
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i simulator
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
