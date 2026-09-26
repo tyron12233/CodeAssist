@@ -5,11 +5,11 @@ import dev.ide.android.support.tasks.DexConcurrency
 import dev.ide.android.support.tools.D8Dexer
 import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.android.support.tools.Dexer
+import dev.ide.android.support.tools.ForkedDexPolicy
 import dev.ide.android.support.tools.MergePlan
 import dev.ide.android.support.tools.OffHeapArchiveDexer
 import dev.ide.android.support.tools.ToolResult
 import dev.ide.platform.log.Log
-import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 
@@ -62,13 +62,23 @@ class ForkedD8Dexer(
         // R8-load for a few classes. In-process instead: [DexMergeTask]'s native-multidex path is bucketed
         // (fixed ≤8 buckets, each merged separately), so the working set stays bounded without a fork — and
         // [mergePlan] returns null in that case so the merge task sizes concurrency for the app heap.
-        val fork = forkAffordable()
-        if (!fork) {
-            if (delegate !== fallback) log.info("forked-D8 merge: in-process (available RAM below fork headroom)")
-            return fallback.dex(inputs, androidJar, minApi, release, outDir, threads, desugaredLibConfig)
+        val inProcess = { fallback.dex(inputs, androidJar, minApi, release, outDir, threads, desugaredLibConfig) }
+        if (!forkAffordable()) {
+            if (delegate !== fallback) log.info("forked-D8 merge: in-process (available RAM below fork headroom, or a recent fork died)")
+            return inProcess()
         }
-        // A merge that forks holds a global fork permit so the parallel merge tasks don't over-commit RAM.
-        val r = onForkGate { delegate.dex(inputs, androidJar, minApi, release, outDir, threads, desugaredLibConfig) }
+        // A small merge stays in-process: the native-multidex merge runs one invocation per bucket (one per core),
+        // so a small app would otherwise fork a big-heap VM per core to merge a few dozen classes each.
+        val inputBytes = ForkedDexPolicy.inputBytes(inputs)
+        if (!ForkedDexPolicy.worthForking(inputBytes, forkThresholdBytes())) return inProcess()
+        // A merge that forks holds a global fork permit so the parallel merge tasks don't over-commit RAM, and is
+        // re-run in-process if the forked VM dies before reaching a verdict (see [ForkedDexPolicy]).
+        val r = ForkedDexPolicy.runWithFallback(
+            outDir,
+            forked = { onForkGate { delegate.dex(inputs, androidJar, minApi, release, outDir, threads, desugaredLibConfig) } },
+            inProcess = inProcess,
+            onProcessFailure = ::noteForkFailure,
+        )
         return note?.let { r.copy(log = listOf(it) + r.log) } ?: r
     }
 
@@ -79,17 +89,50 @@ class ForkedD8Dexer(
         inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean,
         outDir: Path, threads: Int, desugaredLibConfig: Path?,
     ): ToolResult {
-        val inputBytes = inputs.sumOf { runCatching { if (Files.exists(it)) Files.size(it) else 0L }.getOrDefault(0L) }
-        val thresholdBytes = (archiveForkMbProvider()?.takeIf { it > 0 } ?: ARCHIVE_FORK_DEFAULT_MB).toLong() * 1024 * 1024
-        val dexer = if (inputBytes >= thresholdBytes && delegate !== fallback) {
+        val inputBytes = ForkedDexPolicy.inputBytes(inputs)
+        val thresholdBytes = forkThresholdBytes()
+        val dexer = if (ForkedDexPolicy.worthForking(inputBytes, thresholdBytes) && delegate !== fallback && !forkRecentlyDied()) {
             log.info("forked-D8 archive: ${inputBytes / (1024 * 1024)}MB input ≥ ${thresholdBytes / (1024 * 1024)}MB → forked VM (off the app heap)")
             delegate
         } else {
             fallback
         }
         // Gate only the forked archive (dexer === delegate); an in-process archive is bounded by the app heap.
-        val call = { dexer.dexArchive(inputs, classpath, androidJar, minApi, release, outDir, threads, desugaredLibConfig) }
-        return if (dexer === delegate) onForkGate(call) else call()
+        val inProcess = { fallback.dexArchive(inputs, classpath, androidJar, minApi, release, outDir, threads, desugaredLibConfig) }
+        if (dexer !== delegate) return inProcess()
+        return ForkedDexPolicy.runWithFallback(
+            outDir,
+            forked = { onForkGate { delegate.dexArchive(inputs, classpath, androidJar, minApi, release, outDir, threads, desugaredLibConfig) } },
+            inProcess = inProcess,
+            onProcessFailure = ::noteForkFailure,
+        )
+    }
+
+    /** Input size (bytes) at/above which a merge or archive forks: the "Off-heap dexing threshold" setting. */
+    private fun forkThresholdBytes(): Long =
+        (archiveForkMbProvider()?.takeIf { it > 0 } ?: ARCHIVE_FORK_DEFAULT_MB).toLong() * 1024 * 1024
+
+    /** Wall-clock of the last forked VM that died without a verdict; 0 when none has. */
+    @Volatile
+    private var lastForkFailureMs = 0L
+
+    /**
+     * A forked VM died before reaching a verdict: almost always ART refusing the heap reservation on a device whose
+     * memory is committed elsewhere (the IDE, the Kotlin compiler VM, sibling forks). The next launch a moment later
+     * meets the same device, so forking pauses for [FORK_FAILURE_BACKOFF_MS] instead of paying another launch and
+     * another abort for every remaining bucket of the build.
+     */
+    private fun noteForkFailure(result: ToolResult) {
+        lastForkFailureMs = System.currentTimeMillis()
+        log.warn(
+            "forked-D8: the forked VM died without a result (${result.log.lastOrNull()}); running in-process, and " +
+                "not forking for ${FORK_FAILURE_BACKOFF_MS / 1000}s. Tool output:\n" + result.log.takeLast(20).joinToString("\n")
+        )
+    }
+
+    private fun forkRecentlyDied(): Boolean {
+        val at = lastForkFailureMs
+        return at != 0L && System.currentTimeMillis() - at < FORK_FAILURE_BACKOFF_MS
     }
 
     /**
@@ -103,6 +146,7 @@ class ForkedD8Dexer(
      */
     private fun forkAffordable(): Boolean {
         if (delegate === fallback) return false        // resolves the one-time fork probe; fallback ⇒ never forks
+        if (forkRecentlyDied()) return false
         val xmx = forkXmxMb ?: return false
         val avail = R8ForkSupport.availableMemMb(appContext)
         return avail <= 0L || avail >= (xmx * FORK_HEADROOM_FACTOR).toLong()   // avail unknown → allow (can't tell)
@@ -232,5 +276,8 @@ class ForkedD8Dexer(
         // LMK-killed. Below it, both fall back to the bounded in-process paths. ~1.5x a 1536MB fork ≈ 2.3GB
         // available — comfortably true on an 8GB emulator, false on a 1.5-2GB one (where forks thrashed).
         const val FORK_HEADROOM_FACTOR = 1.5
+
+        // How long forking pauses after a forked VM died without a verdict (see [noteForkFailure]).
+        const val FORK_FAILURE_BACKOFF_MS = 120_000L
     }
 }

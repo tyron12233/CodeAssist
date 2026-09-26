@@ -10,7 +10,7 @@ internal object Subprocess {
         val proc = try {
             pb.start()
         } catch (t: Throwable) {
-            return ToolResult.fail("could not launch ${command.firstOrNull()}: ${t.message}")
+            return ToolResult(false, listOf("could not launch ${command.firstOrNull()}: ${t.message}"), processFailed = true)
         }
         // Read to EOF first (drains the merged stream), then await exit — no pipe-buffer deadlock.
         val out = proc.inputStream.bufferedReader().readLines()
@@ -20,8 +20,9 @@ internal object Subprocess {
         // A process killed by signal N exits with 128+N. Decode it: a bare "code 139" is opaque, but
         // "SIGSEGV" tells the reader the native tool crashed (vs. a clean non-zero error exit), which on a
         // bundled aapt2/zipalign prebuilt usually means an ABI/page-size/kernel mismatch on this device.
-        val detail = signalName(code)?.let { "$it (code $code) — the native binary crashed" } ?: "code $code"
-        return ToolResult(false, out + "$tool exited with $detail")
+        val signal = signalName(code)
+        val detail = signal?.let { "$it (code $code), the native binary crashed" } ?: "code $code"
+        return ToolResult(false, out + "$tool exited with $detail", processFailed = signal != null)
     }
 
     /** Map a 128+N shell exit status to its POSIX signal name, or null if [code] is not a signal death. */

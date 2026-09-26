@@ -66,8 +66,9 @@ object BuiltInSettingsPages {
     const val R8_CEILING_PREF = "r8.detectedCeilingMb"
 
     /** IntSlider key on [BUILD_RUNTIME]: input size (MB) at/above which an on-device debug-dex step (the
-     *  dexBuilder archive) runs in a separate VM instead of the app heap. Read by `ForkedD8Dexer` (:ide-android),
-     *  and only when R8 execution is Forked VM. Android-only. Lower = safer on small heaps but more VM spawns. */
+     *  dexBuilder archive, or one dex merge invocation) runs in a separate VM instead of the app heap. Read by
+     *  `ForkedD8Dexer` (:ide-android), and only when R8 execution is Forked VM. Android-only. Lower = safer on
+     *  small heaps but more VM spawns. */
     const val DEX_OFFHEAP_MB = "dexOffHeapMb"
     const val DEX_OFFHEAP_MB_DEFAULT = 8
 

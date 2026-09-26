@@ -23,11 +23,16 @@ import java.nio.file.Path
  * (aapt2, apksigner, bundletool, a forked dexer) reaches us as text and leaves [diagnostics] empty, so its
  * caller falls back to parsing [log]; an in-process D8/R8 fills it from its `DiagnosticsHandler` and loses
  * neither the origin nor the position the way a printed line does.
+ *
+ * [processFailed] marks a subprocess that never reached a verdict of its own: it could not be launched, or a
+ * signal ended it (a VM aborting because it could not reserve its heap, the low-memory killer). Such a failure
+ * says nothing about the inputs, so a caller with another way to run the same work can retry it there.
  */
 data class ToolResult(
     val success: Boolean,
     val log: List<String> = emptyList(),
     val diagnostics: List<ToolDiagnostic> = emptyList(),
+    val processFailed: Boolean = false,
 ) {
     companion object {
         fun ok(log: List<String> = emptyList(), diagnostics: List<ToolDiagnostic> = emptyList()) =
