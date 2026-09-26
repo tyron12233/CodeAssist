@@ -179,7 +179,7 @@ private fun StoreBrowse(
                             rating = item.rating,
                             installs = item.installs,
                             preview = if (hasSamplePreview(item.previewKey)) {
-                                { m -> SamplePreview(item.previewKey!!, m) }
+                                { m -> SamplePreview(item.previewKey ?: return@, m) }
                             } else null,
                             onClick = { onOpenItem(item) },
                         )
