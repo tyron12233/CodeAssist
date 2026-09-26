@@ -14,13 +14,26 @@ package dev.ide.model
  * vs `-jvm` collisions used to be collapsed here too, but the resolver now selects the right artifact
  * variant from Gradle Module Metadata up front, so only one is ever present.)
  *
- * The coordinate (artifact name + version) is read from the Maven directory layout — so it works for plain
- * jars AND exploded-AAR `classes.jar`s — falling back to the file name for non-Maven paths (the bundled
- * stdlib). Paths with neither (module output dirs) carry no coordinate and pass through.
+ * The coordinate is read from the Maven directory layout, so it works for plain jars AND exploded-AAR
+ * `classes.jar`s, and it keeps the GROUP: `androidx.core:core` and `io.noties.markwon:core` are both a
+ * `core` artifact, yet they are different libraries and both must survive. A non-Maven path (the bundled
+ * stdlib) only has a file name, so it competes with the Maven artifact of that name when exactly one group
+ * publishes it. Paths with neither (module output dirs) carry no coordinate and pass through.
  */
 fun dedupeJarsForAndroidDex(jars: List<java.nio.file.Path>): List<java.nio.file.Path> {
-    val parsed = jars.map { path -> val c = dexCoordinate(path); ParsedJar(path, c?.first, c?.second) }
-    // Per artifact (keyed by its exact name, no platform-suffix folding), the newest version wins — but
+    val coordinates = jars.map { dexCoordinate(it) }
+    // A bare file name (`kotlin-stdlib`) joins the slot of the one Maven artifact with that name. When two
+    // groups publish the name, which one it duplicates is unknowable, so it keeps a slot of its own.
+    val mavenKeysByName = HashMap<String, MutableSet<String>>()
+    for (c in coordinates) if (c is DexCoordinate.Maven) mavenKeysByName.getOrPut(c.name) { HashSet() }.add(c.key)
+    val parsed = jars.zip(coordinates) { path, c ->
+        when (c) {
+            null -> ParsedJar(path, null, null)
+            is DexCoordinate.Maven -> ParsedJar(path, c.key, c.version)
+            is DexCoordinate.FileName -> ParsedJar(path, mavenKeysByName[c.name]?.singleOrNull() ?: c.name, c.version)
+        }
+    }
+    // Per artifact (keyed by group and name, no platform-suffix folding), the newest version wins — but
     // preferring jars that EXIST on disk. A missing jar contributes no classes to the dex, so it must never
     // win an artifact's dex slot and evict a real, present version: the IDE's bundled
     // `.platform/kotlin-stdlib-<v>.jar` failing to extract would otherwise supersede the project's real
@@ -49,17 +62,31 @@ fun dedupeJarsForAndroidDex(jars: List<java.nio.file.Path>): List<java.nio.file.
 
 private class ParsedJar(val path: java.nio.file.Path, val base: String?, val version: String?)
 
-/** Artifact name + version for a dex input: Maven layout first (plain jar OR exploded AAR), else file name.
- *  The name carries the classifier, so two secondary artifacts of one module don't share a dex slot. */
-private fun dexCoordinate(path: java.nio.file.Path): Pair<String, String>? {
+private sealed class DexCoordinate(val name: String, val version: String) {
+    /** A Maven-layout jar. [key] is the artifact's `group/name` (classifier included), unique per library. */
+    class Maven(val key: String, name: String, version: String) : DexCoordinate(name, version)
+    /** A jar outside the Maven layout, known only by the `<name>-<version>.jar` in its file name. */
+    class FileName(name: String, version: String) : DexCoordinate(name, version)
+}
+
+/** The coordinate of a dex input: Maven layout first (plain jar OR exploded AAR), else the file name. The
+ *  key carries the classifier, so two secondary artifacts of one module don't share a dex slot. */
+private fun dexCoordinate(path: java.nio.file.Path): DexCoordinate? {
     MavenClasspath.coordinateOf(path.toString())?.let { c ->
-        val name = java.nio.file.Paths.get(c.artifactKey).fileName?.toString()
-        if (name != null) return (if (c.classifier.isEmpty()) name else "$name|${c.classifier}") to c.version
+        val dir = c.artifactKey.replace('\\', '/')
+        val name = dir.substringAfterLast('/')
+        // The resolver's cache is `<root>/.platform/caches/resolved-deps/<group/as/path>/<name>`, so the part
+        // after the marker is exactly `group/name`, whichever cache root the jar came from. Anywhere else the
+        // whole artifact directory stands in for it.
+        val ga = dir.substringAfter("/$RESOLVED_DEPS/", missingDelimiterValue = dir)
+        return DexCoordinate.Maven(if (c.classifier.isEmpty()) ga else "$ga|${c.classifier}", name, c.version)
     }
     val file = path.fileName?.toString() ?: return null
     if (!file.endsWith(".jar", ignoreCase = true)) return null
-    return FILE_NAME_VERSION.matchEntire(file)?.let { it.groupValues[1] to it.groupValues[2] }
+    return FILE_NAME_VERSION.matchEntire(file)?.let { DexCoordinate.FileName(it.groupValues[1], it.groupValues[2]) }
 }
+
+private const val RESOLVED_DEPS = "resolved-deps"
 
 // <name>-<version>.jar with a digit-led version (e.g. `kotlin-stdlib-2.4.0`, `core-jvm-1.8.0-alpha01`).
 private val FILE_NAME_VERSION = Regex("""(.+?)-(\d[A-Za-z0-9.]*(?:-[A-Za-z0-9.]+)*)\.jar""", RegexOption.IGNORE_CASE)

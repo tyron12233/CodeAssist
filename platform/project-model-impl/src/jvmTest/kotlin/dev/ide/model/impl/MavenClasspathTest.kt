@@ -114,6 +114,47 @@ class MavenClasspathTest {
     }
 
     @Test
+    fun dexDedupKeepsSameNamedArtifactsOfDifferentGroups() {
+        // `androidx.core:core` and `io.noties.markwon:core` are both a `core` artifact. Keyed by name alone,
+        // the newer markwon 4.6.2 evicted androidx.core 1.13.1, and every class of it (ContextCompat, the
+        // TaskStackBuilder AppCompatActivity implements) vanished from the compile classpath and the dex.
+        val androidxCore = p("/cache/.platform/caches/resolved-deps/androidx/core/core/1.13.1/core-1.13.1-exploded/classes.jar")
+        val markwonCore = p("/cache/.platform/caches/resolved-deps/io/noties/markwon/core/4.6.2/core-4.6.2-exploded/classes.jar")
+        val result = dedupeJarsForAndroidDex(listOf(androidxCore, markwonCore)).map { it.toString() }
+        assertEquals(listOf(androidxCore.toString(), markwonCore.toString()), result, "both `core` libraries survive")
+    }
+
+    @Test
+    fun dexDedupStillKeepsNewestOfOneGroupAndName() {
+        val base = "/cache/.platform/caches/resolved-deps/androidx/core/core"
+        val old = p("$base/1.9.0/core-1.9.0-exploded/classes.jar")
+        val new = p("$base/1.13.1/core-1.13.1-exploded/classes.jar")
+        val other = p("/cache/.platform/caches/resolved-deps/io/noties/markwon/core/4.6.2/core-4.6.2-exploded/classes.jar")
+        val result = dedupeJarsForAndroidDex(listOf(old, other, new)).map { it.toString() }
+        assertEquals(listOf(other.toString(), new.toString()), result)
+    }
+
+    @Test
+    fun dexDedupMatchesOneGroupAcrossTwoCacheRoots() {
+        // The same `group:name` reached through the shared cache and a project's own cache is one artifact.
+        val shared = p("/shared/.platform/caches/resolved-deps/androidx/collection/collection/1.4.0/collection-1.4.0.jar")
+        val local = p("/project/.platform/caches/resolved-deps/androidx/collection/collection/1.1.0/collection-1.1.0.jar")
+        val result = dedupeJarsForAndroidDex(listOf(local, shared)).map { it.toString() }
+        assertEquals(listOf(shared.toString()), result)
+    }
+
+    @Test
+    fun dexDedupLeavesABareFileNameAloneWhenTwoGroupsShareIt() {
+        // Which of two same-named Maven artifacts a bare `core-2.0.0.jar` duplicates can't be known, so all
+        // three keep their place rather than one being evicted by a guess.
+        val a = p("/c/resolved-deps/androidx/core/core/1.13.1/core-1.13.1-exploded/classes.jar")
+        val b = p("/c/resolved-deps/io/noties/markwon/core/4.6.2/core-4.6.2-exploded/classes.jar")
+        val bare = p("/project/libs/core-9.0.0.jar")
+        val result = dedupeJarsForAndroidDex(listOf(a, b, bare)).map { it.toString() }
+        assertEquals(listOf(a, b, bare).map { it.toString() }, result)
+    }
+
+    @Test
     fun dexDedupDropsAMissingBundledStdlibForThePresentMavenOne() {
         // The reported Firebase crash: the bundled `.platform/kotlin-stdlib-2.4.0.jar` was ABSENT on disk (its
         // extraction failed), so newest-wins would supersede the project's real Maven stdlib and drop it from the
