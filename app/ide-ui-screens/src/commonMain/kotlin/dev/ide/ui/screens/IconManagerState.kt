@@ -531,7 +531,10 @@ internal class IconManagerState(
         val repoId = selectedRepoId ?: return
         scope.launch {
             loadingResults = true
-            results = runCatching { backend.icons.searchIcons(repoId, query, SEARCH_LIMIT) }.getOrDefault(emptyList())
+            // Uncapped: the grid is lazy and fetches artwork only for the tiles on screen, so listing every
+            // icon costs one small entry each. A cap here hid most of a 4000-icon repository with no way to
+            // scroll to the rest, while the header still reported the full count.
+            results = runCatching { backend.icons.searchIcons(repoId, query, Int.MAX_VALUE) }.getOrDefault(emptyList())
             loadingResults = false
         }
     }
@@ -560,7 +563,6 @@ internal class IconManagerState(
     }
 
     private companion object {
-        const val SEARCH_LIMIT = 300
         const val SEARCH_DEBOUNCE_MS = 180L
 
         /** Enough parallelism to keep a scrolling grid filling in, few enough to be polite to a remote host. */

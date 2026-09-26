@@ -47,7 +47,11 @@ import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import dev.ide.vcs.ui.generated.resources.Res
 import dev.ide.vcs.ui.generated.resources.vcs_cancel
+import dev.ide.vcs.ui.generated.resources.vcs_accounts
 import dev.ide.vcs.ui.generated.resources.vcs_clone_action
+import dev.ide.vcs.ui.generated.resources.vcs_clone_auth_signed_in
+import dev.ide.vcs.ui.generated.resources.vcs_clone_auth_signed_out
+import dev.ide.vcs.ui.generated.resources.vcs_clone_auth_title
 import dev.ide.vcs.ui.generated.resources.vcs_clone_folder
 import dev.ide.vcs.ui.generated.resources.vcs_clone_none
 import dev.ide.vcs.ui.generated.resources.vcs_clone_search
@@ -89,6 +93,9 @@ internal fun CloneScreen(ctx: ScreenContext) {
     // A finished clone that no build system recognized: held here rather than opened, because the user has to
     // be told before they land in an editor that cannot build anything.
     var unrecognized by remember { mutableStateOf<ClonedFolder?>(null) }
+    // The last clone was refused for want of credentials. A private repository is the usual cause, and the
+    // fix is an account on this screen, which a bare "authentication failed" does not point at.
+    var authFailed by remember { mutableStateOf(false) }
 
     // Debounced so typing a search term does not fire a request per keystroke.
     LaunchedEffect(query, accounts.size) {
@@ -107,8 +114,10 @@ internal fun CloneScreen(ctx: ScreenContext) {
         val name = folder.trim().ifBlank { target.substringAfterLast('/').removeSuffix(".git") }
         scope.launch {
             unrecognized = null
+            authFailed = false
             val result = vcs.cloneRepository(target, name)
             feedback.show(result.message, isError = !result.ok)
+            authFailed = !result.ok && result.authRequired
             val path = result.path
             if (!result.ok || path == null) return@launch
             // The clone is a listable project either way. Only an unrecognized one stops here for an answer.
@@ -150,6 +159,13 @@ internal fun CloneScreen(ctx: ScreenContext) {
                 }
             }
             FeedbackStrip(feedback)
+            if (authFailed) {
+                CloneAuthNotice(
+                    signedIn = accounts.isNotEmpty(),
+                    onDismiss = { authFailed = false },
+                    onSignIn = { ctx.openScreen(VcsService.SCREEN_ACCOUNTS) },
+                )
+            }
             unrecognized?.let { cloned ->
                 UnrecognizedCloneNotice(
                     name = cloned.name,
@@ -247,6 +263,51 @@ private fun UnrecognizedCloneNotice(name: String, onDismiss: () -> Unit, onOpen:
         ) {
             TextButton(onDismiss) { Text(stringResource(Res.string.vcs_cancel), style = MaterialTheme.typography.labelLarge) }
             PrimaryButton(stringResource(Res.string.vcs_clone_unrecognized_open), onOpen, icon = CaIcons.folder)
+        }
+    }
+}
+
+/**
+ * Said in place when a clone is refused for want of credentials. Git sign-in is its own account, kept apart
+ * from the Projects Store sign-in, and a user signed in to one reasonably expects the other to follow, so the
+ * notice says which one a clone uses and offers the way to add it.
+ */
+@Composable
+private fun CloneAuthNotice(signedIn: Boolean, onDismiss: () -> Unit, onSignIn: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .background(scheme.errorContainer.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(CaIcons.account, null, Modifier.size(16.dp), tint = scheme.error)
+            Text(
+                stringResource(Res.string.vcs_clone_auth_title),
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Text(
+            stringResource(if (signedIn) Res.string.vcs_clone_auth_signed_in else Res.string.vcs_clone_auth_signed_out),
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onDismiss) { Text(stringResource(Res.string.vcs_cancel), style = MaterialTheme.typography.labelLarge) }
+            PrimaryButton(
+                stringResource(if (signedIn) Res.string.vcs_accounts else Res.string.vcs_sign_in_github),
+                onSignIn,
+                icon = CaIcons.account,
+            )
         }
     }
 }

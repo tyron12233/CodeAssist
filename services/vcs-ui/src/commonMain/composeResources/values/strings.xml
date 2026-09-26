@@ -140,7 +140,10 @@
     <string name="vcs_clone_action">Clone</string>
     <string name="vcs_clone_yours">Your repositories</string>
     <string name="vcs_clone_search">Search repositories</string>
-    <string name="vcs_clone_sign_in">Sign in to browse your repositories.</string>
+    <string name="vcs_clone_sign_in">Sign in to browse your repositories and clone private ones. This is separate from the Projects Store sign-in.</string>
+    <string name="vcs_clone_auth_title">This repository needs a sign-in</string>
+    <string name="vcs_clone_auth_signed_out">Private repositories are cloned with a GitHub account added here. Signing in to the Projects Store does not give CodeAssist access to your repositories.</string>
+    <string name="vcs_clone_auth_signed_in">The signed-in account could not open it. Check that the account can see this repository, or add another account.</string>
     <string name="vcs_clone_none">No repositories found.</string>
     <string name="vcs_clone_unrecognized_title">Not a recognized project</string>
     <string name="vcs_clone_unrecognized_body">%1$s was cloned and added to your projects, but no build system recognized it. You can browse and edit its files; building and running need a module set up first.</string>

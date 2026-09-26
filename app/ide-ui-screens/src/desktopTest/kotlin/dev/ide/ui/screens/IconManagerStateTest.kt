@@ -66,10 +66,14 @@ class IconManagerStateTest {
             return UiIconLoadResult(ok = true, iconCount = 2)
         }
 
+        /** Replaces the three-icon catalogue, for the cases about a repository of realistic size. */
+        var largeCatalogue: List<UiIconEntry>? = null
+
         override suspend fun searchIcons(repoId: String, query: String, limit: Int): List<UiIconEntry> {
             if (repoId == "remote" && !loaded) return emptyList()
             val q = query.trim().lowercase()
-            return catalogue.filter { q.isEmpty() || it.name.contains(q) || it.keywordsMatch(q) }
+            val source = largeCatalogue ?: catalogue
+            return source.filter { q.isEmpty() || it.name.contains(q) || it.keywordsMatch(q) }.take(limit)
         }
 
         override suspend fun iconArtwork(repoId: String, name: String, variant: UiIconVariant): UiIconArtwork {
@@ -122,7 +126,7 @@ class IconManagerStateTest {
 
         private fun UiIconEntry.keywordsMatch(q: String) = displayName.lowercase().contains(q)
 
-        private fun entry(name: String, keywords: List<String>) = UiIconEntry(
+        fun entry(name: String, keywords: List<String>) = UiIconEntry(
             repoId = "bundled",
             name = name,
             displayName = name.replaceFirstChar { it.uppercaseChar() },
@@ -159,6 +163,17 @@ class IconManagerStateTest {
             assertEquals("bundled", state.selectedRepoId)
             assertEquals(3, state.results.size, "the offline repository lists immediately")
             assertEquals("/p/app/src/main/res", state.target?.resDirPath, "the default target is preselected")
+        }
+    }
+
+    /** The whole repository is browsable, not the first few hundred of it. */
+    @Test
+    fun aLargeRepositoryListsEveryIcon() {
+        val backend = FakeIcons().apply {
+            largeCatalogue = List(4271) { entry("icon_$it", emptyList()) }
+        }
+        withState(backend) { state, _ ->
+            assertEquals(4271, state.results.size)
         }
     }
 
