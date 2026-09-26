@@ -83,6 +83,7 @@ import dev.ide.ui.generated.resources.support_ad_privacy
 import dev.ide.ui.generated.resources.support_ad_privacy_desc
 import dev.ide.ui.generated.resources.support_ad_privacy_button
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.platform.rememberNotificationPermissionController
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
@@ -262,6 +263,8 @@ private fun NarrowLayout(
 ) {
     var openId by remember { mutableStateOf<String?>(null) }
     val open = openId?.let { id -> pages.firstOrNull { it.id == id } }
+    // System back leaves an open page for the category list before it closes Settings.
+    PlatformBackHandler(enabled = open != null) { openId = null }
     if (open == null) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             itemsKeyed(pages, key = { it.id }) { page ->
