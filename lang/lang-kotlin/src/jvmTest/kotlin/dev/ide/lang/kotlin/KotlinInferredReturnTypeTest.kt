@@ -41,10 +41,18 @@ class KotlinInferredReturnTypeTest {
      * declaration the overflow unwound through permanently untyped: a chain off them stayed unresolved until
      * the source model was rebuilt, with nothing logged, because the error was read as a body that failed to
      * type. Driven by a chain of expression-body functions long enough to exhaust a small thread stack.
+     *
+     * The chain has to be long enough that NO JVM can fit it in the small stack. One level of inference spans
+     * a couple of dozen frames, and how many bytes those take depends on whether the methods are still
+     * interpreted or already JIT-compiled (and inlined), which in turn depends on what the test JVM ran first.
+     * At 400 levels this overflowed 256 KB on a cold JVM but fit once the resolver was compiled, as it is in
+     * the full suite on GitHub's Ubuntu/JDK 25 runner, so the shallow attempt returned "Int" instead of
+     * throwing. 4000 levels would need under 64 bytes per level to fit, which not even a single compiled
+     * frame achieves, while the deep attempt still has room for the fully interpreted case.
      */
     @Test
     fun stackExhaustionIsNotCachedAsAnAbsentType() {
-        val depth = 400
+        val depth = 4000
         val chain = buildString {
             append("package demo\n")
             for (i in 1 until depth) append("fun f$i() = f${i + 1}()\n")
@@ -58,10 +66,10 @@ class KotlinInferredReturnTypeTest {
         // BOTH attempts run on a thread with an EXPLICIT stack size, because what this test asserts is the
         // difference between the two: too little stack must surface the overflow, enough stack must still type
         // the declaration afterwards. Taking the second measurement on whatever stack the test runner happens
-        // to give us made the result depend on the JVM and the runner: 400 nested inferences overflow the
-        // DEFAULT thread stack on some (GitHub's Ubuntu/JDK 25 runner, where this failed while passing on the
-        // JetBrains Runtime), and then the retry threw instead of returning "Int" and the assertion below never
-        // got to run. Pinning both sizes keeps the test measuring the memo, not the runner.
+        // to give us made the result depend on the JVM and the runner: a deep chain of nested inferences
+        // overflows the DEFAULT thread stack on some (GitHub's Ubuntu/JDK 25 runner, where this failed while
+        // passing on the JetBrains Runtime), and then the retry threw instead of returning "Int" and the
+        // assertion below never got to run. Pinning both sizes keeps the test measuring the memo, not the runner.
         fun typeOfF1On(stackBytes: Long, name: String): Result<String?> {
             var out: Result<String?> = Result.failure(IllegalStateException("$name never ran"))
             val t = Thread(null, { out = runCatching { typeOfF1() } }, name, stackBytes)
@@ -71,11 +79,12 @@ class KotlinInferredReturnTypeTest {
             return out
         }
 
-        // 400 nested inferences need far more than 256 KB, so this attempt exhausts the stack.
+        // 4000 nested inferences need far more than 256 KB however the frames are compiled, so this attempt
+        // exhausts the stack.
         val shallow = typeOfF1On(256L * 1024, "shallow-stack-inference")
         assertTrue(
             shallow.exceptionOrNull() is StackOverflowError,
-            "the shallow attempt must surface the overflow, not swallow it; got ${shallow.exceptionOrNull()}",
+            "the shallow attempt must surface the overflow, not swallow it; got $shallow",
         )
 
         // The overflow must have left the memo untouched, so a retry with room types the declaration.
