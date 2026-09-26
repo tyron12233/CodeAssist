@@ -1,9 +1,12 @@
 package dev.ide.vcs.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -457,71 +460,78 @@ private fun WorkingCopy(
     var pushAfter by remember(ctx.backend) { mutableStateOf(true) }
     var discarding by remember { mutableStateOf<UiVcsChange?>(null) }
 
-    Column(Modifier.fillMaxSize()) {
-        SyncBar(
-            status = status,
-            onPull = { perform { vcs.pull() } },
-            onPush = { perform { vcs.push() } },
-            onConnect = { ctx.openScreen(VcsService.SCREEN_GITHUB) },
-        )
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // The commit form never takes more than this share of the pane. Past it the form scrolls, so on a short
+        // pane (a phone drawer above a footer ad, or with the keyboard up) the commit button stays reachable and
+        // the change list keeps the rest.
+        val commitBoxMax = maxHeight * COMMIT_BOX_MAX_FRACTION
+        Column(Modifier.fillMaxSize()) {
+            SyncBar(
+                status = status,
+                onPull = { perform { vcs.pull() } },
+                onPush = { perform { vcs.push() } },
+                onConnect = { ctx.openScreen(VcsService.SCREEN_GITHUB) },
+            )
 
-        Box(Modifier.weight(1f)) {
-            if (status.clean) {
-                VcsEmptyState(
-                    icon = CaIcons.check,
-                    title = stringResource(Res.string.vcs_clean_title),
-                    body = stringResource(Res.string.vcs_clean_body),
-                ) {
-                    if (status.headSummary.isNotBlank()) {
-                        Text(
-                            "${status.headShortId} ${status.headSummary}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+            Box(Modifier.weight(1f)) {
+                if (status.clean) {
+                    VcsEmptyState(
+                        icon = CaIcons.check,
+                        title = stringResource(Res.string.vcs_clean_title),
+                        body = stringResource(Res.string.vcs_clean_body),
+                    ) {
+                        if (status.headSummary.isNotBlank()) {
+                            Text(
+                                "${status.headShortId} ${status.headSummary}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
+                } else {
+                    ChangeList(
+                        status = status,
+                        onOpenDiff = { change ->
+                            VcsNav.diff = DiffTarget(path = change.path, staged = change.staged)
+                            ctx.openScreen(VcsService.SCREEN_DIFF)
+                        },
+                        onOpenHistory = { change ->
+                            VcsNav.historyPath = change.path
+                            ctx.openScreen(VcsService.SCREEN_HISTORY)
+                        },
+                        onStage = { paths -> perform { vcs.stage(paths) } },
+                        onUnstage = { paths -> perform { vcs.unstage(paths) } },
+                        onResolve = { paths -> perform { vcs.markResolved(paths) } },
+                        onDiscard = { change -> discarding = change },
+                    )
                 }
-            } else {
-                ChangeList(
-                    status = status,
-                    onOpenDiff = { change ->
-                        VcsNav.diff = DiffTarget(path = change.path, staged = change.staged)
-                        ctx.openScreen(VcsService.SCREEN_DIFF)
-                    },
-                    onOpenHistory = { change ->
-                        VcsNav.historyPath = change.path
-                        ctx.openScreen(VcsService.SCREEN_HISTORY)
-                    },
-                    onStage = { paths -> perform { vcs.stage(paths) } },
-                    onUnstage = { paths -> perform { vcs.unstage(paths) } },
-                    onResolve = { paths -> perform { vcs.markResolved(paths) } },
-                    onDiscard = { change -> discarding = change },
-                )
             }
-        }
 
-        CommitBox(
-            message = message,
-            onMessage = { message = it },
-            amend = amend,
-            onAmend = { amend = it },
-            pushAfter = pushAfter,
-            onPushAfter = { pushAfter = it },
-            canCommit = status.staged.isNotEmpty() || amend,
-            hasRemote = status.upstream.isNotBlank(),
-            onCommit = {
-                val text = message
-                val alsoPush = pushAfter && status.upstream.isNotBlank()
-                perform {
-                    val committed = vcs.commit(text, amend)
-                    if (!committed.ok) return@perform committed
-                    message = ""
-                    amend = false
-                    if (alsoPush) vcs.push() else committed
-                }
-            },
-        )
+            CommitBox(
+                modifier = Modifier.heightIn(max = commitBoxMax).verticalScroll(rememberScrollState()),
+                message = message,
+                onMessage = { message = it },
+                amend = amend,
+                onAmend = { amend = it },
+                pushAfter = pushAfter,
+                onPushAfter = { pushAfter = it },
+                canCommit = status.staged.isNotEmpty() || amend,
+                hasRemote = status.upstream.isNotBlank(),
+                onCommit = {
+                    val text = message
+                    val alsoPush = pushAfter && status.upstream.isNotBlank()
+                    perform {
+                        val committed = vcs.commit(text, amend)
+                        if (!committed.ok) return@perform committed
+                        message = ""
+                        amend = false
+                        if (alsoPush) vcs.push() else committed
+                    }
+                },
+            )
+        }
     }
 
     val pending = discarding
@@ -699,6 +709,7 @@ private fun ChangeRow(
 
 @Composable
 private fun CommitBox(
+    modifier: Modifier,
     message: String,
     onMessage: (String) -> Unit,
     amend: Boolean,
@@ -714,6 +725,7 @@ private fun CommitBox(
         Modifier
             .fillMaxWidth()
             .background(scheme.surfaceContainerLow)
+            .then(modifier)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -723,6 +735,7 @@ private fun CommitBox(
             placeholder = stringResource(Res.string.vcs_commit_hint),
             singleLine = false,
             minHeight = 62,
+            maxHeight = COMMIT_MESSAGE_MAX_HEIGHT,
         )
         VcsCheckRow(stringResource(Res.string.vcs_amend), amend, onToggle = { onAmend(!amend) })
         if (hasRemote) {
@@ -759,6 +772,12 @@ private fun CommitBox(
         )
     }
 }
+
+/** Tallest the commit message field grows (dp) before it scrolls inside itself: about six lines. */
+private const val COMMIT_MESSAGE_MAX_HEIGHT = 150
+
+/** Largest share of the panel height the commit form takes before it scrolls. */
+private const val COMMIT_BOX_MAX_FRACTION = 0.6f
 
 /** The card body of a destructive confirmation, hosted by [CenteredDialog]. */
 @Composable

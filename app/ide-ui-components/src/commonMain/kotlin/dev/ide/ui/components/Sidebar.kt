@@ -47,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -99,6 +100,10 @@ enum class RailSide { Left, Right }
  * [key] is the slot the state is saved under and defaults to the panel's id. A host that can show one panel
  * under more than one id (a stale selection falling back to the first panel) passes the id it resolved from
  * instead, since two slots alive at once under one key is an error.
+ *
+ * The slot clips to its bounds. Hosts pin a footer (the sidebar ad) under it, and a panel whose content
+ * outgrows the slot must be cut off at the slot's edge rather than drawn underneath that footer, where it
+ * looks present but cannot be reached.
  */
 @Composable
 fun PanelContent(
@@ -107,7 +112,7 @@ fun PanelContent(
     modifier: Modifier = Modifier,
     key: Any? = null,
 ) {
-    Box(modifier) {
+    Box(modifier.clipToBounds()) {
         if (panel != null) holder.SaveableStateProvider(key ?: panel.id) { panel.content() }
     }
 }

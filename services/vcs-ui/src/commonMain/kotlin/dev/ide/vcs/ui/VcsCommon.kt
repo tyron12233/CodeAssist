@@ -153,6 +153,9 @@ internal fun SectionHeader(
 /**
  * The plain single-line field the version-control forms use. Material's `OutlinedTextField` is 56dp tall and
  * over-heavy for a sidebar, so this is a bordered box around a [BasicTextField] with the same roles.
+ *
+ * A multi-line field grows with its text up to [maxHeight] and then scrolls inside itself, so a long entry
+ * never pushes the controls below it out of the pane. Null leaves it unbounded.
  */
 @Composable
 internal fun VcsField(
@@ -163,6 +166,7 @@ internal fun VcsField(
     leading: ImageVector? = null,
     singleLine: Boolean = true,
     minHeight: Int = 44,
+    maxHeight: Int? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -177,7 +181,12 @@ internal fun VcsField(
             Icon(leading, null, Modifier.size(16.dp), tint = scheme.onSurfaceVariant)
             Spacer(Modifier.width(8.dp))
         }
-        Box(Modifier.weight(1f).heightIn(min = (minHeight - 20).dp), contentAlignment = Alignment.CenterStart) {
+        val bounds = if (maxHeight != null) {
+            Modifier.heightIn(min = (minHeight - 20).dp, max = (maxHeight - 20).dp)
+        } else {
+            Modifier.heightIn(min = (minHeight - 20).dp)
+        }
+        Box(Modifier.weight(1f).then(bounds), contentAlignment = Alignment.CenterStart) {
             if (value.isEmpty()) {
                 Text(
                     placeholder,
