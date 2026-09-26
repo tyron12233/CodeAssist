@@ -229,7 +229,7 @@ private fun LogRow(entry: UiLogEntry, reveal: (() -> Float)?, slotPx: Float) {
             }
             if (expanded && entry.stackTrace != null) {
                 Text(
-                    entry.stackTrace!!,
+                    entry.stackTrace ?: "",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = Ide.type.codeSmall,
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp, start = 4.dp)
