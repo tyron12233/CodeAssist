@@ -72,7 +72,16 @@ jobs:
       # against KotlinSymbolService and for a `Files.writeString` (on no Android release at all) to reach
       # :ide-core past :platform-core's own API-floor gate. Anything with a `desktopTest`/`jvmTest` source
       # set belongs in one of these two lists.
+      # These modules are the Compose/AGP shells that CI_CORE_ONLY leaves out of the build, so this step turns
+      # the full module set back on, and the shells need an Android SDK even to configure.
+      - name: Set up Android SDK (the shells need one to configure)
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 platforms;android-36.1 build-tools;36.0.0"
+
       - name: Multiplatform suites (UI, preview interpreter, store, the model bridge)
+        env:
+          CI_CORE_ONLY: "false"
         run: >-
           ./gradlew :ide-ui:desktopTest :ide-ui-core:desktopTest :ide-ui-components:desktopTest
           :ide-ui-editor:desktopTest :ide-ui-screens:desktopTest :agent-ui:desktopTest
@@ -262,6 +271,8 @@ jobs:
       # still fail here. It did -- `CastsOptimization` blew its stack on this graph and the iOS app could not
       # be built at all, while every compile task stayed green. A ~6 minute link is worth catching that.
       - name: Link the CodeAssistUi framework (whole-program lowering)
+        env:
+          CI_CORE_ONLY: "false"
         run: ./gradlew :ide-ios:linkDebugFrameworkIosSimulatorArm64 --console=plain --stacktrace
 
       - name: Upload iOS test reports
