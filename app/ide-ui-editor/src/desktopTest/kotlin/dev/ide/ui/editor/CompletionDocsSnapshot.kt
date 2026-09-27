@@ -61,6 +61,6 @@ class CompletionDocsSnapshot {
     }
 
     private companion object {
-        const val OUT_DIR = "/private/tmp/claude-501/-Users-tyronscott-JavaProjects-CodeAssist/8b7a0e57-9bee-4671-94e9-9bfc2f97e5ba/scratchpad"
+        val OUT_DIR: String = java.io.File(System.getProperty("java.io.tmpdir"), "codeassist-snapshots").apply { mkdirs() }.absolutePath
     }
 }

@@ -110,6 +110,6 @@ class RunScreenSnapshot {
     }
 
     private companion object {
-        const val OUT_DIR = "/private/tmp/claude-501/-Users-tyronscott-JavaProjects-CodeAssist/b65de382-ff5b-4a3c-9931-04443b19714a/scratchpad"
+        val OUT_DIR: String = java.io.File(System.getProperty("java.io.tmpdir"), "codeassist-snapshots").apply { mkdirs() }.absolutePath
     }
 }

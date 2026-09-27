@@ -47,6 +47,6 @@ class SidebarIconSnapshot {
     }
 
     private companion object {
-        const val OUT = "/private/tmp/claude-501/-Users-tyronscott-JavaProjects-CodeAssist/3ef37a35-7870-4cde-976f-e90e5e713766/scratchpad"
+        val OUT: String = java.io.File(System.getProperty("java.io.tmpdir"), "codeassist-snapshots").apply { mkdirs() }.absolutePath
     }
 }

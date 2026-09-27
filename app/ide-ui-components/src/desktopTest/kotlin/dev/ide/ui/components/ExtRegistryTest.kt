@@ -143,6 +143,6 @@ class ExtRegistryTest {
     }
 
     private companion object {
-        const val OUT_DIR = "/private/tmp/claude-501/-Users-tyronscott-JavaProjects-CodeAssist/8c43bdb9-8226-43cd-9fd3-d7d5ec53763d/scratchpad"
+        val OUT_DIR: String = java.io.File(System.getProperty("java.io.tmpdir"), "codeassist-snapshots").apply { mkdirs() }.absolutePath
     }
 }

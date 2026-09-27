@@ -95,6 +95,6 @@ class BlockRenderSnapshot {
     }
 
     private companion object {
-        const val OUT_DIR = "/private/tmp/claude-501/-Users-tyronscott-JavaProjects-CodeAssist/52154a21-c913-4db9-af75-e8600ca9445f/scratchpad"
+        val OUT_DIR: String = java.io.File(System.getProperty("java.io.tmpdir"), "codeassist-snapshots").apply { mkdirs() }.absolutePath
     }
 }
