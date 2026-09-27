@@ -40,13 +40,18 @@ class ImeValueCostTest {
         val session = sessionOf(lines)
         val caret = session.selection.min
         repeat(20) { block(session) } // warm up the lazy paths and the allocator
-        val mark = TimeSource.Monotonic.markNow()
-        repeat(KEYSTROKES) {
-            // One keystroke: an edit (which replaces the document) followed by the reads UIKit makes.
-            session.imeCommitText("x", 1)
-            repeat(READS_PER_KEYSTROKE) { block(session) }
+        // The fastest of several trials: a shared CI host can stall any single run, and a stall only ever
+        // adds time, so the minimum is the closest reading of the cost itself. A real change in the cost's
+        // shape moves every trial, so this does not mask the regression the ratio below guards.
+        val perKeystrokeMs = (1..TRIALS).minOf {
+            val mark = TimeSource.Monotonic.markNow()
+            repeat(KEYSTROKES) {
+                // One keystroke: an edit (which replaces the document) followed by the reads UIKit makes.
+                session.imeCommitText("x", 1)
+                repeat(READS_PER_KEYSTROKE) { block(session) }
+            }
+            mark.elapsedNow().inWholeMicroseconds / 1000.0 / KEYSTROKES
         }
-        val perKeystrokeMs = mark.elapsedNow().inWholeMicroseconds / 1000.0 / KEYSTROKES
         println("  $label, $lines lines (${session.doc.length} chars): ${perKeystrokeMs} ms per keystroke")
         session.imeSetSelection(caret, caret)
         return perKeystrokeMs
@@ -81,6 +86,7 @@ class ImeValueCostTest {
 
     private companion object {
         const val KEYSTROKES = 200
+        const val TRIALS = 3
         /** UIKit asks for text around the caret several times per edit (autocorrect, the loupe, range maths). */
         const val READS_PER_KEYSTROKE = 4
         const val WINDOW = 256
