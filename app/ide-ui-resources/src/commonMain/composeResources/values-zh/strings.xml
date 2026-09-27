@@ -121,6 +121,7 @@
     <string name="export_screenshots_desc">展示给导入此包的用户。</string>
     <string name="export_screenshot_add">添加图片</string>
     <string name="export_screenshot_remove">移除截图</string>
+    <string name="export_screenshot_unreadable">无法预览此图片</string>
     <string name="export_intro_gradle">将此项目导出为 Gradle 构建，以便在 Android Studio 中打开或使用 gradle 构建。</string>
     <string name="export_format_title">格式</string>
     <string name="export_format_package">CodeAssist 包</string>
@@ -157,6 +158,27 @@
     <string name="no_project_yet">还没有项目哦~新建项目即可开始开发</string>
     <string name="your_projects">你的项目</string>
     <string name="project_kind_android">Android</string>
+    <!-- Short forms for the compact project row, where "4 modules · Android · Opened 2 hours ago"
+         does not fit and the "Opened" is carried by the context. -->
+    <string name="project_age_just_now">刚刚</string>
+    <plurals name="project_age_minutes">
+        <item quantity="one">%1$d 分钟前</item>
+        <item quantity="other">%1$d 分钟前</item>
+    </plurals>
+    <plurals name="project_age_hours">
+        <item quantity="one">%1$d 小时前</item>
+        <item quantity="other">%1$d 小时前</item>
+    </plurals>
+    <plurals name="project_age_days">
+        <item quantity="one">%1$d 天前</item>
+        <item quantity="other">%1$d 天前</item>
+    </plurals>
+    <plurals name="project_age_weeks">
+        <item quantity="one">%1$d 周前</item>
+        <item quantity="other">%1$d 周前</item>
+    </plurals>
+    <!-- The editor's collapsed notice strip. Never shown for a single notice, which renders in place. -->
+    <string name="editor_notices_many">%1$d 项内容需要关注</string>
     <string name="project_opened_just_now">刚刚打开</string>
     <plurals name="project_opened_minutes">
         <item quantity="one">%1$d 分钟前打开</item>
@@ -321,6 +343,9 @@
     <string name="buildc_no_problems_match">没有符合此筛选条件的问题！</string>
     <string name="buildc_ungroup">取消分组</string>
     <string name="buildc_group_by_task">按任务分组</string>
+    <string name="buildc_verbose_on">显示构建详情</string>
+    <string name="buildc_verbose_off">隐藏构建详情</string>
+    <string name="buildc_verbose_hidden">已隐藏 %1$d 行详情</string>
     <string name="buildc_empty_log">点击“运行”以构建并运行此模块。</string>
     <string name="buildc_no_log_match">没有匹配的日志行。</string>
     <string name="buildc_logcat_empty">运行调试应用后，可在此查看日志。</string>
@@ -350,6 +375,11 @@
     <string name="codeaction_severity_info">信息</string>
     <string name="codeaction_severity_hint">提示</string>
     <string name="codeaction_quick_fixes">快速修复</string>
+    <string name="codeaction_same_span">同一区间还有 %1$d 个</string>
+    <plurals name="codeaction_problems_here">
+        <item quantity="one">此处有 %1$d 个问题</item>
+        <item quantity="other">此处有 %1$d 个问题</item>
+    </plurals>
     <string name="completion_no_suggestions">没有建议</string>
     <string name="completion_back_to_suggestions">返回建议列表</string>
     <string name="completion_show_documentation">显示文档</string>
@@ -441,6 +471,10 @@
         <item quantity="one">%1$d 个依赖无法解析</item>
         <item quantity="other">%1$d 个依赖无法解析</item>
     </plurals>
+    <plurals name="edchrome_empty_dependencies">
+        <item quantity="one">%1$d 个依赖未能解析</item>
+        <item quantity="other">%1$d 个依赖未能解析</item>
+    </plurals>
     <string name="edchrome_search_tasks">搜索任务…</string>
     <string name="edchrome_nothing_to_run">没有可运行的内容</string>
     <string name="edchrome_no_matching_tasks">没有匹配的任务</string>
@@ -505,6 +539,8 @@
     <!-- home/store/learn/search/logs/palette — reuses projects, join_the_community -->
     <string name="home_store">发现</string>
     <string name="home_learn">学习</string>
+    <string name="home_challenges">每日</string>
+    <!-- Home / Projects tab, Material 3 Expressive redesign -->
     <string name="home_your_projects">你的项目</string>
     <string name="home_good_morning">早上好</string>
     <string name="home_good_afternoon">下午好</string>
@@ -536,6 +572,7 @@
     <string name="store_subtitle">从模板和示例项目快速开始</string>
     <string name="store_settings_and_tools">设置与工具</string>
     <string name="store_search_hint">搜索模板和示例</string>
+    <!-- Explore tab, Material 3 Expressive redesign -->
     <string name="store_search_placeholder">模板、示例应用、插件</string>
     <string name="store_browse_by_kind">按类型浏览</string>
     <string name="store_see_all">查看全部</string>
@@ -559,6 +596,7 @@
     <string name="store_item_details">详情</string>
     <string name="store_item_size">大小</string>
     <string name="store_item_version">版本</string>
+    <!-- Hero figure labels: lowercase, because they read as captions under a number, not as headings -->
     <string name="store_hero_installs">安装量</string>
     <string name="store_hero_download">下载量</string>
     <string name="store_install_project">安装项目</string>
@@ -609,6 +647,9 @@
     <string name="submit_field_category">分类</string>
     <string name="submit_field_version">版本</string>
     <string name="submit_field_tags">标签，逗号分隔</string>
+    <string name="submit_category_loading">正在加载分类…</string>
+    <string name="submit_category_unavailable">无法加载分类。每份提交都必须选择分类，因此发送前需要网络连接。</string>
+    <string name="submit_category_retry">重试</string>
     <string name="submit_screenshots">截图</string>
     <string name="submit_screenshots_desc">最多六张。这是别人在安装之前最先看的东西。</string>
     <string name="submit_add_screenshot">添加截图</string>
@@ -616,10 +657,102 @@
     <string name="submit_sending">正在提交…</string>
     <string name="submit_review_note">每份提交都会经过审核员审核后才会展示。未经批准，任何内容都不会公开。</string>
     <string name="submit_required">请填写标题、简介、描述和分类。</string>
+    <string name="submit_target">发布为</string>
+    <string name="submit_target_new">新上架项目</string>
+    <string name="submit_target_update">更新 %1$s</string>
+    <string name="submit_update_live">当前上架：%1$s</string>
+    <string name="submit_update_unreviewed">尚未发布</string>
+    <string name="submit_update_note">这是该上架项目的新版本。下方文字是商店当前展示的内容，你在此修改的任何内容都会与新版本一起接受审核。</string>
+    <string name="submit_screenshots_kept">这些是上架页面当前的截图。提交时，这里的截图会整体替换原有截图，因此请删除要更换的，保留其余的。</string>
+    <string name="submit_screenshots_offline">无法加载此上架项目的截图，商店将保留原有截图。你在此添加的任何截图都会替换全部现有截图。</string>
+    <string name="submit_category_current">保留分类 %1$s。分类列表无法加载，暂时无法更改。</string>
+    <string name="submit_field_changelog">变更内容</string>
+    <string name="submit_required_version">版本号请使用三段数字，如 1.2.0。</string>
     <string name="submit_mine_title">你的提交</string>
     <string name="submit_withdraw">撤回</string>
     <string name="submit_unavailable">此构建版本不支持发布。</string>
     <string name="submit_signin_first">登录后才能发布。</string>
+    <string name="you_title">我的</string>
+    <string name="you_signed_out">登录后可查看个人主页、提交记录以及你发布的所有内容。</string>
+    <string name="you_sign_in">登录</string>
+    <string name="you_unavailable">无法加载你的个人主页，需要网络连接。</string>
+    <string name="you_edit">编辑资料</string>
+    <string name="you_field_name">显示名称</string>
+    <string name="you_field_handle">用户名</string>
+    <string name="you_field_bio">简介</string>
+    <string name="you_field_location">位置</string>
+    <string name="you_field_link">链接</string>
+    <string name="you_handle_rules">2 到 39 个字符：字母、数字、- 和 _</string>
+    <string name="you_handle_taken">该用户名已被占用</string>
+    <string name="you_handle_free">可用</string>
+    <string name="you_handle_note">用户名是你公开主页的地址，修改用户名会同时改变该地址。</string>
+    <string name="you_stat_published">已发布</string>
+    <string name="you_stat_review">审核中</string>
+    <string name="you_stat_followers">粉丝</string>
+    <string name="you_stat_installs">安装量</string>
+    <string name="you_submissions">提交记录</string>
+    <string name="you_submissions_none">暂无审核中的提交。你发布的项目会在这里等待，直到审核员给出答复。</string>
+    <string name="you_published">已发布</string>
+    <string name="you_published_none">商店里还没有你上架的项目。</string>
+    <string name="you_view_public">查看公开主页</string>
+    <string name="you_sign_out">退出登录</string>
+    <string name="you_publish">发布项目</string>
+    <string name="you_version">版本 %1$s</string>
+    <string name="you_status_submitted">审核中</string>
+    <string name="you_status_building">正在构建</string>
+    <string name="you_status_changes">要求修改</string>
+    <string name="you_status_rejected">未通过</string>
+    <string name="you_status_published">已上架</string>
+    <string name="you_reason_rejected">未通过的原因</string>
+    <string name="you_reason_changes">需要修改什么</string>
+    <string name="you_reason_note">来自审核员</string>
+    <string name="you_update">修改后重新提交</string>
+    <string name="you_delete">删除</string>
+    <string name="you_delete_title">删除这份提交？</string>
+    <string name="you_delete_body">%1$s %2$s 及其上传的文件将从商店中移除。若项目仅有这一份提交，项目也会随之删除。</string>
+    <string name="you_status_listing_pending">等待审核</string>
+    <string name="you_status_listing_rejected">未通过</string>
+    <string name="you_status_listing_unpublished">已下架</string>
+
+    <!-- Moderation: the review queue and the report queue, for an account listed in store_admins. -->
+    <string name="you_moderation">审核</string>
+    <string name="you_moderation_waiting">%1$d 个待审核</string>
+    <string name="you_moderation_clear">没有待审核的内容</string>
+    <string name="moderation_title">审核</string>
+    <string name="moderation_not_allowed">此账号没有商店审核权限。</string>
+    <string name="moderation_tab_queue">待审核</string>
+    <string name="moderation_tab_reports">举报</string>
+    <string name="moderation_queue_clear">没有待审核的内容。</string>
+    <string name="moderation_recent">最近的审核决定</string>
+    <string name="moderation_version_by">%1$s · 作者 %2$s</string>
+    <string name="moderation_view_publisher">发布者</string>
+    <string name="moderation_flag_banned">已封禁的发布者</string>
+    <string name="moderation_files">%1$d 个文件</string>
+    <string name="moderation_show_files">显示全部 %1$d 个文件</string>
+    <string name="moderation_hide_files">隐藏文件</string>
+    <string name="moderation_files_more">以及另外 %1$d 个</string>
+    <string name="moderation_changelog">变更内容</string>
+    <string name="moderation_listing_edit">拟议的列表信息变更</string>
+    <string name="moderation_edit_nothing">无变更</string>
+    <string name="moderation_approve">通过</string>
+    <string name="moderation_reject">拒绝</string>
+    <string name="moderation_reject_title">拒绝 %1$s？</string>
+    <string name="moderation_reject_body">发布者只会收到这条备注，请写明需要修改什么。</string>
+    <string name="moderation_reject_note">给发布者的备注</string>
+    <string name="moderation_icon_title">此版本没有应用图标</string>
+    <string name="moderation_icon_body">%1$s %2$s 没有图标，但列表信息中有图标。若发布者已删除自己的图标，请清除；若这是无法上传图标的旧应用，请保留。</string>
+    <string name="moderation_icon_clear">清除图标</string>
+    <string name="moderation_icon_keep">保留当前图标</string>
+    <string name="moderation_reports_none">暂无举报。</string>
+    <string name="moderation_report_project">整个项目被举报</string>
+    <string name="moderation_report_review">有评价被举报</string>
+    <string name="moderation_already_hidden">已隐藏</string>
+    <string name="moderation_reporter_said">举报者说：%1$s</string>
+    <string name="moderation_open_listing">打开列表信息</string>
+    <string name="moderation_hide_review">隐藏该评价</string>
+    <string name="moderation_restore_review">恢复该评价</string>
+    <string name="moderation_dismiss_report">忽略</string>
+    <string name="moderation_mark_actioned">标记为已处理</string>
     <string name="notif_title">通知</string>
     <string name="notif_empty">暂无新动态。</string>
     <string name="notif_empty_body">审核结果、更新和完成的构建会显示在这里。</string>
@@ -742,6 +875,7 @@
     <string name="learn_review">复习</string>
     <string name="learn_continue">继续</string>
     <string name="learn_completed">已完成</string>
+    <!-- Learn tab, Material 3 Expressive redesign -->
     <string name="learn_lessons_done">已完成 %1$d 节课</string>
     <string name="learn_module_meta">%2$d 节课中的第 %1$d 节 · %3$d 分钟</string>
     <string name="learn_resume_lesson">继续第 %1$d 节课</string>
@@ -927,6 +1061,7 @@
     <string name="newfile_kind_android_res">Android 资源</string>
     <string name="newfile_kind_assets">资源文件</string>
     <string name="newfile_preset_aidl">AIDL</string>
+    <string name="newfile_preset_jni_libs">JNI 库</string>
     <string name="newfile_preset_custom">自定义</string>
     <string name="newfile_role_sources">源码</string>
     <string name="newfile_add_source_root">添加源码根目录</string>
@@ -1050,6 +1185,8 @@
     <string name="plugins_change_disabled">已关闭</string>
     <string name="plugins_changes_more">还有 %1$d 项</string>
     <string name="plugins_required">必需</string>
+    <string name="plugins_review">审核</string>
+    <string name="plugins_logs">日志</string>
     <string name="plugins_requires">需要 %1$s</string>
     <string name="plugins_tab_builtin">内置</string>
     <string name="plugins_tab_installed">已安装</string>
@@ -1128,6 +1265,7 @@
     <string name="dep_resolving_dependencies">正在解析依赖</string>
     <string name="dep_downloading_artifacts">正在下载 POM 和构件…</string>
     <string name="dep_unresolved_count">%1$d 项未解析</string>
+    <string name="dep_empty_count">%1$d 个未能解析</string>
     <string name="dep_none_declared">尚未声明依赖。点按“添加”下载一个。</string>
     <string name="dep_nothing_resolved">尚未解析任何内容。</string>
     <string name="dep_not_resolved">未解析。请检查版本或仓库，然后重新解析。</string>
@@ -1164,6 +1302,7 @@
     <string name="dep_resolving_transitive">正在解析传递依赖…</string>
     <string name="dep_no_other_modules">没有可供依赖的其他模块。</string>
     <string name="dep_no_results">没有结果。</string>
+    <string name="dep_index_unreachable">仓库索引无响应，当前无可搜索内容。请检查网络连接，或直接输入完整的 group:name 添加依赖。</string>
     <string name="dep_type_to_search">至少输入 2 个字符进行搜索，或输入完整的 group:name[:version]。</string>
     <string name="dep_add_named">添加 %1$s</string>
     <string name="dep_import_as_platform">作为平台（BOM）导入</string>
@@ -1695,6 +1834,7 @@
     <string name="store_step_submit_body">我们会在干净的机器上构建，并由真人检查许可协议与 README。通常两个工作日。</string>
     <string name="store_step_submit_title">提交审核</string>
     <string name="store_top_charts">排行榜</string>
+
     <plurals name="store_project_count">
         <item quantity="one">%1$d 个项目</item>
         <item quantity="other">%1$d 个项目</item>
