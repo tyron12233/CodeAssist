@@ -54,7 +54,7 @@ internal fun KotlinResolver.returnParamGotNullLambda(
 ): Boolean {
     call.valueArguments.forEachIndexed { i, arg ->
         val lambda = arg.getArgumentExpression() as? KtLambdaExpression ?: return@forEachIndexed
-        val pt = (sym.paramTypes.getOrNull(i) ?: sym.paramTypes.lastOrNull()) as? KotlinType
+        val pt = (sym.paramTypes.getOrNull(lambdaParamIndex(call, i, sym)) ?: sym.paramTypes.lastOrNull()) as? KotlinType
             ?: return@forEachIndexed
         val ret = service.functionalShape(pt)?.returnType as? KotlinType
         if (ret?.isTypeParameter == true && ret.qualifiedName == param) {
@@ -192,8 +192,8 @@ internal fun KotlinResolver.mentionsTypeParam(t: TypeRef?, name: String): Boolea
 }
 
 /** The declared value-parameter indices that received an argument at [call]: a named argument by its
- *  parameter name, a trailing lambda by Kotlin's trailing-lambda rule (the last parameter), the rest by
- *  position. A named argument whose name matches no parameter contributes nothing. */
+ *  parameter name, a trailing lambda by Kotlin's trailing-lambda rule (the last parameter), a positional
+ *  argument past a vararg by the vararg, the rest by position. A named argument whose name matches no parameter contributes nothing. */
 internal fun KotlinResolver.suppliedValueParameterIndices(
     sym: KotlinSymbol,
     call: KtCallExpression
@@ -207,6 +207,7 @@ internal fun KotlinResolver.suppliedValueParameterIndices(
                 ?: return@forEachIndexed
 
             arg is KtLambdaArgument -> (paramCount - 1).coerceAtLeast(0)
+            sym.varargParamIndex in 0..<i -> sym.varargParamIndex
             else -> i
         }
         out += idx
@@ -270,7 +271,9 @@ internal fun KotlinResolver.bindingsFromArgExprs(
         // Behaviour-identical: a key-form mismatch just means no early exit, never a different result.
         if (bindings.keys.containsAll(needed)) return bindings
         if (expr == null || expr is KtLambdaExpression) return@forEachIndexed
-        val pt = (sym.paramTypes.getOrNull(i) ?: sym.paramTypes.lastOrNull()) as? KotlinType
+        // A positional argument past a vararg still fills the vararg, not the parameter after it.
+        val paramIndex = if (sym.varargParamIndex in 0..<i) sym.varargParamIndex else i
+        val pt = (sym.paramTypes.getOrNull(paramIndex) ?: sym.paramTypes.lastOrNull()) as? KotlinType
             ?: return@forEachIndexed
         inferType(expr)?.let { unify(pt, it, bindings) }
     }

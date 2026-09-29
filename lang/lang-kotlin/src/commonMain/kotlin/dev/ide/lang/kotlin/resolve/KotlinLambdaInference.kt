@@ -236,9 +236,11 @@ internal fun KotlinResolver.enclosingCallAndParamIndex(lambda: KtLambdaExpressio
     return call to call.valueArguments.indexOf(valueArg).coerceAtLeast(0)
 }
 
-/** The declared parameter index a lambda value-argument at [argIndex] fills: a named lambda by its name, a
+/** The declared parameter index a value-argument at [argIndex] fills: a named argument by its name, a
  *  trailing lambda by Kotlin's trailing-lambda rule (the LAST parameter — so a defaulted leading param like
- *  `modifier` doesn't misalign `Column { }`/`LazyColumn { }`'s content receiver), else its positional index. */
+ *  `modifier` doesn't misalign `Column { }`/`LazyColumn { }`'s content receiver), a positional argument at or
+ *  past a vararg by the vararg itself (it absorbs them all: `remember(a, b, c, d) { }` binds `b`..`d` to
+ *  `keys`, not to `calculation`), else its positional index. */
 internal fun KotlinResolver.lambdaParamIndex(
     call: KtCallExpression,
     argIndex: Int,
@@ -250,5 +252,7 @@ internal fun KotlinResolver.lambdaParamIndex(
     }
     val paramCount = maxOf(sym.paramTypes.size, sym.paramNames.size)
     if (arg is KtLambdaArgument) return (paramCount - 1).coerceAtLeast(0)
+    val vararg = sym.varargParamIndex
+    if (vararg in 0..<argIndex) return vararg
     return argIndex
 }

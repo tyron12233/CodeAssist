@@ -120,6 +120,10 @@ internal fun KotlinResolver.expectedArgType(arg: KtValueArgument): KotlinType? {
         return null
     }
     val index = argList.arguments.indexOf(arg)
-    targets.forEach { s -> (s.paramTypes.getOrNull(index) as? KotlinType)?.let { return it } }
+    targets.forEach { s ->
+        // A positional argument past a vararg still fills the vararg, not the parameter after it.
+        val paramIndex = if (s.varargParamIndex in 0..<index) s.varargParamIndex else index
+        (s.paramTypes.getOrNull(paramIndex) as? KotlinType)?.let { return it }
+    }
     return null
 }

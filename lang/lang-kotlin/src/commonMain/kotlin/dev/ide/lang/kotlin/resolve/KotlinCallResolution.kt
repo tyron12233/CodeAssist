@@ -200,7 +200,13 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         return bestOverload(exact, call, receiverType)
     }
     if (moreParams.isNotEmpty()) return bestOverload(moreParams, call, receiverType)
-    if (fewerParams.isNotEmpty()) return bestOverload(fewerParams, call, receiverType)
+    // More arguments than parameters fit only a vararg overload: `remember(a, b, c, d) { }` is
+    // `remember(vararg keys, calculation)`, never the fixed `remember(key1, key2, key3, calculation)` whose
+    // last slot would swallow `d`. Fall back to the whole tier when no candidate declares a vararg.
+    if (fewerParams.isNotEmpty()) {
+        val pool = fewerParams.filter { it.varargParamIndex >= 0 }.ifEmpty { fewerParams }
+        return bestOverload(pool, call, receiverType)
+    }
     return viable.firstOrNull()
 }
 
@@ -416,8 +422,9 @@ internal fun KotlinResolver.lambdaReturnSpecificity(
     return score
 }
 
-/** The declared parameter index a non-lambda value argument fills: a NAMED argument by its name (else its
- *  positional index). The trailing-lambda variant is [lambdaParamIndex]. */
+/** The declared parameter index a non-lambda value argument fills: a NAMED argument by its name, a positional
+ *  argument at or past a vararg by the vararg, else its positional index. The trailing-lambda variant is
+ *  [lambdaParamIndex]. */
 internal fun KotlinResolver.argParamIndex(
     arg: ValueArgument,
     argIndex: Int,
@@ -426,6 +433,8 @@ internal fun KotlinResolver.argParamIndex(
     arg.getArgumentName()?.asName?.identifier?.let { n ->
         sym.paramNames.indexOf(n).takeIf { it >= 0 }?.let { return it }
     }
+    val vararg = sym.varargParamIndex
+    if (vararg in 0..<argIndex) return vararg
     return argIndex
 }
 
