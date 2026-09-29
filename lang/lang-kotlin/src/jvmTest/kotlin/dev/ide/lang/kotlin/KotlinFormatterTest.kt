@@ -26,6 +26,27 @@ class KotlinFormatterTest {
         apply(src, KotlinFormatter.reformat("Test.kt", src, style, 0, src.length))
 
     /**
+     * The elvis operator stays one operator. The lexer emits `?:` as a `?` leaf and a `:` leaf, and spacing
+     * the gap between them as an operator gap wrote `? :`, which does not parse.
+     */
+    @Test
+    fun keepsTheElvisOperatorWhole() {
+        assertEquals("fun t() {\n  val r = x ?: y\n}\n", fmt("fun t() {\n  val r = x ?: y\n}\n"))
+        assertEquals("fun t() {\n  val r = x ?: y\n}\n", fmt("fun t() {\n  val r = x?:y\n}\n"))
+        assertEquals(
+            "fun t() {\n  val r = x?.let { it } ?: return\n}\n",
+            fmt("fun t() {\n  val r = x?.let { it } ?: return\n}\n"),
+        )
+    }
+
+    /** Range operators are written tight, as Kotlin style has them, not spaced like other binary operators. */
+    @Test
+    fun keepsRangeOperatorsTight() {
+        assertEquals("fun t() {\n  val a = 0..n\n  val b = 0..<n\n}\n", fmt("fun t() {\n  val a = 0..n\n  val b = 0..<n\n}\n"))
+        assertEquals("fun t() {\n  val a = 0..n\n}\n", fmt("fun t() {\n  val a = 0 .. n\n}\n"))
+    }
+
+    /**
      * The interior of a multi-line comment survives, which is the formatter's one absolute rule: a reflowed
      * comment is an edit the user did not ask for and cannot see coming.
      *

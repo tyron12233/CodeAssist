@@ -4,6 +4,7 @@ import com.intellij.platform.syntax.SyntaxElementType
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtElement
 import dev.ide.kotlin.syntax.psi.KtFile
+import dev.ide.kotlin.syntax.psi.KtOperationReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtStringTemplateExpression
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.lang.dom.TextRange
@@ -215,14 +216,26 @@ class KotlinFormatter : FormattingService {
          * inside a string/comment) per the inline-spacing knobs: around binary operators and `=`, after a
          * comma, just inside parentheses, before a `{`, and around a lambda `->`. Binary operators are found
          * from [KtBinaryExpression] PSI (not token adjacency) so a unary `-x` is never spaced like `a - b`.
+         * Each operator is ONE atom: the lexer emits `?:` as a `?` and a `:` leaf, and spacing the gap between
+         * them would write `? :`, which does not parse. Range operators (`..`, `..<`) stay tight.
          * Returns [text] with the gaps rewritten; gaps with no matching rule are left exactly as they are.
          */
         private fun applyInlineSpacing(name: String, text: String, style: FormatStyle): String {
             val ktFile = KotlinParserHost.parse(name, text)
             val binaryOps = HashSet<Int>()
+            val rangeOps = HashSet<Int>()
             val atoms = ArrayList<Atom>()
             fun walk(e: KtElement) {
-                if (e is KtBinaryExpression) binaryOps += e.operationReference.textRange.startOffset
+                if (e is KtBinaryExpression) {
+                    val op = e.operationReference
+                    binaryOps += op.textRange.startOffset
+                    if (op.text == ".." || op.text == "..<") rangeOps += op.textRange.startOffset
+                }
+                if (e is KtOperationReferenceExpression && e.parent is KtBinaryExpression) {
+                    val r = e.textRange
+                    atoms += Atom(r.startOffset, r.endOffset, e.getReferencedNameElementType())
+                    return
+                }
                 // As in `scan`: a comment is a token here, matched by kind, and reached only through the
                 // trivia-including children.
                 if (e is KtStringTemplateExpression || e.elementType in COMMENT_TYPES) {
@@ -251,7 +264,7 @@ class KotlinFormatter : FormattingService {
                 val r = atoms[i + 1]
                 if (r.start < l.end) continue // overlap guard; r.start == l.end is a zero-width gap (may insert)
                 if (hasNewline(text, l.end, r.start)) continue
-                val desired = desiredGap(l, r, binaryOps, style) ?: continue
+                val desired = desiredGap(l, r, binaryOps, rangeOps, style) ?: continue
                 if (text.substring(l.end, r.start) != desired) edits += Edit(l.end, r.start, desired)
             }
             for (e in edits.sortedByDescending { it.start }) sb.setRange(e.start, e.end, e.replacement)
@@ -259,7 +272,8 @@ class KotlinFormatter : FormattingService {
         }
 
         /** The whitespace a gap between [l] and [r] should hold, or null to leave it untouched. */
-        private fun desiredGap(l: Atom, r: Atom, binaryOps: Set<Int>, style: FormatStyle): String? {
+        private fun desiredGap(l: Atom, r: Atom, binaryOps: Set<Int>, rangeOps: Set<Int>, style: FormatStyle): String? {
+            if (l.start in rangeOps || r.start in rangeOps) return "" // `0..n`, `0..<n`: Kotlin writes ranges tight
             // Binary operators (incl. `=` assignment/named-arg/default) — found via PSI, so unary is excluded.
             if (l.start in binaryOps || r.start in binaryOps || l.type == KtTokens.EQ || r.type == KtTokens.EQ) {
                 return if (style.spaceAroundOperators) " " else ""
