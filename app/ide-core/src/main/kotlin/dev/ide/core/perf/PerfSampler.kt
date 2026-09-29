@@ -40,23 +40,28 @@ internal class PerfSampler(
      * Record one [ms] sample of [name]. [dims] split the metric into separately summarized windows (the
      * language, the editor pass), and are reported with it; they must come from closed sets, never user
      * content. [queuedMs] is the part of [ms] spent waiting for the engine before the work started.
-     * [overMs] counts the samples above it (a frame budget).
+     * [over] tallies the samples that missed whatever budget the caller holds it to (`over_count`).
+     *
+     * The verdict is the caller's rather than a threshold passed in, because [ms] is a rounded millisecond
+     * and a frame budget is not: a 16.9 ms frame against a 16.67 ms deadline is a miss that comparing the
+     * truncated `16` against `16` would score as a hit. The frame source compares in nanoseconds and reports
+     * the answer.
      */
     fun record(
         name: String,
         ms: Long,
         dims: Map<String, String> = emptyMap(),
         queuedMs: Long? = null,
-        overMs: Long? = null,
+        over: Boolean? = null,
     ) {
         val key = if (dims.isEmpty()) name else name + dims.entries.sortedBy { it.key }.joinToString("") { "|${it.key}=${it.value}" }
         val full = synchronized(lock) {
             val window = buckets.getOrPut(key) { Window(windowSize, name, dims) }
             window.samples.add(ms)
             if (queuedMs != null) window.queued.add(queuedMs)
-            if (overMs != null) {
+            if (over != null) {
                 window.hasThreshold = true
-                if (ms > overMs) window.over++
+                if (over) window.over++
             }
             window.heap.record()
             if (window.samples.size >= windowSize) buckets.remove(key) else null

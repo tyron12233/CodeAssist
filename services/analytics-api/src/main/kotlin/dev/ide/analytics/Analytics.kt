@@ -101,7 +101,8 @@ object Events {
     const val COMPLETION_PERF = "completion_perf"
     const val ANALYSIS_PERF = "analysis_perf"     // the diagnostics pass (props `lang`, `queue_*`)
     const val PASS_PERF = "pass_perf"             // every other editor pass (props `pass`, `lang`, `queue_*`)
-    const val FRAME_PERF = "frame_perf"           // editor frame times while typing (`over_count` = janky frames)
+    const val FRAME_PERF = "frame_perf"           // whole frame, vsync to done (`over_count` = missed the deadline)
+    const val FRAME_CPU_PERF = "frame_cpu_perf"   // the app's own share of that frame (`over_count` = ours alone overran)
 
     // crash / stability
     const val APP_CRASH = "app_crash"       // uncaught exception (fatal path)

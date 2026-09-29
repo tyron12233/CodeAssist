@@ -52,7 +52,7 @@ class PerfSamplerTest {
         val events = mutableListOf<Map<String, String>>()
         val sampler = PerfSampler(windowSize = 3) { _, props -> events += props }
 
-        listOf(10L, 20L, 40L).forEach { sampler.record("frame_perf", it, overMs = 16L) }
+        listOf(10L, 20L, 40L).forEach { sampler.record("frame_perf", it, over = it > 16L) }
 
         assertEquals("2", events.single()["over_count"])
         assertTrue("queue_p50_ms" !in events.single(), "no queue keys when nothing was queued")

@@ -41,8 +41,23 @@ Events (the `event` column), by category:
 
 | Category      | Events (props in parens) |
 |---------------|--------|
-| `performance` | `cold_start` (`duration_ms` — full on-device bootstrap, once per launch; also the per-launch anchor), `index_perf` (`duration_ms` + `heap_*_mb` — per index build/reindex; **plus** the phase split `lib_ms`/`src_ms`, the cache-effectiveness counts `artifacts`/`artifacts_built`/`artifacts_reused`, the source-diff counts `src_files`/`src_parsed`, and a per-indexer breakdown `idx.<index-id>.ms` for each index that cost ≥1ms — e.g. `idx.java.classNames.ms`, `idx.android.resources.ms` — where the id is a fixed index-kind name, never a file/project/package name), `build_result` (`ok`, `duration_ms`, `steps`, `peak_heap_mb`/`min_headroom_mb`/`heap_max_mb`, and on failure `failure_kind` = `compile`/`resource`/`tool`/`oom`/`no_diagnostic` — per build/run), `completion_perf` / `analysis_perf` (`count`, `mean_ms`, `p50_ms`, `p95_ms`, `max_ms`, plus the window's peak `heap_used_mb`/`heap_max_mb`/`heap_headroom_mb`) |
+| `performance` | `cold_start` (`duration_ms` — full on-device bootstrap, once per launch; also the per-launch anchor), `index_perf` (`duration_ms` + `heap_*_mb` — per index build/reindex; **plus** the phase split `lib_ms`/`src_ms`, the cache-effectiveness counts `artifacts`/`artifacts_built`/`artifacts_reused`, the source-diff counts `src_files`/`src_parsed`, and a per-indexer breakdown `idx.<index-id>.ms` for each index that cost ≥1ms — e.g. `idx.java.classNames.ms`, `idx.android.resources.ms` — where the id is a fixed index-kind name, never a file/project/package name), `build_result` (`ok`, `duration_ms`, `steps`, `peak_heap_mb`/`min_headroom_mb`/`heap_max_mb`, and on failure `failure_kind` = `compile`/`resource`/`tool`/`oom`/`no_diagnostic` — per build/run), `completion_perf` / `analysis_perf` (`count`, `mean_ms`, `p50_ms`, `p95_ms`, `max_ms`, plus the window's peak `heap_used_mb`/`heap_max_mb`/`heap_headroom_mb`), `frame_perf` / `frame_cpu_perf` (same summary shape, plus `over_count`; see below) |
 | `crash`       | `app_crash` (scrubbed — see below; also carries the crash-time `heap_*_mb` and always pins at least one `dev.ide.*` frame, walking the cause chain if the top of the stack is all framework code), `error_logged` (a caught ERROR-level failure, scrubbed + throttled) |
+
+`frame_perf` and `frame_cpu_perf` summarize drawn frames, counted only in bursts (a frame drawn within
+100ms of the one before it) so that typing, scrolling and animation are measured and the idle caret blink is
+not. `frame_perf` is the whole frame, vsync to done, which is what the user feels; `frame_cpu_perf` is the
+same frame minus the wait for the display, which is the part this app is responsible for and the one to read
+when asking whether a change made the IDE slower.
+
+`over_count` is **frames that missed their deadline**, from `FrameMetrics.DEADLINE` (API 31+; older devices
+fall back to one vsync interval). It is not "frames longer than one vsync". A frame can exceed the refresh
+interval and still be perfectly smooth, because its total includes blocking in `swapBuffers` for a free
+buffer, which is ordinary pipelining. Readings taken before 3.23 used the vsync interval and are therefore
+**not comparable**: on a two-core emulator that older test scored a smooth editor scroll 96-100% janky where
+the deadline scored it 2-12%, and it was strictest on the fastest panels, since a 120Hz device was being held
+to 8ms. Rows from those releases also contain occasional nonsense frame times near `Long.MAX_VALUE`
+nanoseconds, which one sample is enough to poison a window with; those are now dropped at the source.
 
 `failure_kind` categorizes a failed build so the ~50% "failure" rate is actionable: a compiler/resource
 error is the user's own code (the expected inner loop), whereas `tool`/`no_diagnostic` point at our pipeline

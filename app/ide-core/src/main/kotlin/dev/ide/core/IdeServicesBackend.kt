@@ -327,9 +327,24 @@ class IdeServicesBackend(
      *  of frames a second, and one event per few hundred frames is enough to see jank trend by version. */
     private val frames = PerfSampler(windowSize = FRAME_WINDOW) { name, props -> track(name, props) }
 
-    /** One drawn frame of [totalMs] against a [budgetMs] vsync budget (the host decides which frames count). */
-    fun recordFrame(totalMs: Long, budgetMs: Long) =
-        frames.record(dev.ide.analytics.Events.FRAME_PERF, totalMs, overMs = budgetMs)
+    /** The app-side half of [recordFrame]; its own sampler so the two windows close independently. */
+    private val frameCpu = PerfSampler(windowSize = FRAME_WINDOW) { name, props -> track(name, props) }
+
+    /**
+     * One drawn frame the host decided to count: [totalMs] end to end, of which [cpuMs] was the app's own
+     * work; [missedDeadline] is whether the frame actually arrived late, and [cpuOverran] whether that work
+     * alone was already over budget before anything was handed to the display.
+     *
+     * Two metrics rather than one because they answer different questions and can disagree. `frame_perf`
+     * carries the whole frame, which is what the user feels but which includes waiting for a buffer: normal
+     * pipelining that no amount of work on our side removes. `frame_cpu_perf` carries only what this app
+     * spends, so a regression in our own code can neither hide behind a fast display nor be invented by a
+     * slow one.
+     */
+    fun recordFrame(totalMs: Long, cpuMs: Long, missedDeadline: Boolean, cpuOverran: Boolean) {
+        frames.record(dev.ide.analytics.Events.FRAME_PERF, totalMs, over = missedDeadline)
+        frameCpu.record(dev.ide.analytics.Events.FRAME_CPU_PERF, cpuMs, over = cpuOverran)
+    }
 
     // ---- critical-error surface (non-fatal dialog, fed by the logging facade) ----
 
@@ -747,6 +762,7 @@ class IdeServicesBackend(
         runCatching { engineScope.cancel() }
         runCatching { perf.flushAll() } // drain partial latency windows so the last session's samples ship
         runCatching { frames.flushAll() }
+        runCatching { frameCpu.flushAll() }
         runCatching { analytics.flush() }
         runCatching { analytics.close() }
         // The version-control backend holds an open repository handle and its own refresh coroutine.
