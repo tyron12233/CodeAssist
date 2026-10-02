@@ -5,4 +5,6 @@
 <paths>
     <external-files-path name="codeassist-ext" path="codeassist/" />
     <files-path name="codeassist" path="codeassist/" />
+    <!-- Where the camera writes a photo taken for the AI chat (see AndroidFileOps.newCameraTarget). -->
+    <cache-path name="camera" path="camera/" />
 </paths>

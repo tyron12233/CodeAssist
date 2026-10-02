@@ -29,6 +29,26 @@ interface FileActions {
      */
     fun pickFile(extensions: List<String> = emptyList(), onPicked: (String?) -> Unit) = onPicked(null)
 
+    /** Whether this host can take a photo with the device camera (shows the chat's "Take photo" affordance). */
+    val canTakePhoto: Boolean get() = false
+
+    /**
+     * Launch the camera and return the saved photo's absolute path via [onTaken] (null if cancelled or no camera
+     * app). The file is a temporary copy the caller reads and may discard. Default no-op.
+     */
+    fun takePhoto(onTaken: (String?) -> Unit) = onTaken(null)
+
+    /** Whether this host can read an image from the system clipboard (shows "Paste image"). */
+    val canPasteImage: Boolean get() = false
+
+    /** Whether the clipboard holds an image right now. Cheap enough to ask on a key press, so a paste shortcut
+     *  can claim the key only when there is an image to paste and leave text paste alone otherwise. */
+    fun hasClipboardImage(): Boolean = false
+
+    /** Save the clipboard's image to a temporary file and return its path via [onPasted] (null when there is
+     *  none). Default no-op. */
+    fun pasteImage(onPasted: (String?) -> Unit) = onPasted(null)
+
     /** Whether this host can pick an existing directory (shows the "Import Gradle project" affordance). */
     val canPickDirectory: Boolean get() = false
 

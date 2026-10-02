@@ -16,3 +16,7 @@ actual fun nativeImageToBitmap(handle: Any?): ImageBitmap? = null
 actual fun encodeImagePng(image: ImageBitmap): ByteArray? = runCatching {
     Image.makeFromBitmap(image.asSkiaBitmap()).encodeToData(EncodedImageFormat.PNG)?.bytes
 }.getOrNull()
+
+actual fun encodeImageJpeg(image: ImageBitmap, quality: Int): ByteArray? = runCatching {
+    Image.makeFromBitmap(image.asSkiaBitmap()).encodeToData(EncodedImageFormat.JPEG, quality.coerceIn(0, 100))?.bytes
+}.getOrNull()

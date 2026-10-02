@@ -1736,8 +1736,42 @@ interface AgentService {
      *  certificate PEM to trust for an endpoint behind a private/regional CA — blank = system trust only). */
     fun setGateway(baseUrl: String, model: String, caCert: String)
 
-    /** Send a user message; streams the agent's response into [chatState]. */
+    /** Send a user message; streams the agent's response into [chatState]. Queued
+     *  [UiAgentChatState.pendingAttachments] go with it. */
     fun send(text: String)
+
+    /** Queue an attachment for the next message. */
+    fun attach(attachment: UiAgentAttachment) {}
+
+    /** Drop the queued attachment at [index]. */
+    fun detach(index: Int) {}
+
+    /** Project files matching [query], for `@` mentions in the composer. */
+    suspend fun mentionCandidates(query: String): List<UiAgentMention> = emptyList()
+
+    /** The slash commands the composer offers. */
+    fun commands(): List<UiAgentCommand> = emptyList()
+
+    /** Run slash command [name] (without the `/`) with its [args]; false when it is not a command. */
+    fun runCommand(name: String, args: String = ""): Boolean = false
+
+    /** Saved conversations for this project, newest first. */
+    fun sessions(): List<UiAgentSessionSummary> = emptyList()
+
+    /** Reopen a saved conversation, transcript and model context both. */
+    fun resumeSession(id: String) {}
+
+    /** Delete a saved conversation. */
+    fun deleteSession(id: String) {}
+
+    /** Revert the files the agent changed while answering user message [messageId], and every later message. */
+    fun undoTurn(messageId: Long) {}
+
+    /** Switch to [model] and re-run the last failed turn (the one-tap fix for a model the account can't use). */
+    fun switchModelAndRetry(model: String) {
+        setModel(model)
+        retry()
+    }
 
     /** Re-run the last turn after a failure (rate limit, network). No-op if there's nothing to retry. */
     fun retry()

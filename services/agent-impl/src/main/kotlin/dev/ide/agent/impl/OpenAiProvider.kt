@@ -129,18 +129,52 @@ class OpenAiProvider(
                 if (cacheable) put("content", cachedTextContent(it)) else put("content", it)
             })
         }
+        // A `tool` message is text-only on this dialect, so images a tool produced are held back and sent in a
+        // user message right after the run of tool results they belong to.
+        val toolImages = ArrayList<ContentPart.Image>()
+        fun flushToolImages() {
+            if (toolImages.isEmpty()) return
+            add(buildJsonObject {
+                put("role", "user")
+                put("content", userContent(listOf(ContentPart.Text("Images returned by the tool calls above:")) + toolImages))
+            })
+            toolImages.clear()
+        }
         messages.forEach { m ->
+            if (m.role != LlmRole.TOOL) flushToolImages()
             when (m.role) {
                 LlmRole.SYSTEM -> add(buildJsonObject { put("role", "system"); put("content", plainText(m.content)) })
-                LlmRole.USER -> add(buildJsonObject { put("role", "user"); put("content", plainText(m.content)) })
+                LlmRole.USER -> add(buildJsonObject {
+                    put("role", "user")
+                    if (m.content.any { it is ContentPart.Image }) put("content", userContent(m.content))
+                    else put("content", plainText(m.content))
+                })
                 LlmRole.ASSISTANT -> add(assistantMessage(m.content))
                 LlmRole.TOOL -> m.content.forEach { part ->
-                    if (part is ContentPart.ToolResultPart) add(buildJsonObject {
-                        put("role", "tool")
-                        put("tool_call_id", part.toolCallId)
-                        put("content", part.content)
-                    })
+                    if (part is ContentPart.ToolResultPart) {
+                        add(buildJsonObject {
+                            put("role", "tool")
+                            put("tool_call_id", part.toolCallId)
+                            put("content", part.content)
+                        })
+                        toolImages += part.images
+                    }
                 }
+            }
+        }
+        flushToolImages()
+    }
+
+    /** The content-array form, needed as soon as a user turn carries an image. */
+    private fun userContent(parts: List<ContentPart>): JsonArray = buildJsonArray {
+        parts.forEach { p ->
+            when (p) {
+                is ContentPart.Text -> add(buildJsonObject { put("type", "text"); put("text", p.text) })
+                is ContentPart.Image -> add(buildJsonObject {
+                    put("type", "image_url")
+                    put("image_url", buildJsonObject { put("url", "data:${p.mediaType};base64,${p.data}") })
+                })
+                else -> Unit
             }
         }
     }

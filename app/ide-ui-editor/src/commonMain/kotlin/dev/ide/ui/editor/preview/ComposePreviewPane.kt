@@ -290,7 +290,9 @@ fun ComposePreviewPane(
         // Wrap mode: the card sizes to the composable, so the content (and this box) must wrap too rather than
         // fill a fixed viewport. Fixed mode fills the device card.
         val contentMod = if (wrap) Modifier.wrapContentSize() else Modifier.fillMaxSize()
-        Box(contentMod, contentAlignment = Alignment.Center) {
+        // What the agent's screenshot_preview sees: the device card's content, at render scale.
+        val capture = rememberPreviewCapture(path, current?.label ?: path.substringAfterLast('/'))
+        Box(contentMod.then(capture), contentAlignment = Alignment.Center) {
             when {
                 host != null && current != null && !ready -> {
                     // The index is still building — wait rather than render a preview whose library composables

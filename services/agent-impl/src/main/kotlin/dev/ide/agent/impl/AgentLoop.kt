@@ -16,6 +16,7 @@ import dev.ide.agent.TokenUsage
 import dev.ide.agent.ToolExecutionResult
 import dev.ide.agent.WriteRequest
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
@@ -49,9 +50,28 @@ class AgentLoop(
     private val effort: String? = null,
     /** Trims re-sent tool output so a long task does not re-bill the whole transcript each step. */
     private val compactor: HistoryCompactor = HistoryCompactor(),
+    /** Keeps requests under the provider's per-minute limits; null sends as fast as the loop runs. */
+    private val pacer: RequestPacer? = null,
+    /** Records what each mutating call changed, for diffs and undo; null records nothing. */
+    private val checkpoints: CheckpointWorkspace? = null,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private companion object {
+        /** How many rate-limit waits one turn may sit through before it gives up and reports the error. */
+        const val MAX_RATE_LIMIT_WAITS = 6
+
+        /** The wait when a rate limit names no retry delay. */
+        const val DEFAULT_RATE_LIMIT_WAIT_MS = 30_000L
+
+        /** A provider asking for longer than this is reported rather than waited out. */
+        const val MAX_RATE_LIMIT_WAIT_MS = 120_000L
+
         /** Sent on the final turn once the iteration cap is hit; no tools are offered alongside it. */
+        const val COMPACT = "Summarize this conversation so far so it can continue from your summary alone. " +
+            "Keep: the user's goals and constraints, decisions made, files created or changed (with paths), the " +
+            "current state of the work, open problems, and the next steps. Be specific and concise. Reply with " +
+            "the summary only."
+
         const val WRAP_UP = "You have reached this task's tool-call limit, so this is your last turn and no " +
             "tools are available. Do not start new work. Report what you changed, what you verified, and " +
             "exactly what is left to do, so the user can pick it up from here."
@@ -83,8 +103,8 @@ class AgentLoop(
         }
     }
 
-    suspend fun send(userText: String, sink: AgentEventSink) {
-        history += LlmMessage.user(userText)
+    suspend fun send(userText: String, sink: AgentEventSink, images: List<ContentPart.Image> = emptyList()) {
+        history += if (images.isEmpty()) LlmMessage.user(userText) else LlmMessage.user(userText, images)
         sink.emit(AgentEvent.UserMessage(userText))
         runTurns(sink)
     }
@@ -102,6 +122,7 @@ class AgentLoop(
 
     private suspend fun runTurns(sink: AgentEventSink) {
         var iteration = 0
+        var rateLimitWaits = 0
         // A user-visible "turn" is the whole loop, which is several requests; report what all of them cost.
         var total = TokenUsage()
         while (iteration++ < maxIterations) {
@@ -116,10 +137,26 @@ class AgentLoop(
                 webSearch = webSearch,
                 effort = effort,
             )
+            pace(request, sink)
             val turn = Turn()
             client.chat(request).collect { event -> turn.consume(event, sink) }
 
-            turn.failure?.let { sink.emit(AgentEvent.Error(it)); return }
+            val failure = turn.failure
+            if (failure != null) {
+                val wait = rateLimitWait(turn)
+                if (wait != null && rateLimitWaits < MAX_RATE_LIMIT_WAITS) {
+                    // Nothing reached the user, so the same request can simply be sent again once the window
+                    // has moved on. The attempt does not count against the iteration cap.
+                    rateLimitWaits++
+                    iteration--
+                    sink.emit(AgentEvent.Waiting(clock() + wait, "Rate limited by the provider. Retrying when the limit resets."))
+                    delay(wait)
+                    continue
+                }
+                sink.emit(AgentEvent.Error(failure, (turn.failureCause as? LlmHttpException)?.kind?.name))
+                return
+            }
+            rateLimitWaits = 0
             turn.usage?.let { total += it }
 
             history += LlmMessage.assistant(turn.assistantParts())
@@ -151,6 +188,7 @@ class AgentLoop(
             webSearch = false,
             effort = effort,
         )
+        pace(request, sink)
         val turn = Turn()
         client.chat(request).collect { event -> turn.consume(event, sink) }
         turn.failure?.let {
@@ -160,6 +198,68 @@ class AgentLoop(
         history += LlmMessage.assistant(turn.assistantParts())
         val total = turn.usage?.let { usageSoFar + it } ?: usageSoFar
         sink.emit(AgentEvent.TurnCompleted(turn.stopReason, total))
+    }
+
+    /**
+     * Replaces the conversation with a model-written summary of it, so a long task can continue without
+     * re-sending (and re-billing) everything so far. The summary streams to [sink] like an answer. Returns false,
+     * leaving the history untouched, when there is nothing to compact or the request failed.
+     */
+    suspend fun compactConversation(sink: AgentEventSink): Boolean {
+        if (history.isEmpty()) return false
+        val request = LlmRequest(
+            model = model,
+            system = systemPrompt(),
+            messages = compactor.compact(history) + LlmMessage.user(COMPACT),
+            tools = emptyList(),
+            maxTokens = maxTokens,
+            thinking = false,
+            effort = effort,
+        )
+        pace(request, sink)
+        val turn = Turn()
+        client.chat(request).collect { event -> turn.consume(event, sink) }
+        val failure = turn.failure
+        if (failure != null || turn.text.isBlank()) {
+            sink.emit(AgentEvent.Error(failure ?: "The model returned an empty summary.", (turn.failureCause as? LlmHttpException)?.kind?.name))
+            return false
+        }
+        history.clear()
+        compactor.reset()
+        history += LlmMessage.user("Continue the earlier conversation. Here is where it got to.")
+        history += LlmMessage.assistant(listOf(ContentPart.Text(turn.text.toString())))
+        sink.emit(AgentEvent.TurnCompleted(turn.stopReason, turn.usage))
+        return true
+    }
+
+    /** Waits, visibly, when sending [request] now would break a known per-minute limit, then records it. */
+    private suspend fun pace(request: LlmRequest, sink: AgentEventSink) {
+        val p = pacer ?: return
+        val estimate = RequestPacer.estimateTokens(request)
+        val wait = p.delayFor(estimate)
+        if (wait > 0) {
+            val limit = listOfNotNull(
+                p.rpm?.let { "$it requests" },
+                p.tpm?.let { "$it tokens" },
+            ).joinToString(" and ")
+            sink.emit(AgentEvent.Waiting(clock() + wait, "Pacing requests to stay under the provider's limit of $limit per minute."))
+            delay(wait)
+        }
+        p.record(estimate)
+    }
+
+    /**
+     * How long to wait before resending a turn that failed on a per-minute rate limit, or null when the
+     * failure is not one to wait out: a different error, a daily or not-on-plan quota (waiting does not help),
+     * a wait longer than [MAX_RATE_LIMIT_WAIT_MS], or a turn that already streamed something to the user.
+     */
+    private fun rateLimitWait(turn: Turn): Long? {
+        val cause = turn.failureCause as? LlmHttpException ?: return null
+        if (cause.kind != LlmErrorKind.RATE_LIMIT || turn.producedOutput) return null
+        pacer?.learn(cause.quota)
+        val wait = cause.retryAfterMs ?: DEFAULT_RATE_LIMIT_WAIT_MS
+        if (wait > MAX_RATE_LIMIT_WAIT_MS) return null
+        return wait.coerceAtLeast(1_000)
     }
 
     /**
@@ -212,7 +312,10 @@ class AgentLoop(
         sink.emit(AgentEvent.ToolCallStarted(call.id, call.name, summary))
 
         if (tool.mutating) {
-            val allowed = gate.authorize(WriteRequest(call.name, summary, args.optString("path")))
+            // Ask with the change itself in hand when the tool can say what it would do, so the prompt shows a
+            // diff rather than only a path. Skipped in modes that never ask.
+            val preview = if (gate.mode == PermissionMode.ASK_EACH) runCatching { tool.preview(args) }.getOrDefault(emptyList()) else emptyList()
+            val allowed = gate.authorize(WriteRequest(call.name, summary, args.optString("path"), preview))
             if (!allowed) {
                 val reason = when (gate.mode) {
                     PermissionMode.PLAN_ONLY ->
@@ -224,10 +327,16 @@ class AgentLoop(
             }
         }
 
+        // Mutating calls run one at a time, so the checkpoint workspace can attribute every write to this call.
+        if (tool.mutating) checkpoints?.beginCall(call.id)
         val result = runCatching { tool.execute(args) }
             .getOrElse { ToolExecutionResult.error(it.message ?: "tool failed") }
+        if (tool.mutating) {
+            checkpoints?.endCall()?.takeIf { it.isNotEmpty() }?.let { sink.emit(AgentEvent.FilesChanged(call.id, it)) }
+        }
+        result.event?.let { sink.emit(it) }
         sink.emit(AgentEvent.ToolCallFinished(call.id, ok = !result.isError, resultSummary = brief(result.content)))
-        return LlmMessage.toolResult(call.id, result.content, result.isError)
+        return LlmMessage.toolResult(call.id, result.content, result.isError, result.images)
     }
 
     private fun brief(content: String): String {
@@ -244,6 +353,10 @@ class AgentLoop(
         var usage: TokenUsage? = null
         var stopReason: StopReason = StopReason.END_TURN
         var failure: String? = null
+        var failureCause: Throwable? = null
+
+        /** Whether anything from this turn has reached the user (so resending it would duplicate output). */
+        val producedOutput: Boolean get() = text.isNotEmpty() || toolOrder.isNotEmpty() || thinkingParts.isNotEmpty()
 
         suspend fun consume(event: LlmStreamEvent, sink: AgentEventSink) {
             when (event) {
@@ -259,7 +372,10 @@ class AgentLoop(
                 }
                 is LlmStreamEvent.Usage -> usage = event.usage
                 is LlmStreamEvent.Completed -> stopReason = event.stopReason
-                is LlmStreamEvent.Failed -> failure = event.message
+                is LlmStreamEvent.Failed -> {
+                    failure = event.message
+                    failureCause = event.cause
+                }
                 is LlmStreamEvent.ToolCallStarted, is LlmStreamEvent.ToolCallArgsDelta -> Unit
             }
         }

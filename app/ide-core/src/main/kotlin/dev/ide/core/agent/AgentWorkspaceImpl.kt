@@ -67,6 +67,17 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
         sliceLines(engine().readCurrentText(path(path)), startLine, endLine)
     }
 
+    /** The preview panes register themselves with [dev.ide.ui.ext.PreviewSnapshots] while composed; the agent
+     *  sees what the user sees. Relative paths are resolved like every other tool path before matching. */
+    override suspend fun previewScreenshot(path: String?): dev.ide.agent.PreviewImage? {
+        val shot = dev.ide.ui.ext.PreviewSnapshots.capture(path?.let { path(it).toString() }) ?: return null
+        return dev.ide.agent.PreviewImage(shot.path, shot.label, shot.png, shot.width, shot.height)
+    }
+
+    override suspend fun readBytes(path: String): ByteArray = ctx.background { Files.readAllBytes(path(path)) }
+
+    override suspend fun exists(path: String): Boolean = ctx.background { Files.exists(path(path)) }
+
     override suspend fun listDir(path: String): List<WorkspaceEntry> = ctx.background {
         val dir = path(path)
         if (!Files.isDirectory(dir)) {

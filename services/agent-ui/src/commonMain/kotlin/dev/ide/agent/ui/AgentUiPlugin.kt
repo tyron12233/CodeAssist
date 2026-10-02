@@ -23,7 +23,7 @@ object AgentUiPlugin : UiPlugin {
                 title = "AI",
                 iconId = "sparkle",
                 anchor = ToolWindowAnchor.RIGHT,
-                content = { ctx -> ChatDrawer(ctx.backend) },
+                content = { ctx -> ChatDrawer(ctx.backend, fileActions = ctx.fileActions, activeFilePath = ctx.activeFilePath) },
             ),
         )
         // The write-permission prompt (ASK_EACH): observes backend.agent.permissionRequest and shows only while

@@ -1,7 +1,11 @@
 package dev.ide.agent.impl
 
+import dev.ide.agent.AgentEvent
 import dev.ide.agent.AgentTool
 import dev.ide.agent.AgentWorkspace
+import dev.ide.agent.ContentPart
+import dev.ide.agent.FileChange
+import dev.ide.agent.TodoItem
 import dev.ide.agent.Location
 import dev.ide.agent.RunResult
 import dev.ide.agent.TaskRunResult
@@ -111,6 +115,7 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
         },
         mutating = true,
         summary = { "create ${it.optString("path") ?: "file"}" },
+        preview = { args -> listOf(FileChange(args.string("path"), null, args.string("content"))) },
     ) { args -> ToolExecutionResult.ok("Created " + ws.createFile(args.string("path"), args.string("content"))) },
 
     tool(
@@ -122,6 +127,10 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
         },
         mutating = true,
         summary = { "write ${it.optString("path") ?: "file"}" },
+        preview = { args ->
+            val path = args.string("path")
+            listOf(FileChange(path, runCatching { ws.readFile(path) }.getOrNull(), args.string("content")))
+        },
     ) { args ->
         ws.writeFile(args.string("path"), args.string("content"))
         ToolExecutionResult.ok("Wrote ${args.string("path")}")
@@ -138,6 +147,7 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
         },
         mutating = true,
         summary = { "edit ${it.optString("path") ?: "file"}" },
+        preview = { args -> listOfNotNull(previewEdit(ws, args)) },
     ) { args -> editFile(ws, args) },
 
     tool(
@@ -430,7 +440,110 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
             ),
         )
     },
+
+    tool(
+        name = "todo_write",
+        description = "Record your plan for a multi-step task as a checklist the user can follow. Send the WHOLE " +
+            "list every time (it replaces the previous one), with exactly one item in_progress while you work and " +
+            "items marked completed as soon as they are done. Use it for tasks of three or more steps; skip it " +
+            "for a quick question or a one-line fix.",
+        parameters = TODO_SCHEMA,
+        summary = { "update plan" },
+    ) { args -> todoWrite(args) },
+
+    tool(
+        name = "screenshot_preview",
+        description = "Take a screenshot of the Compose @Preview or XML layout preview the user has open, to see " +
+            "what the UI actually looks like after a change (layout, spacing, colours, text). Optionally name the " +
+            "file the preview is for. Only works while a preview pane is showing; if none is, ask the user to " +
+            "open the preview for that file.",
+        parameters = toolSchema { string("path", "Source file whose preview to capture; omit for whatever is showing.", required = false) },
+        summary = { "screenshot preview" + (it.optString("path")?.let { p -> " of ${p.substringAfterLast('/')}" } ?: "") },
+    ) { args ->
+        val shot = ws.previewScreenshot(args.optString("path")?.ifBlank { null })
+            ?: return@tool ToolExecutionResult.error(
+                "No preview is showing" + (args.optString("path")?.let { " for $it" } ?: "") +
+                    ". Ask the user to open the preview pane for the file, then try again.",
+            )
+        val data = java.util.Base64.getEncoder().encodeToString(shot.png)
+        ToolExecutionResult(
+            "Preview of ${shot.label} in ${shot.path} (${shot.width}x${shot.height}).",
+            images = listOf(ContentPart.Image("image/png", data)),
+        )
+    },
+
+    tool(
+        name = "view_image",
+        description = "Look at an image file in the project (PNG, JPEG, WebP or GIF), such as a screenshot, an " +
+            "icon or a drawable, to check what it shows. Vector drawables are XML: read those with read_file.",
+        parameters = toolSchema { string("path", "Image file path.") },
+        summary = { "view ${it.optString("path") ?: "image"}" },
+    ) { args -> viewImage(ws, args.string("path")) },
 )
+
+/** `todo_write` takes an array of objects, which [toolSchema] cannot express, so its schema is spelled out. */
+private val TODO_SCHEMA = """
+    {"type":"object","properties":{"todos":{"type":"array","description":"The full plan, in order.",
+    "items":{"type":"object","properties":{
+    "content":{"type":"string","description":"The step, as a short imperative sentence."},
+    "status":{"type":"string","enum":["pending","in_progress","completed"]}},
+    "required":["content","status"],"additionalProperties":false}}},
+    "required":["todos"],"additionalProperties":false}
+""".trimIndent().replace("\n", "")
+
+private fun todoWrite(args: ToolArgs): ToolExecutionResult {
+    val items = AgentJson.parseToJsonElement(args.raw()).asObj()?.get("todos").asArr()
+        ?.mapNotNull { it.asObj() }
+        ?.mapNotNull { o ->
+            val content = o["content"].asStr()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            TodoItem(content, o["status"].asStr() ?: "pending")
+        }
+        ?: return ToolExecutionResult.error("todos must be an array of {content, status} objects.")
+    val done = items.count { it.status == "completed" }
+    return ToolExecutionResult(
+        "Plan updated: $done of ${items.size} steps completed.",
+        event = AgentEvent.TodosUpdated(items),
+    )
+}
+
+private suspend fun viewImage(ws: AgentWorkspace, path: String): ToolExecutionResult {
+    val type = imageMediaType(path)
+        ?: return ToolExecutionResult.error("$path is not a PNG, JPEG, WebP or GIF image.")
+    val bytes = ws.readBytes(path)
+    if (bytes.size > MAX_IMAGE_BYTES) {
+        return ToolExecutionResult.error("$path is ${bytes.size / 1024} KB, over the ${MAX_IMAGE_BYTES / 1024} KB an image may be.")
+    }
+    val data = java.util.Base64.getEncoder().encodeToString(bytes)
+    return ToolExecutionResult("Image $path (${bytes.size / 1024} KB).", images = listOf(ContentPart.Image(type, data)))
+}
+
+/** The media type for an image path every provider accepts, or null for anything else. */
+fun imageMediaType(path: String): String? = when (path.substringAfterLast('.', "").lowercase()) {
+    "png" -> "image/png"
+    "jpg", "jpeg" -> "image/jpeg"
+    "webp" -> "image/webp"
+    "gif" -> "image/gif"
+    else -> null
+}
+
+/** Providers cap an image at about 5 MB; base64 adds a third, so the raw file stays under this. */
+private const val MAX_IMAGE_BYTES = 3_700_000
+
+/** What [editFile] would produce, or null when it would fail (the call itself then reports why). */
+private suspend fun previewEdit(ws: AgentWorkspace, args: ToolArgs): FileChange? {
+    val path = args.string("path")
+    val old = args.string("old_string")
+    if (old.isEmpty()) return null
+    val text = runCatching { ws.readFile(path) }.getOrNull() ?: return null
+    val count = countOccurrences(text, old)
+    val replaceAll = args.optBoolean("replace_all") ?: false
+    if (count == 0 || (count > 1 && !replaceAll)) return null
+    var after = text
+    buildReplaceEdits(text, old, args.string("new_string"), replaceAll).sortedByDescending { it.offset }.forEach { e ->
+        after = after.substring(0, e.offset) + e.newText + after.substring(e.offset + e.oldLength)
+    }
+    return FileChange(path, text, after)
+}
 
 /**
  * Converts a 1-based [line] (plus the optional [symbol] on it) to a character offset in the file's current
@@ -586,10 +699,13 @@ private fun tool(
     parameters: String,
     mutating: Boolean = false,
     summary: (ToolArgs) -> String = { name },
+    preview: (suspend (ToolArgs) -> List<FileChange>)? = null,
     action: suspend (ToolArgs) -> ToolExecutionResult,
 ): AgentTool = object : AgentTool {
     override val spec: ToolSpec = ToolSpec(name, description, parameters)
     override val mutating: Boolean = mutating
     override fun summarize(args: ToolArgs): String = summary(args)
+    override suspend fun preview(args: ToolArgs): List<FileChange> =
+        preview?.let { runCatching { it(args) }.getOrNull() }.orEmpty()
     override suspend fun execute(args: ToolArgs): ToolExecutionResult = action(args)
 }

@@ -42,4 +42,22 @@
     <string name="chat_antigravity_signin">تسجيل الدخول بحساب Google</string>
     <string name="chat_antigravity_waiting">في انتظار المتصفح — امنح الإذن ثم عُد إلى CodeAssist</string>
     <string name="chat_cancel">إلغاء</string>
+    <string name="chat_attach">إرفاق</string>
+    <string name="chat_attach_image">صورة</string>
+    <string name="chat_attach_file">الملف الحالي</string>
+    <string name="chat_history">السجل</string>
+    <string name="chat_history_empty">لا توجد محادثات محفوظة لهذا المشروع بعد.</string>
+    <string name="chat_history_messages">%1$d رسائل</string>
+    <string name="chat_delete">حذف</string>
+    <string name="chat_image_failed">تعذّرت قراءة هذا الملف كصورة.</string>
+    <string name="chat_undo">التراجع عن التغييرات</string>
+    <string name="chat_undone">تم التراجع عن التغييرات</string>
+    <string name="chat_use_model">استخدام %1$s</string>
+    <string name="chat_file_new">جديد</string>
+    <string name="chat_file_deleted">محذوف</string>
+    <string name="chat_no_changes">لا توجد تغييرات</string>
+    <string name="chat_plan">الخطة</string>
+    <string name="chat_remove">إزالة</string>
+    <string name="chat_attach_photo">التقاط صورة</string>
+    <string name="chat_paste_image">لصق صورة</string>
 </resources>

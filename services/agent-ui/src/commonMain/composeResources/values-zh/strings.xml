@@ -42,4 +42,22 @@
     <string name="chat_antigravity_signin">使用 Google 登录</string>
     <string name="chat_antigravity_waiting">正在等待浏览器 — 授权后请返回 CodeAssist</string>
     <string name="chat_cancel">取消</string>
+    <string name="chat_attach">附加</string>
+    <string name="chat_attach_image">图片</string>
+    <string name="chat_attach_file">当前文件</string>
+    <string name="chat_history">历史记录</string>
+    <string name="chat_history_empty">此项目还没有已保存的对话。</string>
+    <string name="chat_history_messages">%1$d 条消息</string>
+    <string name="chat_delete">删除</string>
+    <string name="chat_image_failed">无法将该文件读取为图片。</string>
+    <string name="chat_undo">撤销更改</string>
+    <string name="chat_undone">已撤销更改</string>
+    <string name="chat_use_model">使用 %1$s</string>
+    <string name="chat_file_new">新建</string>
+    <string name="chat_file_deleted">已删除</string>
+    <string name="chat_no_changes">无更改</string>
+    <string name="chat_plan">计划</string>
+    <string name="chat_remove">移除</string>
+    <string name="chat_attach_photo">拍照</string>
+    <string name="chat_paste_image">粘贴图片</string>
 </resources>

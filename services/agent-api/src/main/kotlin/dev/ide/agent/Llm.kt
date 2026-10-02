@@ -31,17 +31,36 @@ sealed interface ContentPart {
      *  is a provider-opaque token echoed back on the tool_use when continuing (Gemini's thought signature). */
     data class ToolUse(val id: String, val name: String, val arguments: String, val signature: String? = null) : ContentPart
 
-    /** The result of a tool call, referenced back to its [ToolUse.id]. */
-    data class ToolResultPart(val toolCallId: String, val content: String, val isError: Boolean = false) : ContentPart
+    /** The result of a tool call, referenced back to its [ToolUse.id]. [images] carries any pictures the tool
+     *  produced (a screenshot, an image file it read); providers that cannot put images inside a tool result
+     *  send them in a user turn right after it. */
+    data class ToolResultPart(
+        val toolCallId: String,
+        val content: String,
+        val isError: Boolean = false,
+        val images: List<Image> = emptyList(),
+    ) : ContentPart
+
+    /** An image the model should look at. [data] is base64 (no `data:` prefix); [mediaType] is one of
+     *  `image/png`, `image/jpeg`, `image/webp` or `image/gif`, which every provider accepts. */
+    data class Image(val mediaType: String, val data: String) : ContentPart
 }
 
 /** One turn of the conversation. */
 data class LlmMessage(val role: LlmRole, val content: List<ContentPart>) {
     companion object {
         fun user(text: String): LlmMessage = LlmMessage(LlmRole.USER, listOf(ContentPart.Text(text)))
+
+        /** A user turn with attached images, which go before the text as every provider recommends. */
+        fun user(text: String, images: List<ContentPart.Image>): LlmMessage =
+            LlmMessage(LlmRole.USER, images + ContentPart.Text(text))
         fun assistant(parts: List<ContentPart>): LlmMessage = LlmMessage(LlmRole.ASSISTANT, parts)
-        fun toolResult(toolCallId: String, content: String, isError: Boolean = false): LlmMessage =
-            LlmMessage(LlmRole.TOOL, listOf(ContentPart.ToolResultPart(toolCallId, content, isError)))
+        fun toolResult(
+            toolCallId: String,
+            content: String,
+            isError: Boolean = false,
+            images: List<ContentPart.Image> = emptyList(),
+        ): LlmMessage = LlmMessage(LlmRole.TOOL, listOf(ContentPart.ToolResultPart(toolCallId, content, isError, images)))
     }
 }
 
@@ -178,6 +197,14 @@ interface LlmProvider {
     /** Query the provider's available models with the user's credentials. Defaults to the static [models]
      *  list; providers override to fetch live and fall back to [models] on any error. */
     suspend fun listModels(config: ProviderConfig): List<LlmModelInfo> = models
+
+    /**
+     * The model to use when the user has not picked one, chosen from what their account actually offers
+     * ([available], usually from [listModels]). A static [defaultModel] goes stale as a provider retires models
+     * or moves them off its free tier, and a stale default fails on the very first request. Null keeps
+     * [defaultModel].
+     */
+    fun preferredModel(available: List<LlmModelInfo>): String? = null
 }
 
 /** Resolves providers by id. Built-in providers are registered by AgentPlugin; plugins may add more. */

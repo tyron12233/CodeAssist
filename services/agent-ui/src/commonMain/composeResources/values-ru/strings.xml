@@ -40,4 +40,22 @@
     <string name="chat_antigravity_signin">Войти через Google</string>
     <string name="chat_antigravity_waiting">Ожидание браузера — разрешите доступ и вернитесь в CodeAssist</string>
     <string name="chat_cancel">Отмена</string>
+    <string name="chat_attach">Прикрепить</string>
+    <string name="chat_attach_image">Изображение</string>
+    <string name="chat_attach_file">Текущий файл</string>
+    <string name="chat_history">История</string>
+    <string name="chat_history_empty">Для этого проекта ещё нет сохранённых бесед.</string>
+    <string name="chat_history_messages">Сообщений: %1$d</string>
+    <string name="chat_delete">Удалить</string>
+    <string name="chat_image_failed">Не удалось прочитать этот файл как изображение.</string>
+    <string name="chat_undo">Отменить изменения</string>
+    <string name="chat_undone">Изменения отменены</string>
+    <string name="chat_use_model">Использовать %1$s</string>
+    <string name="chat_file_new">новый</string>
+    <string name="chat_file_deleted">удалён</string>
+    <string name="chat_no_changes">Нет изменений</string>
+    <string name="chat_plan">План</string>
+    <string name="chat_remove">Убрать</string>
+    <string name="chat_attach_photo">Сделать фото</string>
+    <string name="chat_paste_image">Вставить изображение</string>
 </resources>

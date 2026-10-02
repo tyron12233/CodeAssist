@@ -79,6 +79,9 @@ internal object GeminiWire {
                                     })
                                 })
                             }
+                            // Pictures a tool produced ride as inline data in the same turn, after the
+                            // responses, which every Gemini generation accepts.
+                            results.forEach { r -> r.images.forEach { add(inlineData(it)) } }
                         })
                     }
                 }
@@ -102,7 +105,20 @@ internal object GeminiWire {
     }
 
     private fun userParts(parts: List<ContentPart>): JsonArray = buildJsonArray {
-        parts.forEach { if (it is ContentPart.Text) add(buildJsonObject { put("text", it.text) }) }
+        parts.forEach { p ->
+            when (p) {
+                is ContentPart.Text -> add(buildJsonObject { put("text", p.text) })
+                is ContentPart.Image -> add(inlineData(p))
+                else -> Unit
+            }
+        }
+    }
+
+    private fun inlineData(image: ContentPart.Image): JsonObject = buildJsonObject {
+        put("inline_data", buildJsonObject {
+            put("mime_type", image.mediaType)
+            put("data", image.data)
+        })
     }
 
     private fun modelParts(parts: List<ContentPart>): JsonArray = buildJsonArray {
@@ -122,9 +138,13 @@ internal object GeminiWire {
         }
     }
 
-    /** Removes `additionalProperties`, which Gemini's function-declaration schema rejects. */
-    fun stripAdditionalProperties(element: JsonElement): JsonElement {
-        val obj = element.asObj() ?: return element
-        return JsonObject(obj.filterKeys { it != "additionalProperties" })
+    /** Removes `additionalProperties` at every depth, which Gemini's function-declaration schema rejects (a
+     *  nested object schema such as an array's `items` carries it too). */
+    fun stripAdditionalProperties(element: JsonElement): JsonElement = when (element) {
+        is JsonObject -> JsonObject(
+            element.filterKeys { it != "additionalProperties" }.mapValues { (_, v) -> stripAdditionalProperties(v) },
+        )
+        is JsonArray -> JsonArray(element.map { stripAdditionalProperties(it) })
+        else -> element
     }
 }

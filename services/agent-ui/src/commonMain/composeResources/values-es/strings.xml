@@ -40,4 +40,22 @@
     <string name="chat_antigravity_signin">Iniciar sesión con Google</string>
     <string name="chat_antigravity_waiting">Esperando al navegador: autoriza el acceso y vuelve a CodeAssist</string>
     <string name="chat_cancel">Cancelar</string>
+    <string name="chat_attach">Adjuntar</string>
+    <string name="chat_attach_image">Imagen</string>
+    <string name="chat_attach_file">Archivo actual</string>
+    <string name="chat_history">Historial</string>
+    <string name="chat_history_empty">Todavía no hay conversaciones guardadas para este proyecto.</string>
+    <string name="chat_history_messages">%1$d mensajes</string>
+    <string name="chat_delete">Eliminar</string>
+    <string name="chat_image_failed">No se pudo leer ese archivo como imagen.</string>
+    <string name="chat_undo">Deshacer cambios</string>
+    <string name="chat_undone">Cambios revertidos</string>
+    <string name="chat_use_model">Usar %1$s</string>
+    <string name="chat_file_new">nuevo</string>
+    <string name="chat_file_deleted">eliminado</string>
+    <string name="chat_no_changes">Sin cambios</string>
+    <string name="chat_plan">Plan</string>
+    <string name="chat_remove">Quitar</string>
+    <string name="chat_attach_photo">Tomar foto</string>
+    <string name="chat_paste_image">Pegar imagen</string>
 </resources>

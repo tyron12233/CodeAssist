@@ -19,3 +19,10 @@ actual fun encodeImagePng(image: ImageBitmap): ByteArray? = runCatching {
         out.toByteArray()
     }
 }.getOrNull()
+
+actual fun encodeImageJpeg(image: ImageBitmap, quality: Int): ByteArray? = runCatching {
+    java.io.ByteArrayOutputStream().use { out ->
+        image.asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.JPEG, quality.coerceIn(0, 100), out)
+        out.toByteArray()
+    }
+}.getOrNull()

@@ -302,7 +302,7 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, se
                 )
             },
         ) {
-            Canvas(Modifier.fillMaxSize()) {
+            Canvas(Modifier.fillMaxSize().then(rememberPreviewCapture(path, path.substringAfterLast('/')))) {
                 val img = realImage
                 when {
                     // Real-view path: paint the device-rendered PNG 1:1 (it's already device px from the origin).

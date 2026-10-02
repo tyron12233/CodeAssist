@@ -40,4 +40,22 @@
     <string name="chat_antigravity_signin">Masuk dengan Google</string>
     <string name="chat_antigravity_waiting">Menunggu browser — setujui akses, lalu kembali ke CodeAssist</string>
     <string name="chat_cancel">Batal</string>
+    <string name="chat_attach">Lampirkan</string>
+    <string name="chat_attach_image">Gambar</string>
+    <string name="chat_attach_file">File saat ini</string>
+    <string name="chat_history">Riwayat</string>
+    <string name="chat_history_empty">Belum ada percakapan tersimpan untuk proyek ini.</string>
+    <string name="chat_history_messages">%1$d pesan</string>
+    <string name="chat_delete">Hapus</string>
+    <string name="chat_image_failed">File itu tidak dapat dibaca sebagai gambar.</string>
+    <string name="chat_undo">Urungkan perubahan</string>
+    <string name="chat_undone">Perubahan dibatalkan</string>
+    <string name="chat_use_model">Gunakan %1$s</string>
+    <string name="chat_file_new">baru</string>
+    <string name="chat_file_deleted">dihapus</string>
+    <string name="chat_no_changes">Tidak ada perubahan</string>
+    <string name="chat_plan">Rencana</string>
+    <string name="chat_remove">Hapus</string>
+    <string name="chat_attach_photo">Ambil foto</string>
+    <string name="chat_paste_image">Tempel gambar</string>
 </resources>

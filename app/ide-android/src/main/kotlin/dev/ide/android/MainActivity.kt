@@ -2,6 +2,7 @@ package dev.ide.android
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.webkit.MimeTypeMap
@@ -108,6 +109,15 @@ class MainActivity : ComponentActivity() {
                     pendingPick?.invoke(uri?.let { fileOps.copyUriToCache(it) })
                     pendingPick = null
                 }
+            // Camera capture for the AI chat: the camera app writes into a FileProvider URI we hand it.
+            var pendingPhoto by remember { mutableStateOf<Pair<File, (String?) -> Unit>?>(null) }
+            val photoLauncher =
+                rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
+                    val pending = pendingPhoto
+                    pendingPhoto = null
+                    val (file, cb) = pending ?: return@rememberLauncherForActivityResult
+                    cb(if (saved && file.length() > 0) file.absolutePath else null)
+                }
             // Directory picker (Gradle import): SAF hands back a content:// tree, so copy it into local
             // storage off the main thread and return that path — the copy can be large, hence the coroutine.
             val hostScope = rememberCoroutineScope()
@@ -159,6 +169,26 @@ class MainActivity : ComponentActivity() {
                             onPicked(null)
                             Toast.makeText(this@MainActivity, "No file manager available to pick a file", Toast.LENGTH_SHORT).show()
                         }
+                    }
+
+                    override val canTakePhoto: Boolean =
+                        packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+                    override fun takePhoto(onTaken: (String?) -> Unit) {
+                        val (file, uri) = runCatching { fileOps.newCameraTarget() }.getOrElse { onTaken(null); return }
+                        pendingPhoto = file to onTaken
+                        try {
+                            photoLauncher.launch(uri)
+                        } catch (e: ActivityNotFoundException) {
+                            pendingPhoto = null
+                            onTaken(null)
+                            Toast.makeText(this@MainActivity, "No camera app available", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+
+                    override val canPasteImage: Boolean = true
+                    override fun hasClipboardImage(): Boolean = fileOps.clipboardHasImage()
+                    override fun pasteImage(onPasted: (String?) -> Unit) {
+                        onPasted(fileOps.clipboardImageUri()?.let { fileOps.copyUriToCache(it) })
                     }
 
                     override val canPickDirectory: Boolean = true

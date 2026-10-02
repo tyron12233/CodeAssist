@@ -19,6 +19,13 @@ interface AgentWorkspace {
 
     suspend fun listDir(path: String): List<WorkspaceEntry>
 
+    /** A file's raw bytes from disk (images and other binary files). */
+    suspend fun readBytes(path: String): ByteArray =
+        throw UnsupportedOperationException("Reading binary files is not supported here.")
+
+    /** Whether [path] exists (file or directory). */
+    suspend fun exists(path: String): Boolean = runCatching { readFile(path); true }.getOrDefault(false)
+
     suspend fun searchText(
         query: String,
         regex: Boolean = false,
@@ -117,6 +124,12 @@ interface AgentWorkspace {
      *  given, each hit is judged for compatibility with that module. */
     suspend fun searchDependency(query: String, module: String? = null): List<ArtifactHit> = emptyList()
 
+    // Preview.
+
+    /** A PNG of the preview currently on screen for [path] (or of whatever preview is showing, when null). Null
+     *  when no preview is open for it. Only a host with a preview UI can answer. */
+    suspend fun previewScreenshot(path: String?): PreviewImage? = null
+
     // Memory.
 
     /** The agent's project memory: the project's instruction files plus the persisted agent notes. */
@@ -156,6 +169,12 @@ data class RunResult(
     val exitCode: Int?,
     val diagnostics: List<String>,
 )
+
+/** A rendered preview: [png] bytes of [width]x[height], of [label] (the `@Preview` or layout) in [path]. */
+class PreviewImage(val path: String, val label: String, val png: ByteArray, val width: Int, val height: Int)
+
+/** One file's content before and after a change; null means the file did not exist on that side. */
+data class FileChange(val path: String, val before: String?, val after: String?)
 
 /** An offset-based text edit: replace [oldLength] characters at [offset] with [newText]. */
 data class TextEdit(val offset: Int, val oldLength: Int, val newText: String)

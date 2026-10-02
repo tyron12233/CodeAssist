@@ -1,5 +1,7 @@
 package dev.ide.android
 
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -115,6 +117,31 @@ internal class AndroidFileOps(private val activity: ComponentActivity) {
             ?.use { input -> dest.outputStream().use { input.copyTo(it) } } ?: return null
         dest.absolutePath
     }.getOrNull()
+
+    /** A fresh file for the camera to write a photo into, and the FileProvider URI the camera app writes through
+     *  (the camera runs in another process, so it needs a grantable content:// URI, not a path). */
+    fun newCameraTarget(): Pair<File, Uri> {
+        val dir = File(activity.cacheDir, "camera").apply { mkdirs() }
+        // One photo at a time is all the chat needs; clearing old ones keeps the cache from filling with them.
+        dir.listFiles()?.forEach { it.delete() }
+        val file = File(dir, "photo-${System.currentTimeMillis()}.jpg")
+        return file to FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", file)
+    }
+
+    /** The first image on the clipboard as a content URI, or null. Reading the clip grants this app temporary
+     *  read access to its URIs. */
+    fun clipboardImageUri(): Uri? = runCatching {
+        val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = clipboard.primaryClip ?: return@runCatching null
+        if (!clip.description.hasMimeType("image/*")) return@runCatching null
+        (0 until clip.itemCount).firstNotNullOfOrNull { clip.getItemAt(it).uri }
+    }.getOrNull()
+
+    /** Whether the clipboard holds an image, from its description alone (no read of the clip itself). */
+    fun clipboardHasImage(): Boolean = runCatching {
+        val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.primaryClipDescription?.hasMimeType("image/*") == true
+    }.getOrDefault(false)
 
     /** Share [path] to another app via a FileProvider content:// URI (no FileUriExposedException). */
     fun shareFile(path: String) = runCatching {

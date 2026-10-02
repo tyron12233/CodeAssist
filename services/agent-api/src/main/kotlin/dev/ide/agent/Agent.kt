@@ -9,8 +9,14 @@ package dev.ide.agent
 /** How aggressively the agent may apply changes. Persisted per project. */
 enum class PermissionMode { ASK_EACH, AUTO_ACCEPT, PLAN_ONLY }
 
-/** A pending mutating tool call awaiting authorization. */
-data class WriteRequest(val tool: String, val summary: String, val path: String? = null)
+/** A pending mutating tool call awaiting authorization. [changes] previews what it would do, when the tool can
+ *  say ([AgentTool.preview]), so the prompt can show a diff instead of just a path. */
+data class WriteRequest(
+    val tool: String,
+    val summary: String,
+    val path: String? = null,
+    val changes: List<FileChange> = emptyList(),
+)
 
 /**
  * The single decision point for whether a mutating tool may run. The host implementation encodes the
@@ -39,8 +45,26 @@ sealed interface AgentEvent {
     data class ToolCallFinished(val id: String, val ok: Boolean, val resultSummary: String) : AgentEvent
     data class ToolCallDenied(val id: String, val reason: String) : AgentEvent
     data class TurnCompleted(val stopReason: StopReason, val usage: TokenUsage?) : AgentEvent
-    data class Error(val message: String) : AgentEvent
+    /** [kind] names the failure category when it was categorized (an `LlmErrorKind` name such as
+     *  `MODEL_NOT_ON_PLAN` or `DAILY_LIMIT`), so the host can offer the right fix. */
+    data class Error(val message: String, val kind: String? = null) : AgentEvent
+
+    /**
+     * The run is paused before its next request, either because the provider rate-limited it or because the
+     * client-side pacer is keeping it under a known limit. [untilEpochMs] is when it resumes; any later event
+     * means the wait is over. Cancelling the run cancels the wait.
+     */
+    data class Waiting(val untilEpochMs: Long, val reason: String) : AgentEvent
+
+    /** Tool call [id] changed these files (recorded so the turn can be reviewed and reverted). */
+    data class FilesChanged(val id: String, val changes: List<FileChange>) : AgentEvent
+
+    /** The agent replaced its visible plan for the task. */
+    data class TodosUpdated(val todos: List<TodoItem>) : AgentEvent
 }
+
+/** One step of the agent's plan. [status] is `pending`, `in_progress` or `completed`. */
+data class TodoItem(val content: String, val status: String)
 
 /** Receives [AgentEvent]s from a running loop. */
 fun interface AgentEventSink {

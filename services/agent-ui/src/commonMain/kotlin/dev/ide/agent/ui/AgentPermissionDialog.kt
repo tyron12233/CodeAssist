@@ -61,7 +61,8 @@ fun AgentPermissionDialog(backend: IdeBackend) {
 private fun AgentPermissionCard(req: UiAgentPermissionRequest, answer: (UiAgentPermissionDecision) -> Unit) {
     Column(
         Modifier
-            .widthIn(max = 420.dp)
+            // Wider when it carries a diff, which needs the room more than the buttons do.
+            .widthIn(max = if (req.changes.isEmpty()) 420.dp else 640.dp)
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             // Opaque: this card is the guard on every file write, so it must not depend on what is behind it.
@@ -75,6 +76,11 @@ private fun AgentPermissionCard(req: UiAgentPermissionRequest, answer: (UiAgentP
         req.path?.let {
             Spacer(Modifier.height(2.dp))
             Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
+        // The change itself, so approving is a decision about the edit rather than about a file name.
+        if (req.changes.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            FileChangesList(req.changes, expandedByDefault = true, maxDiffHeight = 280)
         }
         Spacer(Modifier.height(16.dp))
 

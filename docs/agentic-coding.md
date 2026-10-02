@@ -164,6 +164,32 @@ delay. The classifier therefore treats a 429 / `resource_exhausted` as a retryab
 the non-retryable `QUOTA` verdict for narrow true-billing signals (`insufficient_quota`, spent credit
 balance) — so a per-minute limit auto-retries instead of surfacing a dead-end "billing exhausted" message.
 
+### Quotas, free tiers and pacing
+
+Why a fresh Gemini key used to fail on its first message: the default model was `gemini-2.5-pro`, and Google
+took 2.5 Pro off the free tier entirely (its free limit is 0) and later closed the 2.5 family to new
+projects. Three changes follow from that.
+
+- **Model choice.** `LlmProvider.preferredModel(available)` lets a provider pick from the account's live model
+  list; Gemini picks the newest plain `gemini-X.Y-flash` (`GeminiModels.newestFlash`), which is what a free
+  key can use. The backend uses it when the user has not picked a model, and picks are stored per provider
+  (`settings.ai.model.<provider>`), so switching provider no longer carries the old provider's model id.
+- **Which quota tripped.** `LlmErrors.quotaInfo` reads Google's `QuotaFailure` detail (`quotaId`, `quotaValue`)
+  and refines a 429 into `MODEL_NOT_ON_PLAN` (limit 0), `DAILY_LIMIT` (a per-day quota) or `RATE_LIMIT` (per
+  minute). Only the last clears by waiting. For the first two the chat offers a one-tap "Use <model>" that
+  switches and re-runs the turn.
+- **Waiting instead of failing.** A per-minute `RATE_LIMIT` is not retried silently in the transport any more.
+  `AgentLoop` waits it out (up to 2 minutes, at most 6 times a turn), emitting `AgentEvent.Waiting` so the chat
+  shows a countdown the user can cancel, and resends the same request when nothing had streamed yet.
+  `RequestPacer` keeps the next minute under the limit before a request is sent: it uses the configured
+  `settings.ai.rpm` / `settings.ai.tpmK`, else what a quota error stated, else the rate that was in flight when
+  it tripped. One pacer per key + model, shared across conversations.
+
+Request correctness on Gemini 3: it takes `thinkingConfig.thinkingLevel` and rejects `thinkingBudget` (2.5 is
+the reverse), so the builder sends whichever the model's generation takes. `maxOutputTokens` caps thinking and
+answer together, so the reasoning allowance is added on top of `maxTokens`. Search grounding next to function
+declarations is a Gemini 3 capability; on 2.x it is only sent on a request with no client tools.
+
 ## Tools and the engine seam
 
 Tool implementations call the project only through `AgentWorkspace`, which `ide-core` implements over
@@ -227,6 +253,49 @@ desktop; a from-end `PushDrawer` on mobile), toggled from the editor top bar. It
 the design tokens: glass message surfaces, a gradient sparkle accent, a shimmer thinking indicator, a
 glowing pill composer, and a token-by-token streaming reveal. All user-facing strings are `chat_*`
 keys in `strings.xml`.
+
+### Attachments, mentions, plans, sessions and undo
+
+- **Images.** `ContentPart.Image` (base64) rides in user turns and in tool results
+  (`ToolResultPart.images`, `ToolExecutionResult.images`). Anthropic puts it in the block or `tool_result`;
+  Gemini as `inline_data` (after the `functionResponse` parts); OpenAI as an `image_url` data URL, with tool
+  images in a user message right after the tool results (a `tool` message is text-only there). The composer's
+  attach menu picks an image through `FileActions.pickFile`; `prepareImageAttachment` scales it to a 1568 px
+  long edge and re-encodes it as JPEG when it is large. The menu also offers the camera
+  (`FileActions.takePhoto`, Android `TakePicture` into a FileProvider cache path) and the clipboard
+  (`FileActions.pasteImage`: Android clip URIs, desktop AWT pixels or a copied image file); Ctrl/Cmd+V in the
+  composer pastes an image when the clipboard holds one and leaves text paste alone otherwise. The
+  `view_image` tool lets the agent look at an image file in the project. The compactor drops images from stale
+  tool results with the rest of their bulk.
+- **Preview screenshots.** `screenshot_preview` returns a PNG of the Compose or XML layout preview on screen.
+  Each pane applies `rememberPreviewCapture`, which records its drawing into a Compose `GraphicsLayer` and
+  registers with the process-global `PreviewSnapshots` while composed; the engine asks it through
+  `AgentWorkspace.previewScreenshot`. One path covers a frame streamed from the preview process and an
+  in-process composition. It only sees a preview the user has open; the tool says so when none is.
+- **Files, selections and mentions.** `AgentService.attach` queues `UiAgentAttachment`s for the next message.
+  A FILE or SELECTION goes to the model as a tagged `<file>` / `<selection>` block ahead of the question, with
+  path and line range. Typing `@` in the composer completes a project file (`mentionCandidates`), and each
+  `@path` naming a project file attaches it. The engine action `agent.askAboutSelection` ("Ask AI", editor
+  menu and command palette) attaches the selection (or the whole file) and opens the chat: a `Navigate` effect
+  whose target is a RIGHT tool-window id now opens that panel.
+- **Plan.** The `todo_write` tool replaces the agent's checklist; its `ToolExecutionResult.event`
+  (`AgentEvent.TodosUpdated`) is forwarded by the loop and pinned above the composer.
+- **Diffs and undo.** Mutating tools may implement `AgentTool.preview`, so an ASK_EACH prompt shows the diff
+  (create/write/edit do). `CheckpointWorkspace` wraps the workspace for chat tools: it snapshots each target
+  before a write, per turn (the first touch of a path in a turn) and per call. After a mutating call the loop
+  emits `AgentEvent.FilesChanged`, shown as collapsible diffs (`LineDiff`, a Myers line diff) on the tool row.
+  "Undo changes" on a user message (or `/undo`) reverts that turn and every later one; a project-wide
+  `rename_symbol` and `add_dependency` cannot be snapshotted, and the revert report says so. The model is told
+  about a revert in a `<system-reminder>` on the next message. The MCP server has its own tool set over the
+  raw workspace, so an external client's edits are never filed under a chat turn.
+- **Sessions.** `AgentSessionStore` writes each conversation to `<project>/.platform/agent/sessions/<id>.json`
+  after every turn: the transcript as shown, plus the model-side history (`ConversationCodec`). The history
+  button resumes or deletes one; a resumed session drops replayed reasoning blocks.
+- **Slash commands.** `/clear`, `/compact` (the model summarizes the conversation, which then replaces the
+  history), `/init` (writes an AGENTS.md), `/undo`, `/resume` and `/model`. Changing a setting or the model no
+  longer drops the conversation: `resetLoop` only forces a rebuild, and the rebuild carries the history.
+- **Project instructions** (AGENTS.md / CLAUDE.md) now ride in the cached system prefix rather than the
+  per-turn context, where they were re-sent at full price on every request.
 
 ## System prompt
 

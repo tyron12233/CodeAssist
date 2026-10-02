@@ -10,12 +10,18 @@ import kotlinx.serialization.json.JsonObject
  * chat shows something actionable instead of a raw JSON dump. A provider-suggested retry delay is recovered
  * from the `Retry-After` header, Gemini's `RetryInfo.retryDelay`, or an OpenAI "try again in Ns" message.
  */
-internal enum class LlmErrorKind(val retryable: Boolean) {
+enum class LlmErrorKind(val retryable: Boolean) {
+    /** A per-minute limit (requests or tokens). Clears by itself, usually within a minute. */
     RATE_LIMIT(true),
     OVERLOADED(true),
     SERVER(true),
     NETWORK(true),
     QUOTA(false),
+    /** A per-day limit. Waiting a minute will not clear it; it resets on the provider's daily boundary. */
+    DAILY_LIMIT(false),
+    /** The model has no quota at all on the account's plan (Gemini reports `limit: 0`), typically a model that
+     *  is not on the free tier. Only a different model, or billing, gets past it. */
+    MODEL_NOT_ON_PLAN(false),
     AUTH(false),
     NOT_FOUND(false),
     CONTEXT_LENGTH(false),
@@ -27,12 +33,15 @@ internal data class ParsedLlmError(
     val kind: LlmErrorKind,
     val message: String,
     val retryAfterMs: Long? = null,
+    val quota: QuotaInfo? = null,
 ) {
     val retryable: Boolean get() = kind.retryable
 }
 
 internal object LlmErrors {
     private const val MAX_DETAIL = 400
+    private val limitInMessage = Regex("""limit:\s*([0-9]+)""")
+    private val modelInMessage = Regex("""model:\s*([A-Za-z0-9._-]+)""")
     private val retryInMessage = Regex("""try again in\s+([0-9]+(?:\.[0-9]+)?)\s*(ms|s)""", RegexOption.IGNORE_CASE)
 
     /** Parse an HTTP error response body + status into a categorized error. */
@@ -52,8 +61,53 @@ internal object LlmErrors {
         val retryAfterMs = retryAfterHeaderMs
             ?: geminiRetryDelayMs(errObj)
             ?: retryDelayFromMessage(providerMsg)
-        val kind = classify(statusCode, type, code, providerMsg)
-        return ParsedLlmError(kind, compose(kind, providerMsg, statusCode, retryAfterMs), retryAfterMs)
+        val quota = quotaInfo(errObj, providerMsg)
+        var kind = classify(statusCode, type, code, providerMsg)
+        // A rate-limit-shaped error is refined by WHICH quota tripped: Gemini answers a model that is not on the
+        // plan, a spent daily allowance and a per-minute burst with the same 429 and the same wording, and only
+        // the first of those clears by waiting. Treating all three as "retry shortly" is what made a fresh free
+        // key look broken.
+        if (kind == LlmErrorKind.RATE_LIMIT || kind == LlmErrorKind.QUOTA) {
+            kind = when {
+                quota?.limit == 0L -> LlmErrorKind.MODEL_NOT_ON_PLAN
+                quota?.window == QuotaInfo.Window.DAY -> LlmErrorKind.DAILY_LIMIT
+                else -> kind
+            }
+        }
+        return ParsedLlmError(kind, compose(kind, providerMsg, statusCode, retryAfterMs, quota), retryAfterMs, quota)
+    }
+
+    /**
+     * Which quota a Google `RESOURCE_EXHAUSTED` tripped, from the `google.rpc.QuotaFailure` detail (`quotaId`
+     * like `GenerateRequestsPerDayPerProjectPerModel-FreeTier`, `quotaMetric`, `quotaValue`) with the
+     * human-readable message as a fallback (`... limit: 0, model: gemini-2.5-pro`). Null when the error says
+     * nothing about a quota.
+     */
+    internal fun quotaInfo(errObj: JsonObject?, message: String?): QuotaInfo? {
+        val violation = errObj?.get("details").asArr()
+            ?.mapNotNull { it.asObj() }
+            ?.firstOrNull { it["@type"].asStr()?.endsWith("QuotaFailure") == true }
+            ?.get("violations").asArr()?.firstOrNull().asObj()
+        val quotaId = violation?.get("quotaId").asStr().orEmpty()
+        val metric = violation?.get("quotaMetric").asStr().orEmpty()
+        val model = violation?.get("quotaDimensions").asObj()?.get("model").asStr()
+            ?: modelInMessage.find(message.orEmpty())?.groupValues?.get(1)
+        val limit = violation?.get("quotaValue").asStr()?.toLongOrNull()
+            ?: limitInMessage.find(message.orEmpty())?.groupValues?.get(1)?.toLongOrNull()
+        if (violation == null && limit == null) return null
+        val id = quotaId.lowercase()
+        val window = when {
+            "perday" in id -> QuotaInfo.Window.DAY
+            "perminute" in id -> QuotaInfo.Window.MINUTE
+            else -> null
+        }
+        val tokens = "token" in id || "token" in metric.lowercase()
+        return QuotaInfo(
+            window = window,
+            metric = if (tokens) QuotaInfo.Metric.INPUT_TOKENS else QuotaInfo.Metric.REQUESTS,
+            limit = limit,
+            model = model,
+        )
     }
 
     /** A connection-level failure (no HTTP response). */
@@ -103,11 +157,22 @@ internal object LlmErrors {
         return LlmErrorKind.UNKNOWN
     }
 
-    private fun compose(kind: LlmErrorKind, detail: String?, status: Int?, retryAfterMs: Long?): String {
+    private fun compose(kind: LlmErrorKind, detail: String?, status: Int?, retryAfterMs: Long?, quota: QuotaInfo? = null): String {
         val wait = retryAfterMs?.let { " Try again in ${humanDelay(it)}." }.orEmpty()
         val tail = detail?.takeIf { it.isNotBlank() }?.let { "\n${it.take(MAX_DETAIL)}" }.orEmpty()
+        val modelName = quota?.model?.let { "'$it'" } ?: "This model"
         return when (kind) {
-            LlmErrorKind.RATE_LIMIT -> "Rate limit reached: too many requests.$wait$tail"
+            LlmErrorKind.RATE_LIMIT -> when (quota?.metric) {
+                QuotaInfo.Metric.INPUT_TOKENS -> "Rate limit reached: too many tokens per minute.$wait$tail"
+                else -> "Rate limit reached: too many requests.$wait$tail"
+            }
+            LlmErrorKind.DAILY_LIMIT ->
+                "Daily limit reached for $modelName${quota?.limit?.let { " ($it per day)" }.orEmpty()}. It resets on " +
+                    "the provider's daily boundary (midnight Pacific time for Gemini). Switch to another model or " +
+                    "enable billing to keep going.$tail"
+            LlmErrorKind.MODEL_NOT_ON_PLAN ->
+                "$modelName has no quota on your plan (its limit is 0), so every request to it is refused. Pick a " +
+                    "different model, or enable billing for this API key's project.$tail"
             LlmErrorKind.OVERLOADED -> "The AI provider is temporarily overloaded.$wait$tail"
             LlmErrorKind.SERVER -> "The AI provider reported a server error${status?.let { " ($it)" }.orEmpty()}.$wait$tail"
             LlmErrorKind.NETWORK -> "Couldn't reach the AI provider. Check your connection.$tail"
@@ -141,7 +206,7 @@ internal object LlmErrors {
         return if (match.groupValues[2].equals("ms", true)) value.toLong() else (value * 1000).toLong()
     }
 
-    private fun humanDelay(ms: Long): String {
+    fun humanDelay(ms: Long): String {
         if (ms < 1000) return "${ms}ms"
         val totalSec = (ms + 999) / 1000
         if (totalSec < 60) return "${totalSec}s"
@@ -149,4 +214,18 @@ internal object LlmErrors {
         val sec = totalSec % 60
         return if (sec == 0L) "${min}m" else "${min}m ${sec}s"
     }
+}
+
+/**
+ * The quota a provider said was exceeded. [window] is null when the provider did not say; [limit] is the
+ * allowance for that window (0 means the model is not on the plan at all); [model] is the model it applies to.
+ */
+data class QuotaInfo(
+    val window: Window?,
+    val metric: Metric,
+    val limit: Long?,
+    val model: String?,
+) {
+    enum class Window { MINUTE, DAY }
+    enum class Metric { REQUESTS, INPUT_TOKENS }
 }

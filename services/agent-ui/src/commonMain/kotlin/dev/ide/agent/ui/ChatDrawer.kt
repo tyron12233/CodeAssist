@@ -26,6 +26,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -62,6 +65,9 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -73,7 +79,17 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import dev.ide.ui.itemsKeyed
 import kotlinx.coroutines.delay
+import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.backend.UiAgentCommand
+import dev.ide.ui.backend.UiAgentMention
+import dev.ide.ui.backend.UiAgentAttachment
+import dev.ide.ui.backend.UiAgentAttachmentKind
+import dev.ide.ui.backend.UiAgentTodoStatus
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import dev.ide.ui.backend.UiAgentConfig
 import dev.ide.ui.backend.UiAgentMessage
 import dev.ide.ui.backend.UiAgentModel
@@ -84,6 +100,16 @@ import dev.ide.ui.backend.UiAgentToolStatus
 import dev.ide.ui.backend.UiAgentUsage
 import dev.ide.agent.ui.generated.resources.Res
 import dev.ide.agent.ui.generated.resources.chat_add_key
+import dev.ide.agent.ui.generated.resources.chat_attach
+import dev.ide.agent.ui.generated.resources.chat_attach_file
+import dev.ide.agent.ui.generated.resources.chat_attach_image
+import dev.ide.agent.ui.generated.resources.chat_attach_photo
+import dev.ide.agent.ui.generated.resources.chat_paste_image
+import dev.ide.agent.ui.generated.resources.chat_history
+import dev.ide.agent.ui.generated.resources.chat_image_failed
+import dev.ide.agent.ui.generated.resources.chat_undo
+import dev.ide.agent.ui.generated.resources.chat_undone
+import dev.ide.agent.ui.generated.resources.chat_use_model
 import dev.ide.agent.ui.generated.resources.chat_close
 import dev.ide.agent.ui.generated.resources.chat_copied
 import dev.ide.agent.ui.generated.resources.chat_copy
@@ -123,15 +149,62 @@ import org.jetbrains.compose.resources.stringResource
  * editor, whatever file happens to be open.
  */
 @Composable
-fun ChatDrawer(backend: IdeBackend, onClose: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+fun ChatDrawer(
+    backend: IdeBackend,
+    onClose: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    fileActions: FileActions = FileActions.None,
+    activeFilePath: String? = null,
+) {
     val chat by backend.agent.chatState.collectAsState()
     val models by backend.agent.models.collectAsState()
     var cfg by remember { mutableStateOf(backend.agent.config()) }
-    var input by remember { mutableStateOf("") }
+    var input by remember { mutableStateOf(TextFieldValue("")) }
     var showProviders by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
+    var modelMenuOpen by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val imageFailed = stringResource(Res.string.chat_image_failed)
 
     // Fetch the provider's live model list when the drawer opens or the provider changes.
     LaunchedEffect(cfg.selectedProvider) { backend.agent.refreshModels() }
+
+    fun submit() {
+        val text = input.text.trim()
+        if (text.isEmpty()) return
+        input = TextFieldValue("")
+        if (text.startsWith("/")) {
+            val name = text.removePrefix("/").substringBefore(' ').lowercase()
+            val args = text.substringAfter(' ', "").trim()
+            when (name) {
+                "resume", "history" -> { showHistory = true; return }
+                "model" -> { modelMenuOpen = true; return }
+            }
+            if (backend.agent.runCommand(name, args)) {
+                cfg = backend.agent.config()
+                return
+            }
+        }
+        backend.agent.send(text)
+    }
+
+    /** Reads, scales and queues the image at [path]; every image source (picker, camera, clipboard) ends here. */
+    fun attachImageAt(path: String?) {
+        if (path == null) return
+        scope.launch {
+            val bytes = backend.projects.imageBytes(path)
+            val attachment = bytes?.let { prepareImageAttachment(path.substringAfterLast('/'), it) }
+            if (attachment != null) backend.agent.attach(attachment) else notice = imageFailed
+        }
+    }
+
+    val imageSources = ImageSources(
+        pick = if (fileActions.canPickFile) ({ fileActions.pickFile(IMAGE_EXTENSIONS, ::attachImageAt) }) else null,
+        camera = if (fileActions.canTakePhoto) ({ fileActions.takePhoto(::attachImageAt) }) else null,
+        paste = if (fileActions.canPasteImage) ({ fileActions.pasteImage(::attachImageAt) }) else null,
+        hasClipboardImage = fileActions::hasClipboardImage,
+    )
 
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxSize()) {
@@ -139,8 +212,11 @@ fun ChatDrawer(backend: IdeBackend, onClose: (() -> Unit)? = null, modifier: Mod
                 ChatHeader(
                 cfg = cfg,
                 models = models.ifEmpty { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.models ?: emptyList() },
+                modelMenuOpen = modelMenuOpen,
+                onModelMenu = { modelMenuOpen = it },
                 onPickModel = { backend.agent.setModel(it); cfg = backend.agent.config() },
                 onManage = { showProviders = true },
+                onHistory = { showHistory = true },
                 onCycleMode = {
                     backend.agent.setPermissionMode(nextMode(cfg.mode))
                     cfg = backend.agent.config()
@@ -153,23 +229,53 @@ fun ChatDrawer(backend: IdeBackend, onClose: (() -> Unit)? = null, modifier: Mod
                 if (chat.messages.isEmpty()) {
                     EmptyState(configured = cfg.configured, onManage = { showProviders = true })
                 } else {
-                    Transcript(chat.messages, onRetry = { backend.agent.retry() })
+                    Transcript(
+                        chat.messages,
+                        busy = chat.busy,
+                        onRetry = { backend.agent.retry() },
+                        onUndo = { backend.agent.undoTurn(it) },
+                        onUseModel = { backend.agent.switchModelAndRetry(it); cfg = backend.agent.config() },
+                    )
                 }
             }
+            if (chat.todos.isNotEmpty() && (chat.busy || chat.todos.any { it.status != UiAgentTodoStatus.DONE })) {
+                TodoCard(chat.todos)
+            }
             ChatChrome {
-                Composer(
-                value = input,
-                configured = cfg.configured,
-                busy = chat.busy,
-                onValueChange = { input = it },
-                onSend = {
-                    if (input.isNotBlank()) {
-                        backend.agent.send(input)
-                        input = ""
+                Column {
+                    notice?.let { message ->
+                        LaunchedEffect(message) { delay(3000); notice = null }
+                        Text(
+                            message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                        )
                     }
-                },
-                onStop = { backend.agent.stop() },
-                )
+                    Suggestions(
+                        backend = backend,
+                        input = input,
+                        onPick = { input = it },
+                    )
+                    AttachmentChips(
+                        chat.pendingAttachments,
+                        onRemove = { backend.agent.detach(it) },
+                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp),
+                    )
+                    Composer(
+                    value = input,
+                    configured = cfg.configured,
+                    busy = chat.busy,
+                    images = imageSources,
+                    activeFilePath = activeFilePath,
+                    onAttachFile = { path ->
+                        backend.agent.attach(UiAgentAttachment(UiAgentAttachmentKind.FILE, path.substringAfterLast('/'), path = path))
+                    },
+                    onValueChange = { input = it },
+                    onSend = ::submit,
+                    onStop = { backend.agent.stop() },
+                    )
+                }
             }
         }
         if (showProviders) {
@@ -178,6 +284,112 @@ fun ChatDrawer(backend: IdeBackend, onClose: (() -> Unit)? = null, modifier: Mod
                 cfg = backend.agent.config()
             }
         }
+        if (showHistory) {
+            AgentHistorySheet(backend) {
+                showHistory = false
+                cfg = backend.agent.config()
+            }
+        }
+    }
+}
+
+private val IMAGE_EXTENSIONS = listOf("png", "jpg", "jpeg", "webp", "gif")
+
+/** The ways this host can supply an image; a null source is one the platform lacks, and is not offered. */
+private class ImageSources(
+    val pick: (() -> Unit)?,
+    val camera: (() -> Unit)?,
+    val paste: (() -> Unit)?,
+    val hasClipboardImage: () -> Boolean,
+) {
+    val any: Boolean get() = pick != null || camera != null || paste != null
+}
+
+/**
+ * What the composer can complete at the caret: a slash command while the message is just `/name`, or a project
+ * file while the word under the caret starts with `@`. Picking one rewrites that word.
+ */
+@Composable
+private fun Suggestions(backend: IdeBackend, input: TextFieldValue, onPick: (TextFieldValue) -> Unit) {
+    val text = input.text
+    val caret = input.selection.end.coerceIn(0, text.length)
+    val beforeCaret = text.substring(0, caret)
+    val commandQuery = if (text.startsWith("/") && ' ' !in text) text.removePrefix("/").lowercase() else null
+    val mentionMatch = remember(beforeCaret) { MENTION_AT_CARET.find(beforeCaret) }
+    val mentionQuery = mentionMatch?.groupValues?.get(1)
+
+    var mentions by remember { mutableStateOf<List<UiAgentMention>>(emptyList()) }
+    LaunchedEffect(mentionQuery) {
+        mentions = if (mentionQuery == null) emptyList() else {
+            delay(120)
+            backend.agent.mentionCandidates(mentionQuery)
+        }
+    }
+    val commands: List<UiAgentCommand> = remember(commandQuery) {
+        if (commandQuery == null) emptyList() else backend.agent.commands().filter { it.name.startsWith(commandQuery) }
+    }
+    if (commands.isEmpty() && (mentionQuery == null || mentions.isEmpty())) return
+
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp)
+            .clip(MaterialTheme.shapes.medium).background(scheme.surfaceContainerHigh)
+            .heightIn(max = 220.dp).verticalScroll(rememberScrollState())
+            .padding(vertical = 4.dp),
+    ) {
+        if (commands.isNotEmpty()) {
+            commands.forEach { command ->
+                SuggestionRow(
+                    title = "/" + command.name,
+                    detail = command.description,
+                    onClick = {
+                        val value = "/" + command.name + " "
+                        onPick(TextFieldValue(value, TextRange(value.length)))
+                    },
+                )
+            }
+        } else {
+            val start = mentionMatch!!.range.first
+            mentions.forEach { mention ->
+                SuggestionRow(
+                    title = mention.label,
+                    detail = mention.detail,
+                    onClick = {
+                        val replaced = text.substring(0, start) + "@" + mention.insert + " "
+                        val after = text.substring(caret)
+                        onPick(TextFieldValue(replaced + after, TextRange(replaced.length)))
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** `@partial` ending at the caret, not glued to a preceding word (so an e-mail address is not a mention). */
+private val MENTION_AT_CARET = Regex("""(?:^|(?<=\s))@([\w./-]*)$""")
+
+@Composable
+private fun SuggestionRow(title: String, detail: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+        Text(
+            detail,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -185,8 +397,11 @@ fun ChatDrawer(backend: IdeBackend, onClose: (() -> Unit)? = null, modifier: Mod
 private fun ChatHeader(
     cfg: UiAgentConfig,
     models: List<UiAgentModel>,
+    modelMenuOpen: Boolean,
+    onModelMenu: (Boolean) -> Unit,
     onPickModel: (String) -> Unit,
     onManage: () -> Unit,
+    onHistory: () -> Unit,
     onCycleMode: () -> Unit,
     onNew: () -> Unit,
     onClose: (() -> Unit)?,
@@ -204,7 +419,7 @@ private fun ChatHeader(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
-            ModelPicker(cfg = cfg, models = models, onPick = onPickModel)
+            ModelPicker(cfg = cfg, models = models, open = modelMenuOpen, onOpen = onModelMenu, onPick = onPickModel)
         }
         // The permission mode cycles on tap, and is tinted by how much it lets the agent do: a session left
         // on auto-accept applies edits without asking, which should be visible in the header rather than
@@ -227,6 +442,7 @@ private fun ChatHeader(
             fill = modeFill,
             textColor = modeText,
         )
+        IconButtonCa(CaIcons.clock, stringResource(Res.string.chat_history), onHistory, iconSize = 16, boxSize = 30)
         IconButtonCa(CaIcons.key, stringResource(Res.string.chat_manage_keys), onManage, iconSize = 16, boxSize = 30)
         IconButtonCa(CaIcons.refresh, stringResource(Res.string.chat_new), onNew, iconSize = 16, boxSize = 30)
         if (onClose != null) {
@@ -236,15 +452,20 @@ private fun ChatHeader(
 }
 
 @Composable
-private fun ModelPicker(cfg: UiAgentConfig, models: List<UiAgentModel>, onPick: (String) -> Unit) {
-    var open by remember { mutableStateOf(false) }
+private fun ModelPicker(
+    cfg: UiAgentConfig,
+    models: List<UiAgentModel>,
+    open: Boolean,
+    onOpen: (Boolean) -> Unit,
+    onPick: (String) -> Unit,
+) {
     val provider = cfg.providers.firstOrNull { it.id == cfg.selectedProvider }
     val current = cfg.model.ifBlank { provider?.defaultModel ?: "" }
     val label = models.firstOrNull { it.id == current }?.displayName
         ?: current.ifBlank { provider?.displayName ?: "" }
     Box {
         Row(
-            Modifier.clip(RoundedCornerShape(Ca.radius.pill)).clickable { open = true },
+            Modifier.clip(RoundedCornerShape(Ca.radius.pill)).clickable { onOpen(true) },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
@@ -252,11 +473,11 @@ private fun ModelPicker(cfg: UiAgentConfig, models: List<UiAgentModel>, onPick: 
             val chevron by animateFloatAsState(if (open) 180f else 0f, label = "chevron")
             Icon(CaIcons.chevronDown, null, Modifier.size(12.dp).rotate(chevron), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        CaDropdownMenu(expanded = open, onDismissRequest = { onOpen(false) }) {
             models.forEach { model ->
                 DropdownMenuItem(
                     text = { Text(model.displayName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface) },
-                    onClick = { onPick(model.id); open = false },
+                    onClick = { onPick(model.id); onOpen(false) },
                 )
             }
         }
@@ -264,10 +485,17 @@ private fun ModelPicker(cfg: UiAgentConfig, models: List<UiAgentModel>, onPick: 
 }
 
 @Composable
-private fun Transcript(messages: List<UiAgentMessage>, onRetry: () -> Unit) {
+private fun Transcript(
+    messages: List<UiAgentMessage>,
+    busy: Boolean,
+    onRetry: () -> Unit,
+    onUndo: (Long) -> Unit,
+    onUseModel: (String) -> Unit,
+) {
     val listState = rememberLazyListState()
     val last = messages.lastOrNull()
-    val tail = (last?.text?.length ?: 0) + (last?.thinking?.length ?: 0) + (last?.toolCalls?.size ?: 0)
+    val tail = (last?.text?.length ?: 0) + (last?.thinking?.length ?: 0) + (last?.toolCalls?.size ?: 0) +
+        (if (last?.waitUntilMs != null) 1 else 0)
     LaunchedEffect(messages.size, tail) {
         if (messages.isNotEmpty()) runCatching { listState.animateScrollToItem(messages.lastIndex) }
     }
@@ -281,17 +509,30 @@ private fun Transcript(messages: List<UiAgentMessage>, onRetry: () -> Unit) {
     ) {
         itemsKeyed(messages, key = { it.id }) { msg ->
             // Only the most recent failure offers a retry (it resumes the latest turn).
-            val retry = if (msg.id == lastId && msg.isError && msg.canRetry) onRetry else null
-            MessageItem(msg, retry)
+            val latest = msg.id == lastId
+            val retry = if (latest && msg.isError && msg.canRetry) onRetry else null
+            val useModel = if (latest && msg.isError) msg.suggestedModel else null
+            MessageItem(
+                msg, retry,
+                onUndo = if (!busy && msg.canUndo) ({ onUndo(msg.id) }) else null,
+                suggestedModel = useModel,
+                onUseModel = onUseModel,
+            )
         }
     }
 }
 
 @Composable
-private fun MessageItem(msg: UiAgentMessage, onRetry: (() -> Unit)? = null) {
+private fun MessageItem(
+    msg: UiAgentMessage,
+    onRetry: (() -> Unit)? = null,
+    onUndo: (() -> Unit)? = null,
+    suggestedModel: String? = null,
+    onUseModel: (String) -> Unit = {},
+) {
     Box(Modifier.fillMaxWidth().entranceSlideUp()) {
         when {
-            msg.isError -> ErrorMessage(msg.text, onRetry)
+            msg.isError -> ErrorMessage(msg.text, onRetry, suggestedModel, onUseModel)
             msg.role == UiAgentRole.USER -> Column(
                 Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.End,
@@ -311,7 +552,24 @@ private fun MessageItem(msg: UiAgentMessage, onRetry: (() -> Unit)? = null) {
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                CopyButton(msg.text)
+                AttachmentChips(msg.attachments, modifier = Modifier.widthIn(max = 320.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (msg.undone) {
+                        Text(
+                            stringResource(Res.string.chat_undone),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (onUndo != null) {
+                        TextButton(onClick = onUndo) {
+                            Icon(CaIcons.undo, null, Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(Res.string.chat_undo), style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                    CopyButton(msg.text)
+                }
             }
             else -> AssistantMessage(msg)
         }
@@ -319,7 +577,12 @@ private fun MessageItem(msg: UiAgentMessage, onRetry: (() -> Unit)? = null) {
 }
 
 @Composable
-private fun ErrorMessage(text: String, onRetry: (() -> Unit)?) {
+private fun ErrorMessage(
+    text: String,
+    onRetry: (() -> Unit)?,
+    suggestedModel: String? = null,
+    onUseModel: (String) -> Unit = {},
+) {
     // The errorContainer pair rather than a translucent error tint: it stays legible in both themes and
     // against any Material You palette, which an alpha-over-surface fill does not.
     val scheme = MaterialTheme.colorScheme
@@ -335,7 +598,18 @@ private fun ErrorMessage(text: String, onRetry: (() -> Unit)?) {
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             CopyButton(text, tint = scheme.onErrorContainer)
-            if (onRetry != null) {
+            // The one-tap fix for a model the account cannot use: switch and re-run, rather than leaving the user
+            // to find the model picker and guess which model would work.
+            if (suggestedModel != null) {
+                TextButton(
+                    onClick = { onUseModel(suggestedModel) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = scheme.onErrorContainer),
+                ) {
+                    Icon(CaIcons.sparkle, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(Res.string.chat_use_model, suggestedModel), style = MaterialTheme.typography.labelLarge)
+                }
+            } else if (onRetry != null) {
                 TextButton(
                     onClick = onRetry,
                     colors = ButtonDefaults.textButtonColors(contentColor = scheme.onErrorContainer),
@@ -354,10 +628,11 @@ private fun AssistantMessage(msg: UiAgentMessage) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (msg.thinking.isNotBlank()) ThinkingBlock(msg.thinking, msg.streaming)
         if (msg.toolCalls.isNotEmpty()) ToolCallsSection(msg.toolCalls)
+        msg.waitUntilMs?.let { WaitRow(it, msg.waitReason) }
         if (msg.text.isNotBlank()) AssistantMarkdown(msg.text)
         // A blinking caret while the answer is still streaming in.
         if (msg.streaming && msg.text.isNotBlank()) TypingCaret()
-        if (msg.streaming && msg.text.isBlank() && msg.thinking.isBlank() && msg.toolCalls.isEmpty()) {
+        if (msg.streaming && msg.waitUntilMs == null && msg.text.isBlank() && msg.thinking.isBlank() && msg.toolCalls.isEmpty()) {
             ThinkingBlock(thinking = "", streaming = true)
         }
         // Copy the finished answer.
@@ -495,19 +770,24 @@ private fun ThinkingBlock(thinking: String, streaming: Boolean) {
 
 @Composable
 private fun ToolCallRow(call: UiAgentToolCall) {
-    Row(
+    Column(
         Modifier.fillMaxWidth().entranceSlideUp().background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.medium)
             .padding(horizontal = 12.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ToolStatusIcon(call.status)
-        Column(Modifier.weight(1f)) {
-            Text(call.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (call.detail.isNotBlank()) {
-                Text(call.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ToolStatusIcon(call.status)
+            Column(Modifier.weight(1f)) {
+                Text(call.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (call.detail.isNotBlank()) {
+                    Text(call.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
+        if (call.changes.isNotEmpty()) FileChangesList(call.changes)
     }
 }
 
@@ -573,10 +853,13 @@ private fun EmptyState(configured: Boolean, onManage: () -> Unit) {
 
 @Composable
 private fun Composer(
-    value: String,
+    value: TextFieldValue,
     configured: Boolean,
     busy: Boolean,
-    onValueChange: (String) -> Unit,
+    images: ImageSources,
+    activeFilePath: String?,
+    onAttachFile: (String) -> Unit,
+    onValueChange: (TextFieldValue) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
 ) {
@@ -585,6 +868,47 @@ private fun Composer(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (images.any || activeFilePath != null) {
+            var attachOpen by remember { mutableStateOf(false) }
+            Box {
+                IconButtonCa(
+                    CaIcons.plus, stringResource(Res.string.chat_attach), { attachOpen = true },
+                    iconSize = 18, boxSize = 36, tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                CaDropdownMenu(expanded = attachOpen, onDismissRequest = { attachOpen = false }) {
+                    images.pick?.let { pick ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(Res.string.chat_attach_image), style = MaterialTheme.typography.bodyMedium) },
+                            leadingIcon = { Icon(CaIcons.image, null, Modifier.size(16.dp)) },
+                            onClick = { attachOpen = false; pick() },
+                        )
+                    }
+                    images.camera?.let { camera ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(Res.string.chat_attach_photo), style = MaterialTheme.typography.bodyMedium) },
+                            leadingIcon = { Icon(CaIcons.eye, null, Modifier.size(16.dp)) },
+                            onClick = { attachOpen = false; camera() },
+                        )
+                    }
+                    // Offered only while there is an image to paste, checked as the menu opens.
+                    val paste = images.paste
+                    if (paste != null && remember(attachOpen) { images.hasClipboardImage() }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(Res.string.chat_paste_image), style = MaterialTheme.typography.bodyMedium) },
+                            leadingIcon = { Icon(CaIcons.copy, null, Modifier.size(16.dp)) },
+                            onClick = { attachOpen = false; paste() },
+                        )
+                    }
+                    if (activeFilePath != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(Res.string.chat_attach_file), style = MaterialTheme.typography.bodyMedium) },
+                            leadingIcon = { Icon(CaIcons.file, null, Modifier.size(16.dp)) },
+                            onClick = { attachOpen = false; onAttachFile(activeFilePath) },
+                        )
+                    }
+                }
+            }
+        }
         // The focus outline follows M3's own treatment: the field sits on a container fill and gains a primary
         // outline while focused. Motion uses the app's expressive springs rather than a linear tween.
         val scheme = MaterialTheme.colorScheme
@@ -607,7 +931,7 @@ private fun Composer(
                 .border(borderWidth, borderColor, fieldShape)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
-            if (value.isEmpty()) {
+            if (value.text.isEmpty()) {
                 Text(
                     stringResource(if (configured) Res.string.chat_placeholder else Res.string.chat_need_key),
                     color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
@@ -622,18 +946,20 @@ private fun Composer(
                 maxLines = 5,
                 interactionSource = fieldInteraction,
                 modifier = Modifier.fillMaxWidth().onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
-                        onSend()
-                        true
-                    } else {
-                        false
+                    when {
+                        event.type != KeyEventType.KeyDown -> false
+                        event.key == Key.Enter && !event.isShiftPressed -> { onSend(); true }
+                        // Paste claims Ctrl/Cmd+V only when the clipboard holds an image; text paste is untouched.
+                        event.key == Key.V && (event.isCtrlPressed || event.isMetaPressed) &&
+                            images.paste != null && images.hasClipboardImage() -> { images.paste.invoke(); true }
+                        else -> false
                     }
                 },
             )
         }
         // A native filled icon button, so the disabled state, ripple and tonal roles all come from the theme.
         // While a turn is running it becomes the stop control rather than a second button appearing beside it.
-        val canSend = configured && value.isNotBlank() && !busy
+        val canSend = configured && value.text.isNotBlank() && !busy
         FilledIconButton(
             onClick = { if (busy) onStop() else onSend() },
             enabled = busy || canSend,

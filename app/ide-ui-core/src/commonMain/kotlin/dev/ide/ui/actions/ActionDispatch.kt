@@ -4,6 +4,8 @@ import dev.ide.ui.IdeUiState
 import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionEffect
 import dev.ide.ui.backend.UiTextEdit
+import dev.ide.ui.ext.ToolWindowAnchor
+import dev.ide.ui.ext.ToolWindowRegistry
 
 /**
  * Run a registry action by id and apply the [UiActionEffect]s it returns. The single place the UI action
@@ -38,7 +40,14 @@ suspend fun IdeUiState.applyActionEffects(
         is UiActionEffect.OpenFile -> openAt(effect.path, effect.offset ?: 0)
         is UiActionEffect.ReloadFile -> refreshTree()
         UiActionEffect.RefreshTree -> refreshTree()
-        is UiActionEffect.Navigate -> navigate(effect.target)
+        // A right-edge tool window is a panel, not a screen: navigating to one opens the panel beside the
+        // editor, which is how an editor action such as "Ask AI about selection" brings up its tool.
+        is UiActionEffect.Navigate ->
+            if (ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).any { it.id == effect.target }) {
+                selectRightPanel(effect.target)
+            } else {
+                navigate(effect.target)
+            }
 
         // Editing goes through the editor session, not the file on disk, so a plugin's rewrite joins the
         // same undo stack as typing and re-triggers analysis the ordinary way.

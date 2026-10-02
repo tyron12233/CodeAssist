@@ -23,3 +23,9 @@ expect fun nativeImageToBitmap(handle: Any?): ImageBitmap?
  * `Bitmap.compress` on Android. Returns null when encoding fails.
  */
 expect fun encodeImagePng(image: ImageBitmap): ByteArray?
+
+/**
+ * Encode an [ImageBitmap] as JPEG at [quality] (0..100). For a photo or screenshot sent to a model, where PNG
+ * would be several times the size for no visible gain. Returns null when encoding fails.
+ */
+expect fun encodeImageJpeg(image: ImageBitmap, quality: Int = 85): ByteArray?

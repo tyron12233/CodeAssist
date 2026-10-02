@@ -59,11 +59,56 @@ class ChatDrawerSnapshot {
         ),
     )
 
-    private fun backend(): StubBackend = object : StubBackend() {
+    private val change = dev.ide.ui.backend.UiAgentFileChange(
+        "app/src/main/java/com/example/Theme.kt",
+        "object Theme {\n    val colors = lightColors()\n    val shapes = Shapes()\n}\n",
+        "object Theme {\n    val colors = lightColors()\n    val LocalColors = staticCompositionLocalOf { colors }\n    val shapes = Shapes()\n}\n",
+    )
+
+    /** The newer surfaces: attachments, undo, a diff, a rate-limit countdown, a model suggestion, the plan. */
+    private fun featureState(): UiAgentChatState = UiAgentChatState(
+        messages = listOf(
+            UiAgentMessage(
+                1, UiAgentRole.USER, text = "Why does @Theme.kt break the preview?",
+                attachments = listOf(
+                    dev.ide.ui.backend.UiAgentAttachment(dev.ide.ui.backend.UiAgentAttachmentKind.SELECTION, "Theme.kt:12-30"),
+                    dev.ide.ui.backend.UiAgentAttachment(dev.ide.ui.backend.UiAgentAttachmentKind.IMAGE, "screenshot.png"),
+                ),
+                canUndo = true,
+            ),
+            UiAgentMessage(
+                2, UiAgentRole.ASSISTANT,
+                toolCalls = listOf(UiAgentToolCall("e", "edit Theme.kt", UiAgentToolStatus.OK, "Edited Theme.kt", listOf(change))),
+                text = "Moved the local into the theme object.",
+            ),
+            UiAgentMessage(3, UiAgentRole.USER, text = "Now run it."),
+            UiAgentMessage(
+                4, UiAgentRole.ASSISTANT, streaming = true,
+                waitUntilMs = System.currentTimeMillis() + 42_000,
+                waitReason = "Rate limited by the provider. Retrying when the limit resets.",
+            ),
+            UiAgentMessage(
+                5, UiAgentRole.ASSISTANT, isError = true, canRetry = true, suggestedModel = "gemini-3.8-flash",
+                text = "'gemini-2.5-pro' has no quota on your plan (its limit is 0), so every request to it is refused.",
+            ),
+        ),
+        todos = listOf(
+            dev.ide.ui.backend.UiAgentTodo("Find where the theme local is declared", dev.ide.ui.backend.UiAgentTodoStatus.DONE),
+            dev.ide.ui.backend.UiAgentTodo("Move it into the theme object", dev.ide.ui.backend.UiAgentTodoStatus.IN_PROGRESS),
+            dev.ide.ui.backend.UiAgentTodo("Run the preview again", dev.ide.ui.backend.UiAgentTodoStatus.PENDING),
+        ),
+        pendingAttachments = listOf(
+            dev.ide.ui.backend.UiAgentAttachment(dev.ide.ui.backend.UiAgentAttachmentKind.FILE, "MainActivity.kt"),
+        ),
+    )
+
+    private fun backend(
+        state: UiAgentChatState = UiAgentChatState(messages = transcript(), busy = false),
+        permission: UiAgentPermissionRequest? = null,
+    ): StubBackend = object : StubBackend() {
         override val agent: AgentService = object : AgentService {
-            override val chatState: StateFlow<UiAgentChatState> =
-                MutableStateFlow(UiAgentChatState(messages = transcript(), busy = false))
-            override val permissionRequest: StateFlow<UiAgentPermissionRequest?> = MutableStateFlow(null)
+            override val chatState: StateFlow<UiAgentChatState> = MutableStateFlow(state)
+            override val permissionRequest: StateFlow<UiAgentPermissionRequest?> = MutableStateFlow(permission)
             override val models: StateFlow<List<UiAgentModel>> =
                 MutableStateFlow(listOf(UiAgentModel("claude-opus-5", "Claude Opus 5")))
 
@@ -106,6 +151,37 @@ class ChatDrawerSnapshot {
     private fun Sheet() {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
             AgentProvidersSheet(backend()) {}
+        }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun renderFeaturesDark() {
+        snapshot("chat-features-dark.png", dark = true) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+                ChatDrawer(backend(featureState()), onClose = {})
+            }
+        }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun renderFeaturesLight() {
+        snapshot("chat-features-light.png", dark = false) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+                ChatDrawer(backend(featureState()), onClose = {})
+            }
+        }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun renderPermissionWithDiffDark() {
+        val request = UiAgentPermissionRequest(1, "edit_file", "edit Theme.kt", "app/src/main/java/com/example/Theme.kt", listOf(change))
+        snapshot("permission-diff-dark.png", dark = true) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+                AgentPermissionDialog(backend(permission = request))
+            }
         }
     }
 

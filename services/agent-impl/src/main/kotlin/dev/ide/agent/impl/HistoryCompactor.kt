@@ -47,6 +47,9 @@ class HistoryCompactor(
          * invalidate what the other had just cached.
          */
         fun serverManaged(): HistoryCompactor = HistoryCompactor(triggerChars = Int.MAX_VALUE)
+
+        /** What an image costs in the size budget: roughly its token price (~1.5K tokens) in characters. */
+        const val IMAGE_CHARS = 6_000
     }
 
     /** Forgets past elisions. Call when the conversation itself is reset. */
@@ -74,9 +77,9 @@ class HistoryCompactor(
             for (part in history[index].content) {
                 if (part !is ContentPart.ToolResultPart) continue
                 if (part.toolCallId in elidedCallIds) continue
-                if (part.content.length <= maxToolResultChars) continue
+                if (part.content.length <= maxToolResultChars && part.images.isEmpty()) continue
                 elidedCallIds += part.toolCallId
-                projected -= part.content.length - maxToolResultChars
+                projected -= (part.content.length - maxToolResultChars).coerceAtLeast(0) + part.images.size * IMAGE_CHARS
             }
         }
     }
@@ -89,21 +92,20 @@ class HistoryCompactor(
                 is ContentPart.ToolUse -> part.arguments.length + part.name.length
                 is ContentPart.ToolResultPart ->
                     if (part.toolCallId in elidedCallIds) minOf(part.content.length, maxToolResultChars)
-                    else part.content.length
+                    else part.content.length + part.images.size * IMAGE_CHARS
+                is ContentPart.Image -> IMAGE_CHARS
             }
         }
     }
 
     private fun elide(message: LlmMessage): LlmMessage {
         val content = message.content.map { part ->
-            if (part is ContentPart.ToolResultPart &&
-                part.toolCallId in elidedCallIds &&
-                part.content.length > maxToolResultChars
-            ) {
-                part.copy(content = truncate(part.content))
-            } else {
-                part
+            if (part !is ContentPart.ToolResultPart || part.toolCallId !in elidedCallIds) return@map part
+            var text = if (part.content.length > maxToolResultChars) truncate(part.content) else part.content
+            if (part.images.isNotEmpty()) {
+                text += "\n… [${part.images.size} image(s) elided to save context; call the tool again to see them.]"
             }
+            part.copy(content = text, images = emptyList())
         }
         return message.copy(content = content)
     }

@@ -267,7 +267,15 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
                                 add(buildJsonObject {
                                     put("type", "tool_result")
                                     put("tool_use_id", r.toolCallId)
-                                    put("content", r.content)
+                                    if (r.images.isEmpty()) {
+                                        put("content", r.content)
+                                    } else {
+                                        // A tool_result may carry images alongside its text.
+                                        put("content", buildJsonArray {
+                                            add(buildJsonObject { put("type", "text"); put("text", r.content) })
+                                            r.images.forEach { add(imageBlock(it)) }
+                                        })
+                                    }
                                     if (r.isError) put("is_error", true)
                                 })
                             }
@@ -309,8 +317,21 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
 
     private fun userContent(parts: List<ContentPart>): JsonArray = buildJsonArray {
         parts.forEach { p ->
-            if (p is ContentPart.Text) add(buildJsonObject { put("type", "text"); put("text", p.text) })
+            when (p) {
+                is ContentPart.Text -> add(buildJsonObject { put("type", "text"); put("text", p.text) })
+                is ContentPart.Image -> add(imageBlock(p))
+                else -> Unit
+            }
         }
+    }
+
+    private fun imageBlock(image: ContentPart.Image): JsonObject = buildJsonObject {
+        put("type", "image")
+        put("source", buildJsonObject {
+            put("type", "base64")
+            put("media_type", image.mediaType)
+            put("data", image.data)
+        })
     }
 
     private fun assistantContent(parts: List<ContentPart>): JsonArray = buildJsonArray {

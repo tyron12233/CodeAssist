@@ -3,6 +3,11 @@ package dev.ide.desktop
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import java.awt.Desktop
+import java.awt.Image
+import java.awt.Toolkit
+import java.awt.datatransfer.DataFlavor
+import java.awt.image.BufferedImage
+import javax.imageio.ImageIO
 import java.io.File
 import javax.swing.JFileChooser
 import javax.swing.SwingUtilities
@@ -46,6 +51,42 @@ class DesktopFileActions(private val backend: IdeBackend) : FileActions {
             }
             val path = if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile?.absolutePath else null
             onPicked(path)
+        }
+    }
+
+    override val canPasteImage: Boolean = true
+
+    override fun hasClipboardImage(): Boolean = runCatching {
+        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+        clipboard.isDataFlavorAvailable(DataFlavor.imageFlavor) ||
+            (clipboard.isDataFlavorAvailable(DataFlavor.javaFileListFlavor) && copiedImageFile(clipboard) != null)
+    }.getOrDefault(false)
+
+    /**
+     * A screenshot tool puts pixels on the clipboard; a file manager's Copy puts a file list. Both count as "an
+     * image": pixels are written out as a PNG, a copied image file is handed back as it is.
+     */
+    override fun pasteImage(onPasted: (String?) -> Unit) {
+        val path = runCatching {
+            val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+            copiedImageFile(clipboard)?.let { return@runCatching it.absolutePath }
+            if (!clipboard.isDataFlavorAvailable(DataFlavor.imageFlavor)) return@runCatching null
+            val image = clipboard.getData(DataFlavor.imageFlavor) as? Image ?: return@runCatching null
+            val buffered = image as? BufferedImage ?: BufferedImage(
+                image.getWidth(null).coerceAtLeast(1), image.getHeight(null).coerceAtLeast(1), BufferedImage.TYPE_INT_ARGB,
+            ).also { it.createGraphics().apply { drawImage(image, 0, 0, null); dispose() } }
+            val out = File.createTempFile("pasted-", ".png").apply { deleteOnExit() }
+            ImageIO.write(buffered, "png", out)
+            out.absolutePath
+        }.getOrNull()
+        onPasted(path)
+    }
+
+    private fun copiedImageFile(clipboard: java.awt.datatransfer.Clipboard): File? {
+        if (!clipboard.isDataFlavorAvailable(DataFlavor.javaFileListFlavor)) return null
+        val files = clipboard.getData(DataFlavor.javaFileListFlavor) as? List<*> ?: return null
+        return files.filterIsInstance<File>().firstOrNull {
+            it.extension.lowercase() in setOf("png", "jpg", "jpeg", "webp", "gif")
         }
     }
 

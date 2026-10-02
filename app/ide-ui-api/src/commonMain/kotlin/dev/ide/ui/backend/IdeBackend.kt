@@ -740,13 +740,53 @@ enum class UiAgentRole { USER, ASSISTANT }
 enum class UiAgentPermissionMode { ASK_EACH, AUTO_ACCEPT, PLAN_ONLY }
 enum class UiAgentToolStatus { RUNNING, OK, ERROR, DENIED }
 
-/** One tool call in a streamed assistant turn, with its live status. */
+/** One tool call in a streamed assistant turn, with its live status. [changes] are the files it changed, for
+ *  an inline diff. */
 data class UiAgentToolCall(
     val id: String,
     val title: String,
     val status: UiAgentToolStatus,
     val detail: String = "",
+    val changes: List<UiAgentFileChange> = emptyList(),
 )
+
+/**
+ * One file's change, before and after (null = the file did not exist on that side). The UI renders the diff
+ * itself. Very large files arrive truncated, so a diff of them is a preview, not a patch.
+ */
+data class UiAgentFileChange(val path: String, val before: String?, val after: String?)
+
+enum class UiAgentAttachmentKind { IMAGE, FILE, SELECTION }
+
+/**
+ * Something attached to a user message. An [UiAgentAttachmentKind.IMAGE] carries [mediaType] + [base64] (already
+ * downscaled by whoever picked it); a FILE carries [path]; a SELECTION carries [path], the selected [text] and its
+ * 1-based [startLine]..[endLine]. [name] is the short label shown on the chip.
+ */
+data class UiAgentAttachment(
+    val kind: UiAgentAttachmentKind,
+    val name: String,
+    val path: String? = null,
+    val mediaType: String? = null,
+    val base64: String? = null,
+    val text: String? = null,
+    val startLine: Int? = null,
+    val endLine: Int? = null,
+)
+
+/** A file the composer can @-mention: [label] is shown, [insert] is what goes into the message after the `@`. */
+data class UiAgentMention(val label: String, val insert: String, val detail: String = "")
+
+/** A slash command the composer offers (`/name`). */
+data class UiAgentCommand(val name: String, val description: String)
+
+enum class UiAgentTodoStatus { PENDING, IN_PROGRESS, DONE }
+
+/** One step of the agent's visible plan for the current task. */
+data class UiAgentTodo(val content: String, val status: UiAgentTodoStatus)
+
+/** A saved conversation, for the history list. */
+data class UiAgentSessionSummary(val id: String, val title: String, val updatedAtMs: Long, val messageCount: Int)
 
 /**
  * What one turn cost. [input] is the prompt tokens the provider billed at full rate; [cacheRead] is the part it
@@ -775,12 +815,29 @@ data class UiAgentMessage(
     val canRetry: Boolean = false,
     /** Token and prompt-cache accounting for a finished assistant turn; null while streaming or unreported. */
     val usage: UiAgentUsage? = null,
+    /** Images, files and selections the user attached to this message. */
+    val attachments: List<UiAgentAttachment> = emptyList(),
+    /** While the run is paused for a rate limit or pacing, when it resumes (epoch ms) and why; null otherwise. */
+    val waitUntilMs: Long? = null,
+    val waitReason: String = "",
+    /** When [isError] came from a model the account cannot use, a model that should work instead. */
+    val suggestedModel: String? = null,
+    /** On a user message: the files the agent changed while answering it can be reverted ([AgentService.undoTurn]). */
+    val canUndo: Boolean = false,
+    /** On a user message: its changes were reverted. */
+    val undone: Boolean = false,
 )
 
 /** The observable chat transcript. */
 data class UiAgentChatState(
     val messages: List<UiAgentMessage> = emptyList(),
     val busy: Boolean = false,
+    /** Attachments queued for the next message (from the composer or an editor action like "Ask AI"). */
+    val pendingAttachments: List<UiAgentAttachment> = emptyList(),
+    /** The agent's current plan, as it last reported it. */
+    val todos: List<UiAgentTodo> = emptyList(),
+    /** The saved conversation this transcript belongs to, or null before the first message. */
+    val sessionId: String? = null,
 )
 
 data class UiAgentModel(val id: String, val displayName: String)
@@ -808,8 +865,14 @@ data class UiAgentConfig(
     val gatewayCaCert: String = "",
 )
 
-/** A pending write-permission prompt (ASK_EACH mode). */
-data class UiAgentPermissionRequest(val id: Int, val tool: String, val summary: String, val path: String?)
+/** A pending write-permission prompt (ASK_EACH mode). [changes] previews what the call would do, when known. */
+data class UiAgentPermissionRequest(
+    val id: Int,
+    val tool: String,
+    val summary: String,
+    val path: String?,
+    val changes: List<UiAgentFileChange> = emptyList(),
+)
 
 enum class UiAgentPermissionDecision { DENY, ALLOW_ONCE, ALLOW_SESSION }
 

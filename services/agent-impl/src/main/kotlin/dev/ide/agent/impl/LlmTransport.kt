@@ -69,6 +69,10 @@ class LlmHttpException(
     val retryAfterMs: Long? = null,
     val retryable: Boolean = false,
     cause: Throwable? = null,
+    /** What went wrong, when the failure was categorized (null for a bare network failure). */
+    val kind: LlmErrorKind? = null,
+    /** Which quota was exceeded, when the provider said. */
+    val quota: QuotaInfo? = null,
 ) : RuntimeException(message, cause)
 
 /** The default transport. One [OkHttpClient] with streaming-friendly timeouts (no read/call timeout so a
@@ -117,7 +121,11 @@ class OkHttpLlmTransport(
             } catch (t: Throwable) {
                 val failure = t as? LlmHttpException
                 val retryAfter = failure?.retryAfterMs
-                val canRetry = failure?.retryable == true && !emitted && attempt < MAX_RETRIES &&
+                // A rate limit is left to the agent loop, which waits it out visibly (with a countdown the user
+                // can cancel) and feeds what it learned to the pacer. Retrying it silently here only spends more
+                // of the same per-minute budget before the user ever hears about it.
+                val rateLimited = failure?.kind == LlmErrorKind.RATE_LIMIT
+                val canRetry = failure?.retryable == true && !rateLimited && !emitted && attempt < MAX_RETRIES &&
                     (retryAfter == null || retryAfter <= MAX_AUTO_WAIT_MS)
                 if (!canRetry) throw t
                 attempt++
@@ -199,11 +207,11 @@ class OkHttpLlmTransport(
     private fun toException(t: Throwable?, response: Response?, prefetchedBody: String? = null): LlmHttpException {
         if (response == null) {
             val net = LlmErrors.network(t)
-            return LlmHttpException(net.message, retryable = net.retryable, cause = t)
+            return LlmHttpException(net.message, retryable = net.retryable, cause = t, kind = net.kind)
         }
         val body = prefetchedBody ?: runCatching { response.body?.string() }.getOrNull()
         val parsed = LlmErrors.parseHttp(response.code, body, response.header("retry-after"))
-        return LlmHttpException(parsed.message, response.code, parsed.retryAfterMs, parsed.retryable, t)
+        return LlmHttpException(parsed.message, response.code, parsed.retryAfterMs, parsed.retryable, t, parsed.kind, parsed.quota)
     }
 
     private companion object {
