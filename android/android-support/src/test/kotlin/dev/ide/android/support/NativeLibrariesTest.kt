@@ -116,6 +116,24 @@ class NativeLibrariesTest {
     }
 
     @Test
+    fun twoSameNamedJarsFromDifferentGroupsUnpackSeparately() {
+        withDirs { dir, out ->
+            // A fork published under another group carries the same file name, but different `.so` files.
+            val name = "gdx-box2d-platform-1.12.1-natives-arm64-v8a.jar"
+            val upstream = jar(Files.createDirectories(dir.resolve("com/badlogicgames")), name, "libgdx-box2d.so")
+            val fork = jar(Files.createDirectories(dir.resolve("games/rednblack")), name, "libfork-box2d.so")
+
+            val unpacked = NativeLibraries.unpack(listOf(upstream, fork), out)
+
+            assertEquals(2, unpacked.dirs.distinct().size, "one directory per jar: ${unpacked.dirs}")
+            assertEquals(
+                listOf("arm64-v8a/libfork-box2d.so", "arm64-v8a/libgdx-box2d.so"),
+                unpacked.dirs.flatMap { relativeFiles(it) }.sorted(),
+            )
+        }
+    }
+
+    @Test
     fun aPerAbiClassifierArtifactIsRecognisedWhateverScopeDeclaresIt() {
         withDirs { dir, _ ->
             // What the Android packager screens a classpath with, so a `natives-arm64-v8a` jar declared as

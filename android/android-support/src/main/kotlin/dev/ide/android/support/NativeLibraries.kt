@@ -4,6 +4,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.readText
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 import kotlin.io.path.writeText
 
@@ -47,12 +48,12 @@ object NativeLibraries {
         for (jar in jars.distinct()) {
             if (!Files.isRegularFile(jar)) continue
             val name = jar.fileName.toString()
-            val target = outRoot.resolve(name.substringBeforeLast('.'))
+            val target = outRoot.resolve(unpackDirName(jar))
             // The marker is a SIBLING of the output directory, never a file inside it: everything under an
             // unpacked root is packaged verbatim into the APK's `lib/`, so a marker within it would ship as
             // `lib/.unpacked`, and a second ABI's jar offering that same name would be reported as a
             // duplicate native library.
-            val marker = outRoot.resolve("$name.unpacked")
+            val marker = outRoot.resolve("${target.fileName}.unpacked")
             if (runCatching { marker.readText().trim() }.getOrNull() == LAYOUT_VERSION) {
                 if (hasNativeLibrary(target)) dirs.add(target) else warnings.add(noNativesWarning(name))
                 continue
@@ -67,6 +68,19 @@ object NativeLibraries {
             if (count > 0) dirs.add(target) else warnings.add(noNativesWarning(name))
         }
         return Unpacked(dirs, warnings)
+    }
+
+    /**
+     * The output directory name for [jar]: its file stem plus a short hash of its absolute path. Two groups
+     * can publish the same file name (a fork of `gdx-box2d-platform-1.12.1-natives-arm64-v8a.jar`), and an
+     * already-unpacked directory is reused as-is, so keyed by the file name alone the second jar would package
+     * the first one's `.so` files.
+     */
+    private fun unpackDirName(jar: Path): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(jar.toAbsolutePath().normalize().toString().toByteArray(Charsets.UTF_8))
+        return jar.fileName.toString().substringBeforeLast('.') + "-" +
+            digest.take(4).joinToString("") { "%02x".format(it) }
     }
 
     /**
