@@ -424,6 +424,101 @@ class GradleImportTest {
         }
     }
 
+    /** buildSrc constants that share a simple name across objects (`AndroidX.core`, `Markwon.core`, `Versions.core`)
+     *  are different values: each qualified reference resolves to its own object's constant, not to whichever
+     *  `core` was scanned first. */
+    @Test
+    fun sameNamedConstantsInDifferentObjectsStayDistinct() {
+        withTempDir("gradle-same-named-constants") { tmp ->
+            val proj = tmp.resolve("Same")
+            fun w(rel: String, text: String) {
+                val f = proj.resolve(rel); Files.createDirectories(f.parent); f.writeText(text.trimIndent())
+            }
+            w("settings.gradle.kts", """
+                rootProject.name = "Same"
+                include(":app")
+            """)
+            w("buildSrc/src/main/kotlin/Versions.kt", """
+                object Versions {
+                    const val core = "1.13.1"
+                    const val markwon = "4.6.2"
+                }
+            """)
+            w("buildSrc/src/main/kotlin/Deps.kt", """
+                object AndroidX {
+                    const val core = "androidx.core:core:${'$'}{Versions.core}"
+                }
+                object Libs {
+                    object Markwon {
+                        const val core = "io.noties.markwon:core:${'$'}{Versions.markwon}"
+                    }
+                }
+            """)
+            w("app/build.gradle.kts", """
+                plugins {
+                    id("org.jetbrains.kotlin.jvm")
+                }
+                dependencies {
+                    implementation(AndroidX.core)
+                    implementation(Libs.Markwon.core)
+                    implementation("io.noties.markwon:html:${'$'}{Versions.markwon}")
+                }
+            """)
+
+            val spec = GradleImport.parse(proj)
+            assertNotNull(spec)
+            val coords = spec.modules.first { it.name == "app" }.mavenDeps.map { it.coordinate }.toSet()
+            assertEquals(
+                setOf("androidx.core:core:1.13.1", "io.noties.markwon:core:4.6.2", "io.noties.markwon:html:4.6.2"),
+                coords,
+            )
+        }
+    }
+
+    /** `:core:common` and `:feature:common` are two modules. Named by their shared last segment, the import kept
+     *  only the first and pointed every `project(":…:common")` at it; they are named by their whole path. */
+    @Test
+    fun modulesSharingALastPathSegmentStayDistinct() {
+        withTempDir("gradle-same-leaf") { tmp ->
+            val proj = tmp.resolve("Leaf")
+            fun w(rel: String, text: String) {
+                val f = proj.resolve(rel); Files.createDirectories(f.parent); f.writeText(text.trimIndent())
+            }
+            w("settings.gradle.kts", """
+                rootProject.name = "Leaf"
+                include(":app", ":core:common", ":feature:common")
+            """)
+            w("app/build.gradle.kts", """
+                plugins { id("org.jetbrains.kotlin.jvm") }
+                dependencies {
+                    implementation(project(":core:common"))
+                    implementation(project(":feature:common"))
+                }
+            """)
+            w("core/common/build.gradle.kts", """
+                plugins { id("org.jetbrains.kotlin.jvm") }
+                dependencies { implementation("com.squareup.okio:okio:3.9.0") }
+            """)
+            w("feature/common/build.gradle.kts", """
+                plugins { id("org.jetbrains.kotlin.jvm") }
+                dependencies {
+                    implementation(project(":core:common"))
+                    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+                }
+            """)
+
+            val spec = GradleImport.parse(proj)
+            assertNotNull(spec)
+            assertEquals(setOf("app", "core-common", "feature-common"), spec.modules.map { it.name }.toSet())
+            val byName = spec.modules.associateBy { it.name }
+            assertEquals("core/common", byName.getValue("core-common").dirRel)
+            assertEquals("feature/common", byName.getValue("feature-common").dirRel)
+            assertEquals(listOf("core-common", "feature-common"), byName.getValue("app").moduleDeps.map { it.name })
+            assertEquals(listOf("core-common"), byName.getValue("feature-common").moduleDeps.map { it.name })
+            assertEquals(listOf("com.squareup.okio:okio:3.9.0"), byName.getValue("core-common").mavenDeps.map { it.coordinate })
+        }
+    }
+
     /** An imperative `Plugin<Project>` convention (registered via `gradlePlugin`) can't be read, so the Android
      *  kind is inferred from the module's manifest/res and a note is recorded rather than silently dropping it. */
     @Test

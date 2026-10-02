@@ -146,7 +146,8 @@ object GradleImport {
         val conventions = buildConventionIndex(root)
 
         val paths = parseIncludes(settings).ifEmpty { discoverModuleDirs(root) }
-        val modules = paths.mapNotNull { parseModule(root, it, catalog, rootVars, conventions, notes) }
+        val moduleNames = moduleNames(paths, root)
+        val modules = paths.mapNotNull { parseModule(root, it, catalog, rootVars, conventions, moduleNames, notes) }
         if (modules.isEmpty()) return null
         if (!catalog.isEmpty) notes.add("Read a version catalog (gradle/libs.versions.toml).")
         if (conventions.conventions.isNotEmpty())
@@ -154,6 +155,25 @@ object GradleImport {
         val repos = parseRepositories(settings, rootBuild, notes)
         return ProjectSpec(name, modules.distinctBy { it.name }, SyncReport(notes), repos)
     }
+
+    /**
+     * The IDE module name for each Gradle path: its last segment (`:feature:home` → `home`), unless another
+     * included path ends in the same segment. Then every one of them is named by its whole path
+     * (`:core:common` → `core-common`, `:feature:common` → `feature-common`). Naming both `common` made the
+     * import keep only the first and point every `project(":…:common")` dependency at it.
+     */
+    private fun moduleNames(paths: List<String>, root: Path): Map<String, String> {
+        val rootName = root.fileName?.toString() ?: "app"
+        fun leaf(path: String) = path.trimEnd(':').substringAfterLast(':').ifEmpty { rootName }
+        val leafCounts = paths.groupingBy { leaf(it) }.eachCount()
+        return paths.associate { path ->
+            val leaf = leaf(path)
+            normalizeGradlePath(path) to
+                if ((leafCounts[leaf] ?: 0) > 1) path.trim(':').replace(':', '-').ifEmpty { leaf } else leaf
+        }
+    }
+
+    private fun normalizeGradlePath(path: String): String = ":" + path.trim(':')
 
     private fun parseRootName(settings: String?): String? =
         settings?.let { firstGroup(it, """rootProject\.name\s*=\s*['"]([^'"]+)['"]""") }
@@ -189,15 +209,15 @@ object GradleImport {
         catalog: GradleVersionCatalog,
         rootVars: Map<String, String>,
         conventions: ConventionIndex,
+        moduleNames: Map<String, String>,
         notes: MutableList<String>,
     ): ModuleSpec? {
         val dirRel = gradlePath.trim(':').replace(':', '/')
         val dir = if (dirRel.isEmpty()) root else root.resolve(dirRel)
         if (!Files.isDirectory(dir)) return null
         val build = BUILD_FILES.firstNotNullOfOrNull { readStripped(dir.resolve(it)) } ?: ""
-        val name = (gradlePath.trimEnd(':').substringAfterLast(':')).ifEmpty {
-            root.fileName?.toString() ?: "app"
-        }
+        val name = moduleNames[normalizeGradlePath(gradlePath)]
+            ?: gradlePath.trimEnd(':').substringAfterLast(':').ifEmpty { root.fileName?.toString() ?: "app" }
         // Constants from buildSrc/build-logic (`object Deps { const val x = "…" }`) join the interpolation
         // map so `implementation(Deps.x)` and `"g:a:${Versions.y}"` resolve; module-local vars win.
         val vars = resolveVars(rootVars + conventions.constants + readProperties(dir) + collectVars(build))
@@ -265,7 +285,7 @@ object GradleImport {
         val serialization = plugins.any { "serialization" in it }
 
         val (maven, moduleDeps, platforms) =
-            parseDependencies(depBodies.joinToString("\n"), catalog, vars, name, notes)
+            parseDependencies(depBodies.joinToString("\n"), catalog, vars, name, moduleNames, notes)
 
         if (hasAndroidBlock) noteUnmodeledAndroid(name, androidTexts, notes)
 
@@ -366,6 +386,7 @@ object GradleImport {
         catalog: GradleVersionCatalog,
         vars: Map<String, String>,
         module: String,
+        moduleNames: Map<String, String>,
         notes: MutableList<String>,
     ): Triple<List<Dep>, List<ModuleDep>, List<PlatformDep>> {
         val maven = LinkedHashMap<String, Dep>()
@@ -399,9 +420,9 @@ object GradleImport {
                 }
                 else -> {
                     // A bare constant reference — `implementation(Deps.okhttp)` — resolved through the
-                    // buildSrc/build-logic constants folded into [vars] (full name, then the last segment).
+                    // buildSrc/build-logic constants folded into [vars] (see [lookupVar]).
                     val bareRef = firstGroup(text, """^[A-Za-z]\w*\s*\(?\s*([A-Za-z_][\w.]*)\s*\)?\s*$""")
-                    val resolved = bareRef?.let { vars[it] ?: vars[it.substringAfterLast('.')] }
+                    val resolved = bareRef?.let { lookupVar(vars, it) }
                     if (resolved != null && COORD_RE.matches(resolved)) addLib(resolved, scope, variant, isPlatform)
                     else coordinateFrom(text, vars, module, notes)?.let { addLib(it, scope, variant, isPlatform) }
                 }
@@ -430,7 +451,7 @@ object GradleImport {
             }
             if ("project(" in st) {
                 firstGroup(st, """project\s*\(\s*(?:path\s*[:=]\s*)?['"](:[\w:\-]+)['"]""")?.let { path ->
-                    val n = path.trimEnd(':').substringAfterLast(':')
+                    val n = moduleNames[normalizeGradlePath(path)] ?: path.trimEnd(':').substringAfterLast(':')
                     if (n.isNotEmpty()) modules.putIfAbsent(n, ModuleDep(n, scope, variant))
                 }
             } else {
@@ -627,15 +648,31 @@ object GradleImport {
     private fun interpolate(s: String, vars: Map<String, String>): String {
         // NB: the closing brace is escaped (`\}`). The JVM regex engine tolerates a bare `}`, but ART's ICU
         // engine rejects it as a syntax error — so an unescaped `}` here throws PatternSyntaxException on device.
-        // A dotted reference (`${Versions.room}`) is tried whole, then by its last segment, so a
-        // buildSrc/build-logic constant keyed by its bare name (`room`) still resolves.
+        // A dotted reference (`${Versions.room}`) resolves through [lookupVar], so a buildSrc/build-logic
+        // constant is found by its qualified name or any unambiguous suffix of it.
         var r = Regex("""\$\{([^}]+)\}""").replace(s) { m ->
-            val k = m.groupValues[1].trim(); vars[k] ?: vars[k.substringAfterLast('.')] ?: m.value
+            lookupVar(vars, m.groupValues[1].trim()) ?: m.value
         }
         r = Regex("""\$([A-Za-z_][\w.]*)""").replace(r) { m ->
-            val k = m.groupValues[1]; vars[k] ?: vars[k.substringAfterLast('.')] ?: m.value
+            lookupVar(vars, m.groupValues[1]) ?: m.value
         }
         return r
+    }
+
+    /**
+     * A dotted reference looked up whole, then with leading qualifiers dropped one at a time
+     * (`Deps.Markwon.core`, `Markwon.core`, `core`). Constants are published under every UNAMBIGUOUS suffix of
+     * their qualified name ([publishConstants]), so a shorter key only answers when no other constant shares it:
+     * `Markwon.core` never falls back to an unrelated `AndroidX.core` or `Versions.core`.
+     */
+    private fun lookupVar(vars: Map<String, String>, ref: String): String? {
+        var k = ref
+        while (true) {
+            vars[k]?.let { return it }
+            val dot = k.indexOf('.')
+            if (dot < 0) return null
+            k = k.substring(dot + 1)
+        }
     }
 
     private fun unquote(v: String): String = v.trim().trim('"', '\'')
@@ -662,7 +699,7 @@ object GradleImport {
         val roots = listOf(root.resolve("buildSrc"), root.resolve("build-logic")).filter { Files.isDirectory(it) }
         if (roots.isEmpty()) return ConventionIndex.EMPTY
         val conventions = LinkedHashMap<String, ConventionScript>()
-        val constants = LinkedHashMap<String, String>()
+        val qualifiedConstants = LinkedHashMap<String, String>()
         val imperativeIds = LinkedHashSet<String>()
         for (base in roots) runCatching {
             Files.walk(base).use { stream ->
@@ -680,7 +717,7 @@ object GradleImport {
                         }
                         fn.endsWith(".kt") || fn == "build.gradle.kts" || fn == "build.gradle" -> {
                             val text = readStripped(file) ?: return@forEach
-                            for (m in CONST_RE.findAll(text)) constants.putIfAbsent(m.groupValues[1], m.groupValues[2])
+                            collectConstants(text, qualifiedConstants)
                             GradleScript.blockBody(text, "gradlePlugin")?.let { gp ->
                                 for (m in Regex("""\bid\s*=\s*['"]([\w.\-]+)['"]""").findAll(gp)) imperativeIds.add(m.groupValues[1])
                             }
@@ -691,8 +728,59 @@ object GradleImport {
         }
         // A registered plugin id with no precompiled script → an imperative Plugin<Project> class we can't read.
         for (id in imperativeIds) conventions.putIfAbsent(id, ConventionScript("", imperative = true))
+        val constants = publishConstants(qualifiedConstants)
         return if (conventions.isEmpty() && constants.isEmpty()) ConventionIndex.EMPTY
         else ConventionIndex(conventions, constants)
+    }
+
+    private val OWNER_RE = Regex("""\b(?:companion\s+object(?:\s+(\w+))?|(?:object|class|interface)\s+(\w+))[^{};\n]*\{""")
+
+    /**
+     * Record each `val NAME = "…"` in [text] under its qualified name: the enclosing named `object`/`class`/
+     * `interface` declarations joined by dots (`Libs.Markwon.core`; an unnamed `companion object` adds no
+     * segment). Keying by the bare name instead let `AndroidX.core`, `Markwon.core` and `Versions.core` share
+     * one slot, so every `*.core` reference got whichever was scanned first.
+     */
+    private fun collectConstants(text: String, out: MutableMap<String, String>) {
+        val owners = OWNER_RE.findAll(text).associate { m ->
+            (m.range.last) to (m.groupValues[1].ifEmpty { m.groupValues[2] })
+        }
+        val consts = CONST_RE.findAll(text).associateBy { it.range.first }
+        val stack = ArrayList<Pair<String, Int>>() // (owner name or "", brace depth inside its body)
+        var depth = 0
+        for (i in text.indices) {
+            when (text[i]) {
+                '{' -> { depth++; owners[i]?.let { stack.add(it to depth) } }
+                '}' -> { if (stack.lastOrNull()?.second == depth) stack.removeAt(stack.lastIndex); depth-- }
+            }
+            val c = consts[i] ?: continue
+            val path = stack.map { it.first }.filter { it.isNotEmpty() } + c.groupValues[1]
+            out.putIfAbsent(path.joinToString("."), c.groupValues[2])
+        }
+    }
+
+    /**
+     * The constants under every dotted suffix of their qualified names (`Libs.Markwon.core` →
+     * `Libs.Markwon.core`, `Markwon.core`, `core`), so a reference resolves however much of the path an import
+     * lets it omit. A suffix two constants share with DIFFERENT values is left out: it names neither of them,
+     * and answering with one would silently put the wrong library on the classpath.
+     */
+    private fun publishConstants(qualified: Map<String, String>): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        val ambiguous = HashSet<String>()
+        for ((name, value) in qualified) {
+            var key = name
+            while (true) {
+                if (key !in ambiguous) {
+                    val prev = out.putIfAbsent(key, value)
+                    if (prev != null && prev != value) { out.remove(key); ambiguous.add(key) }
+                }
+                val dot = key.indexOf('.')
+                if (dot < 0) break
+                key = key.substring(dot + 1)
+            }
+        }
+        return out
     }
 
     // --- repositories ---
