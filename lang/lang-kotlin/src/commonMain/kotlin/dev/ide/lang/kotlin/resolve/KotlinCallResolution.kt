@@ -125,6 +125,12 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
                 .filter { it.name == name && it.kind == SymbolKind.METHOD }
         else emptyList()
         members + scopeExts + companionMethods
+    } else if (q != null && q.selectorExpression === call) {
+        // An EXPLICIT receiver whose type is unknown (`unresolved?.let { }`). Only a package-qualified call
+        // (`kotlinx.coroutines.delay(…)`) can still resolve, to a plain top-level function. The scope walk below
+        // must not run: it treats the call as a BARE one and binds an extension's receiver to the enclosing
+        // implicit receiver, so `x?.let { it }` inside `Column { }` typed `it` as `ColumnScope`.
+        service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD && !it.isExtension }
     } else {
         // Top-level functions (`Text`, `Column`, `remember`, …) resolve via the cheap exact lookup. Only when
         // none matches do we pay for the scope-aware lookup, which also finds a bare-called scope EXTENSION
