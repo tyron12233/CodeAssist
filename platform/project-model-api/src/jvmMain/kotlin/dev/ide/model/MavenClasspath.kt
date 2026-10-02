@@ -18,19 +18,32 @@ package dev.ide.model
  * `classes.jar`s, and it keeps the GROUP: `androidx.core:core` and `io.noties.markwon:core` are both a
  * `core` artifact, yet they are different libraries and both must survive. A non-Maven path (the bundled
  * stdlib) only has a file name, so it competes with the Maven artifact of that name when exactly one group
- * publishes it. Paths with neither (module output dirs) carry no coordinate and pass through.
+ * publishes it and the two jars define a class in common. Paths with neither (module output dirs) carry no coordinate and pass through.
  */
 fun dedupeJarsForAndroidDex(jars: List<java.nio.file.Path>): List<java.nio.file.Path> {
     val coordinates = jars.map { dexCoordinate(it) }
     // A bare file name (`kotlin-stdlib`) joins the slot of the one Maven artifact with that name. When two
     // groups publish the name, which one it duplicates is unknowable, so it keeps a slot of its own.
     val mavenKeysByName = HashMap<String, MutableSet<String>>()
-    for (c in coordinates) if (c is DexCoordinate.Maven) mavenKeysByName.getOrPut(c.name) { HashSet() }.add(c.key)
+    val mavenJarsByKey = HashMap<String, MutableList<java.nio.file.Path>>()
+    jars.zip(coordinates) { path, c ->
+        if (c is DexCoordinate.Maven) {
+            mavenKeysByName.getOrPut(c.name) { HashSet() }.add(c.key)
+            mavenJarsByKey.getOrPut(c.key) { ArrayList() }.add(path)
+        }
+    }
     val parsed = jars.zip(coordinates) { path, c ->
         when (c) {
             null -> ParsedJar(path, null, null)
             is DexCoordinate.Maven -> ParsedJar(path, c.key, c.version)
-            is DexCoordinate.FileName -> ParsedJar(path, mavenKeysByName[c.name]?.singleOrNull() ?: c.name, c.version)
+            is DexCoordinate.FileName -> {
+                // A matching NAME is not yet the same library: a local `libs/core-1.0.jar` and Maven
+                // `io.noties.markwon:core` share only the word. Join the Maven slot only when the jars could
+                // collide in the dex, i.e. they define a class in common (or one can't be read to tell).
+                val key = mavenKeysByName[c.name]?.singleOrNull()
+                    ?.takeIf { k -> mavenJarsByKey[k].orEmpty().any { mayShareClasses(path, it) } }
+                ParsedJar(path, key ?: c.name, c.version)
+            }
         }
     }
     // Per artifact (keyed by group and name, no platform-suffix folding), the newest version wins — but
@@ -59,6 +72,22 @@ fun dedupeJarsForAndroidDex(jars: List<java.nio.file.Path>): List<java.nio.file.
     }
     return out
 }
+
+/** Whether [a] and [b] define a class in common. True when either can't be read (missing, empty, not a
+ *  zip): then nothing rules the collision out, and the name match stands, as it always did. */
+private fun mayShareClasses(a: java.nio.file.Path, b: java.nio.file.Path): Boolean {
+    val ca = classEntries(a) ?: return true
+    val cb = classEntries(b) ?: return true
+    return ca.any { it in cb }
+}
+
+private fun classEntries(jar: java.nio.file.Path): Set<String>? = runCatching {
+    java.util.zip.ZipFile(jar.toFile()).use { zf ->
+        zf.entries().asSequence().map { it.name }
+            .filter { it.endsWith(".class") && !it.startsWith("META-INF/") && it != "module-info.class" }
+            .toHashSet()
+    }
+}.getOrNull()?.takeIf { it.isNotEmpty() }
 
 private class ParsedJar(val path: java.nio.file.Path, val base: String?, val version: String?)
 

@@ -176,6 +176,41 @@ class MavenClasspathTest {
         }
     }
 
+    @Test
+    fun dexDedupKeepsALocalJarThatOnlySharesAMavenArtifactsName() {
+        // A local `libs/core-1.0.jar` and Maven `io.noties.markwon:core` share a name and nothing else: no class in
+        // common, so no dex collision, and dropping either one loses a real library.
+        val dir = java.nio.file.Files.createTempDirectory("dex-dedup-same-name")
+        try {
+            val maven = jarWith(dir.resolve("resolved-deps/io/noties/markwon/core/4.6.2/core-4.6.2.jar"), "io/noties/markwon/Markwon.class")
+            val local = jarWith(dir.resolve("libs/core-1.0.jar"), "com/acme/Core.class")
+            assertEquals(listOf(maven, local).map { it.toString() }, dedupeJarsForAndroidDex(listOf(maven, local)).map { it.toString() })
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun dexDedupStillCollapsesAFileNameJarThatDuplicatesTheMavenOne() {
+        // The bundled stdlib case with real jars: the classes overlap, so only the newest stays.
+        val dir = java.nio.file.Files.createTempDirectory("dex-dedup-overlap")
+        try {
+            val maven = jarWith(dir.resolve("resolved-deps/org/jetbrains/kotlin/kotlin-stdlib/2.2.0/kotlin-stdlib-2.2.0.jar"), "kotlin/Unit.class")
+            val bundled = jarWith(dir.resolve(".platform/kotlin-stdlib-2.4.0.jar"), "kotlin/Unit.class")
+            assertEquals(listOf(bundled.toString()), dedupeJarsForAndroidDex(listOf(maven, bundled)).map { it.toString() })
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    private fun jarWith(path: java.nio.file.Path, vararg classes: String): java.nio.file.Path {
+        java.nio.file.Files.createDirectories(path.parent)
+        java.util.zip.ZipOutputStream(java.nio.file.Files.newOutputStream(path)).use { z ->
+            for (c in classes) { z.putNextEntry(java.util.zip.ZipEntry(c)); z.write(byteArrayOf(0xCA.toByte())); z.closeEntry() }
+        }
+        return path
+    }
+
     /** A [VirtualFile] that only carries a [path] — all the dedup logic reads. */
     private class PathOnlyFile(override val path: String) : VirtualFile {
         override val name get() = path.substringAfterLast('/')
