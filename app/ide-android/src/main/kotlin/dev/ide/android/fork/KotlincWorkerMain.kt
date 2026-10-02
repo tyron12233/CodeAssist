@@ -86,9 +86,16 @@ object KotlincWorkerMain {
             } ?: break                                  // client closed stdin, or exited
             activity.touch()
             if (line.isBlank()) continue
-            val reply = runCatching { serve(line, compiler) }
-                .getOrElse { "$FAIL worker threw: ${it.javaClass.name}: ${flatten(it.message)}" }
-            activity.touch()                            // a long compile must not look idle
+            // Busy for the whole command: a compile on a slow device can run longer than the idle window,
+            // and timing it from the moment it arrived would exit the VM in the middle of it.
+            activity.busy = true
+            val reply = try {
+                runCatching { serve(line, compiler) }
+                    .getOrElse { "$FAIL worker threw: ${it.javaClass.name}: ${flatten(it.message)}" }
+            } finally {
+                activity.busy = false
+                activity.touch()
+            }
             control.println(reply)
         }
         exitProcess(0)
@@ -146,10 +153,16 @@ object KotlincWorkerMain {
         }
     }
 
-    /** Last time a command arrived or finished, so a long compile is never mistaken for an idle session. */
+    /**
+     * Last time a command arrived or finished, and whether one is running now, so a long compile is never
+     * mistaken for an idle session.
+     */
     private class Activity {
         @Volatile
         var lastMillis: Long = System.currentTimeMillis()
+
+        @Volatile
+        var busy: Boolean = false
 
         fun touch() {
             lastMillis = System.currentTimeMillis()
@@ -165,7 +178,7 @@ object KotlincWorkerMain {
         val thread = Thread({
             val idleMillis = idleSeconds * 1000
             while (true) {
-                val remaining = idleMillis - (System.currentTimeMillis() - activity.lastMillis)
+                val remaining = if (activity.busy) idleMillis else idleMillis - (System.currentTimeMillis() - activity.lastMillis)
                 if (remaining <= 0) {
                     System.err.println("kotlinc worker: idle for ${idleSeconds}s, exiting")
                     exitProcess(0)

@@ -126,6 +126,10 @@ class ForkedKotlinCompiler(
      * OS may reclaim a worker at any time. Neither is a reason to compile a whole module in-process, and
      * neither should count toward [MAX_WORKER_FAILURES] when the retry succeeds, or a few quiet gaps would
      * disable forking for the session. Only a failure that survives the retry is counted and fallen back on.
+     *
+     * A worker that stayed alive but did not answer in time is NOT retried: it was still working on the same
+     * request, and a fresh worker would only spend that long again before the in-process fallback runs it a
+     * third time.
      */
     private fun <T> withWorker(onUnavailable: () -> T, body: (Worker) -> T): T {
         if (!slots.tryAcquire(SLOT_WAIT_SEC, TimeUnit.SECONDS)) {
@@ -145,6 +149,7 @@ class ForkedKotlinCompiler(
                 } catch (t: Throwable) {
                     worker.kill()
                     lastFailure = t
+                    if (t is WorkerTimeout) break
                     if (attempt < ATTEMPTS - 1 && forkUnusable == null) {
                         log.info("forked-kotlinc: worker lost (${t.message}); retrying on a fresh one")
                     }
@@ -263,7 +268,7 @@ class ForkedKotlinCompiler(
             writer.newLine()
             writer.flush()
             val reply = replies.poll(timeoutSec, TimeUnit.SECONDS)
-                ?: error("worker did not answer within ${timeoutSec}s${stderr.suffix()}")
+                ?: throw WorkerTimeout("worker did not answer within ${timeoutSec}s${stderr.suffix()}")
             if (reply == EOF) error("worker exited mid-command${stderr.suffix()}")
             if (reply != KotlincWorkerMain.DONE) error("worker replied '$reply'${stderr.suffix()}")
         }
@@ -345,6 +350,9 @@ class ForkedKotlinCompiler(
         }
     }
 
+    /** A worker that is still alive but did not reply within the command's timeout. */
+    private class WorkerTimeout(message: String) : RuntimeException(message)
+
     /** Keeps the worker's stderr drained (so it can never block on a full pipe) and its tail for diagnostics. */
     private class StderrTail(reader: BufferedReader) {
         private val lines = ArrayDeque<String>()
@@ -392,8 +400,12 @@ class ForkedKotlinCompiler(
         /** Cold VM boot plus the compiler class-load, measured at ~2s; generous for a slow device. */
         const val START_TIMEOUT_SEC = 180L
 
-        /** A ceiling on a single module's compile, so a wedged worker fails the module instead of the build. */
-        const val COMPILE_TIMEOUT_SEC = 900L
+        /**
+         * A ceiling on a single module's compile, so a wedged worker fails the module instead of the build. A
+         * dead worker is noticed at once (its stdout reaches EOF), so this only bounds a live, silent one, and
+         * it must sit well above a legitimately slow full compile of a large module on a low-end phone.
+         */
+        const val COMPILE_TIMEOUT_SEC = 3600L
 
         /** How long a compile waits for a busy pool before giving up and going in-process. */
         const val SLOT_WAIT_SEC = 900L
