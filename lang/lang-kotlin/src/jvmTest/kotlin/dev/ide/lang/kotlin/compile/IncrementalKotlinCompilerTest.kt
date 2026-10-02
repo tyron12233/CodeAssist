@@ -6,6 +6,7 @@ import dev.ide.lang.kotlin.parse
 import java.net.URLClassLoader
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -86,6 +87,42 @@ class IncrementalKotlinCompilerTest {
             val r = ic.compile(listOf(a, b), emptyList(), cp, out)
             assertTrue(r.success, "rebuild failed: ${r.messages}")
             assertEquals(IncrementalKotlinCompiler.Mode.FULL, r.mode, "a public-signature change must force a full recompile")
+        }
+    }
+
+    @Test
+    fun rewrittenButIdenticalJavaKeepsTheFastPath() {
+        withTempDir("kt-ic-java") { dir ->
+            val src = dir.resolve("src"); val out = dir.resolve("out")
+            // Generated Java (KSP output, R.java) is rewritten on every run that regenerates it, with a new mtime
+            // even when the content is the same. That must not count as a change to the compile context.
+            val gen = write(src, "demo/Gen.java", "package demo;\npublic final class Gen { public static int seed() { return 40; } }")
+            val a = write(src, "demo/A.kt", "package demo\nclass A {\n  fun value(): Int = Gen.seed() + 1\n}")
+            val ic = IncrementalKotlinCompiler()
+            val cp = listOf(stdlib)
+            val javaSources = listOf(gen)
+
+            val first = ic.compile(listOf(a), javaSources, cp, out)
+            assertTrue(first.success, "initial compile failed: ${first.messages}")
+            assertEquals(IncrementalKotlinCompiler.Mode.FULL, first.mode)
+
+            fun regenerate(content: String) {
+                write(src, "demo/Gen.java", content)
+                Files.setLastModifiedTime(gen, FileTime.fromMillis(Files.getLastModifiedTime(gen).toMillis() + 5_000))
+            }
+
+            regenerate("package demo;\npublic final class Gen { public static int seed() { return 40; } }")
+            assertEquals(IncrementalKotlinCompiler.Mode.NOOP, ic.compile(listOf(a), javaSources, cp, out).mode)
+
+            regenerate("package demo;\npublic final class Gen { public static int seed() { return 40; } }")
+            write(src, "demo/A.kt", "package demo\nclass A {\n  fun value(): Int = Gen.seed() + 2\n}")
+            val edit = ic.compile(listOf(a), javaSources, cp, out)
+            assertTrue(edit.success, "incremental compile failed: ${edit.messages}")
+            assertEquals(IncrementalKotlinCompiler.Mode.INCREMENTAL, edit.mode, "identical regenerated Java must not force a full recompile")
+
+            // A real change to the Java still invalidates the baseline.
+            regenerate("package demo;\npublic final class Gen { public static int seed() { return 50; } }")
+            assertEquals(IncrementalKotlinCompiler.Mode.FULL, ic.compile(listOf(a), javaSources, cp, out).mode)
         }
     }
 

@@ -60,16 +60,17 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
             return Result(true, emptyList(), Mode.NOOP)
         }
 
+        val prev = state(outputDir).read()
+        val javaSig = javaSignatures(javaSources, prev?.javaSig.orEmpty())
         // Which sources are common changes what the compiler accepts, so it belongs in the context hash: a
         // module that gains or loses multiplatform mode must fully rebuild, not reuse the other mode's output.
-        val context = contextHash(javaSources, classpath, bootClasspath, jvmTarget, compilerPlugins, pluginOptions, runtimePluginClasspaths, commonSources)
+        val context = contextHash(javaSig, classpath, bootClasspath, jvmTarget, compilerPlugins, pluginOptions, runtimePluginClasspaths, commonSources)
         val srcHash = kt.associateWith { fileHash(it) }
-        val prev = state(outputDir).read()
 
         // No usable baseline, the interop/classpath context moved, or a source was deleted → full rebuild.
         val removed = prev != null && (prev.srcHash.keys - srcHash.keys).isNotEmpty()
         if (prev == null || prev.context != context || removed) {
-            return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, compilerPlugins, pluginOptions, runtimePluginClasspaths, commonSources)
+            return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, compilerPlugins, pluginOptions, runtimePluginClasspaths, commonSources)
         }
 
         // The manifest must describe exactly what is in the output dir. If a prior run left them out of sync —
@@ -79,20 +80,26 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         // depends on (a spurious "unresolved reference"). A full rebuild is the only safe move. (Generalizes the
         // old dirty-empty-only tamper check to every path.)
         if (currentClasses(outputDir).toSet() != prev.abi.keys) {
-            return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, compilerPlugins, pluginOptions, runtimePluginClasspaths, commonSources)
+            return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, compilerPlugins, pluginOptions, runtimePluginClasspaths, commonSources)
         }
 
         val dirty = kt.filter { prev.srcHash[it] != srcHash[it] }
-        if (dirty.isEmpty()) return Result(true, emptyList(), Mode.NOOP) // nothing changed; output matches the manifest
+        if (dirty.isEmpty()) {
+            // Nothing changed; output matches the manifest. Record Java files that were rewritten with the same
+            // content, so the next build does not hash them again.
+            if (javaSig != prev.javaSig) state(outputDir).write(prev.copy(javaSig = javaSig))
+            return Result(true, emptyList(), Mode.NOOP)
+        }
 
-        return incremental(kt, dirty, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, prev, compilerPlugins, pluginOptions, runtimePluginClasspaths, commonSources)
-            ?: full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, compilerPlugins, pluginOptions, runtimePluginClasspaths, commonSources)
+        return incremental(kt, dirty, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, prev, compilerPlugins, pluginOptions, runtimePluginClasspaths, commonSources)
+            ?: full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, javaSig, compilerPlugins, pluginOptions, runtimePluginClasspaths, commonSources)
     }
 
     /** Whole-module compile into a clean output dir; records a fresh manifest. */
     private fun full(
         kt: List<Path>, javaSources: List<Path>, classpath: List<Path>, outputDir: Path,
         jvmTarget: String, bootClasspath: List<Path>, context: String, srcHash: Map<Path, String>,
+        javaSig: Map<Path, JavaSig>,
         compilerPlugins: List<Path>, pluginOptions: List<String>, runtimePluginClasspaths: List<List<Path>>,
         commonSources: List<Path>,
     ): Result {
@@ -116,7 +123,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         }
         val srcToOut = relativizeMapping(r.outputs, outputDir, srcHash.keys)
         val abi = snapshotAll(outputDir)
-        state(outputDir).write(State(context, srcHash, srcToOut, abi))
+        state(outputDir).write(State(context, srcHash, srcToOut, abi, javaSig))
         return Result(true, r.messages, Mode.FULL, kt, r.diagnostics)
     }
 
@@ -131,7 +138,8 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
      */
     private fun incremental(
         kt: List<Path>, dirty: List<Path>, javaSources: List<Path>, classpath: List<Path>, outputDir: Path,
-        jvmTarget: String, bootClasspath: List<Path>, context: String, srcHash: Map<Path, String>, prev: State,
+        jvmTarget: String, bootClasspath: List<Path>, context: String, srcHash: Map<Path, String>,
+        javaSig: Map<Path, JavaSig>, prev: State,
         compilerPlugins: List<Path>, pluginOptions: List<String>, runtimePluginClasspaths: List<List<Path>>,
         commonSources: List<Path>,
     ): Result? {
@@ -203,7 +211,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         }
         val srcToOut = HashMap(prev.srcToOut).apply { dirty.forEach { put(it, newMapping[it].orEmpty()) } }
         val abi = HashMap(prev.abi).apply { putAll(newAbi) }
-        state(outputDir).write(State(context, HashMap(prev.srcHash).apply { putAll(srcHash) }, srcToOut, abi))
+        state(outputDir).write(State(context, HashMap(prev.srcHash).apply { putAll(srcHash) }, srcToOut, abi, javaSig))
         clearDir(cleanDir); clearDir(stagingDir)
         return Result(true, r.messages, Mode.INCREMENTAL, dirty, r.diagnostics)
     }
@@ -241,7 +249,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
 
     /** A digest of everything-but-the-Kotlin-sources that changes what the Kotlin sources compile to. */
     private fun contextHash(
-        javaSources: List<Path>, classpath: List<Path>, boot: List<Path>, jvmTarget: String,
+        javaSig: Map<Path, JavaSig>, classpath: List<Path>, boot: List<Path>, jvmTarget: String,
         compilerPlugins: List<Path>, pluginOptions: List<String>, runtimePluginClasspaths: List<List<Path>>,
         commonSources: List<Path>,
     ): String {
@@ -256,16 +264,35 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
         runtimePluginClasspaths.flatten().map { it.toAbsolutePath().normalize().toString() }.sorted().forEach { md.update(it.toByteArray(Charsets.UTF_8)) }
         pluginOptions.sorted().forEach { md.update(it.toByteArray(Charsets.UTF_8)) }
         boot.map { it.toAbsolutePath().normalize().toString() }.sorted().forEach { md.update(it.toByteArray(Charsets.UTF_8)) }
-        // Java interop sources AND classpath entries (dep outputs, libs) both get a cheap path+size+mtime
-        // signature rather than a content hash. The build engine already re-runs this task only when an input
-        // truly changed (a content-based fingerprint at the task level), so this is the secondary guard — and a
-        // .java save always bumps its mtime, so a real interop change still invalidates the baseline. This
-        // avoids reading every .java byte (mixed modules) and halves the stat syscalls per jar (one
-        // readAttributes vs. exists+size+mtime), both of which ran on every single compile.
-        javaSources.map { it.toAbsolutePath().normalize() }.filter { Files.isRegularFile(it) }.sortedBy { it.toString() }
-            .forEach { statSignature(md, it) }
+        // Java interop sources count by CONTENT. Generated Java is rewritten on every run that regenerates it
+        // (KSP clears its output first; aapt2 rewrites R.java), so an mtime would change on every edit and
+        // force a full recompile of the module even when the generated code came out identical.
+        javaSig.entries.sortedBy { it.key.toString() }.forEach { (p, sig) ->
+            md.update(p.toString().toByteArray(Charsets.UTF_8))
+            md.update(sig.hash.toByteArray(Charsets.UTF_8))
+        }
+        // Classpath entries (dep outputs, libs) get a cheap path+size+mtime signature: the build engine already
+        // re-runs this task only when an input truly changed, and a jar is not rewritten without a change.
         classpath.map { it.toAbsolutePath().normalize() }.sortedBy { it.toString() }.forEach { statSignature(md, it) }
         return hex(md)
+    }
+
+    /**
+     * The content hash of every Java source, keyed by normalized path. A file whose size and mtime match
+     * [previous] reuses its recorded hash, so only the files that were actually rewritten are read.
+     */
+    private fun javaSignatures(javaSources: List<Path>, previous: Map<Path, JavaSig>): Map<Path, JavaSig> {
+        val out = HashMap<Path, JavaSig>()
+        for (p in javaSources.map { it.toAbsolutePath().normalize() }) {
+            val attrs = runCatching {
+                Files.readAttributes(p, java.nio.file.attribute.BasicFileAttributes::class.java)
+            }.getOrNull()?.takeIf { it.isRegularFile } ?: continue
+            val size = attrs.size()
+            val mtime = attrs.lastModifiedTime().toMillis()
+            val known = previous[p]
+            out[p] = if (known != null && known.size == size && known.mtime == mtime) known else JavaSig(size, mtime, fileHash(p))
+        }
+        return out
     }
 
     /** Feed a path + size + last-modified signature for [p] into [md] using a single stat (readAttributes). */
@@ -294,12 +321,16 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
 
     private fun state(outputDir: Path) = ManifestStore(outputDir.resolveSibling("${outputDir.fileName}.ic"))
 
+    /** A Java source's stat at the time [hash] (its content hash) was taken. */
+    private data class JavaSig(val size: Long, val mtime: Long, val hash: String)
+
     /** Persisted per-module incremental state (content hashes + source→class mapping + per-class ABI). */
     private data class State(
         val context: String,
         val srcHash: Map<Path, String>,
         val srcToOut: Map<Path, List<String>>,
         val abi: Map<String, String>,
+        val javaSig: Map<Path, JavaSig> = emptyMap(),
     )
 
     /** A plain-text manifest under [dir]; keyed off the output dir so it survives restarts. */
@@ -315,6 +346,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
                 val srcHash = HashMap<Path, String>()
                 val srcToOut = HashMap<Path, List<String>>()
                 val abi = HashMap<String, String>()
+                val javaSig = HashMap<Path, JavaSig>()
                 for (line in Files.readAllLines(file)) {
                     val p = line.split('\t')
                     when (p.getOrNull(0)) {
@@ -322,9 +354,10 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
                         "s" -> srcHash[Paths.get(p[1])] = p[2]
                         "o" -> srcToOut[Paths.get(p[1])] = if (p.size > 2 && p[2].isNotEmpty()) p[2].split(',') else emptyList()
                         "a" -> abi[p[1]] = p[2]
+                        "j" -> javaSig[Paths.get(p[1])] = JavaSig(p[2].toLong(), p[3].toLong(), p[4])
                     }
                 }
-                if (context.isEmpty()) null else State(context, srcHash, srcToOut, abi)
+                if (context.isEmpty()) null else State(context, srcHash, srcToOut, abi, javaSig)
             }.getOrNull()
         }
 
@@ -336,6 +369,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinCompilerBackend = Ko
                 s.srcHash.forEach { (k, v) -> lines += "s\t$k\t$v" }
                 s.srcToOut.forEach { (k, v) -> lines += "o\t$k\t${v.joinToString(",")}" }
                 s.abi.toSortedMap().forEach { (k, v) -> lines += "a\t$k\t$v" }
+                s.javaSig.forEach { (k, v) -> lines += "j\t$k\t${v.size}\t${v.mtime}\t${v.hash}" }
                 Files.write(file, lines)
             }
         }
