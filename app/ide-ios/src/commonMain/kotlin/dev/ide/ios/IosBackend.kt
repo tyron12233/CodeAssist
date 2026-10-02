@@ -23,7 +23,11 @@ import dev.ide.ui.backend.UiAction
 import dev.ide.ui.backend.UiActionEdits
 import dev.ide.ui.backend.UiActionKind
 import dev.ide.ui.backend.UiAddResult
+import dev.ide.lang.kotlin.interp.PreviewInfo
 import dev.ide.ui.backend.UiArtifactHit
+import dev.ide.ui.backend.UiComposePreview
+import dev.ide.ui.backend.UiLogEntry
+import dev.ide.ui.backend.UiPreviewConfig
 import dev.ide.ui.backend.UiArtifactSearch
 import dev.ide.ui.backend.UiCachedVersion
 import dev.ide.ui.backend.UiCompletionResult
@@ -69,10 +73,15 @@ import dev.ide.ui.backend.UiProjectTemplate
 import dev.ide.ui.icons.fileIconId
 import dev.ide.ui.platform.ioDispatcher
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import dev.ide.platform.log.Log
+import kotlin.time.TimeSource
 
 /**
  * The iOS host's [dev.ide.ui.backend.IdeBackend]: real files, real projects, a real Kotlin editor.
@@ -382,13 +391,8 @@ class IosBackend(
         // Built from whatever jars are ALREADY on disk, never a fetch, because this runs on the completion
         // path. `ensureClasspath` is what puts them there, and resets this so the next call picks them up.
         val jars = analysisClasspath()
-        indexState.value = IndexUiStatus(
-            building = true,
-            message = "Indexing libraries",
-            phase = "Libraries",
-            fraction = 0.0,
-            total = jars.size,
-        )
+        // "Indexing" appears only once the index reports that it is reading jars: segments already on disk
+        // for this classpath are opened, not rebuilt, and an open that reads nothing has nothing to show.
         return try {
             IosKotlinAnalysis(
                 projectRoot = root,
@@ -409,6 +413,216 @@ class IosBackend(
             // In `finally` so a build that throws does not leave the UI claiming to index forever.
             indexState.value = IndexUiStatus(message = "Indexed", fraction = 1.0)
         }
+    }
+
+    /** Background work that belongs to the analysis thread and outlives the call that started it. */
+    private val analysisScope = CoroutineScope(SupervisorJob() + analysisDispatcher)
+
+    /**
+     * Build the open project's analysis now rather than at the first language pass.
+     *
+     * Opening a project is when indexing should happen: left to the first pass, it waited for a file to be
+     * opened and then held that file's highlighting and completion behind reading every jar. A build that
+     * finds its segments on disk opens them and reports nothing, so this costs a cached open very little.
+     */
+    private fun warmAnalysis() {
+        analysisScope.launch { runCatching { analysis() } }
+    }
+
+    // ---- Compose preview ----------------------------------------------------------------------------
+
+    /**
+     * The preview runtime's jars: the app bundle's. A settable property for the same reason
+     * [dependenciesFor] is one: a test binary has no app bundle, so a test hands in the jars itself.
+     */
+    internal var previewRuntimeJars: () -> List<String> = IosPreviewRuntime::jars
+
+    /** The renderer for the current preview class path, and that class path, owned by [IosPreviewThread]. */
+    private var previewRenderer: IosPreviewRenderer? = null
+    private var previewRendererClasspath: List<String>? = null
+
+    /** The declarations the preview libraries were last resolved for, and the jars they resolved to. */
+    private var previewLibraries: Pair<List<Coordinate>, List<String>>? = null
+
+    override suspend fun composePreviews(path: String, text: String): List<UiComposePreview> =
+        if (!path.endsWith(".kt", ignoreCase = true)) emptyList()
+        else withAnalysis(emptyList()) { analysis -> analysis.previews(path, text).map(::toUiPreview) }
+
+    /**
+     * The `@Preview` [functionName] in [path] rendered at [width]x[height] pixels: lowered by the editor's
+     * analysis, then run by [IosPreviewRenderer] on [IosPreviewThread] against the project's libraries in their
+     * desktop variants (see [IosPreviewDependencies]).
+     */
+    internal suspend fun renderComposePreview(
+        path: String,
+        text: String,
+        functionName: String,
+        width: Int,
+        height: Int,
+        density: Float,
+        fontScale: Float = 1f,
+        dark: Boolean = false,
+        background: Long = 0L,
+    ): IosPreviewFrame {
+        val runtime = previewRuntimeJars()
+        if (runtime.isEmpty()) return IosPreviewFrame(null, listOf("This build of the app does not carry the preview runtime."))
+        val blob = withAnalysis(null) { it.lowerPreview(path, text, functionName) }
+            ?: return IosPreviewFrame(null, listOf("`$functionName` could not be lowered for preview."))
+        val classpath = runtime + previewLibraryJars()
+        return IosPreviewThread.run {
+            val renderer = previewRendererFor(classpath)
+            runCatching { renderer.renderFrame(blob, width, height, density, fontScale, dark, background) }
+                .getOrElse { IosPreviewFrame(null, listOf(it.message ?: (it::class.simpleName ?: "The preview failed to render."))) }
+        }
+    }
+
+    /**
+     * A live preview session for [functionName]: the scene stays composed in the VM, takes touches
+     * ([composePreviewPointer]) and renders again on request ([composePreviewFrame]). The first frame comes
+     * with it. A session belongs to the renderer that opened it; one replaced by a class-path change is gone.
+     */
+    internal suspend fun openComposePreview(
+        path: String,
+        text: String,
+        functionName: String,
+        width: Int,
+        height: Int,
+        density: Float,
+        fontScale: Float = 1f,
+        dark: Boolean = false,
+        background: Long = 0L,
+    ): IosPreviewSession {
+        val total = TimeSource.Monotonic.markNow()
+        val runtime = previewRuntimeJars()
+        if (runtime.isEmpty()) return IosPreviewSession(null, IosPreviewFrame(null, listOf("This build of the app does not carry the preview runtime.")))
+        try {
+            val blob = previewStage("Lowering $functionName") {
+                withAnalysis(null) { it.lowerPreview(path, text, functionName) }
+            } ?: return IosPreviewSession(null, IosPreviewFrame(null, listOf("`$functionName` could not be lowered for preview.")))
+            val libraries = previewStage("Resolving preview libraries") { previewLibraryJars() }
+            if (libraries.isEmpty()) {
+                previewLog.warn("no preview libraries resolved; the preview runs on the runtime alone and will likely fail")
+            }
+            val classpath = runtime + libraries
+            val warm = previewRenderer?.let { previewRendererClasspath == classpath } == true
+            return previewStage(if (warm) "Rendering $functionName" else "Starting the preview runtime (first render loads Compose)") {
+                IosPreviewThread.run {
+                    runCatching {
+                        val renderer = previewRendererFor(classpath)
+                        val id = renderer.open(blob, width, height, density, fontScale, dark, background)
+                        val frame = renderer.frame(id)
+                        previewLog.info("rendered $functionName: ${renderer.steps} VM steps so far, ${renderer.loadedClasses} classes, problems ${frame.problems}")
+                        IosPreviewSession(id, frame)
+                    }.getOrElse {
+                        previewLog.error("preview of $functionName failed", it)
+                        IosPreviewSession(null, IosPreviewFrame(null, listOf(it.message ?: (it::class.simpleName ?: "The preview failed to render."))))
+                    }
+                }
+            }
+        } finally {
+            previewLog.info("preview of $functionName took ${total.elapsedNow().inWholeMilliseconds}ms in all")
+            previewStageState.value = null
+        }
+    }
+
+    // ---- diagnostics: the in-app Logs viewer reads the process's log ring ---------------------------
+
+    override fun recentLogs(): List<UiLogEntry> = Log.recent().map { r ->
+        UiLogEntry(
+            level = r.level.name,
+            tag = r.tag,
+            message = r.message,
+            timestampMs = r.timestampMs,
+            timeLabel = IosClock.timeOfDay(r.timestampMs),
+            thread = r.threadName,
+            stackTrace = r.throwable?.stackTraceToString(),
+            source = r.source,
+        )
+    }
+
+    override suspend fun exportLogs(): String? = withContext(ioDispatcher) {
+        val dir = IosFiles.join(IosFiles.documentsDir(), "Logs")
+        IosFiles.mkdirs(dir)
+        val path = IosFiles.join(dir, "codeassist-${IosClock.timeOfDay(dev.ide.platform.epochMillis()).replace(':', '-')}.log")
+        val text = Log.recent().joinToString("\n") { r ->
+            "${IosClock.timeOfDay(r.timestampMs)} ${r.level} [${r.threadName}] ${r.tag}: ${r.message}" +
+                (r.throwable?.let { "\n" + it.stackTraceToString() } ?: "")
+        }
+        if (IosFiles.writeText(path, text)) path else null
+    }
+
+    /** What the preview is doing right now, for the pane to show while it works; null when idle. */
+    internal val previewStage: StateFlow<String?> get() = previewStageState
+    private val previewStageState = MutableStateFlow<String?>(null)
+    private val previewLog = Log.logger("ios-preview")
+
+    /** Runs [block] as the preview's current [stage], logging how long it took. */
+    private suspend fun <T> previewStage(stage: String, block: suspend () -> T): T {
+        previewStageState.value = stage
+        val start = TimeSource.Monotonic.markNow()
+        previewLog.info("$stage...")
+        try {
+            return block()
+        } finally {
+            previewLog.info("$stage: ${start.elapsedNow().inWholeMilliseconds}ms")
+        }
+    }
+
+    internal suspend fun composePreviewFrame(session: Int): IosPreviewFrame = IosPreviewThread.run {
+        runCatching { previewRenderer?.frame(session) ?: IosPreviewFrame(null, emptyList()) }
+            .getOrElse { IosPreviewFrame(null, listOf(it.message ?: "The preview failed to render.")) }
+    }
+
+    /** Sends a touch to [session]; queued on the preview thread ahead of the next frame. */
+    internal fun composePreviewPointer(session: Int, kind: Int, x: Float, y: Float) {
+        IosPreviewThread.post { runCatching { previewRenderer?.pointer(session, kind, x, y) } }
+    }
+
+    internal suspend fun closeComposePreview(session: Int) = IosPreviewThread.run { runCatching { previewRenderer?.close(session) } }
+
+    internal fun closeComposePreviewLater(session: Int) = IosPreviewThread.post { runCatching { previewRenderer?.close(session) } }
+
+    /** The renderer for [classpath], replacing (and so ending every session of) one for another class path. */
+    private fun previewRendererFor(classpath: List<String>): IosPreviewRenderer =
+        previewRenderer?.takeIf { previewRendererClasspath == classpath }
+            ?: IosPreviewRenderer(classpath).also { previewRenderer = it; previewRendererClasspath = classpath }
+
+    /** The project's libraries as the preview runs them, re-resolved only when the declarations change. */
+    private suspend fun previewLibraryJars(): List<String> = withContext(ioDispatcher) {
+        val root = active?.rootPath?.takeIf { it.isNotEmpty() } ?: return@withContext emptyList()
+        val store = projectModel.storeFor(root) ?: return@withContext emptyList()
+        val bridge = DependencyModelBridge(store)
+        val declared = store.workspace.projects.flatMap { it.modules }
+            .flatMap { bridge.declared(it) }.map { it.coordinate }.distinct()
+        previewLibraries?.takeIf { it.first == declared }?.second
+            ?: resolving(message = "Resolving preview libraries", showUntilReported = true) { progress ->
+                IosPreviewDependencies(root).classpath(declared, progress)
+            }.also { previewLibraries = declared to it }
+    }
+
+    private fun toUiPreview(p: PreviewInfo): UiComposePreview {
+        val c = p.config
+        return UiComposePreview(
+            functionName = p.functionName,
+            offset = p.offset,
+            variantId = p.variantId,
+            label = p.label,
+            group = c.group,
+            arity = p.arity,
+            hasParameter = p.parameter != null,
+            config = UiPreviewConfig(
+                widthDp = c.widthDp,
+                heightDp = c.heightDp,
+                showBackground = c.showBackground,
+                backgroundColor = c.backgroundColor,
+                fontScale = c.fontScale,
+                nightMode = if (c.uiMode != null) c.isNight else null,
+                locale = c.locale,
+                apiLevel = c.apiLevel,
+                showSystemUi = c.showSystemUi,
+                device = c.device,
+            ),
+        )
     }
 
     /**
@@ -456,10 +670,15 @@ class IosBackend(
         // On the IO pool, not the caller's thread: opening a project is called from the UI, and `ensure`
         // downloads — through `NSURLSession` waited on with a semaphore, which blocks whatever thread it is
         // given. The same reason every store call moved off `Dispatchers.Default` on this platform.
+        // Through [resolving], so a first open that downloads shows the same bar an explicit resolve does; it
+        // only appears once the resolver reports, so a fully cached open (a few stat calls) shows nothing.
         val jars = withContext(ioDispatcher) {
-            dependenciesFor(root).ensure(projectModel.open(root))
+            resolving(message = "Resolving project dependencies", showUntilReported = true) { progress ->
+                dependenciesFor(root).ensure(projectModel.open(root), progress)
+            }
         }
         if (jars.isNotEmpty()) resetAnalysis()
+        warmAnalysis()
     }
 
     /** Drop the analysis when the open project changes; the next pass builds one for the new root. */
@@ -1252,13 +1471,23 @@ class IosBackend(
      * The flow is reset to idle in a `finally`: a resolve that throws must not leave a spinner running for
      * the rest of the session.
      */
-    private suspend fun <T> resolving(block: suspend (ProgressReporter) -> T): T {
-        depsProgress.value = DepsResolveState(resolving = true, message = "Resolving dependencies", fraction = -1.0)
+    /**
+     * Runs a resolve with its progress on [depsState], which is what the shared UI draws its bar from.
+     * [showUntilReported] holds the bar back until the resolver first reports, for a resolve that is usually a
+     * cache check and should not flash a bar for one.
+     */
+    private suspend fun <T> resolving(
+        message: String = "Resolving dependencies",
+        showUntilReported: Boolean = false,
+        block: suspend (ProgressReporter) -> T,
+    ): T {
+        val started = DepsResolveState(resolving = true, message = message, fraction = -1.0)
+        if (!showUntilReported) depsProgress.value = started
         try {
             return block(
                 object : ProgressReporter {
                     override fun report(fraction: Double, message: String?) {
-                        val state = depsProgress.value
+                        val state = depsProgress.value.takeIf { it.resolving } ?: started
                         depsProgress.value = state.copy(
                             fraction = fraction,
                             message = message ?: state.message,

@@ -58,6 +58,9 @@ kotlin {
             }
         }
         getByName("desktopMain").dependsOn(jvmShared)
+        // VmPreviewEntry paints a preview's background and sets its theme: compileOnly, like `compose.ui`
+        // above, since inside the VM it links against the project's own Compose.
+        getByName("desktopMain").dependencies { compileOnly(compose.foundation) }
         getByName("androidMain").dependsOn(jvmShared)
 
         // Desktop unit tests: drive the reflective Compose-ABI bridge against REAL Compose-compiled composables
@@ -74,6 +77,9 @@ kotlin {
                 // interpreted ui/foundation stack) need the graphics floor present even headless. No display is
                 // opened; only the native lib is loaded. currentOs resolves the matching skiko-awt-runtime.
                 implementation(compose.desktop.currentOs)
+                // The closed-world VM, for running this module's own preview pipeline interpreted (the way a
+                // host with no JVM, iOS, renders a preview) and checking it against the direct run.
+                implementation(project(":jvm-vm"))
             }
         }
     }

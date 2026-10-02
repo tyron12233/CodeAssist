@@ -31,6 +31,9 @@ import dev.ide.lang.kotlin.index.KotlinBuiltinCallableIndex
 import dev.ide.lang.kotlin.index.KotlinBuiltinsIndex
 import dev.ide.lang.kotlin.index.KotlinCallableIndex
 import dev.ide.lang.kotlin.index.KotlinTypeShapeIndex
+import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
+import dev.ide.lang.kotlin.interp.PreviewInfo
+import dev.ide.lang.kotlin.interp.PreviewWire
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.resolve.KotlinResolver
@@ -107,6 +110,9 @@ internal class IosKotlinAnalysis(
     )
 
     private val completion = KotlinCompletion(service)
+
+    /** The preview lowering, sharing the editor's resolver caches so a preview reuses what analysis did. */
+    private val previewLowering = KotlinPreviewLowering(service, cachesFor = ::sharedCachesFor)
 
     /**
      * The semantic checks, with their per-declaration reuse cache.
@@ -287,6 +293,24 @@ internal class IosKotlinAnalysis(
         return KotlinParsedFile(ktFile, IosVirtualFile(path), ++documentVersion)
             .also { lastByFile[path] = it }
     }
+
+    /**
+     * The `@Preview` [functionName] in [path], lowered with everything it reaches across the project's files
+     * and encoded as a [PreviewWire] blob: what [IosPreviewRenderer] renders. Null when the function is not
+     * in the file or did not lower.
+     */
+    fun lowerPreview(path: String, text: String, functionName: String): ByteArray? {
+        val file = parsed(path, text)
+        val model = previewLowering.crossFileModel(file)
+        val entry = model.program["$functionName/0"] ?: return null
+        return PreviewWire.encode(entry, model.program, model.classes)
+    }
+
+    /** The `@Preview` variants [path] declares. */
+    fun previews(path: String, text: String): List<PreviewInfo> = previewLowering.previews(parsed(path, text))
+
+    /** The `@Preview` functions [path] declares, by name. */
+    fun previewNames(path: String, text: String): List<String> = previews(path, text).map { it.functionName }.distinct()
 
     /**
      * Go-to targets of [kind] at [offset], for Go to Declaration / Implementation(s) / Type / Super.

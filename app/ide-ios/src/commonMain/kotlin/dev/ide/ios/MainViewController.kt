@@ -18,6 +18,7 @@ import platform.UIKit.UIViewController
 fun MainViewController(): UIViewController = ComposeUIViewController {
     CodeAssistApp(
         backend = host.backend,
+        composePreviewHost = host.composePreviewHost,
         fileActions = host.fileActions,
         openStoreItemId = host.pendingStoreItem,
         onStoreItemIdHandled = host::storeItemHandled,

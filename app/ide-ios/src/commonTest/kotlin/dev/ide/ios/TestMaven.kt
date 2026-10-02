@@ -27,9 +27,18 @@ internal class FixtureMaven : ArtifactFetcher {
      */
     var reachable: Boolean = true
 
+    /** Every URL asked for, in order, so a test can say how much a lookup cost. */
+    val requested = ArrayList<String>()
+
     override fun fetch(url: String): ByteArray? {
         if (!reachable) throw IllegalStateException("The Internet connection appears to be offline")
+        requested += url
         return byUrl[url]
+    }
+
+    /** Serve [bytes] at [url] as they are: a `maven-metadata.xml`, a `.module`. */
+    fun put(url: String, bytes: ByteArray) {
+        byUrl[url] = bytes
     }
 
     /** Publish `group:name:version`, optionally with the given jar bytes and transitive dependencies. */

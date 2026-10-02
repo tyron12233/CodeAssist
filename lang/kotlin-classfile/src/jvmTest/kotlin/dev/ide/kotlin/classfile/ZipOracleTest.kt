@@ -5,6 +5,7 @@ import dev.ide.platform.ByteArraySource
 import java.io.File
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry as JvmZipEntry
+import java.util.zip.Deflater
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import kotlin.random.Random
@@ -165,6 +166,36 @@ class ZipOracleTest {
             val entry = assertNotNull(archive.entry("entry-$i.txt"), "entry $i")
             assertEquals("content $i", assertNotNull(archive.read(entry)).decodeToString())
         }
+    }
+
+    /**
+     * This module's own decoder, which [Inflate.inflate] now reaches only when the platform's refuses a
+     * stream: every class of real jars, deflated by `java.util.zip` at two levels, decoded back byte for byte.
+     */
+    @Test
+    fun theFallbackDecoderMatchesZlib() {
+        var checked = 0
+        for (jar in jars()) {
+            ZipFile(jar).use { zip ->
+                for (entry in zip.entries().asSequence().filter { !it.isDirectory }) {
+                    val original = zip.getInputStream(entry).use { it.readBytes() }
+                    if (original.isEmpty()) continue
+                    for (level in intArrayOf(Deflater.BEST_SPEED, Deflater.BEST_COMPRESSION)) {
+                        val deflater = Deflater(level, true)
+                        deflater.setInput(original)
+                        deflater.finish()
+                        val out = java.io.ByteArrayOutputStream()
+                        val buffer = ByteArray(8192)
+                        while (!deflater.finished()) out.write(buffer, 0, deflater.deflate(buffer))
+                        deflater.end()
+                        val decoded = assertNotNull(Inflate.decode(out.toByteArray(), original.size), "${entry.name} in ${jar.name}")
+                        assertTrue(original.contentEquals(decoded), "${entry.name} in ${jar.name} at level $level")
+                    }
+                    checked++
+                }
+            }
+        }
+        assertTrue(checked > 1000, "expected a real corpus; checked $checked entries")
     }
 
     @Test

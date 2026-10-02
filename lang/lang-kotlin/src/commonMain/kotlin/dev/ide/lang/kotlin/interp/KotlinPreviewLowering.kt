@@ -14,7 +14,6 @@ import dev.ide.lang.kotlin.KotlinPerf
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Lowers a parsed Kotlin file into the [ResolvedTree] program the Compose-preview interpreter runs (see
@@ -30,7 +29,7 @@ class KotlinPreviewLowering(
     private val cachesFor: ((KotlinParsedFile) -> dev.ide.lang.kotlin.resolve.KotlinResolverCaches)? = null,
     /** Persists lowered declarations across sessions, so a project reopen decodes instead of re-resolving —
      *  the dominant cold-preview cost on a big project. Null → in-memory caching only (tests / no host dir). */
-    private val diskCache: PreviewLoweringDiskCache? = null,
+    private val diskCache: PreviewLoweringStore? = null,
 ) {
 
     /** The `@Preview @Composable` functions in [parsed] (the editor's preview targets), expanded to one entry
@@ -94,7 +93,7 @@ class KotlinPreviewLowering(
     // Parse cache for cross-file dependency files, keyed by path → (textHash, parsed). The preview re-renders
     // per keystroke; without this each render reparses every reached sibling (parsing is the dominant cost).
     private class ParsedEntry(val textHash: Int, val parsed: KotlinParsedFile)
-    private val crossFileParseCache = ConcurrentHashMap<String, ParsedEntry>()
+    private val crossFileParseCache = concurrentMap<String, ParsedEntry>()
 
     private fun parseDependency(pf: KotlinSymbolService.PreviewSourceFile): KotlinParsedFile? {
         val h = pf.text.hashCode()
@@ -240,7 +239,7 @@ class KotlinPreviewLowering(
             }
         }
 
-        private val fns = ConcurrentHashMap<String, FnEntry>()
+        private val fns = concurrentMap<String, FnEntry>()
 
         private val classesLazy = lazy(LazyThreadSafetyMode.NONE) {
             carriedClasses
@@ -284,7 +283,7 @@ class KotlinPreviewLowering(
         private fun lowerDecl(decl: KtDeclaration): ResolvedFunction = when (decl) {
             is KtNamedFunction -> lowerOneFunction(resolver, decl)
             is KtProperty -> lowerOneTopLevelProperty(resolver, decl)
-            else -> error("not a lowerable top-level declaration: ${decl::class.java.simpleName}")
+            else -> error("not a lowerable top-level declaration: ${decl::class.simpleName}")
         }
 
         fun materializedProgram(): Map<String, ResolvedFunction> =
@@ -307,13 +306,13 @@ class KotlinPreviewLowering(
 
         private fun scheduleStore() {
             val cache = diskCache ?: return
-            val snapshot = LinkedHashMap<String, PreviewLoweringDiskCache.CachedFn>()
-            fns.forEach { (k, e) -> snapshot[k] = PreviewLoweringDiskCache.CachedFn(e.textHash, e.startOffset, e.fn, e.anons) }
-            cache.store(path, PreviewLoweringDiskCache.Entry(fileSigHash, snapshot, classesIfMaterialized()))
+            val snapshot = LinkedHashMap<String, PreviewLoweringStore.CachedFn>()
+            fns.forEach { (k, e) -> snapshot[k] = PreviewLoweringStore.CachedFn(e.textHash, e.startOffset, e.fn, e.anons) }
+            cache.store(path, PreviewLoweringStore.Entry(fileSigHash, snapshot, classesIfMaterialized()))
         }
     }
 
-    private val loweredCache = ConcurrentHashMap<String, Lowered>()
+    private val loweredCache = concurrentMap<String, Lowered>()
 
     /** The file text with every TOP-LEVEL function body elided — a hash of everything a sibling's lowering can
      *  depend on (signatures, imports, properties, class bodies). Stable across function-body edits.
@@ -375,7 +374,7 @@ class KotlinPreviewLowering(
         // Unsupported node — which would lose the whole file's lowering and leave the preview with no
         // reason. Turn it into a diagnostic so the cause is reported, not swallowed.
         val span = SourceSpan(fn.textRange.startOffset, fn.textRange.endOffset)
-        val reason = "lowering failed (${t::class.java.simpleName}): ${t.message ?: "no message"}"
+        val reason = "lowering failed (${t::class.simpleName}): ${t.message ?: "no message"}"
         val params = fn.valueParameters.mapIndexed { i, p ->
             RParam(SlotId(i), p.name ?: "_", null)
         }
@@ -394,7 +393,7 @@ class KotlinPreviewLowering(
     } catch (t: Throwable) {
         // As in lowerOneFunction: a resolver gap that THROWS becomes a diagnostic so the cause is reported.
         val span = SourceSpan(prop.textRange.startOffset, prop.textRange.endOffset)
-        val reason = "lowering failed (${t::class.java.simpleName}): ${t.message ?: "no message"}"
+        val reason = "lowering failed (${t::class.simpleName}): ${t.message ?: "no message"}"
         ResolvedFunction(
             prop.name ?: "?", emptyList(),
             RNode.Unsupported(reason, prop.name ?: "", span),

@@ -108,6 +108,8 @@ include(
     ":interp-api",  // published SPI: the narrowed interpreter surface a plugin runs project code through
     ":interp-impl", // the engine behind it: source sessions over :interp-core, bytecode sessions over :jvm-interp
     ":jvm-interp", // PoC: standalone .class bytecode-interpreting VM + Android/native bridge seam (Play dynamic-code compliance spike)
+    ":jvm-vm", // closed-world multiplatform bytecode VM: interprets every library class, the JDK floor is Kotlin (iOS previews)
+    ":jvm-vm-fixtures", // compiled fixtures :jvm-vm's tests interpret (Compose runtime drivers, plain Kotlin programs)
     ":deps-api",
     ":deps-impl",
     ":vcs-api",  // version-control SPI: repository/branch/commit/status model, the provider EP, accounts + forge ports
@@ -232,7 +234,7 @@ val layers = mapOf(
     "build-system" to listOf("build-api", "build-engine", "jvm-build"),
     // Executing project code on device: the source interpreter, the bytecode VM, and the AWT/Swing
     // surface an interpreted program draws into.
-    "run" to listOf("interp-api", "interp-core", "interp-impl", "interp-compose", "jvm-interp", "awt-toolkit"),
+    "run" to listOf("interp-api", "interp-core", "interp-impl", "interp-compose", "jvm-interp", "jvm-vm", "jvm-vm-fixtures", "awt-toolkit"),
     // Android as a target platform: the facet/variant model, the SDK metadata, the XML layout
     // preview, and the ART compatibility shims.
     "android" to listOf(

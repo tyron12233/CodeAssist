@@ -18,7 +18,11 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.runTest
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUserDefaults
@@ -663,6 +667,27 @@ class IosBackendTest {
 
         assertTrue("CLASS" in names, "a builtin enum's entries come from the jar; got ${names.take(20)}")
         assertTrue("FUNCTION" in names, "got ${names.take(20)}")
+    }
+
+    /**
+     * Opening a project indexes its libraries; no file has to be opened first.
+     *
+     * The index used to be built by the first language pass, so a project sat unindexed until a file was
+     * opened and that file then waited on every jar being read. The segments appearing on disk with no pass
+     * having run is the proof the work moved to the open.
+     */
+    @Test
+    fun openingAProjectIndexesItsLibrariesWithoutAFileOpen() = runTest {
+        val projectRoot = openTwoFileProject()
+        seedStdlib(projectRoot)
+        assertTrue(backend.openProject(projectRoot))
+
+        val index = IosFiles.join(projectRoot, ".platform/caches/index")
+        withContext(Dispatchers.Default) {
+            withTimeout(60_000) {
+                while (IosFiles.list(index).none { it.endsWith(".seg") }) delay(50)
+            }
+        }
     }
 
     /** The same type by its fully-qualified name, which needs no import at all. */
@@ -1476,14 +1501,13 @@ class IosBackendTest {
     // ---- threading + index status --------------------------------------------------------------------
 
     /**
-     * Registering a buffer must not be what builds the index.
+     * The index status is wired to the classpath index, rather than left at StubBackend's default.
      *
-     * It used to be: `updateDocument` reached the analysis object, so opening the first file constructed the
-     * symbol model and read every jar on the classpath — on the editor's thread, which is the main one. The
-     * index status is the observable proxy for that work having happened.
+     * Opening the project starts the index (see [openingAProjectIndexesItsLibrariesWithoutAFileOpen]); a pass
+     * waits on the analysis thread behind it, so once one returns the status says the index is done.
      */
     @Test
-    fun recordingABufferDoesNotBuildTheIndex() = runTest {
+    fun theIndexStatusReportsTheClasspathIndex() = runTest {
         val projectRoot = openTwoFileProject()
         seedStdlib(projectRoot)
         assertTrue(backend.openProject(projectRoot))
@@ -1491,14 +1515,6 @@ class IosBackendTest {
         val text = "package demo\n\nfun use() {}\n"
 
         backend.editor.updateDocument(file, text)
-
-        assertEquals(
-            "",
-            backend.search.indexStatus.value.message,
-            "nothing has been indexed yet: a keystroke is a map write, not an index build",
-        )
-
-        // A real pass is what builds it, and the status says so afterwards.
         backend.editor.analyze(file, text)
 
         val status = backend.search.indexStatus.value

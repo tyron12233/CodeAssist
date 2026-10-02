@@ -319,7 +319,7 @@ class ResolveOffTheJvmTest {
 }
 
 /** A [VirtualFile] over the portable file system, for the resolver's `fileFor`. */
-private class DiskFile(override val path: String) : VirtualFile {
+internal class DiskFile(override val path: String) : VirtualFile {
     private val info get() = fileInfo(path)
     override val name: String get() = path.trimEnd('/').substringAfterLast('/')
     override val isDirectory: Boolean get() = info?.isDirectory == true

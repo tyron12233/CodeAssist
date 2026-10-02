@@ -2,6 +2,8 @@ package dev.ide.core.preview
 
 import dev.ide.core.LoweredComposePreview
 import dev.ide.core.LoweredPreviewParameter
+import dev.ide.lang.kotlin.interp.JavaDataReader
+import dev.ide.lang.kotlin.interp.JavaDataWriter
 import dev.ide.lang.kotlin.interp.ResolvedTreeCodec
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -29,7 +31,7 @@ object ComposePreviewWireCodec {
         val d = DataOutputStream(bos)
         d.writeInt(MAGIC)
         d.writeInt(ResolvedTreeCodec.FORMAT)
-        ResolvedTreeCodec.Writer(d).run {
+        ResolvedTreeCodec.Writer(JavaDataWriter(d)).run {
             function(preview.entry)
             map(preview.program) { function(it) }
             list(preview.classes) { klass(it) }
@@ -46,7 +48,7 @@ object ComposePreviewWireCodec {
         val d = DataInputStream(ByteArrayInputStream(bytes))
         require(d.readInt() == MAGIC) { "bad Compose preview wire magic" }
         require(d.readInt() == ResolvedTreeCodec.FORMAT) { "bad Compose preview wire format" }
-        return ResolvedTreeCodec.Reader(d).run {
+        return ResolvedTreeCodec.Reader(JavaDataReader(d)).run {
             LoweredComposePreview(
                 entry = function(),
                 program = map { function() },

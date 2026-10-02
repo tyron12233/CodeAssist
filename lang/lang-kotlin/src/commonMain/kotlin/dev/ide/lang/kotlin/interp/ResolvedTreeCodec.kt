@@ -2,8 +2,8 @@ package dev.ide.lang.kotlin.interp
 
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.resolve.TypeRef
-import java.io.DataInputStream
-import java.io.DataOutputStream
+import dev.ide.platform.DataReader
+import dev.ide.platform.DataWriter
 
 /**
  * Compact binary codec for the [ResolvedTree] model — [ResolvedFunction]/[ResolvedClass] with their whole
@@ -15,7 +15,8 @@ import java.io.DataOutputStream
  * (`ComposePreviewWireCodec` wraps these [Writer]/[Reader] primitives in its envelope), and the preview
  * lowering DISK cache ([PreviewLoweringDiskCache]) that persists lowered files across sessions. It is
  * deliberately hand-written in the style of the index `Segment` codec rather than a reflective serializer, so
- * it has no dependency footprint and stays pure-JVM (headless-testable on CI).
+ * it has no dependency footprint. It is common code over [DataWriter]/[DataReader] (the `DataOutputStream` byte
+ * format), so a tree lowered on iOS encodes to the same bytes the JVM build of this codec decodes.
  *
  * [FORMAT] versions the encoding — bump it when ANY encoded shape changes (a new RNode field, a Binding
  * variant, …) **or when lowering behavior changes in a way that makes previously-lowered trees wrong** (an
@@ -27,10 +28,10 @@ object ResolvedTreeCodec {
 
     const val FORMAT = 2
 
-    class Writer(val d: DataOutputStream) {
+    class Writer(val d: DataWriter) {
         fun int(v: Int) = d.writeInt(v)
         fun bool(v: Boolean) = d.writeBoolean(v)
-        fun str(s: String) { val b = s.toByteArray(Charsets.UTF_8); d.writeInt(b.size); d.write(b) }
+        fun str(s: String) { val b = s.encodeToByteArray(); d.writeInt(b.size); for (x in b) d.writeByte(x.toInt()) }
         fun strN(s: String?) { bool(s != null); if (s != null) str(s) }
         fun <T> list(xs: List<T>, each: (T) -> Unit) { int(xs.size); xs.forEach(each) }
         fun <T> nullable(x: T?, write: (T) -> Unit) { bool(x != null); if (x != null) write(x) }
@@ -82,11 +83,12 @@ object ResolvedTreeCodec {
             is String -> { d.writeByte(1); str(v) }
             is Int -> { d.writeByte(2); int(v) }
             is Long -> { d.writeByte(3); d.writeLong(v) }
-            is Double -> { d.writeByte(4); d.writeDouble(v) }
-            is Float -> { d.writeByte(5); d.writeFloat(v) }
+            // DataOutputStream's writeDouble/writeFloat/writeChar, which DataWriter does not carry.
+            is Double -> { d.writeByte(4); d.writeLong(v.toBits()) }
+            is Float -> { d.writeByte(5); d.writeInt(v.toBits()) }
             is Boolean -> { d.writeByte(6); bool(v) }
-            is Char -> { d.writeByte(7); d.writeChar(v.code) }
-            else -> error("unsupported Const.value type ${v.javaClass.name}")
+            is Char -> { d.writeByte(7); d.writeShort(v.code) }
+            else -> error("unsupported Const.value type ${v::class.simpleName}")
         }
 
         fun node(n: RNode) {
@@ -150,10 +152,10 @@ object ResolvedTreeCodec {
         }
     }
 
-    class Reader(val d: DataInputStream) {
+    class Reader(val d: DataReader) {
         fun int() = d.readInt()
         fun bool() = d.readBoolean()
-        fun str(): String { val b = ByteArray(d.readInt()); d.readFully(b); return String(b, Charsets.UTF_8) }
+        fun str(): String { val n = d.readInt(); return ByteArray(n) { d.readByte().toByte() }.decodeToString() }
         fun strN(): String? = if (bool()) str() else null
         fun <T> list(each: () -> T): List<T> = (0 until int()).map { each() }
         fun <T> nullable(read: () -> T): T? = if (bool()) read() else null
@@ -213,10 +215,10 @@ object ResolvedTreeCodec {
             1 -> str()
             2 -> int()
             3 -> d.readLong()
-            4 -> d.readDouble()
-            5 -> d.readFloat()
+            4 -> Double.fromBits(d.readLong())
+            5 -> Float.fromBits(d.readInt())
             6 -> bool()
-            7 -> d.readChar()
+            7 -> (d.readShort() and 0xFFFF).toChar()
             else -> error("bad Const.value tag $tag")
         }
 

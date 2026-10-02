@@ -11,6 +11,7 @@ import dev.ide.index.MatchingMode
 import dev.ide.kotlin.classfile.ZipArchive
 import dev.ide.platform.createDirectories
 import dev.ide.platform.fileInfo
+import dev.ide.platform.fileName
 import dev.ide.platform.openFile
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.platform.ContentHash
@@ -99,7 +100,8 @@ class ClasspathIndex private constructor(
             cacheDir: String,
             blockCacheBytes: Long = 4L * 1024 * 1024,
             /**
-             * Called as each jar is read, with the number done and the number that will be read at all.
+             * Called as each jar is read, with the number done and the number that will be read at all, and
+             * once with zero done before the first, so a host can say it is indexing from the start.
              *
              * Reported per JAR rather than per entry because that is the unit whose cost varies (one large
              * artifact holds tens of thousands of classes), and because it is the only point the build can
@@ -120,6 +122,7 @@ class ClasspathIndex private constructor(
             if (missing.isNotEmpty()) {
                 val collected = HashMap<IndexId, MutableList<IndexEntry>>()
                 for (ext in missing) collected[ext.id] = ArrayList()
+                onProgress(0, jars.size)
                 for ((done, jar) in jars.withIndex()) {
                     collect(jar, missing, collected)
                     onProgress(done + 1, jars.size)
@@ -151,10 +154,12 @@ class ClasspathIndex private constructor(
                 for (entry in archive.entries) {
                     if (entry.isDirectory) continue
                     var bytes: ByteArray? = null
+                    // ONE input for every extension, so what they share (the parsed class, its decoded
+                    // @Metadata) is computed once per entry. An input per extension decoded each class twice.
+                    val input = JarEntryInput(entry.name, jarHash) {
+                        bytes ?: (archive.read(entry) ?: ByteArray(0)).also { bytes = it }
+                    }
                     for (ext in extensions) {
-                        val input = JarEntryInput(entry.name, jarHash) {
-                            bytes ?: (archive.read(entry) ?: ByteArray(0)).also { bytes = it }
-                        }
                         if (!ext.inputFilter.accepts(input)) continue
                         val produced = runCatching { ext.index(input) }.getOrNull() ?: continue
                         val out = into[ext.id] ?: continue
@@ -181,19 +186,24 @@ class ClasspathIndex private constructor(
             "$cacheDir/${ext.id.value}-v${ext.version}-$key.seg"
 
         /**
-         * A stable name for a classpath: each jar's name and size.
+         * A stable name for a classpath: each jar's file name and size, NOT its full path.
          *
          * Size rather than content: hashing hundreds of megabytes of jars to decide whether to reuse a cache
          * would cost more than rebuilding it, and a jar whose bytes change without its length changing is a
          * rebuild of the same version, which the extension version does not cover but a project re-resolve
          * does.
+         *
+         * Name rather than path because the directory a jar sits in is not part of what it indexes to, and it
+         * moves: an iOS app's container (and its bundle) gets a new path on every install, so a key over
+         * absolute paths named a new classpath each time and the whole index was rebuilt. What a segment
+         * stores is class names, never where the jar was, so one built from the same jars elsewhere is valid.
          */
-        private fun classpathKey(jars: List<String>): String {
+        internal fun classpathKey(jars: List<String>): String {
             var hash = 0L
-            for (jar in jars.sorted()) {
-                val info = fileInfo(jar)
-                hash = hash * 1_000_003L + jar.hashCode().toLong()
-                hash = hash * 1_000_003L + (info?.size ?: 0L)
+            val named = jars.map { jar -> fileName(jar) to (fileInfo(jar)?.size ?: 0L) }
+            for ((name, size) in named.sortedWith(compareBy({ it.first }, { it.second }))) {
+                hash = hash * 1_000_003L + name.hashCode().toLong()
+                hash = hash * 1_000_003L + size
             }
             return hash.toULong().toString(16)
         }
@@ -201,7 +211,7 @@ class ClasspathIndex private constructor(
 }
 
 /** One entry of a jar, as an index extension consumes it. The bytes are read on demand and once. */
-private class JarEntryInput(
+internal class JarEntryInput(
     override val unitName: String,
     private val jarHash: ContentHash,
     private val readBytes: () -> ByteArray,
@@ -209,7 +219,16 @@ private class JarEntryInput(
     override val origin = IndexOrigin.LIBRARY
     override val contentHash: ContentHash get() = jarHash
     override val sourcePath: String? = null
+    private var memo: HashMap<String, Any?>? = null
+
     override fun bytes(): ByteArray = readBytes()
     override fun text(): String? = null
     override fun dom(): ParsedFile? = null
+
+    @Suppress("UNCHECKED_CAST")
+    override fun <T> shared(key: String, compute: () -> T): T {
+        val map = memo ?: HashMap<String, Any?>().also { memo = it }
+        if (map.containsKey(key)) return map[key] as T
+        return compute().also { map[key] = it }
+    }
 }

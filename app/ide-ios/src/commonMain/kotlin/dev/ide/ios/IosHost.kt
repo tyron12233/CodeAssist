@@ -20,6 +20,9 @@ class IosHost {
 
     val backend: IosBackend = IosBackend()
 
+    /** Compose previews, rendered by [backend] in the VM. */
+    val composePreviewHost: dev.ide.ui.ComposePreviewHost = IosComposePreviewHost(backend)
+
     /**
      * The store item a `codeassist://store/<id>` link asked for, or "" for the Store tab itself.
      *

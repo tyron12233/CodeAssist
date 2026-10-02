@@ -1,5 +1,8 @@
 package dev.ide.lang.kotlin.interp
 
+import dev.ide.lang.kotlin.interp.PreviewLoweringStore.CachedFn
+import dev.ide.lang.kotlin.interp.PreviewLoweringStore.Entry
+
 import dev.ide.platform.log.Log
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -37,15 +40,7 @@ import java.util.concurrent.Executors
  * Writes are asynchronous and coalesced per path (latest snapshot wins) on a shared daemon thread, so storing
  * never blocks the engine thread; a torn/failed write is self-healing (the next load discards it).
  */
-class PreviewLoweringDiskCache(private val dir: Path, private val salt: String) {
-
-    /** One persisted declaration: the lowered function plus the anonymous `object : Foo {}` classes its body
-     *  synthesized (they must travel together — anon FQN numbering is per-lowering-generation). */
-    class CachedFn(
-        val textHash: Int, val startOffset: Int, val fn: ResolvedFunction,
-        val anons: List<ResolvedClass> = emptyList(),
-    )
-    class Entry(val sigHash: Int, val fns: Map<String, CachedFn>, val classes: List<ResolvedClass>?)
+class PreviewLoweringDiskCache(private val dir: Path, private val salt: String) : PreviewLoweringStore {
 
     private val log = Log.logger("preview-lowering-cache")
 
@@ -55,12 +50,12 @@ class PreviewLoweringDiskCache(private val dir: Path, private val salt: String) 
     private val pending = ConcurrentHashMap<String, Entry>()
 
     /** Load the stored entry for source [path], or null when absent/stale/corrupt (all self-healing misses). */
-    fun load(path: String): Entry? = runCatching {
+    override fun load(path: String): Entry? = runCatching {
         val f = dir.resolve(fileName(path))
         if (!Files.isRegularFile(f)) return null
         val d = DataInputStream(ByteArrayInputStream(Files.readAllBytes(f)))
         if (d.readInt() != MAGIC || d.readInt() != ResolvedTreeCodec.FORMAT) return null
-        val r = ResolvedTreeCodec.Reader(d)
+        val r = ResolvedTreeCodec.Reader(JavaDataReader(d))
         if (r.str() != salt || r.str() != path) return null
         val sigHash = r.int()
         val fns = LinkedHashMap<String, CachedFn>()
@@ -77,7 +72,7 @@ class PreviewLoweringDiskCache(private val dir: Path, private val salt: String) 
     }
 
     /** Persist [entry] as the snapshot for [path] — asynchronous, coalesced (the latest store wins). */
-    fun store(path: String, entry: Entry) {
+    override fun store(path: String, entry: Entry) {
         pending[path] = entry
         writer.execute {
             val e = pending.remove(path) ?: return@execute
@@ -97,7 +92,7 @@ class PreviewLoweringDiskCache(private val dir: Path, private val salt: String) 
         val d = DataOutputStream(bos)
         d.writeInt(MAGIC)
         d.writeInt(ResolvedTreeCodec.FORMAT)
-        ResolvedTreeCodec.Writer(d).run {
+        ResolvedTreeCodec.Writer(JavaDataWriter(d)).run {
             str(salt); str(path)
             int(entry.sigHash)
             int(entry.fns.size)

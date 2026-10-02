@@ -10,6 +10,8 @@ coroutines = "1.11.0"
 junit = "5.11.4"
 jdt = "3.40.0"
 compose = "1.11.1"
+# The skia binding Compose Multiplatform 1.11.1 is built against (its ui-desktop/ui-uikit dependency).
+skiko = "0.144.6"
 # What `compose` resolves to in androidx terms on Android (see the androidx-compose-* libraries below).
 androidxCompose = "1.11.2"
 androidxComposeMaterial3 = "1.4.0"
@@ -126,6 +128,7 @@ kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "
 trove4j = { module = "org.jetbrains.intellij.deps:trove4j", version.ref = "trove4j" }
 # Compose Multiplatform runtime (JVM/desktop variant), used as a test-only compile classpath so the
 # KotlinJvmCompiler @Composable-transform test has the real `androidx.compose.runtime.*` to compile against.
+skiko = { module = "org.jetbrains.skiko:skiko", version.ref = "skiko" }
 compose-runtime-desktop = { module = "org.jetbrains.compose.runtime:runtime-desktop", version.ref = "compose" }
 # compose-ui, for the one published SPI signature that needs a DrawScope (plugin-ui-api's editor painter).
 # compileOnly there, like the runtime above: a loaded plugin binds to the IDE's own Compose.

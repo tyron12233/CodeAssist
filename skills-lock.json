@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "compose-expert": {
+      "source": "vitorpamplona/amethyst",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/compose-expert/SKILL.md",
+      "computedHash": "680c64819893140f9725a11f4cdf3fa32ee1c6848fc1cd1decb59d188dce7a48"
+    },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/ui-ux-pro-max/SKILL.md",
+      "computedHash": "daa1a7be30edc9cda6b31da821c5285a9f421ee3136dd6335ff47e917215d1a5"
+    }
+  }
+}

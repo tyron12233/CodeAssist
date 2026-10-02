@@ -142,7 +142,7 @@ internal class IosDependencies(
      * The cheap path is the common one: with everything attached and cached this is a handful of `stat`
      * calls and no resolver at all, which is what makes it safe to call on every project open.
      */
-    suspend fun ensure(store: ProjectModelStore?): List<String> {
+    suspend fun ensure(store: ProjectModelStore?, progress: ProgressReporter = SilentProgress): List<String> {
         if (store == null) return emptyList()
         val bridge = model(store)
         val modules = store.workspace.projects.flatMap { it.modules }
@@ -151,7 +151,7 @@ internal class IosDependencies(
         // neither is a reason to fail.
         val missingLibrary = modules.any { !bridge.fullyAttached(it) }
         val missingStdlib = !declaresStdlib(bridge, store) && hostClasspath().isEmpty()
-        if (missingLibrary || missingStdlib) for (module in modules) resolveInto(store, module)
+        if (missingLibrary || missingStdlib) for (module in modules) resolveInto(store, module, progress)
         return classpathJars(store)
     }
 

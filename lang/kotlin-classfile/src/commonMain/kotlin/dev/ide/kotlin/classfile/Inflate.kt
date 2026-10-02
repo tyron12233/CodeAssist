@@ -12,6 +12,10 @@ package dev.ide.kotlin.classfile
  * of the two standard shapes and the one whose correctness can be read off the spec; the faster one builds
  * a lookup table whose construction is where the bugs live. Checked byte for byte against
  * `java.util.zip.Inflater` over every entry of real jars.
+ *
+ * Where the platform has a native inflater ([platformInflate]: zlib on iOS, `java.util.zip` on the JVM),
+ * [inflate] uses it first. Indexing a classpath inflates every class in every jar, and on the phone this
+ * decoder took about as long as everything else the index does combined.
  */
 object Inflate {
 
@@ -23,6 +27,14 @@ object Inflate {
      * is corrupt, and saying so is better than growing to fit whatever a malformed jar claims.
      */
     fun inflate(input: ByteArray, expectedSize: Int): ByteArray? =
+        (if (expectedSize > 0 && input.isNotEmpty()) platformInflate(input, expectedSize) else null)
+            ?: decode(input, expectedSize)
+
+    /**
+     * This decoder, bypassing the platform's. What [inflate] falls back to when the platform's refuses a
+     * stream, and what the oracle tests check directly.
+     */
+    fun decode(input: ByteArray, expectedSize: Int): ByteArray? =
         runCatching { Stream(input, expectedSize).inflate() }.getOrNull()
 
     // RFC 1951 section 3.2.5: the length and distance codes, and how many extra bits each one reads.
@@ -218,3 +230,9 @@ object Inflate {
         }
     }
 }
+
+/**
+ * The platform's own DEFLATE decoder over a raw (headerless) stream, producing exactly [expectedSize] bytes,
+ * or null when it rejects the stream or has none; [Inflate.inflate] then decodes it itself.
+ */
+internal expect fun platformInflate(input: ByteArray, expectedSize: Int): ByteArray?
