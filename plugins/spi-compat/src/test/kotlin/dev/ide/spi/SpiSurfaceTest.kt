@@ -318,12 +318,15 @@ class SpiSurfaceTest {
      *    would notice;
      *  * `<init>`, including the synthetic constructor generated for a class with default arguments, which
      *    is what a plugin constructing a `PluginManifest` by name actually calls.
+     *
+     * Synthetic is NOT a reason to drop a member: Kotlin compiles a `DeprecationLevel.HIDDEN` declaration as
+     * synthetic, and that is exactly how an old signature is kept linkable after its replacement lands. The
+     * synthetic members the compiler invents for itself (lambda bodies, `access$` accessors) all carry a `$`.
      */
     private fun pinnableMember(access: Int, name: String): Boolean {
         if (access and (Opcodes.ACC_PUBLIC or Opcodes.ACC_PROTECTED) == 0) return false
         if (access and Opcodes.ACC_BRIDGE != 0) return false
         if (name == "<init>") return true
-        if (access and Opcodes.ACC_SYNTHETIC != 0 && !name.endsWith("\$default")) return false
         return '$' !in name.removeSuffix("\$default")
     }
 

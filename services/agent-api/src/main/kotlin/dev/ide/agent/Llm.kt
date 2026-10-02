@@ -39,7 +39,16 @@ sealed interface ContentPart {
         val content: String,
         val isError: Boolean = false,
         val images: List<Image> = emptyList(),
-    ) : ContentPart
+    ) : ContentPart {
+        // The pre-[images] signatures, kept in the bytecode for plugins compiled against them.
+        @Deprecated("Binary compatibility with plugins built against SPI 3.0", level = DeprecationLevel.HIDDEN)
+        constructor(toolCallId: String, content: String, isError: Boolean = false) :
+            this(toolCallId, content, isError, emptyList())
+
+        @Deprecated("Binary compatibility with plugins built against SPI 3.0", level = DeprecationLevel.HIDDEN)
+        fun copy(toolCallId: String = this.toolCallId, content: String = this.content, isError: Boolean = this.isError): ToolResultPart =
+            ToolResultPart(toolCallId, content, isError, images)
+    }
 
     /** An image the model should look at. [data] is base64 (no `data:` prefix); [mediaType] is one of
      *  `image/png`, `image/jpeg`, `image/webp` or `image/gif`, which every provider accepts. */
@@ -61,6 +70,11 @@ data class LlmMessage(val role: LlmRole, val content: List<ContentPart>) {
             isError: Boolean = false,
             images: List<ContentPart.Image> = emptyList(),
         ): LlmMessage = LlmMessage(LlmRole.TOOL, listOf(ContentPart.ToolResultPart(toolCallId, content, isError, images)))
+
+        /** The pre-`images` signature, kept in the bytecode for plugins compiled against it. */
+        @Deprecated("Binary compatibility with plugins built against SPI 3.0", level = DeprecationLevel.HIDDEN)
+        fun toolResult(toolCallId: String, content: String, isError: Boolean = false): LlmMessage =
+            toolResult(toolCallId, content, isError, emptyList())
     }
 }
 

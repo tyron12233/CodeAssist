@@ -16,7 +16,15 @@ data class WriteRequest(
     val summary: String,
     val path: String? = null,
     val changes: List<FileChange> = emptyList(),
-)
+) {
+    // The pre-[changes] signatures, kept in the bytecode for plugins compiled against them.
+    @Deprecated("Binary compatibility with plugins built against SPI 3.0", level = DeprecationLevel.HIDDEN)
+    constructor(tool: String, summary: String, path: String? = null) : this(tool, summary, path, emptyList())
+
+    @Deprecated("Binary compatibility with plugins built against SPI 3.0", level = DeprecationLevel.HIDDEN)
+    fun copy(tool: String = this.tool, summary: String = this.summary, path: String? = this.path): WriteRequest =
+        WriteRequest(tool, summary, path, changes)
+}
 
 /**
  * The single decision point for whether a mutating tool may run. The host implementation encodes the
@@ -47,7 +55,14 @@ sealed interface AgentEvent {
     data class TurnCompleted(val stopReason: StopReason, val usage: TokenUsage?) : AgentEvent
     /** [kind] names the failure category when it was categorized (an `LlmErrorKind` name such as
      *  `MODEL_NOT_ON_PLAN` or `DAILY_LIMIT`), so the host can offer the right fix. */
-    data class Error(val message: String, val kind: String? = null) : AgentEvent
+    data class Error(val message: String, val kind: String? = null) : AgentEvent {
+        // The pre-[kind] signatures, kept in the bytecode for plugins compiled against them.
+        @Deprecated("Binary compatibility with plugins built against SPI 3.0", level = DeprecationLevel.HIDDEN)
+        constructor(message: String) : this(message, null)
+
+        @Deprecated("Binary compatibility with plugins built against SPI 3.0", level = DeprecationLevel.HIDDEN)
+        fun copy(message: String = this.message): Error = Error(message, kind)
+    }
 
     /**
      * The run is paused before its next request, either because the provider rate-limited it or because the
