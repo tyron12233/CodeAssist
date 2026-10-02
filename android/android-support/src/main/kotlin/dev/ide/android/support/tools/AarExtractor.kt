@@ -5,6 +5,7 @@ import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 import kotlin.io.path.writeText
 
@@ -29,6 +30,18 @@ object AarExtractor {
         val aarMetadata: Path?,        // META-INF/.../aar-metadata.properties (AGP's minCompileSdk etc.); null if absent
         val rTxt: Path?,               // the AAR's `R.txt` symbol table — the ONLY record of its own R fields
     )
+
+    /**
+     * The directory name to explode [aar] into under a shared root: its file stem plus a short hash of its
+     * absolute path. Two different local libraries that happen to share a file name (`x/libs/core.aar` and
+     * `y/libs/core.aar`) must not share one directory, because an exploded directory is reused as-is.
+     */
+    fun explodeDirName(aar: Path): String {
+        val stem = aar.fileName.toString().substringBeforeLast('.')
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(aar.toAbsolutePath().normalize().toString().toByteArray(Charsets.UTF_8))
+        return "$stem-" + digest.take(4).joinToString("") { "%02x".format(it) }
+    }
 
     fun explode(aar: Path, into: Path): Exploded {
         if (!isAlreadyExploded(into)) unzip(aar, into)

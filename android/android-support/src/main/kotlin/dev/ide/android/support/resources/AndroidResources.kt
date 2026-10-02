@@ -88,7 +88,7 @@ object AndroidResources {
             when {
                 sibling != null && Files.isDirectory(sibling) -> add(sibling)
                 explodeRoot != null && entry.toString().endsWith(".aar", ignoreCase = true) && Files.isRegularFile(entry) ->
-                    add(runCatching { AarExtractor.explode(entry, explodeRoot.resolve(stem(entry))).resDir }.getOrNull())
+                    add(runCatching { AarExtractor.explode(entry, explodeRoot.resolve(AarExtractor.explodeDirName(entry))).resDir }.getOrNull())
             }
         }
         return out.distinctBy { it.resDir }
@@ -113,8 +113,6 @@ object AndroidResources {
     private fun explodeRoot(module: Module, workspace: Workspace): Path? =
         workspace.projects.firstOrNull { p -> p.modules.any { it.id == module.id } }
             ?.let { runCatching { Paths.get(it.rootDir.path).resolve(".platform/caches/aar-res") }.getOrNull() }
-
-    private fun stem(p: Path): String = p.fileName.toString().substringBeforeLast('.')
 
     fun repository(
         root: Module,

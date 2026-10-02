@@ -73,7 +73,7 @@ object AndroidLibraries {
         val aarSymbols = ArrayList<AarSymbolTable>()
 
         val cache = HashMap<Path, AarExtractor.Exploded>()
-        fun explode(aar: Path) = cache.getOrPut(aar) { AarExtractor.explode(aar, explodeRoot.resolve(dirNameOf(aar))) }
+        fun explode(aar: Path) = cache.getOrPut(aar) { AarExtractor.explode(aar, explodeRoot.resolve(AarExtractor.explodeDirName(aar))) }
 
         fun addAarParts(classesJars: List<Path>, res: Path?, assets: Path?, jni: Path?, aidl: Path?, manifest: Path?, proguard: Path?, metadata: Path?, rTxt: Path?, name: String) {
             compileJars.addAll(classesJars)
@@ -150,8 +150,6 @@ object AndroidLibraries {
 
     private fun isAar(p: Path) = p.toString().endsWith(".aar", ignoreCase = true)
     private fun isJar(p: Path) = p.toString().endsWith(".jar", ignoreCase = true)
-    private fun dirNameOf(aar: Path): String = aar.fileName.toString().substringBeforeLast('.')
-
     /**
      * A `classes.jar` that the dependency resolver already exploded out of an AAR — recognised by the
      * `res/`/`assets/`/manifest siblings (or the resolver's `.extracted` marker) sitting next to it. The

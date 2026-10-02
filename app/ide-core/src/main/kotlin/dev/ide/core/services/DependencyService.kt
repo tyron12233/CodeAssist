@@ -809,6 +809,25 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
     private fun declaredPlatforms(module: Module): List<Coordinate> =
         module.dependencies.filterIsInstance<PlatformDependency>().map { it.bom }
 
+    /**
+     * The workspace library name for a local file called [fileName] whose classes roots are [rootPaths]: the
+     * file name itself, unless a workspace library of that name already holds DIFFERENT files, in which case
+     * the first free `name (2).ext`, `name (3).ext`, … A library already registered for these exact files keeps
+     * its name, so adding the same file to a second module shares the one library.
+     */
+    private fun localLibraryName(fileName: String, rootPaths: List<String>): String {
+        val table = ctx.store.workspace.libraryTable
+        val stem = fileName.substringBeforeLast('.')
+        val ext = fileName.substringAfterLast('.', "").let { if (it.isEmpty()) "" else ".$it" }
+        var n = 1
+        while (true) {
+            val candidate = if (n == 1) fileName else "$stem ($n)$ext"
+            val existing = table.byName(candidate) ?: return candidate
+            if (existing.classesRoots.map { it.path } == rootPaths) return candidate
+            n++
+        }
+    }
+
     private fun findLibrary(name: String) = ctx.store.workspace.libraryTable.byName(name)
         ?: ctx.store.workspace.projects.firstNotNullOfOrNull { it.libraryTable.byName(name) }
 
@@ -1663,26 +1682,29 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             false, "${src.fileName} is an Android library (.aar) — ${aarReason(module)}."
         )
 
-        val libName = src.fileName.toString()
-        if (module.dependencies.any { it is LibraryDependency && it.library.name == libName }) return UiAddResult(
-            false, "$libName is already a dependency of '$moduleName'."
-        )
         val project =
             ctx.projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
 
+        // The files this library's classes roots will be. A workspace library is identified by its NAME, and
+        // `create` replaces a same-named one, so a second `core.aar` from another folder must not reuse the
+        // name: it would repoint every module already depending on the first `core.aar` at this file.
+        val roots = runCatching {
+            if (isAar) AarExtractor.explode(
+                src, ctx.store.rootPath.resolve(".platform/libs").resolve(AarExtractor.explodeDirName(src))
+            ).classesJars
+            else listOf(src)
+        }
+        roots.exceptionOrNull()?.let { return UiAddResult(false, "Couldn't read ${src.fileName}: ${it.message}") }
+        val rootFiles = roots.getOrThrow().map { ctx.store.vfs.fileFor(it) }
+        val libName = localLibraryName(src.fileName.toString(), rootFiles.map { it.path })
+        if (module.dependencies.any { it is LibraryDependency && it.library.name == libName }) return UiAddResult(
+            false, "$libName is already a dependency of '$moduleName'."
+        )
+
         val registered = runCatching {
             ctx.store.workspace.libraryTable.create(libName).apply {
-                if (isAar) {
-                    kind = LibraryKind.AAR
-                    val into = ctx.store.rootPath.resolve(".platform/libs")
-                        .resolve(libName.substringBeforeLast('.'))
-                    AarExtractor.explode(
-                        src, into
-                    ).classesJars.forEach { addClassesRoot(ctx.store.vfs.fileFor(it)) }
-                } else {
-                    kind = LibraryKind.JAR
-                    addClassesRoot(ctx.store.vfs.fileFor(src))
-                }
+                kind = if (isAar) LibraryKind.AAR else LibraryKind.JAR
+                rootFiles.forEach { addClassesRoot(it) }
                 commit()
             }
         }
