@@ -223,6 +223,11 @@
     <string name="buildc_build_succeeded">Сборка успешна</string>
     <string name="buildc_build_failed">Сборка не удалась</string>
     <string name="codeaction_show_context_actions">Показать контекстные действия</string>
+    <string name="literal_tweak_decrease">Уменьшить</string>
+    <string name="literal_tweak_increase">Увеличить</string>
+    <string name="literal_tweak_scrub">Перетащите для настройки</string>
+    <string name="literal_tweak_pick_color">Выбрать цвет</string>
+    <string name="literal_tweak_toggle">Переключить значение</string>
     <string name="codeaction_preview_composable">Предпросмотр этого composable</string>
     <string name="codeaction_dismiss">Закрыть</string>
     <string name="codeaction_severity_error">Ошибка</string>

@@ -255,6 +255,11 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
 
     <!-- edpop (code actions / completion / signature help / sheets / symbol bar / breadcrumb) -->
     <string name="codeaction_show_context_actions">Mostrar ações de contexto</string>
+    <string name="literal_tweak_decrease">Diminuir</string>
+    <string name="literal_tweak_increase">Aumentar</string>
+    <string name="literal_tweak_scrub">Arraste para ajustar</string>
+    <string name="literal_tweak_pick_color">Escolher cor</string>
+    <string name="literal_tweak_toggle">Alternar valor</string>
     <string name="codeaction_preview_composable">Visualizar este composable</string>
     <string name="codeaction_dismiss">Dispensar</string>
     <string name="codeaction_severity_error">Erro</string>

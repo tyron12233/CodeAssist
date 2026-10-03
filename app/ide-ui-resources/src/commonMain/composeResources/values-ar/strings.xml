@@ -406,6 +406,11 @@
 
     <!-- edpop (CodeActionsPopup/CompletionPopup/SignatureHelpPopup/EditorSheets/EditorSymbolBar/EditorBottomNav/EditorBreadcrumbBar) -->
     <string name="codeaction_show_context_actions">إظهار إجراءات السياق</string>
+    <string name="literal_tweak_decrease">تقليل</string>
+    <string name="literal_tweak_increase">زيادة</string>
+    <string name="literal_tweak_scrub">اسحب للضبط</string>
+    <string name="literal_tweak_pick_color">اختيار لون</string>
+    <string name="literal_tweak_toggle">تبديل القيمة</string>
     <string name="codeaction_preview_composable">معاينة هذا الـ composable</string>
     <string name="codeaction_dismiss">تجاهل</string>
     <string name="codeaction_severity_error">خطأ</string>

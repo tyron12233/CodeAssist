@@ -250,6 +250,11 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="buildc_build_succeeded">Build berhasil</string>
     <string name="buildc_build_failed">Build gagal</string>
     <string name="codeaction_show_context_actions">Tampilkan tindakan konteks</string>
+    <string name="literal_tweak_decrease">Kurangi</string>
+    <string name="literal_tweak_increase">Tambah</string>
+    <string name="literal_tweak_scrub">Seret untuk menyesuaikan</string>
+    <string name="literal_tweak_pick_color">Pilih warna</string>
+    <string name="literal_tweak_toggle">Alihkan nilai</string>
     <string name="codeaction_preview_composable">Pratinjau composable ini</string>
     <string name="codeaction_dismiss">Tutup</string>
     <string name="codeaction_severity_error">Kesalahan</string>

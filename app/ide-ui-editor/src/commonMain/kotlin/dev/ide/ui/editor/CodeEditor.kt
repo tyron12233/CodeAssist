@@ -1144,6 +1144,19 @@ private fun CodeEditorContent(
             gutterWidthPx = gutterWidthPx,
         )
 
+        // Literal tweak chip (number scrub / color pick / boolean flip) in a file with @Preview composables. Gives way
+        // to the completion popup and the quick-fix bulb/menu, and stacks above the touch selection toolbar.
+        LiteralTweakLayer(
+            session = editorSession,
+            visible = engaged && !showPopup && !acts.menuOpen &&
+                !(acts.available.isNotEmpty() && acts.caretDiagnostic != null),
+            caretGeometry = { geometry.caretGeometry(it) },
+            gutterWidthPx = gutterWidthPx,
+            liftPx = if (interaction.handlesVisible && interaction.lastInputWasTouch) {
+                interaction.selectionToolbarHeightPx + with(LocalDensity.current) { 8.dp.roundToPx() }
+            } else 0,
+        )
+
         PreviewGutterIconsLayer(
             session = editorSession,
             metrics = metrics,

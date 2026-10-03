@@ -269,6 +269,11 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
 
     <!-- Code actions -->
     <string name="codeaction_show_context_actions">Mostrar acciones de contexto</string>
+    <string name="literal_tweak_decrease">Disminuir</string>
+    <string name="literal_tweak_increase">Aumentar</string>
+    <string name="literal_tweak_scrub">Arrastra para ajustar</string>
+    <string name="literal_tweak_pick_color">Elegir color</string>
+    <string name="literal_tweak_toggle">Alternar valor</string>
     <string name="codeaction_preview_composable">Previsualizar este composable</string>
     <string name="codeaction_dismiss">Descartar</string>
     <string name="codeaction_severity_error">Error</string>

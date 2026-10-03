@@ -367,6 +367,11 @@
 
     <!-- edpop (CodeActionsPopup/CompletionPopup/SignatureHelpPopup/EditorSheets/EditorSymbolBar/EditorBottomNav/EditorBreadcrumbBar) -->
     <string name="codeaction_show_context_actions">显示上下文操作</string>
+    <string name="literal_tweak_decrease">减少</string>
+    <string name="literal_tweak_increase">增加</string>
+    <string name="literal_tweak_scrub">拖动以调整</string>
+    <string name="literal_tweak_pick_color">选择颜色</string>
+    <string name="literal_tweak_toggle">切换值</string>
     <string name="codeaction_preview_composable">预览此 Composable</string>
     <string name="codeaction_dismiss">关闭</string>
     <string name="codeaction_severity_error">错误</string>
