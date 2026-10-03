@@ -7,6 +7,8 @@ import dev.ide.core.LoweredPreviewParameter
 import dev.ide.core.PreviewRunResult
 import dev.ide.lang.kotlin.KotlinLanguageBackend
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
+import dev.ide.lang.kotlin.interp.LiveLiteralState
+import dev.ide.lang.kotlin.interp.LiveLiterals
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
 import dev.ide.model.Module
@@ -237,7 +239,48 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         val classes = model.classes
         if (previewRefusals(entry, program, classes, text).isNotEmpty()) return null
         val parameter = resolvePreviewParameter(analyzer, vf, functionName, arity, classes)
-        LoweredComposePreview(entry, program, classes, parameter)
+        LoweredComposePreview(entry, program, classes, parameter).also { lowered ->
+            // Only this file's own functions are patchable: a function pulled in from another file carries spans
+            // into THAT file's text. The entry file is lowered whole, so this is a cache hit, not a second lowering.
+            val own = analyzer.lowerFile(vf)
+            val editable = own.filterTo(HashMap()) { (k, fn) -> program[k] === fn }.keys
+            liveLiterals[liveLiteralKey(file, functionName, arity)] =
+                LiveLiteralBase(LiveLiteralState(text, program, editable), lowered)
+        }
+    }
+
+    /** The last lowering of each preview (`path#name/arity`), the base a live-literal edit is patched against. */
+    private val liveLiterals = java.util.concurrent.ConcurrentHashMap<String, LiveLiteralBase>()
+
+    private class LiveLiteralBase(val state: LiveLiteralState, val lowered: LoweredComposePreview)
+
+    private fun liveLiteralKey(file: Path, functionName: String, arity: Int) = "${file.normalize()}#$functionName/$arity"
+
+    /**
+     * [text] applied to the last lowering of this preview as a live-literal edit (see [LiveLiterals]), or null
+     * when it isn't one and the full [lowerComposePreview] has to run. Pure data work over the cached program:
+     * no parse, no analysis and no engine lane, so it answers at typing speed even while the editor's analysis
+     * holds the engine.
+     *
+     * Same text as the last lowering answers null too, so a re-render request (pane reopened, index settled)
+     * always takes the full path and re-reads the other files the preview reaches.
+     */
+    fun liveLiteralPreview(file: Path, text: String, functionName: String, arity: Int): LoweredComposePreview? {
+        val key = liveLiteralKey(file, functionName, arity)
+        val base = liveLiterals[key] ?: return null
+        val next = LiveLiterals.patch(base.state, text) ?: return null
+        val old = base.lowered
+        val entryKey = old.program.entries.firstOrNull { it.value === old.entry }?.key
+        val lowered = old.copy(entry = entryKey?.let { next.program[it] } ?: old.entry, program = next.program)
+        liveLiterals[key] = LiveLiteralBase(next, lowered)
+        return lowered
+    }
+
+    /** Whether [text] is a live-literal edit of the last lowering of any preview in [file] — the pane renders such
+     *  an edit at once instead of waiting out its typing debounce. */
+    fun isLiveLiteralEdit(file: Path, text: String): Boolean {
+        val prefix = "${file.normalize()}#"
+        return liveLiterals.entries.any { (k, base) -> k.startsWith(prefix) && LiveLiterals.patch(base.state, text) != null }
     }
 
     /** The lowered preview function for [functionName] at [arity] (a `@PreviewParameter` preview has arity > 0);

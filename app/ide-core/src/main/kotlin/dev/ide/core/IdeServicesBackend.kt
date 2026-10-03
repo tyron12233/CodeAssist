@@ -597,10 +597,13 @@ class IdeServicesBackend(
 
     /** The lowered preview to render — lowest-priority engine work, preempted by analysis and completion,
      *  retries until the engine is free. Returns an ide-core type; on-device preview host calls this. */
-    suspend fun lowerComposePreview(path: String, functionName: String, arity: Int, text: String): LoweredComposePreview? =
-        timedPass("lower", path, { it?.program?.size ?: 0 }) {
+    suspend fun lowerComposePreview(path: String, functionName: String, arity: Int, text: String): LoweredComposePreview? {
+        // A live-literal edit patches the last lowering directly: no lane wait behind the editor's analysis.
+        runCatching { services.liveLiteralPreview(Paths.get(path), text, functionName, arity) }.getOrNull()?.let { return it }
+        return timedPass("lower", path, { it?.program?.size ?: 0 }) {
             preview { services.lowerComposePreview(Paths.get(path), text, functionName, arity) }
         }
+    }
 
     /** Why [functionName] isn't interpretable yet (lowering diagnostics + offending source), for the preview
      *  panel's not-interpretable state. Lowest-priority engine work; preempted by analysis and completion. */

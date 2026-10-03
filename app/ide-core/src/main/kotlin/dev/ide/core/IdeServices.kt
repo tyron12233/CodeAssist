@@ -2523,6 +2523,14 @@ class IdeServices private constructor(
         file: Path, text: String, functionName: String, arity: Int = 0,
     ): LoweredComposePreview? = composePreview.lowerComposePreview(file, text, functionName, arity)
 
+    /** [text] patched into the last lowering of this preview when the edit only changed one literal, else null
+     *  (see [dev.ide.core.services.ComposePreviewService.liveLiteralPreview]). Needs no engine lane. */
+    fun liveLiteralPreview(file: Path, text: String, functionName: String, arity: Int = 0): LoweredComposePreview? =
+        composePreview.liveLiteralPreview(file, text, functionName, arity)
+
+    /** Whether [text] only changed one literal since a preview in [file] was last lowered. */
+    fun isLiveLiteralEdit(file: Path, text: String): Boolean = composePreview.isLiveLiteralEdit(file, text)
+
     /**
      * The project library inputs the on-device Compose preview needs to make the user's library composables
      * (`Text`, third-party widgets, sibling library modules) callable: [file]'s module compile classpath

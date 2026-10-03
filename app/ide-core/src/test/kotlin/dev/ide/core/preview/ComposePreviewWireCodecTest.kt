@@ -164,4 +164,22 @@ class ComposePreviewWireCodecTest {
         assertEquals("com.Bar", arg.qualifiedName)
         assertTrue(arg.nullable)
     }
+
+    @Test
+    fun decodeMemoReusesUnchangedDeclarations() {
+        // A live session decodes every update; the renderer finds what changed by INSTANCE, so an unchanged
+        // function must come back as the previous update's instance and only the edited one as a new instance.
+        val a = smallFn("A")
+        val v1 = LoweredComposePreview(a, mapOf("A/0" to a, "B/0" to smallFn("B")))
+        val v2 = LoweredComposePreview(a, mapOf("A/0" to a, "B/0" to ResolvedFunction("B", emptyList(), c("edited"), emptyList())))
+        val memo = ComposePreviewWireCodec.DecodeMemo()
+        val first = ComposePreviewWireCodec.decode(ComposePreviewWireCodec.encode(v1), memo)
+        val second = ComposePreviewWireCodec.decode(ComposePreviewWireCodec.encode(v2), memo)
+        assertTrue(first.program["A/0"] === second.program["A/0"], "unchanged A keeps its instance")
+        assertTrue(first.entry === second.entry, "unchanged entry keeps its instance")
+        assertTrue(first.program["B/0"] !== second.program["B/0"], "edited B is a new instance")
+        assertEquals(c("edited"), second.program.getValue("B/0").body)
+        // Without a memo every decode is fresh (the open path and one-shot renders).
+        assertTrue(ComposePreviewWireCodec.decode(ComposePreviewWireCodec.encode(v1)).program["A/0"] !== first.program["A/0"])
+    }
 }

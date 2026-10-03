@@ -96,7 +96,8 @@ class ComposePreviewSessionService : Service() {
             sandbox: Array<out String>?,
             cb: IComposePreviewCallback?,
         ): Int = runCatching {
-            val lowered = ComposePreviewWireCodec.decode(File(blobFile!!).readBytes())
+            val memo = ComposePreviewWireCodec.DecodeMemo()
+            val lowered = ComposePreviewWireCodec.decode(File(blobFile!!).readBytes(), memo)
             val id = nextId.getAndIncrement()
             val session = Session(
                 id, widthPx, heightPx, density, night, File(frameDir!!).apply { mkdirs() }, cb!!,
@@ -105,6 +106,7 @@ class ComposePreviewSessionService : Service() {
                 namespace = packageName?.takeIf { it.isNotBlank() },
                 wrapContent = wrapContent,
                 sandbox = sandbox?.toList().orEmpty(),
+                decodeMemo = memo,
             )
             session.start(lowered)
             sessions[id] = session
@@ -118,13 +120,13 @@ class ComposePreviewSessionService : Service() {
 
         override fun update(sessionId: Int, blobFile: String?) {
             val session = sessions[sessionId] ?: return
-            runCatching { session.update(ComposePreviewWireCodec.decode(File(blobFile!!).readBytes())) }
+            runCatching { session.update(session.decode(File(blobFile!!).readBytes())) }
                 .onFailure { log.warn("compose session $sessionId update failed", it) }
         }
 
         override fun updateBytes(sessionId: Int, blob: ByteArray?) {
             val session = sessions[sessionId] ?: return
-            runCatching { session.update(ComposePreviewWireCodec.decode(blob!!)) }
+            runCatching { session.update(session.decode(blob!!)) }
                 .onFailure { log.warn("compose session $sessionId updateBytes failed", it) }
         }
 
@@ -262,7 +264,13 @@ class ComposePreviewSessionService : Service() {
         val wrapContent: Boolean = false,
         /** [dev.ide.interp.SandboxCategory] ids the project restricts; empty = unrestricted. */
         val sandbox: List<String> = emptyList(),
+        /** Previous update's decoded declarations: an update reuses the instance of every unchanged function, so the
+         *  renderer's identity diff re-runs only what the edit touched (a live-literal edit re-runs one function). */
+        private val decodeMemo: ComposePreviewWireCodec.DecodeMemo = ComposePreviewWireCodec.DecodeMemo(),
     ) {
+        fun decode(blob: ByteArray): LoweredComposePreview =
+            synchronized(decodeMemo) { ComposePreviewWireCodec.decode(blob, decodeMemo) }
+
         /** The policy the renderer runs under. Built once per session — it memoizes its per-callee decisions and
          *  accumulates the findings the IDE displays, so it must NOT be rebuilt per composition pass. */
         private val sandboxPolicy: PreviewSandboxPolicy? =

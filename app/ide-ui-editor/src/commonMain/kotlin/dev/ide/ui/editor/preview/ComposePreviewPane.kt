@@ -69,7 +69,8 @@ private const val PREVIEW_DEBOUNCE_MS = 400L
  * and behave the same. The open file's first `@Preview` is composed live inside the device card by the
  * platform render [host] (the on-device interpreter); the Night toggle drives the `uiMode`, mirroring
  * `@Preview(uiMode = UI_MODE_NIGHT_YES)`. The interpreter is NOT re-run on every keystroke: the rendered
- * buffer trails the editor by an idle debounce, and a Stop/Resume button freezes it entirely so editing
+ * buffer trails the editor by an idle debounce (except an edit that only changes a literal, which is patched
+ * into the rendered program and shown at once), and a Stop/Resume button freezes it entirely so editing
  * does no interpretation work. The Live/Paused badge reflects that state; Rebuild renders the current
  * buffer on demand. With no host (desktop) the card shows the "renders on device" note.
  */
@@ -98,7 +99,10 @@ fun ComposePreviewPane(
     var renderText by remember(path) { mutableStateOf(text) }
     LaunchedEffect(path, text, live) {
         if (!live) return@LaunchedEffect
-        delay(PREVIEW_DEBOUNCE_MS.milliseconds)
+        // A live-literal edit (only a number/string/char/boolean changed) is patched into the rendered program
+        // without re-lowering, so it's cheap enough to show on every keystroke.
+        val literal = host != null && runCatching { backend.preview.isLiveLiteralEdit(path, text) }.getOrDefault(false)
+        if (!literal) delay(PREVIEW_DEBOUNCE_MS.milliseconds)
         renderText = text
     }
     // Gate rendering on the workspace index being ready to resolve LIBRARY composables. Interpreting a preview

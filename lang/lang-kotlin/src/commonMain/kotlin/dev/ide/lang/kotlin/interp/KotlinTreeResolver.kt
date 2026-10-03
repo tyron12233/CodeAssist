@@ -883,48 +883,11 @@ class KotlinTreeResolver(
             t == "false" -> false to "kotlin.Boolean"
             t == "null" -> return RNode.Const(null, null, span(e))
             t.startsWith("'") -> parseChar(t) to "kotlin.Char"
-            else -> parseNumber(t) ?: (null to "kotlin.Int")
+            else -> parseKotlinNumberLiteral(t) ?: (null to "kotlin.Int")
         }
         return if (value == null) unsupported("unparseable literal `$t`", e)
         else RNode.Const(value, service.typeByFqn(fqn), span(e))
     }
-
-    /** Parse a Kotlin numeric literal → (boxed value, type FQN). Handles hex (`0xFFD32F2F`, a `Color(Long)`
-     *  argument) / binary (`0b1010`) prefixes, digit separators (`1_000`), the `u`/`U` (unsigned) and `L`
-     *  (long) suffixes, and floats (`1.5`, `1e5`, `1.5f`). An integer literal that overflows `Int` widens to
-     *  `Long` — matching Kotlin, so a 32-bit ARGB hex like `0xFFD32F2F` types as `Long`. Null when unparseable. */
-    private fun parseNumber(raw: String): Pair<Any, String>? {
-        val t = raw.replace("_", "")
-        val lower = t.lowercase()
-        // Hex / binary INTEGER literal — radix-prefixed, so its a-f / e digits are NOT a float exponent/suffix.
-        if (lower.startsWith("0x") || lower.startsWith("0b")) {
-            val radix = if (lower[1] == 'x') 16 else 2
-            var body = t.substring(2)
-            val isLong = body.endsWith("L") || body.endsWith("l")
-            if (isLong) body = body.dropLast(1)
-            if (body.endsWith("u") || body.endsWith("U")) body = body.dropLast(1) // model UInt/ULong as Int/Long
-            val asLong = body.toLongOrNull(radix) ?: body.toULongOrNull(radix)?.toLong() ?: return null
-            return integerValue(asLong, isLong)
-        }
-        // Float / Double — a fractional point, a decimal exponent, or an f/F suffix.
-        if ('.' in t || 'e' in lower || t.endsWith("f") || t.endsWith("F")) {
-            return if (t.endsWith("f") || t.endsWith("F")) t.dropLast(1).toFloatOrNull()?.let { it to "kotlin.Float" }
-            else t.toDoubleOrNull()?.let { it to "kotlin.Double" }
-        }
-        // Decimal integer.
-        var body = t
-        val isLong = body.endsWith("L") || body.endsWith("l")
-        if (isLong) body = body.dropLast(1)
-        if (body.endsWith("u") || body.endsWith("U")) body = body.dropLast(1)
-        val asLong = body.toLongOrNull() ?: return null
-        return integerValue(asLong, isLong)
-    }
-
-    /** An integer literal's boxed value + type: `Long` when an `L` suffix is present or the value doesn't fit
-     *  `Int` (Kotlin's auto-widening), else `Int`. */
-    private fun integerValue(value: Long, isLong: Boolean): Pair<Any, String> =
-        if (isLong || value !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) value to "kotlin.Long"
-        else value.toInt() to "kotlin.Int"
 
     private fun stringNode(e: KtStringTemplateExpression): RNode {
         val entries = e.entries

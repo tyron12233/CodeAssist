@@ -52,6 +52,9 @@ internal class PreviewBackend(private val ctx: BackendContext) : PreviewService 
     override suspend fun composePreviewReady(path: String): Boolean =
         ctx.background { ctx.services.composePreviewReady(Paths.get(path)) }
 
+    override suspend fun isLiveLiteralEdit(path: String, text: String): Boolean =
+        runCatching { ctx.services.isLiveLiteralEdit(Paths.get(path), text) }.getOrDefault(false)
+
     override suspend fun drawablePreview(path: String, text: String): UiDrawable? =
         ctx.services.drawablePreview(Paths.get(path), text)?.let(DrawableMapping::toUi)
 

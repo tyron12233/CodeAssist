@@ -15,6 +15,7 @@ import dev.ide.interp.InterpreterHooks
 import dev.ide.interp.LibraryExecutor
 import dev.ide.interp.PreviewResourceResolver
 import dev.ide.lang.kotlin.interp.ResolvedClass
+import dev.ide.lang.kotlin.interp.liveEditDirtyClosure
 import dev.ide.lang.kotlin.interp.ResolvedFunction
 import java.util.logging.Logger
 
@@ -121,18 +122,6 @@ class ComposePreviewRenderer(
         onError: @Composable (Throwable) -> Unit = {},
         onPartialError: (Throwable?) -> Unit = {},
     ) {
-        // Live edit: the lowerer REUSES the ResolvedFunction instance for a function whose text is unchanged, so
-        // the set of functions that actually changed since the last render is exactly those whose instance now
-        // differs — an identity diff of consecutive program maps. A changed function always gets a fresh instance
-        // (no false negatives → no stale body); if the pipeline ever copies instances, everything just looks
-        // dirty and re-runs (still correct — state survives via the edit-stable call-site keys). First render:
-        // empty (a fresh composition skips nothing anyway).
-        val prevProgram = remember { arrayOfNulls<Map<String, ResolvedFunction>>(1) }
-        val dirtyCallees = remember(program) {
-            val prev = prevProgram[0]
-            (if (prev == null) emptySet() else program.keys.filterTo(HashSet()) { program[it] !== prev[it] })
-                .also { prevProgram[0] = program }
-        }
         // Single-instance storage for top-level `val`/`var`s, REMEMBERED with no key so it OUTLIVES the interpreter
         // below: `remember(program, classes)` rebuilds the Interpreter whenever program/classes identity churns
         // (the isolated `:preview` render re-supplies them across recompositions), and a fresh per-interpreter map
@@ -140,6 +129,34 @@ class ComposePreviewRenderer(
         // CompositionLocal identity (`provides`/`.current` land on different instances → "No X provided", the grey
         // out-of-process custom-theme preview). Sharing the store keeps a top-level val's one instance stable.
         val topLevelStore = remember { HashMap<String, Any?>() }
+        // Live edit: the lowerer REUSES the ResolvedFunction instance for a function whose text is unchanged, so
+        // the set of functions that actually changed since the last render is exactly those whose instance now
+        // differs — an identity diff of consecutive program maps. A changed function always gets a fresh instance
+        // (no false negatives → no stale body); if the pipeline ever copies instances, everything just looks
+        // dirty and re-runs (still correct — state survives via the edit-stable call-site keys). First render:
+        // empty (a fresh composition skips nothing anyway).
+        //
+        // The changed functions alone aren't enough to force: a composable only runs when its caller does, so an
+        // unchanged no-argument caller would be skipped and the edited body below it never reached. The dirty set
+        // is widened to every function that reaches a changed one ([liveEditDirtyClosure]), and a changed source
+        // CLASS (which the closure can't follow into its users) dirties everything.
+        val prevProgram = remember { arrayOfNulls<Map<String, ResolvedFunction>>(1) }
+        val prevClasses = remember { arrayOfNulls<List<ResolvedClass>>(1) }
+        val dirtyCallees = remember(program, classes) {
+            val prev = prevProgram[0]
+            val prevCls = prevClasses[0]
+            prevProgram[0] = program
+            prevClasses[0] = classes
+            if (prev == null) return@remember emptySet()
+            val classesChanged = prevCls != null &&
+                (prevCls.size != classes.size || classes.indices.any { classes[it] !== prevCls[it] })
+            val changed = program.keys.filterTo(HashSet()) { program[it] !== prev[it] }
+            val dirty = if (classesChanged) program.keys.toSet() else liveEditDirtyClosure(program, classes, changed)
+            // A changed top-level `val` initializer (or one reading a changed value) must be re-evaluated, not
+            // served from the store; its readers are in the dirty set, so they re-run and re-read it.
+            dirty.forEach { topLevelStore.remove(it) }
+            dirty
+        }
         val interpreter = remember(program, classes) {
             // tolerateGaps: a single unsupported construct skips rather than blanking the whole preview (the
             // editor default); a lesson passes false so a gap surfaces as a visible error instead of a blank.

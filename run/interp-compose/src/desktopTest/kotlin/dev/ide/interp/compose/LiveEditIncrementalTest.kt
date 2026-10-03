@@ -110,6 +110,64 @@ class LiveEditIncrementalTest {
         }
     }
 
+    /** `@Composable fun name() { callees… }` — calls each named source composable in order. */
+    private fun composableCalling(name: String, vararg callees: String): ResolvedFunction {
+        val calls = callees.mapIndexed { i, callee ->
+            RNode.Call(
+                ResolvedCallable.Source(callee, "$callee/0", emptyList(), isComposable = true),
+                DispatchKind.TOP_LEVEL, receiver = null, args = emptyList(), callSiteKey = CallSiteKey(i + 1), source = span,
+            )
+        }
+        return ResolvedFunction(name, emptyList(), RNode.Block(calls, false, span), emptyList(), returnsUnit = true)
+    }
+
+    @Test
+    fun editBelowAnUnchangedCallerStillReruns() {
+        // Preview → Middle → Leaf, plus an unrelated Other. Only Leaf changes. Middle takes no arguments and is
+        // unchanged, so on its own it would be SKIPPED and Leaf's new body never reached: the renderer must force
+        // the callers of a changed function down to it, while Other (which doesn't reach Leaf) still skips.
+        liveEditMarks.clear()
+        val preview = composableCalling("Preview", "Middle", "Other")
+        val middle = composableCalling("Middle", "Leaf")
+        val other = composableMarking("Other", "O")
+        val v1 = mapOf("Preview/0" to preview, "Middle/0" to middle, "Leaf/0" to composableMarking("Leaf", "L"), "Other/0" to other)
+        val v2 = v1 + ("Leaf/0" to composableMarking("Leaf", "L2"))
+        renderEdit(preview, v1, v2, until = "L2")
+        assertEquals(listOf("L", "O", "L2"), liveEditMarks.snapshot(), "Leaf re-runs through its unchanged caller; Other skips")
+    }
+
+    /** Render [v1] into a live composition, swap in [v2], and pump frames until [until] is marked. */
+    private fun renderEdit(entry: ResolvedFunction, v1: Map<String, ResolvedFunction>, v2: Map<String, ResolvedFunction>, until: String) {
+        val programState = mutableStateOf(v1)
+        val renderer = ComposePreviewRenderer(loader = null)
+        val executor = Executors.newSingleThreadExecutor { Thread(it, "liveedit-test") }
+        val cd = executor.asCoroutineDispatcher()
+        try {
+            runBlocking {
+                withTimeout(30_000) {
+                    val clock = BroadcastFrameClock()
+                    val recomposer = Recomposer(coroutineContext + cd + clock)
+                    val runJob = launch(cd + clock) { recomposer.runRecomposeAndApplyChanges() }
+                    recomposer.currentState.first { it == Recomposer.State.Idle }
+                    val composition = withContext(cd) {
+                        Composition(UnitApplier, recomposer).also { c ->
+                            c.setContent { renderer.Render(entry, programState.value, emptyList(), emptyList(), onError = {}, onPartialError = {}) }
+                        }
+                    }
+                    withContext(cd) { programState.value = v2; Snapshot.sendApplyNotifications() }
+                    var frame = 0L
+                    while (!liveEditMarks.snapshot().contains(until)) { clock.sendFrame(frame++); delay(5) }
+                    // A few more frames so an unexpected extra re-run would show up in the marks.
+                    repeat(3) { clock.sendFrame(frame++); delay(5) }
+                    withContext(cd) { composition.dispose() }
+                    recomposer.cancel(); runJob.cancel()
+                }
+            }
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
     private fun MutableList<String>.snapshot(): List<String> = synchronized(this) { toList() }
 
     private object UnitApplier : Applier<Unit> {

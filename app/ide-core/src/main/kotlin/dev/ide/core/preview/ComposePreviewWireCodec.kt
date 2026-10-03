@@ -4,6 +4,8 @@ import dev.ide.core.LoweredComposePreview
 import dev.ide.core.LoweredPreviewParameter
 import dev.ide.lang.kotlin.interp.JavaDataReader
 import dev.ide.lang.kotlin.interp.JavaDataWriter
+import dev.ide.lang.kotlin.interp.ResolvedClass
+import dev.ide.lang.kotlin.interp.ResolvedFunction
 import dev.ide.lang.kotlin.interp.ResolvedTreeCodec
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -44,19 +46,64 @@ object ComposePreviewWireCodec {
         return bos.toByteArray()
     }
 
-    fun decode(bytes: ByteArray): LoweredComposePreview {
-        val d = DataInputStream(ByteArrayInputStream(bytes))
+    /**
+     * Decoded declarations kept across the [decode]s of one live preview session. The renderer tells what an edit
+     * changed by INSTANCE identity (an unchanged function keeps its instance, so only changed ones are forced to
+     * re-run), but every decode builds fresh instances, which made every update re-run the whole preview. With a
+     * memo, a declaration whose encoded bytes are identical to the previous update's reuses the previous instance.
+     * Not thread-safe: one session's updates are decoded one at a time.
+     */
+    class DecodeMemo {
+        internal var entry: Pair<ByteArray, ResolvedFunction>? = null
+        internal var functions: Map<String, Pair<ByteArray, ResolvedFunction>> = emptyMap()
+        internal var classes: Map<String, Pair<ByteArray, ResolvedClass>> = emptyMap()
+    }
+
+    fun decode(bytes: ByteArray, memo: DecodeMemo? = null): LoweredComposePreview {
+        val input = PositionedInput(bytes)
+        val d = DataInputStream(input)
         require(d.readInt() == MAGIC) { "bad Compose preview wire magic" }
         require(d.readInt() == ResolvedTreeCodec.FORMAT) { "bad Compose preview wire format" }
         return ResolvedTreeCodec.Reader(JavaDataReader(d)).run {
+            // Decode one declaration, handing back the previous instance when its bytes are unchanged.
+            fun <T> reuse(previous: Pair<ByteArray, T>?, read: () -> T): Pair<ByteArray, T> {
+                val start = input.position
+                val value = read()
+                val slice = bytes.copyOfRange(start, input.position)
+                return if (previous != null && previous.first.contentEquals(slice)) previous else slice to value
+            }
+            val entry = reuse(memo?.entry) { function() }
+            val functions = LinkedHashMap<String, Pair<ByteArray, ResolvedFunction>>()
+            repeat(int()) {
+                val key = str()
+                functions[key] = reuse(memo?.functions?.get(key)) { function() }
+            }
+            val classes = ArrayList<Pair<ByteArray, ResolvedClass>>()
+            repeat(int()) {
+                // Classes are a list, so the previous instance is found by FQN after decoding.
+                val decoded = reuse<ResolvedClass>(null) { klass() }
+                val previous = memo?.classes?.get(decoded.second.fqn)
+                classes += if (previous != null && previous.first.contentEquals(decoded.first)) previous else decoded
+            }
+            val parameter = nullable {
+                LoweredPreviewParameter(str(), strN(), nullable { klass() }, int())
+            }
+            memo?.let { m ->
+                m.entry = entry
+                m.functions = functions
+                m.classes = classes.associateBy { it.second.fqn }
+            }
             LoweredComposePreview(
-                entry = function(),
-                program = map { function() },
-                classes = list { klass() },
-                parameter = nullable {
-                    LoweredPreviewParameter(str(), strN(), nullable { klass() }, int())
-                },
+                entry = entry.second,
+                program = functions.mapValuesTo(LinkedHashMap()) { it.value.second },
+                classes = classes.map { it.second },
+                parameter = parameter,
             )
         }
+    }
+
+    /** A byte-array stream that exposes its read position (`DataInputStream` reads through without buffering). */
+    private class PositionedInput(bytes: ByteArray) : ByteArrayInputStream(bytes) {
+        val position: Int get() = pos
     }
 }

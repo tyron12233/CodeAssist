@@ -278,6 +278,11 @@ interface PreviewService {
      *  immediately (unchanged behavior). */
     suspend fun composePreviewReady(path: String): Boolean = true
 
+    /** Whether [text] differs from the last lowered buffer of a `@Preview` in [path] only inside one literal
+     *  (a number, string, char or boolean). Such an edit is applied to the rendered preview directly, so the
+     *  pane renders it at once instead of waiting out its typing debounce. False when unsure. */
+    suspend fun isLiveLiteralEdit(path: String, text: String): Boolean = false
+
     // ---- Real-view layout attribute editor ----
     // Backs the Preview's editable attribute sheet: it edits the layout XML source (the same buffer the Code
     // view shows) driven by the SAME allowed-attribute metadata + completion the XML editor uses. [sourceOffset]
