@@ -140,9 +140,10 @@ data class LlmRequest(
 )
 
 /**
- * The neutral effort levels. [NONE] and [MINIMAL] exist for the OpenAI dialect, where newer reasoning models
- * reject function tools combined with reasoning on `/v1/chat/completions`, so `none` is what lets a tool-using
- * agent run against them at all; providers without that constraint treat them as the lowest real effort.
+ * The neutral effort levels. [NONE] and [MINIMAL] exist for the OpenAI dialect: newer reasoning models reject
+ * function tools combined with reasoning on `/v1/chat/completions`, so behind an OpenAI-compatible gateway `none`
+ * is what lets a tool-using agent run against them at all (the official endpoint uses the Responses API, which
+ * has no such limit); providers without that constraint treat them as the lowest real effort.
  */
 object LlmEffort {
     const val NONE = "none"

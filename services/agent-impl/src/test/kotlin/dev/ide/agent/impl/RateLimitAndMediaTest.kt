@@ -219,10 +219,18 @@ class RateLimitAndMediaTest {
         runBlocking { AnthropicProvider(anthropic).client(ProviderConfig("k")).chat(request).toList() }
         assertTrue(anthropic.lastBody!!.contains(""""tool_use_id":"c1","content":[{"type":"text","text":"a screenshot"},{"type":"image""""), anthropic.lastBody)
 
+        // Both OpenAI dialects carry tool results as text, so the images follow them in a user turn.
         val openai = CapturingTransport(emptyList())
         runBlocking { OpenAiProvider(openai).client(ProviderConfig("k")).chat(request).toList() }
         val body = openai.lastBody!!
-        assertTrue(body.indexOf("\"role\":\"tool\"") < body.indexOf("Images returned by the tool calls above"), body)
+        val result = body.indexOf("\"type\":\"function_call_output\"")
+        assertTrue(result >= 0 && result < body.indexOf("Images returned by the tool calls above"), body)
+
+        val gateway = CapturingTransport(emptyList())
+        runBlocking { OpenAiProvider(gateway).client(ProviderConfig("k", baseUrl = "https://gateway.example")).chat(request).toList() }
+        val chatBody = gateway.lastBody!!
+        val toolMessage = chatBody.indexOf("\"role\":\"tool\"")
+        assertTrue(toolMessage >= 0 && toolMessage < chatBody.indexOf("Images returned by the tool calls above"), chatBody)
 
         val gemini = geminiBody(request.copy(model = "gemini-3.8-flash"))
         assertTrue(gemini.indexOf("functionResponse") < gemini.indexOf("inline_data"), gemini)

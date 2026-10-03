@@ -120,6 +120,9 @@ class AgentTest {
         assertEquals(5, usage.outputTokens)
     }
 
+    /** A custom base URL: the OpenAI-compatible gateway path, which speaks Chat Completions. */
+    private val gateway = ProviderConfig("k", baseUrl = "https://gateway.example")
+
     @Test
     fun openAiDecodesTextAndToolCall() {
         val provider = OpenAiProvider(
@@ -134,7 +137,7 @@ class AgentTest {
                 ),
             ),
         )
-        val events = runBlocking { provider.client(ProviderConfig("k")).chat(request()).toList() }
+        val events = runBlocking { provider.client(gateway).chat(request()).toList() }
 
         assertEquals("Hi", events.filterIsInstance<LlmStreamEvent.TextDelta>().joinToString("") { it.text })
         val call = events.filterIsInstance<LlmStreamEvent.ToolCallCompleted>().single()
@@ -186,7 +189,7 @@ class AgentTest {
     @Test
     fun openAiSendsReasoningEffortOnlyWhenRequested() {
         val transport = CapturingTransport(payloads = listOf("[DONE]"))
-        val client = OpenAiProvider(transport).client(ProviderConfig("k"))
+        val client = OpenAiProvider(transport).client(gateway)
 
         runBlocking {
             client.chat(LlmRequest("gpt-5.6-luna", null, listOf(LlmMessage.user("hi")), effort = "none")).toList()

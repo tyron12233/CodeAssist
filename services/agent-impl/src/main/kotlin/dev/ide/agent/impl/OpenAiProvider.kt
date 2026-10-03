@@ -22,10 +22,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * The OpenAI Chat Completions provider. A configurable base URL makes the same adapter serve
- * OpenAI-compatible gateways (OpenRouter, Ollama, LocalAI, and similar). The official endpoint takes
- * `max_completion_tokens`; compatible gateways generally take `max_tokens`, so the parameter name is
- * chosen from whether a custom base URL was set.
+ * The OpenAI provider. The official endpoint is driven through the Responses API ([OpenAiResponses]); a
+ * configurable base URL makes the same adapter serve OpenAI-compatible gateways (OpenRouter, Ollama, LocalAI, and
+ * similar) over Chat Completions, which is what they implement, with the `max_tokens` they generally take.
  *
  * [explicitPromptCaching] switches on the breakpoint markers that gateways fronting Anthropic models require:
  * OpenAI caches long prefixes by itself, but a Claude model reached through a gateway caches nothing unless
@@ -50,18 +49,31 @@ class OpenAiProvider(
         // is what lifts the automatic prefix cache's hit rate; it is a routing hint only, never an identifier.
         val cacheKey = "codeassist-" + java.util.UUID.randomUUID().toString()
         return LlmClient { request ->
-            val official = config.baseUrl.isNullOrBlank()
-            val base = config.baseUrl?.trimEnd('/') ?: DEFAULT_BASE
-            val sse = SseRequest(
-                url = "$base/v1/chat/completions",
-                headers = mapOf(
-                    "Authorization" to "Bearer ${config.apiKey}",
-                    "content-type" to "application/json",
-                ),
-                jsonBody = buildBody(request, official, cacheKey),
-                caCertificatePem = config.caCertificatePem,
+            val base = config.baseUrl?.takeIf { it.isNotBlank() }?.trimEnd('/') ?: DEFAULT_BASE
+            val official = base == DEFAULT_BASE
+            val headers = mapOf(
+                "Authorization" to "Bearer ${config.apiKey}",
+                "content-type" to "application/json",
             )
-            stream(sse)
+            if (official) {
+                // OpenAI itself speaks the Responses API, which takes reasoning and function tools together.
+                val sse = SseRequest(
+                    url = base + OpenAiResponses.PATH,
+                    headers = headers,
+                    jsonBody = OpenAiResponses.body(request, cacheKey),
+                    caCertificatePem = config.caCertificatePem,
+                )
+                streamResponses(sse)
+            } else {
+                // Compatible gateways implement Chat Completions, not the Responses API.
+                val sse = SseRequest(
+                    url = "$base/v1/chat/completions",
+                    headers = headers,
+                    jsonBody = buildBody(request),
+                    caCertificatePem = config.caCertificatePem,
+                )
+                stream(sse)
+            }
         }
     }
 
@@ -82,11 +94,16 @@ class OpenAiProvider(
         if (!decoder.completed) decoder.finish().forEach { emit(it) }
     }.catch { e -> emit(LlmStreamEvent.Failed(e.message ?: "OpenAI stream error", e)) }
 
-    private fun buildBody(request: LlmRequest, official: Boolean, cacheKey: String): String = buildJsonObject {
+    private fun streamResponses(sse: SseRequest): Flow<LlmStreamEvent> = flow {
+        val decoder = OpenAiResponsesDecoder()
+        transport.sse(sse).collect { data -> decoder.decode(data).forEach { emit(it) } }
+        if (!decoder.completed) decoder.finish(null, null).forEach { emit(it) }
+    }.catch { e -> emit(LlmStreamEvent.Failed(e.message ?: "OpenAI stream error", e)) }
+
+    private fun buildBody(request: LlmRequest): String = buildJsonObject {
         put("model", request.model)
         put("stream", true)
-        if (official) put("prompt_cache_key", cacheKey)
-        put(if (official) "max_completion_tokens" else "max_tokens", request.maxTokens)
+        put("max_tokens", request.maxTokens)
         // A reasoning model applies a default reasoning effort even when none is sent; on chat completions
         // that default plus function tools is rejected, so forwarding "none" is how a tool-using agent runs
         // against such a model. Non-reasoning models ignore the field. Sent only when explicitly requested.
