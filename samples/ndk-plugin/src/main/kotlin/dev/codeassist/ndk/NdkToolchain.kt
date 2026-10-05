@@ -168,8 +168,17 @@ class NdkToolchain(
     /**
      * Compile [source] to [output]. [cpp] selects the C++ driver, which is `--driver-mode=g++` rather than a
      * `clang++` of its own, because an APK carries no symlink to make one.
+     *
+     * With a [depFile], clang also writes every header the source opened into it (`-MD -MF`), as a by-product
+     * of the same compile, which is what lets the next build skip this source until one of them changes.
      */
-    fun compile(source: Path, output: Path, cpp: Boolean, extraFlags: List<String> = emptyList()): ToolResult {
+    fun compile(
+        source: Path,
+        output: Path,
+        cpp: Boolean,
+        extraFlags: List<String> = emptyList(),
+        depFile: Path? = null,
+    ): ToolResult {
         val driver = driver ?: return ToolResult(false, "no compiler for this device's ABI")
         Files.createDirectories(output.parent)
         return run(
@@ -178,6 +187,7 @@ class NdkToolchain(
                 if (cpp) add("--driver-mode=g++")
                 addAll(commonFlags())
                 addAll(extraFlags)
+                if (depFile != null) { add("-MD"); add("-MF"); add(depFile.toString()) }
                 add("-c"); add(source.toString())
                 add("-o"); add(output.toString())
             }

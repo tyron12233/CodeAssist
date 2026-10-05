@@ -140,7 +140,7 @@ class NativeCppTemplate : ProjectTemplate {
           language standards (this project was created with `$standard`), the STL, optimization, extra flags
           and the libraries to link. Everything in it has a default; the file spells them out so it says what
           can be changed.
-        - Building the project writes `app/src/main/jniLibs/arm64-v8a/lib$library.so`.
+        - Building the project writes `app/build/intermediates/ndk/lib/arm64-v8a/lib$library.so`.
 
         Errors appear in the editor as you type, reported by the same clang that builds the code, so the two
         cannot disagree.

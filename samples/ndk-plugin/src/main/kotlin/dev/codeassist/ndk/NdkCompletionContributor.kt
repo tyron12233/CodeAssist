@@ -28,7 +28,7 @@ class NdkCompletionContributor(
 
     override val id = "ndk.clang"
 
-    private var cachedKey: Triple<String, Int, Int>? = null
+    private var cachedKey: List<Any>? = null
     private var cached: List<ClangCompletion> = emptyList()
 
     override suspend fun fillCompletionVariants(params: CompletionParams, result: CompletionResultSet) {
@@ -52,19 +52,20 @@ class NdkCompletionContributor(
         text: String,
         params: CompletionParams,
     ): List<ClangCompletion>? {
+        // The same flags the editor's diagnostics use, so the popup and the squiggles see one file: the
+        // module's own facet, or on a host that does not hand completion its module, the one diagnostics
+        // last recorded for the file's module (see [NdkFlags.remember]). An unseen module gets the defaults.
+        val facet = facetOf(params) ?: NdkFlags.facetFor(path) ?: NdkFacet()
+
         // Keyed on the buffer and the position, NOT the prefix: clang is asked at the start of the word being
-        // typed, so every keystroke within one word is the same query and must not re-run the compiler.
+        // typed, so every keystroke within one word is the same query and must not re-run the compiler. The
+        // facet is part of it, since a different standard offers different members.
         val wordStart = params.replacementRange.start
-        val key = Triple(params.document.file.path, text.hashCode(), wordStart)
+        val key = listOf(params.document.file.path, text.hashCode(), wordStart, facet.hashCode())
         synchronized(this) { if (cachedKey == key) return cached }
 
         val (line, column) = LineOffsets(text).lineColOf(wordStart)
         val cpp = NdkPlugin.CPP_SUFFIXES.any { path.fileName.toString().endsWith(it) }
-
-        // The same flags the editor's diagnostics use, so the popup and the squiggles see one file. They
-        // come from a lookup rather than from the module, because `CompletionParams` carries no `Module`
-        // (see [NdkFlags.remember]); an unseen module falls back to the defaults.
-        val facet = NdkFlags.facetFor(path) ?: NdkFacet()
 
         val result = withContext(Dispatchers.IO) {
             when (toolchain.prepare()) {
@@ -89,6 +90,17 @@ class NdkCompletionContributor(
         }
         return candidates
     }
+
+    /**
+     * The facet of the module the host says the file belongs to. Null when it belongs to none, carries no
+     * facet, or the host predates SPI 3.1.0 and [CompletionParams.module] does not link.
+     */
+    private fun facetOf(params: CompletionParams): NdkFacet? =
+        try {
+            params.module?.facets?.get(NdkFacet.KEY)
+        } catch (e: LinkageError) {
+            null
+        }
 }
 
 /**

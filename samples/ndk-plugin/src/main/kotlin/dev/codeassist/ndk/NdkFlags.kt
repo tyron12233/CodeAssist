@@ -36,11 +36,10 @@ internal object NdkFlags {
     /**
      * Record [facet] as the configuration for everything under [moduleDir].
      *
-     * Completion needs these flags and cannot get them: `CompletionParams` carries the document, the caret
-     * and the scope, but no `Module`, so a contributor has no way to ask which module its file belongs to
-     * (diagnostics, through `AnalysisTarget.module`, does). This is the seam between the two -- the
-     * diagnostics provider runs on every open C or C++ file, so by the time a popup is asked for in one, its
-     * module's facet has been seen.
+     * Completion reads the facet from `CompletionParams.module`, which arrived in SPI 3.1.0. On an older host
+     * it has no way to ask which module its file belongs to (diagnostics, through `AnalysisTarget.module`,
+     * does), and this is the seam between the two -- the diagnostics provider runs on every open C or C++
+     * file, so by the time a popup is asked for in one, its module's facet has been seen.
      *
      * A miss is not a failure: [facetFor] answers null and the caller uses the defaults, which is what a
      * module carrying no facet would give anyway.

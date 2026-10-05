@@ -148,10 +148,18 @@ off `mergeNativeLibs<Variant>` (the Android packaging merge) and the module's `a
 Configuring a task no build system registered is silently ignored, which is how one plugin serves both
 pipelines without probing which is running.
 
-The `.so` is written into the module's own `src/main/jniLibs/<abi>/`. That is not where generated output
-would ideally live, but it is the only place the packaging merge looks: it collects the module's *declared*
-`jniLibs` content roots, and those come from the module type rather than from anything a plugin can add. A
-build directory would be tidier and would simply never be packaged.
+The `.so` is written to `build/intermediates/ndk/lib/<abi>/` and declared through
+`BuildConfiguration.addNativeLibraries` (SPI 3.1.0), which the Android build merges into the APK (or an AAR's
+`jni/`) after this task. On an IDE older than that the call does not link, and the plugin falls back to the
+module's own `src/main/jniLibs/<abi>/`, the only place such a host's merge looks. Moving to the build directory
+deletes the copy an earlier version left in `src/main/jniLibs`, because the merge keeps the first library of a
+name and would otherwise go on packaging the stale one.
+
+The build is incremental. Each object lives under `build/intermediates/ndk/obj/<abi>/`, named after its
+source's path in the module, beside the dependency file clang writes with `-MD`. A source compiles again only
+when it, or any header it included, is newer than its object; a change of flags or of compiler version
+rebuilds everything, and the library is linked only when an object changed. Headers in the source directories
+and every header the last build recorded are task inputs too, so editing only a header is not "up to date".
 
 Compiler output is parsed by the same `ClangDiagnostics` the editor uses, so a build error and the squiggle
 on the same line say the same thing in the same words. An ABI the bundled toolchain cannot target is reported
@@ -183,7 +191,7 @@ so the sysroot and resource headers are being found.
 
 **The build**, also on device: an ordinary Build of a module with an `[ndk]` facet produced
 `src/main/jniLibs/arm64-v8a/libnative-lib.so` — AArch64 `ELF64 DYN` exporting `ndk_sum` — plus its object
-file under `build/ndk/`. The `[ndk]` panel renders and is editable in Module Settings.
+file under `build/ndk/` (both have since moved under `build/intermediates/ndk/`). The `[ndk]` panel renders and is editable in Module Settings.
 
 **Completion**, on device: typing `values.s` on a `std::vector<int>` offers `push_back(const_reference x)`,
 `resize(size_type sz)`, `erase(const_iterator position)` and the rest, read out of the real libc++ headers,
