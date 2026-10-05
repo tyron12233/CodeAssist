@@ -67,6 +67,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -207,7 +208,7 @@ class IdeServicesBackend(
      *
      *  1. [interactive] — completion: highest priority, preempts both background and preview.
      *  2. [background] — analysis/hints/semantic/folding/signature: preempts preview, preempted by interactive
-     *     (throws [EngineCanceledException]; callers map it to a "skipped, retry next edit" result).
+     *     (the scheduler throws [EngineCanceledException]; [background] below re-runs the call after it).
      *  3. [preview] — preview rendering/lowering: lowest priority, preempted by both; retries automatically.
      */
     // The observer records a crash breadcrumb the instant a lane's block STARTS running on the engine worker
@@ -226,8 +227,26 @@ class IdeServicesBackend(
     )
     override suspend fun <T> interactive(op: String, block: suspend () -> T): T =
         logEditorFailures("completion") { scheduler.interactive(label = op.ifEmpty { "completion" }, block = block) }
+    /**
+     * A background-lane call that waits out preemption instead of failing with it. Completion preempting this
+     * lane is the scheduler's business, not the caller's: most callers (icon import, the agent's workspace
+     * tools, preview readiness) are one-off operations with no "skip it, the next keystroke retries" to fall
+     * back on, and an [EngineCanceledException] escaping one of them crashed the app. So while the caller still
+     * wants the result, the call runs again once the completion has had the worker. Cancelling the caller still
+     * ends it, as a [kotlinx.coroutines.CancellationException].
+     */
     override suspend fun <T> background(op: String, block: suspend () -> T): T =
-        logEditorFailures("analysis") { scheduler.background(label = op.ifEmpty { "background" }, block = block) }
+        logEditorFailures("analysis") { backgroundUntilRun(op.ifEmpty { "background" }, block) }
+
+    private suspend fun <T> backgroundUntilRun(label: String, block: suspend () -> T): T {
+        while (true) {
+            try {
+                return scheduler.background(label = label, block = block)
+            } catch (_: EngineCanceledException) {
+                delay(BACKGROUND_RETRY_MS)
+            }
+        }
+    }
     override suspend fun <T> preview(op: String, block: suspend () -> T): T =
         logEditorFailures("preview") { scheduler.preview(label = op.ifEmpty { "preview" }, block = block) }
 
@@ -781,6 +800,9 @@ class IdeServicesBackend(
 
     private companion object {
         const val ANALYTICS_CONSENT_PREF = "analytics.consent"
+
+        /** How long a preempted background-lane call waits before running again (a completion's typical span). */
+        const val BACKGROUND_RETRY_MS = 30L
     }
 
     /** Make [next] the active project: swap it in, bump the epoch (re-keys UI state), and close the old one. */

@@ -11,6 +11,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
@@ -146,6 +147,13 @@ class EngineScheduler(
                     if (backgroundToken === token) backgroundToken = null
                 }
             }
+        } catch (e: EngineCanceledException) {
+            // The caller's own cancellation flips the token too ([cancelOnCallerCancel]), and has to surface as
+            // cancellation: a cancelled coroutine that ends in a plain RuntimeException is reported as FAILED, so
+            // the exception reaches the uncaught handler and kills the app (a LaunchedEffect whose key changed
+            // while its engine call was in flight). Only a preemption with the caller still active stays this.
+            currentCoroutineContext().ensureActive()
+            throw e
         } finally {
             backgroundPending.decrementAndGet()
         }

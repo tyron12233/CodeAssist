@@ -61,6 +61,35 @@ class EngineSchedulerTest {
     }
 
     @Test
+    fun cancellingTheCallerEndsABackgroundPassAsCancellationNotAFailure() {
+        // The caller's cancellation flips the pass's token, so the block bails with EngineCanceledException.
+        // It must reach the caller as CancellationException: a cancelled coroutine ending in a RuntimeException
+        // counts as FAILED and lands in the uncaught handler (an app crash from a LaunchedEffect re-keying).
+        runBlocking {
+            val sched = EngineScheduler()
+            val started = CompletableDeferred<Unit>()
+            val outcome = CompletableDeferred<Throwable?>()
+            val caller = launch(Dispatchers.Default) {
+                try {
+                    sched.background {
+                        started.complete(Unit)
+                        busy(5_000)
+                    }
+                    outcome.complete(null)
+                } catch (t: Throwable) {
+                    outcome.complete(t)
+                    throw t
+                }
+            }
+            started.await()
+            caller.cancel()
+            val thrown = withTimeout(3_000) { outcome.await() }
+            assertTrue(thrown is kotlinx.coroutines.CancellationException, "got $thrown")
+            caller.join()
+        }
+    }
+
+    @Test
     fun backgroundPreemptsPreviewWhichThenRetriesToCompletion() = runBlocking {
         val sched = EngineScheduler(previewRetryDelay = kotlin.time.Duration.ZERO)
         val previewStarted = CompletableDeferred<Unit>()
