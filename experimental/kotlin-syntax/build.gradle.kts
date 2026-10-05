@@ -86,6 +86,13 @@ tasks.named<Test>("jvmTest") {
     // compiler's PSI environment, which wants room.
     maxHeapSize = "2g"
     systemProperty("kotlinSyntax.corpusRoot", rootDir.absolutePath)
+    // The parity suites read these trees at run time. Declared so an edit to them reruns the suite instead of
+    // reusing a result computed over the old text (the whole-repository sweep stays undeclared: that is
+    // every source file).
+    inputs.dir(rootDir.resolve("lang/lang-kotlin/src/commonMain"))
+        .withPathSensitivity(PathSensitivity.RELATIVE).withPropertyName("langKotlinSources")
+    inputs.dir(layout.projectDirectory.dir("testData"))
+        .withPathSensitivity(PathSensitivity.RELATIVE).withPropertyName("parserCorpus")
     // An external Kotlin checkout to sweep as well (opt-in; the suite self-skips without it). Forwarded
     // explicitly for the same reason as the baseline flag below: a `-D` reaches the Gradle JVM, not the
     // forked test one.

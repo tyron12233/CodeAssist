@@ -204,10 +204,27 @@ internal fun collapsedBodiesAreClosed(tree: LightSyntaxTree, node: LightNode = t
         val n = tree.childCount(holder)
         if (n == 0) return false
         val last = LightNode(tree.childIndexAt(holder, n - 1))
-        return tree.isToken(last) && tree.getType(last) == KtTokens.RBRACE
+        if (!tree.isToken(last) || tree.getType(last) != KtTokens.RBRACE) return false
+        // Ending in a `}` is not enough: an extra `{` inside the body (`if ({x)`, mid-edit) makes that `}` close
+        // the inner brace and leaves the body itself open to the end of the file.
+        val depth = IntArray(2) // [current depth, times it returned to zero]
+        braceDepth(tree, holder, depth)
+        return depth[0] == 0 && depth[1] == 1
     }
     for (i in 0 until tree.childCount(node)) if (!collapsedBodiesAreClosed(tree, LightNode(tree.childIndexAt(node, i)))) return false
     return true
+}
+
+/** Walks the `{`/`}` tokens under [node] in order, tracking the depth in [depth] and counting each return to zero. */
+private fun braceDepth(tree: LightSyntaxTree, node: LightNode, depth: IntArray) {
+    for (i in 0 until tree.childCount(node)) {
+        val c = LightNode(tree.childIndexAt(node, i))
+        if (!tree.isToken(c)) { braceDepth(tree, c, depth); continue }
+        when (tree.getType(c)) {
+            KtTokens.LBRACE -> depth[0]++
+            KtTokens.RBRACE -> if (--depth[0] == 0) depth[1]++
+        }
+    }
 }
 
 /**
