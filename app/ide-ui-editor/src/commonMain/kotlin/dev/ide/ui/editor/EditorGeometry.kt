@@ -1,5 +1,6 @@
 package dev.ide.ui.editor
 
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.foundation.gestures.Scrollable2DState
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.gestures.rememberScrollable2DState
@@ -170,8 +171,8 @@ internal class EditorGeometry(private val session: EditorSession) {
     fun caretGeometry(offset: Int): Triple<Int, Float, Float> {
         val doc = session.doc
         val line = doc.lineForOffset(offset)
-        val vcol = render.renderCache.rawToVisual(line, offset - doc.lineStart(line))
         val layout = render.layoutFor(line)
+        val vcol = layout.clampColumn(render.renderCache.rawToVisual(line, offset - doc.lineStart(line)))
         val x = layout.getHorizontalPosition(vcol, usePrimaryDirection = true)
         val subTop = if (wordWrap) layout.getLineTop(layout.getLineForOffset(vcol)) else 0f
         return Triple(line, textLeft() + x, lineTop(line) + subTop)
@@ -253,8 +254,8 @@ internal class EditorGeometry(private val session: EditorSession) {
         val off = session.selection.end
         val d = session.doc
         val ln = d.lineForOffset(off)
-        val vcol = render.renderCache.rawToVisual(ln, off - d.lineStart(ln))
         val layout = render.layoutFor(ln)
+        val vcol = layout.clampColumn(render.renderCache.rawToVisual(ln, off - d.lineStart(ln)))
         val x = gutterWidthPx + metrics.padLeft + layout.getHorizontalPosition(vcol, usePrimaryDirection = true)
         val subTop = if (wordWrap) layout.getLineTop(layout.getLineForOffset(vcol)) else 0f
         return Offset(x, metrics.padTop + vlayout.topRow(ln) * metrics.lineHeight + subTop)
@@ -423,8 +424,8 @@ internal fun rememberEditorGeometry(
         if (state.viewport.value == IntSize.Zero) return@LaunchedEffect
         val doc = session.doc
         val line = doc.lineForOffset(session.selection.end)
-        val vcol = render.renderCache.rawToVisual(line, session.selection.end - doc.lineStart(line))
         val layout = render.layoutFor(line)
+        val vcol = layout.clampColumn(render.renderCache.rawToVisual(line, session.selection.end - doc.lineStart(line)))
         val subTop = if (wordWrap) layout.getLineTop(layout.getLineForOffset(vcol)) else 0f
         val top = metrics.padTop + state.vlayout.topRow(line) * metrics.lineHeight + subTop
         val bottom = top + metrics.lineHeight
@@ -544,3 +545,11 @@ internal fun prefetchOrder(first: Int, last: Int, lineCount: Int, reach: Int): I
     }
     return out.toIntArray()
 }
+
+/**
+ * [column] clamped into this layout's text. The column comes from an offset in the live document, and the
+ * layout from a cache that can trail a fresh edit by a frame, so it can land past the laid-out line's end;
+ * `getHorizontalPosition` / `getLineForOffset` throw an IllegalArgumentException on that, which crashed the
+ * editor from these geometry paths the way it once did from the draw path (see `drawEditor`'s `xOf`).
+ */
+internal fun TextLayoutResult.clampColumn(column: Int): Int = column.coerceIn(0, layoutInput.text.length)

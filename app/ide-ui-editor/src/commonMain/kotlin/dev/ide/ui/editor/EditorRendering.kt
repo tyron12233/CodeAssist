@@ -184,7 +184,7 @@ internal fun DrawScope.drawEditor(
     fun yTopOf(line: Int, offset: Int): Float {
         if (!wrap) return lineTop(line)
         val l = layoutFor(line)
-        return lineTop(line) + l.getLineTop(l.getLineForOffset(rawToVisual(line, offset - doc.lineStart(line))))
+        return lineTop(line) + l.getLineTop(l.getLineForOffset(l.clampColumn(rawToVisual(line, offset - doc.lineStart(line)))))
     }
     // Fill the visual columns [vStart, vEnd] on [line] with [color], one rect per wrapped sub-row. vEnd == -1
     // means "to the end of the line" (interior lines of a multi-line selection/match); [trailingMarker] adds a
@@ -229,7 +229,7 @@ internal fun DrawScope.drawEditor(
     val caretLine = doc.lineForOffset(sel.end)
     val caretSubRow = if (wrap) {
         val l = layoutFor(caretLine)
-        l.getLineForOffset(rawToVisual(caretLine, sel.end - doc.lineStart(caretLine)))
+        l.getLineForOffset(l.clampColumn(rawToVisual(caretLine, sel.end - doc.lineStart(caretLine))))
     } else 0
 
     // current-line band across the full width (incl. gutter; gutter bg repaints its slice below) — on the
