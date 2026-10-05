@@ -73,6 +73,8 @@ class LlmHttpException(
     val kind: LlmErrorKind? = null,
     /** Which quota was exceeded, when the provider said. */
     val quota: QuotaInfo? = null,
+    /** The output-token cap the account can still pay for, when the provider said. */
+    val affordableMaxTokens: Int? = null,
 ) : RuntimeException(message, cause)
 
 /** The default transport. One [OkHttpClient] with streaming-friendly timeouts (no read/call timeout so a
@@ -211,7 +213,9 @@ class OkHttpLlmTransport(
         }
         val body = prefetchedBody ?: runCatching { response.body?.string() }.getOrNull()
         val parsed = LlmErrors.parseHttp(response.code, body, response.header("retry-after"), response.request.url.toString())
-        return LlmHttpException(parsed.message, response.code, parsed.retryAfterMs, parsed.retryable, t, parsed.kind, parsed.quota)
+        return LlmHttpException(parsed.message, response.code, parsed.retryAfterMs, parsed.retryable, t, parsed.kind, parsed.quota,
+            parsed.affordableMaxTokens,
+        )
     }
 
     private companion object {

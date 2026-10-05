@@ -188,6 +188,48 @@ class RateLimitAndMediaTest {
         assertTrue(events.last() is AgentEvent.Error)
     }
 
+    private val openRouterCreditBody =
+        """{"error":{"message":"This request requires more credits, or fewer max_tokens. You requested up to 8192 tokens, but can only afford 1600. To increase, visit https://openrouter.ai/settings/keys and adjust the key's total limit","code":402}}"""
+
+    @Test
+    fun openRouterCreditShortfallIsAQuotaErrorThatNamesTheAffordableCap() {
+        val parsed = LlmErrors.parseHttp(402, openRouterCreditBody, null, "https://openrouter.ai/api/v1/chat/completions")
+        assertEquals(LlmErrorKind.QUOTA, parsed.kind)
+        assertFalse(parsed.retryable)
+        assertEquals(1600, parsed.affordableMaxTokens)
+        assertTrue(parsed.message.startsWith("Not enough credit left on this API key"), parsed.message)
+    }
+
+    @Test
+    fun loopRetriesACreditShortfallWithTheAffordableCap() {
+        val parsed = LlmErrors.parseHttp(402, openRouterCreditBody, null)
+        val short = LlmHttpException(parsed.message, 402, kind = parsed.kind, affordableMaxTokens = parsed.affordableMaxTokens)
+        val caps = mutableListOf<Int>()
+        val client = LlmClient { request ->
+            caps += request.maxTokens
+            if (caps.size == 1) flowOf(LlmStreamEvent.Failed(short.message!!, short))
+            else flowOf(LlmStreamEvent.TextDelta("done"), LlmStreamEvent.Completed(StopReason.END_TURN))
+        }
+        val loop = AgentLoop(client, "m", SimpleToolRegistry(emptyList()), AllowAllGate, { "sys" })
+        val events = mutableListOf<AgentEvent>()
+        runBlocking { loop.send("hi", AgentEventSink { events += it }) }
+        assertEquals(listOf(8192, 1520), caps)
+        assertTrue(events.none { it is AgentEvent.Error })
+        assertTrue(events.last() is AgentEvent.TurnCompleted)
+    }
+
+    @Test
+    fun loopReportsACreditShortfallTooSmallToRetry() {
+        val short = LlmHttpException("Not enough credit", 402, kind = LlmErrorKind.QUOTA, affordableMaxTokens = 300)
+        var calls = 0
+        val client = LlmClient { calls++; flowOf(LlmStreamEvent.Failed(short.message!!, short)) }
+        val loop = AgentLoop(client, "m", SimpleToolRegistry(emptyList()), AllowAllGate, { "sys" })
+        val events = mutableListOf<AgentEvent>()
+        runBlocking { loop.send("hi", AgentEventSink { events += it }) }
+        assertEquals(1, calls)
+        assertTrue(events.last() is AgentEvent.Error)
+    }
+
     private val png = ContentPart.Image("image/png", "iVBORw0KGgo=")
 
     @Test

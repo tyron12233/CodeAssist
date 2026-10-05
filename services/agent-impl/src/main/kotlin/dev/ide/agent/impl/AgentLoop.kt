@@ -66,6 +66,12 @@ class AgentLoop(
         /** A provider asking for longer than this is reported rather than waited out. */
         const val MAX_RATE_LIMIT_WAIT_MS = 120_000L
 
+        /** How many times one turn may lower its output cap to what the account's credit covers. */
+        const val MAX_CREDIT_RETRIES = 2
+
+        /** Below this many output tokens a tool-using turn is not worth sending; the credit error is reported. */
+        const val MIN_CREDIT_MAX_TOKENS = 1024
+
         /** Sent on the final turn once the iteration cap is hit; no tools are offered alongside it. */
         const val COMPACT = "Summarize this conversation so far so it can continue from your summary alone. " +
             "Keep: the user's goals and constraints, decisions made, files created or changed (with paths), the " +
@@ -103,9 +109,18 @@ class AgentLoop(
         }
     }
 
+    /**
+     * The output-token cap the provider last said the account can pay for, below [maxTokens]. Kept for the rest
+     * of the run, since spending only lowers it, and cleared when the user sends or retries (they may have topped up).
+     */
+    private var creditCap: Int? = null
+
+    private val requestMaxTokens: Int get() = creditCap?.coerceAtMost(maxTokens) ?: maxTokens
+
     suspend fun send(userText: String, sink: AgentEventSink, images: List<ContentPart.Image> = emptyList()) {
         history += if (images.isEmpty()) LlmMessage.user(userText) else LlmMessage.user(userText, images)
         sink.emit(AgentEvent.UserMessage(userText))
+        creditCap = null
         runTurns(sink)
     }
 
@@ -117,12 +132,14 @@ class AgentLoop(
      *  there's nothing to resume. */
     suspend fun retry(sink: AgentEventSink) {
         if (history.isEmpty()) return
+        creditCap = null
         runTurns(sink)
     }
 
     private suspend fun runTurns(sink: AgentEventSink) {
         var iteration = 0
         var rateLimitWaits = 0
+        var creditRetries = 0
         // A user-visible "turn" is the whole loop, which is several requests; report what all of them cost.
         var total = TokenUsage()
         while (iteration++ < maxIterations) {
@@ -131,7 +148,7 @@ class AgentLoop(
                 system = systemPrompt(),
                 messages = withSessionContext(compactor.compact(history)),
                 tools = tools.specs(),
-                maxTokens = maxTokens,
+                maxTokens = requestMaxTokens,
                 thinking = true,
                 thinkingBudget = thinkingBudget,
                 webSearch = webSearch,
@@ -151,6 +168,16 @@ class AgentLoop(
                     iteration--
                     sink.emit(AgentEvent.Waiting(clock() + wait, "Rate limited by the provider. Retrying when the limit resets."))
                     delay(wait)
+                    continue
+                }
+                val affordable = affordableCap(turn, request.maxTokens)
+                if (affordable != null && creditRetries < MAX_CREDIT_RETRIES) {
+                    // The provider refused before generating anything because the key's credit cannot cover the
+                    // requested output cap, and said what it can cover. Asking for that much instead lets the
+                    // turn go through; only a long answer is affected, and it stops at the lower cap.
+                    creditRetries++
+                    iteration--
+                    creditCap = affordable
                     continue
                 }
                 sink.emit(AgentEvent.Error(failure, (turn.failureCause as? LlmHttpException)?.kind?.name))
@@ -182,7 +209,7 @@ class AgentLoop(
             system = systemPrompt(),
             messages = compactor.compact(history) + LlmMessage(LlmRole.SYSTEM, listOf(ContentPart.Text(WRAP_UP))),
             tools = emptyList(),
-            maxTokens = maxTokens,
+            maxTokens = requestMaxTokens,
             thinking = true,
             thinkingBudget = thinkingBudget,
             webSearch = false,
@@ -212,7 +239,7 @@ class AgentLoop(
             system = systemPrompt(),
             messages = compactor.compact(history) + LlmMessage.user(COMPACT),
             tools = emptyList(),
-            maxTokens = maxTokens,
+            maxTokens = requestMaxTokens,
             thinking = false,
             effort = effort,
         )
@@ -260,6 +287,20 @@ class AgentLoop(
         val wait = cause.retryAfterMs ?: DEFAULT_RATE_LIMIT_WAIT_MS
         if (wait > MAX_RATE_LIMIT_WAIT_MS) return null
         return wait.coerceAtLeast(1_000)
+    }
+
+    /**
+     * The lower output cap to resend a turn with after the provider refused it for lack of credit, or null when
+     * the failure is something else, the provider named no affordable amount, the turn already streamed output,
+     * or what is affordable is no lower than [requested] or too small to be useful.
+     */
+    private fun affordableCap(turn: Turn, requested: Int): Int? {
+        val cause = turn.failureCause as? LlmHttpException ?: return null
+        if (cause.kind != LlmErrorKind.QUOTA || turn.producedOutput) return null
+        val affordable = cause.affordableMaxTokens ?: return null
+        // A little under the stated figure: the remaining credit is also shrinking as the conversation grows.
+        val cap = affordable - affordable / 20
+        return cap.takeIf { it in MIN_CREDIT_MAX_TOKENS until requested }
     }
 
     /**

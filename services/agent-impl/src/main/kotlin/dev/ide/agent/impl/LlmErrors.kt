@@ -41,6 +41,8 @@ internal data class ParsedLlmError(
     val message: String,
     val retryAfterMs: Long? = null,
     val quota: QuotaInfo? = null,
+    /** The output-token cap the account can still pay for, when the provider said (OpenRouter's 402 does). */
+    val affordableMaxTokens: Int? = null,
 ) {
     val retryable: Boolean get() = kind.retryable
 }
@@ -49,6 +51,7 @@ internal object LlmErrors {
     private const val MAX_DETAIL = 400
     private val limitInMessage = Regex("""limit:\s*([0-9]+)""")
     private val modelInMessage = Regex("""model:\s*([A-Za-z0-9._-]+)""")
+    private val affordInMessage = Regex("""can only afford\s+([0-9]+)""", RegexOption.IGNORE_CASE)
     private val retryInMessage = Regex("""try again in\s+([0-9]+(?:\.[0-9]+)?)\s*(ms|s)""", RegexOption.IGNORE_CASE)
 
     /** Parse an HTTP error response body + status into a categorized error. */
@@ -94,7 +97,10 @@ internal object LlmErrors {
                 else -> kind
             }
         }
-        return ParsedLlmError(kind, compose(kind, providerMsg, statusCode, retryAfterMs, quota), retryAfterMs, quota)
+        val affordable = affordInMessage.find(providerMsg.orEmpty())?.groupValues?.get(1)?.toIntOrNull()
+        return ParsedLlmError(
+            kind, compose(kind, providerMsg, statusCode, retryAfterMs, quota, affordable), retryAfterMs, quota, affordable,
+        )
     }
 
     /**
@@ -185,11 +191,13 @@ internal object LlmErrors {
     private fun classify(status: Int?, type: String, code: String, msg: String?): LlmErrorKind {
         val m = msg.orEmpty().lowercase()
         // True billing exhaustion — a retry will NOT clear it. OpenAI marks it `insufficient_quota`;
-        // Anthropic reports a spent credit balance. This is deliberately narrow: it must NOT catch the generic
+        // Anthropic reports a spent credit balance; OpenRouter answers 402 when the key's remaining credit cannot
+        // cover the request's max_tokens. This is deliberately narrow: it must NOT catch the generic
         // "you exceeded your current quota / billing details" wording, because Gemini's free tier returns that
         // exact text for a transient per-minute rate limit (see the 429 branch below).
         val billingExhausted = type.contains("insufficient_quota") || code.contains("insufficient_quota") ||
-            m.contains("out of credit") || m.contains("credit balance")
+            m.contains("out of credit") || m.contains("credit balance") ||
+            status == 402 || m.contains("requires more credits")
         if (billingExhausted) return LlmErrorKind.QUOTA
         val auth = status == 401 || status == 403 || type.contains("authentication") ||
             type.contains("unauthenticated") || type.contains("permission") || type.contains("forbidden") ||
@@ -220,7 +228,14 @@ internal object LlmErrors {
         return LlmErrorKind.UNKNOWN
     }
 
-    private fun compose(kind: LlmErrorKind, detail: String?, status: Int?, retryAfterMs: Long?, quota: QuotaInfo? = null): String {
+    private fun compose(
+        kind: LlmErrorKind,
+        detail: String?,
+        status: Int?,
+        retryAfterMs: Long?,
+        quota: QuotaInfo? = null,
+        affordableMaxTokens: Int? = null,
+    ): String {
         val wait = retryAfterMs?.let { " Try again in ${humanDelay(it)}." }.orEmpty()
         val tail = detail?.takeIf { it.isNotBlank() }?.let { "\n${it.take(MAX_DETAIL)}" }.orEmpty()
         val modelName = quota?.model?.let { "'$it'" } ?: "This model"
@@ -240,7 +255,12 @@ internal object LlmErrors {
             LlmErrorKind.SERVER -> "The AI provider reported a server error${status?.let { " ($it)" }.orEmpty()}.$wait$tail"
             LlmErrorKind.NETWORK -> "Couldn't reach the AI provider. Check your connection.$tail"
             LlmErrorKind.CERTIFICATE -> "The AI provider's certificate isn't trusted.$tail"
-            LlmErrorKind.QUOTA -> "Your API quota or billing limit is exhausted. Check your provider account and plan.$tail"
+            LlmErrorKind.QUOTA -> if (affordableMaxTokens != null) {
+                "Not enough credit left on this API key: it can pay for about $affordableMaxTokens output tokens " +
+                    "per request. Add credits or raise the key's spending limit with your provider.$tail"
+            } else {
+                "Your API quota or billing limit is exhausted. Check your provider account and plan.$tail"
+            }
             LlmErrorKind.AUTH -> "Authentication failed. Check your API key in Settings > AI.$tail"
             LlmErrorKind.NOT_FOUND -> "The selected model isn't available. Pick another model.$tail"
             LlmErrorKind.ENDPOINT_NOT_FOUND -> "Nothing was found at this address (HTTP 404).$tail"
