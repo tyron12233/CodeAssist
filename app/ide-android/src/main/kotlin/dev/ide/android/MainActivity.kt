@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -244,6 +245,8 @@ class MainActivity : ComponentActivity() {
                     }.getOrNull(),
                 )
             }
+            // Pooled native ads hold this Activity's context; destroy them with it.
+            DisposableEffect(adHost) { onDispose { adHost.close() } }
 
             // A `.caproj` package handed in via "Open with" opens the import preview (see the branch below); any
             // other inbound file is copied into the open project's first source root as before.

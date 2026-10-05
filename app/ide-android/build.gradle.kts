@@ -387,7 +387,7 @@ val bundleComposeDrawablesAsset = tasks.register<Copy>("bundleComposeDrawablesAs
 // via -PADMOB_APP_ID / -PADMOB_NATIVE_UNIT_ID (or the ADMOB_APP_ID / ADMOB_NATIVE_UNIT_ID env vars), falling
 // back to the test ids so a fork builds fine with AdMob unconfigured. The App id reaches the manifest through
 // the `admobAppId` placeholder; the native ad-unit id is a BuildConfig field AndroidAdHost reads. One native
-// ad unit is reused across all four placements. OFFICIAL RELEASES MUST SET BOTH real ids.
+// ad unit serves every placement that has no unit of its own (see below). OFFICIAL RELEASES MUST SET BOTH real ids.
 val testAdmobAppId = "ca-app-pub-3940256099942544~3347511713"
 val testAdmobNativeUnitId = "ca-app-pub-3940256099942544/2247696110"
 // Google's TEST interstitial unit — the full-screen "long build" ad (AndroidAdHost.showBuildInterstitial).
@@ -404,6 +404,24 @@ val realAdmobNativeUnitId = (findProperty("ADMOB_NATIVE_UNIT_ID") as String?) ?:
 val realAdmobInterstitialUnitId = (findProperty("ADMOB_INTERSTITIAL_UNIT_ID") as String?)
     ?: System.getenv("ADMOB_INTERSTITIAL_UNIT_ID")
     ?: "ca-app-pub-7523005242346905/6735189457"
+// Per-placement native units, keyed by AdPlacement name, so the AdMob report splits native earnings by screen.
+// A placement left blank falls back to the shared native unit above, and several placements may share one
+// unit. Each is overridable via -PADMOB_NATIVE_UNIT_<PLACEMENT> (or the env var of the same name). Reaches
+// AndroidAdHost as AD_NATIVE_UNIT_IDS, `PLACEMENT=unit` pairs joined by `;`.
+val realAdmobNativeUnitsByPlacement = mapOf(
+    "STORE" to "ca-app-pub-7523005242346905/7834378049",
+    "STORE_ITEM" to "ca-app-pub-7523005242346905/7783155586",
+    "PROJECTS" to "ca-app-pub-7523005242346905/4502386125",
+    "LEARN" to "ca-app-pub-7523005242346905/1338175893",
+    "CHALLENGE" to "ca-app-pub-7523005242346905/9563141113",
+    "BUILD_CONSOLE" to "ca-app-pub-7523005242346905/3460767191",
+    "RUN_RESULT" to "ca-app-pub-7523005242346905/5021260875",
+    "SDK_MANAGER" to "ca-app-pub-7523005242346905/6936977775",
+    "SETTINGS" to "ca-app-pub-7523005242346905/7642806352",
+    "SIDEBAR" to "ca-app-pub-7523005242346905/8833522537",
+).mapValues { (placement, default) ->
+    (findProperty("ADMOB_NATIVE_UNIT_$placement") as String?) ?: System.getenv("ADMOB_NATIVE_UNIT_$placement") ?: default
+}.filterValues { it.isNotBlank() }.entries.joinToString(";") { "${it.key}=${it.value}" }
 
 android {
     namespace = "dev.ide.android"
@@ -458,6 +476,7 @@ android {
         manifestPlaceholders["admobAppId"] = testAdmobAppId
         buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
         buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$testAdmobInterstitialUnitId\"")
+        buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"\"")
     }
 
     buildFeatures {
@@ -529,6 +548,7 @@ android {
             manifestPlaceholders["admobAppId"] = realAdmobAppId
             buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$realAdmobNativeUnitId\"")
             buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$realAdmobInterstitialUnitId\"")
+            buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"$realAdmobNativeUnitsByPlacement\"")
         }
         // A release-like, non-debuggable build that's still installable locally (signed with the debug key).
         // Use this — never `debug` — to judge runtime/typing/recomposition performance: a `debuggable` app
@@ -547,6 +567,7 @@ android {
             manifestPlaceholders["admobAppId"] = testAdmobAppId
             buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
             buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$testAdmobInterstitialUnitId\"")
+            buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"\"")
         }
         // EXPERIMENTAL, non-shipping: an R8-minified build used only to measure how far the app's own
         // dex (~61% of the APK, mostly the bundled Kotlin compiler + IntelliJ platform) can shrink. The
@@ -572,6 +593,7 @@ android {
             manifestPlaceholders["admobAppId"] = testAdmobAppId
             buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
             buildConfigField("String", "AD_INTERSTITIAL_UNIT_ID", "\"$testAdmobInterstitialUnitId\"")
+            buildConfigField("String", "AD_NATIVE_UNIT_IDS", "\"\"")
         }
     }
 

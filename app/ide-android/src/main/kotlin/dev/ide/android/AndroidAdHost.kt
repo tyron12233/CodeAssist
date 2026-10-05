@@ -5,20 +5,25 @@ import android.content.Context
 import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.TypedValue
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdListener
@@ -32,6 +37,7 @@ import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import dev.ide.platform.log.Log
+import dev.ide.ui.ads.NativeAdPool
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.components.BetaInfo
@@ -145,65 +151,117 @@ class AndroidAdHost(
         return true
     }
 
+    // Native ads outlive the slots that show them (see NativeAdPool): a slot that leaves and comes back, or a
+    // second slot of the same placement, reuses an ad that already loaded instead of requesting another.
+    private val nativeAds = NativeAdPool<NativeAd>(
+        load = ::loadNativeAd,
+        destroy = { it.destroy() },
+        now = SystemClock::elapsedRealtime,
+    )
+
+    /** Destroys the pooled native ads. Called when the hosting Activity goes away. */
+    fun close() = nativeAds.close()
+
+    private fun loadNativeAd(placement: AdPlacement, callbacks: NativeAdPool.Callbacks<NativeAd>): Boolean {
+        // AdLoader.Builder reads the system WebView user-agent as it's built (and loadAd needs it too), so on an
+        // image with no WebView provider it throws MissingWebViewPackageException. `webViewAvailable` short-
+        // circuits that common case; the runCatching backstops any other SDK failure. Either way the slot keeps
+        // the house ad, so it is never blank and the IDE never crashes.
+        if (!webViewAvailable) return false
+        val context = activityProvider() ?: return false
+        val unit = nativeAdUnitId(placement)
+        return runCatching {
+            AdLoader.Builder(context, unit)
+                .forNativeAd { loaded ->
+                    adLog.info("native ad loaded for $placement (unit $unit)")
+                    callbacks.loaded(loaded)
+                }
+                .withAdListener(object : AdListener() {
+                    // Log the error (don't swallow it) so a stuck house-ad state is diagnosable from logcat: code
+                    // 3 is NO_FILL (expected for hours/days on a brand-new real unit), while other codes point at
+                    // a config/network/Play-services problem (the reason even test ads may not fill).
+                    override fun onAdFailedToLoad(error: LoadAdError) {
+                        adLog.warn(
+                            "native ad failed for $placement (unit $unit): " +
+                                "code=${error.code} domain=${error.domain} message=${error.message} " +
+                                "response=${error.responseInfo}"
+                        )
+                        callbacks.failed()
+                    }
+
+                    override fun onAdImpression() = callbacks.impression()
+                })
+                .build()
+                .loadAd(AdRequest.Builder().build())
+        }.onFailure { e ->
+            adLog.warn("native ad load skipped for $placement (no WebView / SDK unavailable): ${e.message}")
+        }.isSuccess
+    }
+
     @Composable
     override fun NativeAd(placement: AdPlacement, modifier: Modifier) {
-        val context = LocalContext.current
-        var ad by remember(placement) { mutableStateOf<NativeAd?>(null) }
+        val lease = remember(placement) { nativeAds.lease(placement) }
+        var ad by remember(lease) { mutableStateOf(lease.ad) }
+        // Only a slot that is actually on screen asks for an ad. A lazy list composes (prefetches) the next item
+        // before it scrolls into view, and a slot further down a page can be composed but never reached; a
+        // request for either loads an ad nobody sees.
+        var onScreen by remember(lease) { mutableStateOf(false) }
 
-        DisposableEffect(placement) {
-            // Guard the whole load: AdLoader.Builder reads the system WebView user-agent as it's built (and
-            // loadAd needs it too), so on an image with no WebView provider it throws
-            // MissingWebViewPackageException. `webViewAvailable` short-circuits that common case so we don't
-            // throw-and-catch on every slot; the runCatching backstops any other SDK failure. On failure `ad`
-            // stays null → the house ad shows, so the slot is never blank and the IDE never crashes.
-            if (webViewAvailable) runCatching {
-                val loader = AdLoader.Builder(context, BuildConfig.AD_NATIVE_UNIT_ID)
-                    .forNativeAd { loaded ->
-                        ad?.destroy()
-                        ad = loaded
-                        adLog.info("native ad loaded for $placement (unit ${BuildConfig.AD_NATIVE_UNIT_ID})")
-                    }
-                    .withAdListener(object : AdListener() {
-                        // Leave `ad` null on failure → the house ad stays, so the slot is never blank. Log the
-                        // error (don't swallow it) so a stuck house-ad state is diagnosable from logcat: code 3
-                        // is NO_FILL (expected for hours/days on a brand-new real unit), while other codes point
-                        // at a config/network/Play-services problem (the reason even test ads may not fill).
-                        override fun onAdFailedToLoad(error: LoadAdError) {
-                            adLog.warn(
-                                "native ad failed for $placement (unit ${BuildConfig.AD_NATIVE_UNIT_ID}): " +
-                                    "code=${error.code} domain=${error.domain} message=${error.message} " +
-                                    "response=${error.responseInfo}"
-                            )
-                        }
-                    })
-                    .build()
-                loader.loadAd(AdRequest.Builder().build())
-            }.onFailure { e ->
-                adLog.warn("native ad load skipped for $placement (no WebView / SDK unavailable): ${e.message}")
-            }
-            onDispose {
-                ad?.destroy()
-                ad = null
+        DisposableEffect(lease) {
+            lease.onChange = { ad = lease.ad }
+            onDispose { nativeAds.release(lease) }
+        }
+        LaunchedEffect(lease, onScreen) {
+            if (onScreen) {
+                nativeAds.acquire(lease)
+                ad = lease.ad
             }
         }
 
-        val loaded = ad
-        if (loaded == null) {
-            HouseAd(modifier) { openUrl(BetaInfo.SPONSOR_URL) }
-        } else {
-            // Theme-aware colours captured from the Compose theme and applied to the plain Android views the
-            // AdMob NativeAdView requires (its asset views can't be Compose composables — impressions/clicks
-            // are tracked on real Views registered with the SDK).
-            val textPrimary = Ca.colors.textPrimary.toArgb()
-            val textSecondary = Ca.colors.textSecondary.toArgb()
-            val accent = Ca.colors.accent.toArgb()
-            AndroidView(
-                modifier = modifier,
-                factory = { ctx -> buildNativeAdView(ctx, mediaHeightDp(placement)) },
-                update = { view -> bindNativeAd(view, loaded, textPrimary, textSecondary, accent) },
-            )
+        Box(
+            modifier.onGloballyPositioned { coordinates ->
+                if (!onScreen && coordinates.isAttached && coordinates.boundsInWindow().height > 0f) onScreen = true
+            }
+        ) {
+            val loaded = ad
+            if (loaded == null) {
+                HouseAd(Modifier.fillMaxWidth()) { openUrl(BetaInfo.SPONSOR_URL) }
+            } else {
+                // Theme-aware colours captured from the Compose theme and applied to the plain Android views the
+                // AdMob NativeAdView requires (its asset views can't be Compose composables — impressions/clicks
+                // are tracked on real Views registered with the SDK).
+                val textPrimary = Ca.colors.textPrimary.toArgb()
+                val textSecondary = Ca.colors.textSecondary.toArgb()
+                val accent = Ca.colors.accent.toArgb()
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth(),
+                    factory = { ctx -> buildNativeAdView(ctx, mediaHeightDp(placement)) },
+                    update = { view ->
+                        bindNativeAd(view, loaded, textPrimary, textSecondary, accent)
+                        nativeAds.bound(lease)
+                    },
+                )
+            }
         }
     }
+}
+
+/**
+ * The native ad unit for [placement]: its own unit when the build configured one (so the AdMob report splits
+ * earnings by screen), otherwise the shared native unit. `AD_NATIVE_UNIT_IDS` is `PLACEMENT=unit` pairs joined
+ * by `;` (see build.gradle.kts); debug builds leave it empty and use the shared test unit everywhere.
+ */
+private fun nativeAdUnitId(placement: AdPlacement): String =
+    nativeAdUnitsByPlacement[placement.name] ?: BuildConfig.AD_NATIVE_UNIT_ID
+
+private val nativeAdUnitsByPlacement: Map<String, String> by lazy {
+    BuildConfig.AD_NATIVE_UNIT_IDS.split(';')
+        .mapNotNull { pair ->
+            val key = pair.substringBefore('=', "").trim()
+            val unit = pair.substringAfter('=', "").trim()
+            if (key.isEmpty() || unit.isEmpty()) null else key to unit
+        }
+        .toMap()
 }
 
 // ---------------------------------------------------------------------------
