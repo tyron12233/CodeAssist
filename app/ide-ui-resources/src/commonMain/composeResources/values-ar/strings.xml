@@ -1737,6 +1737,12 @@
     <string name="respreview_no_colors">لا توجد ألوان مُعلَنة في هذا الملف</string>
     <string name="respreview_unresolved">(غير محلول)</string>
     <string name="respreview_decode_image_failed">تعذّر فك ترميز هذه الصورة</string>
+    <string name="respreview_anim_play">تشغيل</string>
+    <string name="respreview_anim_pause">إيقاف مؤقت</string>
+    <string name="respreview_anim_restart">إعادة التشغيل</string>
+    <string name="respreview_anim_frames">%1$d إطارات</string>
+    <string name="respreview_anim_length">%1$d مللي ثانية لكل تشغيل</string>
+    <string name="respreview_anim_forever">يتكرر بلا توقف</string>
     <!-- Module config: keep-rule file build-type descriptor -->
     <string name="modcfg_consumer_suffix">%1$s · مستهلِك</string>
     <!-- Block editor palette items -->

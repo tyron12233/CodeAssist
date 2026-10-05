@@ -13,12 +13,16 @@ import javax.xml.parsers.DocumentBuilderFactory
  * Coverage: `<shape>` (rectangle/oval/line/ring · solid/gradient/stroke/corners/size), `<vector>` (viewport
  * + a `<path>`/`<group>` tree with transforms, `<clip-path>` and fill rules), `<selector>`, `<layer-list>`,
  * `<color>`, `<ripple>`, `<inset>`, `<clip>`/`<scale>`/
- * `<rotate>` (unwrap), and `<bitmap>`/`<nine-patch>` / `@drawable` refs to image files. Unknown roots become
- * [DrawablePreview.Unsupported] rather than throwing.
+ * `<rotate>` (unwrap), `<bitmap>`/`<nine-patch>` / `@drawable` refs to image files, and the animated forms:
+ * `<animation-list>` frames and `<animated-vector>` targets with their property animators, from `res/animator`
+ * or inlined through `<aapt:attr>`. Unknown roots become [DrawablePreview.Unsupported] rather than throwing.
  */
 object DrawablePreviewParser {
 
     private const val MAX_DEPTH = 12
+
+    /** An animator's duration when it declares none (`ValueAnimator`'s default). */
+    private const val DEFAULT_DURATION_MS = 300L
 
     /** Parse [text]; returns [DrawablePreview.Unsupported] on malformed XML rather than throwing. */
     fun parse(text: String, resolver: DrawableResolver = DrawableResolver.NONE): DrawablePreview {
@@ -44,8 +48,10 @@ object DrawablePreviewParser {
             "bitmap", "nine-patch", "animated-image" -> bitmapRef(androidAttr(el, "src"), r)
                 ?: DrawablePreview.Unsupported(el.tagName, "No image source")
             "level-list", "transition" -> firstItemOr(el, r, depth, el.tagName)
-            "animated-vector" -> androidAttr(el, "drawable")?.let { resolveDrawableRef(it, r, depth) }
-                ?: DrawablePreview.Unsupported("animated-vector", "Animated vector")
+            "animation-list" -> parseAnimationList(el, r, depth)
+            "animated-vector" -> parseAnimatedVector(el, r, depth)
+            // Its <transition>s only play between states; the states themselves read like a <selector>'s.
+            "animated-selector" -> parseSelector(el, r, depth)
             else -> DrawablePreview.Unsupported(el.tagName, "Unsupported drawable")
         }
     }
@@ -135,7 +141,7 @@ object DrawablePreviewParser {
     private fun parseVector(el: Element, r: DrawableResolver): DrawablePreview {
         val children = parseVectorNodes(el, r, 0)
         // A `<clip-path>` directly under `<vector>` clips the whole drawable; model it as an outer group.
-        val rootClip = clipPathOf(el)
+        val rootClip = clipPathOf(el, r)
         return DrawablePreview.Vector(
             VectorSpec(
                 widthDp = dp(androidAttr(el, "width"), r).ifZero(24f),
@@ -145,6 +151,7 @@ object DrawablePreviewParser {
                 rootAlpha = androidAttr(el, "alpha")?.toFloatOrNull() ?: 1f,
                 nodes = if (rootClip == null) children
                 else listOf(VectorGroup(children = children, clipPathData = rootClip)),
+                name = androidAttr(el, "name"),
             ),
         )
     }
@@ -163,7 +170,7 @@ object DrawablePreviewParser {
     }
 
     private fun parseVectorPath(el: Element, r: DrawableResolver): VectorPath? {
-        val data = androidAttr(el, "pathData") ?: return null
+        val data = pathData(androidAttr(el, "pathData"), r) ?: return null
         return VectorPath(
             pathData = data,
             fillColor = colorToken(androidAttr(el, "fillColor"), r),
@@ -184,6 +191,10 @@ object DrawablePreviewParser {
                 else -> StrokeJoin.MITER
             },
             strokeMiter = androidAttr(el, "strokeMiterLimit")?.toFloatOrNull() ?: 4f,
+            name = androidAttr(el, "name"),
+            trimPathStart = androidAttr(el, "trimPathStart")?.toFloatOrNull() ?: 0f,
+            trimPathEnd = androidAttr(el, "trimPathEnd")?.toFloatOrNull() ?: 1f,
+            trimPathOffset = androidAttr(el, "trimPathOffset")?.toFloatOrNull() ?: 0f,
         )
     }
 
@@ -196,13 +207,181 @@ object DrawablePreviewParser {
         rotation = androidAttr(el, "rotation")?.toFloatOrNull() ?: 0f,
         pivotX = androidAttr(el, "pivotX")?.toFloatOrNull() ?: 0f,
         pivotY = androidAttr(el, "pivotY")?.toFloatOrNull() ?: 0f,
-        clipPathData = clipPathOf(el),
+        clipPathData = clipPathOf(el, r),
+        name = androidAttr(el, "name"),
     )
 
     /** The `<clip-path android:pathData>` declared directly under [el], or null. */
-    private fun clipPathOf(el: Element): String? = elements(el)
+    private fun clipPathOf(el: Element, r: DrawableResolver): String? = elements(el)
         .firstOrNull { it.tagName.substringAfterLast(':') == "clip-path" }
-        ?.let { androidAttr(it, "pathData") }
+        ?.let { pathData(androidAttr(it, "pathData"), r) }
+
+    /** Path data written inline, or kept in a `@string` resource as animated vectors usually do. */
+    private fun pathData(raw: String?, r: DrawableResolver): String? {
+        val s = raw?.trim()?.ifEmpty { null } ?: return null
+        return if (s.startsWith("@")) r.resolveValue(s)?.trim()?.ifEmpty { null } else s
+    }
+
+    // --- animated drawables ----------------------------------------------------------------------------
+
+    private fun parseAnimationList(el: Element, r: DrawableResolver, depth: Int): DrawablePreview {
+        val frames = ArrayList<Frame>()
+        for (item in elements(el)) {
+            if (item.tagName.substringAfterLast(':') != "item") continue
+            val drawable = itemDrawable(item, r, depth) ?: continue
+            frames += Frame(drawable, androidAttr(item, "duration")?.toIntOrNull()?.coerceAtLeast(0) ?: 0)
+        }
+        if (frames.isEmpty()) return DrawablePreview.Unsupported("animation-list", "No frames")
+        return DrawablePreview.Frames(frames, oneShot = androidAttr(el, "oneshot").equals("true", ignoreCase = true))
+    }
+
+    /**
+     * An `<animated-vector>`: its vector (an `android:drawable` reference or an inline `<aapt:attr>`) and the
+     * animator of each `<target>`. A drawable that turns out not to be a vector is shown as whatever it is.
+     */
+    private fun parseAnimatedVector(el: Element, r: DrawableResolver, depth: Int): DrawablePreview {
+        val base = inlineAttr(el, "drawable")?.let { parseElement(it, r, depth + 1) }
+            ?: androidAttr(el, "drawable")?.let { resolveDrawableRef(it, r, depth) }
+            ?: return DrawablePreview.Unsupported("animated-vector", "No vector")
+        val vector = (base as? DrawablePreview.Vector)?.spec ?: return base
+        val targets = ArrayList<AnimationTarget>()
+        for (target in elements(el)) {
+            if (target.tagName.substringAfterLast(':') != "target") continue
+            val name = androidAttr(target, "name") ?: continue
+            val animator = inlineAttr(target, "animation")?.let { parseAnimator(it, r, 0) }
+                ?: androidAttr(target, "animation")?.let { ref -> xmlRoot(r.resolveXml(ref))?.let { parseAnimator(it, r, 0) } }
+                ?: continue
+            targets += AnimationTarget(name, animator)
+        }
+        return DrawablePreview.AnimatedVector(vector, targets)
+    }
+
+    private fun parseAnimator(el: Element, r: DrawableResolver, depth: Int): AnimatorSpec? {
+        if (depth > MAX_DEPTH) return null
+        return when (el.tagName.substringAfterLast(':')) {
+            "set" -> elements(el).mapNotNull { parseAnimator(it, r, depth + 1) }
+                .takeIf { it.isNotEmpty() }
+                ?.let { AnimatorSpec.Set(it, sequential = androidAttr(el, "ordering") == "sequentially") }
+            "objectAnimator" -> parseObjectAnimator(el, r)
+            else -> null // a bare <animator> has no target property; view animations do not apply to vectors
+        }
+    }
+
+    private fun parseObjectAnimator(el: Element, r: DrawableResolver): AnimatorSpec? {
+        val duration = androidAttr(el, "duration")?.toLongOrNull()?.coerceAtLeast(0) ?: DEFAULT_DURATION_MS
+        val offset = androidAttr(el, "startOffset")?.toLongOrNull()?.coerceAtLeast(0) ?: 0
+        val repeat = androidAttr(el, "repeatCount")?.let { if (it == "infinite") -1 else it.toIntOrNull() } ?: 0
+        val reverse = androidAttr(el, "repeatMode") == "reverse"
+        val interpolator = interpolatorOf(el, r) ?: InterpolatorSpec.DEFAULT
+        val valueType = androidAttr(el, "valueType")
+
+        fun property(name: String, keyframes: List<Keyframe>) = AnimatorSpec.Property(
+            name, keyframes, duration, offset, if (repeat < -1) 0 else repeat, reverse, interpolator,
+        )
+
+        val holders = elements(el).filter { it.tagName.substringAfterLast(':') == "propertyValuesHolder" }
+        val properties = if (holders.isEmpty()) {
+            val name = androidAttr(el, "propertyName") ?: return null
+            listOfNotNull(fromTo(el, name, valueType, r)?.let { property(name, it) })
+        } else {
+            holders.mapNotNull { h ->
+                val name = androidAttr(h, "propertyName") ?: return@mapNotNull null
+                val type = androidAttr(h, "valueType") ?: valueType
+                val frames = keyframes(h, name, type, r) ?: fromTo(h, name, type, r) ?: return@mapNotNull null
+                property(name, frames)
+            }
+        }
+        return when (properties.size) {
+            0 -> null
+            1 -> properties[0]
+            else -> AnimatorSpec.Set(properties, sequential = false)
+        }
+    }
+
+    /** `valueFrom`/`valueTo` as two keyframes; a missing `valueFrom` starts from the property's current value. */
+    private fun fromTo(el: Element, property: String, valueType: String?, r: DrawableResolver): List<Keyframe>? {
+        val to = animatedValue(androidAttr(el, "valueTo"), property, valueType, r) ?: return null
+        val from = animatedValue(androidAttr(el, "valueFrom"), property, valueType, r)
+        return listOf(Keyframe(0f, from), Keyframe(1f, to))
+    }
+
+    private fun keyframes(el: Element, property: String, valueType: String?, r: DrawableResolver): List<Keyframe>? {
+        val kfs = elements(el).filter { it.tagName.substringAfterLast(':') == "keyframe" }
+        if (kfs.isEmpty()) return null
+        return kfs.mapIndexed { i, kf ->
+            val evenly = if (kfs.size == 1) 1f else i.toFloat() / (kfs.size - 1)
+            Keyframe(
+                fraction = androidAttr(kf, "fraction")?.toFloatOrNull()?.coerceIn(0f, 1f) ?: evenly,
+                value = animatedValue(androidAttr(kf, "value"), property, androidAttr(kf, "valueType") ?: valueType, r),
+                interpolator = interpolatorOf(kf, r),
+            )
+        }.sortedBy { it.fraction }
+    }
+
+    private fun animatedValue(raw: String?, property: String, valueType: String?, r: DrawableResolver): AnimatedValue? {
+        val s = raw?.trim()?.ifEmpty { null } ?: return null
+        val type = valueType ?: when {
+            property == "pathData" -> "pathType"
+            property.endsWith("Color") || s.startsWith("#") || typeOf(s) == "color" -> "colorType"
+            else -> "floatType"
+        }
+        return when (type) {
+            "pathType" -> pathData(s, r)?.let { AnimatedValue.PathData(it) }
+            "colorType" -> colorToken(s, r)?.let { AnimatedValue.Color(it) }
+            else -> number(s, r)?.let { AnimatedValue.Number(it) }
+        }
+    }
+
+    private fun number(s: String, r: DrawableResolver): Float? {
+        s.toFloatOrNull()?.let { return it }
+        if (!s.startsWith("@")) return null
+        if (typeOf(s) == "dimen") return r.resolveDimenDp(s)
+        return r.resolveValue(s)?.trim()?.toFloatOrNull()
+    }
+
+    /** An element's `android:interpolator`: inline, one of the framework's, or a project `@interpolator`. */
+    private fun interpolatorOf(el: Element, r: DrawableResolver): InterpolatorSpec? {
+        inlineAttr(el, "interpolator")?.let { return parseInterpolator(it) }
+        val ref = androidAttr(el, "interpolator")?.trim()?.ifEmpty { null } ?: return null
+        if (!ref.contains("android:")) xmlRoot(r.resolveXml(ref))?.let { parseInterpolator(it) }?.let { return it }
+        return Interpolators.named(ref.substringAfterLast('/'))
+    }
+
+    private fun parseInterpolator(el: Element): InterpolatorSpec? {
+        fun f(name: String, default: Float) = androidAttr(el, name)?.toFloatOrNull() ?: default
+        return when (el.tagName.substringAfterLast(':')) {
+            "linearInterpolator" -> InterpolatorSpec.LINEAR
+            "accelerateInterpolator" -> InterpolatorSpec(InterpolatorKind.ACCELERATE, f("factor", 1f))
+            "decelerateInterpolator" -> InterpolatorSpec(InterpolatorKind.DECELERATE, f("factor", 1f))
+            "accelerateDecelerateInterpolator" -> InterpolatorSpec.DEFAULT
+            "anticipateInterpolator" -> InterpolatorSpec(InterpolatorKind.ANTICIPATE, f("tension", 2f))
+            "overshootInterpolator" -> InterpolatorSpec(InterpolatorKind.OVERSHOOT, f("tension", 2f))
+            "anticipateOvershootInterpolator" ->
+                InterpolatorSpec(InterpolatorKind.ANTICIPATE_OVERSHOOT, f("tension", 2f), f("extraTension", 1.5f))
+            "bounceInterpolator" -> InterpolatorSpec(InterpolatorKind.BOUNCE)
+            "cycleInterpolator" -> InterpolatorSpec(InterpolatorKind.CYCLE, f("cycles", 1f))
+            "pathInterpolator" -> {
+                androidAttr(el, "pathData")?.let { return InterpolatorSpec(InterpolatorKind.PATH, pathData = it) }
+                val x1 = f("controlX1", 0f); val y1 = f("controlY1", 0f)
+                val x2 = androidAttr(el, "controlX2")?.toFloatOrNull()
+                val y2 = androidAttr(el, "controlY2")?.toFloatOrNull()
+                // A quadratic curve (one control point) is the cubic with both controls two thirds of the way to it.
+                val points = if (x2 != null && y2 != null) listOf(x1, y1, x2, y2)
+                else listOf(x1 * 2f / 3f, y1 * 2f / 3f, (1f + 2f * x1) / 3f, (1f + 2f * y1) / 3f)
+                InterpolatorSpec(InterpolatorKind.CUBIC, points = points)
+            }
+            else -> null
+        }
+    }
+
+    /** The element an `<aapt:attr name="android:[attr]">` child inlines in place of a resource reference. */
+    private fun inlineAttr(el: Element, attr: String): Element? = elements(el)
+        .firstOrNull { it.tagName.substringAfterLast(':') == "attr" && it.getAttribute("name").substringAfterLast(':') == attr }
+        ?.let { elements(it).firstOrNull() }
+
+    private fun xmlRoot(text: String?): Element? = text?.let {
+        runCatching { builder().parse(it.byteInputStream(Charsets.UTF_8)).documentElement }.getOrNull()
+    }
 
     // --- selector / layer-list / composites ------------------------------------------------------------
 
@@ -297,6 +476,7 @@ object DrawablePreviewParser {
      * reference, or an `android:color` (color state list / tinted item).
      */
     private fun itemDrawable(el: Element, r: DrawableResolver, depth: Int): DrawablePreview? {
+        inlineAttr(el, "drawable")?.let { return parseElement(it, r, depth + 1) }
         elements(el).firstOrNull()?.let { return parseElement(it, r, depth + 1) }
         androidAttr(el, "drawable")?.let { return resolveDrawableRef(it, r, depth) }
         androidAttr(el, "color")?.let { raw -> colorToken(raw, r)?.let { return DrawablePreview.SolidColor(it) } }

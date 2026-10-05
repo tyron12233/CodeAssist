@@ -30,6 +30,8 @@ internal object DrawableBackgroundRenderer {
                     r - layer.insetRightDp * dp, b - layer.insetBottomDp * dp, canvas, ctx)
             }
             is DrawablePreview.States -> d.defaultLayer?.let { draw(it, l, t, r, b, canvas, ctx) }
+            // A static layout shows an animation-list's first frame, as an unstarted AnimationDrawable does.
+            is DrawablePreview.Frames -> d.frames.firstOrNull()?.let { draw(it.drawable, l, t, r, b, canvas, ctx) }
             else -> { /* Vector / BitmapRef / Unsupported background: skip */ }
         }
     }

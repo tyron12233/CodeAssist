@@ -1078,6 +1078,12 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="respreview_no_colors">Nenhuma cor declarada neste arquivo</string>
     <string name="respreview_unresolved">(não resolvido)</string>
     <string name="respreview_decode_image_failed">Não foi possível decodificar esta imagem</string>
+    <string name="respreview_anim_play">Reproduzir</string>
+    <string name="respreview_anim_pause">Pausar</string>
+    <string name="respreview_anim_restart">Reiniciar</string>
+    <string name="respreview_anim_frames">%1$d quadros</string>
+    <string name="respreview_anim_length">%1$d ms por reprodução</string>
+    <string name="respreview_anim_forever">Repete para sempre</string>
     <string name="modcfg_consumer_suffix">%1$s · consumidor</string>
 
     <!-- Home / recovery -->

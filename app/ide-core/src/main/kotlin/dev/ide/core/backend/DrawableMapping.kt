@@ -1,6 +1,9 @@
 package dev.ide.core.backend
 
+import dev.ide.android.support.preview.AnimatedValue
+import dev.ide.android.support.preview.AnimatorSpec
 import dev.ide.android.support.preview.DrawablePreview
+import dev.ide.android.support.preview.InterpolatorSpec
 import dev.ide.android.support.preview.FillRule
 import dev.ide.android.support.preview.GradientSpec
 import dev.ide.android.support.preview.Layer
@@ -8,7 +11,13 @@ import dev.ide.android.support.preview.StateLayer
 import dev.ide.android.support.preview.VectorGroup
 import dev.ide.android.support.preview.VectorNode
 import dev.ide.android.support.preview.VectorPath
+import dev.ide.ui.backend.UiAnimatedValue
+import dev.ide.ui.backend.UiAnimationTarget
+import dev.ide.ui.backend.UiAnimator
 import dev.ide.ui.backend.UiDrawable
+import dev.ide.ui.backend.UiFrame
+import dev.ide.ui.backend.UiInterpolator
+import dev.ide.ui.backend.UiKeyframe
 import dev.ide.ui.backend.UiGradient
 import dev.ide.ui.backend.UiLayer
 import dev.ide.ui.backend.UiStateLayer
@@ -49,6 +58,7 @@ object DrawableMapping {
                 viewportWidth = v.viewportWidth, viewportHeight = v.viewportHeight,
                 rootAlpha = v.rootAlpha,
                 nodes = v.nodes.map(::toUiVectorNode),
+                name = v.name,
             )
         }
 
@@ -59,6 +69,11 @@ object DrawableMapping {
         )
 
         is DrawablePreview.BitmapRef -> UiDrawable.Bitmap(d.resType, d.resName, d.filePath)
+        is DrawablePreview.Frames -> UiDrawable.Frames(d.frames.map { UiFrame(toUi(it.drawable), it.durationMs) }, d.oneShot)
+        is DrawablePreview.AnimatedVector -> UiDrawable.AnimatedVector(
+            vector = toUi(DrawablePreview.Vector(d.vector)) as UiDrawable.Vector,
+            targets = d.targets.map { UiAnimationTarget(it.name, toUiAnimator(it.animator)) },
+        )
         is DrawablePreview.Unsupported -> UiDrawable.Unsupported(d.rootTag, d.message)
     }
 
@@ -81,6 +96,10 @@ object DrawableMapping {
             strokeCap = n.strokeCap.name.lowercase(),
             strokeJoin = n.strokeJoin.name.lowercase(),
             strokeMiter = n.strokeMiter,
+            name = n.name,
+            trimPathStart = n.trimPathStart,
+            trimPathEnd = n.trimPathEnd,
+            trimPathOffset = n.trimPathOffset,
         )
 
         is VectorGroup -> UiVectorGroup(
@@ -89,8 +108,31 @@ object DrawableMapping {
             scaleX = n.scaleX, scaleY = n.scaleY,
             rotation = n.rotation, pivotX = n.pivotX, pivotY = n.pivotY,
             clipPathData = n.clipPathData,
+            name = n.name,
         )
     }
+
+    private fun toUiAnimator(a: AnimatorSpec): UiAnimator = when (a) {
+        is AnimatorSpec.Set -> UiAnimator.Set(a.children.map(::toUiAnimator), a.sequential)
+        is AnimatorSpec.Property -> UiAnimator.Property(
+            property = a.property,
+            keyframes = a.keyframes.map { k -> UiKeyframe(k.fraction, k.value?.let(::toUiValue), k.interpolator?.let(::toUiInterpolator)) },
+            durationMs = a.durationMs,
+            startOffsetMs = a.startOffsetMs,
+            repeatCount = a.repeatCount,
+            reverse = a.reverse,
+            interpolator = toUiInterpolator(a.interpolator),
+        )
+    }
+
+    private fun toUiValue(v: AnimatedValue): UiAnimatedValue = when (v) {
+        is AnimatedValue.Number -> UiAnimatedValue.Number(v.value)
+        is AnimatedValue.Color -> UiAnimatedValue.Color(v.argb)
+        is AnimatedValue.PathData -> UiAnimatedValue.PathData(v.data)
+    }
+
+    private fun toUiInterpolator(i: InterpolatorSpec) =
+        UiInterpolator(i.kind.name.lowercase(), i.factor, i.extraTension, i.points, i.pathData)
 
     private fun toUiLayer(l: Layer) = UiLayer(
         drawable = toUi(l.drawable),

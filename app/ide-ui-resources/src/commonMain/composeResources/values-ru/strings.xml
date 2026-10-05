@@ -982,6 +982,12 @@
     <string name="respreview_no_colors">В этом файле не объявлено ни одного цвета</string>
     <string name="respreview_unresolved">(не разрешено)</string>
     <string name="respreview_decode_image_failed">Не удалось декодировать это изображение</string>
+    <string name="respreview_anim_play">Воспроизвести</string>
+    <string name="respreview_anim_pause">Пауза</string>
+    <string name="respreview_anim_restart">Сначала</string>
+    <string name="respreview_anim_frames">Кадров: %1$d</string>
+    <string name="respreview_anim_length">%1$d мс за проигрывание</string>
+    <string name="respreview_anim_forever">Повторяется бесконечно</string>
     <string name="modcfg_consumer_suffix">%1$s · потребитель</string>
     <string name="block_palette_if">Если</string>
     <string name="block_palette_if_else">Если / Иначе</string>

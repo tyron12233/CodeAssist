@@ -152,6 +152,15 @@ class ProjectPreviewResources(
             return if (path.endsWith(".xml")) runCatching { src.readText() }.getOrNull()?.let { ResolvedDrawable.Xml(it) }
             else ResolvedDrawable.BitmapFile(p.type.rClass, p.name, path)
         }
+
+        override fun resolveXml(ref: String): String? {
+            val p = parseRef(ref)?.takeIf { it.pkg != "android" } ?: return null
+            val src = repo.definitions(p.type, p.name).firstOrNull()?.source ?: return null
+            return if (src.toString().endsWith(".xml")) runCatching { src.readText() }.getOrNull() else null
+        }
+
+        override fun resolveValue(ref: String): String? =
+            (resolve(ref, ValueFormat.STRING) as? ResolvedValue.Str)?.text?.toString()
     }
 
     private fun parseLiteral(s: String, format: ValueFormat): ResolvedValue? = when (format) {

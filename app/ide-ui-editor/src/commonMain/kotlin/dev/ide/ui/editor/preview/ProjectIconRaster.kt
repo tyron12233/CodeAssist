@@ -94,9 +94,9 @@ object ProjectIconRaster {
             val boxEdge = if (adaptive) edge * AppIconRaster.BOX_TO_SAFE_ZONE else edge
             val inset = (edge - boxEdge) / 2f
             CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(bitmap), canvasSize) {
-                drawUiDrawable(drawable, Offset(inset, inset), Size(boxEdge, boxEdge)) { ref ->
+                drawUiDrawable(drawable, Offset(inset, inset), Size(boxEdge, boxEdge), images = { ref ->
                     ref.filePath?.let(images::get)
-                }
+                })
             }
             bitmap
         }.getOrNull()

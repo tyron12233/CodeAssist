@@ -1027,6 +1027,12 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="respreview_no_colors">Tidak ada warna dideklarasikan dalam file ini</string>
     <string name="respreview_unresolved">(belum diselesaikan)</string>
     <string name="respreview_decode_image_failed">Tidak dapat mendekode gambar ini</string>
+    <string name="respreview_anim_play">Putar</string>
+    <string name="respreview_anim_pause">Jeda</string>
+    <string name="respreview_anim_restart">Mulai ulang</string>
+    <string name="respreview_anim_frames">%1$d bingkai</string>
+    <string name="respreview_anim_length">%1$d md per putaran</string>
+    <string name="respreview_anim_forever">Berulang terus</string>
     <string name="modcfg_consumer_suffix">%1$s · konsumen</string>
     <string name="block_palette_if">If</string>
     <string name="block_palette_if_else">If / Else</string>

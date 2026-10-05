@@ -39,7 +39,19 @@ sealed interface DrawablePreview {
      */
     data class BitmapRef(val resType: String, val resName: String, val filePath: String? = null) : DrawablePreview
 
-    /** A root tag we model the structure of but can't fully render (e.g. `<animated-vector>`). */
+    /**
+     * An `<animation-list>`: [frames] shown in turn for their durations, looping unless [oneShot]. A static
+     * render shows the first frame, which is what an `ImageView` shows before the animation is started.
+     */
+    data class Frames(val frames: List<Frame>, val oneShot: Boolean) : DrawablePreview
+
+    /**
+     * An `<animated-vector>`: the [vector] it animates plus the animator of each named target. A static render
+     * shows [vector] as authored, which is what Android shows before the animation is started.
+     */
+    data class AnimatedVector(val vector: VectorSpec, val targets: List<AnimationTarget>) : DrawablePreview
+
+    /** A root tag we model the structure of but can't fully render. */
     data class Unsupported(val rootTag: String, val message: String) : DrawablePreview
 }
 
@@ -114,6 +126,12 @@ data class VectorPath(
     val strokeCap: StrokeCap = StrokeCap.BUTT,
     val strokeJoin: StrokeJoin = StrokeJoin.MITER,
     val strokeMiter: Float = 4f,
+    /** `android:name`, which an `<animated-vector>` target refers to. */
+    val name: String? = null,
+    /** The visible part of the path, as fractions of its length (`trimPathStart`/`End`/`Offset`). */
+    val trimPathStart: Float = 0f,
+    val trimPathEnd: Float = 1f,
+    val trimPathOffset: Float = 0f,
 ) : VectorNode
 
 /**
@@ -131,6 +149,8 @@ data class VectorGroup(
     val pivotX: Float = 0f,
     val pivotY: Float = 0f,
     val clipPathData: String? = null,
+    /** `android:name`, which an `<animated-vector>` target refers to. */
+    val name: String? = null,
 ) : VectorNode
 
 /**
@@ -145,6 +165,8 @@ data class VectorSpec(
     val viewportHeight: Float,
     val rootAlpha: Float = 1f,
     val nodes: List<VectorNode>,
+    /** `android:name` of the `<vector>`, which an `<animated-vector>` target uses to animate [rootAlpha]. */
+    val name: String? = null,
 ) {
     /** Every [VectorPath] in the tree, depth-first, for callers that only want geometry and not transforms. */
     val paths: List<VectorPath> get() = ArrayList<VectorPath>().also { collectPaths(nodes, it) }
@@ -183,6 +205,12 @@ interface DrawableResolver {
 
     /** `@drawable/x` / `@mipmap/x` → its source (nested XML to recurse into, or a bitmap file), or null. */
     fun resolveDrawable(ref: String): ResolvedDrawable?
+
+    /** The XML text of a file resource (`@animator/x`, `@anim/x`, `@interpolator/x`, `@drawable/x`), or null. */
+    fun resolveXml(ref: String): String? = null
+
+    /** The value of `@string/x` / `@integer/x` (an animated vector's path data is often a string), or null. */
+    fun resolveValue(ref: String): String? = null
 
     companion object {
         val NONE: DrawableResolver = object : DrawableResolver {

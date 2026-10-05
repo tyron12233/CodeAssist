@@ -3,17 +3,15 @@ package dev.ide.core.services
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.index.AndroidResourceIndex
 import dev.ide.android.support.index.ResourceDeclValue
-import dev.ide.android.support.preview.AndroidColor
 import dev.ide.android.support.preview.ColorEntry
 import dev.ide.android.support.preview.ColorResources
 import dev.ide.android.support.preview.DrawablePreview
 import dev.ide.android.support.preview.DrawablePreviewParser
 import dev.ide.android.support.preview.DrawableResolver
-import dev.ide.android.support.preview.ResolvedDrawable
+import dev.ide.android.support.preview.ResourceDrawableResolver
 import dev.ide.android.support.resources.DrawableXmlCatalog
 import dev.ide.android.support.resources.ResourceItem
 import dev.ide.android.support.resources.ResourceReferences
-import dev.ide.android.support.resources.ResourceRepository
 import dev.ide.android.support.resources.ResourceType
 import dev.ide.core.EngineContext
 import dev.ide.model.ContentRole
@@ -114,53 +112,10 @@ internal class AndroidResourceService(private val ctx: EngineContext) : ModuleRe
     /** Raw bytes of a resource file (for bitmap preview); null if unreadable. */
     fun resourceBytes(file: Path): ByteArray? = runCatching { Files.readAllBytes(file) }.getOrNull()
 
-    private fun drawableResolver(module: Module): DrawableResolver {
-        val repo = ctx.resourceRepo(module) ?: return DrawableResolver.NONE
-        return object : DrawableResolver {
-            override fun resolveColor(ref: String): Long? = resolveColorRef(ref, repo, 0)
-
-            override fun resolveDimenDp(ref: String): Float? {
-                val name = sanitizeResName(ref.substringAfterLast('/'))
-                val v = repo.definitions(ResourceType.DIMEN, name).firstOrNull()?.value ?: return null
-                return DIMEN_LITERAL.find(v)?.groupValues?.get(1)?.toFloatOrNull()
-            }
-
-            override fun resolveDrawable(ref: String): ResolvedDrawable? {
-                val name = sanitizeResName(ref.substringAfterLast('/'))
-                // A @color used where a drawable is expected resolves to a flat fill — let the color path handle it.
-                if (ref.contains("color") && repo.has(ResourceType.COLOR, name)) return null
-                val item = repo.definitions(ResourceType.DRAWABLE, name).firstOrNull()
-                    ?: repo.definitions(ResourceType.MIPMAP, name).firstOrNull() ?: return null
-                val src = item.source ?: return null
-                val p = src.toString()
-                return if (p.endsWith(".xml")) {
-                    runCatching { src.readText() }.getOrNull()?.let { ResolvedDrawable.Xml(it) }
-                } else {
-                    ResolvedDrawable.BitmapFile(item.type.rClass, name, p)
-                }
-            }
-        }
-    }
-
-    /** Resolve `@color/x` (transitively through `@color` indirection) to ARGB; `@android:color/x` via the table. */
-    private fun resolveColorRef(ref: String, repo: ResourceRepository, depth: Int): Long? {
-        if (depth > 8) return null
-        val raw = ref.trim()
-        if (raw.startsWith("#")) return AndroidColor.parseHex(raw)
-        if (raw.contains("android:")) return AndroidColor.framework(raw.substringAfterLast('/'))
-        if (!raw.startsWith("@")) return null
-        val name = sanitizeResName(raw.substringAfterLast('/'))
-        val v = repo.definitions(ResourceType.COLOR, name).firstOrNull()?.value ?: return null
-        return when {
-            v.startsWith("#") -> AndroidColor.parseHex(v)
-            v.startsWith("@") -> resolveColorRef(v, repo, depth + 1)
-            else -> null
-        }
-    }
+    private fun drawableResolver(module: Module): DrawableResolver =
+        ctx.resourceRepo(module)?.let(ResourceDrawableResolver::of) ?: DrawableResolver.NONE
 
     private fun sanitizeResName(s: String): String = s.replace('.', '_').replace('-', '_').trim()
-
-    private val DIMEN_LITERAL = Regex("""(-?\d+(?:\.\d+)?)""")
 
     // ---- ModuleResources: any module type -------------------------------------------------------------
     //

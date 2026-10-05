@@ -34,7 +34,30 @@ object ResourceDrawableResolver {
                 ResolvedDrawable.BitmapFile(item.type.rClass, name, src.toString())
             }
         }
+
+        override fun resolveXml(ref: String): String? {
+            val (type, name) = typeAndName(ref) ?: return null
+            val src = repo.definitions(type, name).firstOrNull()?.source ?: return null
+            if (!src.toString().endsWith(".xml")) return null
+            return runCatching { src.readText() }.getOrNull()
+        }
+
+        override fun resolveValue(ref: String): String? {
+            val (type, name) = typeAndName(ref) ?: return null
+            if (type != ResourceType.STRING && type != ResourceType.INTEGER) return null
+            return repo.definitions(type, name).firstOrNull()?.value
+        }
     }
+
+    /** `@type/name` (never a framework `@android:` one, which a project repository does not hold) → its parts. */
+    private fun typeAndName(ref: String): Pair<ResourceType, String>? {
+        val m = REF.find(ref.trim()) ?: return null
+        if (m.groupValues[1] == "android") return null
+        val type = ResourceType.byRClass(m.groupValues[2]) ?: return null
+        return type to sanitize(m.groupValues[3])
+    }
+
+    private val REF = Regex("""^@\+?(?:([A-Za-z][\w.]*):)?([A-Za-z]\w*)/(.+)$""")
 
     /** Resolve `@color/x` (transitively through `@color` indirection) to ARGB; `@android:color/x` via the table. */
     private fun resolveColorRef(ref: String, repo: ResourceRepository, depth: Int): Long? {

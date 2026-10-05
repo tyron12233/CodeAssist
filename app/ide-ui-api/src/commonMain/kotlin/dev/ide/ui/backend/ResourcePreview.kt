@@ -34,11 +34,20 @@ sealed interface UiDrawable {
         val viewportHeight: Float,
         val rootAlpha: Float,
         val nodes: List<UiVectorNode>,
+        /** `android:name`, which an [AnimatedVector] target uses to animate [rootAlpha]. */
+        val name: String? = null,
     ) : UiDrawable
 
     data class Layers(val layers: List<UiLayer>, val adaptive: Boolean = false) : UiDrawable
     data class States(val states: List<UiStateLayer>, val defaultLayer: UiDrawable?) : UiDrawable
     data class Bitmap(val resType: String, val resName: String, val filePath: String?) : UiDrawable
+
+    /** An `<animation-list>`: [frames] in turn, looping unless [oneShot]. Drawn statically, its first frame. */
+    data class Frames(val frames: List<UiFrame>, val oneShot: Boolean) : UiDrawable
+
+    /** An `<animated-vector>`: [vector] and the animator of each named target. Drawn statically, [vector]. */
+    data class AnimatedVector(val vector: Vector, val targets: List<UiAnimationTarget>) : UiDrawable
+
     data class Unsupported(val rootTag: String, val message: String) : UiDrawable
 }
 
@@ -79,6 +88,11 @@ data class UiVectorPath(
     /** "miter" | "round" | "bevel" */
     val strokeJoin: String = "miter",
     val strokeMiter: Float = 4f,
+    val name: String? = null,
+    /** The visible part of the path, as fractions of its length. */
+    val trimPathStart: Float = 0f,
+    val trimPathEnd: Float = 1f,
+    val trimPathOffset: Float = 0f,
 ) : UiVectorNode
 
 /**
@@ -95,6 +109,7 @@ data class UiVectorGroup(
     val pivotX: Float = 0f,
     val pivotY: Float = 0f,
     val clipPathData: String? = null,
+    val name: String? = null,
 ) : UiVectorNode
 
 data class UiLayer(
@@ -106,6 +121,48 @@ data class UiLayer(
 )
 
 data class UiStateLayer(val states: List<String>, val drawable: UiDrawable)
+
+data class UiFrame(val drawable: UiDrawable, val durationMs: Int)
+
+/** The animator of the group, path or vector named [name] in an [UiDrawable.AnimatedVector]. */
+data class UiAnimationTarget(val name: String, val animator: UiAnimator)
+
+sealed interface UiAnimator {
+    data class Set(val children: List<UiAnimator>, val sequential: Boolean) : UiAnimator
+
+    /** One animated property; [repeatCount] is -1 for forever, [reverse] plays alternate repeats backwards. */
+    data class Property(
+        val property: String,
+        val keyframes: List<UiKeyframe>,
+        val durationMs: Long,
+        val startOffsetMs: Long,
+        val repeatCount: Int,
+        val reverse: Boolean,
+        val interpolator: UiInterpolator,
+    ) : UiAnimator
+}
+
+/** A value at [fraction] of an animator; null [value] = the property's own value. */
+data class UiKeyframe(val fraction: Float, val value: UiAnimatedValue?, val interpolator: UiInterpolator?)
+
+sealed interface UiAnimatedValue {
+    data class Number(val value: Float) : UiAnimatedValue
+    data class Color(val argb: Long) : UiAnimatedValue
+    data class PathData(val data: String) : UiAnimatedValue
+}
+
+/**
+ * An interpolator. [kind] is "linear" | "accelerate" | "decelerate" | "accelerate_decelerate" | "anticipate" |
+ * "overshoot" | "anticipate_overshoot" | "bounce" | "cycle" | "cubic" (through [points] `x1, y1, x2, y2`) |
+ * "path" (along [pathData]). [factor] is the factor, tension or cycle count the kind takes.
+ */
+data class UiInterpolator(
+    val kind: String,
+    val factor: Float = 1f,
+    val extraTension: Float = 1.5f,
+    val points: List<Float> = emptyList(),
+    val pathData: String? = null,
+)
 
 /** One color-resource swatch. [argb] is null when the value couldn't be resolved (framework/unknown ref). */
 data class UiColorEntry(val name: String, val rawValue: String, val argb: Long?)

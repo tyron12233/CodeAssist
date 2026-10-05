@@ -15,6 +15,17 @@ usual `res/` conventions:
   `<vector>` (viewport + `<path>`/`<group>`, full SVG `pathData` incl. arcs), `<selector>` (the
   default state), `<layer-list>`/`<inset>` (composited, inset), `<color>`, `<ripple>`, and
   `<bitmap>`/`@drawable` references to image files.
+- **Animated drawables** play in the pane, looping with a short hold on the last frame, under
+  play/pause and restart controls. `<animation-list>` shows each frame for its `android:duration`
+  (image frames are decoded, `oneshot` stops on the last one). `<animated-vector>` runs its targets'
+  `<objectAnimator>`/`<set>` animators (from `res/animator` or inline `<aapt:attr>`), with
+  `<propertyValuesHolder>`/`<keyframe>`, `startOffset`, `repeatCount`/`repeatMode`, and the framework
+  and `<pathInterpolator>` curves, over group transforms, path colours, alphas, stroke width,
+  `trimPath*`, `pathData` morphing, and the root `alpha`. The evaluation is
+  `DrawableAnimation.atTime` (`ide-ui-editor`), which turns the drawable into the static one it shows
+  at a moment. Everything else that draws a drawable (icons, layout backgrounds, `painterResource`)
+  shows the unstarted state: the first frame, or the vector as authored. `<animated-selector>` shows
+  its states like a `<selector>`; its transitions are not played.
 - **Color** — a `res/values` file named `*color*`. Rendered as a swatch list (name · resolved hex),
   with `@color/…` indirection followed transitively.
 - **Bitmap** — `png`/`webp`/`jpg`/`jpeg`/`gif`/`bmp` under `res/`. Decoded to a Compose `ImageBitmap`

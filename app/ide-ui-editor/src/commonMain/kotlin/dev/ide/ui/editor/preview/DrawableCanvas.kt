@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -45,17 +46,23 @@ internal fun argbColor(v: Long): Color = Color(v.toInt())
  * bytes up front. Without it a bitmap draws the placeholder, which is right for a preview pane and wrong
  * for an icon whose foreground IS an image: an adaptive icon with a `<bitmap>` foreground would rasterise
  * to a dashed grey box.
+ *
+ * An animated drawable draws as it stands before it is started: an animation-list's first frame, an animated
+ * vector's own vector. To draw a moment of the animation, pass [DrawableAnimation.atTime]'s result instead.
+ * [parsePath] turns vector path data into a [Path]; the default shares parsed paths across callers, and a
+ * caller drawing a morphing path every frame passes its own so the transient shapes stay out of that cache.
  */
 fun DrawScope.drawUiDrawable(
     d: UiDrawable,
     topLeft: Offset,
     size: Size,
     images: ((UiDrawable.Bitmap) -> ImageBitmap?)? = null,
+    parsePath: (String, Boolean) -> Path = AndroidPathParser::cached,
 ) {
     when (d) {
         is UiDrawable.SolidColor -> drawRect(argbColor(d.color), topLeft, size)
         is UiDrawable.Shape -> drawShape(d, topLeft, size)
-        is UiDrawable.Vector -> drawVector(d, topLeft, size)
+        is UiDrawable.Vector -> drawVector(d, topLeft, size, parsePath)
         is UiDrawable.Layers -> for (layer in d.layers) {
             val l = layer.insetLeftDp.dp.toPx(); val t = layer.insetTopDp.dp.toPx()
             val r = layer.insetRightDp.dp.toPx(); val b = layer.insetBottomDp.dp.toPx()
@@ -64,9 +71,12 @@ fun DrawScope.drawUiDrawable(
                 Offset(topLeft.x + l, topLeft.y + t),
                 Size((size.width - l - r).coerceAtLeast(0f), (size.height - t - b).coerceAtLeast(0f)),
                 images,
+                parsePath,
             )
         }
-        is UiDrawable.States -> d.defaultLayer?.let { drawUiDrawable(it, topLeft, size, images) }
+        is UiDrawable.States -> d.defaultLayer?.let { drawUiDrawable(it, topLeft, size, images, parsePath) }
+        is UiDrawable.Frames -> d.frames.firstOrNull()?.let { drawUiDrawable(it.drawable, topLeft, size, images, parsePath) }
+        is UiDrawable.AnimatedVector -> drawVector(d.vector, topLeft, size, parsePath)
         is UiDrawable.Bitmap -> {
             val image = images?.invoke(d)
             if (image != null) drawContained(image, topLeft, size) else drawPlaceholder(topLeft, size)
@@ -150,7 +160,7 @@ private fun DrawScope.gradientBrush(g: UiGradient, rect: Rect): Brush {
     }
 }
 
-private fun DrawScope.drawVector(v: UiDrawable.Vector, topLeft: Offset, size: Size) {
+private fun DrawScope.drawVector(v: UiDrawable.Vector, topLeft: Offset, size: Size, parsePath: (String, Boolean) -> Path) {
     if (v.viewportWidth <= 0f || v.viewportHeight <= 0f) return
     // Fit the viewport into the bounds preserving aspect ratio, centred.
     val scaleF = min(size.width / v.viewportWidth, size.height / v.viewportHeight)
@@ -159,7 +169,7 @@ private fun DrawScope.drawVector(v: UiDrawable.Vector, topLeft: Offset, size: Si
     val oy = topLeft.y + (size.height - drawnH) / 2f
     translate(ox, oy) {
         scale(scaleF, scaleF, pivot = Offset.Zero) {
-            drawVectorNodes(v.nodes, v.rootAlpha)
+            drawVectorNodes(v.nodes, v.rootAlpha, parsePath)
         }
     }
 }
@@ -168,17 +178,19 @@ private fun DrawScope.drawVector(v: UiDrawable.Vector, topLeft: Offset, size: Si
  * Draws a `<vector>`'s node tree in viewport coordinates. The enclosing scope has already mapped the
  * viewport onto the target bounds, so a group's translate/scale/rotate values apply as written.
  */
-private fun DrawScope.drawVectorNodes(nodes: List<UiVectorNode>, rootAlpha: Float) {
+private fun DrawScope.drawVectorNodes(nodes: List<UiVectorNode>, rootAlpha: Float, parsePath: (String, Boolean) -> Path) {
     for (node in nodes) when (node) {
-        is UiVectorPath -> drawVectorPath(node, rootAlpha)
-        is UiVectorGroup -> drawVectorGroup(node, rootAlpha)
+        is UiVectorPath -> drawVectorPath(node, rootAlpha, parsePath)
+        is UiVectorGroup -> drawVectorGroup(node, rootAlpha, parsePath)
     }
 }
 
-private fun DrawScope.drawVectorPath(p: UiVectorPath, rootAlpha: Float) {
+private fun DrawScope.drawVectorPath(p: UiVectorPath, rootAlpha: Float, parsePath: (String, Boolean) -> Path) {
     // Drawing only READS the path, so the shared cached one is safe here and saves a re-parse per
     // path per frame — the icon grid redraws every visible tile on every scroll frame.
-    val path = AndroidPathParser.cached(p.pathData, fillEvenOdd = p.fillRule == "evenOdd")
+    val parsed = parsePath(p.pathData, p.fillRule == "evenOdd")
+    // Like VectorDrawable, an offset alone does not trim: only a start or end short of the whole path does.
+    val path = if (p.trimPathStart != 0f || p.trimPathEnd != 1f) trimmed(parsed, p) else parsed
     p.fillColor?.let {
         drawPath(path, argbColor(it), alpha = (p.fillAlpha * rootAlpha).coerceIn(0f, 1f), style = Fill)
     }
@@ -206,17 +218,39 @@ private fun DrawScope.drawVectorPath(p: UiVectorPath, rootAlpha: Float) {
 }
 
 /** Android composes a group's transform as scale, then rotate, then translate, all about the pivot. */
-private fun DrawScope.drawVectorGroup(g: UiVectorGroup, rootAlpha: Float) {
+private fun DrawScope.drawVectorGroup(g: UiVectorGroup, rootAlpha: Float, parsePath: (String, Boolean) -> Path) {
     val pivot = Offset(g.pivotX, g.pivotY)
     translate(g.translateX, g.translateY) {
         rotate(g.rotation, pivot) {
             scale(g.scaleX, g.scaleY, pivot) {
                 val clip = g.clipPathData
-                if (clip == null) drawVectorNodes(g.children, rootAlpha)
-                else clipPath(AndroidPathParser.cached(clip)) { drawVectorNodes(g.children, rootAlpha) }
+                if (clip == null) drawVectorNodes(g.children, rootAlpha, parsePath)
+                else clipPath(parsePath(clip, false)) { drawVectorNodes(g.children, rootAlpha, parsePath) }
             }
         }
     }
+}
+
+/**
+ * The part of [path] a `trimPathStart`/`End`/`Offset` leaves visible, computed as Android's VectorDrawable does:
+ * the window is shifted by the offset and wraps past the end of the path back to its start.
+ */
+private fun trimmed(path: Path, p: UiVectorPath): Path {
+    val measure = PathMeasure()
+    measure.setPath(path, false)
+    val length = measure.length
+    val out = Path().apply { fillType = path.fillType }
+    if (length <= 0f) return out
+    fun wrap(v: Float) = (v % 1f).let { if (it < 0f) it + 1f else it }
+    val start = wrap(p.trimPathStart + p.trimPathOffset) * length
+    val end = wrap(p.trimPathEnd + p.trimPathOffset) * length
+    if (start > end) {
+        measure.getSegment(start, length, out, true)
+        if (end > 0f) measure.getSegment(0f, end, out, true)
+    } else {
+        measure.getSegment(start, end, out, true)
+    }
+    return out
 }
 
 /** A light/dark checkerboard, the conventional "transparency" backdrop behind a previewed drawable/image. */

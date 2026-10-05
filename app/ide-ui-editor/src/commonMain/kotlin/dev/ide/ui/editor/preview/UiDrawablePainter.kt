@@ -26,6 +26,9 @@ class UiDrawablePainter(
         is UiDrawable.Vector ->
             if (drawable.widthDp > 0f && drawable.heightDp > 0f)
                 Size(drawable.widthDp * density, drawable.heightDp * density) else Size.Unspecified
+        is UiDrawable.AnimatedVector ->
+            if (drawable.vector.widthDp > 0f && drawable.vector.heightDp > 0f)
+                Size(drawable.vector.widthDp * density, drawable.vector.heightDp * density) else Size.Unspecified
         is UiDrawable.Shape ->
             if (drawable.intrinsicWidthDp > 0f && drawable.intrinsicHeightDp > 0f)
                 Size(drawable.intrinsicWidthDp * density, drawable.intrinsicHeightDp * density) else Size.Unspecified
