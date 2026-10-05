@@ -302,6 +302,12 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     /** Models that failed this session for want of quota, so a suggestion never points back at one. */
     private val exhaustedModels = ConcurrentHashMap.newKeySet<String>()
 
+    /**
+     * Models the provider answered "not found" for this session. Gemini keeps listing models it has closed to
+     * new projects (2.5 Pro), so the live list alone would keep offering a model that can never answer.
+     */
+    private val missingModels = ConcurrentHashMap.newKeySet<String>()
+
     /** One pacer per key + model, which is the scope a provider counts its per-minute limits against. */
     private val pacers = ConcurrentHashMap<String, RequestPacer>()
 
@@ -392,8 +398,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         scope.launch {
             val fetched = runCatching { provider.listModels(ProviderConfig(key, cfg.baseUrl, cfg.caCertificatePem)) }
                 .getOrDefault(provider.models)
-            rememberPreferred(cfg.selectedId, provider, fetched)
-            _models.value = fetched.map { UiAgentModel(it.id, it.displayName) }
+            val usable = fetched.filter { it.id !in missingModels }.ifEmpty { fetched }
+            rememberPreferred(cfg.selectedId, provider, usable)
+            _models.value = usable.map { UiAgentModel(it.id, it.displayName) }
         }
     }
 
@@ -717,16 +724,22 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     }
 
     /**
-     * For an error a different model fixes (no quota for this model, or its daily allowance spent), the model
-     * to offer instead: the provider's pick from the account's live list, then its default, then anything else
-     * it lists, skipping every model that has already failed this way.
+     * For an error a different model fixes (no quota for this model, its daily allowance spent, or the model
+     * retired or closed to the account), the model to offer instead: the provider's pick from the account's live
+     * list, then its default, then anything else it lists, skipping every model that has already failed this way.
+     * A model picked once stays picked across launches, so without this offer a retired pick failed every send.
      */
     private fun suggestionFor(kind: String?): String? {
-        if (kind != LlmErrorKind.MODEL_NOT_ON_PLAN.name && kind != LlmErrorKind.DAILY_LIMIT.name) return null
+        val missing = kind == LlmErrorKind.NOT_FOUND.name
+        if (!missing && kind != LlmErrorKind.MODEL_NOT_ON_PLAN.name && kind != LlmErrorKind.DAILY_LIMIT.name) return null
         val cfg = resolveConfig()
         if (cfg.selectedId == GATEWAY) return null
         val provider = registry.provider(cfg.clientProviderId) ?: return null
         exhaustedModels += cfg.model
+        if (missing) {
+            missingModels += cfg.model
+            _models.update { list -> list.filterNot { it.id == cfg.model } }
+        }
         val listed = _models.value.map { it.id }.ifEmpty { provider.models.map { it.id } }
         val candidates = listOfNotNull(preferredModels[cfg.selectedId], provider.defaultModel) + listed
         return candidates.firstOrNull { it !in exhaustedModels }
