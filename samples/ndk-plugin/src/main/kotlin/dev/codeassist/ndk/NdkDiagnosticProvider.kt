@@ -53,6 +53,7 @@ class NdkDiagnosticProvider(
         // include directory, without which line 2 of every generated project is a false error.
         val facet = target.module.facets.get(NdkFacet.KEY) ?: NdkFacet()
         NdkFlags.remember(target.module.dir.path, facet)
+        dev.codeassist.ndk.jni.JniModules.remember(target.module)
 
         // The facet is part of the key: changing the standard changes what parses, and answering from a
         // cache filled under the old one would leave the editor a version behind the file.

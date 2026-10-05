@@ -206,6 +206,42 @@ class NdkTemplatesTest {
         assertTrue(files.keys.none { it.contains("..") }, files.keys.toString())
     }
 
+    // ---- the JNI app ---------------------------------------------------------------------------------
+
+    /**
+     * The generated activity and C++ file have to agree on the JNI symbol, or the app builds, links and throws
+     * UnsatisfiedLinkError on its first call. Read back with the same scanner the editor's check uses, so this
+     * is the check the user would see, run on what the template wrote.
+     */
+    @Test
+    fun `the native app's C++ implements the native method its activity declares, in Kotlin and in Java`() {
+        for (language in listOf("kotlin", "java")) {
+            val s = generate(NativeAppTemplate(), NdkTemplateSupport.LANGUAGE to language)
+            val activityPath = s.files.keys.single { it.contains("MainActivity") }
+            val natives = if (language == "kotlin") {
+                assertTrue(activityPath.endsWith(".kt"), activityPath)
+                dev.codeassist.ndk.jni.NativeMethodScanner.scanKotlin(s.files.getValue(activityPath), "MainActivity.kt")
+            } else {
+                assertTrue(activityPath.endsWith(".java"), activityPath)
+                dev.codeassist.ndk.jni.NativeMethodScanner.scanJava(s.files.getValue(activityPath))
+            }
+            val native = natives.single()
+            assertEquals("com.example.demo.MainActivity", native.className)
+            val functions = dev.codeassist.ndk.jni.CppJniScanner.scan(s.files.getValue("app/src/main/cpp/native-lib.cpp")).functions
+            assertEquals(listOf(dev.codeassist.ndk.jni.Jni.shortName(native)), functions.map { it.name }, language)
+            assertTrue("System.loadLibrary(\"native-lib\")" in s.files.getValue(activityPath))
+        }
+    }
+
+    @Test
+    fun `the native app is an android app with the ndk facet linking the static C++ runtime`() {
+        val module = generate(NativeAppTemplate()).module()
+        assertEquals("android-app", module.typeId)
+        assertEquals(setOf("ndk", "android"), module.facets.keys)
+        assertEquals("c++_static", module.facets.getValue("ndk")["stl"])
+        assertEquals(false, module.facets.getValue("ndk")["nativeActivity"])
+    }
+
     private fun generate(
         template: dev.ide.model.template.ProjectTemplate,
         vararg args: Pair<String, String>,

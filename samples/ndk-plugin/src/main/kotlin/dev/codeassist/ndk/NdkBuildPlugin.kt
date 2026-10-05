@@ -50,6 +50,7 @@ class NdkBuildPlugin(
 
         val variant = config.request.variant.name
         for (module in config.project.modules) {
+            dev.codeassist.ndk.jni.JniModules.remember(module)
             val facet = module.facets.get(NdkFacet.KEY) ?: continue
             val taskName = TaskName(":${module.name}:compileNative")
             val buildDir = config.env.buildDir(module)
@@ -288,10 +289,13 @@ internal class NdkCompileTask(
         removeOrphanObjects(objDir, objects.toSet())
 
         val out = outputFor(abi)
+        // Linking through the C++ driver is what brings the runtime in, so it follows the sources, not a flag.
+        val cpp = units.any { (source, _) -> source.extension.lowercase() != "c" }
         val linkStamp = buildString {
             appendLine(version)
             objects.forEach { appendLine(it.toString()) }
             appendLine(facet.linkLibraries.joinToString(" "))
+            appendLine("cpp=$cpp stl=${facet.stl}")
         }
         val linkStampFile = objDir.resolve("link.stamp")
         if (!NativeIncremental.needsLink(stale.isNotEmpty(), out, objects, linkStamp, readStamp(linkStampFile))) {
@@ -300,15 +304,35 @@ internal class NdkCompileTask(
         }
 
         ctx.progress.report(stale.size.toDouble() / (stale.size + 1), "Linking lib${facet.libraryName}.so")
-        val linked = toolchain.linkShared(objects, out, facet.linkLibraries)
+        val linked = toolchain.linkShared(objects, out, facet.linkLibraries, cpp = cpp, stl = facet.stl)
         report(ctx, linked.output, null)
         if (!linked.ok) {
             runCatching { Files.deleteIfExists(linkStampFile) }
             return TaskResult.Failed("ndk: lib${facet.libraryName}.so did not link")
         }
+        packageCxxRuntime(ctx, toolchain, cpp, out)?.let { return it }
         writeStamp(linkStampFile, linkStamp)
 
         ctx.logger()("ndk: wrote ${out.fileName} (${runCatching { Files.size(out) }.getOrDefault(0L)} bytes) for $abi")
+        return null
+    }
+
+    /**
+     * Put `libc++_shared.so` beside the library when it links against it, since the APK must carry it and
+     * nothing else packages it. With any other runtime, a copy this task left there earlier is removed, but
+     * only from the build directory: in `src/main/jniLibs` the file may be the user's own.
+     */
+    private fun packageCxxRuntime(ctx: TaskContext, toolchain: NdkToolchain, cpp: Boolean, out: Path): TaskResult? {
+        val target = out.resolveSibling(CXX_SHARED)
+        if (cpp && facet.stl == "c++_shared") {
+            val runtime = toolchain.sharedCxxRuntime
+                ?: return TaskResult.Failed("ndk: stl = c++_shared, but the toolchain has no $CXX_SHARED")
+            runCatching { Files.copy(runtime, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+                .onFailure { return TaskResult.Failed("ndk: could not package $CXX_SHARED: ${it.message}", it) }
+            ctx.logger()("ndk: packaged $CXX_SHARED")
+        } else if (libDir.normalize() != moduleDir.resolve("src/main/jniLibs").normalize()) {
+            runCatching { Files.deleteIfExists(target) }
+        }
         return null
     }
 
@@ -392,6 +416,7 @@ internal class NdkCompileTask(
     private companion object {
         val SOURCE_EXTENSIONS = setOf("c", "cc", "cpp", "cxx", "c++")
         val HEADER_EXTENSIONS = setOf("h", "hh", "hpp", "hxx", "inl")
+        const val CXX_SHARED = "libc++_shared.so"
 
         /** What the bundled toolchain was built to target; see tools/ndk-toolchain/README.md. */
         const val SUPPORTED_ABI = "arm64-v8a"

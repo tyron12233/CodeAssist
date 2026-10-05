@@ -1,5 +1,12 @@
 package dev.codeassist.ndk
 
+import dev.codeassist.ndk.jni.HostSupport
+import dev.codeassist.ndk.jni.JniDeclarations
+import dev.codeassist.ndk.jni.JniGutterMarks
+import dev.codeassist.ndk.jni.JniMissingFunctionProvider
+import dev.codeassist.ndk.jni.JniOrphanFunctionProvider
+import dev.codeassist.ndk.jni.jniNavigateAction
+import dev.ide.plugin.editor.EDITOR_DECORATION_EP
 import dev.ide.analysis.DIAGNOSTIC_PROVIDER_EP
 import dev.ide.build.BUILD_PLUGIN_EP
 import dev.ide.lang.FILE_TYPE_EP
@@ -51,6 +58,7 @@ class NdkPlugin : Plugin {
         // user finds out what is configurable.
         reg.register(ProjectTemplateExtensionPoint, NativeCppTemplate())
         reg.register(ProjectTemplateExtensionPoint, NativeActivityTemplate())
+        reg.register(ProjectTemplateExtensionPoint, NativeAppTemplate())
 
         // What a .c, .cpp or .h looks like in the project tree. The UI facet registers the matching art and
         // the same mapping for tabs and breadcrumbs; both read one table ([NdkFileIcons]).
@@ -73,6 +81,18 @@ class NdkPlugin : Plugin {
         // Errors in the editor, from the compiler that builds the file. Registered with the toolchain read
         // lazily, because `register` runs before there is any reason to unpack one.
         reg.register(DIAGNOSTIC_PROVIDER_EP, NdkDiagnosticProvider({ NdkState.toolchain }, reg.logger("NdkClang")))
+
+        // JNI: a native method with no C/C++ function (with a fix that writes it), a `Java_` function no method
+        // matches, a gutter mark on each end of a pair, and Go to Declaration across it.
+        val jniLog = reg.logger("NdkJni")
+        reg.register(DIAGNOSTIC_PROVIDER_EP, JniMissingFunctionProvider(jniLog))
+        reg.register(DIAGNOSTIC_PROVIDER_EP, JniOrphanFunctionProvider(jniLog))
+        reg.register(EDITOR_DECORATION_EP, JniGutterMarks())
+        reg.register(UI_ACTION_EP, jniNavigateAction())
+        if (HostSupport.spi31) JniDeclarations.register(reg)
+
+        reg.register(UI_ACTION_EP, NdkModuleActions.addCpp(log))
+        NdkModuleActions.legacyNewFileActions().forEach { reg.register(UI_ACTION_EP, it) }
 
         // The command that makes the toolchain real to the user: it prepares it (unpacking on first run,
         // with a progress row), then compiles and links a throwaway file so the answer is "it works" rather
@@ -144,7 +164,7 @@ class NdkPlugin : Plugin {
         if (!compiled.ok) return "compile failed: ${compiled.output.take(300)}"
 
         val so = dir.resolve("libcaprobe.so")
-        val linked = toolchain.linkShared(listOf(obj), so, libs = listOf("log"))
+        val linked = toolchain.linkShared(listOf(obj), so, libs = listOf("log"), cpp = true)
         if (!linked.ok) return "link failed: ${linked.output.take(300)}"
 
         return "compiled and linked ${so.fileName} (${Files.size(so)} bytes)"

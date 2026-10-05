@@ -47,8 +47,13 @@ data class NdkFacet(
      */
     val cStandard: String = "c17",
 
-    /** `c++_shared` or `c++_static`. Shared is the default because the plugin packages that one. */
-    val stl: String = "c++_shared",
+    /**
+     * The C++ runtime: `c++_static` links it into the library, `c++_shared` packages `libc++_shared.so` beside
+     * it, `none` links none (C, or C++ with no standard library). Static is the default because it is one
+     * self-contained file, which is also what Android Studio's CMake defaults to; shared is for an app whose
+     * several native libraries pass C++ objects between each other.
+     */
+    val stl: String = "c++_static",
 
     /** Optimization level passed to clang, as written (`-O2`, `-Oz`, `-O0`). */
     val optimization: String = "-O2",

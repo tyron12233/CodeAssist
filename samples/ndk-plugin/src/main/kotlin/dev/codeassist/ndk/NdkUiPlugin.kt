@@ -55,6 +55,10 @@ class NdkUiPlugin : UiPlugin {
         for ((suffixes, iconId) in NdkFileIcons.SUFFIXES) {
             ui.fileIcon(FileIcon(iconId, suffixes, badge = BADGES.getValue(iconId), color = COLORS.getValue(iconId)))
         }
+
+        // C++ class / source / header in the New menu. An IDE before SPI 3.1.0 has no such menu entry, and
+        // gets tree actions from the engine facet instead (NdkModuleActions.legacyNewFileActions).
+        CppNewFileTemplates.register(ui)
     }
 
     private companion object {

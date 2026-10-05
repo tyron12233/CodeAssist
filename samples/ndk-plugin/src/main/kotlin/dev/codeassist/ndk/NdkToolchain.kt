@@ -162,6 +162,13 @@ class NdkToolchain(
         return "$LAYOUT_VERSION-$identity"
     }
 
+    /**
+     * The shared C++ runtime an app linked with `c++_shared` has to carry in its APK beside its own library.
+     * Null before [prepare] has unpacked the toolchain.
+     */
+    val sharedCxxRuntime: Path?
+        get() = root.resolve("sysroot/usr/lib/aarch64-linux-android/libc++_shared.so").takeIf { Files.isRegularFile(it) }
+
     /** What a tool printed, and whether it succeeded. */
     data class ToolResult(val ok: Boolean, val output: String)
 
@@ -274,16 +281,37 @@ class NdkToolchain(
         )
     }
 
-    /** Link [objects] into a shared library at [output]. */
-    fun linkShared(objects: List<Path>, output: Path, libs: List<String> = emptyList()): ToolResult {
+    /**
+     * Link [objects] into a shared library at [output].
+     *
+     * [cpp] links through the C++ driver, which is what brings the C++ runtime in; [stl] says which one (see
+     * [NdkFacet.stl]). Linked through the C driver, C++ code links without error and then fails at
+     * `System.loadLibrary` with "cannot locate symbol", because nothing provided `std::` or `operator new`.
+     * `--no-undefined` is the guard against that whole class: an unresolved symbol is a link error here, with
+     * its name, instead of a crash on the device.
+     */
+    fun linkShared(
+        objects: List<Path>,
+        output: Path,
+        libs: List<String> = emptyList(),
+        cpp: Boolean = false,
+        stl: String = "c++_static",
+    ): ToolResult {
         val driver = driver ?: return ToolResult(false, "no compiler for this device's ABI")
         val linker = linker ?: return ToolResult(false, "no linker for this device's ABI")
         Files.createDirectories(output.parent)
         return run(
             buildList {
                 add(driver.toString()); add("clang")
+                if (cpp) add("--driver-mode=g++")
                 addAll(commonFlags())
                 add("-shared")
+                add("-Wl,--no-undefined")
+                if (cpp) when (stl) {
+                    "c++_static" -> add("-static-libstdc++")
+                    "none" -> add("-nostdlib++")
+                    // c++_shared is the driver's own default on Android: it links libc++_shared.so.
+                }
                 // 16 KB pages. Android 15 runs a library whose LOAD segments are 4 KB-aligned in a
                 // compatibility mode and says so in a dialog on first launch, and Play requires alignment
                 // outright for apps targeting API 35+. The NDK's own toolchain passes this by default and

@@ -106,7 +106,12 @@ one thing it will not do is confuse *absent* with *empty*: `linkLibraries = []` 
 
 ## The project templates
 
-Two of them, in two categories of the gallery, because the projects are not variants of each other:
+Three of them, because the projects are not variants of each other:
+
+- **Native C++ App** (Android) — an Android app in Java or Kotlin (the user picks) whose `MainActivity`
+  declares one native method and shows what it returns, and a C++ file implementing it. The JNI symbol is
+  derived by the same `Jni` code the editor's check uses. A plain `android.app.Activity` building its view in
+  code, so the project needs nothing downloaded.
 
 - **C/C++ Library** (Other) — a `java-lib` module with a header and an implementation, in C or C++ as the
   user picks, and nothing Android in it: no manifest, no resources, no `android/log.h`. The header is
@@ -179,6 +184,42 @@ something callable, `Pattern` is a snippet, a bare name is a macro in C and a ty
 Asked once per word, not per keystroke: the cache is keyed on the buffer and the **start** of the word being
 typed, so narrowing a prefix re-filters what clang already said instead of re-parsing.
 
+## JNI
+
+Java and Kotlin call the C++ through JNI, and the plugin checks both sides of that binding as you type.
+`jni/` holds it:
+
+- **`Jni`** — the specification's naming (`Java_` + mangled class + `_` + mangled method, `__` + the mangled
+  argument descriptor for an overload; `_1`, `_2`, `_3`, `_0xxxx`, `$` as `_00024`) and its typing
+  (`jint`, `jstring`, `jintArray`, `jobjectArray`, `jclass` as the receiver of a static method).
+- **`NativeMethodScanner`** — `native` methods in Java and `external fun` in Kotlin, read from the text with
+  comments and literals blanked. Where kotlinc puts the native method decides the symbol, and
+  `KotlinNativeLayoutTest` reads it off compiled classes: `@JvmStatic` in a companion is a static native on the
+  outer class, a plain one is an instance method of `Outer$Companion`, a top-level one is a static on the file
+  facade (`@file:JvmName` respected).
+- **`CppJniScanner`** — the `Java_…` functions a C/C++ file *defines* (a declaration implements nothing), and
+  whether it calls `RegisterNatives`, after which names alone prove nothing and the checks stand down.
+
+On top of them, in a module with the `[ndk]` facet:
+
+- **Missing function**: a native method nothing implements is a warning on its name, and the quick fix writes
+  the function, with the right symbol, receiver and parameter types and a body that returns something of the
+  return type, into the module's main C/C++ file. With no C/C++ file yet it creates `src/main/cpp/<lib>.cpp`
+  (`WorkspaceEdit.createFile`, SPI 3.1.0; an older IDE gets no fix in that one case).
+- **Orphan function**: a `Java_…` function no method in the module matches, the usual leftover of a rename.
+- **Navigation**: a gutter mark on both ends of every pair; tapping it opens the other end. On SPI 3.1.0 the
+  same pairs answer Go to Declaration (`DeclarationProvider`).
+- **New ▸ C++ Class / C/C++ Source File / C/C++ Header File** in native directories (`NewFileTemplate`, SPI
+  3.1.0; an older IDE gets "New C++ Class" and "New C/C++ Source File" tree actions with placeholder names).
+- **Add C++ to Module** on a module row: declares `src/main/cpp`, writes the `[ndk]` table and starts a file
+  (SPI 3.1.0's `ActionContext.workspaceServices` and `ModuleSources.setFacetData`).
+
+The C++ runtime is linked the way `stl` says: `c++_static` (the default) into the library, `c++_shared` as
+`libc++_shared.so` copied beside it, `none` for neither. The link always passes `-Wl,--no-undefined`, so a
+symbol nothing provides is a build error with its name rather than an `UnsatisfiedLinkError` on the device.
+Before this the link went through the C driver with no runtime at all, and any C++ using the standard library
+built, linked, and failed to load.
+
 ## Verified
 
 On an arm64 emulator (API 37), from inside the IDE: the plugin unpacked its toolchain, ran
@@ -230,6 +271,6 @@ Escape both characters in every pattern, and treat a JVM-green regex as unverifi
 
 ## Not built yet
 
-- Incremental compilation: the task rebuilds every source when any input changes. Per-file up-to-date checks
-  would need a header dependency scan (`clang -MD`), which is the next real piece of work here.
+- Updating the C++ when a Java method or class is renamed: the IDE has no rename hook a plugin can join, so
+  today the rename leaves an orphan function, which the orphan check then points at.
 - More than one ABI, which needs a toolchain built with more than one backend.
