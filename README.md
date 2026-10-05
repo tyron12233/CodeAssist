@@ -113,7 +113,7 @@ on each release.
 ## Tests
 
 <!-- AUTOGEN:tests:START -->
-**1868** tests passing across **336** suites · 0 failing · 1 skipped (framework / `CI_CORE_ONLY`).
+**1923** tests passing across **345** suites · 0 failing · 2 skipped (framework / `CI_CORE_ONLY`).
 <!-- AUTOGEN:tests:END -->
 
 The badges and the numbers in this section are regenerated automatically on each release (see
