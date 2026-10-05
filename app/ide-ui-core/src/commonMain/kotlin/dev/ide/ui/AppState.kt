@@ -193,6 +193,40 @@ class OpenFile(
      *  on disk, so any divergence from it is resolved. */
     fun onSaved(text: String) { savedText = text; modified = false; staleOnDisk = false }
 
+    /**
+     * Bring the buffer up to [text], which something other than this editor wrote to the file (the AI agent, a
+     * tool outside the IDE). Applied as one edit over only the span that differs, so the caret and the rest of
+     * the tab's state survive, the change is a single undo step, and the edit bumps the revision the
+     * highlighting daemon re-runs on. Replacing the tab instead built a fresh session whose revision matched the
+     * old one's when the tab had never been typed in, so nothing re-analyzed it. [text] becomes the saved
+     * baseline, since it is what the file now holds.
+     */
+    fun applyExternalText(text: String) {
+        val current = session.doc.text
+        if (current != text) {
+            var start = 0
+            val shorter = minOf(current.length, text.length)
+            while (start < shorter && current[start] == text[start]) start++
+            var oldEnd = current.length
+            var newEnd = text.length
+            while (oldEnd > start && newEnd > start && current[oldEnd - 1] == text[newEnd - 1]) { oldEnd--; newEnd-- }
+            val inserted = text.substring(start, newEnd)
+            val delta = inserted.length - (oldEnd - start)
+            // A caret before the change stays put, one after it moves with the text, one inside it lands after
+            // the new text.
+            fun map(offset: Int): Int = when {
+                offset <= start -> offset
+                offset >= oldEnd -> offset + delta
+                else -> start + inserted.length
+            }
+            val selection = session.selection
+            session.beginBatch()
+            session.replaceRange(start, oldEnd, inserted, TextRange(map(selection.start), map(selection.end)))
+            session.endBatch()
+        }
+        onSaved(text)
+    }
+
     companion object {
         // Monotonic tab-id source. Bumped only from OpenFile construction, which always happens on the UI
         // thread (see [tabId]), so a plain counter is race-free without atomics.
@@ -497,9 +531,9 @@ class IdeUiState(
     var analyzeOnTheFly by mutableStateOf(true)
 
     /**
-     * Bumped when an action changed files other than the one in front of the user, so the focused editor
-     * re-analyzes although its own text did not change: a quick fix that writes the C++ function a `native`
-     * method was missing changes what the method's own file reports.
+     * Bumped when files changed other than through the editor in front of the user, so the open tabs re-analyze
+     * although their own text did not change: a quick fix that writes the C++ function a `native` method was
+     * missing changes what the method's own file reports, and an agent's edit to one file can break another.
      */
     var analysisEpoch by mutableStateOf(0)
     /** Quiet period (ms) after the last edit before the highlighting daemon runs. */
@@ -965,12 +999,13 @@ class IdeUiState(
                 }
                 val text = readTabText(f.path) ?: continue
                 if (text == f.savedText) continue // untouched → preserve session/undo/caret
-                val i = openFiles.indexOf(f)
-                if (i < 0 || openFiles[i].modified) continue
-                val name = f.path.substringAfterLast('/').substringAfterLast('\\')
-                openFiles[i] = OpenFile(f.path, name, text, tabId = f.tabId)
+                if (f !in openFiles || f.modified) continue
+                f.applyExternalText(text)
                 backend.editor.updateDocument(f.path, text)
             }
+            // The write can change what other files report as well as its own (an agent renaming a function
+            // breaks its callers), so every open tab is re-analyzed, the focused one included.
+            analysisEpoch++
         }
     }
 
@@ -1104,12 +1139,12 @@ class IdeUiState(
 
     /** Re-read clean (unmodified) tabs whose disk content changed — e.g. references rewritten by a rename. */
     private suspend fun refreshCleanTabs() {
-        for (i in openFiles.indices) {
-            val f = openFiles[i]
-            if (f.modified) continue
+        for (f in openFiles.toList()) {
+            if (f.modified || f.readOnly) continue
             val text = readTabText(f.path) ?: continue
             if (text == f.savedText) continue
-            openFiles[i] = OpenFile(f.path, f.name, text, tabId = f.tabId)
+            if (f !in openFiles || f.modified) continue
+            f.applyExternalText(text)
             backend.editor.updateDocument(f.path, text)
         }
     }

@@ -25,7 +25,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * told: a restored session has nothing on any tab until it is clicked, and a tab's status dot can only report
  * the file already on screen. This sweep fills that in, one diagnostics pass per tab, when a tab opens and
  * again for all of them when the workspace index or a build settles (both change what analysis concludes: a
- * classpath appears, generated sources land).
+ * classpath appears, generated sources land), or when files change outside the editor ([IdeUiState.analysisEpoch]).
  *
  * Deliberately narrow next to the daemon: one pass rather than five, one tab at a time with a gap between
  * them so the focused tab's daemon keeps the engine, never the focused tab itself, and nothing at all while
@@ -89,6 +89,8 @@ fun OpenTabDiagnosticsEffect(state: IdeUiState, indexBuilding: Boolean, buildSta
     LaunchedEffect(state.backend, buildStatus) {
         if (buildStatus == RunStatus.Succeeded || buildStatus == RunStatus.Failed) generation++
     }
+    // So does a change the user did not type: an agent's write, an action that edited other files.
+    LaunchedEffect(state.backend, state.analysisEpoch) { generation++ }
     val enabled = state.analyzeOnTheFly && !indexBuilding
     LaunchedEffect(state.backend, generation, enabled) {
         if (!enabled) return@LaunchedEffect
