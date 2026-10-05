@@ -308,6 +308,12 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
      */
     private val missingModels = ConcurrentHashMap.newKeySet<String>()
 
+    /**
+     * Whether [models] came from the custom gateway itself. When its `/v1/models` cannot be read the list falls
+     * back to the OpenAI defaults, which a local server does not serve, so those are never offered as a fix.
+     */
+    @Volatile private var gatewayModelsLive = false
+
     /** One pacer per key + model, which is the scope a provider counts its per-minute limits against. */
     private val pacers = ConcurrentHashMap<String, RequestPacer>()
 
@@ -398,6 +404,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         scope.launch {
             val fetched = runCatching { provider.listModels(ProviderConfig(key, cfg.baseUrl, cfg.caCertificatePem)) }
                 .getOrDefault(provider.models)
+            gatewayModelsLive = cfg.selectedId == GATEWAY && fetched !== provider.models
             val usable = fetched.filter { it.id !in missingModels }.ifEmpty { fetched }
             rememberPreferred(cfg.selectedId, provider, usable)
             _models.value = usable.map { UiAgentModel(it.id, it.displayName) }
@@ -733,7 +740,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         val missing = kind == LlmErrorKind.NOT_FOUND.name
         if (!missing && kind != LlmErrorKind.MODEL_NOT_ON_PLAN.name && kind != LlmErrorKind.DAILY_LIMIT.name) return null
         val cfg = resolveConfig()
-        if (cfg.selectedId == GATEWAY) return null
+        if (cfg.selectedId == GATEWAY) return gatewaySuggestion(missing, cfg.model)
         val provider = registry.provider(cfg.clientProviderId) ?: return null
         exhaustedModels += cfg.model
         if (missing) {
@@ -743,6 +750,21 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         val listed = _models.value.map { it.id }.ifEmpty { provider.models.map { it.id } }
         val candidates = listOfNotNull(preferredModels[cfg.selectedId], provider.defaultModel) + listed
         return candidates.firstOrNull { it !in exhaustedModels }
+    }
+
+    /**
+     * A gateway has no default to fall back on, but when it lists its models a "not found" for the typed name
+     * (often a file name such as `Qwen3.5-2B-Q4_0.gguf` where the server's id differs) can offer one it serves:
+     * the closest by name, else the first.
+     */
+    private fun gatewaySuggestion(missing: Boolean, model: String): String? {
+        if (!missing || !gatewayModelsLive) return null
+        missingModels += model
+        val listed = _models.value.map { it.id }.filter { it != model && it !in missingModels }
+        if (listed.isEmpty()) return null
+        val stem = model.substringAfterLast('/').substringBeforeLast(".gguf").lowercase()
+        return listed.firstOrNull { it.lowercase().contains(stem) || stem.contains(it.substringAfterLast('/').lowercase()) }
+            ?: listed.first()
     }
 
     private fun todoStatus(status: String): UiAgentTodoStatus = when (status) {

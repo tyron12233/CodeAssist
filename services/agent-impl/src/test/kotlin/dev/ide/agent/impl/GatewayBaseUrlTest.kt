@@ -92,8 +92,20 @@ class GatewayBaseUrlTest {
     fun aPlainPageNotFoundPointsAtTheBaseUrlNotTheModel() {
         val url = "http://127.0.0.1:11434/v1/api/v1/chat/completions"
         val parsed = LlmErrors.parseHttp(404, "404 page not found", null, url)
-        assertEquals(LlmErrorKind.NOT_FOUND, parsed.kind)
+        assertEquals(LlmErrorKind.ENDPOINT_NOT_FOUND, parsed.kind)
         assertTrue(parsed.message.contains(url) && parsed.message.contains("base URL"), parsed.message)
+
+        // A web dashboard on the wrong port answers in its framework's own shapes; still the address, not the model.
+        for (body in listOf("""{"error":"Not Found"}""", """{"detail":"Not Found"}""", """{"message":"Cannot POST"}""")) {
+            val shaped = LlmErrors.parseHttp(404, body, null, "http://127.0.0.1:8080/v1/chat/completions")
+            assertEquals(LlmErrorKind.ENDPOINT_NOT_FOUND, shaped.kind, body)
+            assertTrue(shaped.message.contains(":8080/v1/chat/completions"), shaped.message)
+        }
+
+        // A string error that names the model is about the model, and its text is shown.
+        val stringModel = LlmErrors.parseHttp(404, """{"error":"model 'qwen.gguf' not found"}""", null, url)
+        assertEquals(LlmErrorKind.NOT_FOUND, stringModel.kind)
+        assertTrue(stringModel.message.contains("model 'qwen.gguf' not found"), stringModel.message)
 
         // A provider's own not-found (a missing model) keeps the model wording.
         val model = LlmErrors.parseHttp(404, """{"error":{"type":"not_found_error","message":"model 'x' not found"}}""", null, url)

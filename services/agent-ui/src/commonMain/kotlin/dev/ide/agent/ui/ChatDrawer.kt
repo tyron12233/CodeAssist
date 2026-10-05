@@ -73,6 +73,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -133,6 +135,7 @@ import dev.ide.agent.ui.generated.resources.chat_title
 import dev.ide.ui.components.CodeSample
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.markdown.Markdown
+import dev.ide.ui.markdown.defaultHeadingStyle
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CaMotion
 import dev.ide.ui.theme.Ide
@@ -418,6 +421,10 @@ private fun ChatHeader(
                 color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
+                // One line: the bar is 52dp, and a title that wraps (a longer translation in a narrow drawer)
+                // splits mid-word and pushes the model picker under it out of view.
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             ModelPicker(cfg = cfg, models = models, open = modelMenuOpen, onOpen = onModelMenu, onPick = onPickModel)
         }
@@ -549,7 +556,7 @@ private fun MessageItem(
                     Text(
                         msg.text,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = chatBodyStyle(),
                     )
                 }
                 AttachmentChips(msg.attachments, modifier = Modifier.widthIn(max = 320.dp))
@@ -594,7 +601,7 @@ private fun ErrorMessage(
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
             Icon(CaIcons.warning, null, Modifier.size(16.dp), tint = scheme.onErrorContainer)
-            Text(text, color = scheme.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
+            Text(text, color = scheme.onErrorContainer, style = chatBodyStyle())
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             CopyButton(text, tint = scheme.onErrorContainer)
@@ -806,13 +813,23 @@ private fun ToolStatusIcon(status: UiAgentToolStatus) {
     }
 }
 
+/**
+ * The style for message text. A message is in whatever language its writer used (an English provider error, a
+ * model's reply, the user's prompt), not the UI's, so each paragraph takes its direction from its own first
+ * strong character, as Android's TextView does. Compose otherwise lays it out in the UI's direction, which put an
+ * English sentence's final period on the far left under the Arabic UI.
+ */
+@Composable
+private fun chatBodyStyle(): TextStyle = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Content)
+
 @Composable
 private fun AssistantMarkdown(text: String) {
     // The shared Markdown renderer (headings, lists, quotes, emphasis, links), tuned to the chat's compact
     // footnote style; fenced code uses the syntax-highlighted CodeSample card.
     Markdown(
         text,
-        paragraphStyle = MaterialTheme.typography.bodyMedium,
+        paragraphStyle = chatBodyStyle(),
+        headingStyle = { defaultHeadingStyle(it).copy(textDirection = TextDirection.Content) },
         color = MaterialTheme.colorScheme.onSurface,
         spacing = 8.dp,
         codeBlock = { code, lang -> CodeSample(code, lang) },

@@ -1,6 +1,8 @@
 package dev.ide.agent.impl
 
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Turns a provider's HTTP or in-stream error into a categorized, user-facing message. All three providers
@@ -16,6 +18,8 @@ enum class LlmErrorKind(val retryable: Boolean) {
     OVERLOADED(true),
     SERVER(true),
     NETWORK(true),
+    /** The endpoint's TLS certificate is not trusted. Retrying cannot fix it; trusting its CA can. */
+    CERTIFICATE(false),
     QUOTA(false),
     /** A per-day limit. Waiting a minute will not clear it; it resets on the provider's daily boundary. */
     DAILY_LIMIT(false),
@@ -23,7 +27,10 @@ enum class LlmErrorKind(val retryable: Boolean) {
      *  is not on the free tier. Only a different model, or billing, gets past it. */
     MODEL_NOT_ON_PLAN(false),
     AUTH(false),
+    /** The model is unknown to the provider. A different model fixes it. */
     NOT_FOUND(false),
+    /** Nothing answers at the request's URL: a wrong base URL or port, which no model choice fixes. */
+    ENDPOINT_NOT_FOUND(false),
     CONTEXT_LENGTH(false),
     INVALID_REQUEST(false),
     UNKNOWN(false),
@@ -47,12 +54,20 @@ internal object LlmErrors {
     /** Parse an HTTP error response body + status into a categorized error. */
     fun parseHttp(statusCode: Int?, body: String?, retryAfterHeader: String?, url: String? = null): ParsedLlmError {
         val root = body?.takeIf { it.isNotBlank() }
-            ?.let { runCatching { AgentJson.parseToJsonElement(it) }.getOrNull() }
-        val errObj = root.asObj()?.get("error").asObj()
-        // A 404 without a provider error object is a web server's "page not found": the path is wrong, not the
-        // model. Saying "pick another model" sent users of a misconfigured gateway looking in the wrong place.
-        if (statusCode == 404 && errObj == null && url != null) {
-            return ParsedLlmError(LlmErrorKind.NOT_FOUND, endpointNotFound(url))
+            ?.let { runCatching { AgentJson.parseToJsonElement(it) }.getOrNull() }.asObj()
+        // Local servers and web frameworks rarely use the `{"error": {...}}` shape: llama.cpp-style servers send
+        // `{"error": "text"}`, FastAPI `{"detail": "text"}`, others a bare `{"message": "text"}`. Their text is
+        // read as the error's message so the user sees what the server said.
+        val errObj = root?.get("error").asObj()
+            ?: (root?.get("error").asStr() ?: root?.get("detail").asStr() ?: root?.get("message").asStr())
+                ?.let { buildJsonObject { put("message", it) } }
+        // A 404 that is not about a model is a web server's "page not found": the base URL or port is wrong. Saying
+        // "pick another model" sent users of a misconfigured gateway (a dashboard port instead of the API port)
+        // looking in the wrong place.
+        val detail = errObj?.get("message").asStr()
+        if (statusCode == 404 && url != null && detail?.contains("model", ignoreCase = true) != true) {
+            val tail = detail?.takeIf { it.isNotBlank() }?.let { "\n${it.take(MAX_DETAIL)}" }.orEmpty()
+            return ParsedLlmError(LlmErrorKind.ENDPOINT_NOT_FOUND, endpointNotFound(url) + tail)
         }
         val headerMs = retryAfterHeader?.trim()?.toLongOrNull()?.times(1000)
         return parseErrorObj(statusCode, errObj, headerMs)
@@ -116,13 +131,56 @@ internal object LlmErrors {
     }
 
     /** A connection-level failure (no HTTP response). */
+    /**
+     * A request that never got an HTTP answer, worded for its cause: each one has a different fix, and "check your
+     * connection" was misleading for a DNS block, a server that is not running, or an untrusted certificate.
+     */
     fun network(t: Throwable?): ParsedLlmError {
+        val chain = generateSequence(t) { it.cause.takeIf { c -> c !== it } }.take(8).toList()
         val extra = t?.message?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+
+        chain.firstOrNull { it is java.net.UnknownHostException }?.let { e ->
+            val host = e.message?.let { HOST_IN_MESSAGE.find(it)?.groupValues?.get(1) ?: it.substringBefore(':').trim() }
+                ?.takeIf { it.isNotBlank() } ?: "the provider"
+            return ParsedLlmError(
+                LlmErrorKind.NETWORK,
+                "Couldn't look up $host: the device could not resolve its address. Check that it is online. A " +
+                    "Private DNS setting, an ad-blocking DNS or VPN, or a network that filters the address can " +
+                    "also block the lookup.$extra",
+            )
+        }
+        val certificate = chain.any {
+            it is java.security.cert.CertificateException || it is java.security.cert.CertPathValidatorException ||
+                it is javax.net.ssl.SSLPeerUnverifiedException
+        }
+        if (certificate) {
+            return ParsedLlmError(
+                LlmErrorKind.CERTIFICATE,
+                "The AI provider's certificate isn't trusted, so no secure connection was made. For an endpoint " +
+                    "behind a private or regional CA, add its CA certificate in the provider settings.$extra",
+            )
+        }
+        if (chain.any { it is java.net.SocketTimeoutException }) {
+            return ParsedLlmError(
+                LlmErrorKind.NETWORK,
+                "The AI provider didn't answer in time. Check your connection and try again.$extra",
+            )
+        }
+        if (chain.any { it is java.net.ConnectException || it is java.net.NoRouteToHostException }) {
+            return ParsedLlmError(
+                LlmErrorKind.NETWORK,
+                "Couldn't connect to the AI provider. For a local or custom endpoint, check that the server is " +
+                    "running and that the address and port are right.$extra",
+            )
+        }
         return ParsedLlmError(
             LlmErrorKind.NETWORK,
             "Couldn't reach the AI provider. Check your connection and try again.$extra",
         )
     }
+
+    /** The host Android names in `Unable to resolve host "x": No address associated with hostname`. */
+    private val HOST_IN_MESSAGE = Regex("\"([^\"]+)\"")
 
     private fun classify(status: Int?, type: String, code: String, msg: String?): LlmErrorKind {
         val m = msg.orEmpty().lowercase()
@@ -181,9 +239,11 @@ internal object LlmErrors {
             LlmErrorKind.OVERLOADED -> "The AI provider is temporarily overloaded.$wait$tail"
             LlmErrorKind.SERVER -> "The AI provider reported a server error${status?.let { " ($it)" }.orEmpty()}.$wait$tail"
             LlmErrorKind.NETWORK -> "Couldn't reach the AI provider. Check your connection.$tail"
+            LlmErrorKind.CERTIFICATE -> "The AI provider's certificate isn't trusted.$tail"
             LlmErrorKind.QUOTA -> "Your API quota or billing limit is exhausted. Check your provider account and plan.$tail"
             LlmErrorKind.AUTH -> "Authentication failed. Check your API key in Settings > AI.$tail"
-            LlmErrorKind.NOT_FOUND -> "The selected model isn't available for your account. Pick another model.$tail"
+            LlmErrorKind.NOT_FOUND -> "The selected model isn't available. Pick another model.$tail"
+            LlmErrorKind.ENDPOINT_NOT_FOUND -> "Nothing was found at this address (HTTP 404).$tail"
             LlmErrorKind.CONTEXT_LENGTH ->
                 "This conversation is too long for the model's context window. Start a new chat or shorten it.$tail"
             LlmErrorKind.INVALID_REQUEST ->
@@ -195,8 +255,9 @@ internal object LlmErrors {
     }
 
     private fun endpointNotFound(url: String): String =
-        "No API was found at ${url.substringBefore('?')} (HTTP 404). Check the base URL: it is the server's root, " +
-            "and /v1/chat/completions is added to it (for Ollama, http://127.0.0.1:11434)."
+        "No API was found at ${url.substringBefore('?')} (HTTP 404). Check the base URL: it is the API server's " +
+            "address and port, not a web dashboard's, and /v1/chat/completions is added to it (for Ollama, " +
+            "http://127.0.0.1:11434)."
 
     /** Google's `error.details[]` carries a `RetryInfo` with a `retryDelay` like "5s" or "1.5s". */
     private fun geminiRetryDelayMs(errObj: JsonObject?): Long? {
