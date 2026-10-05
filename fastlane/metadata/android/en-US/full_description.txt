@@ -1,42 +1,49 @@
-CodeAssist is an on-device IDE that compiles and runs real Android and Java
-projects directly on your phone or tablet — no PC, no server, and no Gradle
-daemon required.
+CodeAssist is an Android IDE for your phone and tablet. Write Kotlin and Java, watch Jetpack Compose previews update as you type, and build, sign and install real Android apps on the device itself. No PC, no cloud build server, no Gradle daemon.
 
-Version 3.0 is a complete rewrite. The entire IDE — editor, build system, and
-Android toolchain — was re-engineered from scratch to be fast, incremental, and
-fully offline.
+It is a complete Android IDE, not a code playground: open multi-module Android projects, add libraries from Maven, and ship an APK or App Bundle you can install or publish.
 
-<b>A real on-device build system</b>
-* Native incremental build engine — only what changed is rebuilt.
-* Full Android APK pipeline on-device: resource compilation (aapt2), R
-  generation, D8 dexing, packaging and signing, all in-process.
-* Build, install and launch a debug APK straight from your device.
+<b>Build Android apps on your device</b>
+• The whole toolchain runs on your phone: aapt2, the Kotlin compiler, the Java compiler, D8 dexing, packaging and APK signing
+• Incremental builds redo only what changed
+• Install and launch your app in one tap, then follow its output in Logcat
+• Release builds with R8 shrinking, Android App Bundles (AAB) and your own signing key
+• Multi-module projects, build variants, ViewBinding, AIDL, KSP (Room, Hilt) and google-services.json for Firebase
+• Dependencies from Maven Central and Google's Maven repository, plus local JAR and AAR files
+• Import existing Gradle projects, or export yours as a Gradle project to open on a computer
 
-<b>Java and Kotlin</b>
-* First-class Java support backed by the Eclipse compiler.
-* End-to-end Kotlin: edit, compile and run mixed Kotlin/Java modules with the
-  Kotlin compiler running on-device.
-* Multi-module projects, Android app and library modules, build variants, and
-  JAR/AAR library dependencies resolved from Maven.
+<b>Kotlin and Java code editor</b>
+• Code completion that keeps working on half-written code, with automatic imports
+• Errors and warnings as you type, with one-tap quick fixes
+• Go to definition, implementation and type, symbol search, and readable library sources
+• Reformat Code, Optimize Imports, code folding and word wrap
+• Android XML completion for layouts, manifests, values and drawables
+• A coding keyboard bar for symbols, pinch to zoom, and editor color schemes
 
-<b>A smarter editor</b>
-* Fast, error-tolerant code completion that works on half-typed code.
-* Android XML intelligence for layouts, manifests, values and drawables, driven
-  by the real Android SDK, with resource references and go-to-definition.
-* Inline diagnostics, quick-fixes and intentions.
-* Go-to-symbol and auto-import powered by a low-memory on-device index.
+<b>Jetpack Compose and layout previews</b>
+• @Preview composables render live next to your code and update as you edit
+• Preview XML layouts, including your own custom views, without running a build
 
-<b>Block editor</b>
-* A Scratch/Blockly-style projectional editor with typed sockets — a live
-  projection of your real code, so switching between Code and Blocks loses
-  nothing.
+<b>AI coding assistant</b>
+• Describe a change in plain words. The agent reads your project, edits the code, runs a build and shows a diff you can undo
+• Use your own key for Anthropic Claude, Google Gemini, OpenAI or OpenRouter, or a compatible gateway. A free Gemini key works
+• Attach screenshots, mention files with @, and pick up saved sessions later
 
-<b>Safe runs</b>
-* A run sandbox prompts you before code you run touches the network, files,
-  reflection or other processes.
+<b>Git and GitHub</b>
+• Clone, commit, branch, merge, stash and push
+• Sign in to GitHub to clone private repositories and open pull requests
+
+<b>Learn and practice</b>
+• Interactive Java and Kotlin lessons with exercises that compile and run on your device
+• A daily coding challenge with a public leaderboard
+• Start from templates and sample apps in the Projects Store, or publish your own
+
+<b>Also included</b>
+• Block editor: switch a Java file to Scratch-style blocks and back without losing a character
+• Run Java and Kotlin console programs with an interactive console
+• A run sandbox that asks before your program uses the network, files or other processes
+• Plugins that extend the IDE, including an NDK plugin for C and C++
+• Light and dark themes with Material You colors
 
 <b>Free and open source</b>
-CodeAssist is free and open-source software, licensed under the GNU General
-Public License v3.0 or later. Browse the source, report issues, and download
-releases on GitHub:
+CodeAssist is a free, open-source Android IDE licensed under the GNU General Public License v3.0. It shows a few small ads, and you can turn them off in the app at no cost. Source code, issues and releases are on GitHub:
 https://github.com/tyron12233/CodeAssist

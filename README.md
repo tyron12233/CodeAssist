@@ -13,7 +13,7 @@
 [![Forks](https://img.shields.io/github/forks/tyron12233/CodeAssist?style=flat&logo=github)](https://github.com/tyron12233/CodeAssist/network/members)
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/y2gycT6pDW)
 
-<img src="docs/assets/01-ide-on-phone.png" alt="CodeAssist running on a phone" width="320" />
+<img src="docs/assets/banner.png" alt="CodeAssist: build Android apps on Android" width="720" />
 
 </div>
 
@@ -55,16 +55,18 @@ It ships with a Compose Multiplatform UI and both desktop and Android launchers.
 
 ## Screenshots
 
-|  |  |
-|---|---|
-| <img src="docs/assets/01-ide-on-phone.png" width="380" alt="A real IDE on your phone" /> | <img src="docs/assets/02-java-completion.png" width="380" alt="Java completion" /> |
-| **A real IDE, on your phone** — write, navigate, and build end to end. | **Completion that knows your code** — precise, ranked JDT suggestions with signatures and docs. |
-| <img src="docs/assets/06-kotlin-completion.png" width="380" alt="Kotlin completion" /> | <img src="docs/assets/03-block-editing.png" width="380" alt="Block editing" /> |
-| **Kotlin completion (beta)** — the same calm, ranked experience as Java. | **Edit as code, or as blocks** — a live projection of the same source, byte-for-byte. |
-| <img src="docs/assets/04-build-apk.png" width="380" alt="Build APKs on device" /> | <img src="docs/assets/05-command-palette.png" width="380" alt="Command palette" /> |
-| **Build real APKs, on device** — resolve, compile, dex, package, sign, install. | **Jump anywhere, instantly** — one input for commands, files, and symbols. |
-| <img src="docs/assets/07-xml-completion.png" width="380" alt="Android XML completion" /> | <img src="docs/assets/08-compose.png" width="380" alt="Built on Jetpack Compose" /> |
-| **Layouts, fully assisted** — Android XML completion with live validation. | **Built on Jetpack Compose** — a native Compose UI throughout. |
+| | | |
+|---|---|---|
+| <img src="docs/assets/screen-01-hero.png" width="260" alt="A real IDE in your pocket" /> | <img src="docs/assets/screen-02-compose-preview.png" width="260" alt="Compose @Preview beside the code" /> | <img src="docs/assets/screen-03-kotlin-completion.png" width="260" alt="Kotlin completion" /> |
+| **A real IDE, on your phone.** Write, navigate, and build end to end. | **Compose @Preview, live.** See your UI next to the code as you type. | **Completion that keeps up.** Ranked Kotlin and Java suggestions, even on half-written code. |
+| <img src="docs/assets/screen-04-build-apk.png" width="260" alt="Build APKs on device" /> | <img src="docs/assets/screen-05-ai-agent.png" width="260" alt="AI coding agent" /> | |
+| **Build real APKs, on device.** Resolve, compile, dex, package, sign, install. | **An AI agent, built in.** Ask for a change; it edits, builds, and shows the diff. | |
+
+<div align="center">
+<img src="docs/assets/screen-tablet-preview.png" width="800" alt="CodeAssist on a tablet: file tree, code, and a live Compose preview" />
+<br />
+<sub>On tablets and foldables the file tree, editor, and preview sit side by side.</sub>
+</div>
 
 ## Block editor
 
