@@ -161,4 +161,27 @@ class CheckpointAndToolsTest {
         assertTrue(none.isError)
         assertTrue(none.content.contains("open the preview"), none.content)
     }
+
+    @Test
+    fun screenshotPreviewRendersAFileNobodyHasOpen() {
+        val shot = dev.ide.agent.PreviewImage("Cards.kt", "BlueCard", byteArrayOf(4, 5, 6), 10, 20)
+        val asked = mutableListOf<Pair<String, String?>>()
+        val ws = object : dev.ide.agent.AgentWorkspace by FakeWorkspace() {
+            override suspend fun previewScreenshot(path: String?): dev.ide.agent.PreviewImage? = null
+            override suspend fun renderPreview(path: String, preview: String?): dev.ide.agent.RenderedPreview {
+                asked += path to preview
+                return dev.ide.agent.RenderedPreview(shot, listOf("Preview partially rendered: boom"))
+            }
+        }
+        val tool = builtinTools(ws).single { it.spec.name == "screenshot_preview" }
+        val ok = runBlocking { tool.execute(JsonToolArgs(parseArgsObject("""{"path":"Cards.kt","preview":"BlueCard"}"""))) }
+        assertTrue(!ok.isError, ok.content)
+        assertEquals("BAUG", ok.images.single().data)
+        assertTrue(ok.content.contains("BlueCard") && ok.content.contains("partially rendered"), ok.content)
+        assertEquals(listOf<Pair<String, String?>>("Cards.kt" to "BlueCard"), asked)
+
+        // No path and nothing on screen: say what to pass rather than asking the user to open anything.
+        val noPath = runBlocking { tool.execute(JsonToolArgs(parseArgsObject("{}"))) }
+        assertTrue(noPath.isError && noPath.content.contains("Pass `path`"), noPath.content)
+    }
 }

@@ -18,6 +18,21 @@ fun interface PreviewSnapshotSource {
 }
 
 /**
+ * What a render with no pane on screen produced: the frame when there is one, and [problems] that either explain
+ * why there is none (no `@Preview` in the file, libraries not prepared) or qualify the frame (a partial render, a
+ * call the preview sandbox blocked).
+ */
+class HeadlessPreview(val snapshot: PreviewSnapshot?, val problems: List<String>)
+
+/**
+ * Renders a file's preview off screen, for a caller that needs to see a file nobody has open. [text] is the
+ * file's current content; [preview] names the `@Preview` function to render (null: the file's first).
+ */
+fun interface HeadlessPreviewRenderer {
+    suspend fun render(path: String, text: String, preview: String?): HeadlessPreview
+}
+
+/**
  * The preview panes currently on screen, registered while they are composed. Process-global because the
  * renderers live in the UI and the caller lives in the engine, and both can see this module. The most recently
  * registered pane is asked first, which is the one the user opened last.
@@ -34,6 +49,15 @@ object PreviewSnapshots {
 
     /** Whether any preview pane is on screen. */
     val available: Boolean get() = sources.isNotEmpty()
+
+    /** The platform's off-screen renderer, registered by the app at startup; null where previews cannot render. */
+    var headless: HeadlessPreviewRenderer? = null
+        private set
+
+    fun registerHeadless(renderer: HeadlessPreviewRenderer): Registration {
+        headless = renderer
+        return Registration { if (headless === renderer) headless = null }
+    }
 
     suspend fun capture(path: String?): PreviewSnapshot? {
         val current = sources.toList().asReversed()

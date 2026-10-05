@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import dev.ide.ui.backend.IdeBackend
@@ -23,7 +24,11 @@ actual fun LayoutPreviewPane(
     backend: IdeBackend,
     session: EditorSession,
     modifier: Modifier,
+    onStatus: ((PreviewPaneStatus) -> Unit)?,
 ) {
+    LaunchedEffect(onStatus) {
+        onStatus?.invoke(PreviewPaneStatus(settled = true, failed = true, problems = listOf("Layout preview isn't available on this platform.")))
+    }
     Box(modifier.fillMaxSize().background(Ide.colors.editorBg)) {
         Text(
             "Layout preview isn't available for this project",

@@ -24,4 +24,12 @@ fun isLayoutPreviewable(path: String): Boolean {
  * Code view + preview stay in sync), exactly as the block editor does.
  */
 @Composable
-expect fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, session: EditorSession, modifier: Modifier)
+expect fun LayoutPreviewPane(
+    path: String,
+    text: String,
+    backend: IdeBackend,
+    session: EditorSession,
+    modifier: Modifier,
+    /** Reports the pane's progress, for a caller rendering it off screen (see [PreviewPaneStatus]). */
+    onStatus: ((PreviewPaneStatus) -> Unit)? = null,
+)

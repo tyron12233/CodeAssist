@@ -22,6 +22,9 @@ import androidx.compose.runtime.setValue
 import dev.ide.core.project.CaprojFormat
 import dev.ide.core.IdeServicesBackend
 import dev.ide.ui.CodeAssistApp
+import dev.ide.ui.editor.preview.OffscreenPreviewRenderer
+import dev.ide.ui.ext.PreviewSnapshots
+import dev.ide.android.preview.SurfaceComposer
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import kotlinx.coroutines.Dispatchers
@@ -274,14 +277,22 @@ class MainActivity : ComponentActivity() {
             }
 
             val b = backend
+            // On-device Compose preview: render @Preview composables through the interpreter. The backend instance
+            // is stable across project switches (it swaps services internally), so one host suffices.
+            val previewHost = remember(b) { (b as? IdeServicesBackend)?.let { AndroidComposePreviewHost(it) } }
+            // The same previews rendered off screen, for the AI agent to look at a file the user has not opened.
+            DisposableEffect(b, previewHost) {
+                val registration = b?.let {
+                    PreviewSnapshots.registerHeadless(OffscreenPreviewRenderer(it, previewHost, SurfaceComposer(applicationContext)))
+                }
+                onDispose { registration?.dispose() }
+            }
             when {
                 b != null -> CodeAssistApp(
                     b,
                     fileActions = fileActions,
                     adHost = adHost,
-                    // On-device Compose preview: render @Preview composables through the interpreter. The backend
-                    // instance is stable across project switches (it swaps services internally), so one host suffices.
-                    composePreviewHost = (b as? IdeServicesBackend)?.let { AndroidComposePreviewHost(it) },
+                    composePreviewHost = previewHost,
                     importPackagePath = importPackagePath,
                     openStoreItemId = storeLink.value,
                     onStoreItemIdHandled = { storeLink.value = null },

@@ -30,6 +30,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -101,7 +102,14 @@ private fun PreviewStatusChip(stage: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, session: EditorSession, modifier: Modifier) {
+actual fun LayoutPreviewPane(
+    path: String,
+    text: String,
+    backend: IdeBackend,
+    session: EditorSession,
+    modifier: Modifier,
+    onStatus: ((PreviewPaneStatus) -> Unit)?,
+) {
     // A layout opened from a qualified folder previews THAT variant (the backend renders it under a matching
     // configuration), so the chrome starts on the matching orientation and day/night mode instead of showing
     // a rotation and a theme the render does not use.
@@ -136,6 +144,8 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, se
     val request = PreviewRequest(state.widthPx, state.heightPx, state.device.density, showChrome, state.night, realViews = realViews)
     val lpBackend = backend as? LayoutPreviewBackend
     var result by remember { mutableStateOf<LayoutPreviewResult?>(null) }
+    // Whether the current request has come back, so "no result" can be told apart from "not fetched yet".
+    var fetched by remember(path) { mutableStateOf(false) }
     // Re-fetch when dependency resolution settles: a re-resolve changes the module classpath the real-view
     // render dexes against, so the preview must re-render rather than keep a stale (pre-resolve) result.
     val depsResolving = backend.deps.depsState.collectAsState().value.resolving
@@ -150,6 +160,7 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, se
         // burst into a single render. The fetch runs on the backend's preview lane, off the UI thread.
         delay(PREVIEW_DEBOUNCE_MS)
         result = lpBackend?.layoutPreview(path, text, request)
+        fetched = true
     }
 
     val fontResolver = LocalFontFamilyResolver.current
@@ -157,6 +168,24 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, se
     val gfx = remember(measurer) { ComposeGraphics(measurer) }
 
     val r = result
+    if (onStatus != null) {
+        val status = when {
+            lpBackend == null -> PreviewPaneStatus(settled = true, failed = true, problems = listOf("Layout preview isn't available for this project."))
+            !fetched || renderProgress != null -> PreviewPaneStatus(settled = false)
+            r == null -> PreviewPaneStatus(settled = true, failed = true, problems = listOf("No layout preview for this file."))
+            r.buildRequired -> PreviewPaneStatus(
+                settled = true, failed = true,
+                problems = listOf(
+                    "The project's libraries need preparing before layouts can render" +
+                        (if (r.undexedCount > 0) " (${r.undexedCount} not prepared)" else "") +
+                        ". Build the project once, then try again.",
+                ),
+            )
+            else -> PreviewPaneStatus(settled = true, label = path.substringAfterLast('/'))
+        }
+        val report by rememberUpdatedState(onStatus)
+        LaunchedEffect(status) { report(status) }
+    }
     if (lpBackend == null || r == null) {
         Box(modifier.fillMaxSize().background(Ide.colors.editorBg)) {
             Text(

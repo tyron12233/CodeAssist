@@ -9,6 +9,9 @@ import androidx.compose.ui.window.rememberWindowState
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.project.ProjectManager
 import dev.ide.ui.CodeAssistApp
+import dev.ide.ui.editor.preview.ImageSceneComposer
+import dev.ide.ui.editor.preview.OffscreenPreviewRenderer
+import dev.ide.ui.ext.PreviewSnapshots
 import java.nio.file.Path
 
 /**
@@ -34,6 +37,11 @@ fun main(args: Array<String>) {
     // creates that project's IdeServices on demand. The download cache is still shared across projects via
     // the ProjectManager (sharedCachesRoot = projects-root parent), so deps resolve once.
     val backend = IdeServicesBackend(initial = null, manager = manager)
+    // Live @Preview rendering on desktop: the interpreter drives Compose for Desktop (see
+    // DesktopComposePreviewHost). The backend instance is stable across project switches.
+    val previewHost = DesktopComposePreviewHost(backend)
+    // The same previews rendered off screen, for the AI agent to look at a file the user has not opened.
+    PreviewSnapshots.registerHeadless(OffscreenPreviewRenderer(backend, previewHost, ImageSceneComposer()))
     application {
         val state = rememberWindowState(size = DpSize(1360.dp, 880.dp))
         Window(
@@ -44,9 +52,7 @@ fun main(args: Array<String>) {
             CodeAssistApp(
                 backend,
                 fileActions = DesktopFileActions(backend),
-                // Live @Preview rendering on desktop: the interpreter drives Compose for Desktop (see
-                // DesktopComposePreviewHost). The backend instance is stable across project switches.
-                composePreviewHost = DesktopComposePreviewHost(backend),
+                composePreviewHost = previewHost,
             )
         }
     }

@@ -130,6 +130,14 @@ interface AgentWorkspace {
      *  when no preview is open for it. Only a host with a preview UI can answer. */
     suspend fun previewScreenshot(path: String?): PreviewImage? = null
 
+    /**
+     * Render [path]'s preview off screen, for a file whose preview is not open: the `@Preview` function named
+     * [preview] (null: the file's first), or the layout when [path] is a layout XML. Null when this host cannot
+     * render previews at all; throws with the reason when this file's preview cannot render (no `@Preview`, an
+     * unknown name, libraries not prepared).
+     */
+    suspend fun renderPreview(path: String, preview: String?): RenderedPreview? = null
+
     // Memory.
 
     /** The agent's project memory: the project's instruction files plus the persisted agent notes. */
@@ -172,6 +180,9 @@ data class RunResult(
 
 /** A rendered preview: [png] bytes of [width]x[height], of [label] (the `@Preview` or layout) in [path]. */
 class PreviewImage(val path: String, val label: String, val png: ByteArray, val width: Int, val height: Int)
+
+/** An off-screen preview render: the [image], plus [problems] that qualify it (a partial render, a blocked call). */
+class RenderedPreview(val image: PreviewImage, val problems: List<String>)
 
 /** One file's content before and after a change; null means the file did not exist on that side. */
 data class FileChange(val path: String, val before: String?, val after: String?)

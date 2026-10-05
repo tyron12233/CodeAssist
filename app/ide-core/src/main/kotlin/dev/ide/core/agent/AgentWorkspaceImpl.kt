@@ -74,6 +74,25 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
         return dev.ide.agent.PreviewImage(shot.path, shot.label, shot.png, shot.width, shot.height)
     }
 
+    /**
+     * Renders [path]'s preview with no pane on screen, through the app's off-screen renderer
+     * ([dev.ide.ui.ext.PreviewSnapshots.headless]), from the file's current text (the open tab's buffer if it has
+     * one). A render that produced no frame throws its reasons, which the tool reports to the model.
+     */
+    override suspend fun renderPreview(path: String, preview: String?): dev.ide.agent.RenderedPreview? {
+        val renderer = dev.ide.ui.ext.PreviewSnapshots.headless ?: return null
+        val file = path(path)
+        if (!Files.isRegularFile(file)) throw IllegalArgumentException("No such file: $path")
+        val text = ctx.background { engine().readCurrentText(file) }
+        val result = renderer.render(file.toString(), text, preview)
+        val shot = result.snapshot
+            ?: throw IllegalStateException(result.problems.joinToString("\n").ifBlank { "The preview did not render." })
+        return dev.ide.agent.RenderedPreview(
+            dev.ide.agent.PreviewImage(shot.path, shot.label, shot.png, shot.width, shot.height),
+            result.problems,
+        )
+    }
+
     override suspend fun readBytes(path: String): ByteArray = ctx.background { Files.readAllBytes(path(path)) }
 
     override suspend fun exists(path: String): Boolean = ctx.background { Files.exists(path(path)) }

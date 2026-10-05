@@ -7,6 +7,7 @@ import dev.ide.agent.ContentPart
 import dev.ide.agent.FileChange
 import dev.ide.agent.TodoItem
 import dev.ide.agent.Location
+import dev.ide.agent.PreviewImage
 import dev.ide.agent.RunResult
 import dev.ide.agent.TaskRunResult
 import dev.ide.agent.TextEdit
@@ -453,23 +454,34 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
 
     tool(
         name = "screenshot_preview",
-        description = "Take a screenshot of the Compose @Preview or XML layout preview the user has open, to see " +
-            "what the UI actually looks like after a change (layout, spacing, colours, text). Optionally name the " +
-            "file the preview is for. Only works while a preview pane is showing; if none is, ask the user to " +
-            "open the preview for that file.",
-        parameters = toolSchema { string("path", "Source file whose preview to capture; omit for whatever is showing.", required = false) },
+        description = "Render a Compose @Preview or an XML layout and look at it, to see what the UI actually looks " +
+            "like after a change (layout, spacing, colours, text). Give the file's path: its preview is rendered " +
+            "even when the user does not have it open. For a Kotlin file with several @Preview functions, name " +
+            "the one to render in `preview` (default: the first). With no path, captures the preview the user " +
+            "has on screen.",
+        parameters = toolSchema {
+            string("path", "Kotlin file with a @Preview, or a layout XML. Omit to capture the preview on screen.", required = false)
+            string("preview", "Name of the @Preview function to render; omit for the file's first.", required = false)
+        },
         summary = { "screenshot preview" + (it.optString("path")?.let { p -> " of ${p.substringAfterLast('/')}" } ?: "") },
     ) { args ->
-        val shot = ws.previewScreenshot(args.optString("path")?.ifBlank { null })
-            ?: return@tool ToolExecutionResult.error(
-                "No preview is showing" + (args.optString("path")?.let { " for $it" } ?: "") +
-                    ". Ask the user to open the preview pane for the file, then try again.",
+        val path = args.optString("path")?.ifBlank { null }
+        val preview = args.optString("preview")?.ifBlank { null }
+        // The pane on screen answers first: it is cheap and it is what the user sees. Not when a particular
+        // preview is asked for, since the pane may be showing another of the file's previews.
+        val onScreen = if (preview == null) ws.previewScreenshot(path) else null
+        if (onScreen != null) return@tool previewResult(onScreen, emptyList())
+        if (path == null) {
+            return@tool ToolExecutionResult.error(
+                "No preview is showing. Pass `path` (a Kotlin file with a @Preview, or a layout XML) to render one.",
             )
-        val data = java.util.Base64.getEncoder().encodeToString(shot.png)
-        ToolExecutionResult(
-            "Preview of ${shot.label} in ${shot.path} (${shot.width}x${shot.height}).",
-            images = listOf(ContentPart.Image("image/png", data)),
-        )
+        }
+        val rendered = ws.renderPreview(path, preview)
+            ?: return@tool ToolExecutionResult.error(
+                "No preview is showing for $path, and this IDE cannot render previews off screen. Ask the user to " +
+                    "open the preview pane for the file, then try again.",
+            )
+        previewResult(rendered.image, rendered.problems)
     },
 
     tool(
@@ -691,6 +703,14 @@ private fun buildReplaceEdits(text: String, old: String, new: String, all: Boole
         index = text.indexOf(old, index + old.length)
     }
     return edits
+}
+
+/** A preview frame for the model, with whatever went wrong in rendering it listed under the caption. */
+private fun previewResult(shot: PreviewImage, problems: List<String>): ToolExecutionResult {
+    val data = java.util.Base64.getEncoder().encodeToString(shot.png)
+    val caption = "Preview of ${shot.label} in ${shot.path} (${shot.width}x${shot.height})." +
+        problems.joinToString("") { "\n- $it" }
+    return ToolExecutionResult(caption, images = listOf(ContentPart.Image("image/png", data)))
 }
 
 private fun tool(

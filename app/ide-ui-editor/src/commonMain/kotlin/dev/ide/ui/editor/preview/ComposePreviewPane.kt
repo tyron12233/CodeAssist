@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,6 +87,8 @@ fun ComposePreviewPane(
     /** Rendered in the editor's Split view: starts the surface's chrome bars collapsed (expandable on demand)
      *  and fits the preview to width so dragging the split divider doesn't rescale it (see [PreviewSurface]). */
     split: Boolean = false,
+    /** Reports the pane's progress, for a caller rendering it off screen (see [PreviewPaneStatus]). */
+    onStatus: ((PreviewPaneStatus) -> Unit)? = null,
 ) {
     val state = rememberPreviewSurfaceState(path)
     var previews by remember(path) { mutableStateOf<List<UiComposePreview>>(emptyList()) }
@@ -142,12 +145,14 @@ fun ComposePreviewPane(
 
     // Detect the @Preview variants from the rendered buffer (so the list/selection track what's on screen,
     // and detection stops churning while paused).
+    var detected by remember(path) { mutableStateOf(false) }
     LaunchedEffect(path, renderText) {
         previews = runCatching {
             backend.preview.composePreviews(
                 path, renderText
             )
         }.getOrDefault(emptyList())
+        detected = true
     }
     // Variant selection: the editor gutter picks one (via [selected]); the in-pane selector can override it
     // (cleared whenever the gutter selection changes so a fresh gutter tap wins).
@@ -174,6 +179,18 @@ fun ComposePreviewPane(
     // @Preview(showBackground=true, backgroundColor=...) paints the card; otherwise the surface's light/dark card.
     val cardBg = cfg?.takeIf { it.showBackground && it.backgroundColor != null }
         ?.let { Color(it.backgroundColor!!) } ?: if (state.night) Color(0xFF161719) else Color.White
+
+    if (onStatus != null) {
+        val status = when {
+            !detected -> PreviewPaneStatus(settled = false)
+            current == null -> PreviewPaneStatus(settled = true, failed = true, problems = listOf("No @Preview function in this file."))
+            host == null -> PreviewPaneStatus(settled = true, failed = true, problems = listOf("This host has no Compose preview renderer."))
+            !ready || loading -> PreviewPaneStatus(settled = false, label = current.label)
+            else -> PreviewPaneStatus(settled = true, label = current.label, problems = problems.map { it.describe() })
+        }
+        val report by rememberUpdatedState(onStatus)
+        LaunchedEffect(status) { report(status) }
+    }
 
     PreviewSurface(
         modifier = modifier,
