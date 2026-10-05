@@ -3,7 +3,12 @@ package dev.ide.agent.ui
 
 import dev.ide.ui.components.*
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -34,15 +39,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
@@ -52,12 +60,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -79,8 +99,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import dev.ide.ui.itemsKeyed
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAgentCommand
@@ -97,6 +121,7 @@ import dev.ide.ui.backend.UiAgentMessage
 import dev.ide.ui.backend.UiAgentModel
 import dev.ide.ui.backend.UiAgentPermissionMode
 import dev.ide.ui.backend.UiAgentRole
+import dev.ide.ui.backend.UiAgentSegment
 import dev.ide.ui.backend.UiAgentToolCall
 import dev.ide.ui.backend.UiAgentToolStatus
 import dev.ide.ui.backend.UiAgentUsage
@@ -108,6 +133,11 @@ import dev.ide.agent.ui.generated.resources.chat_attach_image
 import dev.ide.agent.ui.generated.resources.chat_attach_photo
 import dev.ide.agent.ui.generated.resources.chat_paste_image
 import dev.ide.agent.ui.generated.resources.chat_history
+import dev.ide.agent.ui.generated.resources.chat_files_changed
+import dev.ide.agent.ui.generated.resources.chat_jump_latest
+import dev.ide.agent.ui.generated.resources.chat_more
+import dev.ide.agent.ui.generated.resources.chat_thought
+import dev.ide.agent.ui.generated.resources.chat_tool_count
 import dev.ide.agent.ui.generated.resources.chat_image_failed
 import dev.ide.agent.ui.generated.resources.chat_undo
 import dev.ide.agent.ui.generated.resources.chat_undone
@@ -139,6 +169,7 @@ import dev.ide.ui.markdown.defaultHeadingStyle
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CaMotion
 import dev.ide.ui.theme.Ide
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -449,13 +480,29 @@ private fun ChatHeader(
             fill = modeFill,
             textColor = modeText,
         )
-        IconButtonCa(CaIcons.clock, stringResource(Res.string.chat_history), onHistory, iconSize = 16, boxSize = 30)
-        IconButtonCa(CaIcons.key, stringResource(Res.string.chat_manage_keys), onManage, iconSize = 16, boxSize = 30)
-        IconButtonCa(CaIcons.refresh, stringResource(Res.string.chat_new), onNew, iconSize = 16, boxSize = 30)
+        // The occasional actions share one menu, which leaves the title and the model name room to read.
+        var menuOpen by remember { mutableStateOf(false) }
+        Box {
+            IconButtonCa(CaIcons.ellipsis, stringResource(Res.string.chat_more), { menuOpen = true }, iconSize = 16, boxSize = 30)
+            CaDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                HeaderMenuItem(CaIcons.plus, stringResource(Res.string.chat_new)) { menuOpen = false; onNew() }
+                HeaderMenuItem(CaIcons.clock, stringResource(Res.string.chat_history)) { menuOpen = false; onHistory() }
+                HeaderMenuItem(CaIcons.key, stringResource(Res.string.chat_manage_keys)) { menuOpen = false; onManage() }
+            }
+        }
         if (onClose != null) {
             IconButtonCa(CaIcons.close, stringResource(Res.string.chat_close), onClose, iconSize = 16, boxSize = 30)
         }
     }
+}
+
+@Composable
+private fun HeaderMenuItem(icon: ImageVector, label: String, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface) },
+        leadingIcon = { Icon(icon, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+        onClick = onClick,
+    )
 }
 
 @Composable
@@ -491,43 +538,123 @@ private fun ModelPicker(
     }
 }
 
+/**
+ * The conversation. It follows a streaming reply only while the reader is at the bottom: scrolling up to read stops
+ * the follow, a jump-to-latest button brings it back, and a message the user sends always returns to the bottom.
+ * Following keeps the END of the newest message in view. Scrolling to that message's index instead put its top at
+ * the top of the screen, which for a tall tool-heavy turn held the view on its first tool call while the answer
+ * streamed in below the fold.
+ */
 @Composable
-private fun Transcript(
+internal fun Transcript(
     messages: List<UiAgentMessage>,
     busy: Boolean,
     onRetry: () -> Unit,
     onUndo: (Long) -> Unit,
     onUseModel: (String) -> Unit,
+    listState: LazyListState = rememberLazyListState(),
 ) {
-    val listState = rememberLazyListState()
-    val last = messages.lastOrNull()
-    val tail = (last?.text?.length ?: 0) + (last?.thinking?.length ?: 0) + (last?.toolCalls?.size ?: 0) +
-        (if (last?.waitUntilMs != null) 1 else 0)
-    LaunchedEffect(messages.size, tail) {
-        if (messages.isNotEmpty()) runCatching { listState.animateScrollToItem(messages.lastIndex) }
+    var following by remember { mutableStateOf(true) }
+    // Set by a scroll the reader made. Only the scrollable's own gestures, wheel and fling pass through nested
+    // scroll, so the programmatic scrolls below never set it.
+    var readerScrolled by remember { mutableStateOf(false) }
+    var seen by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    // The zero-height anchor after the last message. Scrolling to it lands on the very end of the content, because
+    // the list will not leave empty space below its last item.
+    val end = messages.size
+    val readerScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                readerScrolled = true
+                // Moving back through the conversation stops the follow at once, so a reply streaming in meanwhile
+                // cannot pull the view back down.
+                if (consumed.y > 0f) following = false
+                return Offset.Zero
+            }
+        }
     }
+    // Where a reader's scroll settles decides whether to follow again: at the bottom it does. A reader's scroll is
+    // measured as it is applied, so the list already knows whether it can go further.
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (!scrolling && readerScrolled) {
+                readerScrolled = false
+                following = !listState.canScrollForward
+            }
+        }
+    }
+    // A message the user sends returns to the end, wherever the reader was.
+    LaunchedEffect(messages.size) {
+        if (messages.size < seen) seen = 0
+        if (messages.drop(seen).any { it.role == UiAgentRole.USER }) following = true
+        seen = messages.size
+    }
+    // Following is driven by the measured layout, not by message changes: whenever the list can scroll further while
+    // following, it goes to the end. That catches every way the content grows (a streamed token, a tool row, a
+    // folding run, an expanding diff), and it scrolls against the layout that already holds the new content. A
+    // scroll issued from a message change ran before that layout and was clamped to the old, shorter content.
+    val currentEnd by rememberUpdatedState(messages.size)
+    LaunchedEffect(listState) {
+        snapshotFlow { following && listState.canScrollForward && !listState.isScrollInProgress }
+            .collectLatest { behind ->
+                // Not during a scroll: that is the reader's drag or fling, or the jump button's animation, and an
+                // instant scroll here would cancel it. Retried a few frames while a layout is still settling.
+                var tries = 0
+                while (behind && tries++ < 3 && following && listState.canScrollForward && !listState.isScrollInProgress) {
+                    runCatching { listState.scrollToItem(currentEnd) }
+                    withFrameNanos { }
+                }
+            }
+    }
+    val last = messages.lastOrNull()
     val lastId = last?.id
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(14.dp),
-        // Chat-app feel: content anchors to the bottom when short, newest message at the bottom.
-        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Bottom),
-    ) {
-        itemsKeyed(messages, key = { it.id }) { msg ->
-            // Only the most recent failure offers a retry (it resumes the latest turn).
-            val latest = msg.id == lastId
-            val retry = if (latest && msg.isError && msg.canRetry) onRetry else null
-            val useModel = if (latest && msg.isError) msg.suggestedModel else null
-            MessageItem(
-                msg, retry,
-                onUndo = if (!busy && msg.canUndo) ({ onUndo(msg.id) }) else null,
-                suggestedModel = useModel,
-                onUseModel = onUseModel,
-            )
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().nestedScroll(readerScroll),
+            // The bottom padding is short by the spacing the end anchor adds after the last message.
+            contentPadding = PaddingValues(start = 14.dp, top = 14.dp, end = 14.dp, bottom = 2.dp),
+            // Chat-app feel: content anchors to the bottom when short, newest message at the bottom.
+            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Bottom),
+        ) {
+            itemsKeyed(messages, key = { it.id }) { msg ->
+                // Only the most recent failure offers a retry (it resumes the latest turn).
+                val latest = msg.id == lastId
+                val retry = if (latest && msg.isError && msg.canRetry) onRetry else null
+                val useModel = if (latest && msg.isError) msg.suggestedModel else null
+                MessageItem(
+                    msg, retry,
+                    onUndo = if (!busy && msg.canUndo) ({ onUndo(msg.id) }) else null,
+                    suggestedModel = useModel,
+                    onUseModel = onUseModel,
+                )
+            }
+            item(key = TRANSCRIPT_END) { Spacer(Modifier.fillMaxWidth().height(1.dp)) }
+        }
+        AnimatedVisibility(
+            visible = !following && listState.canScrollForward,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+            enter = fadeIn() + scaleIn(initialScale = 0.8f),
+            exit = fadeOut() + scaleOut(targetScale = 0.8f),
+        ) {
+            SmallFloatingActionButton(
+                onClick = {
+                    following = true
+                    scope.launch { runCatching { listState.animateScrollToItem(end) } }
+                },
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ) {
+                Icon(CaIcons.chevronDown, stringResource(Res.string.chat_jump_latest), Modifier.size(18.dp))
+            }
         }
     }
 }
+
+/** The key of the transcript's end anchor; message keys are their Long ids, so a String cannot collide. */
+private const val TRANSCRIPT_END = "transcript-end"
 
 @Composable
 private fun MessageItem(
@@ -537,7 +664,22 @@ private fun MessageItem(
     suggestedModel: String? = null,
     onUseModel: (String) -> Unit = {},
 ) {
-    Box(Modifier.fillMaxWidth().entranceSlideUp()) {
+    // One selection scope per message, so a drag (or a long-press and its handles) can take any span of it, across
+    // its paragraphs and code blocks. Controls inside opt out with DisableSelection.
+    SelectionContainer(Modifier.fillMaxWidth().entranceSlideUp()) {
+        MessageContent(msg, onRetry, onUndo, suggestedModel, onUseModel)
+    }
+}
+
+@Composable
+private fun MessageContent(
+    msg: UiAgentMessage,
+    onRetry: (() -> Unit)?,
+    onUndo: (() -> Unit)?,
+    suggestedModel: String?,
+    onUseModel: (String) -> Unit,
+) {
+    Box(Modifier.fillMaxWidth()) {
         when {
             msg.isError -> ErrorMessage(msg.text, onRetry, suggestedModel, onUseModel)
             msg.role == UiAgentRole.USER -> Column(
@@ -560,22 +702,24 @@ private fun MessageItem(
                     )
                 }
                 AttachmentChips(msg.attachments, modifier = Modifier.widthIn(max = 320.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (msg.undone) {
-                        Text(
-                            stringResource(Res.string.chat_undone),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (onUndo != null) {
-                        TextButton(onClick = onUndo) {
-                            Icon(CaIcons.undo, null, Modifier.size(14.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(stringResource(Res.string.chat_undo), style = MaterialTheme.typography.labelMedium)
+                DisableSelection {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (msg.undone) {
+                            Text(
+                                stringResource(Res.string.chat_undone),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
+                        if (onUndo != null) {
+                            TextButton(onClick = onUndo) {
+                                Icon(CaIcons.undo, null, Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(Res.string.chat_undo), style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                        CopyButton(msg.text)
                     }
-                    CopyButton(msg.text)
                 }
             }
             else -> AssistantMessage(msg)
@@ -603,48 +747,94 @@ private fun ErrorMessage(
             Icon(CaIcons.warning, null, Modifier.size(16.dp), tint = scheme.onErrorContainer)
             Text(text, color = scheme.onErrorContainer, style = chatBodyStyle())
         }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            CopyButton(text, tint = scheme.onErrorContainer)
-            // The one-tap fix for a model the account cannot use: switch and re-run, rather than leaving the user
-            // to find the model picker and guess which model would work.
-            if (suggestedModel != null) {
-                TextButton(
-                    onClick = { onUseModel(suggestedModel) },
-                    colors = ButtonDefaults.textButtonColors(contentColor = scheme.onErrorContainer),
-                ) {
-                    Icon(CaIcons.sparkle, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(Res.string.chat_use_model, suggestedModel), style = MaterialTheme.typography.labelLarge)
-                }
-            } else if (onRetry != null) {
-                TextButton(
-                    onClick = onRetry,
-                    colors = ButtonDefaults.textButtonColors(contentColor = scheme.onErrorContainer),
-                ) {
-                    Icon(CaIcons.refresh, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(Res.string.chat_retry), style = MaterialTheme.typography.labelLarge)
+        DisableSelection {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                CopyButton(text, tint = scheme.onErrorContainer)
+                // The one-tap fix for a model the account cannot use: switch and re-run, rather than leaving the user
+                // to find the model picker and guess which model would work.
+                if (suggestedModel != null) {
+                    TextButton(
+                        onClick = { onUseModel(suggestedModel) },
+                        colors = ButtonDefaults.textButtonColors(contentColor = scheme.onErrorContainer),
+                    ) {
+                        Icon(CaIcons.sparkle, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(Res.string.chat_use_model, suggestedModel), style = MaterialTheme.typography.labelLarge)
+                    }
+                } else if (onRetry != null) {
+                    TextButton(
+                        onClick = onRetry,
+                        colors = ButtonDefaults.textButtonColors(contentColor = scheme.onErrorContainer),
+                    ) {
+                        Icon(CaIcons.refresh, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(Res.string.chat_retry), style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
         }
     }
 }
 
+/** One step as the transcript draws it: a [UiAgentSegment] with its tool ids resolved to their calls. */
+private sealed interface Step {
+    data class Text(val text: String) : Step
+    data class Thinking(val text: String) : Step
+    data class Tools(val calls: List<UiAgentToolCall>) : Step
+}
+
+/**
+ * The message's steps in the order they happened. A message with no recorded steps (saved by an older version, or
+ * plain text such as an error) falls back to reasoning, then tools, then text.
+ */
+private fun stepsOf(msg: UiAgentMessage): List<Step> {
+    if (msg.segments.isEmpty()) {
+        return buildList {
+            if (msg.thinking.isNotBlank()) add(Step.Thinking(msg.thinking))
+            if (msg.toolCalls.isNotEmpty()) add(Step.Tools(msg.toolCalls))
+            if (msg.text.isNotBlank()) add(Step.Text(msg.text))
+        }
+    }
+    val byId = msg.toolCalls.associateBy { it.id }
+    return msg.segments.map { seg ->
+        when (seg) {
+            is UiAgentSegment.Text -> Step.Text(seg.text)
+            is UiAgentSegment.Thinking -> Step.Thinking(seg.text)
+            is UiAgentSegment.Tools -> Step.Tools(seg.ids.mapNotNull(byId::get))
+        }
+    }
+}
+
 @Composable
 private fun AssistantMessage(msg: UiAgentMessage) {
+    val steps = remember(msg.segments, msg.toolCalls, msg.text, msg.thinking) { stepsOf(msg) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (msg.thinking.isNotBlank()) ThinkingBlock(msg.thinking, msg.streaming)
-        if (msg.toolCalls.isNotEmpty()) ToolCallsSection(msg.toolCalls)
-        msg.waitUntilMs?.let { WaitRow(it, msg.waitReason) }
-        if (msg.text.isNotBlank()) AssistantMarkdown(msg.text)
-        // A blinking caret while the answer is still streaming in.
-        if (msg.streaming && msg.text.isNotBlank()) TypingCaret()
-        if (msg.streaming && msg.waitUntilMs == null && msg.text.isBlank() && msg.thinking.isBlank() && msg.toolCalls.isEmpty()) {
-            ThinkingBlock(thinking = "", streaming = true)
+        steps.forEachIndexed { i, step ->
+            // The newest step of a running turn is the live one: its reasoning stays open and its tool run stays
+            // expanded until the turn moves past it.
+            val live = msg.streaming && i == steps.lastIndex
+            key(i) {
+                when (step) {
+                    is Step.Thinking -> if (step.text.isNotBlank()) ThinkingStep(step.text, live)
+                    is Step.Tools -> if (step.calls.isNotEmpty()) DisableSelection { ToolRun(step.calls, live) }
+                    is Step.Text -> if (step.text.isNotBlank()) AssistantMarkdown(step.text)
+                }
+            }
         }
+        msg.waitUntilMs?.let { WaitRow(it, msg.waitReason) }
+        val lastStep = steps.lastOrNull()
+        // A blinking caret while the answer is still streaming in.
+        if (msg.streaming && lastStep is Step.Text && lastStep.text.isNotBlank()) TypingCaret()
+        // Something live at the end of a running turn that has nothing streaming yet: before the first token, and
+        // between a finished batch of tools and the model's next step, which otherwise looks stalled.
+        val idle = lastStep == null ||
+            (lastStep is Step.Tools && lastStep.calls.none { it.status == UiAgentToolStatus.RUNNING })
+        if (msg.streaming && msg.waitUntilMs == null && idle) ThinkingStep(thinking = "", live = true)
         // Copy the finished answer.
-        if (!msg.streaming && msg.text.isNotBlank()) CopyButton(msg.text)
-        if (!msg.streaming) msg.usage?.let { UsageFooter(it) }
+        DisableSelection {
+            if (!msg.streaming && msg.text.isNotBlank()) CopyButton(msg.text)
+            if (!msg.streaming) msg.usage?.let { UsageFooter(it) }
+        }
     }
 }
 
@@ -680,47 +870,59 @@ private fun compactTokens(count: Int): String = when {
 }
 
 /**
- * The turn's tool calls. A single call renders as one row; several collapse under a header (chevron +
- * aggregate status + count, plus the latest tool's title when collapsed) so a long tool-heavy turn does not
- * flood the transcript. Expanded by default; the collapse state is remembered per message.
+ * A run of consecutive tool calls. One call is a single compact row. Several get a summary header and stay open
+ * while the run is live or still running, then fold to that header once the turn moves past them, so a tool-heavy
+ * turn reads as its prose with a line per batch of work. A tap on the header overrides the automatic choice.
  */
 @Composable
-private fun ToolCallsSection(calls: List<UiAgentToolCall>) {
-    if (calls.size <= 1) {
-        calls.forEach { ToolCallRow(it) }
+private fun ToolRun(calls: List<UiAgentToolCall>, live: Boolean) {
+    if (calls.size == 1) {
+        ToolCallRow(calls[0])
         return
     }
-    var expanded by rememberSaveable { mutableStateOf(true) }
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        ToolGroupHeader(calls, expanded) { expanded = !expanded }
+    var choice by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    val expanded = choice ?: (live || calls.any { it.status == UiAgentToolStatus.RUNNING })
+    val rail = MaterialTheme.colorScheme.outlineVariant
+    Column(Modifier.fillMaxWidth().entranceSlideUp()) {
+        ToolRunHeader(calls, expanded) { choice = !expanded }
         if (expanded) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { calls.forEach { ToolCallRow(it) } }
+            // A hairline rail ties the rows to their header, the way a nested list is indented under its parent.
+            Column(
+                Modifier.fillMaxWidth().padding(start = 8.dp)
+                    .drawBehind { drawRect(rail, size = Size(1.dp.toPx(), size.height)) }
+                    .padding(start = 10.dp),
+            ) {
+                calls.forEach { call -> key(call.id) { ToolCallRow(call) } }
+            }
         }
     }
 }
 
 @Composable
-private fun ToolGroupHeader(calls: List<UiAgentToolCall>, expanded: Boolean, onToggle: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
+private fun ToolRunHeader(calls: List<UiAgentToolCall>, expanded: Boolean, onToggle: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val files = remember(calls) { calls.flatMap { it.changes }.map { it.path }.distinct().size }
+    val summary = buildString {
+        append(pluralStringResource(Res.plurals.chat_tool_count, calls.size, calls.size))
+        if (files > 0) append(" · ").append(pluralStringResource(Res.plurals.chat_files_changed, files, files))
+    }
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-            .clickable(interactionSource = interaction, indication = null, onClick = onToggle)
-            .padding(vertical = 2.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onToggle)
+            .padding(horizontal = 2.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        val rotation by animateFloatAsState(if (expanded) 0f else -90f, label = "toolChevron")
-        Icon(CaIcons.chevronDown, null, Modifier.size(14.dp).rotate(rotation), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         ToolStatusIcon(aggregateStatus(calls))
-        // A bare count is locale-safe (no pluralized label needed).
-        Text("${calls.size}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-        if (!expanded) {
-            Text(
-                calls.last().title,
-                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-        }
+        Text(summary, style = MaterialTheme.typography.bodySmall, color = scheme.onSurface, fontWeight = FontWeight.Medium, maxLines = 1)
+        // Folded, the header still says what the run did last.
+        Text(
+            if (expanded) "" else calls.last().title,
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+        val rotation by animateFloatAsState(if (expanded) 0f else -90f, label = "toolChevron")
+        Icon(CaIcons.chevronDown, null, Modifier.size(14.dp).rotate(rotation), tint = scheme.onSurfaceVariant)
     }
 }
 
@@ -759,43 +961,93 @@ private fun TypingCaret() {
     )
 }
 
+/**
+ * The model's reasoning. Open while it streams, so there is something to watch. Once the turn moves on it folds to one
+ * "Thought" line that expands on tap: a finished turn's reasoning is rarely worth its screen space.
+ */
 @Composable
-private fun ThinkingBlock(thinking: String, streaming: Boolean) {
+private fun ThinkingStep(thinking: String, live: Boolean) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    val expanded = live || open
+    val scheme = MaterialTheme.colorScheme
+    val canToggle = !live && thinking.isNotBlank()
     Column(
-        Modifier.fillMaxWidth().entranceSlideUp().background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.medium).padding(12.dp),
+        Modifier.fillMaxWidth().entranceSlideUp().clip(MaterialTheme.shapes.medium)
+            .background(if (expanded) scheme.surfaceContainerHigh else Color.Transparent)
+            .then(if (canToggle) Modifier.clickable { open = !open } else Modifier)
+            .padding(horizontal = if (expanded) 12.dp else 2.dp, vertical = if (expanded) 10.dp else 4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(CaIcons.sparkle, null, Modifier.size(12.dp), tint = pulseColor(streaming))
-            Text(stringResource(Res.string.chat_thinking), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(CaIcons.sparkle, null, Modifier.size(12.dp), tint = pulseColor(live))
+            Text(
+                stringResource(if (live) Res.string.chat_thinking else Res.string.chat_thought),
+                style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant,
+            )
+            if (canToggle) {
+                val rotation by animateFloatAsState(if (open) 0f else -90f, label = "thoughtChevron")
+                Icon(CaIcons.chevronDown, null, Modifier.size(12.dp).rotate(rotation), tint = scheme.onSurfaceVariant)
+            }
         }
-        if (thinking.isNotBlank()) {
+        if (expanded && thinking.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
-            Text(thinking, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(thinking, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
         }
     }
 }
 
+/**
+ * One tool call as a single line: status, the call (its verb set apart from its target), and its result. A long
+ * result is cut to the line; a tap shows it whole. Files the call changed list under it, each expanding to its diff.
+ */
 @Composable
 private fun ToolCallRow(call: UiAgentToolCall) {
-    Column(
-        Modifier.fillMaxWidth().entranceSlideUp().background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.medium)
-            .padding(horizontal = 12.dp, vertical = 9.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+    var open by rememberSaveable(call.id) { mutableStateOf(false) }
+    val scheme = MaterialTheme.colorScheme
+    val canOpen = call.detail.isNotBlank()
+    Column(Modifier.fillMaxWidth()) {
         Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                .then(if (canOpen) Modifier.clickable { open = !open } else Modifier)
+                .padding(horizontal = 2.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             ToolStatusIcon(call.status)
-            Column(Modifier.weight(1f)) {
-                Text(call.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (call.detail.isNotBlank()) {
-                    Text(call.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
+            Text(
+                toolTitle(call.title, scheme.onSurfaceVariant),
+                Modifier.weight(1f, fill = false),
+                style = MaterialTheme.typography.bodySmall, color = scheme.onSurface,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            if (canOpen && !open) {
+                Text(
+                    call.detail,
+                    Modifier.widthIn(max = 160.dp),
+                    style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
             }
         }
-        if (call.changes.isNotEmpty()) FileChangesList(call.changes)
+        if (open) {
+            Text(
+                call.detail,
+                Modifier.padding(start = 24.dp, bottom = 4.dp),
+                style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
+            )
+        }
+        if (call.changes.isNotEmpty()) Box(Modifier.padding(start = 22.dp, top = 2.dp)) { FileChangesList(call.changes) }
     }
+}
+
+/** A call's title with its first word, the tool's verb, in a quieter weight than what it acted on. */
+private fun toolTitle(title: String, verbColor: Color): AnnotatedString = buildAnnotatedString {
+    val split = title.indexOf(' ')
+    if (split <= 0) {
+        append(title)
+        return@buildAnnotatedString
+    }
+    withStyle(SpanStyle(color = verbColor, fontWeight = FontWeight.Medium)) { append(title.substring(0, split)) }
+    append(title.substring(split))
 }
 
 @Composable

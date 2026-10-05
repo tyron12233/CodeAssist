@@ -20,6 +20,7 @@ import dev.ide.ui.backend.UiAgentPermissionMode
 import dev.ide.ui.backend.UiAgentPermissionRequest
 import dev.ide.ui.backend.UiAgentProvider
 import dev.ide.ui.backend.UiAgentRole
+import dev.ide.ui.backend.UiAgentSegment
 import dev.ide.ui.backend.UiAgentToolCall
 import dev.ide.ui.backend.UiAgentToolStatus
 import dev.ide.ui.backend.UiAgentUsage
@@ -101,6 +102,70 @@ class ChatDrawerSnapshot {
             dev.ide.ui.backend.UiAgentAttachment(dev.ide.ui.backend.UiAgentAttachmentKind.FILE, "MainActivity.kt"),
         ),
     )
+
+    /**
+     * A tool-heavy turn recorded step by step: prose, a batch of reads, more prose, an edit, the answer. With
+     * [live] the turn is still running, its newest batch open with a call in flight.
+     */
+    private fun stepsState(live: Boolean): UiAgentChatState {
+        val reads = listOf(
+            UiAgentToolCall("r1", "read Theme.kt", UiAgentToolStatus.OK, "48 lines"),
+            UiAgentToolCall("r2", "search staticCompositionLocalOf", UiAgentToolStatus.OK, "3 matches in 2 files"),
+            UiAgentToolCall("r3", "diagnostics Theme.kt", UiAgentToolStatus.OK, "No diagnostics."),
+        )
+        val edits = listOf(
+            UiAgentToolCall("e1", "edit Theme.kt", UiAgentToolStatus.OK, "Edited Theme.kt", listOf(change)),
+            UiAgentToolCall(
+                "e2", "run_program :app",
+                if (live) UiAgentToolStatus.RUNNING else UiAgentToolStatus.OK,
+                if (live) "compiling" else "Preview rendered",
+            ),
+        )
+        val answer = "`staticCompositionLocalOf` in a top-level `val` gets a **fresh identity** per preview " +
+            "process, so the theme read its default. The local now lives in the theme object."
+        val segments = buildList {
+            add(UiAgentSegment.Thinking("The preview reads the theme through a CompositionLocal; check where it is declared."))
+            add(UiAgentSegment.Text("Let me look at how the theme is declared first."))
+            add(UiAgentSegment.Tools(reads.map { it.id }))
+            add(UiAgentSegment.Text("The local is a top-level `val`, so I'll move it into the theme object and re-run."))
+            add(UiAgentSegment.Tools(edits.map { it.id }))
+            if (!live) add(UiAgentSegment.Text(answer))
+        }
+        return UiAgentChatState(
+            messages = listOf(
+                UiAgentMessage(1, UiAgentRole.USER, text = "Why is the preview blank for JetsnackTheme? Fix it."),
+                UiAgentMessage(
+                    2, UiAgentRole.ASSISTANT,
+                    text = segments.filterIsInstance<UiAgentSegment.Text>().joinToString("\n\n") { it.text },
+                    toolCalls = reads + edits,
+                    segments = segments,
+                    streaming = live,
+                    usage = if (live) null else UiAgentUsage(input = 2100, output = 640, cacheRead = 31200),
+                ),
+            ),
+            busy = live,
+        )
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun renderStepsDark() {
+        snapshot("chat-steps-dark.png", dark = true) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+                ChatDrawer(backend(stepsState(live = false)), onClose = {})
+            }
+        }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun renderStepsLiveLight() {
+        snapshot("chat-steps-live-light.png", dark = false) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+                ChatDrawer(backend(stepsState(live = true)), onClose = {})
+            }
+        }
+    }
 
     private fun backend(
         state: UiAgentChatState = UiAgentChatState(messages = transcript(), busy = false),

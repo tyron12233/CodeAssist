@@ -59,4 +59,19 @@
     <string name="chat_remove">Убрать</string>
     <string name="chat_attach_photo">Сделать фото</string>
     <string name="chat_paste_image">Вставить изображение</string>
+    <string name="chat_more">Ещё</string>
+    <string name="chat_jump_latest">К последнему сообщению</string>
+    <string name="chat_thought">Рассуждение</string>
+    <plurals name="chat_tool_count">
+        <item quantity="one">%1$d инструмент</item>
+        <item quantity="few">%1$d инструмента</item>
+        <item quantity="many">%1$d инструментов</item>
+        <item quantity="other">%1$d инструмента</item>
+    </plurals>
+    <plurals name="chat_files_changed">
+        <item quantity="one">изменён %1$d файл</item>
+        <item quantity="few">изменено %1$d файла</item>
+        <item quantity="many">изменено %1$d файлов</item>
+        <item quantity="other">изменено %1$d файла</item>
+    </plurals>
 </resources>

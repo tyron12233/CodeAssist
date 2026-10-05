@@ -59,4 +59,17 @@
     <string name="chat_remove">Remover</string>
     <string name="chat_attach_photo">Tirar foto</string>
     <string name="chat_paste_image">Colar imagem</string>
+    <string name="chat_more">Mais</string>
+    <string name="chat_jump_latest">Ir para o mais recente</string>
+    <string name="chat_thought">Raciocínio</string>
+    <plurals name="chat_tool_count">
+        <item quantity="one">%1$d ferramenta</item>
+        <item quantity="many">%1$d ferramentas</item>
+        <item quantity="other">%1$d ferramentas</item>
+    </plurals>
+    <plurals name="chat_files_changed">
+        <item quantity="one">%1$d arquivo alterado</item>
+        <item quantity="many">%1$d arquivos alterados</item>
+        <item quantity="other">%1$d arquivos alterados</item>
+    </plurals>
 </resources>

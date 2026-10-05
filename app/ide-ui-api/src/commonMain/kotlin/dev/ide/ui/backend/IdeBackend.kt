@@ -801,7 +801,22 @@ data class UiAgentUsage(
     val cacheWrite: Int = 0,
 )
 
-/** One chat message. Assistant messages stream: [text], [thinking], and [toolCalls] fill in as events arrive. */
+/**
+ * One step of an assistant turn, in the order it happened. A turn that writes, calls tools, then writes again is
+ * three segments, so the transcript can show it as it ran rather than all text after all tools. Consecutive tool
+ * calls share one [Tools] segment, whose [Tools.ids] point into [UiAgentMessage.toolCalls].
+ */
+sealed interface UiAgentSegment {
+    data class Text(val text: String) : UiAgentSegment
+    data class Thinking(val text: String) : UiAgentSegment
+    data class Tools(val ids: List<String>) : UiAgentSegment
+}
+
+/**
+ * One chat message. Assistant messages stream: [text], [thinking], and [toolCalls] fill in as events arrive, and
+ * [segments] records the order they arrived in. [text] and [thinking] stay the whole turn's text (steps separated by
+ * a blank line), for copying and for anything that does not care about order.
+ */
 data class UiAgentMessage(
     val id: Long,
     val role: UiAgentRole,
@@ -826,6 +841,8 @@ data class UiAgentMessage(
     val canUndo: Boolean = false,
     /** On a user message: its changes were reverted. */
     val undone: Boolean = false,
+    /** The turn's steps in order. Empty for a message saved before steps were recorded, or one with only text. */
+    val segments: List<UiAgentSegment> = emptyList(),
 )
 
 /** The observable chat transcript. */

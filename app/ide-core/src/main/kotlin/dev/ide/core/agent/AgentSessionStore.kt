@@ -6,6 +6,7 @@ import dev.ide.ui.backend.UiAgentAttachment
 import dev.ide.ui.backend.UiAgentAttachmentKind
 import dev.ide.ui.backend.UiAgentMessage
 import dev.ide.ui.backend.UiAgentRole
+import dev.ide.ui.backend.UiAgentSegment
 import dev.ide.ui.backend.UiAgentSessionSummary
 import dev.ide.ui.backend.UiAgentToolCall
 import dev.ide.ui.backend.UiAgentToolStatus
@@ -109,6 +110,20 @@ internal class AgentSessionStore(private val root: () -> Path?) {
                 addJsonObject { put("id", c.id); put("title", c.title); put("status", c.status.name); put("detail", c.detail) }
             }
         })
+        if (m.segments.isNotEmpty()) put("segments", buildJsonArray {
+            m.segments.forEach { seg ->
+                addJsonObject {
+                    when (seg) {
+                        is UiAgentSegment.Text -> { put("kind", "text"); put("text", seg.text) }
+                        is UiAgentSegment.Thinking -> { put("kind", "thinking"); put("text", seg.text) }
+                        is UiAgentSegment.Tools -> {
+                            put("kind", "tools")
+                            put("ids", buildJsonArray { seg.ids.forEach { add(it) } })
+                        }
+                    }
+                }
+            }
+        })
         m.usage?.let { u ->
             put("usage", buildJsonObject {
                 put("input", u.input); put("output", u.output); put("cacheRead", u.cacheRead); put("cacheWrite", u.cacheWrite)
@@ -147,6 +162,7 @@ internal class AgentSessionStore(private val root: () -> Path?) {
                 )
             }.orEmpty(),
             usage = usage,
+            segments = (obj["segments"] as? JsonArray)?.mapNotNull { decodeSegment(it as? JsonObject) }.orEmpty(),
             attachments = (obj["attachments"] as? JsonArray)?.mapNotNull { a ->
                 val o = a as? JsonObject ?: return@mapNotNull null
                 UiAgentAttachment(
@@ -158,6 +174,13 @@ internal class AgentSessionStore(private val root: () -> Path?) {
                 )
             }.orEmpty(),
         )
+    }
+
+    private fun decodeSegment(obj: JsonObject?): UiAgentSegment? = when (obj?.str("kind")) {
+        "text" -> UiAgentSegment.Text(obj.str("text"))
+        "thinking" -> UiAgentSegment.Thinking(obj.str("text"))
+        "tools" -> UiAgentSegment.Tools((obj["ids"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty())
+        else -> null
     }
 
     private fun JsonObject.str(key: String): String = (this[key] as? JsonPrimitive)?.contentOrNull.orEmpty()

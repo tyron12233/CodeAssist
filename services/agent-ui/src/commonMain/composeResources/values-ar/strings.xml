@@ -61,4 +61,23 @@
     <string name="chat_remove">إزالة</string>
     <string name="chat_attach_photo">التقاط صورة</string>
     <string name="chat_paste_image">لصق صورة</string>
+    <string name="chat_more">المزيد</string>
+    <string name="chat_jump_latest">الانتقال إلى الأحدث</string>
+    <string name="chat_thought">تفكير</string>
+    <plurals name="chat_tool_count">
+        <item quantity="zero">%1$d أداة</item>
+        <item quantity="one">%1$d أداة</item>
+        <item quantity="two">%1$d أداتان</item>
+        <item quantity="few">%1$d أدوات</item>
+        <item quantity="many">%1$d أداة</item>
+        <item quantity="other">%1$d أداة</item>
+    </plurals>
+    <plurals name="chat_files_changed">
+        <item quantity="zero">%1$d ملف معدّل</item>
+        <item quantity="one">%1$d ملف معدّل</item>
+        <item quantity="two">%1$d ملفان معدّلان</item>
+        <item quantity="few">%1$d ملفات معدّلة</item>
+        <item quantity="many">%1$d ملفًا معدّلًا</item>
+        <item quantity="other">%1$d ملف معدّل</item>
+    </plurals>
 </resources>

@@ -61,4 +61,13 @@
     <string name="chat_remove">移除</string>
     <string name="chat_attach_photo">拍照</string>
     <string name="chat_paste_image">粘贴图片</string>
+    <string name="chat_more">更多</string>
+    <string name="chat_jump_latest">跳到最新</string>
+    <string name="chat_thought">思考过程</string>
+    <plurals name="chat_tool_count">
+        <item quantity="other">%1$d 个工具</item>
+    </plurals>
+    <plurals name="chat_files_changed">
+        <item quantity="other">已更改 %1$d 个文件</item>
+    </plurals>
 </resources>

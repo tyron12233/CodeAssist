@@ -59,4 +59,13 @@
     <string name="chat_remove">Hapus</string>
     <string name="chat_attach_photo">Ambil foto</string>
     <string name="chat_paste_image">Tempel gambar</string>
+    <string name="chat_more">Lainnya</string>
+    <string name="chat_jump_latest">Lompat ke terbaru</string>
+    <string name="chat_thought">Proses berpikir</string>
+    <plurals name="chat_tool_count">
+        <item quantity="other">%1$d alat</item>
+    </plurals>
+    <plurals name="chat_files_changed">
+        <item quantity="other">%1$d file diubah</item>
+    </plurals>
 </resources>

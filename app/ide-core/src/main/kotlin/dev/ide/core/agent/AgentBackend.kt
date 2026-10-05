@@ -35,6 +35,7 @@ import dev.ide.platform.log.Log
 import dev.ide.ui.backend.AgentService
 import dev.ide.ui.backend.UiAgentAttachment
 import dev.ide.ui.backend.UiAgentAttachmentKind
+import dev.ide.ui.backend.UiAgentSegment
 import dev.ide.ui.backend.UiAgentChatState
 import dev.ide.ui.backend.UiAgentCommand
 import dev.ide.ui.backend.UiAgentFileChange
@@ -680,12 +681,13 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         }
         when (event) {
             is AgentEvent.UserMessage -> Unit // already seeded
-            is AgentEvent.AssistantTextDelta ->
-                mutateAssistant(assistantId) { it.copy(text = it.text + event.text) }
-            is AgentEvent.AssistantThinkingDelta ->
-                mutateAssistant(assistantId) { it.copy(thinking = it.thinking + event.text) }
+            is AgentEvent.AssistantTextDelta -> mutateAssistant(assistantId) { it.withText(event.text) }
+            is AgentEvent.AssistantThinkingDelta -> mutateAssistant(assistantId) { it.withThinking(event.text) }
             is AgentEvent.ToolCallStarted -> mutateAssistant(assistantId) {
-                it.copy(toolCalls = it.toolCalls + UiAgentToolCall(event.id, event.displaySummary, UiAgentToolStatus.RUNNING))
+                it.copy(
+                    toolCalls = it.toolCalls + UiAgentToolCall(event.id, event.displaySummary, UiAgentToolStatus.RUNNING),
+                    segments = it.segments.appendTool(event.id),
+                )
             }
             is AgentEvent.ToolCallFinished -> mutateAssistant(assistantId) { m ->
                 m.copy(toolCalls = m.toolCalls.map {
@@ -779,6 +781,33 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private fun displayPath(path: String): String {
         val root = ctx.servicesOrNull?.workspaceRoot?.toString() ?: return path
         return if (path.startsWith("$root/")) path.removePrefix("$root/") else path
+    }
+
+    /**
+     * Appends streamed answer text. A delta that follows a tool call or reasoning starts a new step, and the
+     * whole-turn [UiAgentMessage.text] gets a paragraph break there so two steps' sentences do not run together.
+     */
+    private fun UiAgentMessage.withText(delta: String): UiAgentMessage {
+        val last = segments.lastOrNull()
+        if (last is UiAgentSegment.Text) {
+            return copy(text = text + delta, segments = segments.dropLast(1) + UiAgentSegment.Text(last.text + delta))
+        }
+        val joined = if (text.isBlank()) delta.trimStart() else text.trimEnd() + "\n\n" + delta.trimStart()
+        return copy(text = joined, segments = segments + UiAgentSegment.Text(delta.trimStart()))
+    }
+
+    private fun UiAgentMessage.withThinking(delta: String): UiAgentMessage {
+        val last = segments.lastOrNull()
+        if (last is UiAgentSegment.Thinking) {
+            return copy(thinking = thinking + delta, segments = segments.dropLast(1) + UiAgentSegment.Thinking(last.text + delta))
+        }
+        val joined = if (thinking.isBlank()) delta.trimStart() else thinking.trimEnd() + "\n\n" + delta.trimStart()
+        return copy(thinking = joined, segments = segments + UiAgentSegment.Thinking(delta.trimStart()))
+    }
+
+    private fun List<UiAgentSegment>.appendTool(id: String): List<UiAgentSegment> {
+        val last = lastOrNull()
+        return if (last is UiAgentSegment.Tools) dropLast(1) + UiAgentSegment.Tools(last.ids + id) else this + UiAgentSegment.Tools(listOf(id))
     }
 
     private fun mutateAssistant(id: Long, block: (UiAgentMessage) -> UiAgentMessage) {
@@ -894,7 +923,10 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         val assistantId = msgIds.incrementAndGet()
         _chatState.update {
             it.copy(
-                messages = it.messages + UiAgentMessage(assistantId, UiAgentRole.ASSISTANT, text = "**Conversation compacted.** ", streaming = true),
+                messages = it.messages + UiAgentMessage(
+                    assistantId, UiAgentRole.ASSISTANT, text = COMPACTED, streaming = true,
+                    segments = listOf(UiAgentSegment.Text(COMPACTED)),
+                ),
                 busy = true,
             )
         }
@@ -996,6 +1028,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     }
 
     companion object {
+        private const val COMPACTED = "**Conversation compacted.** "
+
         private val live = CopyOnWriteArrayList<WeakReference<AgentBackend>>()
 
         /** The agent of the project at [root] (the most recently opened one when [root] matches none), for an
