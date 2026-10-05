@@ -326,6 +326,21 @@ const val PLUGIN_API_VERSION: Int = 4
  *    `AnalysisTarget` and completion was not, so a contributor could not read the module's configuration and
  *    ran with defaults or with whatever diagnostics last recorded. `language-api`'s common code now depends on
  *    `project-model-api` for it, which was already a dependency of its JVM half.
+ *
+ * And four more, found by building JNI support into the same plugin:
+ *
+ *  - `dev.ide.analysis.WorkspaceEdit.createFile` (and `plus`). A quick fix could edit only files that exist;
+ *    the C++ function a `native` method is missing, in a module with no C++ yet, has to go into a new one.
+ *  - `dev.ide.analysis.DeclarationProvider` and `DECLARATION_PROVIDER_EP`. Go to Declaration was the Kotlin
+ *    service and Android resources, with no seam, so a declaration across a language boundary (a Java
+ *    `native` method's C++ body) could only be a gutter mark. Asked once the built-ins found nothing, and
+ *    listed beside them in the Go-to menu.
+ *  - `dev.ide.plugin.ui.NewFileTemplate`, `UiRegistration.newFileTemplate` and
+ *    [PluginCapabilities.UI_NEW_FILE_TEMPLATE]. The New menu was a closed list; a plugin can now add a kind
+ *    of file to it, with the host's name dialog and the plugin's own content.
+ *  - `dev.ide.plugin.action.ActionContext.workspaceServices` and `dev.ide.model.ModuleSources.setFacetData`.
+ *    An action was handed paths and no model, so "add this feature to the module" had no module to add it
+ *    to; and nothing a plugin could reach would set a facet and save it.
  */
 const val PLUGIN_SPI_VERSION: String = "3.1.0"
 

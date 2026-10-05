@@ -39,7 +39,7 @@ internal class ActionBackend(private val ctx: BackendContext) : ActionService {
     }
 
     private fun UiActionContext.toActionContext(): ActionContext =
-        toPluginActionContext(this, ctx.services.workspaceRoot.toString())
+        toPluginActionContext(this, ctx.services.workspaceRoot.toString(), ctx.services.store.workspaceContainer)
 
     private fun ResolvedMenuItem.toUiMenuNode(): UiMenuNode = when (this) {
         is ResolvedMenuItem.Action -> UiMenuNode.Item(UiActionItem(action.id, action.text, action.iconId, enabled))
@@ -71,7 +71,11 @@ internal class ActionBackend(private val ctx: BackendContext) : ActionService {
  * palette) and the editor backend (the [dev.ide.plugin.action.ActionPlaces.EDITOR] place), so an action
  * sees the same context shape whichever surface resolved it.
  */
-internal fun toPluginActionContext(snapshot: UiActionContext, projectRoot: String?): ActionContext {
+internal fun toPluginActionContext(
+    snapshot: UiActionContext,
+    projectRoot: String?,
+    workspaceServices: dev.ide.platform.ServiceLookup = dev.ide.platform.ServiceLookup.Empty,
+): ActionContext {
     val caretCtx = snapshot.caret?.let {
         CaretContext(
             offset = it.offset,
@@ -93,5 +97,6 @@ internal fun toPluginActionContext(snapshot: UiActionContext, projectRoot: Strin
         override val contextPath = snapshot.contextPath
         override val caret = caretCtx
         override val documentText = snapshot.documentText
+        override val workspaceServices = workspaceServices
     }
 }

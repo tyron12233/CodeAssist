@@ -12,6 +12,7 @@ import dev.ide.plugin.ui.Overlay
 import dev.ide.plugin.ui.EditorAnchor as ExternalAnchorPoint
 import dev.ide.plugin.ui.EditorLanguage as ExternalEditorLanguage
 import dev.ide.plugin.ui.FileIcon as ExternalFileIcon
+import dev.ide.plugin.ui.NewFileTemplate as ExternalNewFileTemplate
 import dev.ide.plugin.ui.EditorLayer as ExternalEditorLayer
 import dev.ide.plugin.ui.EditorLayerContext as ExternalLayerContext
 import dev.ide.plugin.ui.EditorPaintContext as ExternalPaintContext
@@ -206,6 +207,20 @@ private class BridgedRegistration(
             // and the published surface carries no vector type, so the art it CAN describe is a short string
             // and a color -- which is what the IDE's own `J`, `K` and `R8` file badges already are.
             icon = TreeIcon.Badge(icon.badge, Color(icon.color.toULong().toLong())),
+        )
+        return UiHandle { registration.dispose() }
+    }
+
+    override fun newFileTemplate(template: ExternalNewFileTemplate): UiHandle {
+        val registration = scope.newFileTemplate(
+            NewFileTemplateContribution(
+                id = template.id,
+                title = template.title,
+                nameLabel = template.nameLabel,
+                iconId = template.iconId,
+                appliesTo = template.appliesTo,
+                files = { dir, name -> template.files(dir, name).map { it.relativePath to it.text } },
+            ),
         )
         return UiHandle { registration.dispose() }
     }

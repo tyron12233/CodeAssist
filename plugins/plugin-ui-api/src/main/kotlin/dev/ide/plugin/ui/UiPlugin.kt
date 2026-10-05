@@ -108,6 +108,15 @@ interface UiRegistration {
      * unrecognised binary gets, which reads as "the IDE does not know what this is".
      */
     fun fileIcon(icon: FileIcon): UiHandle
+
+    /**
+     * Add a kind of file to the file tree's **New ▸** menu. See [NewFileTemplate].
+     *
+     * Since SPI 3.1.0. On an older host this throws `AbstractMethodError` or `NoSuchMethodError`; a plugin
+     * that supports one calls it inside `catch (LinkageError)`. The default here, a no-op, is what a host that
+     * has no file tree answers.
+     */
+    fun newFileTemplate(template: NewFileTemplate): UiHandle = UiHandle { }
 }
 
 /** Removes one contribution. */

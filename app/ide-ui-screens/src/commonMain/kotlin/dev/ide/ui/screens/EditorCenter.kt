@@ -575,7 +575,7 @@ private fun EditorDaemonEffect(
     LaunchedEffect(
         active.path, active.session.textRevision,
         state.inlayHintsEnabled, state.semanticHighlightingEnabled, state.codeFoldingEnabled,
-        state.analyzeOnTheFly, state.reparseDelayMs,
+        state.analyzeOnTheFly, state.reparseDelayMs, state.analysisEpoch,
     ) {
         // Apply the user's editor/analysis prefs (Settings) to the daemon before each run. Above the large-file
         // threshold the four heavy passes are forced off regardless of the prefs: parsing + resolving a very

@@ -63,6 +63,9 @@ interface UiContributionScope {
     /** Draw straight into the editor's canvas ([EditorPainterContribution]). The escape hatch for a plugin
      *  whose colors are its own rather than one of the theme's roles; held to a per-frame budget. */
     fun editorPainter(painter: EditorPainterContribution): Registration
+
+    /** Add a kind of file to the file tree's New menu ([NewFileTemplateContribution]). */
+    fun newFileTemplate(template: NewFileTemplateContribution): Registration = Registration { }
 }
 
 /**
@@ -181,5 +184,8 @@ object UiPluginHost {
 
         override fun editorPainter(painter: EditorPainterContribution): Registration =
             track(EditorPainterRegistry.register(painter))
+
+        override fun newFileTemplate(template: NewFileTemplateContribution): Registration =
+            track(NewFileTemplateRegistry.register(template))
     }
 }

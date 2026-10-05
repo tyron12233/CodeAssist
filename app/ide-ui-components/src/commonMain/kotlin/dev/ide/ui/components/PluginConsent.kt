@@ -156,6 +156,7 @@ internal fun describeCapability(capability: String): String = when (capability) 
     "ui.editorPainter" -> "Draw into the editor"
     "ui.editorLanguage" -> "Color and comment a language in the editor, including ones the IDE already knows"
     "ui.colorAttribute" -> "Add entries to your editor color scheme, and change what the built-in ones look like"
+    "ui.newFileTemplate" -> "Add kinds of file to the New menu"
     "lang.backend" -> "Teach the editor a language: parsing, completion and errors"
     "model.moduleType" -> "Add a kind of module, and templates that create one"
     "model.facet" -> "Keep configuration of its own in your modules"

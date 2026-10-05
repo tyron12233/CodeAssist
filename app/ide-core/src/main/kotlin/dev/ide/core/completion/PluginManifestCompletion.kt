@@ -146,6 +146,7 @@ class PluginManifestCompletion(
                 PluginCapabilities.UI_TOOL_WINDOW -> "contributes a tool window"
                 PluginCapabilities.UI_SCREEN -> "contributes a full screen"
                 PluginCapabilities.UI_OVERLAY -> "contributes an app-wide overlay"
+                PluginCapabilities.UI_NEW_FILE_TEMPLATE -> "adds kinds of file to the New menu"
                 PluginCapabilities.BUILD_TASK -> "adds steps to the build"
                 PluginCapabilities.BUILD_SOURCE_GENERATOR -> "generates source at build time"
                 PluginCapabilities.BUILD_RUN_TASK -> "contributes a Run-picker row"

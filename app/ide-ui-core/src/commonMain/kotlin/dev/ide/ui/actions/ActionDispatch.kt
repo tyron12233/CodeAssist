@@ -80,13 +80,25 @@ suspend fun IdeUiState.applyWorkspaceEdits(edits: Map<String, List<UiTextEdit>>)
             openSuspend(open.path, open.name)
             applyEdits(fileEdits)
         } else {
-            val original = runCatching { backend.files.readFile(path) }.getOrNull() ?: continue
+            val original = runCatching { backend.files.readFile(path) }.getOrNull()
+            if (original == null) {
+                // A file that is not there and only gains text is a file the action creates (a quick fix's
+                // `WorkspaceEdit.createFile`). `createFile` makes the directories and refuses a path that does
+                // exist, so a file that was merely unreadable is never replaced.
+                if (fileEdits.all { it.start == 0 && it.end == 0 }) {
+                    runCatching {
+                        backend.files.createFile(path.substringBeforeLast('/'), path.substringAfterLast('/'), patch("", fileEdits))
+                    }
+                }
+                continue
+            }
             // Same reasoning as the read above, and as IdeUiState.writeToDisk: an unwritable file must not
             // take the process down mid-refactor. The backend has already logged the reason for the user;
             // the remaining files still get their edits.
             runCatching { backend.editor.saveFile(path, patch(original, fileEdits)) }
         }
     }
+    if (edits.any { (path, fileEdits) -> path != activePath && fileEdits.isNotEmpty() }) analysisEpoch++
     refreshTree()
 }
 

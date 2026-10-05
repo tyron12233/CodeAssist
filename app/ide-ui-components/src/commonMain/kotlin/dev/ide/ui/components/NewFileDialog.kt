@@ -2,6 +2,7 @@
 
 package dev.ide.ui.components
 
+import dev.ide.ui.ext.NewFileTemplateRequest
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
@@ -206,6 +207,91 @@ private fun NewEntryPanel(
             Spacer(Modifier.weight(1f))
             DialogButton(stringResource(Res.string.cancel), primary = false, enabled = true, onClick = onDismiss)
             DialogButton(stringResource(Res.string.create), primary = true, enabled = valid, onClick = ::submit)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// New file from a plugin's template (a C++ class, a header)
+// ---------------------------------------------------------------------------
+
+/**
+ * The name prompt for a plugin's New-file template ([NewFileTemplateRequest]). The template turns the name
+ * into files; one that refuses the name throws [IllegalArgumentException], whose message is shown here while
+ * the dialog stays open. [onCreate] receives the target directory and the files as relative path to text.
+ */
+@Composable
+fun NewFromTemplateDialog(
+    request: NewFileTemplateRequest?,
+    onDismiss: () -> Unit,
+    onCreate: (dirPath: String, files: List<Pair<String, String>>) -> Unit,
+) {
+    var shown by remember { mutableStateOf<NewFileTemplateRequest?>(null) }
+    if (request != null) shown = request
+    DropdownOverlay(visible = request != null, onDismiss = onDismiss, topPadding = 110.dp, scrollableContent = true) {
+        shown?.let { NewFromTemplatePanel(it, onDismiss, onCreate) }
+    }
+}
+
+@Composable
+private fun NewFromTemplatePanel(
+    req: NewFileTemplateRequest,
+    onDismiss: () -> Unit,
+    onCreate: (String, List<Pair<String, String>>) -> Unit,
+) {
+    var name by remember(req) { mutableStateOf("") }
+    var error by remember(req) { mutableStateOf<String?>(null) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(req) { runCatching { focus.requestFocus() } }
+    val trimmed = name.trim()
+
+    fun submit() {
+        if (trimmed.isEmpty()) return
+        val files = try {
+            req.template.files(req.dirPath, trimmed)
+        } catch (e: IllegalArgumentException) {
+            error = e.message ?: "That name cannot be used"
+            return
+        } catch (e: Exception) {
+            error = "The template failed: ${e.message ?: e::class.simpleName}"
+            return
+        }
+        if (files.isEmpty()) { error = "The template produced no files"; return }
+        onCreate(req.dirPath, files)
+        onDismiss()
+    }
+
+    Column(
+        Modifier
+            .widthIn(max = 520.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+            .padding(20.dp),
+    ) {
+        Text(req.template.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(4.dp))
+        Text(stringResource(Res.string.newfile_in, req.dirLabel), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+        Spacer12()
+        FieldLabel(req.template.nameLabel)
+        DialogField(
+            value = name,
+            onValueChange = { name = it; error = null },
+            placeholder = req.template.nameLabel,
+            focusRequester = focus,
+            onSubmit = ::submit,
+            onCancel = onDismiss,
+        )
+        error?.let {
+            Spacer8()
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+        }
+        Spacer12()
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Spacer(Modifier.weight(1f))
+            DialogButton(stringResource(Res.string.cancel), primary = false, enabled = true, onClick = onDismiss)
+            DialogButton(stringResource(Res.string.create), primary = true, enabled = trimmed.isNotEmpty(), onClick = ::submit)
         }
     }
 }

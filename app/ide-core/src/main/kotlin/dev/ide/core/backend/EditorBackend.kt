@@ -635,6 +635,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
                     documentText = text,
                 ),
                 ctx.services.workspaceRoot.toString(),
+                ctx.services.store.workspaceContainer,
             )
             runCatching { ctx.services.actions.actionsFor(actionCtx) }.getOrDefault(emptyList())
                 .mapIndexed { i, action ->

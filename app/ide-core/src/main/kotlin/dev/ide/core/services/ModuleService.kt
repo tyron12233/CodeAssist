@@ -753,6 +753,14 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
         return target
     }
 
+    override fun setFacetData(moduleName: String, data: dev.ide.model.FacetData): Boolean {
+        if (!model.putFacetData(moduleName, data)) return false
+        // A facet changes what the module builds and analyzes (a plugin's build tasks, a language's flags).
+        ctx.invalidateAnalyzers()
+        ctx.resyncIndex()
+        return true
+    }
+
     /** Remove the content root at [dirRelPath] (relative to the module dir) from [sourceSetName] of
      *  [moduleName]. Model-only — the directory on disk is left untouched. Returns true on a model change. */
     override fun removeSourceRoot(moduleName: String, sourceSetName: String, dirRelPath: String): Boolean {

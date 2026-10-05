@@ -33,7 +33,44 @@ data class WorkspaceEdit(val edits: Map<VirtualFile, List<DocumentEdit>>) {
         /** A single-file edit — the common case (insert an import, add a `;`, delete a declaration). */
         fun of(file: VirtualFile, vararg edits: DocumentEdit): WorkspaceEdit =
             WorkspaceEdit(mapOf(file to edits.toList()))
+
+        /**
+         * Create the file at [path] (absolute) holding [text], for a fix whose answer is a file that does not
+         * exist yet: the C++ function a `native` method is missing, in a module with no C++ source so far.
+         *
+         * The host creates the file, and its directories, only if nothing is there when the edit is applied;
+         * an existing file is left alone, so a fix that may race the user should check [VirtualFile.exists]
+         * and edit the file instead. Merge it with other edits through [plus].
+         *
+         * Since SPI 3.1.0. A plugin that runs on an older host calls this inside `catch (LinkageError)`: a
+         * host without it would drop an edit to a missing file without a word.
+         */
+        fun createFile(path: String, text: String): WorkspaceEdit =
+            WorkspaceEdit(mapOf(MissingFile(path) to listOf(DocumentEdit(0, 0, text))))
     }
+
+    /** This edit and [other] as one, for a fix that both creates a file and edits another. */
+    operator fun plus(other: WorkspaceEdit): WorkspaceEdit {
+        val merged = LinkedHashMap<VirtualFile, List<DocumentEdit>>(edits)
+        for ((file, more) in other.edits) merged[file] = merged[file].orEmpty() + more
+        return WorkspaceEdit(merged)
+    }
+}
+
+/** The not-yet-existing file a [WorkspaceEdit.createFile] names. Only its [path] is ever read. */
+private class MissingFile(override val path: String) : VirtualFile {
+    override val name: String get() = path.substringAfterLast('/')
+    override val isDirectory: Boolean get() = false
+    override val exists: Boolean get() = false
+    override val length: Long get() = 0
+    override fun parent(): VirtualFile? = null
+    override fun children(): List<VirtualFile> = emptyList()
+    override fun contentHash(): dev.ide.platform.ContentHash = dev.ide.platform.ContentHash.of(ByteArray(0))
+    override fun readBytes(): ByteArray = ByteArray(0)
+    override fun readText(): CharSequence = ""
+    override fun equals(other: Any?): Boolean = other is MissingFile && other.path == path
+    override fun hashCode(): Int = path.hashCode()
+    override fun toString(): String = path
 }
 
 interface QuickFix {

@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.ext.NewFileTemplateRegistry
+import dev.ide.ui.ext.NewFileTemplateRequest
 import dev.ide.ui.expandedCaretTurn
 import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
@@ -904,6 +906,15 @@ private fun NewActionItems(
         ) { close(); onNewImageAsset(node) }
     }
     if (targetDir != null) {
+        // Kinds of file plugins know how to start (a C++ class, a header). The name dialog is the screen's,
+        // reached through the registry's pending slot rather than another callback down this tree.
+        NewFileTemplateRegistry.forDirectory(targetDir).forEach { template ->
+            FileActionItem(CaIcons.code, template.title) {
+                close()
+                NewFileTemplateRegistry.pending =
+                    NewFileTemplateRequest(targetDir, targetDir.substringAfterLast('/'), template)
+            }
+        }
         FileActionItem(CaIcons.plus, stringResource(Res.string.filetree_file)) { close(); onNewFile(targetDir, segs) }
         FileActionItem(CaIcons.folder, stringResource(Res.string.filetree_directory)) { close(); onNewFolder(targetDir, segs) }
     }

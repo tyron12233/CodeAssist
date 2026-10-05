@@ -495,6 +495,13 @@ class IdeUiState(
     var completionDelayMs by mutableStateOf(110)
     /** Run diagnostics as you type (off = the highlighting daemon skips the diagnostics pass). */
     var analyzeOnTheFly by mutableStateOf(true)
+
+    /**
+     * Bumped when an action changed files other than the one in front of the user, so the focused editor
+     * re-analyzes although its own text did not change: a quick fix that writes the C++ function a `native`
+     * method was missing changes what the method's own file reports.
+     */
+    var analysisEpoch by mutableStateOf(0)
     /** Quiet period (ms) after the last edit before the highlighting daemon runs. */
     var reparseDelayMs by mutableStateOf(300)
     /** Soft-wrap long lines at the viewport edge (off = one row per line + horizontal scroll). */
@@ -983,6 +990,25 @@ class IdeUiState(
             val path = withContext(ioDispatcher) { backend.files.createFile(dirPath, fileName, content) } ?: return@launch
             loadTree()
             openSuspend(path, fileName)
+        }
+    }
+
+    /**
+     * Create several files under [dirPath] at once ([files] = relative path to text, `/`-separated), as a
+     * plugin's New-file template produces them, then open the first one created. A file already on disk is
+     * skipped rather than replaced.
+     */
+    fun createFiles(dirPath: String, files: List<Pair<String, String>>) {
+        scope.launch {
+            val created = withContext(ioDispatcher) {
+                files.mapNotNull { (relative, text) ->
+                    val rel = relative.replace('\\', '/').trim('/')
+                    val dir = if ('/' in rel) "$dirPath/${rel.substringBeforeLast('/')}" else dirPath
+                    backend.files.createFile(dir, rel.substringAfterLast('/'), text)
+                }
+            }
+            loadTree()
+            created.firstOrNull()?.let { openSuspend(it, it.substringAfterLast('/')) }
         }
     }
 

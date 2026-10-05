@@ -878,6 +878,25 @@ A provider declares `PluginCapabilities.UI_EDITOR_DECORATION`. It is the one con
 the user's own code looks on every file it claims, rather than adding a surface they choose to open, so the
 consent gate names it.
 
+### Go to Declaration across languages
+
+Go to Declaration asks the language backends first. Since SPI 3.1.0 a plugin can add declarations they do
+not know about, such as the C++ body of a Java `native` method, through `DECLARATION_PROVIDER_EP`:
+
+```kotlin
+reg.register(DECLARATION_PROVIDER_EP, object : DeclarationProvider {
+    override val id = "my.jni.declaration"
+    override val languages = setOf(LanguageId("java"), LanguageId("kotlin"))
+    override suspend fun declarations(target: AnalysisTarget, offset: Int): List<NavigationTarget> =
+        findCounterpart(target, offset)?.let { listOf(NavigationTarget(it.path, it.offset, it.label)) }.orEmpty()
+})
+```
+
+`target` is the same live-buffer analysis target diagnostics get. A direct jump consults providers only when
+the built-in navigation found nothing, so a plugin cannot shadow a declaration a backend knows; the Go-to
+menu lists both. For a plugin that must also run on an older IDE, register it from a class of its own after
+checking the host has SPI 3.1.0, so the older host never loads a type it does not have.
+
 ### Put composables and pixels in the editor
 
 The decoration tier above covers everything expressible as data. Two things are not, and each has a UI-facet
@@ -1498,7 +1517,28 @@ One consequence of that last row: only the portable tier can place the caret or 
 `WorkspaceEdit` carries edits and nothing else. An analysis-tier refactor that generates a name cannot
 leave it selected for the user to type over.
 
-### 9.4 How it reaches the UI
+A quick fix whose answer is a file that does not exist yet (the C++ function a `native` method is missing,
+in a module with no C++) returns `WorkspaceEdit.createFile(path, text)`, merged with other edits through `+`.
+The host creates the file, and its directories, only when nothing is there. Since SPI 3.1.0.
+
+### 9.4 Actions that change the project
+
+An action is handed paths, not model objects. To change the project itself, for example to switch a feature
+on for the module the user long-pressed, resolve the workspace through `ActionContext.workspaceServices`
+(since SPI 3.1.0):
+
+```kotlin
+val workspace = ctx.workspaceServices.getServiceOrNull(WORKSPACE_SERVICE) ?: return ActionResult.NONE
+val module = workspace.projects.flatMap { it.modules }.firstOrNull { it.dir.path == ctx.contextPath }
+val sources = ctx.workspaceServices.getServiceOrNull(MODULE_SOURCES)
+sources?.addSourceRoot(module.name, "main", "cpp", setOf(ContentRole.SOURCE))
+sources?.setFacetData(module.name, FacetData("myFeature", mapOf("enabled" to true)))
+```
+
+`ModuleSources.setFacetData` replaces the facet table with that id and saves the module; its owner reads it
+back through its codec.
+
+### 9.5 How it reaches the UI
 
 [`ActionManager`](../plugin-impl/src/main/kotlin/dev/ide/plugin/impl/ActionManager.kt) is the single consumer
 of `UI_ACTION_EP` / `ACTION_GROUP_EP`. It resolves a place into an ordered, visibility-filtered list
@@ -1736,6 +1776,28 @@ Named destinations live in `UiDestinations` (`HUB`, `SETTINGS`, `MODULES`, `SDK`
 The IDE's own More-menu and palette entries are contributed exactly this way, through
 [`BuiltInUiPlugin`](../ide-ui-api/src/commonMain/kotlin/dev/ide/ui/ext/BuiltInUiActions.kt), which is the
 reference example.
+
+### 10.7b New-file templates
+
+`UiRegistration.newFileTemplate` adds a kind of file to the file tree's **New ▸** menu (since SPI 3.1.0,
+capability `ui.newFileTemplate`). The host asks for the name in its own dialog and writes what the template
+returns, relative to the directory the menu was opened on, then opens the first file:
+
+```kotlin
+ui.newFileTemplate(NewFileTemplate(
+    id = "my.cppClass",
+    title = "C++ Class",
+    nameLabel = "Class name",
+    appliesTo = { dir -> "/cpp" in dir },
+    files = { _, name ->
+        require(name.first().isLetter()) { "A class name starts with a letter" }
+        listOf(NewFileContent("$name.h", header(name)), NewFileContent("$name.cpp", source(name)))
+    },
+))
+```
+
+Throwing `IllegalArgumentException` refuses the name, with its message shown in the dialog. On a host before
+3.1.0 the call throws a `LinkageError`; catch it if the plugin supports such hosts.
 
 ### 10.8 Icon ids
 

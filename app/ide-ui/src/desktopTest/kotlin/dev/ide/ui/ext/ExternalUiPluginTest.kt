@@ -21,6 +21,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -157,6 +158,43 @@ class ExternalUiPluginTest {
      * cannot name Compose's `Color`), and the naive `Color(long)` conversion silently reads it as an sRGB
      * pixel-format value rather than as those four bytes.
      */
+    /** A New-menu template crosses with its gate and its files, and a refused name stays refused. */
+    @Test
+    fun newFileTemplateIsCarriedOver() {
+        val facet = facet { ui ->
+            ui.newFileTemplate(
+                dev.ide.plugin.ui.NewFileTemplate(
+                    id = "ndk.cppClass",
+                    title = "C++ Class",
+                    nameLabel = "Class name",
+                    iconId = "ndk.cpp",
+                    appliesTo = { dir -> dir.endsWith("/cpp") },
+                    files = { _, name ->
+                        require(name.first().isLetter()) { "starts with a letter" }
+                        listOf(
+                            dev.ide.plugin.ui.NewFileContent("$name.h", "#pragma once\n"),
+                            dev.ide.plugin.ui.NewFileContent("$name.cpp", "#include \"$name.h\"\n"),
+                        )
+                    },
+                ),
+            )
+        }
+        val scope = RecordingScope("com.example.ndk")
+
+        facet.asUiPlugin("com.example.ndk").contributeUi(scope)
+
+        val template = scope.newFileTemplates.single()
+        assertEquals("C++ Class", template.title)
+        assertEquals("Class name", template.nameLabel)
+        assertEquals(true, template.appliesTo("/p/app/src/main/cpp"))
+        assertEquals(false, template.appliesTo("/p/app/src/main/java"))
+        assertEquals(
+            listOf("Widget.h" to "#pragma once\n", "Widget.cpp" to "#include \"Widget.h\"\n"),
+            template.files("/p/app/src/main/cpp", "Widget"),
+        )
+        assertFailsWith<IllegalArgumentException> { template.files("/p", "2d") }
+    }
+
     @Test
     fun fileIconDeclarationIsCarriedOver() {
         val facet = facet { ui ->
@@ -617,6 +655,11 @@ class ExternalUiPluginTest {
         val editorLanguages = mutableListOf<EditorLanguageProfile>()
         val colorAttributes = mutableListOf<ColorAttribute>()
         val fileIcons = mutableListOf<Triple<String, List<String>, TreeIcon>>()
+        val newFileTemplates = mutableListOf<NewFileTemplateContribution>()
+        override fun newFileTemplate(template: NewFileTemplateContribution): Registration {
+            newFileTemplates += template
+            return Registration { newFileTemplates.remove(template) }
+        }
         var disposed = 0
             private set
 

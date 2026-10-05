@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.components.NewFromTemplateDialog
+import dev.ide.ui.ext.NewFileTemplateRegistry
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -188,6 +190,11 @@ fun EditorScreen(
             request = newSource,
             onDismiss = { newSource = null },
             onCreate = { dir, name, template -> state.createSourceFile(dir, name, template) },
+        )
+        NewFromTemplateDialog(
+            request = NewFileTemplateRegistry.pending,
+            onDismiss = { NewFileTemplateRegistry.pending = null },
+            onCreate = { dir, files -> state.createFiles(dir, files) },
         )
         AddSourceRootDialog(
             request = state.addSourceRootModule?.let {

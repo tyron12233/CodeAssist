@@ -43,6 +43,16 @@ interface ModuleSources {
 
     /** Create an empty source set [name] on [moduleName]. False when it already has one by that name. */
     fun addSourceSet(moduleName: String, name: String): Boolean
+
+    /**
+     * Set [data] as [moduleName]'s facet table with that id, replacing one already there, and persist the
+     * module: what a plugin's "add <feature> to this module" action does to switch its own facet on. The
+     * owner of the facet id reads it back through its codec. False when the module cannot be resolved, and
+     * on a host that cannot do it.
+     *
+     * Since SPI 3.1.0. The default is that host: one written before this existed answers false.
+     */
+    fun setFacetData(moduleName: String, data: FacetData): Boolean = false
 }
 
 /** WORKSPACE-scoped [ModuleSources] for the open project. */

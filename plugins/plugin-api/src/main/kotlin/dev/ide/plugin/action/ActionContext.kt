@@ -51,4 +51,15 @@ interface ActionContext {
      * file on disk: the buffer may hold unsaved changes.
      */
     val documentText: String? get() = null
+
+    /**
+     * The open workspace's services, for an action that changes the project rather than a file: resolve
+     * `dev.ide.model.WORKSPACE_SERVICE` for the `Workspace` (find the module under [contextPath], open a
+     * modification, set a facet, add a source root) or `dev.ide.model.MODULE_SOURCES`. Read-only resolution:
+     * it can look services up, not define them.
+     *
+     * [dev.ide.platform.ServiceLookup.Empty] when no workspace is open. Since SPI 3.1.0; a plugin that runs on
+     * an older host reads it inside `catch (LinkageError)`.
+     */
+    val workspaceServices: dev.ide.platform.ServiceLookup get() = dev.ide.platform.ServiceLookup.Empty
 }

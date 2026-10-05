@@ -189,6 +189,23 @@ class ModuleConfigBridge(
     }
 
     /** [addSourceRoot] for a caller that already knows the path, relative to the module directory. */
+    /**
+     * Set [data] as [moduleName]'s facet of that id, replacing one already there, and persist `module.toml`.
+     * False when the module or its project cannot be resolved.
+     */
+    fun putFacetData(moduleName: String, data: dev.ide.model.FacetData): Boolean {
+        val module = module(moduleName) ?: return false
+        val project = projectOf(module) ?: return false
+        return runCatching {
+            project.beginModification().apply {
+                module(module.id).putFacetData(data)
+                commit()
+            }
+            store.save()
+            true
+        }.getOrDefault(false)
+    }
+
     fun addSourceRootAt(
         moduleName: String,
         sourceSetName: String,
