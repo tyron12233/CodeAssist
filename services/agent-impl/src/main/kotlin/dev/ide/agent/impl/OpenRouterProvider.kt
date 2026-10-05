@@ -33,8 +33,8 @@ class OpenRouterProvider(private val transport: LlmTransport) : LlmProvider {
         openai.client(config.copy(baseUrl = config.baseUrl?.takeIf { it.isNotBlank() } ?: DEFAULT_BASE))
 
     override suspend fun listModels(config: ProviderConfig): List<LlmModelInfo> = runCatching {
-        val base = config.baseUrl?.takeIf { it.isNotBlank() }?.trimEnd('/') ?: DEFAULT_BASE
-        val body = transport.get("$base/v1/models", mapOf("Authorization" to "Bearer ${config.apiKey}"), config.caCertificatePem)
+        val base = OpenAiProvider.normalizeBase(config.baseUrl) ?: DEFAULT_BASE
+        val body = transport.get("$base/v1/models", OpenAiProvider.authHeaders(config.apiKey), config.caCertificatePem)
         val data = AgentJson.parseToJsonElement(body).asObj()?.get("data").asArr() ?: return@runCatching models
         data.mapNotNull { it.asObj() }
             .mapNotNull { m ->

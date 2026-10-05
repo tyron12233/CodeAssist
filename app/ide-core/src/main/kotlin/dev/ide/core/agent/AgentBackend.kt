@@ -248,7 +248,11 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         /** An optional additional CA certificate (PEM) to trust for a custom endpoint behind a private/regional
          *  CA (e.g. GigaChat's Russian Trusted Root CA). Only the custom [GATEWAY] endpoint uses it. */
         val caCertificatePem: String? = null,
-    )
+    ) {
+        /** A custom gateway is often a local server (Ollama, LM Studio) that takes no key; its URL is what it needs. */
+        val ready: Boolean
+            get() = if (selectedId == GATEWAY) !baseUrl.isNullOrBlank() else !apiKey.isNullOrBlank()
+    }
 
     private fun resolveConfig(): ResolvedConfig {
         val selected = pref("provider") ?: registry.providers.firstOrNull()?.id ?: "anthropic"
@@ -336,7 +340,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         }
         // A synthetic "Custom gateway" entry (OpenAI-compatible endpoint); its client is the OpenAI provider.
         val gateway = UiAgentProvider(GATEWAY, "Custom gateway", emptyList(), "", apiKey = pref("gatewayKey").orEmpty())
-        val configured = !cfg.apiKey.isNullOrBlank() && (cfg.selectedId != GATEWAY || !cfg.baseUrl.isNullOrBlank())
+        val configured = cfg.ready
         return UiAgentConfig(
             providers = builtins + gateway,
             selectedProvider = cfg.selectedId,
@@ -380,8 +384,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     override fun refreshModels() {
         val cfg = resolveConfig()
         val provider = registry.provider(cfg.clientProviderId) ?: return
-        val key = cfg.apiKey
-        if (key.isNullOrBlank()) {
+        val key = cfg.apiKey.orEmpty()
+        if (!cfg.ready) {
             _models.value = provider.models.map { UiAgentModel(it.id, it.displayName) }
             return
         }
@@ -476,8 +480,11 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             appendError("Unknown AI provider '${cfg.selectedId}'.")
             return null
         }
-        if (cfg.apiKey.isNullOrBlank()) {
-            appendError("Add an API key to use the agent. Tap the key icon to manage providers.")
+        if (!cfg.ready) {
+            appendError(
+                if (cfg.selectedId == GATEWAY) "Add the gateway's base URL to use the agent. Tap the key icon to manage providers."
+                else "Add an API key to use the agent. Tap the key icon to manage providers.",
+            )
             return null
         }
         val model = cfg.model.ifBlank { provider.defaultModel }
@@ -497,7 +504,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         val restored = pendingHistory
         val carried = restored ?: existing?.snapshot()
         val modelChanged = restored != null || (loopClientSignature != null && loopClientSignature != clientSignature)
-        val client = provider.client(ProviderConfig(cfg.apiKey, cfg.baseUrl, cfg.caCertificatePem))
+        val client = provider.client(ProviderConfig(cfg.apiKey.orEmpty(), cfg.baseUrl, cfg.caCertificatePem))
         val built = AgentLoop(
             client, model, tools, gate, ::systemPrompt,
             sessionContext = ::sessionContext,

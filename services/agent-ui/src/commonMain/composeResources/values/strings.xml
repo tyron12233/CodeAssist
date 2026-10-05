@@ -11,6 +11,7 @@
     <string name="chat_providers_title">AI providers</string>
     <string name="chat_providers_subtitle">Choose a provider and add your key. Keys are stored on this device.</string>
     <string name="chat_api_key">API key</string>
+    <string name="chat_api_key_optional">API key (optional)</string>
     <string name="chat_base_url">Base URL</string>
     <string name="chat_model">Model</string>
     <string name="chat_connected">Connected</string>

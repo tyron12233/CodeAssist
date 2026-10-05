@@ -45,10 +45,15 @@ internal object LlmErrors {
     private val retryInMessage = Regex("""try again in\s+([0-9]+(?:\.[0-9]+)?)\s*(ms|s)""", RegexOption.IGNORE_CASE)
 
     /** Parse an HTTP error response body + status into a categorized error. */
-    fun parseHttp(statusCode: Int?, body: String?, retryAfterHeader: String?): ParsedLlmError {
+    fun parseHttp(statusCode: Int?, body: String?, retryAfterHeader: String?, url: String? = null): ParsedLlmError {
         val root = body?.takeIf { it.isNotBlank() }
             ?.let { runCatching { AgentJson.parseToJsonElement(it) }.getOrNull() }
         val errObj = root.asObj()?.get("error").asObj()
+        // A 404 without a provider error object is a web server's "page not found": the path is wrong, not the
+        // model. Saying "pick another model" sent users of a misconfigured gateway looking in the wrong place.
+        if (statusCode == 404 && errObj == null && url != null) {
+            return ParsedLlmError(LlmErrorKind.NOT_FOUND, endpointNotFound(url))
+        }
         val headerMs = retryAfterHeader?.trim()?.toLongOrNull()?.times(1000)
         return parseErrorObj(statusCode, errObj, headerMs)
     }
@@ -188,6 +193,10 @@ internal object LlmErrors {
                     ?: "The AI request failed${status?.let { " (HTTP $it)" }.orEmpty()}."
         }
     }
+
+    private fun endpointNotFound(url: String): String =
+        "No API was found at ${url.substringBefore('?')} (HTTP 404). Check the base URL: it is the server's root, " +
+            "and /v1/chat/completions is added to it (for Ollama, http://127.0.0.1:11434)."
 
     /** Google's `error.details[]` carries a `RetryInfo` with a `retryDelay` like "5s" or "1.5s". */
     private fun geminiRetryDelayMs(errObj: JsonObject?): Long? {

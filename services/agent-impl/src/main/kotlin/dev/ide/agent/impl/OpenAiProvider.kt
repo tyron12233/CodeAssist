@@ -49,12 +49,9 @@ class OpenAiProvider(
         // is what lifts the automatic prefix cache's hit rate; it is a routing hint only, never an identifier.
         val cacheKey = "codeassist-" + java.util.UUID.randomUUID().toString()
         return LlmClient { request ->
-            val base = config.baseUrl?.takeIf { it.isNotBlank() }?.trimEnd('/') ?: DEFAULT_BASE
+            val base = normalizeBase(config.baseUrl) ?: DEFAULT_BASE
             val official = base == DEFAULT_BASE
-            val headers = mapOf(
-                "Authorization" to "Bearer ${config.apiKey}",
-                "content-type" to "application/json",
-            )
+            val headers = authHeaders(config.apiKey) + ("content-type" to "application/json")
             if (official) {
                 // OpenAI itself speaks the Responses API, which takes reasoning and function tools together.
                 val sse = SseRequest(
@@ -78,11 +75,13 @@ class OpenAiProvider(
     }
 
     override suspend fun listModels(config: ProviderConfig): List<LlmModelInfo> = runCatching {
-        val base = config.baseUrl?.trimEnd('/') ?: DEFAULT_BASE
-        val body = transport.get("$base/v1/models", mapOf("Authorization" to "Bearer ${config.apiKey}"), config.caCertificatePem)
+        val base = normalizeBase(config.baseUrl) ?: DEFAULT_BASE
+        val official = base == DEFAULT_BASE
+        val body = transport.get("$base/v1/models", authHeaders(config.apiKey), config.caCertificatePem)
         val data = AgentJson.parseToJsonElement(body).asObj()?.get("data").asArr() ?: return@runCatching models
+        // OpenAI's own list mixes in embedding, audio and image models; a gateway's list is what it serves.
         data.mapNotNull { it.asObj()?.get("id").asStr() }
-            .filter { it.startsWith("gpt") || it.startsWith("o1") || it.startsWith("o3") || it.startsWith("o4") || it.startsWith("chatgpt") }
+            .filter { !official || it.startsWith("gpt") || it.startsWith("o1") || it.startsWith("o3") || it.startsWith("o4") || it.startsWith("chatgpt") }
             .sorted()
             .map { LlmModelInfo(it, it) }
             .ifEmpty { models }
@@ -232,6 +231,29 @@ class OpenAiProvider(
 
     companion object {
         const val DEFAULT_BASE = "https://api.openai.com"
+
+        private val URL_TOKEN = Regex("""https?://\S+""", RegexOption.IGNORE_CASE)
+        private val ENDPOINT_SUFFIXES = listOf("/chat/completions", "/completions", "/responses", "/models")
+
+        /**
+         * The server root that `/v1/...` paths are appended to, from what a user typed or pasted. Gateways document
+         * their base URL in the OpenAI SDK's form, which already ends in `/v1` (Ollama's is
+         * `http://localhost:11434/v1`), and some users paste a full endpoint; both would otherwise double up into
+         * `/v1/v1/...`. A paste that carries more than the URL (a "Base URL: ... / API Key: ..." block) keeps only
+         * the first URL in it: OkHttp silently drops line breaks, so the rest used to end up in the request path.
+         */
+        fun normalizeBase(raw: String?): String? {
+            val text = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            var base = URL_TOKEN.find(text)?.value ?: text.substringBefore('\n').trim().substringBefore(' ')
+            base = base.trimEnd('/')
+            ENDPOINT_SUFFIXES.firstOrNull { base.endsWith(it, ignoreCase = true) }?.let { base = base.dropLast(it.length).trimEnd('/') }
+            if (base.endsWith("/v1", ignoreCase = true)) base = base.dropLast(3)
+            return base.takeIf { it.isNotEmpty() }
+        }
+
+        /** A local server (Ollama, LM Studio, llama.cpp) needs no key; an empty bearer is not sent at all. */
+        internal fun authHeaders(apiKey: String): Map<String, String> =
+            apiKey.trim().takeIf { it.isNotEmpty() }?.let { mapOf("Authorization" to "Bearer $it") } ?: emptyMap()
 
         /** Model-id fragments that identify an Anthropic model behind an OpenAI-dialect gateway. */
         val ANTHROPIC_MODEL_MARKERS = listOf("anthropic/", "claude")

@@ -43,6 +43,7 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAgentProvider
 import dev.ide.agent.ui.generated.resources.Res
 import dev.ide.agent.ui.generated.resources.chat_api_key
+import dev.ide.agent.ui.generated.resources.chat_api_key_optional
 import dev.ide.agent.ui.generated.resources.chat_base_url
 import dev.ide.agent.ui.generated.resources.chat_ca_cert
 import dev.ide.agent.ui.generated.resources.chat_ca_cert_hint
@@ -127,10 +128,11 @@ private fun ProviderCard(
 ) {
     val isGateway = provider.id == "gateway"
     var key by remember(provider.id) { mutableStateOf(provider.apiKey) }
-    var baseUrl by remember(provider.id) { mutableStateOf(gatewayBaseUrl) }
+    var baseUrl by remember(provider.id) { mutableStateOf(oneLine(gatewayBaseUrl)) }
     var model by remember(provider.id) { mutableStateOf(gatewayModel) }
     var caCert by remember(provider.id) { mutableStateOf(gatewayCaCert) }
-    val hasKey = key.isNotBlank() && (!isGateway || baseUrl.isNotBlank())
+    // A gateway is often a local server that takes no key, so its URL alone makes it usable.
+    val hasKey = if (isGateway) baseUrl.isNotBlank() else key.isNotBlank()
     val shape = RoundedCornerShape(Ca.radius.md)
     val scheme = MaterialTheme.colorScheme
     // A selected card is a tonal container, so its text and its radio dot take the container's own content
@@ -164,9 +166,11 @@ private fun ProviderCard(
             }
         }
         if (selected) {
-            SecretField(key, stringResource(Res.string.chat_api_key)) { key = it; onSetKey(it) }
+            SecretField(key, stringResource(if (isGateway) Res.string.chat_api_key_optional else Res.string.chat_api_key)) { key = it; onSetKey(it) }
             if (isGateway) {
-                PlainField(baseUrl, stringResource(Res.string.chat_base_url)) { baseUrl = it; onSetGateway(it, model, caCert) }
+                // A single-line field shows only the first line of a multi-line paste, so a pasted "URL + key" block
+                // looked like a clean URL while the rest still went into requests. Flatten it so all of it is visible.
+                PlainField(baseUrl, stringResource(Res.string.chat_base_url)) { baseUrl = oneLine(it); onSetGateway(baseUrl, model, caCert) }
                 PlainField(model, stringResource(Res.string.chat_model)) { model = it; onSetGateway(baseUrl, it, caCert) }
                 PlainField(caCert, stringResource(Res.string.chat_ca_cert)) { caCert = it; onSetGateway(baseUrl, model, it) }
                 Text(stringResource(Res.string.chat_ca_cert_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
@@ -175,6 +179,10 @@ private fun ProviderCard(
         }
     }
 }
+
+private val LINE_BREAKS = Regex("\\s*[\\r\\n]+\\s*")
+
+private fun oneLine(text: String): String = text.replace(LINE_BREAKS, " ")
 
 @Composable
 private fun RadioDot(selected: Boolean, selectedTint: Color = MaterialTheme.colorScheme.primary) {

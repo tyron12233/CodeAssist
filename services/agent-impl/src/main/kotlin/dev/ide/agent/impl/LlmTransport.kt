@@ -210,7 +210,7 @@ class OkHttpLlmTransport(
             return LlmHttpException(net.message, retryable = net.retryable, cause = t, kind = net.kind)
         }
         val body = prefetchedBody ?: runCatching { response.body?.string() }.getOrNull()
-        val parsed = LlmErrors.parseHttp(response.code, body, response.header("retry-after"))
+        val parsed = LlmErrors.parseHttp(response.code, body, response.header("retry-after"), response.request.url.toString())
         return LlmHttpException(parsed.message, response.code, parsed.retryAfterMs, parsed.retryable, t, parsed.kind, parsed.quota)
     }
 

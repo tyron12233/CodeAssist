@@ -20,6 +20,7 @@
     <string name="chat_providers_title">Proveedores de IA</string>
     <string name="chat_providers_subtitle">Elige un proveedor y agrega tu clave. Las claves se almacenan en este dispositivo.</string>
     <string name="chat_api_key">Clave de API</string>
+    <string name="chat_api_key_optional">Clave de API (opcional)</string>
     <string name="chat_base_url">URL base</string>
     <string name="chat_model">Modelo</string>
     <string name="chat_connected">Conectado</string>

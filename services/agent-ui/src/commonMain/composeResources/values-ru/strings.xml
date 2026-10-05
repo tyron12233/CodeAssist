@@ -20,6 +20,7 @@
     <string name="chat_providers_title">Провайдеры AI</string>
     <string name="chat_providers_subtitle">Выберите провайдера и добавьте свой ключ. Ключи хранятся на этом устройстве.</string>
     <string name="chat_api_key">API-ключ</string>
+    <string name="chat_api_key_optional">API-ключ (необязательно)</string>
     <string name="chat_base_url">Базовый URL</string>
     <string name="chat_model">Модель</string>
     <string name="chat_connected">Подключено</string>

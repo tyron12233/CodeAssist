@@ -11,6 +11,7 @@
     <string name="chat_providers_title">مزودو الذكاء الاصطناعي</string>
     <string name="chat_providers_subtitle">اختر مزودًا وأضف مفتاحك. تُخزَّن المفاتيح على هذا الجهاز.</string>
     <string name="chat_api_key">مفتاح API</string>
+    <string name="chat_api_key_optional">مفتاح API (اختياري)</string>
     <string name="chat_base_url">عنوان URL الأساسي</string>
     <string name="chat_model">النموذج</string>
     <string name="chat_connected">متصل</string>

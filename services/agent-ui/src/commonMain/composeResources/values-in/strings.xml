@@ -20,6 +20,7 @@
     <string name="chat_providers_title">Penyedia AI</string>
     <string name="chat_providers_subtitle">Pilih penyedia dan tambahkan kunci Anda. Kunci disimpan di perangkat ini.</string>
     <string name="chat_api_key">Kunci API</string>
+    <string name="chat_api_key_optional">Kunci API (opsional)</string>
     <string name="chat_base_url">URL dasar</string>
     <string name="chat_model">Model</string>
     <string name="chat_connected">Terhubung</string>

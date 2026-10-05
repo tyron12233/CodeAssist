@@ -11,6 +11,7 @@
     <string name="chat_providers_title">AI 服务商</string>
     <string name="chat_providers_subtitle">选择服务商并添加密钥。密钥仅存储在此设备上。</string>
     <string name="chat_api_key">API 密钥</string>
+    <string name="chat_api_key_optional">API 密钥（可选）</string>
     <string name="chat_base_url">基础 URL</string>
     <string name="chat_model">模型</string>
     <string name="chat_connected">已连接</string>
