@@ -54,6 +54,8 @@ internal fun PaletteOverlay(
     onOpenHub: () -> Unit,
     onOpenIconManager: () -> Unit,
     onOpenDependencies: (String?) -> Unit,
+    onOpenModuleConfig: (String?) -> Unit,
+    onCloseProject: () -> Unit,
 ) {
     val pluginNavigator = LocalPluginNavigator.current
     // The palette's UI-navigation commands come from UiActionRegistry; this host bridges them to the app's
@@ -65,9 +67,11 @@ internal fun PaletteOverlay(
             state.paletteOpen = false
             when (destination) {
                 UiDestinations.HUB -> onOpenHub()
+                UiDestinations.MODULES -> onOpenModuleConfig(null)
                 UiDestinations.DEPENDENCIES -> onOpenDependencies(null)
                 UiDestinations.ICONS -> onOpenIconManager()
                 UiDestinations.LOGS -> state.logsOpen = true
+                UiDestinations.PROJECTS -> onCloseProject()
             }
         }
         override fun toggleTheme() { state.paletteOpen = false; onToggleTheme() }
@@ -106,6 +110,7 @@ internal fun DestinationSheets(
     state: IdeUiState,
     compact: Boolean,
     onOpenModuleConfig: (String?) -> Unit,
+    onOpenDependencies: (String?) -> Unit,
     onToggleTheme: () -> Unit,
     onOpenHub: () -> Unit,
     onOpenIconManager: () -> Unit,
@@ -123,6 +128,7 @@ internal fun DestinationSheets(
                     when (destination) {
                         UiDestinations.HUB -> onOpenHub()
                         UiDestinations.MODULES -> onOpenModuleConfig(null)
+                        UiDestinations.DEPENDENCIES -> onOpenDependencies(null)
                         UiDestinations.ICONS -> onOpenIconManager()
                         UiDestinations.LOGS -> state.logsOpen = true
                         UiDestinations.PROJECTS -> onCloseProject()

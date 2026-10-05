@@ -371,8 +371,8 @@ internal fun ExpandedLayout(
                 )
             }
         }
-        DestinationSheets(state, compact = false, onOpenModuleConfig, onToggleTheme, onOpenHub, onOpenIconManager, onCloseProject, fileActions)
-        PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenIconManager, onOpenDependencies)
+        DestinationSheets(state, compact = false, onOpenModuleConfig, onOpenDependencies, onToggleTheme, onOpenHub, onOpenIconManager, onCloseProject, fileActions)
+        PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenIconManager, onOpenDependencies, onOpenModuleConfig, onCloseProject)
     }
 }
 
@@ -528,8 +528,8 @@ internal fun CompactLayout(
             }
         }
 
-        DestinationSheets(state, compact = true, onOpenModuleConfig, onToggleTheme, onOpenHub, onOpenIconManager, onCloseProject, fileActions)
-        PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenIconManager, onOpenDependencies)
+        DestinationSheets(state, compact = true, onOpenModuleConfig, onOpenDependencies, onToggleTheme, onOpenHub, onOpenIconManager, onCloseProject, fileActions)
+        PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenIconManager, onOpenDependencies, onOpenModuleConfig, onCloseProject)
         // Right-edge tool-window drawer (the phone counterpart of the desktop right pane + rail). Self-gates on
         // there being a RIGHT tool window, so it lays down nothing when no plugin contributes one.
         RightToolOverlay(state)
