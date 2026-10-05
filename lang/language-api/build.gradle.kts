@@ -34,11 +34,8 @@ kotlin {
             // The DOM and the symbol model moved to :model-api (packages unchanged) so that they can be named
             // from common code. Both are all over this module's public signatures, so the dependency is `api`.
             api(project(":model-api"))
-        }
-
-        jvmMain.dependencies {
-            // ClasspathSnapshot and LanguageLevel appear in the LanguageBackend / CompilationContext SPIs,
-            // and the project model behind them is JVM-bound (it is a real filesystem and a real build).
+            // `CompletionParams.module` names the project model's `Module`, which is common code: the model is
+            // a name, a type and relative roots. vfs-api and platform-core come with it as its own `api`.
             api(project(":project-model-api"))
             api(project(":vfs-api"))
             api(project(":platform-core"))

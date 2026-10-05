@@ -374,9 +374,11 @@ mergeNativeLibs, mergeJavaResource ⇒ packageApk    (run alongside dexing; feed
   merged app R, AAR assets and JNI into the package.
 - **Packaging: native libs + Java resources (AGP-faithful).** Two merge tasks feed the packager, mirroring
   AGP's `merge<Variant>NativeLibs` / `merge<Variant>JavaResource`. `mergeNativeLibs` gathers every `.so` — the
-  module's own `src/<set>/jniLibs`, each dependency android-lib's jniLibs, exploded-AAR `jni`, and the `.so`
-  entries under `lib` inside dependency jars — into one `<abi>`-laid-out directory the packager maps under
-  `lib`. `mergeJavaResource` gathers Java resources — the module's own `src/<set>/resources` and the non-class
+  module's own `src/<set>/jniLibs`, each dependency android-lib's jniLibs, exploded-AAR `jni`, the `.so`
+  entries under `lib` inside dependency jars, and any directory a build plugin declared through
+  `BuildConfiguration.addNativeLibraries` for the app or a module it packages (ordered after the task that
+  writes it; an `android-lib` target puts its own into the AAR's `jni/`) — into one `<abi>`-laid-out directory
+  the packager maps under `lib`. `mergeJavaResource` gathers Java resources — the module's own `src/<set>/resources` and the non-class
   entries of the sub-module + external dependency jars — into a `merged-java-res.jar` whose entries the packager
   copies to the APK root; `.class` entries are skipped (they are dexed). Both apply the module's
   `packaging { }` block (`AndroidPackaging` on the facet) **layered over a faithful set of AGP defaults**: Java

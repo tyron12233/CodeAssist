@@ -58,6 +58,7 @@ import dev.ide.android.support.tools.R8Subprocess
 import dev.ide.android.support.tools.ResourceShrink
 import dev.ide.android.support.tools.Shrinker
 import dev.ide.android.support.tools.SigningConfig
+import dev.ide.build.BuildConfiguration
 import dev.ide.build.BuildContext
 import dev.ide.build.BuildEnv
 import dev.ide.build.BuildGoal
@@ -224,6 +225,9 @@ class AndroidBuildSystem(
         val javaPlugin = JavaPlugin({ bootClasspath }, kotlin, plugins)
         val withJar = request.goal != BuildGoal.COMPILE_ONLY
         val registered = HashSet<ModuleId>()
+        // Made before any task is registered, because the packaging tasks read what plugins declare on it
+        // (native libraries a plugin compiles) from their lazy factories, which run after the plugins below.
+        val config = SimpleBuildConfiguration(project, request, tasks, id, ctx.env)
         for (target in targets) {
             val variant = AndroidVariants.select(target, request.variant.name)
                 ?: AndroidVariants.defaultVariant(target) ?: continue
@@ -237,14 +241,14 @@ class AndroidBuildSystem(
             if (target.type.id == "android-lib") {
                 // The library target isn't in its own moduleClosure — register its build tasks, then the AAR.
                 if (registered.add(target.id)) registerAndroidLibrary(tasks, target, byId, withJar = true, variant, targetFacet)
-                appendAar(tasks, target, variant, targetFacet)
+                appendAar(tasks, target, variant, targetFacet, config)
             } else {
-                appendApp(tasks, target, variant, request.goal, byId)
+                appendApp(tasks, target, variant, request.goal, byId, config)
             }
         }
         // Contributed build logic (BUILD_PLUGIN_EP) lands after every android/java task is registered, so it
         // can wire by name to them (`:app:assembleDebug`, `:app:compileJava`); realize once afterwards.
-        applyBuildPlugins(SimpleBuildConfiguration(project, request, tasks, id, ctx.env), ctx.plugins, ctx.onExtensionError)
+        applyBuildPlugins(config, ctx.plugins, ctx.onExtensionError)
         return tasks.build()
     }
 
@@ -253,7 +257,14 @@ class AndroidBuildSystem(
         register(name, create).configure { if (deps.isNotEmpty()) dependsOn(*deps.toTypedArray()) }
     }
 
-    private fun appendApp(tasks: TaskContainer, app: Module, variant: AndroidVariant, goal: BuildGoal, byId: Map<ModuleId, Module>) {
+    private fun appendApp(
+        tasks: TaskContainer,
+        app: Module,
+        variant: AndroidVariant,
+        goal: BuildGoal,
+        byId: Map<ModuleId, Module>,
+        config: BuildConfiguration,
+    ) {
         val facet = app.facets.get(AndroidFacet.KEY) ?: return
         val layout = Layout(app, variant.name)
         val v = variant.name.cap()
@@ -598,11 +609,18 @@ class AndroidBuildSystem(
         // externalJars are static (resolved on disk); only the sub-module jars need building first.
         val nativeWarnings = libs.nativeWarnings + misplacedNativeWarnings(app, variant) +
             depAndroidLibs.flatMap { misplacedNativeWarnings(it, AndroidVariants.matchLibraryVariant(it, variant, facet)) }
+        // Native libraries a plugin compiles for the app or for any module it packages. Read when the graph is
+        // realized rather than now: the plugins that declare them are applied after every task is registered.
+        val nativeModules = (listOf(app) + closure).distinctBy { it.id }
+        fun contributedNative() = nativeModules.flatMap { config.nativeLibraries(it) }
         tasks.task(mergeNativeLibs) {
             MergeNativeLibsTask(
-                mergeNativeLibs, jniDirs, externalJars, nativeLibsFilter, layout.mergedNativeLibs,
-                nativeWarnings,
+                mergeNativeLibs, jniDirs + contributedNative().map { it.dir }.distinct(), externalJars,
+                nativeLibsFilter, layout.mergedNativeLibs, nativeWarnings,
             )
+        }
+        tasks.named(mergeNativeLibs).configure {
+            contributedNative().forEach { dependsOn(it.producedBy) }
         }
         tasks.task(mergeJavaRes, moduleJarProducers) {
             MergeJavaResourcesTask(mergeJavaRes, javaResDirs, subProjectJars + externalJars, javaResFilter, layout.mergedJavaRes)
@@ -991,7 +1009,13 @@ class AndroidBuildSystem(
      * outputs (`:lib:jar` classes + `:lib:generateR` R.txt/res) plus its manifest, assets, jni, and consumer
      * proguard rules into a `.aar` under `build/outputs/aar/`. AGP's `bundle<Variant>Aar` → `assemble<Variant>`.
      */
-    private fun appendAar(tasks: TaskContainer, lib: Module, variant: AndroidVariant, facet: AndroidFacet) {
+    private fun appendAar(
+        tasks: TaskContainer,
+        lib: Module,
+        variant: AndroidVariant,
+        facet: AndroidFacet,
+        config: BuildConfiguration,
+    ) {
         val classesOut = outputDir(lib)
         val buildDir = classesOut.parent
         val moduleDir = buildDir.parent
@@ -1007,6 +1031,9 @@ class AndroidBuildSystem(
 
         val bundleAar = TaskName(":${lib.name}:bundleAar")
         val deps = listOf(TaskName(":${lib.name}:jar"), TaskName(":${lib.name}:generateR"), TaskName(":${lib.name}:classes"))
+        tasks.named(bundleAar).configure {
+            config.nativeLibraries(lib).forEach { dependsOn(it.producedBy) }
+        }
         tasks.task(bundleAar, deps) {
             PackageAarTask(
                 bundleAar,
@@ -1016,7 +1043,7 @@ class AndroidBuildSystem(
                 resDirs = srcRoots(ContentRole.ANDROID_RES),
                 rTxt = rRoot.resolve("R.txt"),
                 assetsDirs = srcRoots(ContentRole.ASSETS),
-                jniLibDirs = srcRoots(ContentRole.JNI_LIBS),
+                jniLibDirs = srcRoots(ContentRole.JNI_LIBS) + config.nativeLibraries(lib).map { it.dir },
                 aidlDirs = srcRoots(ContentRole.AIDL),
                 consumerProguardFiles = consumerProguard,
                 inlineProguardRules = inlineProguard,

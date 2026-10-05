@@ -68,6 +68,33 @@ interface BuildConfiguration {
 
     /** Host paths and per-module platform classpath. Derived from [project] when the host supplies none. */
     val env: BuildEnv get() = BuildEnv.of(project)
+
+    /**
+     * Declare [dir] as native libraries [module] contributes to whatever packages it, written by [producedBy].
+     *
+     * [dir] is laid out the way a `jniLibs` folder is, `<abi>/lib<name>.so`, and usually sits under the
+     * module's build directory: a plugin that compiles native code (C and C++, Rust, Zig) produces it on every
+     * build, so it is output, not a source root. Declaring it as one would persist a build directory into the
+     * project model, and writing it into `src/<set>/jniLibs` would mix generated files into the user's sources.
+     *
+     * A build system that packages native code merges [dir] alongside the declared `jniLibs` roots of [module]
+     * and of every module it packages, and orders the merge after [producedBy]. One that packages none
+     * ignores the declaration, so a plugin does not need to know which build system is running.
+     */
+    fun addNativeLibraries(module: Module, dir: Path, producedBy: TaskName) {}
+
+    /** Everything declared through [addNativeLibraries] for [module], in declaration order. */
+    fun nativeLibraries(module: Module): List<NativeLibraryOutput> = emptyList()
+}
+
+/** A directory of native libraries a task writes, laid out `<abi>/lib<name>.so`. See [BuildConfiguration.addNativeLibraries]. */
+class NativeLibraryOutput(val dir: Path, val producedBy: TaskName) {
+    override fun equals(other: Any?): Boolean =
+        other is NativeLibraryOutput && other.dir == dir && other.producedBy == producedBy
+
+    override fun hashCode(): Int = dir.hashCode() * 31 + producedBy.hashCode()
+
+    override fun toString(): String = "$dir (from $producedBy)"
 }
 
 /**

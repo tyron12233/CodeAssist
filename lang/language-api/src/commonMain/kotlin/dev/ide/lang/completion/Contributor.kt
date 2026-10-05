@@ -9,6 +9,7 @@ import dev.ide.lang.patterns.DomPatterns
 import dev.ide.lang.patterns.ElementPattern
 import dev.ide.lang.resolve.Scope
 import dev.ide.lang.resolve.TypeRef
+import dev.ide.model.Module
 import dev.ide.platform.ExtensionPoint
 
 /**
@@ -58,6 +59,12 @@ class CompletionParams private constructor(
      *  that need a receiver's type — e.g. postfix templates gated on Boolean/Iterable. Null when the backend
      *  can't resolve types or the file didn't parse. */
     val typeResolver: ((DomNode) -> TypeRef?)?,
+    /**
+     * The module the file belongs to, or null when the file belongs to none or the caller did not say.
+     * What a contributor reads the module's own configuration from (a facet's flags, its language level),
+     * so completion answers for the file the way that module builds it.
+     */
+    val module: Module?,
 ) {
     constructor(
         document: DocumentSnapshot,
@@ -73,7 +80,7 @@ class CompletionParams private constructor(
         typeResolver: ((DomNode) -> TypeRef?)? = null,
     ) : this(
         document, offset, prefix, language, trigger, replacementRange,
-        lazyOf(parsedFile), lazyOf(position), scope, expectedType, typeResolver,
+        lazyOf(parsedFile), lazyOf(position), scope, expectedType, typeResolver, null,
     )
 
     /** Deepest DOM node containing the caret; null if the file couldn't be parsed. */
@@ -96,11 +103,26 @@ class CompletionParams private constructor(
             replacementRange: TextRange,
             parse: () -> ParsedFile?,
             typeResolver: ((DomNode) -> TypeRef?)? = null,
+        ): CompletionParams = lazilyParsed(
+            document, offset, prefix, language, trigger, replacementRange, parse, typeResolver, module = null,
+        )
+
+        /** [lazilyParsed] for a file the host knows the [module] of; see [CompletionParams.module]. */
+        fun lazilyParsed(
+            document: DocumentSnapshot,
+            offset: Int,
+            prefix: String,
+            language: LanguageId,
+            trigger: CompletionTrigger,
+            replacementRange: TextRange,
+            parse: () -> ParsedFile?,
+            typeResolver: ((DomNode) -> TypeRef?)?,
+            module: Module?,
         ): CompletionParams {
             val parsed = lazy(parse)
             return CompletionParams(
                 document, offset, prefix, language, trigger, replacementRange,
-                parsed, lazy { parsed.value?.nodeAt(offset) }, null, null, typeResolver,
+                parsed, lazy { parsed.value?.nodeAt(offset) }, null, null, typeResolver, module,
             )
         }
     }

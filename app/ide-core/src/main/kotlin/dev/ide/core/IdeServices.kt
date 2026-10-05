@@ -2097,6 +2097,7 @@ class IdeServices private constructor(
                 replacementRange = replaceRange,
                 parse = { analyzer?.let { runCatching { it.incrementalParser.parseFull(snapshot) }.getOrNull() } },
                 typeResolver = analyzer?.let { a -> { node -> runCatching { a.resolveType(node) }.getOrNull() } },
+                module = module,
             )
             completionEngine.complete(
                 params,

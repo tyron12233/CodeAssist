@@ -4,6 +4,7 @@ import dev.ide.build.BuildConfiguration
 import dev.ide.build.BuildEnv
 import dev.ide.build.BuildPlugin
 import dev.ide.build.BuildRequest
+import dev.ide.build.NativeLibraryOutput
 import dev.ide.build.Task
 import dev.ide.build.TaskContainer
 import dev.ide.build.TaskContext
@@ -32,7 +33,19 @@ class SimpleBuildConfiguration(
     override val tasks: TaskContainer,
     override val buildSystemId: BuildSystemId = BuildSystemId.NATIVE,
     override val env: BuildEnv = BuildEnv.of(project),
-) : BuildConfiguration
+) : BuildConfiguration {
+    private val nativeLibs = LinkedHashMap<ModuleId, MutableList<NativeLibraryOutput>>()
+
+    @Synchronized
+    override fun addNativeLibraries(module: Module, dir: Path, producedBy: TaskName) {
+        val list = nativeLibs.getOrPut(module.id) { ArrayList() }
+        val output = NativeLibraryOutput(dir, producedBy)
+        if (output !in list) list.add(output)
+    }
+
+    @Synchronized
+    override fun nativeLibraries(module: Module): List<NativeLibraryOutput> = nativeLibs[module.id]?.toList().orEmpty()
+}
 
 /**
  * The host's [BuildEnv]: the open workspace root, the shared cache root, and the per-module platform
