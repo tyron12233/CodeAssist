@@ -28,7 +28,8 @@ import dev.ide.plugin.ui.UiPlugin as ExternalUiPlugin
  * Failure-tolerant like everything on the installed-plugin path: a UI facet that is missing, is not a
  * `UiPlugin`, or throws while being created is reported through [onError] and skipped, so the reason reaches
  * that plugin's row in the Plugins screen instead of taking the launch down. A facet that is also the engine
- * facet has already been created by then, so only its `contribute` can still fail.
+ * facet has already been created by then, so only its `contribute` can still fail; the UI host isolates that
+ * call the same way ([dev.ide.ui.ext.UiPluginHost.ensureLoaded]).
  */
 internal object ExternalUiFacets {
 
@@ -61,10 +62,28 @@ internal object ExternalUiFacets {
                 onError(reason)
             }
         }
-        return when (facets.size) {
-            0 -> null
+        val combined = when (facets.size) {
+            0 -> return null
             1 -> facets[0]
             else -> CombinedUiPlugin(manifest.id, facets)
+        }
+        return LoggedUiPlugin(combined)
+    }
+
+    /**
+     * Logs what a facet's `contribute` threw before handing it on. That call runs later, inside the UI host's
+     * startup load, which withdraws the plugin and records the failure for its Plugins row
+     * ([dev.ide.ui.ext.UiPluginHost.failures]) but has no logger of its own.
+     */
+    private class LoggedUiPlugin(private val delegate: UiPlugin) : UiPlugin {
+        override val id: String get() = delegate.id
+        override fun contributeUi(scope: UiContributionScope) {
+            try {
+                delegate.contributeUi(scope)
+            } catch (t: Throwable) {
+                log.warn("plugin '$id': UI could not be contributed: ${PluginLoadFailure.describe(t)}", t)
+                throw t
+            }
         }
     }
 

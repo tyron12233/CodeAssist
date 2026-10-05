@@ -99,47 +99,87 @@ object UiPluginHost {
         if (plugins.none { it.id == plugin.id }) plugins.add(plugin)
     }
 
-    /** Contribute every registered UI plugin's UI, once per process (idempotent). */
+    private val failed = LinkedHashMap<String, Throwable>()
+
+    /**
+     * Contribute every registered UI plugin's UI, once per process (idempotent).
+     *
+     * Each plugin is isolated: one whose `contributeUi` throws has whatever it registered before the throw
+     * withdrawn, is recorded in [failures], and the rest still load. This runs during app startup, so letting
+     * the throw escape would crash every launch; the usual cause is an installed plugin built against an
+     * older host, failing with a `LinkageError` (`NoSuchMethodError`) rather than an exception, so the catch
+     * covers every [Throwable].
+     */
     fun ensureLoaded() {
         if (loaded) return
         loaded = true
-        for (p in plugins) p.contributeUi(Scope(p.id))
+        for (p in plugins) contribute(p)
     }
 
+    /**
+     * Contribute [plugin]'s UI now, isolated: if its `contributeUi` throws, everything it registered before the
+     * throw is withdrawn and the failure is recorded in [failures]. Returns whether it contributed cleanly.
+     */
+    fun contribute(plugin: UiPlugin): Boolean {
+        val scope = Scope(plugin.id)
+        return try {
+            plugin.contributeUi(scope)
+            failed.remove(plugin.id)
+            true
+        } catch (t: Throwable) {
+            scope.withdraw()
+            failed[plugin.id] = t
+            false
+        }
+    }
+
+    /** The UI plugins whose `contributeUi` threw during [ensureLoaded], by plugin id, with what they threw. */
+    val failures: Map<String, Throwable> get() = failed
+
+    /** Records each registration so a plugin that fails part-way can be withdrawn whole. */
     private class Scope(override val pluginId: String) : UiContributionScope {
-        override fun action(action: UiHostAction): Registration = UiActionRegistry.register(action)
+        private val registrations = ArrayList<Registration>()
+
+        private fun track(registration: Registration): Registration = registration.also { registrations += it }
+
+        fun withdraw() {
+            registrations.asReversed().forEach { runCatching { it.dispose() } }
+            registrations.clear()
+        }
+
+        override fun action(action: UiHostAction): Registration = track(UiActionRegistry.register(action))
         override fun toolWindow(toolWindow: ToolWindowContribution): Registration =
-            ToolWindowRegistry.register(toolWindow)
-        override fun screen(screen: ScreenContribution): Registration = ScreenRegistry.register(screen)
-        override fun viewMode(mode: EditorViewModeContribution): Registration = ViewModeRegistry.register(mode)
-        override fun overlay(overlay: OverlayContribution): Registration = OverlayRegistry.register(overlay)
+            track(ToolWindowRegistry.register(toolWindow))
+        override fun screen(screen: ScreenContribution): Registration = track(ScreenRegistry.register(screen))
+        override fun viewMode(mode: EditorViewModeContribution): Registration = track(ViewModeRegistry.register(mode))
+        override fun overlay(overlay: OverlayContribution): Registration = track(OverlayRegistry.register(overlay))
         override fun tabDecoration(decoration: TabDecorationContribution): Registration =
-            TabDecorationRegistry.register(decoration)
+            track(TabDecorationRegistry.register(decoration))
         override fun treeIcon(iconId: String, icon: TreeIcon): Registration {
             TreeIcons.register(iconId, icon)
             return Registration {}
         }
 
         override fun editorLanguage(profile: EditorLanguageProfile): Registration =
-            EditorLanguageRegistry.register(profile)
+            track(EditorLanguageRegistry.register(profile))
 
         override fun colorAttribute(attribute: ColorAttribute): Registration =
-            ColorAttributes.register(attribute)
+            track(ColorAttributes.register(attribute))
 
         override fun fileIcon(iconId: String, suffixes: List<String>, icon: TreeIcon): Registration {
             TreeIcons.register(iconId, icon)
             // Only the name mapping is undone: TreeIcons is a persistent lookup with nothing to unregister,
             // exactly like treeIcon above.
-            return PluginFileIcons.register(suffixes, iconId)
+            return track(PluginFileIcons.register(suffixes, iconId))
         }
 
         override fun editorPreview(preview: EditorPreviewContribution): Registration =
-            EditorPreviewRegistry.register(preview)
+            track(EditorPreviewRegistry.register(preview))
 
         override fun editorLayer(layer: EditorLayerContribution): Registration =
-            EditorLayerRegistry.register(layer)
+            track(EditorLayerRegistry.register(layer))
 
         override fun editorPainter(painter: EditorPainterContribution): Registration =
-            EditorPainterRegistry.register(painter)
+            track(EditorPainterRegistry.register(painter))
     }
 }

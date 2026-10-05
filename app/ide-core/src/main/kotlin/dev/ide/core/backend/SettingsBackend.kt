@@ -10,6 +10,7 @@ import dev.ide.core.settings.IdeSettings
 import dev.ide.core.settings.SettingsStore
 import dev.ide.lang.dom.Severity
 import dev.ide.platform.log.PerfTrace
+import dev.ide.plugin.impl.PluginLoadFailure
 import dev.ide.platform.settings.PreferenceReader
 import dev.ide.platform.settings.SettingControl
 import dev.ide.platform.settings.SettingsPage
@@ -23,6 +24,7 @@ import dev.ide.ui.backend.UiPluginChange
 import dev.ide.ui.backend.UiPluginChangeKind
 import dev.ide.ui.backend.UiPluginInfo
 import dev.ide.ui.backend.UiSettingControl
+import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.ext.displayShortcut
 import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.backend.UiSettingsPage
@@ -77,7 +79,10 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
                 essential = essential, enabled = essential || m.id !in disabled, dependsOn = m.dependsOn,
                 builtIn = fromSource == null,
                 origin = fromSource?.origin?.label ?: "",
-                error = fromSource?.error,
+                // A facet whose `contribute` threw at startup was withdrawn by the UI host; say why on its row.
+                error = fromSource?.error ?: UiPluginHost.failures[m.id]?.let {
+                    "UI could not be loaded: ${PluginLoadFailure.describe(it)}"
+                },
                 needsConsent = fromSource != null && m.id !in consented && m.id !in disabled,
                 capabilities = m.capabilities,
                 // The certificate of the package as installed, from the package manager, not a claim the
