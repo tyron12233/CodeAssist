@@ -36,9 +36,17 @@ import java.net.URLClassLoader
  *    (in the app's dex that name is a `Function`). Only child-first keeps a bundle's guava classes and the
  *    synthetics they reference on the same side of the boundary.
  *
+ *  - `org.apache.commons.codec.*`: the parent is not only the app. On devices whose boot classpath carries
+ *    `/system/framework/org.apache.http.legacy.boot.jar`, that jar's commons-codec (a pre-1.4 snapshot) is
+ *    visible to every class loader and wins over any later copy under parent-first. Room's processor bundles
+ *    commons-codec 1.15 and hashes its schema with `Hex.encodeHexString(byte[])`, which the boot copy lacks, so
+ *    Room died on the first `@Database`: `NoSuchMethodError: No static method encodeHexString([B)Ljava/lang/String;
+ *    in class Lorg/apache/commons/codec/binary/Hex;`. Child-first loads a class from the tool's own dex before
+ *    asking any parent, so the boot copy is never consulted.
+ *
  * The rule this leaves for a tool bundle: a package it ships must either be dropped from the bundle because
  * the app provides it (the Kotlin stdlib, coroutines, the KSP SPI) or be listed here. Shipping a second copy
- * AND inheriting the app's is what produces the failures above.
+ * AND inheriting the app's (or the device's) is what produces the failures above.
  *
  * A package belongs here only when no instance of it crosses the classloader boundary. `dagger.*` is purely an
  * implementation detail of the processor's own dependency injection, and guava appears only inside the
@@ -48,7 +56,7 @@ import java.net.URLClassLoader
 object ToolClassIsolation {
 
     /** Package prefixes a tool classpath resolves from its own jars first. */
-    val CHILD_FIRST_PACKAGES: List<String> = listOf("dagger.", "com.google.common.")
+    val CHILD_FIRST_PACKAGES: List<String> = listOf("dagger.", "com.google.common.", "org.apache.commons.codec.")
 
     /** Whether [className] must be loaded from the tool's own classpath before delegating to the parent. */
     fun isChildFirst(className: String): Boolean = CHILD_FIRST_PACKAGES.any { className.startsWith(it) }

@@ -148,10 +148,12 @@ class ToolClassIsolationTest {
     }
 
     @Test
-    fun childFirstCoversGuavaAndDaggerButNotTheSharedSpi() {
+    fun childFirstCoversGuavaDaggerAndCodecButNotTheSharedSpi() {
         assertTrue(ToolClassIsolation.isChildFirst("com.google.common.collect.ImmutableList"))
         assertTrue(ToolClassIsolation.isChildFirst(SYNTHETIC.replace('/', '.')))
         assertTrue(ToolClassIsolation.isChildFirst("dagger.internal.DoubleCheck"))
+        // Shadowed on device by the boot classpath's org.apache.http.legacy copy, not by the app.
+        assertTrue(ToolClassIsolation.isChildFirst("org.apache.commons.codec.binary.Hex"))
         // The types that cross the boundary have to stay parent-loaded, or the two sides hold different classes.
         assertFalse(ToolClassIsolation.isChildFirst("kotlin.Unit"))
         assertFalse(ToolClassIsolation.isChildFirst("com.google.devtools.ksp.processing.SymbolProcessorProvider"))
