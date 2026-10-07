@@ -239,13 +239,14 @@ object JavaBytecode {
     /**
      * A type from the SIGNATURE grammar.
      *
-     * Two things are carried over from the ASM version rather than fixed, because this replaced it and a
-     * unilateral improvement would be a behaviour change smuggled in as a port. Both are asserted in
-     * `:kotlin-symbols`, so the day either is fixed, that fails and says why:
+     * A nested binary name is normalised to dot-form, as [erased] does. A generic supertype names a nested
+     * class flat (`RecyclerView$Adapter<FragmentViewHolder>`), and keeping the `$` gave `FragmentStateAdapter`
+     * a supertype no dot-form declared type ever equals, so `viewPager.adapter = fragmentStateAdapter` read
+     * "inferred type is FragmentStateAdapter but Adapter was expected".
      *
-     *  * the `$` in a nested binary name is left alone here, unlike [erased], which normalises it to a dot;
-     *  * `Outer<A, B>.Inner<C>` collapses to ONE name carrying `<A, B, C>`, because ASM's visitor
-     *    accumulated arguments across `visitClassType` and `visitInnerClassType` into a single list.
+     * One thing is carried over from the ASM version rather than fixed, and is asserted in `:kotlin-symbols`:
+     * `Outer<A, B>.Inner<C>` collapses to ONE name carrying `<A, B, C>`, because ASM's visitor accumulated
+     * arguments across `visitClassType` and `visitInnerClassType` into a single list.
      */
     private fun JavaType.fromSignature(ctx: KotlinTypeContext?): KotlinType = when (this) {
         is JavaType.Primitive -> primitive(descriptor, ctx)
@@ -268,7 +269,7 @@ object JavaBytecode {
 
     private fun JavaType.Class.signatureClassName(): String {
         val enclosing = outer
-        return if (enclosing == null) name.replace('/', '.') else enclosing.signatureClassName() + "." + name
+        return if (enclosing == null) name.replace('/', '.').replace('$', '.') else enclosing.signatureClassName() + "." + name
     }
 
     private fun JavaType.Class.flattenedArguments(): List<JavaTypeArgument> =

@@ -193,15 +193,10 @@ class JavaSymbolsPortTest {
     }
 
     @Test
-    fun theTwoPathsDisagreeAboutNestedNames() {
-        // Carried over from the original rather than fixed, and recorded here so it is a known fact instead
-        // of a surprise. The ERASED path normalises the binary `$` to a dot, with a comment explaining that
-        // an assignment check false-flagged a mismatch without it. The GENERIC-signature path does not, so
-        // the same nested type has two spellings depending on whether the member that mentions it happened
-        // to carry a signature attribute.
-        //
-        // Both implementations do this, which is why the corpus comparison above is green. Fixing it is a
-        // change to :lang-kotlin-index, not to the port.
+    fun bothPathsSpellNestedNamesWithADot() {
+        // The ERASED path and the GENERIC-signature path both normalise the binary `$` to a dot, so a nested
+        // type has one spelling whether or not the member that mentions it carries a signature attribute.
+        // `HashMap` names `Map$Entry` through both: erased descriptors and generic signatures.
         val bytes = assertNotNull(
             javaClass.classLoader.getResourceAsStream("java/util/HashMap.class")?.readBytes()
                 ?: findOnClasspath("java/util/HashMap.class"),
@@ -210,16 +205,19 @@ class JavaSymbolsPortTest {
         val shape = assertNotNull(JavaSymbols.read(bytes))
         val theirs = assertNotNull(JavaBytecode.read(bytes, null))
 
-        val entrySpellings = (shape.members.mapNotNull { it.type?.qualifiedName } +
-            shape.superTypes.map { it.qualifiedName })
+        fun TypeName.names(): List<String> = listOf(qualifiedName) + typeArguments.flatMap { it.names() }
+        fun TypeRef.names(): List<String> = listOf(qualifiedName) + typeArguments.flatMap { it.names() }
+        val entrySpellings = (shape.members.mapNotNull { it.type }.flatMap { it.names() } +
+            shape.superTypes.flatMap { it.names() })
             .filter { it.contains("Map") && (it.contains("Entry")) }
             .toSet()
-        val theirSpellings = (theirs.members.mapNotNull { it.type?.qualifiedName } +
-            theirs.superTypes.map { it.qualifiedName })
+        val theirSpellings = (theirs.members.mapNotNull { it.type }.flatMap { it.names() } +
+            theirs.superTypes.flatMap { it.names() })
             .filter { it.contains("Map") && (it.contains("Entry")) }
             .toSet()
-        assertEquals(theirSpellings, entrySpellings, "the port reproduces the original's spellings")
-        println("nested-name spellings seen in java.util.HashMap: $entrySpellings")
+        assertTrue("java.util.Map.Entry" in entrySpellings, "Map.Entry is dot-form; got $entrySpellings")
+        assertTrue(entrySpellings.none { '$' in it }, "no nested name keeps the binary separator; got $entrySpellings")
+        assertEquals(entrySpellings, theirSpellings, "the port reproduces the original's spellings")
     }
 
     @Test

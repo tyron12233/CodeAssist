@@ -198,14 +198,14 @@ object JavaSymbols {
     /**
      * A type from the SIGNATURE grammar.
      *
-     * Two things here are carried over from the original rather than fixed, because the port is measured
-     * against the original and a unilateral improvement shows up as a difference:
+     * A nested binary name is normalised to dot-form, as the erased path does, so a nested type has one
+     * spelling whichever path mentions it. See `JavaSymbolsPortTest.bothPathsSpellNestedNamesWithADot`.
      *
-     *  * The `${'$'}` in a nested binary name is left alone, unlike the erased path which normalises it to a dot.
-     *    See `JavaSymbolsPortTest.theTwoPathsDisagreeAboutNestedNames`.
-     *  * `Outer<A, B>.Inner<C>` collapses to ONE name carrying `<A, B, C>`, because the original's visitor
-     *    accumulates arguments across `visitClassType` and `visitInnerClassType` into a single list and
-     *    reports them all at the end. See `JavaSymbolsPortTest.anInnerClassOfAGenericOuterMergesArguments`.
+     * One thing is carried over from the original rather than fixed, because the port is measured against
+     * the original and a unilateral improvement shows up as a difference: `Outer<A, B>.Inner<C>` collapses to
+     * ONE name carrying `<A, B, C>`, because the original's visitor accumulates arguments across
+     * `visitClassType` and `visitInnerClassType` into a single list and reports them all at the end. See
+     * `JavaSymbolsPortTest.anInnerClassOfAGenericOuterMergesArguments`.
      */
     private fun JavaType.fromSignature(): TypeName = when (this) {
         is JavaType.Primitive -> primitive(descriptor)
@@ -225,10 +225,10 @@ object JavaSymbols {
         )
     }
 
-    /** `java.util.Map${'$'}Entry` for the flat form, `java.util.Map.Entry` for the outer-with-suffix form. */
+    /** `java.util.Map.Entry` for both the flat `Map${'$'}Entry` form and the outer-with-suffix form. */
     private fun JavaType.Class.signatureClassName(): String {
         val enclosing = outer
-        return if (enclosing == null) name.replace('/', '.') else enclosing.signatureClassName() + "." + name
+        return if (enclosing == null) name.replace('/', '.').replace('$', '.') else enclosing.signatureClassName() + "." + name
     }
 
     /** Outermost arguments first, then each nested level's, all on one name. See [fromSignature]. */

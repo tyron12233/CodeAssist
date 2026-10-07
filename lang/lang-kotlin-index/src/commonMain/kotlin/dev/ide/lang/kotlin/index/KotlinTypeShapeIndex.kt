@@ -37,13 +37,14 @@ import dev.ide.platform.DataWriter
  */
 object KotlinTypeShapeIndex : IndexExtension<String, TypeShape> {
     override val id = IndexId("kotlin.typeShape")
-    // Base 19 (v16: + isInfix on members; v17: Kotlin @Metadata nested classes surfaced as STATIC CLASS
+    // Base 20 (v16: + isInfix on members; v17: Kotlin @Metadata nested classes surfaced as STATIC CLASS
     // members; v18: real Java parameter names off the MethodParameters attribute; v19: a JVM PRIMITIVE array
-    // decodes to Kotlin's specialised array class, `byte[]` → `ByteArray` not `Array<Byte>`) + the shared-codec
+    // decodes to Kotlin's specialised array class, `byte[]` → `ByteArray` not `Array<Byte>`; v20: a nested
+    // class named in a generic SIGNATURE is dot-form, `RecyclerView.Adapter` not `RecyclerView$Adapter`) + the shared-codec
     // FORMAT, so a TypeShapeExternalizer format change invalidates this index and kotlin.builtins together (see
     // TypeShapeExternalizer.FORMAT). Both base bumps changed the stored shapes' CONTENT with no wire-format
     // change, and only a bump forces the rebuild that lets already-indexed artifacts pick the correction up.
-    override val version = 19 + TypeShapeExternalizer.FORMAT
+    override val version = 20 + TypeShapeExternalizer.FORMAT
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = TypeShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried only by exact owner FQN
