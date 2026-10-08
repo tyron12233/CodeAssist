@@ -43,14 +43,17 @@ object BufferWordsContributor : CompletionContributor {
 
         // word -> nearest distance from the caret (so the closest occurrence wins the ordering)
         val nearest = HashMap<String, Int>()
+        val words = WordTable(text)
         var i = 0
         while (i < len) {
             if (isWordStart(text[i])) {
                 var j = i + 1
                 while (j < len && isWordChar(text[j])) j++
                 val isCaretToken = caret in i..j // the very token under the caret — skip it
-                if (!isCaretToken && j - i >= prefix.length && (!anchored || text[i].equals(first, ignoreCase = true))) {
-                    val word = text.substring(i, j)
+                if (!isCaretToken && j - i >= prefix.length && (!anchored || text[i].equals(first, ignoreCase = true)) &&
+                    holdsInOrder(text, i, j, prefix)
+                ) {
+                    val word = words.wordAt(i, j)
                     if (word !in existing && matcher.matches(word)) {
                         val dist = if (caret < i) i - caret else caret - j
                         val prev = nearest[word]
@@ -58,7 +61,11 @@ object BufferWordsContributor : CompletionContributor {
                     }
                 }
                 i = j
-            } else i++
+            } else {
+                // An assignment, not `i++`: in a suspend function the compiler boxes the value of a trailing
+                // `i++` and drops it, one Integer per character of the buffer on ART (no escape analysis).
+                i += 1
+            }
         }
         // Capped to the nearest few, so a page holding fewer words than matched is not the whole answer.
         if (nearest.size > MAX_WORDS) result.markIncomplete()
@@ -80,6 +87,65 @@ object BufferWordsContributor : CompletionContributor {
 
     /** Most buffer words offered per request, nearest to the caret first. */
     private const val MAX_WORDS = 20
+
+    /**
+     * Whether [prefix]'s characters occur in `text[start, end)` in order, ignoring case. Every
+     * [dev.ide.lang.completion.PrefixMatcher] grade (prefix, camel hump, substring) implies it, so a word that fails it is rejected here, before it is
+     * copied out of the buffer: a short prefix's first letter alone admits thousands of words in a long file.
+     */
+    private fun holdsInOrder(text: String, start: Int, end: Int, prefix: String): Boolean {
+        var q = 0
+        var i = start
+        while (q < prefix.length && i < end) {
+            if (text[i].equals(prefix[q], ignoreCase = true)) q++
+            i++
+        }
+        return q == prefix.length
+    }
+
+    /**
+     * The distinct words of one scan of [text], each copied out of the buffer once. A long file repeats its
+     * words thousands of times (`fun`, `val`, a class name), and a short prefix admits most of them, so copying
+     * every occurrence to look it up made a string per occurrence. Open addressing over the characters' hash,
+     * so a repeat is found without allocating.
+     */
+    private class WordTable(private val text: String) {
+        private var hashes = IntArray(256)
+        private var strings = arrayOfNulls<String>(256)
+        private var size = 0
+
+        fun wordAt(start: Int, end: Int): String {
+            var h = 0
+            for (k in start until end) h = 31 * h + text[k].code
+            var slot = h and (strings.size - 1)
+            while (true) {
+                val existing = strings[slot] ?: break
+                if (hashes[slot] == h && existing.length == end - start && text.regionMatches(start, existing, 0, end - start)) {
+                    return existing
+                }
+                slot = (slot + 1) and (strings.size - 1)
+            }
+            val word = text.substring(start, end)
+            hashes[slot] = h
+            strings[slot] = word
+            if (++size * 2 > strings.size) grow()
+            return word
+        }
+
+        private fun grow() {
+            val oldHashes = hashes
+            val oldStrings = strings
+            hashes = IntArray(oldHashes.size * 2)
+            strings = arrayOfNulls(oldStrings.size * 2)
+            for (k in oldStrings.indices) {
+                val w = oldStrings[k] ?: continue
+                var slot = oldHashes[k] and (strings.size - 1)
+                while (strings[slot] != null) slot = (slot + 1) and (strings.size - 1)
+                hashes[slot] = oldHashes[k]
+                strings[slot] = w
+            }
+        }
+    }
 
     private fun isWordStart(c: Char): Boolean = c.isLetter() || c == '_' || c == '$'
     private fun isWordChar(c: Char): Boolean = c.isLetterOrDigit() || c == '_' || c == '$'

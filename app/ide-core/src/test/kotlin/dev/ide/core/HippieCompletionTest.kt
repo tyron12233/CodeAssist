@@ -17,32 +17,35 @@ import kotlin.test.assertTrue
 class HippieCompletionTest {
 
     @Test
-    fun bufferWordCompletesFromAnywhereInTheFile() = withTempDir("ide-hippie") { dir ->
-        IdeServices.bootstrapJavaDemo(dir).use { ide ->
-            val app = ide.modules().first { it.name == "app" }
-            val probe = ide.sourceRoots(app).first().resolve("com/example/app/Probe.java")
-            // `ztrocketfuel` exists only in a comment — the JDT backend can't propose it, so any proposal of
-            // it must come from the buffer-word fallback.
-            val code = """
-                package com.example.app;
-                // ztrocketfuel marker
-                public class Probe {
-                    void m() {
-                        ztr|CARET|
+    fun bufferWordCompletesFromAnywhereInTheFile() {
+        // A block body: an expression-bodied test whose value is not Unit is silently skipped by JUnit.
+        withTempDir("ide-hippie") { dir ->
+            IdeServices.bootstrapJavaDemo(dir).use { ide ->
+                val app = ide.modules().first { it.name == "app" }
+                val probe = ide.sourceRoots(app).first().resolve("com/example/app/Probe.java")
+                // `ztrocketfuel` exists only in a comment — the JDT backend can't propose it, so any proposal of
+                // it must come from the buffer-word fallback.
+                val code = """
+                    package com.example.app;
+                    // ztrocketfuel marker
+                    public class Probe {
+                        void m() {
+                            ztr|CARET|
+                        }
                     }
-                }
-            """.trimIndent()
-            val offset = code.indexOf("|CARET|")
-            val result = runBlocking { ide.complete(probe, code.replace("|CARET|", ""), offset) }
+                """.trimIndent()
+                val offset = code.indexOf("|CARET|")
+                val result = runBlocking { ide.complete(probe, code.replace("|CARET|", ""), offset) }
 
-            val word = result.items.firstOrNull { it.insertText == "ztrocketfuel" }
-            assertTrue(word != null, "buffer word should be offered: ${result.items.map { it.insertText }}")
-            assertEquals(CompletionItemKind.WORD, word.kind, "buffer words carry the WORD kind")
+                val word = result.items.firstOrNull { it.insertText == "ztrocketfuel" }
+                assertTrue(word != null, "buffer word should be offered: ${result.items.map { it.insertText }}")
+                assertEquals(CompletionItemKind.WORD, word.kind, "buffer words carry the WORD kind")
 
-            // The accept range covers the partial word `ztr`, so accepting replaces it (not just inserts).
-            val replaced = code.replace("|CARET|", "").substring(result.replacementRange.start, result.replacementRange.end)
-            assertEquals("ztr", replaced, "accept range should span the typed prefix")
+                // The accept range covers the partial word `ztr`, so accepting replaces it (not just inserts).
+                val replaced = code.replace("|CARET|", "").substring(result.replacementRange.start, result.replacementRange.end)
+                assertEquals("ztr", replaced, "accept range should span the typed prefix")
+            }
+            dir.toFile().deleteRecursively()
         }
-        dir.toFile().deleteRecursively()
     }
 }
