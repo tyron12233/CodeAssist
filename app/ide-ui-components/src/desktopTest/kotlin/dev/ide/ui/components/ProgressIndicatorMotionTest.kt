@@ -1,6 +1,7 @@
 package dev.ide.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.MotionDurationScale
@@ -69,6 +70,11 @@ class ProgressIndicatorMotionTest {
      * [content] rendered at each of [FrameTimes] under a fixed motion duration [scale], as PNG bytes.
      *
      * The first frame is the one that starts the animation, so comparisons use the two after it.
+     *
+     * Each time is rendered twice. The fallback indicators write the frame time to state inside the frame,
+     * and on desktop the notification that invalidates their drawing is sent from another thread, so a
+     * single render may draw before or after it and show this frame's time or the previous one's. Sending
+     * the notifications and rendering the same time again draws this frame's time either way.
      */
     private fun render(width: Int, height: Int, scale: Float, content: @Composable () -> Unit): List<ByteArray> =
         ImageComposeScene(
@@ -77,7 +83,13 @@ class ProgressIndicatorMotionTest {
             density = Density(1f),
             coroutineContext = Dispatchers.Unconfined + FixedMotionDurationScale(scale),
             content = content,
-        ).use { scene -> FrameTimes.map { scene.render(it).png() } }
+        ).use { scene ->
+            FrameTimes.map {
+                scene.render(it)
+                Snapshot.sendApplyNotifications()
+                scene.render(it).png()
+            }
+        }
 
     private fun Image.png(): ByteArray = encodeToData(EncodedImageFormat.PNG)!!.bytes
 
