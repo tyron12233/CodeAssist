@@ -562,6 +562,9 @@ android {
             // locally when no release keystore is present.
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
+            // Lets the shell attach simpleperf, Perfetto heap/CPU profiling and `am profile` to this
+            // non-debuggable build without the debuggable slowdown.
+            isProfileable = true
             // This build is for on-device perf testing, so keep TEST ads (initWith(release) copied the real
             // ids — undo that) — a tester must never click a live ad.
             manifestPlaceholders["admobAppId"] = testAdmobAppId
