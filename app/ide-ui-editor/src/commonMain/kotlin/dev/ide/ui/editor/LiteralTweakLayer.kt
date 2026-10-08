@@ -35,7 +35,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
 import dev.ide.ui.components.ColorPickerDialog
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.generated.resources.Res
@@ -66,6 +65,7 @@ internal fun LiteralTweakLayer(
     session: EditorSession,
     visible: Boolean,
     caretGeometry: (Int) -> Triple<Int, Float, Float>,
+    lineHeightPx: Float,
     gutterWidthPx: Float,
     liftPx: Int,
 ) {
@@ -98,55 +98,52 @@ internal fun LiteralTweakLayer(
     val shown = remember(session) { arrayOfNulls<TweakableLiteral>(1) }
     if (literal != null || !dragging) shown[0] = literal
     val current = shown[0]
-    // Hidden while the picker is open: a popup draws above the in-tree dialog and would float over its scrim.
+    // Hidden while the picker is open, so the chip does not show through the dialog's scrim.
     if (current == null || !(visible || dragging) || picking != null || session.previewMarkers.isEmpty()) return
 
-    val density = LocalDensity.current
-    val (_, x, top) = caretGeometry(current.start)
-    val gapPx = with(density) { 6.dp.roundToPx() }
-    val positionProvider = remember(x, top, gapPx, liftPx) {
-        AboveAnchorPositionProvider(
-            x.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
-            top.roundToInt() - liftPx,
-            gapPx,
-        )
-    }
-    Popup(popupPositionProvider = positionProvider) {
-        Row(
-            Modifier
-                .clip(RoundedCornerShape(Ca.radius.sm))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.sm))
-                .padding(horizontal = 4.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            when (current) {
-                is TweakableLiteral.Number -> NumberControls(session, current, onDragging = { dragging = it })
-                is TweakableLiteral.ColorHex -> {
-                    val description = stringResource(Res.string.literal_tweak_pick_color)
-                    Box(
-                        Modifier
-                            .padding(2.dp)
-                            .size(22.dp)
-                            .clip(RoundedCornerShape(Ca.radius.control))
-                            .background(Color(current.argb))
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
-                            .clickable { picking = current to session.doc.substring(current.start, current.end) }
-                            .semantics { contentDescription = description },
+    val gapPx = with(LocalDensity.current) { 6.dp.roundToPx() }
+    // In the pane, not a `Popup` (see [aboveLineInPane]): it stays up for as long as the caret is on the literal.
+    Row(
+        Modifier
+            .aboveLineInPane(
+                anchor = { caretGeometry(current.start).let { (_, x, top) -> x to top } },
+                lineHeightPx = lineHeightPx,
+                gapPx = gapPx,
+                minX = gutterWidthPx.roundToInt(),
+                liftPx = liftPx,
+            )
+            .clip(RoundedCornerShape(Ca.radius.sm))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.sm))
+            .padding(horizontal = 4.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        when (current) {
+            is TweakableLiteral.Number -> NumberControls(session, current, onDragging = { dragging = it })
+            is TweakableLiteral.ColorHex -> {
+                val description = stringResource(Res.string.literal_tweak_pick_color)
+                Box(
+                    Modifier
+                        .padding(2.dp)
+                        .size(22.dp)
+                        .clip(RoundedCornerShape(Ca.radius.control))
+                        .background(Color(current.argb))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
+                        .clickable { picking = current to session.doc.substring(current.start, current.end) }
+                        .semantics { contentDescription = description },
+                )
+            }
+            is TweakableLiteral.Bool -> {
+                val description = stringResource(Res.string.literal_tweak_toggle)
+                // A Material switch scaled to chip size: scale() alone keeps the full layout footprint, so the
+                // switch is laid out at its natural size inside a box of the scaled size.
+                Box(Modifier.size(38.dp, 24.dp), contentAlignment = Alignment.Center) {
+                    Switch(
+                        checked = current.value,
+                        onCheckedChange = { replaceLiteral(session, current.start, current.end, current.toggled()) },
+                        modifier = Modifier.requiredSize(52.dp, 32.dp).scale(0.7f).semantics { contentDescription = description },
                     )
-                }
-                is TweakableLiteral.Bool -> {
-                    val description = stringResource(Res.string.literal_tweak_toggle)
-                    // A Material switch scaled to chip size: scale() alone keeps the full layout footprint, so the
-                    // switch is laid out at its natural size inside a box of the scaled size.
-                    Box(Modifier.size(38.dp, 24.dp), contentAlignment = Alignment.Center) {
-                        Switch(
-                            checked = current.value,
-                            onCheckedChange = { replaceLiteral(session, current.start, current.end, current.toggled()) },
-                            modifier = Modifier.requiredSize(52.dp, 32.dp).scale(0.7f).semantics { contentDescription = description },
-                        )
-                    }
                 }
             }
         }

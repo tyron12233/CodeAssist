@@ -39,6 +39,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
@@ -73,6 +74,7 @@ import dev.ide.ui.components.entrancePop
 import dev.ide.ui.components.pressScale
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.generated.resources.Res
@@ -550,21 +552,37 @@ internal class CompletionPopupPositionProvider(
     }
 }
 
-/** Positions the selection toolbar centered above an anchor point in the pane's coordinate space. */
-internal class AboveAnchorPositionProvider(
-    private val anchorX: Int,
-    private val anchorTop: Int,
-    private val gapPx: Int,
-) : PopupPositionProvider {
-    override fun calculatePosition(
-        anchorBounds: IntRect,
-        windowSize: IntSize,
-        layoutDirection: LayoutDirection,
-        popupContentSize: IntSize,
-    ): IntOffset {
-        val x = (anchorBounds.left + anchorX - popupContentSize.width / 2)
-            .coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
-        val y = (anchorBounds.top + anchorTop - popupContentSize.height - gapPx).coerceAtLeast(0)
-        return IntOffset(x, y)
+/**
+ * Places this overlay centered on an anchor in the editor pane, just above a line, in the pane's own window
+ * rather than as a `Popup`.
+ *
+ * An Android `Popup` re-reads its position on screen every frame for as long as it is shown. The overlays
+ * placed this way (the lightbulb, signature help, the selection toolbar, the literal chip) stay up while the
+ * user reads or thinks, and as popups they kept the main thread waking at the display's frame rate with
+ * nothing on screen changing.
+ *
+ * [anchor] gives the anchor's x and the top of its line in pane coordinates. It is read in the placement
+ * phase, so a scroll moves the overlay without recomposing it. [liftPx] raises the overlay further, to stack
+ * it above another one anchored on the same line. The pane clips, so when the overlay does not fit above the
+ * line it goes below it instead, [belowGapPx] under the line's bottom, and it is always kept inside the pane.
+ */
+internal fun Modifier.aboveLineInPane(
+    anchor: () -> Pair<Float, Float>,
+    lineHeightPx: Float,
+    gapPx: Int,
+    minX: Int = 0,
+    liftPx: Int = 0,
+    belowGapPx: Int = gapPx,
+): Modifier = layout { measurable, constraints ->
+    val overlay = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+    layout(overlay.width, overlay.height) {
+        val (x, lineTop) = anchor()
+        val paneWidth = if (constraints.hasBoundedWidth) constraints.maxWidth else Int.MAX_VALUE
+        val paneHeight = if (constraints.hasBoundedHeight) constraints.maxHeight else Int.MAX_VALUE
+        val left = (x.roundToInt().coerceAtLeast(minX) - overlay.width / 2)
+            .coerceIn(0, (paneWidth - overlay.width).coerceAtLeast(0))
+        val above = lineTop.roundToInt() - liftPx - gapPx - overlay.height
+        val top = if (above >= 0) above else (lineTop + lineHeightPx).roundToInt() + belowGapPx
+        overlay.place(left, top.coerceAtMost((paneHeight - overlay.height).coerceAtLeast(0)))
     }
 }

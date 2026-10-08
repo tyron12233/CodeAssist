@@ -49,6 +49,7 @@ class LiteralTweakLayerTest {
                         session = session,
                         visible = true,
                         caretGeometry = { Triple(0, anchorX, anchorTop) },
+                        lineHeightPx = 40f,
                         gutterWidthPx = 0f,
                         liftPx = 0,
                     )

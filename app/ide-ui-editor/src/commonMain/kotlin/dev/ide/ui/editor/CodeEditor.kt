@@ -1103,14 +1103,6 @@ private fun CodeEditorContent(
             visibleLinesOf = { geometry.visibleLineRange() },
         )
 
-        SelectionToolbarLayer(
-            session = editorSession,
-            geometry = geometry,
-            interaction = interaction,
-            onDocs = { showQuickDoc() },
-            onMenu = { interaction.handlesVisible = false; openNavMenu() },
-        )
-
         // completion popup, anchored at the token start (extracted so ART can compile these emission blocks).
         CompletionPopupLayer(
             completion = completion,
@@ -1125,36 +1117,6 @@ private fun CodeEditorContent(
             paneBottomInWindow = paneBottomInWindow,
             safeSelected = safeSelected,
             onAccept = { accept(it) },
-        )
-
-        SignatureHelpLayer(
-            sig = sig,
-            engaged = engaged,
-            caretOffset = caretOffset,
-            caretGeometry = { geometry.caretGeometry(it) },
-            gutterWidthPx = gutterWidthPx,
-        )
-        LightbulbLayer(
-            acts = acts,
-            interaction = interaction,
-            showPopup = showPopup,
-            engaged = engaged,
-            caretOffset = caretOffset,
-            caretGeometry = { geometry.caretGeometry(it) },
-            gutterWidthPx = gutterWidthPx,
-        )
-
-        // Literal tweak chip (number scrub / color pick / boolean flip) in a file with @Preview composables. Gives way
-        // to the completion popup and the quick-fix bulb/menu, and stacks above the touch selection toolbar.
-        LiteralTweakLayer(
-            session = editorSession,
-            visible = engaged && !showPopup && !acts.menuOpen &&
-                !(acts.available.isNotEmpty() && acts.caretDiagnostic != null),
-            caretGeometry = { geometry.caretGeometry(it) },
-            gutterWidthPx = gutterWidthPx,
-            liftPx = if (interaction.handlesVisible && interaction.lastInputWasTouch) {
-                interaction.selectionToolbarHeightPx + with(LocalDensity.current) { 8.dp.roundToPx() }
-            } else 0,
         )
 
         PreviewGutterIconsLayer(
@@ -1194,6 +1156,48 @@ private fun CodeEditorContent(
             caretOffset = caretOffset,
             caretGeometry = { geometry.caretGeometry(it) },
             metrics = metrics,
+            gutterWidthPx = gutterWidthPx,
+        )
+
+        // The overlays placed in the pane rather than as popups (see [aboveLineInPane]). After the gutter and plugin
+        // layers so they draw and take taps over them, before the cards below, which cover them; the bulb last.
+        SignatureHelpLayer(
+            sig = sig,
+            engaged = engaged,
+            caretOffset = caretOffset,
+            caretGeometry = { geometry.caretGeometry(it) },
+            lineHeightPx = metrics.lineHeight,
+            gutterWidthPx = gutterWidthPx,
+        )
+        // Literal tweak chip (number scrub / color pick / boolean flip) in a file with @Preview composables. Gives way
+        // to the completion popup and the quick-fix bulb/menu, and stacks above the touch selection toolbar.
+        LiteralTweakLayer(
+            session = editorSession,
+            visible = engaged && !showPopup && !acts.menuOpen &&
+                !(acts.available.isNotEmpty() && acts.caretDiagnostic != null),
+            caretGeometry = { geometry.caretGeometry(it) },
+            lineHeightPx = metrics.lineHeight,
+            gutterWidthPx = gutterWidthPx,
+            liftPx = if (interaction.handlesVisible && interaction.lastInputWasTouch) {
+                interaction.selectionToolbarHeightPx + with(LocalDensity.current) { 8.dp.roundToPx() }
+            } else 0,
+        )
+        SelectionToolbarLayer(
+            session = editorSession,
+            geometry = geometry,
+            interaction = interaction,
+            lineHeightPx = metrics.lineHeight,
+            onDocs = { showQuickDoc() },
+            onMenu = { interaction.handlesVisible = false; openNavMenu() },
+        )
+        LightbulbLayer(
+            acts = acts,
+            interaction = interaction,
+            showPopup = showPopup,
+            engaged = engaged,
+            caretOffset = caretOffset,
+            caretGeometry = { geometry.caretGeometry(it) },
+            lineHeightPx = metrics.lineHeight,
             gutterWidthPx = gutterWidthPx,
         )
 
@@ -1387,32 +1391,31 @@ private fun SignatureHelpLayer(
     engaged: Boolean,
     caretOffset: Int,
     caretGeometry: (Int) -> Triple<Int, Float, Float>,
+    lineHeightPx: Float,
     gutterWidthPx: Float,
 ) {
     val sigHelp = sig.help
     if (sigHelp != null && !sig.dismissed && engaged && sigHelp.signatures.isNotEmpty()) {
-        val density = LocalDensity.current
-        val (_, sigX, sigTop) = caretGeometry(caretOffset)
-        val gapPx = with(density) { 6.dp.roundToPx() }
-        val positionProvider = remember(sigX, sigTop, gapPx) {
-            AboveAnchorPositionProvider(
-                sigX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
-                sigTop.roundToInt(),
-                gapPx,
-            )
-        }
-        Popup(
-            popupPositionProvider = positionProvider,
-            onDismissRequest = { sig.dismiss() },
-            properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
-        ) {
-            SignatureHelpPopup(sigHelp, mobile = isMobilePlatform)
-        }
+        val gapPx = with(LocalDensity.current) { 6.dp.roundToPx() }
+        // In the pane, not a `Popup` (see [aboveLineInPane]): it stays up for as long as the caret is in a call.
+        SignatureHelpPopup(
+            sigHelp,
+            mobile = isMobilePlatform,
+            modifier = Modifier.aboveLineInPane(
+                anchor = { caretGeometry(caretOffset).let { (_, x, top) -> x to top } },
+                lineHeightPx = lineHeightPx,
+                gapPx = gapPx,
+                minX = gutterWidthPx.roundToInt(),
+            ),
+        )
     }
 }
 
 /** Lightbulb floating just ABOVE the caret — only when the caret is on a diagnostic that has fixes, the
- *  completion popup isn't showing, and the fix menu isn't already open. Tap → the fix list. */
+ *  completion popup isn't showing, and the fix menu isn't already open. Tap → the fix list.
+ *
+ *  In the pane, not a `Popup` (see [aboveLineInPane]): the bulb stays up for as long as the caret rests on
+ *  an error. */
 @Composable
 private fun LightbulbLayer(
     acts: EditorActionsController,
@@ -1421,11 +1424,11 @@ private fun LightbulbLayer(
     engaged: Boolean,
     caretOffset: Int,
     caretGeometry: (Int) -> Triple<Int, Float, Float>,
+    lineHeightPx: Float,
     gutterWidthPx: Float,
 ) {
     if (acts.available.isNotEmpty() && acts.caretDiagnostic != null && !showPopup && !acts.menuOpen && engaged) {
         val density = LocalDensity.current
-        val (_, bulbX, bulbTop) = caretGeometry(caretOffset)
         val gapPx = with(density) { 6.dp.roundToPx() }
         // The touch selection toolbar anchors above this same line; when it's up, stack the bulb above it
         // (toolbar height + its 8dp gap) so a quick-fix like auto-import stays reachable.
@@ -1433,16 +1436,16 @@ private fun LightbulbLayer(
             if (interaction.handlesVisible && interaction.lastInputWasTouch) {
                 interaction.selectionToolbarHeightPx + with(density) { 8.dp.roundToPx() }
             } else 0
-        val positionProvider = remember(bulbX, bulbTop, gapPx, toolbarLift) {
-            AboveAnchorPositionProvider(
-                bulbX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
-                bulbTop.roundToInt() - toolbarLift,
-                gapPx,
-            )
-        }
-        Popup(popupPositionProvider = positionProvider) {
-            FloatingLightbulb(onClick = { acts.openMenu() })
-        }
+        FloatingLightbulb(
+            onClick = { acts.openMenu() },
+            modifier = Modifier.aboveLineInPane(
+                anchor = { caretGeometry(caretOffset).let { (_, x, top) -> x to top } },
+                lineHeightPx = lineHeightPx,
+                gapPx = gapPx,
+                minX = gutterWidthPx.roundToInt(),
+                liftPx = toolbarLift,
+            ),
+        )
     }
 }
 

@@ -263,6 +263,7 @@ internal fun SelectionToolbarLayer(
     session: EditorSession,
     geometry: EditorGeometry,
     interaction: EditorInteraction,
+    lineHeightPx: Float,
     onDocs: () -> Unit,
     onMenu: () -> Unit,
 ) {
@@ -273,36 +274,41 @@ internal fun SelectionToolbarLayer(
     // EditorInputModifier), so the toolbar follows the finger and lands where the user finished selecting
     // rather than staying back at where the selection started.
     val selActive = session.selection.end
-    val (_, selX, selTop) = geometry.caretGeometry(selActive)
     val gapPx = with(density) { 8.dp.roundToPx() }
-    Popup(
-        popupPositionProvider = remember(selX, selTop, gapPx) {
-            AboveAnchorPositionProvider(selX.roundToInt(), selTop.roundToInt(), gapPx)
-        },
-    ) {
-        // Report the toolbar's height so the lightbulb (anchored above this same line) can stack above it.
-        Box(Modifier.onSizeChanged { interaction.selectionToolbarHeightPx = it.height }) {
-            SelectionToolbar(
-                hasSelection = !session.selection.collapsed,
-                onCopy = {
-                    // Cap the payload: putting a multi-MB selection on the system clipboard marshals it across a
-                    // Binder transaction and throws TransactionTooLargeException (crash observed in the field).
-                    session.selectedText()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }
-                    interaction.handlesVisible = false
-                },
-                onCut = {
-                    session.cutSelection()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }
-                    interaction.handlesVisible = false
-                },
-                onPaste = {
-                    clipboard.getText()?.text?.let { if (it.isNotEmpty()) session.commitText(it) }
-                    interaction.handlesVisible = false
-                },
-                onSelectAll = { session.selectAll() },
-                onDocs = { interaction.handlesVisible = false; onDocs() },
-                onMenu = onMenu,
+    // Below the line it has to clear the selection handles hanging under it.
+    val belowGapPx = with(density) { 28.dp.roundToPx() }
+    // In the pane, not a `Popup` (see [aboveLineInPane]): it stays up for as long as text is selected.
+    // Report the toolbar's height so the lightbulb (anchored above this same line) can stack above it.
+    Box(
+        Modifier
+            .aboveLineInPane(
+                anchor = { geometry.caretGeometry(selActive).let { (_, x, top) -> x to top } },
+                lineHeightPx = lineHeightPx,
+                gapPx = gapPx,
+                belowGapPx = belowGapPx,
             )
-        }
+            .onSizeChanged { interaction.selectionToolbarHeightPx = it.height },
+    ) {
+        SelectionToolbar(
+            hasSelection = !session.selection.collapsed,
+            onCopy = {
+                // Cap the payload: putting a multi-MB selection on the system clipboard marshals it across a
+                // Binder transaction and throws TransactionTooLargeException (crash observed in the field).
+                session.selectedText()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }
+                interaction.handlesVisible = false
+            },
+            onCut = {
+                session.cutSelection()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }
+                interaction.handlesVisible = false
+            },
+            onPaste = {
+                clipboard.getText()?.text?.let { if (it.isNotEmpty()) session.commitText(it) }
+                interaction.handlesVisible = false
+            },
+            onSelectAll = { session.selectAll() },
+            onDocs = { interaction.handlesVisible = false; onDocs() },
+            onMenu = onMenu,
+        )
     }
 }
 

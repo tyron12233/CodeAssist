@@ -59,7 +59,7 @@ import org.jetbrains.compose.resources.stringResource
  * definition — full signature + documentation — with a second long-press (or a tap on the hint) collapsing it.
  */
 @Composable
-fun SignatureHelpPopup(help: UiSignatureHelp, mobile: Boolean = false) {
+fun SignatureHelpPopup(help: UiSignatureHelp, mobile: Boolean = false, modifier: Modifier = Modifier) {
     if (help.signatures.isEmpty()) return
     val scroll = rememberScrollState()
     val density = LocalDensity.current
@@ -103,7 +103,7 @@ fun SignatureHelpPopup(help: UiSignatureHelp, mobile: Boolean = false) {
     } else Modifier
 
     Column(
-        Modifier
+        modifier
             .widthIn(min = 80.dp, max = maxW)
             .heightIn(max = maxH)
             .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.md))
