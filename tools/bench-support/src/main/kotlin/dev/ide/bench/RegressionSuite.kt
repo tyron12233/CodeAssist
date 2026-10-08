@@ -10,6 +10,12 @@ enum class Direction { LOWER_BETTER, HIGHER_BETTER }
 enum class MetricUnit { NS, BYTES, RATIO, COUNT }
 
 /**
+ * What a metric measures, for choosing which ones gate a run. Latency and heap occupancy depend on the
+ * machine; allocation, quality and counts do not.
+ */
+enum class MetricKind { LATENCY, ALLOC, HEAP, QUALITY, COUNT, OTHER }
+
+/**
  * One suite's worth of metrics, compared against a committed baseline file and gated with per-metric
  * thresholds. The contract:
  *
@@ -29,6 +35,12 @@ enum class MetricUnit { NS, BYTES, RATIO, COUNT }
  * Latency is machine-dependent, so its default tolerance is generous (it catches *order-of-magnitude*
  * regressions, e.g. the per-keystroke environment rebuild coming back); allocation and quality are far
  * more deterministic and gate tightly.
+ *
+ * `-Dbench.gate=alloc,quality` (a comma list of [MetricKind] names) limits which kinds can fail the run.
+ * The others are still measured and printed, and a breach is reported as "over (not gated)". This is how a
+ * shared CI runner, much slower than the machine the baselines came from, gates only the deterministic
+ * metrics. Without the property every metric gates. With it, `-Dbench.updateBaselines=true` rewrites only the
+ * gated kinds, so a deterministic baseline can be refreshed on a machine whose timings should not be recorded.
  */
 class RegressionSuite internal constructor(
     private val name: String,
@@ -36,6 +48,10 @@ class RegressionSuite internal constructor(
     private val update: Boolean,
 ) {
     constructor(name: String) : this(name, defaultBaselineDir(), System.getProperty("bench.updateBaselines") == "true")
+
+    private val gated: Set<MetricKind>? = System.getProperty("bench.gate")
+        ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+        ?.map { MetricKind.valueOf(it.uppercase()) }?.toSet()
 
     init {
         require(!(update && Bench.quick)) {
@@ -56,6 +72,7 @@ class RegressionSuite internal constructor(
         val unit: MetricUnit,
         val tolerance: Double, // allowed relative drift before FAIL (0.5 = 50%)
         val bound: Double?,     // absolute backstop: a ceiling for LOWER_BETTER, a floor for HIGHER_BETTER
+        val kind: MetricKind,
     )
 
     /** Record one metric. Prefer the typed helpers below; this is the general form. */
@@ -66,31 +83,32 @@ class RegressionSuite internal constructor(
         unit: MetricUnit,
         tolerance: Double,
         bound: Double? = null,
+        kind: MetricKind = MetricKind.OTHER,
     ) {
-        entries += Entry(key, value, dir, unit, tolerance, bound)
+        entries += Entry(key, value, dir, unit, tolerance, bound, kind)
     }
 
     /** Per-keystroke latency (ns). Loose by default (machine noise); [ceilingNs] is an absolute backstop. */
     fun latencyNs(key: String, value: Double, tolerance: Double = 1.5, ceilingNs: Double? = null) =
-        metric(key, value, Direction.LOWER_BETTER, MetricUnit.NS, tolerance, ceilingNs)
+        metric(key, value, Direction.LOWER_BETTER, MetricUnit.NS, tolerance, ceilingNs, MetricKind.LATENCY)
 
     /** Allocation per op (bytes). Deterministic, so it gates tightly. Skipped when unmeasurable (value 0). */
     fun allocBytes(key: String, value: Long, tolerance: Double = 0.35, ceilingBytes: Double? = null) {
         if (value <= 0L && !Bench.allocMeasurable) return // counter unavailable on this VM
-        metric(key, value.toDouble(), Direction.LOWER_BETTER, MetricUnit.BYTES, tolerance, ceilingBytes)
+        metric(key, value.toDouble(), Direction.LOWER_BETTER, MetricUnit.BYTES, tolerance, ceilingBytes, MetricKind.ALLOC)
     }
 
     /** Heap occupancy (bytes): retained footprint or session growth. Noisy, so loose by default. */
     fun heapBytes(key: String, value: Long, tolerance: Double = 0.75, ceilingBytes: Double? = null) =
-        metric(key, value.toDouble(), Direction.LOWER_BETTER, MetricUnit.BYTES, tolerance, ceilingBytes)
+        metric(key, value.toDouble(), Direction.LOWER_BETTER, MetricUnit.BYTES, tolerance, ceilingBytes, MetricKind.HEAP)
 
     /** A quality fraction in 0..1 (recall / top-k / MRR). Higher is better; [floor] is an absolute backstop. */
     fun quality(key: String, value: Double, tolerance: Double = 0.0, floor: Double? = null) =
-        metric(key, value, Direction.HIGHER_BETTER, MetricUnit.RATIO, tolerance, floor)
+        metric(key, value, Direction.HIGHER_BETTER, MetricUnit.RATIO, tolerance, floor, MetricKind.QUALITY)
 
     /** A raw count (e.g. candidates returned). Recorded for the table; gate it with [dir]. */
     fun count(key: String, value: Int, dir: Direction = Direction.HIGHER_BETTER, tolerance: Double = 0.5) =
-        metric(key, value.toDouble(), dir, MetricUnit.COUNT, tolerance)
+        metric(key, value.toDouble(), dir, MetricUnit.COUNT, tolerance, kind = MetricKind.COUNT)
 
     fun finishAndAssert() {
         val rows = entries.map { evaluate(it) }
@@ -124,11 +142,16 @@ class RegressionSuite internal constructor(
 
     // ---- evaluation ----
 
-    private enum class Verdict { OK, IMPROVED, FAIL, NEW }
+    private enum class Verdict { OK, IMPROVED, FAIL, UNGATED, NEW }
 
     private data class Row(val entry: Entry, val base: Double?, val verdict: Verdict, val reason: String)
 
     private fun evaluate(e: Entry): Row {
+        val row = judge(e)
+        return if (row.verdict == Verdict.FAIL && gated != null && e.kind !in gated) row.copy(verdict = Verdict.UNGATED) else row
+    }
+
+    private fun judge(e: Entry): Row {
         val base = baseline[e.key] ?: return Row(e, null, Verdict.NEW, "no baseline yet")
         val v = e.value
         // Absolute backstop first (machine-independent gross-regression guard).
@@ -163,8 +186,9 @@ class RegressionSuite internal constructor(
     private fun persist(rows: List<Row>) {
         val merged = LinkedHashMap(baseline)
         for (r in rows) {
-            // In update mode, move every baseline to the current run; otherwise only seed missing keys.
-            if (update || r.verdict == Verdict.NEW) merged[r.entry.key] = r.entry.value
+            // In update mode, move every gated baseline to the current run; otherwise only seed missing keys.
+            val refresh = update && (gated == null || r.entry.kind in gated)
+            if (refresh || r.verdict == Verdict.NEW) merged[r.entry.key] = r.entry.value
         }
         Files.createDirectories(baselineDir)
         Files.writeString(file, FlatJson.write(merged))
@@ -189,6 +213,7 @@ class RegressionSuite internal constructor(
         Verdict.OK -> "ok"
         Verdict.IMPROVED -> "↑ improved"
         Verdict.FAIL -> "✗ FAIL"
+        Verdict.UNGATED -> "over (not gated)"
         Verdict.NEW -> "• new (seeded)"
     }
 

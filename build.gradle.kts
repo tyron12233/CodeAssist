@@ -136,6 +136,8 @@ subprojects {
                 // `-Dbench.quick=true`: one timed batch instead of five, for iterating on a suite. Gates and
                 // baseline writes are off in that mode — see `Bench.quick`.
                 System.getProperty("bench.quick")?.let { systemProperty("bench.quick", it) }
+                // `-Dbench.gate=alloc,quality`: only those metric kinds can fail the run (see RegressionSuite).
+                System.getProperty("bench.gate")?.let { systemProperty("bench.gate", it) }
                 maxHeapSize = "1536m"
                 // Benchmarks must always run fresh: never UP-TO-DATE, and never served FROM-CACHE (a cached
                 // full run would otherwise replay regardless of a `--tests` filter, and cached perf numbers are

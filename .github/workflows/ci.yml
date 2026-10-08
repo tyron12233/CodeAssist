@@ -98,6 +98,12 @@ jobs:
       - name: Index ranking quality (index-impl)
         run: ./gradlew :index-impl:regressionTest --tests '*IndexQualityTest*' --console=plain --stacktrace
 
+      # The Kotlin backend's suites: completion quality, plus the allocation per keystroke of analysis,
+      # completion and preview lowering. Allocation does not depend on the runner's speed the way latency
+      # does, so `bench.gate` lets only those kinds fail the step; the latency rows still print in the log.
+      - name: Kotlin completion quality + per-keystroke allocation (lang-kotlin)
+        run: ./gradlew :lang-kotlin:regressionTest -Dbench.gate=alloc,quality,count --console=plain --stacktrace
+
       # The dogfooding milestone: the IDE's own build engine compiles + runs a large multi-module Java
       # project and rebuilds it incrementally. Correctness + incremental task count are deterministic
       # (machine-independent); the full-build wall time is gated only by a wide trend + catastrophe ceiling.
@@ -108,7 +114,8 @@ jobs:
       # time and retained heap, which are machine-dependent (a shared CI runner is far slower than the
       # machine the baselines were recorded on, and the heap probe is unreliable under CI's JVM). Run them
       # locally on a stable machine via `./gradlew :lang-jdt:regressionTest :index-impl:regressionTest`.
-      # CI keeps only the deterministic, machine-independent gates above (quality, ranking, build correctness).
+      # CI keeps only the deterministic, machine-independent gates above (quality, ranking, allocation, build
+      # correctness).
 
       - name: Upload test & benchmark reports
         if: ${{ always() }}
