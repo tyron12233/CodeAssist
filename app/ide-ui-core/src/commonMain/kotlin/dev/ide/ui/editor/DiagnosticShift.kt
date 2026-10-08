@@ -132,17 +132,85 @@ internal inline fun <T : Any> mapPreserving(list: List<T>, transform: (T) -> T?)
  * Re-map semantic-highlight tokens across a single [edit] the session just applied, so the type-aware
  * coloring tracks the text until a fresh (debounced) pass replaces it — the same live-shift the editor does
  * for diagnostics, just for color spans (no line/col to recompute). A token the edit fully consumed is dropped.
+ *
+ * The result is a [ShiftedSemanticTokens] whenever anything moved: a whole file's tokens run to tens of
+ * thousands, and every one after the edit moves on every keystroke, so copying them as objects was a large
+ * share of the editor's garbage, all of it on the UI thread. The shifted list holds the new offsets in two
+ * int arrays and shares the tokens themselves across successive shifts.
  */
 fun shiftSemanticTokens(tokens: List<UiSemanticToken>, edit: EditSpan, docLength: Int): List<UiSemanticToken> {
     if (tokens.isEmpty() || edit.isNoOp) return tokens
-    return mapPreserving(tokens) { t ->
-        val start = mapStart(t.startOffset, edit).coerceIn(0, docLength)
-        val end = mapEnd(t.endOffset, edit).coerceIn(start, docLength)
-        when {
-            end <= start -> null
-            start == t.startOffset && end == t.endOffset -> t
-            else -> t.copy(startOffset = start, endOffset = end)
+    val shifted = tokens as? ShiftedSemanticTokens
+    val n = tokens.size
+    var starts: IntArray? = null
+    var ends: IntArray? = null
+    var dropped = 0
+    for (i in 0 until n) {
+        // Explicit branches, not `?.` with `?:`: that would box an Int per token.
+        val s0 = if (shifted != null) shifted.startAt(i) else tokens[i].startOffset
+        val e0 = if (shifted != null) shifted.endAt(i) else tokens[i].endOffset
+        val start = mapStart(s0, edit).coerceIn(0, docLength)
+        val end = mapEnd(e0, edit).coerceIn(start, docLength)
+        if (starts == null) {
+            if (start == s0 && end == e0) continue
+            starts = IntArray(n)
+            ends = IntArray(n)
+            for (k in 0 until i) {
+                starts[k] = if (shifted != null) shifted.startAt(k) else tokens[k].startOffset
+                ends[k] = if (shifted != null) shifted.endAt(k) else tokens[k].endOffset
+            }
         }
+        if (end <= start) dropped++
+        starts[i] = start
+        ends!![i] = end
+    }
+    if (starts == null) return tokens
+    val base: Array<UiSemanticToken> = shifted?.tokens ?: Array(n) { tokens[it] }
+    if (dropped == 0) return ShiftedSemanticTokens(base, starts, ends!!)
+    // A token the edit consumed leaves the list (rare: a deletion spanning a whole token).
+    val kept = n - dropped
+    val keptTokens = arrayOfNulls<UiSemanticToken>(kept)
+    val keptStarts = IntArray(kept)
+    val keptEnds = IntArray(kept)
+    var j = 0
+    for (i in 0 until n) {
+        if (ends!![i] <= starts[i]) continue
+        keptTokens[j] = base[i]
+        keptStarts[j] = starts[i]
+        keptEnds[j] = ends[i]
+        j++
+    }
+    @Suppress("UNCHECKED_CAST")
+    return ShiftedSemanticTokens(keptTokens as Array<UiSemanticToken>, keptStarts, keptEnds)
+}
+
+/**
+ * Semantic tokens after one or more live shifts: the [tokens] as the analysis produced them (their kind and
+ * modifiers) and their current offsets, held apart in [starts] and [ends] so a shift copies two int arrays
+ * instead of every token. Reads as an ordinary list; [get] rebuilds a token only when its offsets moved. A
+ * hot reader that walks every token uses [startAt], [endAt] and [tokenAt] instead, which allocate nothing.
+ */
+class ShiftedSemanticTokens internal constructor(
+    internal val tokens: Array<UiSemanticToken>,
+    private val starts: IntArray,
+    private val ends: IntArray,
+) : AbstractList<UiSemanticToken>() {
+    override val size: Int get() = tokens.size
+
+    /** The current start offset of token [index]. */
+    fun startAt(index: Int): Int = starts[index]
+
+    /** The current end offset of token [index]. */
+    fun endAt(index: Int): Int = ends[index]
+
+    /** Token [index] as the analysis produced it: read its kind and modifiers, not its offsets. */
+    fun tokenAt(index: Int): UiSemanticToken = tokens[index]
+
+    override fun get(index: Int): UiSemanticToken {
+        val t = tokens[index]
+        val s = starts[index]
+        val e = ends[index]
+        return if (t.startOffset == s && t.endOffset == e) t else t.copy(startOffset = s, endOffset = e)
     }
 }
 

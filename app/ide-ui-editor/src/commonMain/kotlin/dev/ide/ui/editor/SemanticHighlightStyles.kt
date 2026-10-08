@@ -83,15 +83,21 @@ fun semanticSpansInLines(
     val len = doc.length
     val rangeStart = doc.lineStart(fromLine)
     val rangeEnd = if (toLine >= doc.lineCount) Int.MAX_VALUE else doc.lineStart(toLine)
-    for (t in tokens) {
-        val start = t.startOffset.coerceIn(0, len)
-        if (start >= len && t.startOffset >= len) continue
+    // Live-shifted tokens are read through their offset arrays: iterating them as a list would rebuild every
+    // token that moved, on every keystroke.
+    val shifted = tokens as? ShiftedSemanticTokens
+    for (i in tokens.indices) {
+        val t = if (shifted != null) shifted.tokenAt(i) else tokens[i]
+        val tokenStart = if (shifted != null) shifted.startAt(i) else t.startOffset
+        val tokenEnd = if (shifted != null) shifted.endAt(i) else t.endOffset
+        val start = tokenStart.coerceIn(0, len)
+        if (start >= len && tokenStart >= len) continue
         if (start < rangeStart || start >= rangeEnd) continue
         val style = styles.styleFor(t.kind, t.modifiers) ?: continue
         val line = doc.lineForOffset(start)
         val ls = doc.lineStart(line)
         val lineEnd = doc.lineEnd(line)
-        val end = t.endOffset.coerceIn(start, lineEnd)
+        val end = tokenEnd.coerceIn(start, lineEnd)
         if (end <= start) continue
         out.getOrPut(line) { ArrayList() }.add(SemSpan(start - ls, end - ls, style))
     }
