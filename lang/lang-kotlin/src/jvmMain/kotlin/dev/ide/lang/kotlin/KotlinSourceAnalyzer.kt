@@ -57,11 +57,13 @@ import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
+import dev.ide.lang.kotlin.parse.TextDiff
 import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.symbols.BuiltinStubRenderer
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
+import dev.ide.lang.kotlin.symbols.SourceIndexBuilder
 import dev.ide.lang.resolve.DocFormat
 import dev.ide.lang.resolve.QuickDocInfo
 import dev.ide.lang.resolve.ResolveResult
@@ -305,6 +307,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         if (inlayLazy.isInitialized()) inlayLazy.value.clear()
         service.releaseMemory()
         KotlinParserHost.releaseMemory()
+        SourceIndexBuilder.forgetLastBuilds()
     }
 
     override val incrementalParser: IncrementalParser = object : IncrementalParser {
@@ -547,8 +550,16 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     /** The file's classes/objects/functions/properties in document order with nesting depth — for the
      *  structure view and sticky scroll headers. Purely syntactic (PSI), so it's safe before the index is ready. */
     /** The last [fileStructure] answer and the text it was built from. The sticky headers and the breadcrumb
-     *  both ask after every edit, and the breadcrumb again on every caret move, always for the same text. */
-    private class StructureMemo(val path: String, val text: String, val items: List<StructureItem>)
+     *  both ask after every edit, and the breadcrumb again on every caret move, always for the same text. Kept
+     *  per top-level declaration too, so the answer for the next keystroke reads only the declaration the edit
+     *  is in, and moves the others' items by the edit's length. */
+    private class StructureMemo(
+        val path: String,
+        val text: String,
+        val items: List<StructureItem>,
+        val decls: List<KtDeclaration>,
+        val itemsByDecl: List<List<StructureItem>>,
+    )
 
     @Volatile
     private var structureMemo: StructureMemo? = null
@@ -557,13 +568,45 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         structureMemo?.let { m ->
             if (m.path == file.path && m.text.length == text.length && m.text.contentEquals(text)) return m.items
         }
-        // Reuse the editor's own parse when it is of this exact text, instead of parsing again.
-        val ktFile = lastByFile[file.path]?.ktFile?.takeIf { it.text.contentEquals(text) }
-            ?: KotlinParserHost.parse(file.name, text)
+        // Reuse the editor's own parse when it is of this exact text, instead of parsing again. While typing it
+        // is usually a keystroke behind (the breadcrumb asks before analysis catches up), so start from it: a
+        // keystroke inside a body reparses only that body instead of the whole file.
+        val previous = lastByFile[file.path]?.ktFile
+        val ktFile = when {
+            previous == null -> KotlinParserHost.parse(file.name, text)
+            previous.sourceText.contentEquals(text) -> previous
+            else -> KotlinParserHost.reparse(previous, file.name, text)
+        }
+        val newText = text.toString()
+        val decls = ktFile.declarations
+        val last = structureMemo?.takeIf { it.path == file.path && it.decls.size == decls.size }
+        val diff = last?.let { TextDiff.between(it.text, newText) }
+        val itemsByDecl = ArrayList<List<StructureItem>>(decls.size)
         val out = ArrayList<StructureItem>()
-        for (d in ktFile.declarations) collectStructure(d, 0, out)
-        structureMemo = StructureMemo(file.path, text.toString(), out)
+        for ((i, d) in decls.withIndex()) {
+            val items = (if (last != null && diff != null) carriedStructure(last.decls[i], last.itemsByDecl[i], d, diff) else null)
+                ?: ArrayList<StructureItem>().also { collectStructure(d, 0, it) }
+            itemsByDecl += items
+            out += items
+        }
+        structureMemo = StructureMemo(file.path, newText, out, decls, itemsByDecl)
         return out
+    }
+
+    /** [oldItems], the structure of [oldDecl], moved onto [newDecl] when the edit left the declaration's text
+     *  alone; null when it has to be read again. */
+    private fun carriedStructure(
+        oldDecl: KtDeclaration,
+        oldItems: List<StructureItem>,
+        newDecl: KtDeclaration,
+        diff: TextDiff,
+    ): List<StructureItem>? {
+        if (oldDecl::class != newDecl::class) return null
+        val newStart = newDecl.textRange.startOffset
+        val oldStart = diff.oldStartOf(newStart, newDecl.textRange.endOffset) ?: return null
+        if (oldDecl.textRange.startOffset != oldStart || oldDecl.textRange.length != newDecl.textRange.length) return null
+        val shift = newStart - oldStart
+        return if (shift == 0) oldItems else oldItems.map { it.copy(nameOffset = it.nameOffset + shift, endOffset = it.endOffset + shift) }
     }
 
     private fun collectStructure(decl: KtDeclaration, depth: Int, out: MutableList<StructureItem>) {

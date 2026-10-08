@@ -729,8 +729,12 @@ class KotlinSymbolService(
         return sf
     }
 
-    /** The last walk of the source roots and when it was taken (see [sourceKtFiles]). */
-    private class WalkedSources(val files: List<VirtualFile>, val at: TimeSource.Monotonic.ValueTimeMark)
+    /** The last walk of the source roots, when it was taken, and when it was last asked for (see
+     *  [sourceKtFiles]). */
+    private class WalkedSources(val files: List<VirtualFile>, val at: TimeSource.Monotonic.ValueTimeMark) {
+        @Volatile
+        var lastAsked: TimeSource.Monotonic.ValueTimeMark = at
+    }
 
     @Volatile
     private var walkedSources: WalkedSources? = null
@@ -738,11 +742,22 @@ class KotlinSymbolService(
     /**
      * Every `.kt` file under the source roots. The model is rebuilt after each edit, and re-walking every
      * directory of the module per keystroke was a full tree traversal for a set that almost never changes:
-     * creating, deleting or moving a source file replaces this whole service. The walk is still reused for
-     * only [SOURCE_WALK_TTL], so a file written without an event (a generator's output) appears promptly.
+     * creating, deleting or moving a source file replaces this whole service. The walk is still taken again
+     * after a pause of [SOURCE_WALK_TTL], and at least every [SOURCE_WALK_MAX_AGE], so a file written without
+     * an event (a generator's output) appears promptly.
+     *
+     * Not on a fixed timer while the user types, though: the model is rebuilt per keystroke, and on Android's
+     * shared storage each directory check is a slow call into the storage daemon, so a walk every couple of
+     * seconds of typing was a tenth of the analysis thread's time.
      */
     private fun sourceKtFiles(): List<VirtualFile> {
-        walkedSources?.let { if (it.at.elapsedNow() < SOURCE_WALK_TTL) return it.files }
+        walkedSources?.let {
+            val age = it.at.elapsedNow()
+            if (age < SOURCE_WALK_MAX_AGE && (age < SOURCE_WALK_TTL || it.lastAsked.elapsedNow() < SOURCE_WALK_TTL)) {
+                it.lastAsked = TimeSource.Monotonic.markNow()
+                return it.files
+            }
+        }
         val out = ArrayList<VirtualFile>()
         for (root in sourceRoots) walkKt(root) { out += it }
         walkedSources = WalkedSources(out, TimeSource.Monotonic.markNow())
@@ -4086,3 +4101,4 @@ class KotlinSymbolService(
 
 /** How long [KotlinSymbolService]'s walk of its source roots is reused before the tree is walked again. */
 private val SOURCE_WALK_TTL = 2.seconds
+private val SOURCE_WALK_MAX_AGE = 30.seconds

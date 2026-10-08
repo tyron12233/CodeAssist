@@ -47,8 +47,44 @@ object KotlinParserHost {
      * (see [KotlinSyntax.reparseFileLazily]); otherwise the whole file is parsed. Either way the tree is the
      * one [parse] would build.
      */
-    fun reparse(previous: KtFile, name: String, text: CharSequence): KtFile =
-        (if (lazyBodies) KotlinSyntax.reparseFileLazily(previous, text) else null) ?: parse(name, text)
+    fun reparse(previous: KtFile, name: String, text: CharSequence): KtFile {
+        RecentReparses.find(previous, name, text)?.let { return it }
+        val next = (if (lazyBodies) KotlinSyntax.reparseFileLazily(previous, text) else null) ?: parse(name, text)
+        RecentReparses.remember(previous, next)
+        return next
+    }
+
+    /**
+     * The last few [reparse] results, by the tree they started from. A keystroke reaches the same reparse more
+     * than once: the analysis and the file structure (breadcrumbs) each bring the buffer's last tree up to the
+     * new text, and between them completion reparses its own copy. Each reparse builds a tree the size of the
+     * file, so the second one is served from here. Holds trees, so it is kept to a couple of entries.
+     */
+    private object RecentReparses {
+        private val lock = Lock()
+        private val from = arrayOfNulls<KtFile>(2)
+        private val to = arrayOfNulls<KtFile>(2)
+        private var next = 0
+
+        fun find(previous: KtFile, name: String, text: CharSequence): KtFile? = lock.withLock {
+            for (i in from.indices) {
+                val result = to[i] ?: continue
+                if (from[i] === previous && result.name == name && result.sourceText.contentEquals(text)) return@withLock result
+            }
+            null
+        }
+
+        fun remember(previous: KtFile, result: KtFile) = lock.withLock {
+            from[next] = previous
+            to[next] = result
+            next = (next + 1) % from.size
+        }
+
+        fun clear() = lock.withLock {
+            from.fill(null)
+            to.fill(null)
+        }
+    }
 
     /** Parse lazily with cached bodies (the default), or every file in full; the switch exists for A/B tests. */
     var lazyBodies: Boolean = true
@@ -93,7 +129,10 @@ object KotlinParserHost {
     }
 
     /** Drop every cached body parse (memory pressure); the next parses rebuild what they touch. */
-    fun releaseMemory() = BodyCache.clear()
+    fun releaseMemory() {
+        BodyCache.clear()
+        RecentReparses.clear()
+    }
 
     /**
      * Kept so the startup path and its tests still have something to call, and deliberately a no-op.
