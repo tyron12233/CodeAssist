@@ -81,7 +81,7 @@ published coordinates:
 ```kotlin
 dependencies {
     // One version for every coordinate below, including the Compose the IDE bundles.
-    compileOnly(platform("io.github.tyron12233:plugin-bom:3.0.0"))
+    compileOnly(platform("io.github.tyron12233:plugin-bom:3.1.0"))
 
     compileOnly("io.github.tyron12233:plugin-api")
     compileOnly("io.github.tyron12233:platform-core")
@@ -101,7 +101,7 @@ dependencies {
 ```
 
 Declare `apiVersion = 4` in the manifest to match, as this sample's own does: `PLUGIN_API_VERSION` is `4`
-for SPI `3.0.0`, and the loader compares the manifest's value with the host's on strict equality.
+for SPI `3.0.0` and `3.1.0`, and the loader compares the manifest's value with the host's on strict equality.
 
 The Compose *compiler* needs no declaration when the project is built by CodeAssist: it applies the plugin to
 any module whose classpath carries the Compose runtime. Building with Gradle, apply

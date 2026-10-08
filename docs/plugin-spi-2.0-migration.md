@@ -5,8 +5,9 @@ SPI `2.0.0` is the first change that can stop an existing plugin from compiling,
 gate** with a version mismatch rather than allowed to fail later as a linkage error.
 
 > Coming from `1.x` you have two hops to make. Read this, then
-> [Migrating a plugin to SPI 3.0.0](plugin-spi-3.0-migration.md), which is the current SPI and the one to
-> compile against; the coordinates below are kept at the versions this migration describes.
+> [Migrating a plugin to SPI 3.0.0](plugin-spi-3.0-migration.md), which starts the line to compile against
+> (`3.1.0` today, additive over `3.0.0`); the coordinates below are kept at the versions this migration
+> describes.
 
 **The coordinate to ask for is `2.7.0`**, the first SPI that carries everything described here.
 `2.0.0` itself was never published, so `2.1.0` was the first `2.x` artifact; there is no reason to ask for it
