@@ -253,3 +253,64 @@ private fun KtTreeSession.collectErrors(node: LightNode, out: MutableList<TextRa
     }
     for (i in 0 until tree.childCount(node)) collectErrors(LightNode(tree.childIndexAt(node, i)), out)
 }
+
+/**
+ * Where an element sits under one of its ancestors, independent of the tree: what [relativeTo] records and
+ * [elementAt] finds again under an identical ancestor in another parse of the same text (a declaration a
+ * keystroke elsewhere in the file left alone).
+ *
+ * Composites are numbered in the parser's production order, which nests: an ancestor's descendants hold the
+ * indices just after its own. Two identical subtrees therefore number their nodes identically relative to
+ * their roots. That is the lookup; the type, the offset from the ancestor and the length are then checked, so
+ * subtrees that are not identical answer null rather than a wrong element.
+ */
+class RelativeElement internal constructor(
+    internal val index: Int,
+    internal val start: Int,
+    internal val length: Int,
+    internal val type: SyntaxElementType,
+)
+
+/** Where this element sits under [ancestor], or null when it is not a composite of the same tree under it.
+ *  Only composites in a file's own tree have one: a token, or anything inside a body parsed on its own, does
+ *  not. */
+fun KtElement.relativeTo(ancestor: KtElement): RelativeElement? {
+    if (session !== ancestor.session) return null
+    val tree = session.tree
+    val rel = node.index - ancestor.node.index
+    if (ancestor.node.index < 0 || rel < 0 || node.index >= tree.rootIndex) return null
+    return RelativeElement(rel, tree.getStartOffset(node) - tree.getStartOffset(ancestor.node), tree.getEndOffset(node) - tree.getStartOffset(node), tree.getType(node))
+}
+
+/** Whether [elementAt] finds an element for [rel] under this one, checked without creating it. */
+fun KtElement.hasElementAt(rel: RelativeElement): Boolean = indexAt(rel) >= 0
+
+/** The element at [rel] under this one, or null when this subtree is not shaped as the one [rel] was taken in. */
+fun KtElement.elementAt(rel: RelativeElement): KtElement? {
+    if (rel.index == 0) return this.takeIf { hasElementAt(rel) }
+    val index = indexAt(rel)
+    return if (index < 0) null else session.psi(LightNode(index))
+}
+
+private fun KtElement.indexAt(rel: RelativeElement): Int {
+    val tree = session.tree
+    val root = node.index
+    if (root < 0) return -1
+    val index = root + rel.index
+    if (index >= tree.rootIndex) return -1
+    val candidate = LightNode(index)
+    if (tree.getType(candidate) != rel.type) return -1
+    val start = tree.getStartOffset(candidate)
+    if (start - tree.getStartOffset(node) != rel.start || tree.getEndOffset(candidate) - start != rel.length) return -1
+    return index
+}
+
+/**
+ * The element under [newAncestor] that sits where this one sits under [oldAncestor], or null when there is no
+ * such element (see [RelativeElement]).
+ */
+fun KtElement.counterpartUnder(oldAncestor: KtElement, newAncestor: KtElement): KtElement? {
+    if (session !== oldAncestor.session) return null
+    if (this == oldAncestor) return newAncestor
+    return relativeTo(oldAncestor)?.let { newAncestor.elementAt(it) }
+}

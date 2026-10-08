@@ -283,6 +283,44 @@ abstract class KtNamedDeclaration internal constructor(session: KtTreeSession, n
      */
     val fqName: FqName?
         get() {
+            if (fqNameRead) return fqNameValue
+            val fq = computeFqName()
+            fqNameValue = fq
+            fqNameRead = true
+            return fq
+        }
+    // Read once per element, like [name]: the tree is immutable, and the answer is a string built from every
+    // enclosing class and the package.
+    private var fqNameRead = false
+    private var fqNameValue: FqName? = null
+
+    /**
+     * Whether [fqName] is non-null, decided from the tree's shape without building the name: a named
+     * declaration whose every enclosing element up to the file is a class body or a named class or object.
+     * For the per-keystroke walks that only need to tell a local or anonymous declaration from the rest.
+     */
+    val hasQualifiedName: Boolean
+        get() {
+            if (fqNameRead) return fqNameValue != null
+            if (!isNamed()) return false
+            var current: KtElement? = parent
+            while (current != null && current !is KtFile) {
+                when (current) {
+                    is KtClassBody -> Unit
+                    is KtClassOrObject -> if (!current.isNamed()) return false
+                    else -> return false
+                }
+                current = current.parent
+            }
+            return current != null
+        }
+
+    /** Whether [name] is non-null, without reading it: an identifier, or the unnamed companion's implicit
+     *  `Companion` (see [KtObjectDeclaration.name]). */
+    internal fun isNamed(): Boolean =
+        nameIdentifier != null || (this is KtObjectDeclaration && isCompanion())
+
+    private fun computeFqName(): FqName? {
             val own = name ?: return null
             val segments = mutableListOf(own)
             // Walk the REAL parent chain rather than hopping containing classes. Only a class body or a
@@ -304,7 +342,7 @@ abstract class KtNamedDeclaration internal constructor(session: KtTreeSession, n
             val packageName = containingKtFile.packageFqName
             if (!packageName.isRoot) segments += packageName.asString()
             return FqName(segments.asReversed().joinToString("."))
-        }
+    }
 }
 
 /** Anything that declares something, mirroring `KtDeclaration`. */
@@ -368,10 +406,16 @@ class KtFile internal constructor(session: KtTreeSession, node: LightNode) :
     /** The file name, carried through the parse; nothing in the text says what file it came from. */
     val name: String get() = session.fileName
 
+    /** The text this file was parsed from, without the copy [text] makes. */
+    val sourceText: CharSequence get() = session.tree.source
+
     val packageDirective: KtPackageDirective? get() = firstChildOfType()
 
-    /** The declared package, or the root for the default package. */
-    val packageFqName: FqName get() = FqName(packageDirective?.qualifiedName ?: "")
+    /** The declared package, or the root for the default package. Read once per file: every [KtNamedDeclaration.fqName]
+     *  in it asks, and the directive's text is re-read and filtered each time it is built. */
+    val packageFqName: FqName
+        get() = packageFqNameValue ?: FqName(packageDirective?.qualifiedName ?: "").also { packageFqNameValue = it }
+    private var packageFqNameValue: FqName? = null
 
     val importList: KtImportList? get() = firstChildOfType()
 

@@ -262,6 +262,10 @@ class LightSyntaxTree(
         val oldCount = tokens.tokenCount
         val m = subLast - subFirst + 1
         val tokenShift = m - (lastToken - firstToken + 1)
+        if (markerShift == 0 && tokenShift == 0) {
+            sameShapeWith(b, lastInner, subOrder, subSlots, newSource, delta, sub, subNode, subFirst, firstToken, lastToken, subStart, bodyStart)
+                ?.let { return it }
+        }
         fun token(t: Int): Int = if (t > lastToken) t + tokenShift else t
         fun subToken(t: Int): Int = firstToken + (t - subFirst)
         fun child(c: Int): Int = if (c >= 0) marker(c) else -(token(-(c + 1)) + 1)
@@ -339,6 +343,105 @@ class LightSyntaxTree(
         )
     }
 
+    /**
+     * [withReplacedSubtree] for the commonest keystroke: the body comes back with the same composites, in the
+     * same nesting, over as many tokens as before (a letter typed into a name). Every index then means what it
+     * meant, so the new tree shares this one's composite types, parents, children and token parents, as well as
+     * the token types when none in the body changed; only the offsets are new. Trees are never written after
+     * they are built, which is what makes the sharing safe. Null when any composite or token of the body does
+     * not line up one for one, and the caller builds the tree in full.
+     */
+    private fun sameShapeWith(
+        b: Int,
+        lastInner: Int,
+        subOrder: List<Int>,
+        subSlots: Map<Int, Int>,
+        newSource: CharSequence,
+        delta: Int,
+        sub: LightSyntaxTree,
+        subNode: LightNode,
+        subFirst: Int,
+        firstToken: Int,
+        lastToken: Int,
+        subStart: Int,
+        bodyStart: Int,
+    ): LightSyntaxTree? {
+        // Where a node of the new body lands in this tree: its slot, or for a token its old index.
+        fun slotOf(c: Int): Int =
+            if (c >= 0) (if (c == subNode.index) b else subSlots[c] ?: return Int.MIN_VALUE)
+            else -((-(c + 1) - subFirst + firstToken) + 1)
+        fun sameChildren(old: List<LightNode>, new: List<LightNode>): Boolean {
+            if (old.size != new.size) return false
+            for (k in old.indices) if (old[k].index != slotOf(new[k].index)) return false
+            return true
+        }
+        if (!sameChildren(childrenByIndex[b], sub.childrenByIndex[subNode.index])) return null
+        for (k in subOrder.indices) {
+            val sc = subOrder[k]
+            val i = b + 1 + k
+            if (i > lastInner) return null
+            if (compositeTypes[i] != sub.compositeTypes[sc]) return null
+            if (parentStartIndex[i] != slotOf(sub.parentStartIndex[sc])) return null
+            if (!sameChildren(childrenByIndex[i], sub.childrenByIndex[sc])) return null
+        }
+        for (t in firstToken..lastToken) {
+            if (tokenParentStart[t] != slotOf(sub.tokenParentStart[subFirst + (t - firstToken)])) return null
+        }
+
+        val oldBodyEnd = compositeEndOffsets[b]
+        val starts = IntArray(rootIndex)
+        val ends = IntArray(rootIndex)
+        for (i in 0 until rootIndex) {
+            val s = compositeStartOffsets[i]
+            starts[i] = if (s >= oldBodyEnd) s + delta else s
+            val e = compositeEndOffsets[i]
+            ends[i] = if (e >= oldBodyEnd) e + delta else e
+        }
+        // The body's own composites sit where the new parse put them.
+        for (k in subOrder.indices) {
+            val sc = subOrder[k]
+            starts[b + 1 + k] = sub.compositeStartOffsets[sc] - subStart + bodyStart
+            ends[b + 1 + k] = sub.compositeEndOffsets[sc] - subStart + bodyStart
+        }
+
+        val count = tokens.tokenCount
+        val tokenStarts = IntArray(count)
+        val tokenEnds = IntArray(count)
+        for (t in 0 until firstToken) {
+            tokenStarts[t] = tokens.getTokenStart(t)
+            tokenEnds[t] = tokens.getTokenEnd(t)
+        }
+        var sameTypes = true
+        for (t in firstToken..lastToken) {
+            val st = subFirst + (t - firstToken)
+            tokenStarts[t] = sub.tokens.getTokenStart(st) - subStart + bodyStart
+            tokenEnds[t] = sub.tokens.getTokenEnd(st) - subStart + bodyStart
+            if (sub.tokens.getTokenType(st) != tokens.getTokenType(t)) sameTypes = false
+        }
+        for (t in lastToken + 1 until count) {
+            tokenStarts[t] = tokens.getTokenStart(t) + delta
+            tokenEnds[t] = tokens.getTokenEnd(t) + delta
+        }
+        val shared = (tokens as? ArrayTokenList)?.types
+        val tokenTypes = if (sameTypes && shared != null) shared else Array(count) { t ->
+            if (t in firstToken..lastToken) sub.tokens.getTokenType(subFirst + (t - firstToken)) else tokens.getTokenType(t)
+        }
+
+        return LightSyntaxTree(
+            tokens = ArrayTokenList(newSource, tokenTypes, tokenStarts, tokenEnds),
+            source = newSource,
+            parentStartIndex = parentStartIndex,
+            tokenParentStart = tokenParentStart,
+            rootIndex = rootIndex,
+            rootNodeType = rootNodeType,
+            compositeTypes = compositeTypes,
+            childrenByIndex = childrenByIndex,
+            compositeEndOffsets = ends,
+            compositeStartOffsets = starts,
+            buildLanguageSpecificTreeStructure = { it },
+        )
+    }
+
     /** [list] with [child] applied to each entry, or [list] itself when no entry lies past the replaced range. */
     private inline fun remapped(list: List<LightNode>, lastInner: Int, lastToken: Int, child: (Int) -> Int): List<LightNode> {
         if (list !is ChildrenList) return list
@@ -372,7 +475,8 @@ class LightSyntaxTree(
 /** A [TokenList] over plain arrays: what [LightSyntaxTree.withRelexedBody] assembles. */
 private class ArrayTokenList(
     override val tokenizedText: CharSequence,
-    private val types: Array<SyntaxElementType?>,
+    /** Shared between trees by [LightSyntaxTree.withReplacedSubtree]; never written once the tree is built. */
+    val types: Array<SyntaxElementType?>,
     private val starts: IntArray,
     private val ends: IntArray,
 ) : TokenList {

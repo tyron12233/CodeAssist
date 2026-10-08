@@ -128,6 +128,19 @@ class LazyBlockParityTest {
         assertTrue(typedApplied > typedCases * 3 / 4, "ordinary typing should reparse in place; applied $typedApplied of $typedCases")
     }
 
+    @Test
+    fun aCharacterTypedIntoANameReparsesToTheTreeAFreshParseBuilds() {
+        // Most keystrokes add or remove one character of a name, which keeps every token and node count, and
+        // the reparse then shares most of the previous tree. Such chains must still read exactly like a fresh
+        // parse, including where a name becomes a keyword (`fo` + `r`) or stops being one.
+        val root = File(System.getProperty("kotlinSyntax.corpusRoot")!!)
+        val sources = File(root, "lang/lang-kotlin/src/commonMain").walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }.sortedBy { it.path }.toList()
+        val (cases, applied) = reparseRun(sources, listOf("a", "r", "n", "_", "7", "s"), deletes = true, steps = 30)
+        println("lazy reparse, single characters: $applied of $cases in-body edits in place")
+        assertTrue(applied > cases * 3 / 4, "typing a name should reparse in place; applied $applied of $cases")
+    }
+
     /** Runs chains of random [inserts] (and deletions) over corpus files, asserting parity. Answers how many edits
      *  landed strictly inside a collapsed body of a lazily parsed file, and how many of those reparsed in place. */
     private fun reparseRun(files: List<File>, inserts: List<String>, deletes: Boolean, steps: Int): Pair<Int, Int> {
