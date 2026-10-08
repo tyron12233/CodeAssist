@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -259,6 +261,8 @@ private fun CodeEditorContent(
     var isFocused by remember { mutableStateOf(false) }
     val engaged = isFocused && !obscured
     var blinkOn by remember { mutableStateOf(true) }
+    // Where the code area starts below the sticky headers, as the editor's last draw left it for the caret's.
+    val caretClip = remember { CaretClip() }
     LaunchedEffect(editorSession.editCount, editorSession.selection.start, isFocused) {
         blinkOn = true // caret solid through every edit or cursor move; blink only at rest
         while (isFocused) {
@@ -1042,7 +1046,7 @@ private fun CodeEditorContent(
                             mn to mx
                         } else null
                     } else null
-                    drawEditor(
+                    caretClip.codeTop = drawEditor(
                         session = editorSession,
                         metrics = metrics,
                         gutterWidth = gutterWidthPx,
@@ -1070,11 +1074,30 @@ private fun CodeEditorContent(
                         indentColsFor = renderState::indentColsFor,
                         stickyHeadersFor = { renderState.stickyHeadersFor(geometry.editorStructure.value, it) },
                         colors = drawColors,
-                        caretVisible = isFocused && (blinkOn || !editorSession.selection.collapsed),
-                        caretContent = interaction.caretContent, // animated, content-space; read here → redraw per frame
                         handlesVisible = interaction.handlesVisible && interaction.lastInputWasTouch,
                         handleColor = colors.accent,
                         animatedSelection = animatedSel,
+                    )
+                },
+        )
+
+        // The caret, in a layer of its own (see [drawCaret]). The blink is read in the layer block, so it changes
+        // the layer's alpha without drawing anything again; the animated position is read in the draw, so a
+        // glide redraws only the caret.
+        Spacer(
+            Modifier
+                .matchParentSize()
+                .graphicsLayer { alpha = if (isFocused && blinkOn && editorSession.selection.collapsed) 1f else 0f }
+                .drawBehind {
+                    if (!editorSession.selection.collapsed) return@drawBehind
+                    drawCaret(
+                        caretContent = interaction.caretContent,
+                        vOff = geometry.vOffset.floatValue,
+                        hOff = geometry.hOffset.floatValue,
+                        gutterWidth = gutterWidthPx,
+                        codeTop = caretClip.codeTop,
+                        lineHeight = metrics.lineHeight,
+                        color = drawColors.caret,
                     )
                 },
         )
@@ -1532,6 +1555,12 @@ private fun NavMenuLayer(
 }
 
 /** Whole-word matches of [word] in [doc], and the exact document and word they were computed from. */
+/** Where the code area starts below the sticky headers, written by the editor's draw and read by the caret's,
+ *  which runs after it in the same frame. Not snapshot state: a draw must not write state another draw reads. */
+private class CaretClip {
+    var codeTop = 0f
+}
+
 private class OccurrenceResult(val doc: EditorDocument, val word: String, val matches: List<Match>)
 
 /** How long the caret and the text must stay put before the identifier under the caret is highlighted. */

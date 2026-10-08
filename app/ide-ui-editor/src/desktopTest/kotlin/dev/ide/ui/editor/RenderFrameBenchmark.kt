@@ -6,7 +6,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeCanvas
@@ -126,8 +125,6 @@ class RenderFrameBenchmark {
                     indentColsFor = cap.render::indentColsFor,
                     stickyHeadersFor = { emptyList() },
                     colors = cap.colors,
-                    caretVisible = true,
-                    caretContent = Offset(100f, 100f),
                     handlesVisible = false,
                     handleColor = Color.Cyan,
                 )

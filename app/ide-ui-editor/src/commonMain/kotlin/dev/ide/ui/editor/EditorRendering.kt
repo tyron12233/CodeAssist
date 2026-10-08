@@ -131,15 +131,13 @@ internal fun DrawScope.drawEditor(
     /** Sticky-header declarations enclosing the given top visible line — memoized by the caller across frames. */
     stickyHeadersFor: (Int) -> List<UiFileSymbol>,
     colors: EditorDrawColors,
-    caretVisible: Boolean,
-    caretContent: Offset,
     handlesVisible: Boolean,
     handleColor: Color,
     /** When non-null, draw the selection background over this `(min, max)` range instead of the live selection —
      *  the interpolated span of an in-progress expand animation. The logical selection is already the final
      *  range (caret/handles reflect it); this only grows the highlight. */
     animatedSelection: Pair<Int, Int>? = null,
-) {
+): Float {
     val doc = session.doc
     val sel = session.selection
     val lineH = metrics.lineHeight
@@ -502,18 +500,9 @@ internal fun DrawScope.drawEditor(
             }
         }
 
-        // caret — drawn at the animated content position (minus scroll), so it glides to a new spot
-        // Plugin painters, over the text and over every decoration the editor drew, but under the caret: the
-        // caret is where the user is, and no plugin gets to hide it.
+        // Plugin painters, over the text and over every decoration the editor drew. The caret is drawn over
+        // them by [drawCaret]: it is where the user is, and no plugin gets to hide it.
         if (paintCtx != null) runPainters(painters.aboveText, paintCtx)
-
-        if (caretVisible && sel.collapsed) {
-            val cx = caretContent.x - hOff
-            val cy = caretContent.y - vOff
-            if (cy + lineH > 0f && cy < size.height) {
-                drawRect(colors.caret, Offset(cx - 1f, cy), Size(2.dp.toPx(), lineH))
-            }
-        }
     }
 
     // gutter: opaque background over anything scrolled beneath it, then the band slice + numbers
@@ -579,6 +568,7 @@ internal fun DrawScope.drawEditor(
     // sticky scroll headers — the declarations enclosing the top visible line, pinned at the top. Drawn LAST
     // (over the scrolling code) and reads the live scroll offset in the draw phase, so it tracks a fling with
     // no recomposition. Pinned horizontally (ignores hOff) so a header stays anchored when scrolled sideways.
+    var codeTop = 0f
     if (firstVisible > 0) {
         val sticky = stickyHeadersFor(firstVisible)
         if (sticky.isNotEmpty()) {
@@ -595,7 +585,32 @@ internal fun DrawScope.drawEditor(
             }
             val bottom = sticky.size * lineH
             drawLine(colors.gutterBorder, Offset(0f, bottom), Offset(size.width, bottom), strokeWidth = 1f)
+            codeTop = bottom
         }
+    }
+    return codeTop
+}
+
+/**
+ * The caret, at its animated content position minus the scroll, so it glides to a new spot. It is drawn in a
+ * layer of its own above [drawEditor]'s: a blink then changes only that layer's alpha, and a glide redraws only
+ * this, instead of the whole editor. Clipped to the code area below [codeTop], the bottom of the sticky headers
+ * [drawEditor] returned, since the headers cover the code scrolled under them.
+ */
+internal fun DrawScope.drawCaret(
+    caretContent: Offset,
+    vOff: Float,
+    hOff: Float,
+    gutterWidth: Float,
+    codeTop: Float,
+    lineHeight: Float,
+    color: Color,
+) {
+    val cx = caretContent.x - hOff
+    val cy = caretContent.y - vOff
+    if (cy + lineHeight <= codeTop || cy >= size.height) return
+    clipRect(left = gutterWidth, top = codeTop, right = size.width, bottom = size.height) {
+        drawRect(color, Offset(cx - 1f, cy), Size(2.dp.toPx(), lineHeight))
     }
 }
 
