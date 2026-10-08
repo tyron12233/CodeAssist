@@ -70,6 +70,9 @@ class IndexServiceImpl(
     private val parse: (Path, String) -> ParsedFile? = { _, _ -> null },
     blockCacheBytes: Long = DEFAULT_BLOCK_CACHE_BYTES,
     blockSize: Int = 4096,
+    /** Whether the host has a tight heap, which narrows the build (e.g. serial artifact indexing). Defaults
+     *  to what the cache cap implies; a device that can afford a larger hot-block cache passes it explicitly. */
+    constrainedHeap: Boolean = blockCacheBytes <= CONSTRAINED_BLOCK_CACHE_BYTES,
     /** PER-PROJECT dir for the persisted source-side partitions + per-file fingerprints (unlike [cacheRoot],
      *  which is the SHARED library/SDK segment store). When set, a re-open reparses ONLY the source/resource
      *  files whose content changed since the last session; null disables cross-launch persistence (the source
@@ -114,10 +117,10 @@ class IndexServiceImpl(
     private val states: Map<IndexId, State> = extensions.associate { it.id to State(it) }
     private val blockCache = BlockCache(blockCacheBytes, blockSize)
 
-    /** True on memory-constrained hosts (the caller passes the smaller [CONSTRAINED_BLOCK_CACHE_BYTES] cap on
-     *  device). Drives memory-vs-speed trade-offs during the build (e.g. serial artifact indexing).
+    /** True on memory-constrained hosts ([constrainedHeap]). Drives memory-vs-speed trade-offs during the build
+     *  (e.g. serial artifact indexing).
      **/
-    private val constrained = blockCacheBytes <= CONSTRAINED_BLOCK_CACHE_BYTES
+    private val constrained = constrainedHeap
     private val segIds = AtomicInteger(0)
 
     /** Measurement channel for [ensureUpToDate]: a one-line build summary at INFO plus per-artifact lines
@@ -258,15 +261,13 @@ class IndexServiceImpl(
         val cap = (limit * 8).coerceAtLeast(64)
         val out = ArrayList<Hit<Any>>()
         // Each source gets its own `cap` budget (the union is re-ranked below) so a large segment can't
-        // starve the others by filling the shared buffer first.
+        // starve the others by filling the shared buffer first. A source stops at its cap counted over the
+        // whole list, so each is handed the list with the cap moved past what is already in it: the same
+        // budget, without a list per segment copied into this one (hundreds of segments, every keystroke).
         for (seg in st.segments) {
-            val tmp = ArrayList<Hit<Any>>()
-            if (fuzzy) seg.fuzzy(q, tmp, cap) else seg.prefix(q, tmp, cap)
-            out.addAll(tmp)
+            if (fuzzy) seg.fuzzy(q, out, out.size + cap) else seg.prefix(q, out, out.size + cap)
         }
-        val src = ArrayList<Hit<Any>>()
-        if (fuzzy) st.source.fuzzy(q, src, cap) else st.source.prefix(q, src, cap)
-        out.addAll(src)
+        if (fuzzy) st.source.fuzzy(q, out, out.size + cap) else st.source.prefix(q, out, out.size + cap)
         @Suppress("UNCHECKED_CAST") return rankMerged(out, limit).asSequence()
             .map { Hit(it.key, it.value as V, it.score) }
     }
@@ -1328,9 +1329,13 @@ class IndexServiceImpl(
         const val DEFAULT_BLOCK_CACHE_BYTES = 4L * 1024 * 1024
 
         /**
-         * A tighter cap for memory-constrained devices (on-device/ART). 1 MB ≈ 256 hot 4 KB blocks — ample
-         * for a completion query's working set — at a quarter of the desktop heap floor; cold blocks just
-         * re-read. The caller, which knows the platform (`isMobilePlatform`), passes this for `blockCacheBytes`.
+         * A tighter cap for low-memory devices: 1 MB, 256 hot 4 KB blocks, a quarter of the desktop cap; cold
+         * blocks just re-read.
+         *
+         * Not ample for completion on a full Android classpath, as once assumed: a type-name query over the
+         * AndroidX and Compose segments touches more blocks than this per keystroke, so on a 1 MB cap every
+         * keystroke re-read most of them from disk, each into a new array. A device with memory to spare uses
+         * [DEFAULT_BLOCK_CACHE_BYTES] instead.
          */
         const val CONSTRAINED_BLOCK_CACHE_BYTES = 1L * 1024 * 1024
 
@@ -1426,7 +1431,11 @@ internal fun rankMerged(hits: List<Hit<Any>>, limit: Int): List<Hit<Any>> {
 
     // Bounded selection via a min-heap whose head is the WORST survivor (lower score, or equal score but later
     // insertion), capped at `limit`: each overflow drops the worst, leaving the top `limit`.
-    val worstFirst = compareBy<RankedHit> { it.hit.score }.thenByDescending { it.index }
+    // Compared field by field: `compareBy { }.thenByDescending { }` boxes both values on every comparison.
+    val worstFirst = Comparator<RankedHit> { a, b ->
+        val byScore = a.hit.score.compareTo(b.hit.score)
+        if (byScore != 0) byScore else b.index.compareTo(a.index)
+    }
     val heap = java.util.PriorityQueue(minOf(limit, bestByValue.size) + 1, worstFirst)
     for (r in bestByValue.values) {
         heap.add(r)

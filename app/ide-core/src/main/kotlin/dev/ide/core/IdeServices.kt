@@ -481,9 +481,16 @@ class IdeServices private constructor(
             // Maven caches) instead of re-indexing the same AndroidX/Compose/stdlib jars per project. The
             // in-memory source side stays per-project regardless of where this points.
             (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("index"),
-            // On-device (androidTools present) ART has a tight heap, so use a smaller hot-block cache; desktop keeps the default.
-            blockCacheBytes = if (androidTools != null) IndexServiceImpl.CONSTRAINED_BLOCK_CACHE_BYTES
-            else IndexServiceImpl.DEFAULT_BLOCK_CACHE_BYTES,
+            // On-device (androidTools present) ART has a tight heap, so the index builds narrowly there. Its hot
+            // block cache is the desktop size unless the device is low on memory: completion's class-name
+            // queries thrash a smaller one, re-reading blocks from disk on every keystroke.
+            blockCacheBytes = if (androidTools != null) {
+                DeviceMemory.pick(
+                    normal = IndexServiceImpl.DEFAULT_BLOCK_CACHE_BYTES,
+                    low = IndexServiceImpl.CONSTRAINED_BLOCK_CACHE_BYTES,
+                )
+            } else IndexServiceImpl.DEFAULT_BLOCK_CACHE_BYTES,
+            constrainedHeap = androidTools != null,
             // The source side IS per-project (not shareable), so persist its per-file partitions under the
             // project's own caches — a re-open then re-parses only the source files that changed since last time.
             sourceCacheRoot = store.rootPath.resolve(".platform/caches/source-index"),

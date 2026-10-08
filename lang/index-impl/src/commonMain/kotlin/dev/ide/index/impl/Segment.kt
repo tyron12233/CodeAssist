@@ -272,7 +272,7 @@ internal class Segment private constructor(
         if (id < 0 || id >= numStrings) return "" // a corrupt id degrades to empty rather than crashing the query
         val off = Cursor(poolTableBase + id.toLong() * poolTableWidth).readFixedUInt(poolTableWidth)
         val sc = Cursor(poolStringsBase + off)
-        return sc.readBytes(sc.readVarLong().toInt()).decodeToString()
+        return sc.readUtf8(sc.readVarLong().toInt())
     }
 
     /** Log the first unreadable value in this segment (throttled to once); the query then skips it and continues. */
@@ -317,7 +317,20 @@ internal class Segment private constructor(
             return out
         }
 
-        fun readString(): String = readBytes(readVarLong().toInt()).decodeToString()
+        fun readString(): String = readUtf8(readVarLong().toInt())
+
+        /** [n] bytes decoded as UTF-8, straight out of the cached block when they lie in one (almost every
+         *  name does), instead of copying them out first. */
+        fun readUtf8(n: Int): String {
+            ensure()
+            val off = (pos - blkBase).toInt()
+            val block = blk!!
+            if (off + n <= block.size) {
+                pos += n
+                return block.decodeToString(off, off + n)
+            }
+            return readBytes(n).decodeToString()
+        }
 
         /** A big-endian unsigned int of [width] bytes (a pool-table entry), returned widened to Long. */
         fun readFixedUInt(width: Int): Long {
