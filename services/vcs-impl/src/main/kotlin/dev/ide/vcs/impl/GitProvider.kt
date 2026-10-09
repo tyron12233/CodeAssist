@@ -2,9 +2,11 @@ package dev.ide.vcs.impl
 
 import dev.ide.vcs.VcsCredentials
 import dev.ide.vcs.VcsException
+import dev.ide.vcs.VcsMessage
 import dev.ide.vcs.VcsProgress
 import dev.ide.vcs.VcsProvider
 import dev.ide.vcs.VcsRepository
+import dev.ide.vcs.VcsText
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
@@ -45,7 +47,7 @@ class GitProvider(configDir: Path) : VcsProvider {
 
     override fun open(root: Path): VcsRepository {
         val gitDir = root.resolve(Constants.DOT_GIT)
-        if (!Files.exists(gitDir)) throw VcsException("${root.fileName} is not a Git repository")
+        if (!Files.exists(gitDir)) throw VcsException(msg(VcsMessage.NOT_A_REPOSITORY, root.fileName))
         return try {
             val repo = FileRepositoryBuilder()
                 .setWorkTree(root.toFile())
@@ -54,7 +56,7 @@ class GitProvider(configDir: Path) : VcsProvider {
                 .build()
             GitRepository(Git(repo), root)
         } catch (e: Throwable) {
-            throw VcsException("Could not open the Git repository at $root: ${e.reason()}", e)
+            throw VcsException(msg(VcsMessage.WITH_REASON, msg(VcsMessage.OPEN_FAILED, root), VcsText.literal(e.reason())), e)
         }
     }
 
@@ -67,7 +69,7 @@ class GitProvider(configDir: Path) : VcsProvider {
                 .call()
             GitRepository(git, dir)
         } catch (e: Throwable) {
-            throw VcsException("Could not create a Git repository in $dir: ${e.reason()}", e)
+            throw VcsException(msg(VcsMessage.WITH_REASON, msg(VcsMessage.INIT_FAILED, dir), VcsText.literal(e.reason())), e)
         }
     }
 
@@ -81,7 +83,7 @@ class GitProvider(configDir: Path) : VcsProvider {
     ): VcsRepository {
         val dir: File = target.toFile()
         if (dir.exists() && dir.list()?.isNotEmpty() == true) {
-            throw VcsException("${target.fileName} already exists and is not empty")
+            throw VcsException(msg(VcsMessage.FOLDER_NOT_EMPTY, target.fileName))
         }
         return try {
             val command = Git.cloneRepository()
@@ -89,6 +91,7 @@ class GitProvider(configDir: Path) : VcsProvider {
                 .setDirectory(dir)
                 .setProgressMonitor(GitProgressMonitor(progress))
                 .setCredentialsProvider(auth.toJGit())
+                .setTimeout(CLONE_TIMEOUT_SECONDS)
             if (!branch.isNullOrBlank()) command.setBranch(branch)
             if (depth > 0) command.setDepth(depth)
             GitRepository(command.call(), target)
@@ -96,7 +99,10 @@ class GitProvider(configDir: Path) : VcsProvider {
             // A failed clone leaves a partial directory behind; clearing it keeps a retry from tripping the
             // "already exists" check above.
             runCatching { dir.deleteRecursively() }
-            throw e.asVcsFailure("Could not clone $url", host = hostOf(url))
+            throw e.asVcsFailure(msg(VcsMessage.CLONE_FAILED, redactUrl(url)), host = hostOf(url))
         }
     }
 }
+
+/** Seconds a clone may sit without the server answering before it fails, so a dead connection cannot hang it. */
+private const val CLONE_TIMEOUT_SECONDS = 60

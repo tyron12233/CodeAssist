@@ -145,4 +145,52 @@ class FileAccountStoreTest {
         assertTrue(sameHost("github.com", "github.com"))
         assertFalse(sameHost("api.github.com", "gitlab.com"))
     }
+
+    @Test
+    fun `a URL that other parsers read as github_com still resolves to the host JGit dials`() {
+        // java.net.URI cannot parse this host, and the old fallback took the text after the '@'.
+        assertEquals("evil_host.com", hostOf("https://evil_host.com/@github.com:x/r.git"))
+        withTempDir("vcs-accounts") { dir ->
+            val store = FileAccountStore(dir)
+            store.add(account("octocat"), "gho_secret")
+            assertEquals(VcsCredentials.Anonymous, store.credentialsFor("https://evil_host.com/@github.com:x/r.git"))
+        }
+    }
+
+    @Test
+    fun `an account token is never offered over plain http`() {
+        withTempDir("vcs-accounts") { dir ->
+            val store = FileAccountStore(dir)
+            store.add(account("octocat"), "gho_secret")
+            assertEquals(VcsCredentials.Anonymous, store.credentialsFor("http://github.com/octocat/hello.git"))
+            assertTrue(store.credentialsFor("https://github.com/octocat/hello.git") is VcsCredentials.Token)
+        }
+    }
+
+    @Test
+    fun `with two accounts on one host the active one supplies the token`() {
+        withTempDir("vcs-accounts") { dir ->
+            val store = FileAccountStore(dir)
+            store.add(account("alice"), "alice_token")
+            val bob = store.add(account("bob"), "bob_token")
+            store.setActive(bob.id)
+
+            val creds = store.credentialsFor("https://github.com/bob/repo.git")
+            assertEquals(VcsCredentials.Token("bob_token", "bob"), creds)
+        }
+    }
+
+    @Test
+    fun `an unreadable accounts file fails loudly instead of being rewritten empty`() {
+        withTempDir("vcs-accounts") { dir ->
+            val store = FileAccountStore(dir)
+            store.add(account("octocat"), "gho_secret")
+            // A malformed \u escape is something Properties.load rejects.
+            Files.writeString(dir.resolve("accounts.properties"), "accounts=x\\uZZZZ\n")
+            val before = Files.readString(dir.resolve("accounts.properties"))
+
+            assertTrue(runCatching { store.add(account("other"), "t") }.isFailure)
+            assertEquals(before, Files.readString(dir.resolve("accounts.properties")))
+        }
+    }
 }

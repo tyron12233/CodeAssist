@@ -44,13 +44,20 @@ internal class Secrets(private val keyFile: Path) {
 
     private fun loadOrCreateKey(): ByteArray {
         if (Files.exists(keyFile)) {
-            val existing = runCatching { DECODER.decode(Files.readAllBytes(keyFile)) }.getOrNull()
+            // A read that fails with an I/O error propagates rather than falling through to a fresh key: that
+            // would make every stored token undecryptable for good, where the read may well succeed next time.
+            // Only a key whose contents are themselves damaged is replaced, since nothing can decrypt with it.
+            val bytes = Files.readAllBytes(keyFile)
+            val existing = runCatching { DECODER.decode(bytes) }.getOrNull()
             if (existing != null && existing.size == KEY_BYTES) return existing
+            Files.delete(keyFile)
         }
         val fresh = ByteArray(KEY_BYTES).also { RANDOM.nextBytes(it) }
         Files.createDirectories(keyFile.parent)
-        Files.write(keyFile, ENCODER.encode(fresh))
+        // Narrowed before the key is written, so it is never readable by anyone else even briefly.
+        Files.createFile(keyFile)
         restrictToOwner(keyFile)
+        Files.write(keyFile, ENCODER.encode(fresh))
         return fresh
     }
 

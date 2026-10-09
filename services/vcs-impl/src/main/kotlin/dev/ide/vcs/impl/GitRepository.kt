@@ -11,6 +11,7 @@ import dev.ide.vcs.VcsCredentials
 import dev.ide.vcs.VcsDiff
 import dev.ide.vcs.VcsException
 import dev.ide.vcs.VcsMergeResult
+import dev.ide.vcs.VcsMessage
 import dev.ide.vcs.VcsOperation
 import dev.ide.vcs.VcsProgress
 import dev.ide.vcs.VcsRemote
@@ -18,11 +19,15 @@ import dev.ide.vcs.VcsRepository
 import dev.ide.vcs.VcsStash
 import dev.ide.vcs.VcsStatus
 import dev.ide.vcs.VcsSyncResult
+import dev.ide.vcs.VcsText
 import dev.ide.vcs.VcsTracking
 import org.eclipse.jgit.api.CreateBranchCommand
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.MergeResult
+import org.eclipse.jgit.api.RebaseCommand
+import org.eclipse.jgit.api.RebaseResult
 import org.eclipse.jgit.api.ResetCommand
+import org.eclipse.jgit.api.errors.CheckoutConflictException
 import org.eclipse.jgit.lib.BranchTrackingStatus
 import org.eclipse.jgit.lib.ConfigConstants
 import org.eclipse.jgit.lib.Constants
@@ -32,9 +37,13 @@ import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.lib.RepositoryState
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.revwalk.filter.RevFilter
 import org.eclipse.jgit.transport.RefSpec
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.eclipse.jgit.transport.URIish
+import org.eclipse.jgit.treewalk.EmptyTreeIterator
+import org.eclipse.jgit.treewalk.TreeWalk
+import org.eclipse.jgit.treewalk.filter.TreeFilter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
@@ -52,7 +61,7 @@ internal class GitRepository(
 
     // ---- reading -------------------------------------------------------------------------------
 
-    override fun status(): VcsStatus = guard("Could not read the repository status") {
+    override fun status(): VcsStatus = guard(msg(VcsMessage.STATUS_FAILED)) {
         val status = git.status().call()
         val changes = buildList {
             status.added.forEach { add(VcsChange(it, VcsChangeKind.ADDED, VcsChangeArea.STAGED)) }
@@ -89,7 +98,7 @@ internal class GitRepository(
         )
     }
 
-    override fun branches(includeRemote: Boolean): List<VcsBranch> = guard("Could not list branches") {
+    override fun branches(includeRemote: Boolean): List<VcsBranch> = guard(msg(VcsMessage.LIST_BRANCHES_FAILED)) {
         val mode = if (includeRemote) {
             org.eclipse.jgit.api.ListBranchCommand.ListMode.ALL
         } else {
@@ -122,7 +131,7 @@ internal class GitRepository(
         return "$remote/${Repository.shortenRefName(merge)}"
     }
 
-    override fun remotes(): List<VcsRemote> = guard("Could not list remotes") {
+    override fun remotes(): List<VcsRemote> = guard(msg(VcsMessage.LIST_REMOTES_FAILED)) {
         git.remoteList().call().map { config ->
             val fetch = config.urIs.firstOrNull()?.toString().orEmpty()
             val push = config.pushURIs.firstOrNull()?.toString() ?: fetch
@@ -131,12 +140,12 @@ internal class GitRepository(
     }
 
     override fun log(limit: Int, skip: Int, path: String?, ref: String?): List<VcsCommit> =
-        guard("Could not read the commit history") {
+        guard(msg(VcsMessage.HISTORY_FAILED)) {
             if (repo.resolve(Constants.HEAD) == null) return@guard emptyList()
             val decorations = refDecorations()
             val command = git.log().setMaxCount(limit).setSkip(skip)
             if (!ref.isNullOrBlank()) {
-                val start = repo.resolve(ref) ?: throw VcsException("Unknown revision $ref")
+                val start = repo.resolve(ref) ?: throw VcsException(msg(VcsMessage.UNKNOWN_REVISION, ref))
                 command.add(start)
             }
             if (!path.isNullOrBlank()) command.addPath(path)
@@ -158,8 +167,8 @@ internal class GitRepository(
         return byCommit
     }
 
-    override fun commitDetail(id: String): VcsCommitDetail = guard("Could not read commit $id") {
-        val objectId = repo.resolve(id) ?: throw VcsException("Unknown commit $id")
+    override fun commitDetail(id: String): VcsCommitDetail = guard(msg(VcsMessage.READ_COMMIT_FAILED, id)) {
+        val objectId = repo.resolve(id) ?: throw VcsException(msg(VcsMessage.UNKNOWN_COMMIT, id))
         RevWalk(repo).use { walk ->
             val commit = walk.parseCommit(objectId)
             val parent = commit.parents.firstOrNull()?.let { walk.parseCommit(it.id) }
@@ -174,14 +183,14 @@ internal class GitRepository(
     }
 
     override fun diff(path: String, staged: Boolean, commitId: String?): VcsDiff =
-        guard("Could not diff $path") { GitDiffs.diff(repo, path, staged, commitId) }
+        guard(msg(VcsMessage.DIFF_FAILED, path)) { GitDiffs.diff(repo, path, staged, commitId) }
 
-    override fun show(path: String, ref: String): String? = guard("Could not read $path at $ref") {
+    override fun show(path: String, ref: String): String? = guard(msg(VcsMessage.SHOW_FAILED, path, ref)) {
         val id = repo.resolve("$ref:$path") ?: return@guard null
         runCatching { repo.open(id).bytes.toString(Charsets.UTF_8) }.getOrNull()
     }
 
-    override fun stashes(): List<VcsStash> = guard("Could not list stashes") {
+    override fun stashes(): List<VcsStash> = guard(msg(VcsMessage.LIST_STASHES_FAILED)) {
         git.stashList().call().mapIndexed { index, commit ->
             VcsStash(
                 index = index,
@@ -194,7 +203,7 @@ internal class GitRepository(
 
     // ---- working tree --------------------------------------------------------------------------
 
-    override fun stage(paths: List<String>) = guard("Could not stage the selected files") {
+    override fun stage(paths: List<String>) = guard(msg(VcsMessage.STAGE_FAILED)) {
         if (paths.isEmpty()) return@guard
         val (present, gone) = paths.partition { Files.exists(root.resolve(it)) }
         if (present.isNotEmpty()) {
@@ -210,7 +219,7 @@ internal class GitRepository(
         }
     }
 
-    override fun unstage(paths: List<String>) = guard("Could not unstage the selected files") {
+    override fun unstage(paths: List<String>) = guard(msg(VcsMessage.UNSTAGE_FAILED)) {
         if (paths.isEmpty()) return@guard
         if (repo.resolve(Constants.HEAD) == null) {
             // Nothing is committed yet, so there is no HEAD to reset against; drop the index entries instead.
@@ -224,9 +233,15 @@ internal class GitRepository(
         reset.call()
     }
 
-    override fun discard(paths: List<String>) = guard("Could not discard the selected changes") {
+    override fun discard(paths: List<String>) = guard(msg(VcsMessage.DISCARD_FAILED)) {
         if (paths.isEmpty()) return@guard
-        val untracked = git.status().call().untracked
+        val status = git.status().call()
+        // A checkout refuses an unmerged path, which would surface as JGit's bare "Unmerged path". Say what to
+        // do instead.
+        paths.firstOrNull { it in status.conflicting }?.let {
+            throw VcsException(msg(VcsMessage.DISCARD_CONFLICTED, it))
+        }
+        val untracked = status.untracked
         val (fresh, tracked) = paths.partition { it in untracked }
         if (tracked.isNotEmpty()) {
             val checkout = git.checkout()
@@ -239,26 +254,38 @@ internal class GitRepository(
         }
     }
 
-    override fun markResolved(paths: List<String>) = guard("Could not mark the conflicts resolved") {
+    override fun markResolved(paths: List<String>) = guard(msg(VcsMessage.RESOLVE_FAILED)) {
         if (paths.isEmpty()) return@guard
-        val add = git.add()
-        paths.forEach { add.addFilepattern(it) }
-        add.call()
+        // Deleting the file is a valid resolution (the usual one for a modify/delete conflict), but `add` keeps
+        // the conflict stages of a path that is gone, so a deleted path is recorded as a removal instead.
+        val (gone, present) = paths.partition { !Files.exists(root.resolve(it)) }
+        if (present.isNotEmpty()) {
+            val add = git.add()
+            present.forEach { add.addFilepattern(it) }
+            add.call()
+        }
+        if (gone.isNotEmpty()) {
+            val rm = git.rm().setCached(true)
+            gone.forEach { rm.addFilepattern(it) }
+            rm.call()
+        }
     }
 
     // ---- history -------------------------------------------------------------------------------
 
     override fun commit(message: String, author: VcsAuthor?, amend: Boolean): VcsCommit {
-        if (message.isBlank()) throw VcsException("Enter a commit message")
+        if (message.isBlank()) throw VcsException(msg(VcsMessage.COMMIT_MESSAGE_REQUIRED))
         val identity = author ?: identity()
-            ?: throw VcsException("Set your name and email in Settings before committing")
-        return guard("Could not create the commit") {
-            val commit = git.commit()
+            ?: throw VcsException(msg(VcsMessage.IDENTITY_REQUIRED))
+        return guard(msg(VcsMessage.COMMIT_FAILED)) {
+            val command = git.commit()
                 .setMessage(message)
                 .setAmend(amend)
-                .setAuthor(PersonIdent(identity.name, identity.email))
                 .setCommitter(PersonIdent(identity.name, identity.email))
-                .call()
+            // An amend keeps the original author, as `git commit --amend` does: JGit reuses the amended
+            // commit's author only when none is set, and the commit may well be someone else's.
+            if (!amend) command.setAuthor(PersonIdent(identity.name, identity.email))
+            val commit = command.call()
             commit.toVcsCommit(emptyMap())
         }
     }
@@ -267,7 +294,7 @@ internal class GitRepository(
 
     override fun createBranch(name: String, startPoint: String?, checkout: Boolean): VcsBranch {
         validateBranchName(name)
-        return guard("Could not create branch $name") {
+        return guard(msg(VcsMessage.CREATE_BRANCH_FAILED, name)) {
             val create = git.branchCreate().setName(name)
             if (!startPoint.isNullOrBlank()) create.setStartPoint(startPoint)
             val ref = create.call()
@@ -282,7 +309,7 @@ internal class GitRepository(
         }
     }
 
-    override fun checkout(name: String) = guard("Could not switch to $name") {
+    override fun checkout(name: String) = guard(msg(VcsMessage.CHECKOUT_FAILED, name)) {
         if (repo.exactRef(Constants.R_HEADS + name) != null) {
             git.checkout().setName(name).call()
             return@guard
@@ -305,13 +332,13 @@ internal class GitRepository(
             return@guard
         }
         // Anything else is a tag or commit id, which checks out with a detached HEAD.
-        repo.resolve(name) ?: throw VcsException("Unknown branch or revision $name")
+        repo.resolve(name) ?: throw VcsException(msg(VcsMessage.UNKNOWN_BRANCH_OR_REVISION, name))
         git.checkout().setName(name).call()
     }
 
-    override fun deleteBranch(name: String, force: Boolean) = guard("Could not delete branch $name") {
+    override fun deleteBranch(name: String, force: Boolean) = guard(msg(VcsMessage.DELETE_BRANCH_FAILED, name)) {
         if (name == runCatching { repo.branch }.getOrNull()) {
-            throw VcsException("$name is the current branch. Switch to another branch first.")
+            throw VcsException(msg(VcsMessage.DELETE_CURRENT_BRANCH, name))
         }
         git.branchDelete().setBranchNames(name).setForce(force).call()
         Unit
@@ -319,27 +346,86 @@ internal class GitRepository(
 
     override fun renameBranch(from: String, to: String) {
         validateBranchName(to)
-        guard("Could not rename $from to $to") {
+        guard(msg(VcsMessage.RENAME_BRANCH_FAILED, from, to)) {
             git.branchRename().setOldName(from).setNewName(to).call()
             Unit
         }
     }
 
-    override fun merge(name: String): VcsMergeResult = guard("Could not merge $name") {
-        val ref = repo.findRef(name) ?: throw VcsException("Unknown branch $name")
-        git.merge().include(ref).call().toVcsMergeResult()
+    override fun merge(name: String): VcsMergeResult = guard(msg(VcsMessage.MERGE_FAILED, name)) {
+        val ref = repo.findRef(name) ?: throw VcsException(msg(VcsMessage.UNKNOWN_BRANCH, name))
+        try {
+            git.merge().include(ref).call().toVcsMergeResult()
+        } catch (e: CheckoutConflictException) {
+            // A fast-forward blocked by local edits throws where a real merge would return CHECKOUT_CONFLICT.
+            VcsMergeResult(VcsMergeResult.Status.FAILED, emptyList(), blockedByLocalEdits(e.conflictingPaths.orEmpty()))
+        }
     }
 
-    override fun abortMerge() = guard("Could not abort the merge") {
-        // ResetCommand clears MERGE_HEAD and the merge message as part of a hard reset, which is what
-        // `git merge --abort` does once the tree is back at HEAD.
+    override fun abortMerge() = guard(msg(VcsMessage.ABORT_FAILED)) {
+        when (repo.repositoryState) {
+            RepositoryState.REBASING_MERGE, RepositoryState.REBASING_INTERACTIVE -> {
+                git.rebase().setOperation(RebaseCommand.Operation.ABORT).call()
+                return@guard
+            }
+
+            else -> Unit
+        }
+        // A hard reset clears MERGE_HEAD and the merge message, but it also reverts every file, and JGit lets a
+        // merge start while files it does not touch carry uncommitted edits. `git merge --abort` keeps those,
+        // so they are read out first and written back after the reset.
+        val kept = editsOutsideMerge()
         git.reset().setMode(ResetCommand.ResetType.HARD).setRef(Constants.HEAD).call()
-        Unit
+        for ((path, bytes) in kept) {
+            val file = root.resolve(path)
+            if (bytes == null) {
+                Files.deleteIfExists(file)
+            } else {
+                file.parent?.let { Files.createDirectories(it) }
+                Files.write(file, bytes)
+            }
+        }
+    }
+
+    /**
+     * The working-tree state of every changed file the in-progress merge never touched, as bytes, or null for a
+     * file the user deleted. A file counts as touched when the merged-in side changed it since the merge base,
+     * which covers both the cleanly merged files and the conflicted ones.
+     */
+    private fun editsOutsideMerge(): Map<String, ByteArray?> {
+        val heads = runCatching { repo.readMergeHeads() }.getOrNull().orEmpty()
+        val head = repo.resolve(Constants.HEAD) ?: return emptyMap()
+        if (heads.isEmpty()) return emptyMap()
+        val touched = mutableSetOf<String>()
+        RevWalk(repo).use { walk ->
+            for (id in heads) {
+                walk.reset()
+                walk.setRevFilter(RevFilter.MERGE_BASE)
+                val ours = walk.parseCommit(head)
+                val theirs = walk.parseCommit(id)
+                walk.markStart(ours)
+                walk.markStart(theirs)
+                val base = walk.next()
+                TreeWalk(repo).use { tree ->
+                    tree.isRecursive = true
+                    tree.filter = TreeFilter.ANY_DIFF
+                    if (base != null) tree.addTree(walk.parseCommit(base).tree) else tree.addTree(EmptyTreeIterator())
+                    tree.addTree(theirs.tree)
+                    while (tree.next()) touched += tree.pathString
+                }
+            }
+        }
+        val status = git.status().call()
+        val edited = status.modified + status.changed + status.added + status.missing + status.removed
+        return edited.filter { it !in touched && it !in status.conflicting }.associateWith { path ->
+            val file = root.resolve(path)
+            if (Files.isRegularFile(file)) Files.readAllBytes(file) else null
+        }
     }
 
     // ---- remotes -------------------------------------------------------------------------------
 
-    override fun addRemote(name: String, url: String) = guard("Could not add remote $name") {
+    override fun addRemote(name: String, url: String) = guard(msg(VcsMessage.ADD_REMOTE_FAILED, name)) {
         val uri = URIish(url)
         if (git.remoteList().call().any { it.name == name }) {
             git.remoteSetUrl().setRemoteName(name).setRemoteUri(uri).call()
@@ -349,7 +435,7 @@ internal class GitRepository(
         Unit
     }
 
-    override fun removeRemote(name: String) = guard("Could not remove remote $name") {
+    override fun removeRemote(name: String) = guard(msg(VcsMessage.REMOVE_REMOTE_FAILED, name)) {
         git.remoteRemove().setRemoteName(name).call()
         Unit
     }
@@ -357,7 +443,7 @@ internal class GitRepository(
     // ---- stash ---------------------------------------------------------------------------------
 
     override fun stashPush(message: String, includeUntracked: Boolean): Boolean =
-        guard("Could not stash the changes") {
+        guard(msg(VcsMessage.STASH_FAILED)) {
             val create = git.stashCreate().setIncludeUntracked(includeUntracked)
             if (message.isNotBlank()) create.setWorkingDirectoryMessage(message)
             val stashed = create.call() ?: return@guard false
@@ -367,13 +453,13 @@ internal class GitRepository(
             stashed.name.isNotEmpty()
         }
 
-    override fun stashApply(index: Int, drop: Boolean) = guard("Could not apply the stash") {
+    override fun stashApply(index: Int, drop: Boolean) = guard(msg(VcsMessage.STASH_APPLY_FAILED)) {
         git.stashApply().setStashRef("stash@{$index}").call()
         if (drop) git.stashDrop().setStashRef(index).call()
         Unit
     }
 
-    override fun stashDrop(index: Int) = guard("Could not drop the stash") {
+    override fun stashDrop(index: Int) = guard(msg(VcsMessage.STASH_DROP_FAILED)) {
         git.stashDrop().setStashRef(index).call()
         Unit
     }
@@ -387,29 +473,40 @@ internal class GitRepository(
                 .setCredentialsProvider(auth.toJGit())
                 .setProgressMonitor(GitProgressMonitor(progress))
                 .setRemoveDeletedRefs(true)
+                .setTimeout(NETWORK_TIMEOUT_SECONDS)
                 .call()
             val updates = result.trackingRefUpdates.map { "${Repository.shortenRefName(it.localName)}: ${it.result}" }
             VcsSyncResult(ok = true, message = result.messages.trim(), updates = updates)
         } catch (e: Throwable) {
-            throw e.asVcsFailure("Could not fetch from $remote")
+            throw e.asVcsFailure(msg(VcsMessage.FETCH_FAILED, remote))
         }
     }
 
     override fun pull(remote: String, auth: VcsCredentials?, progress: VcsProgress): VcsSyncResult {
+        // A branch that tracks nothing has no `branch.<name>.merge` entry, and JGit refuses to pull without one.
+        // Pull the same-named branch instead and record it as the upstream, as a first push would.
+        val untracked = runCatching { repo.branch }.getOrNull()?.takeIf { upstreamOf(it) == null }
         return try {
-            val result = git.pull()
+            val command = git.pull()
                 .setRemote(remote)
                 .setCredentialsProvider(auth.toJGit())
                 .setProgressMonitor(GitProgressMonitor(progress))
-                .call()
-            val merge = result.mergeResult?.toVcsMergeResult()
+            command.setTimeout(NETWORK_TIMEOUT_SECONDS)
+            if (untracked != null) command.setRemoteBranchName(untracked)
+            val result = command.call()
+            if (untracked != null && result.isSuccessful) recordUpstream(untracked, remote)
+            // A repository set to pull with rebase reports through rebaseResult and leaves mergeResult null.
+            val merge = result.mergeResult?.toVcsMergeResult() ?: result.rebaseResult?.toVcsMergeResult()
             VcsSyncResult(
                 ok = result.isSuccessful,
-                message = merge?.message ?: result.fetchResult?.messages?.trim().orEmpty(),
+                text = merge?.text ?: VcsText.literal(result.fetchResult?.messages?.trim().orEmpty()),
                 merge = merge,
             )
+        } catch (e: CheckoutConflictException) {
+            val message = blockedByLocalEdits(e.conflictingPaths.orEmpty())
+            VcsSyncResult(ok = false, text = message, merge = VcsMergeResult(VcsMergeResult.Status.FAILED, emptyList(), message))
         } catch (e: Throwable) {
-            throw e.asVcsFailure("Could not pull from $remote")
+            throw e.asVcsFailure(msg(VcsMessage.PULL_FAILED, remote))
         }
     }
 
@@ -421,8 +518,14 @@ internal class GitRepository(
         auth: VcsCredentials?,
         progress: VcsProgress,
     ): VcsSyncResult {
-        val target = branch ?: runCatching { repo.branch }.getOrNull()
-            ?: throw VcsException("HEAD is detached, so there is no branch to push")
+        // `repo.branch` is the commit id on a detached HEAD, so the full name is what tells the two apart.
+        val target = branch ?: runCatching { repo.fullBranch }.getOrNull()
+            ?.takeIf { it.startsWith(Constants.R_HEADS) }
+            ?.removePrefix(Constants.R_HEADS)
+            ?: throw VcsException(msg(VcsMessage.PUSH_DETACHED))
+        if (repo.exactRef(Constants.R_HEADS + target)?.objectId == null) {
+            throw VcsException(msg(VcsMessage.PUSH_UNBORN, target))
+        }
         return try {
             val results = git.push()
                 .setRemote(remote)
@@ -430,10 +533,11 @@ internal class GitRepository(
                 .setForce(force)
                 .setCredentialsProvider(auth.toJGit())
                 .setProgressMonitor(GitProgressMonitor(progress))
+                .setTimeout(NETWORK_TIMEOUT_SECONDS)
                 .call()
 
             val updates = mutableListOf<String>()
-            var ok = true
+            val problems = mutableListOf<VcsText>()
             for (result in results) {
                 for (update in result.remoteUpdates) {
                     val name = Repository.shortenRefName(update.remoteName)
@@ -441,18 +545,20 @@ internal class GitRepository(
                     if (update.status != RemoteRefUpdate.Status.OK &&
                         update.status != RemoteRefUpdate.Status.UP_TO_DATE
                     ) {
-                        ok = false
+                        problems += update.explain(name)
                     }
                 }
             }
+            val ok = problems.isEmpty()
             if (ok && setUpstream && upstreamOf(target) == null) recordUpstream(target, remote)
             VcsSyncResult(
                 ok = ok,
-                message = if (ok) "" else updates.joinToString("\n"),
+                // One ref is pushed at a time, so there is at most one problem to report; the rest is in updates.
+                text = problems.firstOrNull() ?: VcsText.literal(""),
                 updates = updates,
             )
         } catch (e: Throwable) {
-            throw e.asVcsFailure("Could not push to $remote")
+            throw e.asVcsFailure(msg(VcsMessage.PUSH_FAILED, remote))
         }
     }
 
@@ -478,14 +584,14 @@ internal class GitRepository(
         return VcsAuthor(name.orEmpty().ifBlank { email.orEmpty() }, email.orEmpty())
     }
 
-    override fun setIdentity(author: VcsAuthor) = guard("Could not save the commit identity") {
+    override fun setIdentity(author: VcsAuthor) = guard(msg(VcsMessage.IDENTITY_SAVE_FAILED)) {
         val config = repo.config
         config.setString(ConfigConstants.CONFIG_USER_SECTION, null, ConfigConstants.CONFIG_KEY_NAME, author.name)
         config.setString(ConfigConstants.CONFIG_USER_SECTION, null, ConfigConstants.CONFIG_KEY_EMAIL, author.email)
         config.save()
     }
 
-    override fun ignore(patterns: List<String>) = guard("Could not update .gitignore") {
+    override fun ignore(patterns: List<String>) = guard(msg(VcsMessage.IGNORE_FAILED)) {
         if (patterns.isEmpty()) return@guard
         val file = root.resolve(".gitignore")
         val existing = if (Files.exists(file)) Files.readAllLines(file).map { it.trim() }.toSet() else emptySet()
@@ -510,6 +616,9 @@ internal class GitRepository(
 
     override fun close() {
         runCatching { git.close() }
+        // A Git built around an existing Repository (how GitProvider.open makes one) does not close it, which
+        // would leak its pack files and handles on every project switch. Closing twice is harmless.
+        runCatching { repo.close() }
     }
 
     // ---- mapping -------------------------------------------------------------------------------
@@ -546,26 +655,73 @@ internal class GitRepository(
             MergeResult.MergeStatus.MERGED_SQUASHED_NOT_COMMITTED,
             -> VcsMergeResult.Status.MERGED
 
-            MergeResult.MergeStatus.CONFLICTING,
-            MergeResult.MergeStatus.CHECKOUT_CONFLICT,
-            -> VcsMergeResult.Status.CONFLICTS
+            MergeResult.MergeStatus.CONFLICTING -> VcsMergeResult.Status.CONFLICTS
 
             MergeResult.MergeStatus.ABORTED -> VcsMergeResult.Status.ABORTED
             else -> VcsMergeResult.Status.FAILED
         }
-        val conflicts = conflicts?.keys?.toList()
-            ?: checkoutConflicts?.toList()
-            ?: emptyList()
-        val message = when (status) {
-            VcsMergeResult.Status.CONFLICTS ->
-                "Merge left ${conflicts.size} file(s) conflicted. Resolve them, then commit."
-
-            VcsMergeResult.Status.ALREADY_UP_TO_DATE -> "Already up to date"
-            VcsMergeResult.Status.FAST_FORWARD -> "Fast-forwarded"
-            VcsMergeResult.Status.MERGED -> "Merged"
-            else -> mergeStatus.toString()
+        val conflicts = if (status == VcsMergeResult.Status.CONFLICTS) conflicts?.keys?.toList().orEmpty() else emptyList()
+        // CHECKOUT_CONFLICT and FAILED both mean the merge never started because uncommitted edits sit on files it
+        // would change. The tree is untouched, so these are not conflicts to resolve but edits to commit or stash.
+        val blocking = (checkoutConflicts.orEmpty() + failingPaths?.keys.orEmpty()).distinct()
+        val message = when {
+            status == VcsMergeResult.Status.CONFLICTS -> msg(VcsMessage.MERGE_CONFLICTS, conflicts.size)
+            blocking.isNotEmpty() -> blockedByLocalEdits(blocking)
+            status == VcsMergeResult.Status.ALREADY_UP_TO_DATE -> msg(VcsMessage.ALREADY_UP_TO_DATE)
+            status == VcsMergeResult.Status.FAST_FORWARD -> msg(VcsMessage.FAST_FORWARDED)
+            status == VcsMergeResult.Status.MERGED -> msg(VcsMessage.MERGED)
+            else -> msg(VcsMessage.MERGE_INCOMPLETE, mergeStatus)
         }
         return VcsMergeResult(status, conflicts, message)
+    }
+
+    private fun RebaseResult.toVcsMergeResult(): VcsMergeResult = when (status) {
+        RebaseResult.Status.OK,
+        RebaseResult.Status.FAST_FORWARD,
+        RebaseResult.Status.UP_TO_DATE,
+        RebaseResult.Status.NOTHING_TO_COMMIT,
+        -> VcsMergeResult(
+            if (status == RebaseResult.Status.UP_TO_DATE) {
+                VcsMergeResult.Status.ALREADY_UP_TO_DATE
+            } else {
+                VcsMergeResult.Status.MERGED
+            },
+            emptyList(),
+            if (status == RebaseResult.Status.UP_TO_DATE) msg(VcsMessage.ALREADY_UP_TO_DATE) else msg(VcsMessage.REBASED),
+        )
+
+        RebaseResult.Status.STOPPED, RebaseResult.Status.EDIT -> {
+            val conflicted = conflicts.orEmpty()
+            VcsMergeResult(
+                VcsMergeResult.Status.CONFLICTS,
+                conflicted,
+                msg(VcsMessage.REBASE_STOPPED),
+            )
+        }
+
+        RebaseResult.Status.CONFLICTS, RebaseResult.Status.UNCOMMITTED_CHANGES ->
+            VcsMergeResult(VcsMergeResult.Status.FAILED, emptyList(), blockedByLocalEdits(conflicts.orEmpty() + uncommittedChanges.orEmpty()))
+
+        else -> VcsMergeResult(VcsMergeResult.Status.FAILED, emptyList(), msg(VcsMessage.PULL_INCOMPLETE, status))
+    }
+
+    private fun blockedByLocalEdits(paths: List<String>): VcsText {
+        val shown = paths.distinct()
+        val names: Any = when {
+            shown.isEmpty() -> msg(VcsMessage.SOME_FILES)
+            shown.size > 3 -> msg(VcsMessage.AND_MORE, shown.take(3).joinToString(", "), shown.size - 3)
+            else -> shown.joinToString(", ")
+        }
+        return msg(VcsMessage.BLOCKED_BY_LOCAL_EDITS, names)
+    }
+
+    /** Why the remote refused [this] ref, in words a user can act on. */
+    private fun RemoteRefUpdate.explain(name: String): VcsText = when (status) {
+        RemoteRefUpdate.Status.REJECTED_NONFASTFORWARD, RemoteRefUpdate.Status.REJECTED_REMOTE_CHANGED ->
+            msg(VcsMessage.PUSH_BEHIND, name)
+
+        RemoteRefUpdate.Status.REJECTED_NODELETE -> msg(VcsMessage.PUSH_NO_DELETE, name)
+        else -> msg(VcsMessage.WITH_REASON, name, message?.takeIf { it.isNotBlank() } ?: status.toString())
     }
 
     private fun RepositoryState.toOperation(): VcsOperation = when (this) {
@@ -589,23 +745,27 @@ internal class GitRepository(
      * Catches [Throwable] for the reason [GitProvider] does: JGit is a desktop-JVM library, so a missing
      * runtime method surfaces as a [LinkageError], which is not an [Exception].
      */
-    private inline fun <T> guard(what: String, body: () -> T): T = try {
+    private inline fun <T> guard(what: VcsText, body: () -> T): T = try {
         body()
     } catch (e: VcsException) {
         throw e
     } catch (e: Throwable) {
-        throw e.asVcsFailure(what)
+        throw e.asVcsFailure(what, network = false)
     }
 
     private fun validateBranchName(name: String) {
         val trimmed = name.trim()
-        if (trimmed.isEmpty()) throw VcsException("Enter a branch name")
+        if (trimmed.isEmpty()) throw VcsException(msg(VcsMessage.BRANCH_NAME_REQUIRED))
         if (!Repository.isValidRefName(Constants.R_HEADS + trimmed)) {
-            throw VcsException("\"$trimmed\" is not a valid branch name")
+            throw VcsException(msg(VcsMessage.BRANCH_NAME_INVALID, trimmed))
         }
     }
 
     private companion object {
         const val SHORT_ID_LENGTH = 7
+
+        /** Seconds a fetch, pull, or push may sit without the server answering before it fails. Without it a
+         *  dead mobile connection blocks forever, and the host serializes every Git call behind that one. */
+        const val NETWORK_TIMEOUT_SECONDS = 60
     }
 }

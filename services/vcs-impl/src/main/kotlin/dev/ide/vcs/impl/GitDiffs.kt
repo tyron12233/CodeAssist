@@ -5,6 +5,7 @@ import dev.ide.vcs.VcsChangeArea
 import dev.ide.vcs.VcsChangeKind
 import dev.ide.vcs.VcsDiff
 import dev.ide.vcs.VcsException
+import dev.ide.vcs.VcsMessage
 import org.eclipse.jgit.diff.DiffEntry
 import org.eclipse.jgit.diff.DiffFormatter
 import org.eclipse.jgit.lib.Constants
@@ -102,7 +103,7 @@ internal object GitDiffs {
         commitId: String?,
     ): Pair<AbstractTreeIterator, AbstractTreeIterator> {
         if (commitId != null) {
-            val id = repo.resolve(commitId) ?: throw VcsException("Unknown commit $commitId")
+            val id = repo.resolve(commitId) ?: throw VcsException(msg(VcsMessage.UNKNOWN_COMMIT, commitId))
             RevWalk(repo).use { walk ->
                 val commit = walk.parseCommit(id)
                 val parent = commit.parents.firstOrNull()?.let { walk.parseCommit(it.id) }

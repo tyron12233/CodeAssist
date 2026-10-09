@@ -291,6 +291,115 @@ class GitRepositoryTest {
     }
 
     @Test
+    fun `aborting a merge keeps uncommitted edits to files the merge never touched`() {
+        withTempDir("vcs") { dir ->
+            repo(dir, dir.resolve("config")).use { repository ->
+                write(repository.root, "a.txt", "base\n")
+                write(repository.root, "c.txt", "base\n")
+                repository.stage(listOf("a.txt", "c.txt"))
+                repository.commit("base")
+
+                repository.createBranch("feature", checkout = true)
+                write(repository.root, "a.txt", "feature\n")
+                repository.stage(listOf("a.txt"))
+                repository.commit("feature edit")
+
+                repository.checkout("main")
+                write(repository.root, "a.txt", "main\n")
+                repository.stage(listOf("a.txt"))
+                repository.commit("main edit")
+
+                write(repository.root, "c.txt", "my unsaved work\n")
+                assertEquals(VcsMergeResult.Status.CONFLICTS, repository.merge("feature").status)
+
+                repository.abortMerge()
+                assertEquals("main\n", Files.readString(repository.root.resolve("a.txt")))
+                assertEquals("my unsaved work\n", Files.readString(repository.root.resolve("c.txt")))
+                assertEquals(dev.ide.vcs.VcsOperation.NONE, repository.status().operation)
+            }
+        }
+    }
+
+    @Test
+    fun `local edits that block a merge are named rather than reported as a bare failure`() {
+        withTempDir("vcs") { dir ->
+            repo(dir, dir.resolve("config")).use { repository ->
+                write(repository.root, "a.txt", "base\n")
+                repository.stage(listOf("a.txt"))
+                repository.commit("base")
+                repository.createBranch("feature", checkout = true)
+                write(repository.root, "a.txt", "feature\n")
+                repository.stage(listOf("a.txt"))
+                repository.commit("feature edit")
+                repository.checkout("main")
+
+                write(repository.root, "a.txt", "uncommitted\n")
+                val result = repository.merge("feature")
+                assertTrue(result.conflicts.isEmpty(), "nothing was merged, so nothing is conflicted")
+                assertContains(result.message, "a.txt")
+                assertContains(result.message, "Commit or stash")
+            }
+        }
+    }
+
+    @Test
+    fun `deleting a file resolves a modify-delete conflict`() {
+        withTempDir("vcs") { dir ->
+            repo(dir, dir.resolve("config")).use { repository ->
+                write(repository.root, "a.txt", "base\n")
+                repository.stage(listOf("a.txt"))
+                repository.commit("base")
+                repository.createBranch("feature", checkout = true)
+                Files.delete(repository.root.resolve("a.txt"))
+                repository.stage(listOf("a.txt"))
+                repository.commit("delete")
+                repository.checkout("main")
+                write(repository.root, "a.txt", "changed\n")
+                repository.stage(listOf("a.txt"))
+                repository.commit("modify")
+
+                assertEquals(VcsMergeResult.Status.CONFLICTS, repository.merge("feature").status)
+                Files.deleteIfExists(repository.root.resolve("a.txt"))
+                repository.markResolved(listOf("a.txt"))
+                assertTrue(repository.status().conflicted.isEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun `amending keeps the original author`() {
+        withTempDir("vcs") { dir ->
+            repo(dir, dir.resolve("config")).use { repository ->
+                write(repository.root, "a.txt", "one\n")
+                repository.stage(listOf("a.txt"))
+                repository.commit("first", VcsAuthor("Original Author", "orig@example.com"))
+
+                repository.commit("first, reworded", VcsAuthor("Someone Else", "else@example.com"), amend = true)
+                val head = repository.log(1, 0, null).single()
+                assertEquals("Original Author", head.author.name)
+            }
+        }
+    }
+
+    @Test
+    fun `pushing from a detached HEAD says so`() {
+        withTempDir("vcs") { dir ->
+            val bare = bareRemote(dir)
+            repo(dir, dir.resolve("config")).use { repository ->
+                write(repository.root, "a.txt", "one\n")
+                repository.stage(listOf("a.txt"))
+                val commit = repository.commit("first")
+                repository.addRemote("origin", bare.toUri().toString())
+                repository.checkout(commit.id)
+
+                val failure = runCatching { repository.push() }.exceptionOrNull()
+                assertTrue(failure is VcsException)
+                assertContains(failure.message.orEmpty(), "detached")
+            }
+        }
+    }
+
+    @Test
     fun `a fast-forward merge advances the branch`() {
         withTempDir("vcs") { dir ->
             repo(dir, dir.resolve("config")).use { repository ->
@@ -364,6 +473,54 @@ class GitRepositoryTest {
                 assertTrue(repository.remotes().isEmpty())
             }
         }
+    }
+
+    @Test
+    fun `the first push to a hand-added remote records the upstream`() {
+        withTempDir("vcs") { dir ->
+            val bare = bareRemote(dir)
+            repo(dir, dir.resolve("config")).use { repository ->
+                write(repository.root, "README.md", "hello\n")
+                repository.stage(listOf("README.md"))
+                repository.commit("first")
+                repository.addRemote("origin", bare.toUri().toString())
+                assertNull(repository.status().tracking.upstream, "adding a remote does not make the branch track it")
+
+                assertTrue(repository.push().ok)
+                val tracking = repository.status().tracking
+                assertEquals("origin/main", tracking.upstream)
+                assertEquals(0, tracking.ahead)
+            }
+        }
+    }
+
+    @Test
+    fun `pulling into a branch that tracks nothing takes the same-named branch and tracks it`() {
+        withTempDir("vcs") { dir ->
+            val bare = bareRemote(dir)
+            GitProvider(dir.resolve("config")).init(dir.resolve("seed")).use { seed ->
+                seed.setIdentity(author)
+                write(seed.root, "README.md", "from the remote\n")
+                seed.stage(listOf("README.md"))
+                seed.commit("seed")
+                seed.addRemote("origin", bare.toUri().toString())
+                assertTrue(seed.push().ok)
+            }
+            repo(dir, dir.resolve("config")).use { repository ->
+                repository.addRemote("origin", bare.toUri().toString())
+
+                assertTrue(repository.pull().ok)
+                assertEquals("from the remote\n", Files.readString(repository.root.resolve("README.md")))
+                assertEquals("origin/main", repository.status().tracking.upstream)
+            }
+        }
+    }
+
+    /** An empty bare repository under [dir] to stand in for a hosted remote. */
+    private fun bareRemote(dir: Path): Path {
+        val bare = dir.resolve("remote.git")
+        org.eclipse.jgit.api.Git.init().setBare(true).setInitialBranch("main").setDirectory(bare.toFile()).call().close()
+        return bare
     }
 
     @Test

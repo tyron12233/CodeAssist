@@ -1,5 +1,6 @@
 package dev.ide.vcs.impl
 
+import dev.ide.vcs.VcsAuthException
 import dev.ide.vcs.VcsException
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -115,9 +116,31 @@ class GitHubClientTest {
     @Test
     fun `a network failure keeps its own message rather than the git prefix`() {
         val failure = IOException("transport", UnknownHostException("no address"))
-        val wrapped = failure.asVcsFailure("Could not push to origin", host = "github.com")
+        val wrapped = failure.asVcsFailure(dev.ide.vcs.VcsText.literal("Could not push to origin"), host = "github.com")
         assertTrue(wrapped is VcsException)
         assertContains(wrapped.message.orEmpty(), "internet connection")
+    }
+
+    @Test
+    fun `a local permission error is not mistaken for a sign-in problem`() {
+        val local = IOException("open failed: EACCES (Permission denied)")
+        assertFalse(local.asVcsFailure(dev.ide.vcs.VcsText.literal("Could not stage"), network = false) is VcsAuthException)
+        assertTrue(local.asVcsFailure(dev.ide.vcs.VcsText.literal("Could not push to origin")) is VcsAuthException)
+    }
+
+    @Test
+    fun `a 403 on push asks for sign-in, but 403 inside an id does not`() {
+        val forbidden = IOException("https://github.com/o/r.git: git-receive-pack not permitted on 'https://github.com/o/r.git/'")
+        assertTrue(forbidden.asVcsFailure(dev.ide.vcs.VcsText.literal("Could not push to origin")) is VcsAuthException)
+        val unrelated = IOException("missing object 4031ab9c in pack")
+        assertFalse(unrelated.asVcsFailure(dev.ide.vcs.VcsText.literal("Could not fetch from origin")) is VcsAuthException)
+    }
+
+    @Test
+    fun `a token embedded in a clone URL is redacted`() {
+        assertEquals("https://github.com/o/r.git", redactUrl("https://ghp_secret@github.com/o/r.git"))
+        assertEquals("https://github.com/o/r.git", redactUrl("https://user:pass@github.com/o/r.git"))
+        assertEquals("git@github.com:o/r.git", redactUrl("git@github.com:o/r.git"))
     }
 
     /** Run [block] expecting a [VcsException], returning its message. */

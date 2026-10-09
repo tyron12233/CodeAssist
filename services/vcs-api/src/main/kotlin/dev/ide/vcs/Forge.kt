@@ -39,6 +39,9 @@ interface ForgeClient {
     /** Create a repository under the token owner's account. */
     fun createRepository(token: String, name: String, description: String = "", private: Boolean = true): ForgeRepo
 
+    /** `owner/name` as the forge describes it, chiefly for its [ForgeRepo.defaultBranch]; null when unsupported. */
+    fun repository(token: String, owner: String, name: String): ForgeRepo? = null
+
     /** Open pull requests for `owner/name`, newest first. */
     fun pullRequests(token: String, owner: String, name: String): List<ForgePullRequest>
 
@@ -111,5 +114,13 @@ sealed interface DeviceAuthPoll {
     data class Authorized(val token: String) : DeviceAuthPoll
 
     /** Ended without a token: the code expired, or the user declined. */
-    data class Failed(val message: String) : DeviceAuthPoll
+    data class Failed(val message: String) : DeviceAuthPoll {
+        /** [message] in localizable form, as on [VcsException.text]. */
+        var text: VcsText = VcsText.literal(message)
+            private set
+
+        constructor(text: VcsText) : this(text.english) {
+            this.text = text
+        }
+    }
 }

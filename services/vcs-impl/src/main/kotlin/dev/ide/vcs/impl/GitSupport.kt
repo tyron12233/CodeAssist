@@ -3,7 +3,9 @@ package dev.ide.vcs.impl
 import dev.ide.vcs.VcsAuthException
 import dev.ide.vcs.VcsCredentials
 import dev.ide.vcs.VcsException
+import dev.ide.vcs.VcsMessage
 import dev.ide.vcs.VcsProgress
+import dev.ide.vcs.VcsText
 import org.eclipse.jgit.lib.EmptyProgressMonitor
 import org.eclipse.jgit.transport.CredentialsProvider
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
@@ -59,40 +61,47 @@ internal fun Throwable.reason(): String {
  * Wrap a JGit failure in the right neutral exception. An authentication refusal becomes [VcsAuthException] so
  * the UI can offer sign-in, and a network failure becomes something the user can act on; anything else keeps
  * the transport's own words behind [prefix]. [host] names the server in a network message when known.
+ *
+ * Only a [network] call can be an authentication failure. A local one that reads "Permission denied" is the
+ * file system refusing a write (Android's EACCES on shared storage), and offering sign-in for it sends the user
+ * after the wrong problem.
  */
-internal fun Throwable.asVcsFailure(prefix: String, host: String? = null): Exception {
+internal fun Throwable.asVcsFailure(prefix: VcsText, host: String? = null, network: Boolean = true): Exception {
     val reason = reason()
-    if (looksLikeAuthFailure(reason)) {
-        return VcsAuthException("$prefix: authentication failed. Sign in or check the saved credentials.", this)
+    if (network && looksLikeAuthFailure(reason)) {
+        return VcsAuthException(msg(VcsMessage.AUTH_FAILED, prefix), this)
     }
-    networkFailureMessage(this, host)?.let { return VcsException(it, this) }
-    return VcsException("$prefix: $reason", this)
+    networkFailureText(this, host)?.let { return VcsException(it, this) }
+    // The reason is JGit's or the platform's own wording, so it is carried as given rather than translated.
+    return VcsException(msg(VcsMessage.WITH_REASON, prefix, VcsText.literal(reason)), this)
 }
+
+/** Shorthand for [VcsText.of], which nearly every engine message goes through. */
+internal fun msg(message: VcsMessage, vararg args: Any): VcsText = VcsText.of(message, *args)
 
 /**
  * An actionable message for a failure that is about the network rather than about Git or the forge, or null
  * when it is something else. Android reports a DNS miss as a raw `android_getaddrinfo failed: EAI_NODATA`,
  * which tells a user nothing and hides the one thing they can do about it.
  */
-internal fun networkFailureMessage(failure: Throwable, host: String? = null): String? {
-    val server = host?.takeIf { it.isNotBlank() } ?: "the server"
+internal fun networkFailureText(failure: Throwable, host: String? = null): VcsText? {
+    val server: Any = host?.takeIf { it.isNotBlank() } ?: msg(VcsMessage.THE_SERVER)
     var cause: Throwable? = failure
     while (cause != null) {
         when (cause) {
-            is UnknownHostException ->
-                return "Could not reach $server. Check your internet connection, then try again."
-
-            is SocketTimeoutException -> return "$server did not respond in time. Try again."
-
-            is ConnectException ->
-                return "Could not connect to $server. Check your internet connection, then try again."
-
-            is SSLException -> return "The secure connection to $server could not be established."
+            is UnknownHostException -> return msg(VcsMessage.NET_UNREACHABLE, server)
+            is SocketTimeoutException -> return msg(VcsMessage.NET_TIMEOUT, server)
+            is ConnectException -> return msg(VcsMessage.NET_CONNECT, server)
+            is SSLException -> return msg(VcsMessage.NET_TLS, server)
         }
         cause = cause.cause
     }
     return null
 }
+
+/** [networkFailureText] in English. */
+internal fun networkFailureMessage(failure: Throwable, host: String? = null): String? =
+    networkFailureText(failure, host)?.english
 
 private val AUTH_MARKERS = listOf(
     "not authorized",
@@ -101,13 +110,24 @@ private val AUTH_MARKERS = listOf(
     "no credentialsprovider",
     "invalid credentials",
     "unauthorized",
-    "401",
-    "403",
+    "forbidden",
+    // How JGit words an HTTP 403 on push: "git-receive-pack not permitted on '<url>'", which is what GitHub
+    // answers for a token without write access to the repository.
+    "not permitted",
     "permission denied",
     "auth fail",
 )
 
+/** A bare 401 or 403 status, not those digits inside an object id, a byte count, or a file name. */
+private val AUTH_STATUS = Regex("""(?<![\w.])40[13](?![\w.])""")
+
 private fun looksLikeAuthFailure(reason: String): Boolean {
     val lower = reason.lowercase()
-    return AUTH_MARKERS.any { it in lower }
+    return AUTH_MARKERS.any { it in lower } || AUTH_STATUS.containsMatchIn(lower)
 }
+
+/**
+ * [url] with any `user:secret@` part removed, for messages and records. People paste clone URLs with a token
+ * embedded (`https://ghp_x@github.com/...`), and that must not end up in an error, a log, or project metadata.
+ */
+fun redactUrl(url: String): String = url.replace(Regex("""(://)[^/@\s]+@"""), "\$1")

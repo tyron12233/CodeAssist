@@ -3,9 +3,10 @@ package dev.ide.vcs.impl
 import dev.ide.vcs.AccountStore
 import dev.ide.vcs.VcsAccount
 import dev.ide.vcs.VcsCredentials
-import java.net.URI
+import org.eclipse.jgit.transport.URIish
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.util.Properties
 
 /**
@@ -83,7 +84,16 @@ class FileAccountStore(private val dir: Path) : AccountStore {
     override fun credentialsFor(remoteUrl: String): VcsCredentials {
         val host = hostOf(remoteUrl) ?: return VcsCredentials.Anonymous
         synchronized(lock) {
-            val match = accounts().firstOrNull { sameHost(it.host, host) }
+            // An account token only ever travels over HTTPS: over plain http anyone on the network path can
+            // answer with a 401 and read it, and an SSH server rejects it anyway. With several accounts on one
+            // host the active one wins, the same one the REST calls use, so a publish creates and pushes as
+            // the same user.
+            val match = if (isHttps(remoteUrl)) {
+                val candidates = accounts().filter { sameHost(it.host, host) }
+                candidates.firstOrNull { it.id == activeAccount()?.id } ?: candidates.firstOrNull()
+            } else {
+                null
+            }
             if (match != null) {
                 val token = token(match.id)
                 if (!token.isNullOrBlank()) return VcsCredentials.Token(token, match.login)
@@ -119,18 +129,31 @@ class FileAccountStore(private val dir: Path) : AccountStore {
 
     // ---- storage -------------------------------------------------------------------------------
 
+    /**
+     * Load [file]. A file that exists but cannot be read throws rather than reading as empty: every mutation is
+     * read-modify-write, so an empty read here would be written back and erase every account.
+     */
     private fun read(file: Path): Properties {
         val props = Properties()
         if (Files.exists(file)) {
-            runCatching { Files.newInputStream(file).use { props.load(it) } }
+            Files.newInputStream(file).use { props.load(it) }
         }
         return props
     }
 
+    /** Replace [file] atomically, so a crash mid-write leaves the old contents rather than a truncated file. */
     private fun write(file: Path, props: Properties) {
         Files.createDirectories(dir)
-        Files.newOutputStream(file).use { props.store(it, null) }
-        restrictToOwner(file)
+        val temp = file.resolveSibling("${file.fileName}.tmp")
+        Files.deleteIfExists(temp)
+        Files.createFile(temp)
+        restrictToOwner(temp)
+        Files.newOutputStream(temp).use { props.store(it, null) }
+        try {
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING)
+        }
     }
 
     private fun Properties.readAccount(id: String): VcsAccount? {
@@ -168,21 +191,22 @@ class FileAccountStore(private val dir: Path) : AccountStore {
 }
 
 /**
- * The host a Git remote points at. Handles both URL forms Git accepts: `https://host/owner/repo.git` and the
+ * The host a Git remote points at, for both URL forms Git accepts: `https://host/owner/repo.git` and the
  * SCP-like `git@host:owner/repo.git`.
+ *
+ * Parsed with [URIish], the parser the transport itself connects with. Any other parser can disagree with it
+ * on a crafted URL (`https://evil_host/@github.com:x/r.git`), and then a token picked for the host this
+ * function names would be sent to the host JGit actually dials.
  */
-internal fun hostOf(remoteUrl: String): String? {
+fun hostOf(remoteUrl: String): String? {
     val url = remoteUrl.trim()
     if (url.isEmpty()) return null
-    if ("://" in url) {
-        val host = runCatching { URI(url).host }.getOrNull()
-        if (!host.isNullOrBlank()) return host
-    }
-    val at = url.indexOf('@')
-    val colon = url.indexOf(':', startIndex = if (at >= 0) at else 0)
-    if (at >= 0 && colon > at) return url.substring(at + 1, colon).ifBlank { null }
-    return null
+    return runCatching { URIish(url).host }.getOrNull()?.takeIf { it.isNotBlank() }
 }
+
+/** Whether [remoteUrl] is fetched over HTTPS, the only transport an account token is sent on. */
+internal fun isHttps(remoteUrl: String): Boolean =
+    runCatching { URIish(remoteUrl.trim()).scheme }.getOrNull().equals("https", ignoreCase = true)
 
 /**
  * Whether an account's API host serves a Git remote's host. GitHub signs in against `api.github.com` while

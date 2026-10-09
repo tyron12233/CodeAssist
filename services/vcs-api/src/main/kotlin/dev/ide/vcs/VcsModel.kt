@@ -147,6 +147,17 @@ data class VcsMergeResult(
     val conflicts: List<String> = emptyList(),
     val message: String = "",
 ) {
+    /**
+     * [message] in localizable form. Set by the secondary constructor; a result built from a plain [message]
+     * (or by `copy`, which only sees the primary constructor) carries it as a literal.
+     */
+    var text: VcsText = VcsText.literal(message)
+        private set
+
+    constructor(status: Status, conflicts: List<String>, text: VcsText) : this(status, conflicts, text.english) {
+        this.text = text
+    }
+
     enum class Status { ALREADY_UP_TO_DATE, FAST_FORWARD, MERGED, CONFLICTS, ABORTED, FAILED }
 }
 
@@ -158,10 +169,35 @@ data class VcsSyncResult(
     val updates: List<String> = emptyList(),
     /** Set when a pull's merge step left the tree conflicted. */
     val merge: VcsMergeResult? = null,
-)
+) {
+    /** [message] in localizable form, as on [VcsMergeResult.text]. */
+    var text: VcsText = VcsText.literal(message)
+        private set
+
+    constructor(ok: Boolean, text: VcsText, updates: List<String> = emptyList(), merge: VcsMergeResult? = null) :
+        this(ok, text.english, updates, merge) {
+        this.text = text
+    }
+}
 
 /** Anything the engine could not do, carrying a message already fit to show a user. */
-class VcsException(message: String, cause: Throwable? = null) : Exception(message, cause)
+class VcsException(message: String, cause: Throwable? = null) : Exception(message, cause) {
+    /** The message in localizable form; one built from a plain string carries it as a literal. */
+    var text: VcsText = VcsText.literal(message)
+        private set
+
+    constructor(text: VcsText, cause: Throwable? = null) : this(text.english, cause) {
+        this.text = text
+    }
+}
 
 /** Distinguishes an authentication failure so the UI can offer sign-in rather than a generic error. */
-class VcsAuthException(message: String, cause: Throwable? = null) : Exception(message, cause)
+class VcsAuthException(message: String, cause: Throwable? = null) : Exception(message, cause) {
+    /** The message in localizable form, as on [VcsException.text]. */
+    var text: VcsText = VcsText.literal(message)
+        private set
+
+    constructor(text: VcsText, cause: Throwable? = null) : this(text.english, cause) {
+        this.text = text
+    }
+}

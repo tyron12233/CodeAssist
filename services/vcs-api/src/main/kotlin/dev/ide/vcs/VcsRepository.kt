@@ -89,7 +89,10 @@ interface VcsRepository : AutoCloseable {
     /** Merge [name] into the current branch. */
     fun merge(name: String): VcsMergeResult
 
-    /** Abandon an in-progress merge and restore the pre-merge state. */
+    /**
+     * Abandon an in-progress merge (or a rebase a pull started) and restore the state before it. Uncommitted
+     * edits to files the merge did not touch survive, as with `git merge --abort`.
+     */
     fun abortMerge()
 
     // ---- remotes ----

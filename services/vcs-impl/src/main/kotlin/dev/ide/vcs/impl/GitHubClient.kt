@@ -8,6 +8,8 @@ import dev.ide.vcs.ForgeRepo
 import dev.ide.vcs.VcsAccount
 import dev.ide.vcs.VcsAuthException
 import dev.ide.vcs.VcsException
+import dev.ide.vcs.VcsMessage
+import dev.ide.vcs.VcsText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -57,7 +59,7 @@ class GitHubClient(
         val json = postToOAuth("$webBase/login/device/code", body)
         json.errorMessage()?.let { throw VcsException(it) }
         return DeviceAuthorization(
-            deviceCode = json.str("device_code") ?: throw VcsException("GitHub did not return a device code"),
+            deviceCode = json.str("device_code") ?: throw VcsException(msg(VcsMessage.GH_NO_DEVICE_CODE)),
             userCode = json.str("user_code").orEmpty(),
             verificationUri = json.str("verification_uri") ?: "$webBase/login/device",
             intervalSeconds = json.int("interval") ?: 5,
@@ -76,17 +78,17 @@ class GitHubClient(
         return when (val error = json.str("error")) {
             "authorization_pending" -> DeviceAuthPoll.Pending
             "slow_down" -> DeviceAuthPoll.SlowDown(json.int("interval") ?: 10)
-            "expired_token" -> DeviceAuthPoll.Failed("The sign-in code expired. Start again.")
-            "access_denied" -> DeviceAuthPoll.Failed("Sign-in was cancelled on GitHub.")
-            null -> DeviceAuthPoll.Failed("GitHub returned an unexpected response.")
+            "expired_token" -> DeviceAuthPoll.Failed(msg(VcsMessage.SIGN_IN_CODE_EXPIRED))
+            "access_denied" -> DeviceAuthPoll.Failed(msg(VcsMessage.SIGN_IN_DENIED))
+            null -> DeviceAuthPoll.Failed(msg(VcsMessage.GH_UNEXPECTED))
             else -> DeviceAuthPoll.Failed(json.str("error_description") ?: error)
         }
     }
 
     override fun verifyToken(token: String): VcsAccount {
         val json = getForJson("$apiBase/user", token) as? JsonObject
-            ?: throw VcsException("GitHub returned an unexpected response for the signed-in user")
-        val login = json.str("login") ?: throw VcsAuthException("GitHub did not accept this token")
+            ?: throw VcsException(msg(VcsMessage.GH_UNEXPECTED_USER))
+        val login = json.str("login") ?: throw VcsAuthException(msg(VcsMessage.GH_TOKEN_REJECTED))
         return VcsAccount(
             id = VcsAccount.idOf(VcsAccount.FORGE_GITHUB, host, login),
             forgeId = VcsAccount.FORGE_GITHUB,
@@ -117,7 +119,7 @@ class GitHubClient(
     }
 
     override fun createRepository(token: String, name: String, description: String, private: Boolean): ForgeRepo {
-        if (name.isBlank()) throw VcsException("Enter a repository name")
+        if (name.isBlank()) throw VcsException(msg(VcsMessage.REPO_NAME_REQUIRED))
         val payload = buildString {
             append("{")
             append("\"name\":").append(quote(name))
@@ -130,6 +132,11 @@ class GitHubClient(
         val json = postForJson("$apiBase/user/repos", payload.toRequestBody(JSON_MEDIA), token)
         json.errorMessage()?.let { throw VcsException(it) }
         return json.toRepo()
+    }
+
+    override fun repository(token: String, owner: String, name: String): ForgeRepo? {
+        val json = getForJson("$apiBase/repos/$owner/$name", token) as? JsonObject ?: return null
+        return json.takeIf { it.str("full_name") != null }?.toRepo()
     }
 
     // ---- pull requests -------------------------------------------------------------------------
@@ -203,23 +210,28 @@ class GitHubClient(
             // A DNS miss or a dead connection is the user's to fix, so say so rather than passing along the
             // platform's wording (Android's is `android_getaddrinfo failed: EAI_NODATA`).
             throw VcsException(
-                networkFailureMessage(e, request.url.host) ?: "Could not reach GitHub: ${e.reason()}",
+                networkFailureText(e, request.url.host)
+                    ?: msg(VcsMessage.WITH_REASON, msg(VcsMessage.GH_UNREACHABLE), VcsText.literal(e.reason())),
                 e,
             )
         }
         response.use {
             val text = it.body?.string().orEmpty()
             if (it.code == 401 || it.code == 403) {
+                // GitHub's own explanation, when it gives one, is shown as it wrote it.
                 throw VcsAuthException(
-                    parseBody(text)?.errorMessage() ?: "GitHub rejected the credentials (HTTP ${it.code})",
+                    parseBody(text)?.errorMessage()?.let(VcsText::literal)
+                        ?: msg(VcsMessage.GH_CREDENTIALS_REJECTED, it.code),
                 )
             }
             if (!it.isSuccessful) {
-                throw VcsException(parseBody(text)?.errorMessage() ?: "GitHub returned HTTP ${it.code}")
+                throw VcsException(
+                    parseBody(text)?.errorMessage()?.let(VcsText::literal) ?: msg(VcsMessage.GH_HTTP_ERROR, it.code),
+                )
             }
             if (text.isBlank()) return JsonObject(emptyMap())
             return parseBody(text)
-                ?: throw VcsException("GitHub returned a response that could not be read")
+                ?: throw VcsException(msg(VcsMessage.GH_UNREADABLE))
         }
     }
 
