@@ -6,6 +6,7 @@ import java.io.PrintWriter
 import java.io.StringWriter
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import org.eclipse.jdt.core.compiler.CategorizedProblem
 import org.eclipse.jdt.internal.compiler.CompilationResult
 import org.eclipse.jdt.internal.compiler.ICompilerRequestor
@@ -55,7 +56,22 @@ object JdtBatchCompiler {
         val messages: List<String>,
         /** The problems themselves. This — not [messages] — is what a caller presents; see [Diagnostic]. */
         val diagnostics: List<Diagnostic> = emptyList(),
+        /**
+         * Each compiled source to the class files it produced, relative to the output dir. Keyed by [sourceKey],
+         * since the compiler may report a source under its canonical path rather than the one it was given.
+         */
+        val outputs: Map<Path, List<String>> = emptyMap(),
     )
+
+    /** The key [Result.outputs] uses for [source]: its real path when it exists, else its absolute form. */
+    fun sourceKey(source: Path): Path =
+        runCatching { source.toRealPath() }.getOrElse { source.toAbsolutePath().normalize() }
+
+    /** Record [result]'s class files under its source in [outputs]. */
+    internal fun recordOutputs(result: CompilationResult, outputs: MutableMap<Path, List<String>>) {
+        val source = runCatching { sourceKey(Paths.get(String(result.getFileName()))) }.getOrNull() ?: return
+        outputs[source] = result.classFiles.orEmpty().map { String(it.fileName()) + ".class" }
+    }
 
     /** Build a [Diagnostic] from an ecj problem, computing the column and snippet off the unit's contents. */
     internal fun diagnosticOf(p: CategorizedProblem, result: CompilationResult?): Diagnostic = Diagnostic(
@@ -194,7 +210,7 @@ object JdtBatchCompiler {
         val raw = err.toString() + "\n" + out.toString()
         val messages = raw.lines().filter { it.isNotBlank() }
         val diagnostics = main.problems.ifEmpty { parseEcjDiagnostics(raw) }
-        return Result(ok, messages, diagnostics)
+        return Result(ok, messages, diagnostics, main.outputs)
     }
 
     /**
@@ -204,11 +220,13 @@ object JdtBatchCompiler {
      */
     private class RecordingMain(out: PrintWriter, err: PrintWriter) : Main(out, err, false) {
         val problems = ArrayList<Diagnostic>()
+        val outputs = HashMap<Path, List<String>>()
 
         override fun getBatchRequestor(): ICompilerRequestor {
             val delegate = super.getBatchRequestor()
             return ICompilerRequestor { result ->
                 result?.allProblems?.forEach { p -> if (p != null) problems.add(diagnosticOf(p, result)) }
+                if (result != null && !result.hasErrors()) recordOutputs(result, outputs)
                 delegate.acceptResult(result)
             }
         }

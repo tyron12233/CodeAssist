@@ -115,6 +115,7 @@ internal object ImageFreeJavaCompiler {
 
             val messages = ArrayList<String>()
             val diagnostics = ArrayList<JdtBatchCompiler.Diagnostic>()
+            val outputs = HashMap<Path, List<String>>()
             var hadError = false
             val requestor = ICompilerRequestor { result ->
                 result.allProblems?.forEach { p ->
@@ -130,6 +131,7 @@ internal object ImageFreeJavaCompiler {
                 }
                 // ecj skips class files for units with errors; only write a clean unit's output.
                 if (!result.hasErrors()) {
+                    JdtBatchCompiler.recordOutputs(result, outputs)
                     for (cf in result.classFiles) {
                         val dst = outputDir.resolve(String(cf.fileName()) + ".class")
                         runCatching {
@@ -154,7 +156,7 @@ internal object ImageFreeJavaCompiler {
             )
             return try {
                 compiler.compile(units.toTypedArray())
-                JdtBatchCompiler.Result(!hadError, messages, diagnostics)
+                JdtBatchCompiler.Result(!hadError, messages, diagnostics, outputs)
             } catch (t: Throwable) {
                 JdtBatchCompiler.Result(false, messages + "internal compile failed: ${t.message}",
                     diagnostics + JdtBatchCompiler.Diagnostic(null, null, "internal compile failed: ${t.message}", isError = true))

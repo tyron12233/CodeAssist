@@ -33,6 +33,7 @@ import dev.ide.build.engine.warn
 import dev.ide.build.resolveFor
 import dev.ide.lang.jdt.build.javaFailureSummary
 import dev.ide.lang.jdt.build.reportJavaProblems
+import dev.ide.lang.jdt.compile.IncrementalJavaCompiler
 import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.lang.kotlin.build.kotlinFailureSummary
 import dev.ide.lang.kotlin.build.reportKotlinProblems
@@ -600,15 +601,15 @@ internal class AndroidCompileTask(
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
-        withContext(Dispatchers.IO) {
-            Files.createDirectories(outClasses)
+        // Incremental: only the changed sources are recompiled when nothing else can be affected, and the
+        // output holds exactly the classes of the current sources, so a deleted class is not dexed.
+        val r = withContext(Dispatchers.IO) {
+            IncrementalJavaCompiler().compile(sources(), classpath, outClasses, level, bootClasspath = bootClasspath)
         }
-        val srcs = sources()
-        if (srcs.isEmpty()) return TaskResult.Success
-
-        val r = JdtBatchCompiler.compile(srcs, classpath, outClasses, level, bootClasspath = bootClasspath)
-        ctx.reportJavaProblems(r)
-        return if (r.success) TaskResult.Success else TaskResult.Failed(javaFailureSummary(r))
+        ctx.debug("${name.value}: ${r.mode.name.lowercase()} compile of ${r.recompiledSources.size} source(s)")
+        val result = JdtBatchCompiler.Result(r.success, r.messages, r.diagnostics)
+        ctx.reportJavaProblems(result)
+        return if (r.success) TaskResult.Success else TaskResult.Failed(javaFailureSummary(result))
     }
 }
 

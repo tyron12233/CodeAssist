@@ -84,8 +84,12 @@ internal class InstrumentClassesTask(
         }.getOrElse { TaskResult.Failed("instrumentClasses failed: ${it.message}", it) }
     }
 
-    /** Copy [dir] to [out], passing `.class` files through [transforms]. Returns the number of files written. */
+    /**
+     * Copy [dir] to [out], passing `.class` files through [transforms]. Returns the number of files written.
+     * [out] is emptied first, so a class removed from [dir] does not survive in the copy.
+     */
     private fun instrumentDir(dir: Path, out: Path, transforms: List<ClassTransform>): Int {
+        DexArchives.clearDir(out)
         var count = 0
         Files.walk(dir).use { stream ->
             stream.filter { Files.isRegularFile(it) }.forEach { src ->

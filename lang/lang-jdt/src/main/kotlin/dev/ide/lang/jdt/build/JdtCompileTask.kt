@@ -8,6 +8,7 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
+import dev.ide.build.engine.debug
 import dev.ide.build.engine.depOutputDirs
 import dev.ide.build.engine.kotlinOutputDir
 import dev.ide.build.engine.kotlinSiblings
@@ -15,6 +16,7 @@ import dev.ide.build.engine.levelOf
 import dev.ide.build.engine.libJars
 import dev.ide.build.engine.outputDir
 import dev.ide.build.engine.sourceFiles
+import dev.ide.lang.jdt.compile.IncrementalJavaCompiler
 import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.model.Module
 import java.nio.file.Files
@@ -58,12 +60,14 @@ class JdtCompileTask(
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
-        val sources = sourceFiles(module)
-        if (sources.isEmpty()) { Files.createDirectories(outputDir(module)); return TaskResult.Success }
-        val r = JdtBatchCompiler.compile(
-            sources, classpath(), outputDir(module), levelOf(module.languageLevel), bootClasspath = bootClasspath,
+        // Incremental: only the changed sources are recompiled when nothing else can be affected, and the
+        // output holds exactly the classes of the current sources.
+        val r = IncrementalJavaCompiler().compile(
+            sourceFiles(module), classpath(), outputDir(module), levelOf(module.languageLevel), bootClasspath = bootClasspath,
         )
-        ctx.reportJavaProblems(r)
-        return if (r.success) TaskResult.Success else TaskResult.Failed(javaFailureSummary(r))
+        ctx.debug("${name.value}: ${r.mode.name.lowercase()} compile of ${r.recompiledSources.size} source(s)")
+        val result = JdtBatchCompiler.Result(r.success, r.messages, r.diagnostics)
+        ctx.reportJavaProblems(result)
+        return if (r.success) TaskResult.Success else TaskResult.Failed(javaFailureSummary(result))
     }
 }
