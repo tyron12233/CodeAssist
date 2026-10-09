@@ -175,6 +175,11 @@ object BuiltInSettingsPages {
                 "Keep the buttons in tool window headers visible. Off shows them only while the pointer is over a tool window or it is the one you're working in (mouse and trackpad only)",
                 default = d.alwaysShowToolWindowActions,
             ),
+            SettingControl.Toggle(
+                "rightToolWindowBar", "Right tool window bar",
+                "Show the tool window icons along the right edge on wide screens. Off moves the AI chat's button into the top bar",
+                default = d.rightToolWindowBar,
+            ),
         )
     }
 

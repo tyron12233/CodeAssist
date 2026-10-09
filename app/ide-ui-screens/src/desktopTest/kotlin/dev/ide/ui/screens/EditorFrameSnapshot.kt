@@ -13,6 +13,9 @@ import kotlinx.coroutines.Dispatchers
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.test.Test
+import dev.ide.ui.ext.ToolWindowAnchor
+import dev.ide.ui.ext.ToolWindowContribution
+import dev.ide.ui.ext.ToolWindowRegistry
 
 /**
  * Off-screen renders of the whole wide editor layout (top bar, tool-window stripes, panes, console), for
@@ -27,6 +30,13 @@ class EditorFrameSnapshot {
         render("editor-frame-desktop-light.png", 1280, 760, dark = false) { it.consoleOpen = false; it.selectLeftPanel("search") }
         render("editor-frame-landscape.png", 860, 390, dark = true) { it.consoleOpen = false; it.selectLeftPanel("structure") }
         render("editor-frame-phone-drawer.png", 400, 820, dark = true, compact = true) { it.consoleOpen = false; it.selectLeftPanel("files") }
+        // A RIGHT tool window gets a bottom-nav tab on the phone, which has no right stripe.
+        val ai = ToolWindowRegistry.register(ToolWindowContribution("test.ai", "AI", "sparkle", ToolWindowAnchor.RIGHT) {})
+        try {
+            render("editor-frame-phone.png", 400, 820, dark = true, compact = true) { it.consoleOpen = false; it.selectedLeftPanel = null }
+        } finally {
+            ai.dispose()
+        }
     }
 
     @OptIn(ExperimentalComposeUiApi::class)

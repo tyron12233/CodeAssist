@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.PopupPositionProvider
 import dev.ide.ui.platform.horizontalResizeCursor
-import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.platform.touchInput
 import dev.ide.ui.platform.secondaryClickable
 import kotlinx.coroutines.launch
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +55,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -149,8 +150,8 @@ fun PanelContent(
 
 /** Stripe width: IntelliJ's 40px tool window bar on a pointer host, 48dp on touch so each button keeps a usable
  *  target. Public so the top bar can line its leading button up over the left stripe. */
-val ToolStripeWidth: Dp get() = if (isMobilePlatform) 48.dp else 40.dp
-private val StripeButtonSize: Dp get() = if (isMobilePlatform) 40.dp else 32.dp
+val ToolStripeWidth: Dp @Composable get() = if (touchInput) 48.dp else 40.dp
+private val StripeButtonSize: Dp @Composable get() = if (touchInput) 40.dp else 32.dp
 private val StripeIconSize = 20.dp
 private val StripeGap = 4.dp
 
@@ -189,8 +190,8 @@ fun pluginPanels(anchor: ToolWindowAnchor, backend: IdeBackend, activeFilePath: 
 /**
  * The vertical tool-window stripe (IntelliJ's tool window bar): one icon-only button per [SidebarPanel]. A
  * panel's name shows as a tooltip on hover, or on long-press on touch, beside the stripe on its editor-facing
- * side. [header] and [footer] bracket the panel icons; the footer stays pinned while the panel icons scroll when
- * the window is too short to show them all (a phone in landscape). Tapping an icon calls [onSelect]; the host
+ * side. [header] and [footer] bracket the panel icons, the footer sitting at the bottom of the stripe; when the
+ * window is too short for both (a phone in landscape), the whole stripe scrolls. Tapping an icon calls [onSelect]; the host
  * decides open-vs-collapse (tap-again collapses).
  *
  * [menu], when given, is the stripe's context menu: it opens on a secondary click anywhere on the stripe, or a
@@ -221,22 +222,33 @@ fun ActivityRail(
                 if (menu != null) {
                     Box(Modifier.matchParentSize().pointerInput(Unit) { detectTapGestures(onLongPress = { menuOpen = true }) })
                 }
-                Column(
-                    Modifier.fillMaxSize().padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(StripeGap),
-                ) {
+                // Tool windows at the top, the footer at the bottom. When both groups don't fit (a landscape
+                // phone is ~330dp under the top bar), the whole stripe scrolls as one: a pinned footer would
+                // squeeze the tool windows down to nothing.
+                BoxWithConstraints(Modifier.fillMaxSize()) {
                     Column(
-                        Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+                        Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                            .heightIn(min = maxHeight).padding(vertical = 6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(StripeGap),
+                        verticalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        header?.invoke(this)
-                        panels.forEach { panel ->
-                            StripeButton(panel.icon, panel.title, active = panel.id == selectedId) { onSelect(panel.id) }
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(StripeGap),
+                        ) {
+                            header?.invoke(this)
+                            panels.forEach { panel ->
+                                StripeButton(panel.icon, panel.title, active = panel.id == selectedId) { onSelect(panel.id) }
+                            }
+                        }
+                        if (footer != null) {
+                            Column(
+                                Modifier.padding(top = StripeGap),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(StripeGap),
+                            ) { footer() }
                         }
                     }
-                    footer?.invoke(this)
                 }
                 if (menu != null) {
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -272,7 +284,7 @@ private fun StripeButton(icon: ImageVector, label: String, active: Boolean, onCl
         tooltip = { PlainTooltip { Text(label, style = MaterialTheme.typography.labelMedium) } },
         state = tooltip,
         // Hover is handled by the box; on touch the long-press below drives it, so it can't also count as a tap.
-        enableUserInput = !isMobilePlatform,
+        enableUserInput = !touchInput,
     ) {
         Box(
             Modifier.size(StripeButtonSize)
@@ -385,7 +397,7 @@ fun SidebarPane(
                 modifier = Modifier.width(paneWidth).fillMaxHeight()
                     .then(if (floating) Modifier.shadow(12.dp) else Modifier),
             ) {
-                GlassSurface(Modifier.fillMaxSize(), if (floating) GlassMaterial.Thick else GlassMaterial.Regular) {
+                ToolWindowSurface(Modifier.fillMaxSize()) {
                     Column(Modifier.fillMaxSize()) {
                         if (display != null) ToolWindowHeader(display.title, headerSlots.of(display.id), onHide)
                         // Key on the stable id (not the panel object, which the host rebuilds every recomposition) so
@@ -423,7 +435,7 @@ fun SidebarPane(
                     val sign = if ((side == RailSide.Left) == (LocalLayoutDirection.current == LayoutDirection.Ltr)) 1f else -1f
                     Box(
                         Modifier.align(if (side == RailSide.Left) Alignment.CenterEnd else Alignment.CenterStart)
-                            .width(if (isMobilePlatform) 10.dp else 6.dp).fillMaxHeight()
+                            .width(if (touchInput) 10.dp else 6.dp).fillMaxHeight()
                             .horizontalResizeCursor()
                             .draggable(
                                 orientation = Orientation.Horizontal,

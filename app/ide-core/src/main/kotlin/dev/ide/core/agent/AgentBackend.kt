@@ -140,7 +140,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     @Volatile
     private var mcpServer: HttpMcpServer? = null
 
-    /** The local FTP asset server, started when the More-menu "FTP server" toggle (or the `ftp_server`
+    /** The local FTP asset server, started when the AI settings "FTP server" toggle (or the `ftp_server`
      *  tool) is on. Anonymous and bound to 127.0.0.1 only; uploads land in `<project>/assets`. */
     @Volatile
     private var ftpServer: FtpServer? = null

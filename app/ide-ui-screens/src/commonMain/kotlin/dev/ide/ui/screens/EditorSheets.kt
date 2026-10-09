@@ -10,14 +10,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,9 +24,7 @@ import dev.ide.ui.IdeUiState
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiActionPlaces
-import dev.ide.ui.components.AnalyticsToggleRow
 import dev.ide.ui.components.BottomSheet
-import dev.ide.ui.components.FtpServerToggleRow
 import dev.ide.ui.components.CommandPalette
 import dev.ide.ui.actions.applyActionEffects
 import dev.ide.ui.components.PaletteEditorTarget
@@ -45,14 +39,6 @@ import dev.ide.ui.generated.resources.more
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.theme.Ca
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.material3.Icon
-import dev.ide.ui.components.PillToggle
-import dev.ide.ui.ext.ToolWindowAnchor
-import dev.ide.ui.ext.ToolWindowRegistry
-import dev.ide.ui.generated.resources.sidebar_right_tool_window_bar
-import dev.ide.ui.generated.resources.sidebar_right_tool_window_bar_desc
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -66,25 +52,10 @@ internal fun PaletteOverlay(
     onCloseProject: () -> Unit,
 ) {
     val pluginNavigator = LocalPluginNavigator.current
-    // The palette's UI-navigation commands come from UiActionRegistry; this host bridges them to the app's
-    // navigation callbacks (the same pattern as the More menu). Global settings + SDK/keystore managers all
-    // live behind the Settings & Tools hub now, so they route through one HUB destination.
-    val paletteHost = object : UiActionHost {
-        override val backend: IdeBackend = state.backend
-        override fun navigate(destination: String) {
-            state.paletteOpen = false
-            when (destination) {
-                UiDestinations.HUB -> onOpenHub()
-                UiDestinations.MODULES -> onOpenModuleConfig(null)
-                UiDestinations.DEPENDENCIES -> onOpenDependencies(null)
-                UiDestinations.ICONS -> onOpenIconManager()
-                UiDestinations.LOGS -> state.logsOpen = true
-                UiDestinations.PROJECTS -> onCloseProject()
-            }
-        }
-        override fun toggleTheme() { state.paletteOpen = false; onToggleTheme() }
-        override fun openFile(path: String, offset: Int) { state.paletteOpen = false; state.openAt(path, offset) }
-    }
+    val paletteHost = editorActionHost(
+        state, onToggleTheme, onOpenHub, onOpenIconManager, onOpenDependencies, onOpenModuleConfig, onCloseProject,
+        onDone = { state.paletteOpen = false },
+    )
     DropdownOverlay(
         visible = state.paletteOpen,
         onDismiss = { state.paletteOpen = false },
@@ -110,13 +81,44 @@ internal fun PaletteOverlay(
 }
 
 /**
- * The destinations that present as sheets rather than panes: the More menu of secondary actions and the Logs
- * viewer. (Files/Search/Structure/Source are now left sidebar panels; the compact drawer hosts them.)
+ * Bridges the built-in UI actions (palette commands, the phone's More sheet, the wide layout's stripe buttons)
+ * to the editor's navigation callbacks. Global settings and the SDK/keystore managers all live behind the
+ * Settings & Tools hub, so they route through one HUB destination. [onDone] closes the surface the action was
+ * picked from.
+ */
+internal fun editorActionHost(
+    state: IdeUiState,
+    onToggleTheme: () -> Unit,
+    onOpenHub: () -> Unit,
+    onOpenIconManager: () -> Unit,
+    onOpenDependencies: (String?) -> Unit,
+    onOpenModuleConfig: (String?) -> Unit,
+    onCloseProject: () -> Unit,
+    onDone: () -> Unit,
+): UiActionHost = object : UiActionHost {
+    override val backend: IdeBackend = state.backend
+    override fun navigate(destination: String) {
+        onDone()
+        when (destination) {
+            UiDestinations.HUB -> onOpenHub()
+            UiDestinations.MODULES -> onOpenModuleConfig(null)
+            UiDestinations.DEPENDENCIES -> onOpenDependencies(null)
+            UiDestinations.ICONS -> onOpenIconManager()
+            UiDestinations.LOGS -> state.logsOpen = true
+            UiDestinations.PROJECTS -> onCloseProject()
+        }
+    }
+    override fun toggleTheme() { onDone(); onToggleTheme() }
+    override fun openFile(path: String, offset: Int) { onDone(); state.openAt(path, offset) }
+}
+
+/**
+ * The destinations that present as sheets rather than panes: the phone's More menu and Logs viewer. (The
+ * wide layout puts the More rows on its stripe and docks the Logs viewer in the bottom pane.)
  */
 @Composable
 internal fun DestinationSheets(
     state: IdeUiState,
-    compact: Boolean,
     onOpenModuleConfig: (String?) -> Unit,
     onOpenDependencies: (String?) -> Unit,
     onToggleTheme: () -> Unit,
@@ -124,47 +126,24 @@ internal fun DestinationSheets(
     onOpenIconManager: () -> Unit,
     onCloseProject: () -> Unit,
     fileActions: FileActions,
+    /** The phone shows the Logs viewer as a sheet; the wide layout docks it in the bottom pane instead. */
+    logsAsSheet: Boolean,
 ) {
-    BottomSheet(visible = state.moreOpen, onDismiss = { state.moreOpen = false }, heightFraction = 0.62f) {
-        // The "More" rows are UI-side actions resolved from the registry; the host bridges them to the app's
-        // navigation/theme callbacks. Adding a row is a registration (see BuiltInUiActions), not an edit here.
+    BottomSheet(visible = state.moreOpen, onDismiss = { state.moreOpen = false }, heightFraction = 0.45f) {
+        // The rows are UI-side actions resolved from the registry; the host bridges them to the app's
+        // navigation callbacks. Adding a row is a registration (see BuiltInUiActions), not an edit here.
         val moreHost = remember(state) {
-            object : UiActionHost {
-                override val backend: IdeBackend = state.backend
-                override fun navigate(destination: String) {
-                    state.moreOpen = false
-                    when (destination) {
-                        UiDestinations.HUB -> onOpenHub()
-                        UiDestinations.MODULES -> onOpenModuleConfig(null)
-                        UiDestinations.DEPENDENCIES -> onOpenDependencies(null)
-                        UiDestinations.ICONS -> onOpenIconManager()
-                        UiDestinations.LOGS -> state.logsOpen = true
-                        UiDestinations.PROJECTS -> onCloseProject()
-                    }
-                }
-                override fun toggleTheme() { state.moreOpen = false; onToggleTheme() }
-                override fun openFile(path: String, offset: Int) { state.moreOpen = false; state.openAt(path, offset) }
-            }
+            editorActionHost(
+                state, onToggleTheme, onOpenHub, onOpenIconManager, onOpenDependencies, onOpenModuleConfig, onCloseProject,
+                onDone = { state.moreOpen = false },
+            )
         }
-        // The wide layout's right tool-window stripe can be hidden from its own context menu; this is the way back.
-        UiPluginHost.ensureLoaded()
-        val hasRightTools = !compact && ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).isNotEmpty()
-        MoreSheetContent(
-            backend = state.backend,
-            host = moreHost,
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            extraRows = {
-                if (hasRightTools) {
-                    Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-                    ToolWindowBarToggleRow(state.rightStripeVisible, { state.setRightStripeShown(it) }, Modifier.padding(horizontal = 6.dp))
-                }
-            },
-        )
+        MoreSheetContent(host = moreHost, modifier = Modifier.fillMaxWidth().weight(1f))
     }
-    // The Logs viewer — opened from the More menu; a tall sheet so a stack trace has room.
+    // The phone's Logs viewer: opened from the More menu or the palette; a tall sheet so a stack trace has room.
     BottomSheet(
-        visible = state.logsOpen,
-        onDismiss = { state.logsOpen = false; state.logsSource = null },
+        visible = logsAsSheet && state.logsOpen,
+        onDismiss = { state.closeLogs() },
         heightFraction = 0.9f,
     ) {
         LogsScreen(
@@ -176,47 +155,24 @@ internal fun DestinationSheets(
     }
 }
 
-/** The "More" menu: secondary actions that don't warrant a top-level destination. Rows are UI-side actions
- *  resolved from [UiActionRegistry] (the built-ins, plus anything an in-UI plugin contributes). */
+/** The phone's "More" menu: the screens a project is configured from, which the wide layout keeps on its left
+ *  stripe. Rows are UI-side actions resolved from [UiActionRegistry] (the built-ins, plus anything an in-UI
+ *  plugin contributes). */
 @Composable
 internal fun MoreSheetContent(
-    backend: IdeBackend,
     host: UiActionHost,
     modifier: Modifier = Modifier,
-    extraRows: @Composable ColumnScope.() -> Unit = {},
 ) {
     UiPluginHost.ensureLoaded()
     val actions = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, host)
-    // Scrollable so every row (incl. "Close project") is reachable when the sheet is short — e.g. the soft
-    // keyboard is up and the sheet has been lifted above it (issue #994).
+    // Scrollable so every row is reachable when the sheet is short, e.g. the soft keyboard is up and the sheet
+    // has been lifted above it (issue #994).
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp)) {
         Text(stringResource(Res.string.more), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 6.dp, top = 4.dp, bottom = 10.dp))
         actions.forEach { a ->
             MoreRow(actionIcon(a.iconId), localizedUiActionText(a), localizedUiActionDescription(a) ?: "") { a.perform(host) }
         }
-
-        // Performance-analytics opt-in lives here (a settings surface) rather than on the home screen, so it's
-        // a deliberate one-time choice the user can revisit, not a permanent fixture of the project picker.
-        if (backend.diagnostics.analyticsAvailable()) {
-            var on by remember { mutableStateOf(backend.diagnostics.analyticsConsent() == true) }
-            Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-            Box(Modifier.padding(horizontal = 6.dp)) {
-                AnalyticsToggleRow(enabled = on, onChange = { on = it; backend.diagnostics.setAnalyticsConsent(it) })
-            }
-        }
-
-        // The local FTP asset server toggle sits below analytics; it's controllable from the app or via the
-        // `ftp_server` MCP tool (both flip the same `settings.ai.ftpServer` pref + live server state).
-        if (backend.agent.ftpServerSupported()) {
-            var on by remember { mutableStateOf(backend.agent.ftpServerEnabled()) }
-            Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-            Box(Modifier.padding(horizontal = 6.dp)) {
-                FtpServerToggleRow(enabled = on, onChange = { on = it; backend.agent.setFtpServerEnabled(it) })
-            }
-        }
-
-        extraRows()
     }
 }
 
@@ -236,32 +192,5 @@ private fun MoreRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title
             Text(subtitle, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         }
         androidx.compose.material3.Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
-    }
-}
-
-/** The More-sheet switch for the wide layout's right tool-window stripe. */
-@Composable
-private fun ToolWindowBarToggleRow(shown: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier.fillMaxWidth()
-            .clickable(remember { MutableInteractionSource() }, indication = null) { onChange(!shown) }
-            .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(CaIcons.panelRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Column(Modifier.weight(1f)) {
-            Text(
-                stringResource(Res.string.sidebar_right_tool_window_bar),
-                color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                stringResource(Res.string.sidebar_right_tool_window_bar_desc),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        PillToggle(shown, onChange)
     }
 }

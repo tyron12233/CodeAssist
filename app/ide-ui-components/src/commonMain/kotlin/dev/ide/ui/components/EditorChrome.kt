@@ -2,7 +2,7 @@ package dev.ide.ui.components
 
 import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.platform.claimWindowTitleBar
-import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.platform.touchInput
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedContent
@@ -120,6 +120,7 @@ import dev.ide.ui.generated.resources.edchrome_show_resolution_details
 import dev.ide.ui.generated.resources.edchrome_show_unresolved_dependencies
 import dev.ide.ui.generated.resources.edchrome_toggle_inlay_hints
 import dev.ide.ui.generated.resources.edchrome_toggle_navigator
+import dev.ide.ui.generated.resources.action_close_project
 import dev.ide.ui.generated.resources.edchrome_unresolved_dependencies
 import dev.ide.ui.generated.resources.edview_no_file_open_hint
 import dev.ide.ui.generated.resources.edview_no_file_open_title
@@ -159,6 +160,8 @@ fun EditorTopBar(
     projectName: String,
     indexStatus: IndexUiStatus,
     onToggleNav: () -> Unit,
+    /** Leaves the project for the project list. Null hides the back arrow. */
+    onBack: (() -> Unit)? = null,
     /** Live navigator-open fraction (0 closed → 1 open) driving the sidebar icon's miniature-screen
      *  animation — the drawer's gesture fraction on phone, an eased toggle on desktop. Deferred read. */
     navFraction: () -> Float = { 0f },
@@ -227,15 +230,20 @@ fun EditorTopBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp),
         ) {
-            if (compact || (titleBar != null && titleBar.startInset > 0.dp)) {
-                // After the traffic lights the toggle can no longer sit over the stripe; it just follows them.
-                SidebarToggleButton(navFraction, onToggleNav)
-            } else {
-                // Centred over the left tool-window stripe below, so the bar's first button caps that column.
-                Box(Modifier.width(ToolStripeWidth), contentAlignment = Alignment.Center) {
-                    SidebarToggleButton(navFraction, onToggleNav)
-                }
+            // The back arrow leads, then the sidebar toggle. Whichever comes first is centred over the left
+            // tool-window stripe below, so the bar's first button caps that column.
+            val firstButton: @Composable () -> Unit = {
+                if (onBack != null) BackButton(onBack) else SidebarToggleButton(navFraction, onToggleNav)
             }
+            if (compact || (titleBar != null && titleBar.startInset > 0.dp)) {
+                // After the traffic lights the button can no longer sit over the stripe; it just follows them.
+                firstButton()
+            } else {
+                Box(Modifier.width(ToolStripeWidth), contentAlignment = Alignment.Center) { firstButton() }
+            }
+            if (onBack != null) SidebarToggleButton(navFraction, onToggleNav)
+            // IntelliJ's project widget: the project's tile beside its name. The phone's bar has no room for it.
+            if (!compact) ProjectTile(projectName, size = 24.dp, radius = 6.dp)
             // The name takes the flexible middle and truncates — the right-hand cluster keeps its size.
             Text(
                 projectName,
@@ -250,7 +258,7 @@ fun EditorTopBar(
             IndexStatusChip(indexStatus, compact = compact, onClick = onIndexClick)
             // Accent-tinted while there are unsaved changes; saves the active tab (Cmd/Ctrl-S also works). A desktop
             // has the keyboard for it and the tab's unsaved dot for the state, so only touch hosts show it.
-            if (compact || isMobilePlatform) {
+            if (compact || touchInput) {
                 IconButtonCa(CaIcons.save, stringResource(Res.string.save), onSave, active = hasUnsavedChanges)
             }
             if (compact) {
@@ -287,7 +295,7 @@ fun EditorTopBar(
                 // IntelliJ-lean: the bar keeps what has no other home. Undo/redo stay inline only on touch (no
                 // keyboard there); the console and preview toggles live on the left stripe and the breadcrumb row;
                 // find, reformat, imports and inlay hints move into the ⋯ menu below.
-                if (isMobilePlatform && hasActiveFile) {
+                if (touchInput && hasActiveFile) {
                     IconButtonCa(CaIcons.undo, stringResource(Res.string.undo), onUndo, tint = if (canUndo) null else dim)
                     IconButtonCa(CaIcons.redo, stringResource(Res.string.redo), onRedo, tint = if (canRedo) null else dim)
                 }
@@ -327,6 +335,12 @@ fun EditorTopBar(
 
 /** Height of the editor's top bar (and, on a desktop window with a custom title bar, of the title bar). */
 private val TopBarHeight = 52.dp
+
+/** The top bar's back arrow: leaves the project for the project list (the host confirms first). */
+@Composable
+private fun BackButton(onClick: () -> Unit) {
+    IconButtonCa(CaIcons.arrowLeft, stringResource(Res.string.action_close_project), onClick)
+}
 
 /**
  * The navigator toggle: a **miniature of the screen** whose drawer pane grows and tints accent exactly in

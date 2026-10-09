@@ -39,6 +39,9 @@ internal fun BottomNav(
     onSelect: (RailDestination) -> Unit,
     /** Whether any panel claims the source-control slot; false hides it (the VCS plugin is off). */
     showSource: Boolean = true,
+    /** The primary RIGHT tool window (the AI chat), the phone's way into the right-hand overlay that the wide
+     *  layout reaches from its right stripe. Null when no plugin contributes one. */
+    rightTool: RightToolNavItem? = null,
 ) {
     Row(
         Modifier.fillMaxWidth().height(60.dp),
@@ -49,9 +52,20 @@ internal fun BottomNav(
         if (showSource) {
             BottomNavItem(CaIcons.gitBranch, stringResource(Res.string.edbottomnav_source), selected == RailDestination.Source) { onSelect(RailDestination.Source) }
         }
+        if (rightTool != null) {
+            BottomNavItem(rightTool.icon, rightTool.label, rightTool.open, onClick = rightTool.onClick)
+        }
         BottomNavItem(CaIcons.ellipsis, stringResource(Res.string.more), selected == RailDestination.More) { onSelect(RailDestination.More) }
     }
 }
+
+/** A bottom-nav item for the RIGHT tool windows; [open] lights it while the overlay is showing. */
+internal class RightToolNavItem(
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val label: String,
+    val open: Boolean,
+    val onClick: () -> Unit,
+)
 
 @Composable
 private fun BottomNavItem(

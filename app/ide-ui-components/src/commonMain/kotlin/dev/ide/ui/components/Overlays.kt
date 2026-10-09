@@ -127,7 +127,7 @@ fun BottomSheet(
                         .fillMaxWidth()
                         .fillMaxHeight(fraction.value)
                         .shadow(24.dp, shape, clip = false)
-                        .background(Ide.colors.glassThick, shape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow, shape)
                         .border(1.dp, Ide.colors.glassEdgeTop, shape)
                         // A tap on the sheet body shouldn't dismiss it; only a tap on the scrim above does.
                         // Kept outside the content inset below so the full glass surface (incl. the strip

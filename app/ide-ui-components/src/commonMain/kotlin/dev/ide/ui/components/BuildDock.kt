@@ -219,7 +219,7 @@ fun BuildDock(
             Modifier
                 .fillMaxWidth()
                 .height(with(density) { height.value.toDp() })
-                .background(Ide.colors.glassThick, shape)
+                .background(MaterialTheme.colorScheme.surfaceContainer, shape)
                 .drawBehind { drawLine(edge, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1f) }
                 // A tap on the dock body must not fall through to the editor behind it.
                 .pointerInput(Unit) { detectTapGestures { } }

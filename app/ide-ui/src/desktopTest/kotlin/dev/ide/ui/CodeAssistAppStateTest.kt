@@ -246,9 +246,10 @@ class CodeAssistAppStateTest {
             assertEquals(Screen.Editor, app.screen)
             assertNull(app.pluginScreenId)
 
-            // Only a second back leaves the project, as it does from the editor anywhere else.
+            // Only a second back asks to leave the project, as it does from the editor anywhere else.
             app.navigateBack()
-            assertEquals(Screen.Projects, app.screen)
+            assertEquals(Screen.Editor, app.screen)
+            assertTrue(app.confirmCloseProject)
         }
     }
 
@@ -407,7 +408,7 @@ class CodeAssistAppStateTest {
             // The editor is not a contributed screen, so the claim is not consulted.
             app.navigateBack()
             assertEquals(0, handled)
-            assertEquals(Screen.Projects, app.screen)
+            assertTrue(app.confirmCloseProject)
         } finally {
             claim.dispose()
         }
@@ -496,9 +497,10 @@ class CodeAssistAppStateTest {
         assertEquals(listOf("/ws/app"), backend.opened)
         assertEquals(Screen.Editor, app.screen)
         assertEquals(1, app.epoch)
-        // Back out of the editor and the picker re-reads the project list.
+        // Back on the editor asks before leaving the project; it stays open until the user confirms.
         app.navigateBack()
-        assertEquals(Screen.Projects, app.screen)
+        assertEquals(Screen.Editor, app.screen)
+        assertTrue(app.confirmCloseProject)
     }
 
     @Test
@@ -864,8 +866,10 @@ class CodeAssistAppStateTest {
         advanceUntilIdle()
         assertEquals(Screen.Editor, app.screen)
 
+        // Back is the editor's own (the close confirmation), not a pop to the listing that opened it.
         app.navigateBack()
-        assertEquals(Screen.Projects, app.screen)
+        assertEquals(Screen.Editor, app.screen)
+        assertTrue(app.confirmCloseProject)
     }
 
     @Test

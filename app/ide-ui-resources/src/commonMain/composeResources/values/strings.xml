@@ -226,12 +226,6 @@ We never collect your code, file or project names, which features you use, or an
     <string name="creating">Creating…</string>
     <string name="create_project">Create Project</string>
     <string name="no_templates_available">No templates available.</string>
-    <string name="performance_analytics">Performance analytics</string>
-    <string name="sharing_performance_data">Sharing anonymous performance data</string>
-    <string name="not_sharing_performance_data">Not sharing performance data</string>
-    <string name="ftp_server">FTP server</string>
-    <string name="ftp_server_running">Running on 127.0.0.1:8021 · uploads go to assets/, writable by any app on this device</string>
-    <string name="ftp_server_stopped">Stopped · local asset upload server</string>
     <string name="compatibility">Compatibility</string>
     <plurals name="recovered_projects">
         <item quantity="one">Recovered %1$d project from an older version</item>
@@ -465,8 +459,6 @@ We never collect your code, file or project names, which features you use, or an
     <string name="edchrome_more">More</string>
     <string name="sidebar_hide_tool_window_bar">Hide tool window bar</string>
     <string name="toolwindow_hide">Hide</string>
-    <string name="sidebar_right_tool_window_bar">Right tool window bar</string>
-    <string name="sidebar_right_tool_window_bar_desc">Show the tool window icons along the right edge</string>
     <string name="edchrome_settings_and_tools">Settings &amp; Tools</string>
     <string name="edchrome_toggle_navigator">Toggle navigator</string>
     <string name="edchrome_find_replace">Find / replace</string>
@@ -1909,4 +1901,12 @@ We never collect your code, file or project names, which features you use, or an
     <string name="colors_reset_entry">Reset this entry</string>
     <string name="settings_colors">Editor Colors</string>
     <string name="settings_colors_subtitle">Syntax colors, the editor surface, and the gutter</string>
+    <string name="close_project_title">Close %1$s?</string>
+    <string name="close_project_body">You'll go back to your projects.</string>
+    <plurals name="close_project_unsaved">
+        <item quantity="one">%1$d file has unsaved changes. It will be saved first.</item>
+        <item quantity="other">%1$d files have unsaved changes. They will be saved first.</item>
+    </plurals>
+    <string name="close_project_building">A build is still running.</string>
+    <string name="close_project_save_and_close">Save &amp; close</string>
 </resources>

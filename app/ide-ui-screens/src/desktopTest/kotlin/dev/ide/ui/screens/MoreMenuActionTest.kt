@@ -59,16 +59,19 @@ class MoreMenuActionTest {
     fun builtInsResolveInOrder() {
         UiPluginHost.ensureLoaded()
         val host = RecordingHost(FakeBackend())
-        val ids = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, host).map { it.id }
-        // Manage dependencies joined the sheet: it sits next to Modules, which is the same area of the app,
-        // and used to be reachable only by typing in the palette.
+        fun ids(place: String) = UiActionRegistry.forPlace(place, host).map { it.id }
+        // The phone's More sheet and the wide layout's stripe carry the screens a project is configured from;
+        // the stripe leaves out Settings & Tools and Logs, which it has its own buttons for.
+        assertEquals(listOf("ui.hub", "ui.modules", "ui.icons", "ui.logs"), ids(UiActionPlaces.MORE_MENU))
+        assertEquals(listOf("ui.modules", "ui.icons"), ids(UiActionPlaces.TOOL_STRIPE))
+        // Every built-in can still be found by typing.
         assertEquals(
             listOf(
                 "ui.hub", "ui.modules", "ui.icons", "ui.dependencies",
                 "ui.reindex", "ui.logs", "ui.toggleTheme", "ui.closeProject",
             ),
-            ids,
-            "the More-menu built-ins resolve from the registry in their declared order",
+            ids(UiActionPlaces.COMMAND_PALETTE).filter { it.startsWith("ui.") },
+            "the built-ins resolve from the registry in their declared order",
         )
     }
 
@@ -77,7 +80,7 @@ class MoreMenuActionTest {
         UiPluginHost.ensureLoaded()
         val backend = FakeBackend()
         val host = RecordingHost(backend)
-        val actions = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, host).associateBy { it.id }
+        val actions = UiActionRegistry.forPlace(UiActionPlaces.COMMAND_PALETTE, host).associateBy { it.id }
 
         actions.getValue("ui.hub").perform(host)
         actions.getValue("ui.toggleTheme").perform(host)
@@ -96,7 +99,7 @@ class MoreMenuActionTest {
         val host = RecordingHost(backend)
         snapshot("more-menu.png", 520, 560) {
             Box(Modifier.fillMaxSize().background(Ide.colors.glassThick)) {
-                MoreSheetContent(backend = backend, host = host, modifier = Modifier.fillMaxWidth())
+                MoreSheetContent(host = host, modifier = Modifier.fillMaxWidth())
             }
         }
     }

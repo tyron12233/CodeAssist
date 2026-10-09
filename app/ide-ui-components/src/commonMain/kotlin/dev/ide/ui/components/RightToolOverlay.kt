@@ -187,7 +187,7 @@ fun RightToolOverlay(state: IdeUiState) {
                     // Slide from the right edge: translationX 0 fully open, off-screen when closed.
                     .offset { IntOffset((openPx - shown.value).roundToInt(), 0) },
             ) {
-                GlassSurface(Modifier.fillMaxSize(), GlassMaterial.Thick) {
+                ToolWindowSurface(Modifier.fillMaxSize()) {
                     Column(Modifier.fillMaxSize()) {
                         ToolWindowSwitcherHeader(
                             panels = panels,

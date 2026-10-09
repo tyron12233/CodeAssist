@@ -1793,7 +1793,7 @@ interface AgentService {
     /** Answer a pending [permissionRequest]. */
     fun answerPermission(id: Int, decision: UiAgentPermissionDecision)
 
-    /** Whether the backend hosts the local FTP asset server (the More-menu toggle + `ftp_server` tool). */
+    /** Whether the backend hosts the local FTP asset server (the AI settings toggle + `ftp_server` tool). */
     fun ftpServerSupported(): Boolean = false
 
     /** Whether the local FTP asset server is currently running. */

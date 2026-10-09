@@ -119,9 +119,6 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="creating">Criando…</string>
     <string name="create_project">Criar Projeto</string>
     <string name="no_templates_available">Nenhum modelo disponível.</string>
-    <string name="performance_analytics">Análise de desempenho</string>
-    <string name="sharing_performance_data">Compartilhando dados anônimos de desempenho</string>
-    <string name="not_sharing_performance_data">Não compartilhando dados de desempenho</string>
     <string name="compatibility">Compatibilidade</string>
 
     <!-- AI coding agent -->
@@ -295,8 +292,6 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="edchrome_more">Mais</string>
     <string name="sidebar_hide_tool_window_bar">Ocultar barra de janelas de ferramentas</string>
     <string name="toolwindow_hide">Ocultar</string>
-    <string name="sidebar_right_tool_window_bar">Barra de ferramentas à direita</string>
-    <string name="sidebar_right_tool_window_bar_desc">Mostrar os ícones das janelas de ferramentas na borda direita</string>
     <string name="edchrome_settings_and_tools">Configurações e ferramentas</string>
     <string name="edchrome_toggle_navigator">Alternar navegador</string>
     <string name="edchrome_find_replace">Localizar / substituir</string>
@@ -1135,4 +1130,12 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="home_sort_recent">Recentes</string>
     <string name="home_sort_name">Nome</string>
     <string name="home_clear_search">Limpar pesquisa</string>
+    <string name="close_project_title">Fechar %1$s?</string>
+    <string name="close_project_body">Você voltará para seus projetos.</string>
+    <plurals name="close_project_unsaved">
+        <item quantity="one">%1$d arquivo tem alterações não salvas. Ele será salvo primeiro.</item>
+        <item quantity="other">%1$d arquivos têm alterações não salvas. Eles serão salvos primeiro.</item>
+    </plurals>
+    <string name="close_project_building">Uma compilação ainda está em andamento.</string>
+    <string name="close_project_save_and_close">Salvar e fechar</string>
 </resources>

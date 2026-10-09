@@ -277,6 +277,8 @@ internal fun AppNavGraph(
                 onOpenDependencies = { module -> app.openModuleConfig(module, ModulesTab.Dependencies) },
                 onOpenModuleConfig = { module -> app.openModuleConfig(module, ModulesTab.Settings) },
                 onCloseProject = { app.navigateTo(Screen.Projects) },
+                closeProjectConfirm = app.confirmCloseProject,
+                onCloseProjectConfirmChange = { app.confirmCloseProject = it },
                 onOpenRun = { app.navigateTo(Screen.Run) },
                 fileActions = fileActions,
             )

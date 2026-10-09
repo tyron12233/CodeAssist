@@ -119,9 +119,6 @@
     <string name="creating">Создание…</string>
     <string name="create_project">Создать проект</string>
     <string name="no_templates_available">Шаблоны недоступны.</string>
-    <string name="performance_analytics">Аналитика производительности</string>
-    <string name="sharing_performance_data">Отправка анонимных данных о производительности</string>
-    <string name="not_sharing_performance_data">Без отправки данных о производительности</string>
     <string name="compatibility">Совместимость</string>
 
     <!-- AI coding agent -->
@@ -261,8 +258,6 @@
     <string name="edchrome_more">Ещё</string>
     <string name="sidebar_hide_tool_window_bar">Скрыть панель инструментов</string>
     <string name="toolwindow_hide">Скрыть</string>
-    <string name="sidebar_right_tool_window_bar">Правая панель инструментов</string>
-    <string name="sidebar_right_tool_window_bar_desc">Показывать значки окон инструментов у правого края</string>
     <string name="edchrome_settings_and_tools">Настройки и инструменты</string>
     <string name="edchrome_toggle_navigator">Переключить навигатор</string>
     <string name="edchrome_find_replace">Найти / заменить</string>
@@ -1106,4 +1101,14 @@
     <string name="home_sort_recent">Недавние</string>
     <string name="home_sort_name">Имя</string>
     <string name="home_clear_search">Очистить поиск</string>
+    <string name="close_project_title">Закрыть %1$s?</string>
+    <string name="close_project_body">Вы вернётесь к списку проектов.</string>
+    <plurals name="close_project_unsaved">
+        <item quantity="one">%1$d файл содержит несохранённые изменения. Сначала он будет сохранён.</item>
+        <item quantity="few">%1$d файла содержат несохранённые изменения. Сначала они будут сохранены.</item>
+        <item quantity="many">%1$d файлов содержат несохранённые изменения. Сначала они будут сохранены.</item>
+        <item quantity="other">%1$d файла содержат несохранённые изменения. Сначала они будут сохранены.</item>
+    </plurals>
+    <string name="close_project_building">Сборка ещё выполняется.</string>
+    <string name="close_project_save_and_close">Сохранить и закрыть</string>
 </resources>

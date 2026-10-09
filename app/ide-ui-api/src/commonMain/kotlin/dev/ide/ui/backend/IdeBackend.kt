@@ -1638,6 +1638,10 @@ object UiActionPlaces {
     const val MAIN_TOOLBAR = "mainToolbar"
     const val MAIN_OVERFLOW = "mainToolbar.overflow"
     const val MORE_MENU = "moreMenu"
+
+    /** The lower group of the wide layout's left tool-window stripe: icon-only buttons for the screens a
+     *  project is configured from (modules, icons). An action here should name an icon id. */
+    const val TOOL_STRIPE = "toolStripe"
     const val FILE_CONTEXT = "fileContext"
     const val EDITOR_TAB = "editorTab"
     const val COMMAND_PALETTE = "commandPalette"

@@ -104,7 +104,7 @@ import dev.ide.ui.generated.resources.codestyle_wrap_never
 import dev.ide.ui.generated.resources.codestyle_wrap_one_per_line
 import dev.ide.ui.generated.resources.codestyle_wrapping_and_braces
 import dev.ide.ui.icons.CaIcons
-import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.platform.touchInput
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -126,7 +126,7 @@ internal const val FORMAT_ON_SAVE_KEY = "settings.codeStyle.formatOnSave"
  */
 @Composable
 fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit) {
-    val iconBox = if (isMobilePlatform) 42 else 34
+    val iconBox = if (touchInput) 42 else 34
 
     val state = rememberCodeStyleScreenState(backend, hasProject)
     val display = state.display

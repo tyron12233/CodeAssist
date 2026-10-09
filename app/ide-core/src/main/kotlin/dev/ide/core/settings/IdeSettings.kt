@@ -24,6 +24,9 @@ data class IdeSettings(
     /** Keep tool window header actions visible at all times (off = only while a tool window is hovered or
      *  active, IntelliJ-style). Pointer hosts only; touch always shows them. */
     val alwaysShowToolWindowActions: Boolean = false,
+    /** Show the tool window stripe along the right edge of a wide window (it can also be hidden from its own
+     *  context menu; the top bar then carries the primary right tool window's toggle). */
+    val rightToolWindowBar: Boolean = true,
 
     // ---- editor ----
     /** Code-font zoom, 1.0 = the theme's default size (also driven live by pinch / Ctrl-+ / Ctrl--). */

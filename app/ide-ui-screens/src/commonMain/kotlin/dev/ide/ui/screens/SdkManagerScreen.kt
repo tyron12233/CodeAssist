@@ -74,7 +74,7 @@ import dev.ide.ui.generated.resources.sdk_resume
 import dev.ide.ui.generated.resources.sdk_sources_documentation
 import dev.ide.ui.generated.resources.sdk_sources_documentation_desc
 import dev.ide.ui.icons.CaIcons
-import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.platform.touchInput
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 
@@ -258,7 +258,7 @@ private fun DownloadRow(d: UiSdkDownload, onCancel: () -> Unit) {
 
 @Composable
 private fun PackageRow(p: UiSdkPackage, downloading: Boolean, onInstall: () -> Unit, onCancel: () -> Unit) {
-    val rowMin = if (isMobilePlatform) 56.dp else 48.dp
+    val rowMin = if (touchInput) 56.dp else 48.dp
     Row(
         Modifier.fillMaxWidth().defaultMinSize(minHeight = rowMin).padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -280,7 +280,7 @@ private fun PackageRow(p: UiSdkPackage, downloading: Boolean, onInstall: () -> U
         when {
             downloading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
-                IconButtonCa(CaIcons.stop, stringResource(Res.string.cancel), onCancel, boxSize = if (isMobilePlatform) 40 else 32, iconSize = 18)
+                IconButtonCa(CaIcons.stop, stringResource(Res.string.cancel), onCancel, boxSize = if (touchInput) 40 else 32, iconSize = 18)
             }
             p.installed -> StatusTag(CaIcons.check, stringResource(Res.string.sdk_installed), Ide.colors.run)
             p.incomplete -> PillButton(stringResource(Res.string.sdk_resume), CaIcons.refresh, accent = true, enabled = p.installable, onClick = onInstall)
@@ -305,7 +305,7 @@ private fun StatusTag(icon: ImageVector, label: String, color: androidx.compose.
 @Composable
 private fun PillButton(label: String, icon: ImageVector?, accent: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
-    val h = if (isMobilePlatform) 44.dp else 36.dp
+    val h = if (touchInput) 44.dp else 36.dp
     val bg = if (accent && enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
     val fg = when { !enabled -> MaterialTheme.colorScheme.outline; accent -> MaterialTheme.colorScheme.onPrimary; else -> MaterialTheme.colorScheme.onSurface }
     Row(

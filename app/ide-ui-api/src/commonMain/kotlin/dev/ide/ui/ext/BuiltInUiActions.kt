@@ -17,20 +17,24 @@ object BuiltInUiPlugin : UiPlugin {
 
     override fun contributeUi(scope: UiContributionScope) {
         val palette = UiActionPlaces.COMMAND_PALETTE
-        // Every built-in row is in BOTH places.
+        // Every built-in is in the palette, so any command can be found by typing. The other surfaces carry
+        // only the screens a project is configured from:
         //
-        // They used to be split: Modules was in the More sheet and not the palette, Manage dependencies was
-        // in the palette and not the sheet, Re-index and View logs were sheet-only. Two surfaces that each
-        // hold most of the commands is worse than either one alone, because whichever you open you cannot
-        // tell whether the thing you want is missing or somewhere else. A command that is worth a row is
-        // worth finding by typing.
-        val moreAndPalette = setOf(UiActionPlaces.MORE_MENU, palette)
+        // - the wide layout's left stripe shows Modules and Icon Manager as buttons in its lower group, next to
+        //   Settings (the stripe's own gear) and the Build and Logs bottom tool windows (also its own buttons);
+        // - the phone has no stripe, so its More sheet lists those screens, Logs and Settings & Tools.
+        //
+        // Theme, re-index and dependencies have a home elsewhere (Settings, the index chip, Modules), and Close
+        // project is the top bar's back arrow, so they are palette-only.
+        val more = UiActionPlaces.MORE_MENU
+        val stripe = UiActionPlaces.TOOL_STRIPE
+        val screen = setOf(more, stripe, palette)
 
         scope.action(
             SimpleUiAction(
                 "ui.hub",
                 "Settings & Tools",
-                moreAndPalette,
+                setOf(more, palette),
                 "Settings · code style · SDK manager · keystore manager",
                 "gear",
                 10
@@ -42,7 +46,7 @@ object BuiltInUiPlugin : UiPlugin {
             SimpleUiAction(
                 "ui.modules",
                 "Modules",
-                moreAndPalette,
+                screen,
                 "Add/remove modules · Java version · dependencies · repositories",
                 "layers",
                 20
@@ -54,7 +58,7 @@ object BuiltInUiPlugin : UiPlugin {
             SimpleUiAction(
                 "ui.icons",
                 "Icon Manager",
-                moreAndPalette,
+                screen,
                 "Browse and import icons, and change the app icon",
                 "image",
                 22
@@ -66,7 +70,7 @@ object BuiltInUiPlugin : UiPlugin {
             SimpleUiAction(
                 "ui.dependencies",
                 "Manage dependencies",
-                moreAndPalette,
+                setOf(palette),
                 iconId = "layers",
                 order = 25
             ) {
@@ -77,7 +81,7 @@ object BuiltInUiPlugin : UiPlugin {
             SimpleUiAction(
                 "ui.reindex",
                 "Re-index project",
-                moreAndPalette,
+                setOf(palette),
                 "Rebuild symbol & completion indexes",
                 "refresh",
                 40
@@ -89,9 +93,9 @@ object BuiltInUiPlugin : UiPlugin {
             SimpleUiAction(
                 "ui.logs",
                 "View logs",
-                moreAndPalette,
+                setOf(more, palette),
                 "Editor, analysis & build logs — share when something's off",
-                "terminal",
+                "logs",
                 50
             ) {
                 it.navigate(UiDestinations.LOGS)
@@ -101,7 +105,7 @@ object BuiltInUiPlugin : UiPlugin {
             SimpleUiAction(
                 "ui.toggleTheme",
                 "Toggle theme",
-                moreAndPalette,
+                setOf(palette),
                 "Switch between light and dark",
                 "eye",
                 60
@@ -113,7 +117,7 @@ object BuiltInUiPlugin : UiPlugin {
             SimpleUiAction(
                 "ui.closeProject",
                 "Close project",
-                moreAndPalette,
+                setOf(palette),
                 "Back to all projects",
                 "close",
                 70

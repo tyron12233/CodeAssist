@@ -393,6 +393,10 @@ class CodeAssistAppState(
 
     // ---- navigation intents ----
 
+    /** The editor's close-project confirmation is up. Back on the editor raises it rather than leaving at once,
+     *  the same as the top bar's back arrow; the editor draws it and clears it. */
+    var confirmCloseProject by mutableStateOf(false)
+
     /** Go to [target] with no extra state to carry (the plain forward/back moves between screens). */
     fun navigateTo(target: Screen) {
         screen = target
@@ -1035,7 +1039,7 @@ class CodeAssistAppState(
             screen == Screen.CreateProject -> screen = Screen.Projects
             screen == Screen.ImportProject -> cancelImportPreview()
             screen == Screen.ExportProject -> finishExport()
-            screen == Screen.Editor -> screen = Screen.Projects
+            screen == Screen.Editor -> confirmCloseProject = true
             // On the home screen, a Store/Learn tab steps back to the project picker before exiting.
             screen == Screen.Projects && homeTab != HomeTab.Projects -> homeTab = HomeTab.Projects
             else -> {}

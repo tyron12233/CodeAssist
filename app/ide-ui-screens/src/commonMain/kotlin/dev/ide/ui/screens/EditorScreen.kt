@@ -68,10 +68,16 @@ fun EditorScreen(
     onNewImageAsset: (resDirPath: String) -> Unit = {},
     onOpenDependencies: (String?) -> Unit = {},
     onOpenModuleConfig: (String?) -> Unit = {},
+    /** Leaves for the project list. Called once the user has confirmed in [CloseProjectDialog]. */
     onCloseProject: () -> Unit = {},
+    /** Whether the close-project confirmation is up. The host owns it, so its system-Back handling can raise it. */
+    closeProjectConfirm: Boolean = false,
+    onCloseProjectConfirmChange: (Boolean) -> Unit = {},
     onOpenRun: () -> Unit = {},
     fileActions: FileActions = FileActions.None,
 ) {
+    // Everything in the editor that leaves the project (the top bar's arrow, the palette) asks first.
+    val requestCloseProject = { onCloseProjectConfirmChange(true) }
     val indexStatus by state.backend.search.indexStatus.collectAsState()
     val buildState by state.backend.build.buildState.collectAsState()
     val scope = rememberCoroutineScope()
@@ -113,9 +119,10 @@ fun EditorScreen(
     // sheet) before the app-level handler pops the screen (#997). Desktop has no system back, so this is inert
     // there; the mobile-only panes are gated on [isMobilePlatform] since on wide layouts they're docked panes.
     PlatformBackHandler(
-        enabled = newEntry != null || newXmlTarget != null || newSource != null || fileOp != null || state.addSourceRootModule != null || state.symbolEditorOpen || state.indexDetailOpen || state.paletteOpen || state.moreOpen || state.selectedRightPanel != null || (isMobilePlatform && (state.leftOpen || state.consoleOpen)),
+        enabled = closeProjectConfirm || newEntry != null || newXmlTarget != null || newSource != null || fileOp != null || state.addSourceRootModule != null || state.symbolEditorOpen || state.indexDetailOpen || state.paletteOpen || state.moreOpen || state.selectedRightPanel != null || (isMobilePlatform && (state.leftOpen || state.consoleOpen)),
     ) {
         when {
+            closeProjectConfirm -> onCloseProjectConfirmChange(false)
             fileOp != null -> fileOp = null
             state.symbolEditorOpen -> state.symbolEditorOpen = false
             state.addSourceRootModule != null -> state.addSourceRootModule = null
@@ -147,7 +154,7 @@ fun EditorScreen(
                 onFileOp,
                 onOpenDependencies,
                 onOpenModuleConfig,
-                onCloseProject,
+                requestCloseProject,
                 fileActions
             )
             else ExpandedLayout(
@@ -165,7 +172,7 @@ fun EditorScreen(
                 onFileOp,
                 onOpenDependencies,
                 onOpenModuleConfig,
-                onCloseProject,
+                requestCloseProject,
                 fileActions
             )
         }
@@ -229,6 +236,18 @@ fun EditorScreen(
             status = indexStatus,
             onReindex = { state.backend.search.reindex() },
             onDismiss = { state.indexDetailOpen = false },
+        )
+        CloseProjectDialog(
+            visible = closeProjectConfirm,
+            projectName = state.backend.project.name,
+            unsavedFiles = state.openFiles.count { it.modified && !it.readOnly },
+            building = buildState.status == RunStatus.Running,
+            onDismiss = { onCloseProjectConfirmChange(false) },
+            onConfirm = {
+                state.saveAllNow()
+                onCloseProjectConfirmChange(false)
+                onCloseProject()
+            },
         )
         // While a console run is active but its terminal isn't on screen (the user backed out mid-run), a
         // tappable pill returns to it — the run keeps going in the background until then.

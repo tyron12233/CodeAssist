@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.platform.touchInput
 import dev.ide.ui.generated.resources.home_account
 import dev.ide.ui.generated.resources.home_search_projects
 import dev.ide.ui.generated.resources.home_no_match
@@ -1320,7 +1320,7 @@ private fun DenseProjectRow(
             modifier = Modifier.width(110.dp),
         )
         if (onShare != null || onDelete != null) {
-            Box(Modifier.alpha(if (hovered || menuOpen || isMobilePlatform) 1f else 0f)) {
+            Box(Modifier.alpha(if (hovered || menuOpen || touchInput) 1f else 0f)) {
                 IconButtonCa(CaIcons.ellipsis, stringResource(Res.string.home_more_actions), { menuOpen = true }, iconSize = 18, boxSize = 36)
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     if (onShare != null) {

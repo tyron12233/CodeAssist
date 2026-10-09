@@ -78,6 +78,24 @@ fun GlassSurface(
 }
 
 /**
+ * An opaque chrome surface for tool windows (the side and bottom panes, the phone's drawers): the theme's
+ * container colour with the same 1px top edge as [GlassSurface]. Tool windows sit over the editor and its
+ * code, which a translucent fill lets show through.
+ */
+@Composable
+fun ToolWindowSurface(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val edgeTop = Ide.colors.glassEdgeTop
+    Box(
+        modifier
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .drawBehind { drawLine(edgeTop, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1f) },
+    ) { content() }
+}
+
+/**
  * Scale-to-0.96 press feedback driven by an interaction source. Uses a bouncy spring (the expressive
  * spring feel) so releasing a press settles back past 1.0 for a lively button response.
  */

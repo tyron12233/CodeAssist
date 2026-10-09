@@ -142,6 +142,12 @@ object CaIcons {
         s("M6.5 3.5h7l5 5v10a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 5 18.5v-13A1.5 1.5 0 0 1 6.5 3.5z"),
         s("M13 3.5V8.5h5M8.5 12.5h7M8.5 15.5h7"),
     )
+    /** A bulleted list: the IDE's logs (distinct from [docText], which is a file). */
+    val logs = build(
+        "logs",
+        s("M9.5 7h10M9.5 12h10M9.5 17h10"),
+        circle(5.5f, 7f, 1.1f, true), circle(5.5f, 12f, 1.1f, true), circle(5.5f, 17f, 1.1f, true),
+    )
     val ellipsis = build("ellipsis", circle(5.5f, 12f, 1.4f, true), circle(12f, 12f, 1.4f, true), circle(18.5f, 12f, 1.4f, true))
     val error = build("error", circle(12f, 12f, 8.5f), s("M9 9l6 6M15 9l-6 6"))
     val warning = build("warning", s("M12 4.5l8.5 14.5h-17z"), s("M12 10v4.5"), circle(12f, 17f, 0.6f, true))
@@ -160,6 +166,7 @@ object CaIcons {
     val undo = mirroring("undo", s("M4 12h8.5a5.5 5.5 0 0 1 5.5 5.5"), s("M8 8l-4 4 4 4"))
     val redo = mirroring("redo", s("M20 12h-8.5a5.5 5.5 0 0 0-5.5 5.5"), s("M16 8l4 4-4 4"))
     val arrowRight = mirroring("arrow-right", s("M5 12h13M13 6l6 6-6 6"))
+    val arrowLeft = mirroring("arrow-left", s("M19 12H6M11 6l-6 6 6 6"))
     /** Arrow into a tray — import files from outside the app. */
     val download = build("download", s("M12 4v10M8 10.5l4 4 4-4"), s("M5 18.5h14"))
     /** Arrow up out of a tray — share/export a file to another app. */

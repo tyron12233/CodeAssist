@@ -142,9 +142,6 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="creating">Creando…</string>
     <string name="create_project">Crear Proyecto</string>
     <string name="no_templates_available">No hay plantillas disponibles.</string>
-    <string name="performance_analytics">Análisis de rendimiento</string>
-    <string name="sharing_performance_data">Compartiendo datos de rendimiento anónimos</string>
-    <string name="not_sharing_performance_data">No compartiendo datos de rendimiento</string>
     <string name="compatibility">Compatibilidad</string>
     <plurals name="recovered_projects">
         <item quantity="one">Recuperado %1$d proyecto de una versión anterior</item>
@@ -319,8 +316,6 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="edchrome_more">Más</string>
     <string name="sidebar_hide_tool_window_bar">Ocultar barra de ventanas de herramientas</string>
     <string name="toolwindow_hide">Ocultar</string>
-    <string name="sidebar_right_tool_window_bar">Barra de herramientas derecha</string>
-    <string name="sidebar_right_tool_window_bar_desc">Mostrar los iconos de ventanas de herramientas en el borde derecho</string>
     <string name="edchrome_settings_and_tools">Configuración y herramientas</string>
     <string name="edchrome_toggle_navigator">Alternar navegador</string>
     <string name="edchrome_find_replace">Buscar / reemplazar</string>
@@ -1166,4 +1161,12 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="home_sort_recent">Recientes</string>
     <string name="home_sort_name">Nombre</string>
     <string name="home_clear_search">Borrar búsqueda</string>
+    <string name="close_project_title">¿Cerrar %1$s?</string>
+    <string name="close_project_body">Volverás a tus proyectos.</string>
+    <plurals name="close_project_unsaved">
+        <item quantity="one">%1$d archivo tiene cambios sin guardar. Se guardará primero.</item>
+        <item quantity="other">%1$d archivos tienen cambios sin guardar. Se guardarán primero.</item>
+    </plurals>
+    <string name="close_project_building">Todavía hay una compilación en curso.</string>
+    <string name="close_project_save_and_close">Guardar y cerrar</string>
 </resources>

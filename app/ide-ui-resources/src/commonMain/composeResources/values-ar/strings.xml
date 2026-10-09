@@ -255,12 +255,6 @@
     <string name="creating">جاري الإنشاء…</string>
     <string name="create_project">إنشاء مشروع</string>
     <string name="no_templates_available">لا توجد قوالب متاحة.</string>
-    <string name="performance_analytics">تحليلات الأداء</string>
-    <string name="sharing_performance_data">مشاركة بيانات الأداء مجهولة الهوية</string>
-    <string name="not_sharing_performance_data">عدم مشاركة بيانات الأداء</string>
-    <string name="ftp_server">خادم FTP</string>
-    <string name="ftp_server_running">يعمل على 127.0.0.1:8021 · تذهب الملفات المرفوعة إلى assets/‎، وهي قابلة للكتابة من أي تطبيق على هذا الجهاز</string>
-    <string name="ftp_server_stopped">متوقف · خادم محلي لرفع الأصول</string>
     <string name="compatibility">التوافق</string>
     <plurals name="recovered_projects">
         <item quantity="one">تم استرداد مشروع واحد من إصدار أقدم</item>
@@ -505,8 +499,6 @@
     <string name="edchrome_more">المزيد</string>
     <string name="sidebar_hide_tool_window_bar">إخفاء شريط نوافذ الأدوات</string>
     <string name="toolwindow_hide">إخفاء</string>
-    <string name="sidebar_right_tool_window_bar">شريط نوافذ الأدوات الأيمن</string>
-    <string name="sidebar_right_tool_window_bar_desc">إظهار أيقونات نوافذ الأدوات على الحافة اليمنى</string>
     <string name="edchrome_settings_and_tools">الإعدادات والأدوات</string>
     <string name="edchrome_toggle_navigator">تبديل المتصفح</string>
     <string name="edchrome_find_replace">بحث / استبدال</string>
@@ -1930,4 +1922,12 @@
         <item quantity="many">‏%1$d مشروعًا</item>
         <item quantity="other">‏%1$d مشروع</item>
     </plurals>
+    <string name="close_project_title">إغلاق %1$s؟</string>
+    <string name="close_project_body">ستعود إلى قائمة مشاريعك.</string>
+    <plurals name="close_project_unsaved">
+        <item quantity="one">يحتوي ملف واحد على تغييرات غير محفوظة، وسيتم حفظه أولاً.</item>
+        <item quantity="other">تحتوي %1$d ملفات على تغييرات غير محفوظة، وسيتم حفظها أولاً.</item>
+    </plurals>
+    <string name="close_project_building">لا يزال هناك بناء قيد التشغيل.</string>
+    <string name="close_project_save_and_close">حفظ وإغلاق</string>
 </resources>

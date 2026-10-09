@@ -82,7 +82,7 @@ import dev.ide.ui.generated.resources.run_stopped
 import dev.ide.ui.generated.resources.run_type_input
 import dev.ide.ui.generated.resources.stop
 import dev.ide.ui.icons.CaIcons
-import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.platform.touchInput
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 
@@ -144,7 +144,7 @@ fun RunScreen(
 
 @Composable
 private fun RunTopBar(console: RunConsoleUi?, buildFailed: Boolean, onBack: () -> Unit, onStop: () -> Unit, onRerun: () -> Unit) {
-    val iconBox = if (isMobilePlatform) 42 else 34
+    val iconBox = if (touchInput) 42 else 34
     val running = console?.phase == RunPhase.Running || console?.phase == RunPhase.Building
     val clipboard = LocalClipboardManager.current
     Row(

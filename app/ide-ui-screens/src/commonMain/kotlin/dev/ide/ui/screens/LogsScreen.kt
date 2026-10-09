@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiLogEntry
+import dev.ide.ui.components.HideToolWindowButton
 import dev.ide.ui.components.PeekTimestampReveal
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.logs_copy_all
@@ -84,6 +85,8 @@ fun LogsScreen(
     modifier: Modifier = Modifier,
     /** Open filtered to this source (a plugin id), as the Plugins screen does. Null shows everything. */
     initialSource: String? = null,
+    /** Docked as a bottom tool window: the header ends with the hide button. Null in the phone's sheet. */
+    onHide: (() -> Unit)? = null,
 ) {
     val state = rememberLogsScreenState(backend)
     // Selected rather than filtered-on-open: until that plugin has actually logged something its id is not
@@ -105,7 +108,7 @@ fun LogsScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(CaIcons.logs, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(stringResource(Res.string.logs_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text("${shown.size}", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
                 Box(Modifier.weight(1f))
@@ -117,6 +120,7 @@ fun LogsScreen(
                 if (fileActions.canShare) {
                     HeaderAction(CaIcons.share, stringResource(Res.string.share)) { state.export(fileActions::share) }
                 }
+                if (onHide != null) HideToolWindowButton(onHide)
             }
 
             // Search field

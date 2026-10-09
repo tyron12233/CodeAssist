@@ -47,6 +47,14 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
+import dev.ide.ui.ext.UiActionHost
+import dev.ide.ui.ext.UiActionRegistry
+import dev.ide.ui.ext.UiHostAction
+import dev.ide.ui.ext.UiPluginHost
+import dev.ide.ui.icons.actionIcon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.unit.Dp
@@ -73,8 +81,7 @@ import dev.ide.ui.components.DockBarHeight
 import dev.ide.ui.components.FileNavigator
 import dev.ide.ui.components.FileOpKind
 import dev.ide.ui.components.fileOpPath
-import dev.ide.ui.components.GlassMaterial
-import dev.ide.ui.components.GlassSurface
+import dev.ide.ui.components.ToolWindowSurface
 import dev.ide.ui.components.NewSourceLang
 import dev.ide.ui.components.PanelContent
 import dev.ide.ui.components.PushDrawer
@@ -89,8 +96,10 @@ import dev.ide.ui.components.SidebarPanel
 import dev.ide.ui.components.pluginPanels
 import dev.ide.ui.components.RightToolOverlay
 import dev.ide.ui.ext.ToolWindowAnchor
+import dev.ide.ui.ext.ToolWindowRegistry
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.buildc_build
+import dev.ide.ui.generated.resources.logs_title
 import dev.ide.ui.generated.resources.edchrome_files
 import dev.ide.ui.generated.resources.edchrome_more
 import dev.ide.ui.generated.resources.sidebar_hide_tool_window_bar
@@ -306,7 +315,20 @@ internal fun ExpandedLayout(
     val moreLabel = stringResource(Res.string.edchrome_more)
     val settingsLabel = stringResource(Res.string.edchrome_settings_and_tools)
     val buildConsoleLabel = stringResource(Res.string.buildc_build)
+    val logsLabel = stringResource(Res.string.logs_title)
     val hideBarLabel = stringResource(Res.string.sidebar_hide_tool_window_bar)
+    // The screens a project is configured from (Modules, Icon Manager, Logs) sit in the stripe's lower group,
+    // resolved from the registry like the phone's More sheet that lists them there.
+    val stripeHost = editorActionHost(
+        state, onToggleTheme, onOpenHub, onOpenIconManager, onOpenDependencies, onOpenModuleConfig, onCloseProject,
+        onDone = {},
+    )
+    UiPluginHost.ensureLoaded()
+    val stripeActions = UiActionRegistry.forPlace(UiActionPlaces.TOOL_STRIPE, stripeHost)
+    // What a UI plugin put in the More menu. There is no More sheet here, so those rows open from a stripe menu.
+    // Settings & Tools is left out: it is the stripe's own gear.
+    val pluginMoreActions = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, stripeHost)
+        .filter { UiActionPlaces.TOOL_STRIPE !in it.places && it.id != "ui.hub" }
     // Floating panes overlay the editor, so only one side is open at a time; set by the centre column below.
     var floatPanes by remember { mutableStateOf(false) }
     // Whichever side opened last wins, however it was opened (stripe, top bar, command palette).
@@ -319,7 +341,7 @@ internal fun ExpandedLayout(
     Box(Modifier.fillMaxSize()) {
         // The top bar spans the whole window (IntelliJ's main toolbar); the stripes, panes, editor and console
         // all sit below it, laid out here around the editor body EditorCenter hands back.
-        EditorCenter(state, indexStatus, compact = false, Modifier.fillMaxSize()) { editorBody ->
+        EditorCenter(state, indexStatus, compact = false, Modifier.fillMaxSize(), onCloseProject) { editorBody ->
             Column(Modifier.fillMaxSize()) {
                 // One hairline under the bar, across the stripes too, like IntelliJ's main toolbar border.
                 Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
@@ -332,11 +354,29 @@ internal fun ExpandedLayout(
                         footer = {
                             // The build console is a BOTTOM tool window (docked below the editor, see the centre column);
                             // IntelliJ-style its toggle lives at the lower-left of the stripe, lit while it's open.
-                            RailActionItem(CaIcons.terminal, buildConsoleLabel, active = state.consoleOpen) {
-                                state.consoleOpen = !state.consoleOpen
+                            // The bottom tool windows: the build console and the logs share the bottom pane, one at
+                            // a time; picking the one on show hides the pane.
+                            RailActionItem(CaIcons.terminal, buildConsoleLabel, active = state.consoleOpen && !state.logsOpen) {
+                                if (state.consoleOpen && !state.logsOpen) {
+                                    state.consoleOpen = false
+                                } else {
+                                    state.consoleOpen = true
+                                    state.closeLogs()
+                                }
+                            }
+                            RailActionItem(CaIcons.logs, logsLabel, active = state.logsOpen) {
+                                if (state.logsOpen) {
+                                    state.closeLogs()
+                                    state.consoleOpen = false
+                                } else {
+                                    state.logsOpen = true
+                                }
                             }
                             RailDivider()
-                            RailActionItem(CaIcons.ellipsis, moreLabel) { state.moreOpen = true }
+                            stripeActions.forEach { a ->
+                                RailActionItem(actionIcon(a.iconId), localizedUiActionText(a)) { a.perform(stripeHost) }
+                            }
+                            if (pluginMoreActions.isNotEmpty()) StripeMoreMenu(moreLabel, pluginMoreActions, stripeHost)
                             RailActionItem(CaIcons.gear, settingsLabel, onClick = onOpenHub)
                         },
                     )
@@ -443,7 +483,7 @@ internal fun ExpandedLayout(
                             // The bottom tool window slides up from, and back down into, the bottom edge, with
                             // the same motion as the side panes.
                             AnimatedVisibility(
-                                visible = state.consoleOpen,
+                                visible = state.consoleOpen || state.logsOpen,
                                 enter = expandVertically(tween(Motion.BASE, easing = Motion.quiet), expandFrom = Alignment.Bottom) +
                                     fadeIn(tween(Motion.BASE)),
                                 exit = shrinkVertically(tween(Motion.BASE, easing = Motion.quiet), shrinkTowards = Alignment.Bottom) +
@@ -472,7 +512,16 @@ internal fun ExpandedLayout(
                                         alwaysShowActions = state.alwaysShowToolWindowActions,
                                         onActivate = { state.activeToolWindow = IdeUiState.CONSOLE_TOOL_WINDOW },
                                     ) {
-                                    GlassSurface(Modifier.fillMaxWidth().height(consoleH), GlassMaterial.Regular) {
+                                    ToolWindowSurface(Modifier.fillMaxWidth().height(consoleH)) {
+                                        if (state.logsOpen) {
+                                            LogsScreen(
+                                                backend = state.backend,
+                                                fileActions = fileActions,
+                                                modifier = Modifier.fillMaxSize(),
+                                                initialSource = state.logsSource,
+                                                onHide = { state.closeLogs(); state.consoleOpen = false },
+                                            )
+                                        } else {
                                         // Collected here (not threaded from the parent) so ~10/s app-log updates recompose only
                                         // the console subtree, not the whole editor layout.
                                         val appLog by state.backend.build.appLog.collectAsState()
@@ -490,6 +539,7 @@ internal fun ExpandedLayout(
                                             activeFilePath = state.active?.path,
                                             appLog = appLog,
                                         )
+                                        }
                                     }
                                     }
                                 }
@@ -497,7 +547,7 @@ internal fun ExpandedLayout(
                         }
                     }
                     // The right stripe shows whenever a plugin contributes a RIGHT tool window, unless the user hid it;
-                    // the top bar then carries a toggle for the primary one, and the More sheet brings the stripe back.
+                    // the top bar then carries a toggle for the primary one, and Settings > Appearance brings the stripe back.
                     if (rightPanels.isNotEmpty() && state.rightStripeVisible) {
                         ActivityRail(
                             panels = rightPanels,
@@ -515,8 +565,26 @@ internal fun ExpandedLayout(
                 }
             }
         }
-        DestinationSheets(state, compact = false, onOpenModuleConfig, onOpenDependencies, onToggleTheme, onOpenHub, onOpenIconManager, onCloseProject, fileActions)
+        DestinationSheets(state, onOpenModuleConfig, onOpenDependencies, onToggleTheme, onOpenHub, onOpenIconManager, onCloseProject, fileActions, logsAsSheet = false)
         PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenIconManager, onOpenDependencies, onOpenModuleConfig, onCloseProject)
+    }
+}
+
+/** The stripe's ⋯ button: a menu of the More-menu rows a UI plugin contributed, for the wide layout. */
+@Composable
+private fun StripeMoreMenu(label: String, actions: List<UiHostAction>, host: UiActionHost) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        RailActionItem(CaIcons.ellipsis, label, active = open) { open = true }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            actions.forEach { a ->
+                DropdownMenuItem(
+                    text = { Text(localizedUiActionText(a)) },
+                    leadingIcon = { Icon(actionIcon(a.iconId), null, Modifier.size(18.dp)) },
+                    onClick = { open = false; a.perform(host) },
+                )
+            }
+        }
     }
 }
 
@@ -579,7 +647,7 @@ internal fun CompactLayout(
             gesturesEnabled = isMobilePlatform,
             onProgress = { navProgress = it },
             drawerContent = {
-                GlassSurface(Modifier.fillMaxSize(), GlassMaterial.Regular) {
+                ToolWindowSurface(Modifier.fillMaxSize()) {
                     Column(Modifier.fillMaxSize()) {
                         ToolWindowSwitcherHeader(
                             panels = leftPanels,
@@ -612,7 +680,7 @@ internal fun CompactLayout(
             Box(Modifier.fillMaxSize()) {
                 Column(Modifier.fillMaxSize()) {
                     EditorCenter(
-                        state, indexStatus, compact = true, Modifier.weight(1f).fillMaxWidth(),
+                        state, indexStatus, compact = true, Modifier.weight(1f).fillMaxWidth(), onCloseProject,
                         navFraction = { navProgress },
                     )
                     // While the keyboard is up: a coding-symbol accessory bar sits directly above it. Off-keyboard,
@@ -652,10 +720,19 @@ internal fun CompactLayout(
                         state.backend.settings.setPreference(DOCK_HINT_PREF, "true")
                     },
                     bar = {
+                        // The right-hand tool windows open from here (and the top bar's ⋯ while typing hides this
+                        // bar): the first one is the tab, the overlay's switcher reaches any others.
+                        val rightPrimary = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).firstOrNull()
                         BottomNav(
                             selected = state.bottomNavSelection(),
                             onSelect = { state.onBottomNav(it) },
                             showSource = leftPanels.any { it.id == LeftPanelId.SOURCE },
+                            rightTool = rightPrimary?.let { tw ->
+                                RightToolNavItem(actionIcon(tw.iconId), tw.title, open = state.selectedRightPanel != null) {
+                                    if (state.selectedRightPanel != null) state.selectedRightPanel = null
+                                    else state.selectRightPanel(tw.id)
+                                }
+                            },
                         )
                     },
                 ) {
@@ -678,7 +755,7 @@ internal fun CompactLayout(
             }
         }
 
-        DestinationSheets(state, compact = true, onOpenModuleConfig, onOpenDependencies, onToggleTheme, onOpenHub, onOpenIconManager, onCloseProject, fileActions)
+        DestinationSheets(state, onOpenModuleConfig, onOpenDependencies, onToggleTheme, onOpenHub, onOpenIconManager, onCloseProject, fileActions, logsAsSheet = true)
         PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenIconManager, onOpenDependencies, onOpenModuleConfig, onCloseProject)
         // Right-edge tool-window drawer (the phone counterpart of the desktop right pane + rail). Self-gates on
         // there being a RIGHT tool window, so it lays down nothing when no plugin contributes one.

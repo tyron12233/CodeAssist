@@ -12,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.platform.touchInput
 import kotlinx.coroutines.launch
 
 /**
@@ -35,7 +35,7 @@ fun PeekTimestampReveal(
     modifier: Modifier = Modifier,
     content: @Composable (reveal: (() -> Float)?, slotPx: Float) -> Unit,
 ) {
-    if (!isMobilePlatform) {
+    if (!touchInput) {
         Box(modifier) { content(null, 0f) }
         return
     }

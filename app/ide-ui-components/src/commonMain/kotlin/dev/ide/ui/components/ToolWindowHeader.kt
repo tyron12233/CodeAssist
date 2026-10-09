@@ -12,6 +12,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import dev.ide.ui.theme.Motion
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -42,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.toolwindow_hide
 import dev.ide.ui.icons.CaIcons
-import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.platform.touchInput
 import org.jetbrains.compose.resources.stringResource
 
 /** Minimum height of a tool window's header strip, IntelliJ's tool window title bar. */
@@ -187,7 +188,7 @@ fun ToolWindowFrame(
             }
         },
     ) {
-        val visible = alwaysShowActions || isMobilePlatform || hovered || active
+        val visible = alwaysShowActions || touchInput || hovered || active
         CompositionLocalProvider(LocalToolWindowActionsVisible provides visible) { this@Box.content() }
     }
 }
@@ -205,9 +206,10 @@ fun Modifier.toolWindowActionsAlpha(): Modifier {
 }
 
 /**
- * The header for a host that switches between [panels] (the mobile drawers): the segmented switcher stands in
- * for the title while there are two or more panels, followed by the selected panel's controls and the hide
- * button.
+ * The header for a host that switches between [panels] (the mobile drawers). With two or more panels the
+ * segmented switcher stands in for the title and shares its row only with the hide button; the selected
+ * panel's own controls (a view picker, its actions) get a row of their own below, since a phone-width drawer
+ * has no room for both.
  */
 @Composable
 fun ToolWindowSwitcherHeader(
@@ -222,8 +224,27 @@ fun ToolWindowSwitcherHeader(
     if (panels.size < 2) {
         ToolWindowHeader(selected.title, slot, onHide)
     } else {
-        ToolWindowHeader(slot, onHide, titleFills = true) {
-            SegmentedPanelSwitcher(panels, selected.id, onSelect, Modifier.weight(1f), horizontalPadding = 0.dp)
+        Column(Modifier.fillMaxWidth()) {
+            ToolWindowHeader(null, onHide, titleFills = true) {
+                SegmentedPanelSwitcher(panels, selected.id, onSelect, Modifier.weight(1f), horizontalPadding = 0.dp)
+            }
+            val leading = slot.leading
+            val actions = slot.actions
+            if (leading != null || actions != null) {
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 36.dp).padding(start = 12.dp, end = 6.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    leading?.invoke(this)
+                    Spacer(Modifier.weight(1f))
+                    Row(
+                        Modifier.toolWindowActionsAlpha(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) { actions?.invoke(this) }
+                }
+            }
         }
     }
 }
@@ -241,7 +262,7 @@ fun HideToolWindowButton(onHide: () -> Unit, modifier: Modifier = Modifier) {
         tooltip = { PlainTooltip { Text(label, style = MaterialTheme.typography.labelMedium) } },
         state = rememberTooltipState(),
         // Hover only: on touch a long-press would also count as the tap that hides the window.
-        enableUserInput = !isMobilePlatform,
+        enableUserInput = !touchInput,
         modifier = modifier,
     ) {
         IconButtonCa(CaIcons.minus, label, onHide, boxSize = 28, iconSize = 16)

@@ -21,6 +21,7 @@ fun actionIcon(iconId: String?): ImageVector = when (iconId) {
     "code" -> CaIcons.code
     "braces", "codeStyle", "format" -> CaIcons.braces
     "file", "doc" -> CaIcons.docText
+    "logs" -> CaIcons.logs
     "folder" -> CaIcons.folder
     "share" -> CaIcons.share
     "command" -> CaIcons.command

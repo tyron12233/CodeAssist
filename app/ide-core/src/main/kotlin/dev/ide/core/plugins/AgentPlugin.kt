@@ -1,7 +1,9 @@
 package dev.ide.core.plugins
 
 import dev.ide.agent.LlmEffort
+import dev.ide.agent.mcp.CodeAssistMcpServer
 import dev.ide.core.agent.AgentBackend
+import dev.ide.platform.settings.PreferenceReader
 import dev.ide.platform.settings.SETTINGS_PAGE_EP
 import dev.ide.platform.settings.SettingControl
 import dev.ide.platform.settings.SettingsPage
@@ -100,6 +102,11 @@ internal object AgentSettingsPage : SettingsPage {
     override val scope: SettingsScope = SettingsScope.APPLICATION
     override val order: Int = 90
 
+    override fun onChanged(key: String, values: PreferenceReader) {
+        // Unlike the MCP server, the FTP server starts and stops at once, in the open project.
+        if (key == AgentBackend.FTP_PREF) AgentBackend.forProject(null)?.setFtpServerEnabled(values.bool(key, false))
+    }
+
     override fun controls(): List<SettingControl> = listOf(
         SettingControl.Choice(
             key = "provider",
@@ -179,6 +186,16 @@ internal object AgentSettingsPage : SettingsPage {
                 " tcp:" + AgentBackend.MCP_PORT + "\" then add a remote MCP server at \"http://127.0.0.1:" +
                 AgentBackend.MCP_PORT + "/mcp\". Warning: any client that can reach the port can edit the open " +
                 "project, without further permission prompts. Applies on the next launch.",
+            default = false,
+        ),
+        SettingControl.Toggle(
+            key = AgentBackend.FTP_PREF,
+            title = "FTP server",
+            description = "An anonymous upload inbox on 127.0.0.1:" + CodeAssistMcpServer.DEFAULT_FTP_PORT +
+                ": files sent to it land in the open project's assets/ folder. Any app on this device can " +
+                "write to it while it runs. Reach it from a computer with \"adb forward tcp:" +
+                CodeAssistMcpServer.DEFAULT_FTP_PORT + " tcp:" + CodeAssistMcpServer.DEFAULT_FTP_PORT +
+                "\" and the same for port " + (CodeAssistMcpServer.DEFAULT_FTP_PORT + 1) + ".",
             default = false,
         ),
         SettingControl.IntSlider(

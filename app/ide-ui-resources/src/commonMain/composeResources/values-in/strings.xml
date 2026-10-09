@@ -119,9 +119,6 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="creating">Membuat…</string>
     <string name="create_project">Buat Proyek</string>
     <string name="no_templates_available">Tidak ada templat yang tersedia.</string>
-    <string name="performance_analytics">Analisis performa</string>
-    <string name="sharing_performance_data">Membagikan data performa anonim</string>
-    <string name="not_sharing_performance_data">Tidak membagikan data performa</string>
     <string name="compatibility">Kompatibilitas</string>
 
     <!-- AI coding agent -->
@@ -288,8 +285,6 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="edchrome_more">Lainnya</string>
     <string name="sidebar_hide_tool_window_bar">Sembunyikan bilah jendela alat</string>
     <string name="toolwindow_hide">Sembunyikan</string>
-    <string name="sidebar_right_tool_window_bar">Bilah jendela alat kanan</string>
-    <string name="sidebar_right_tool_window_bar_desc">Tampilkan ikon jendela alat di tepi kanan</string>
     <string name="edchrome_settings_and_tools">Setelan &amp; Alat</string>
     <string name="edchrome_toggle_navigator">Alihkan navigator</string>
     <string name="edchrome_find_replace">Cari / ganti</string>
@@ -1059,4 +1054,11 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="home_sort_recent">Terbaru</string>
     <string name="home_sort_name">Nama</string>
     <string name="home_clear_search">Hapus pencarian</string>
+    <string name="close_project_title">Tutup %1$s?</string>
+    <string name="close_project_body">Anda akan kembali ke daftar proyek.</string>
+    <plurals name="close_project_unsaved">
+        <item quantity="other">%1$d file memiliki perubahan yang belum disimpan. File akan disimpan terlebih dahulu.</item>
+    </plurals>
+    <string name="close_project_building">Build masih berjalan.</string>
+    <string name="close_project_save_and_close">Simpan &amp; tutup</string>
 </resources>
