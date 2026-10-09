@@ -11,6 +11,10 @@ import dev.ide.ui.backend.IdeBackend
 /** App-global preference: whether the user wants ads shown (default true). Flipped by the disable-ads toggle. */
 const val ADS_ENABLED_PREF = "ads.enabled"
 
+/** App-global preference: whether full-screen (interstitial) ads may show (default true). Native ads in the
+ *  app's lists and panels follow [ADS_ENABLED_PREF] alone, so this can be off while they stay on. */
+const val INTERSTITIALS_ENABLED_PREF = "ads.interstitials.enabled"
+
 /** The [AdHost.installStamp] the stored [ADS_ENABLED_PREF] value belongs to — see [AdController]. */
 const val ADS_ENABLED_STAMP_PREF = "ads.enabled.stamp"
 
@@ -34,8 +38,18 @@ class AdController(
     var adsEnabled by mutableStateOf(initialAdsEnabled(backend, host))
         private set
 
+    /** The user's separate choice about full-screen ads. Read after [adsEnabled], whose install reset also
+     *  resets this one. */
+    var interstitialsEnabled by mutableStateOf(
+        backend.settings.preference(INTERSTITIALS_ENABLED_PREF)?.toBooleanStrictOrNull() ?: true
+    )
+        private set
+
     /** Ads render only when the host has an ad network AND the user hasn't turned them off. */
     val adsActive: Boolean get() = host.available && adsEnabled
+
+    /** Full-screen ads show only while ads are active AND the user hasn't turned full-screen ones off. */
+    val interstitialsActive: Boolean get() = adsActive && interstitialsEnabled
 
     /** Whether to show the ad on/off control (only where an ad network exists — i.e. Android, not desktop). */
     val manageable: Boolean get() = host.available
@@ -55,16 +69,23 @@ class AdController(
         backend.settings.setPreference(ADS_ENABLED_PREF, enabled.toString())
     }
 
+    /** Turn full-screen ads on/off on their own (native ads unaffected) and persist the choice. */
+    fun updateInterstitialsEnabled(enabled: Boolean) {
+        interstitialsEnabled = enabled
+        backend.settings.setPreference(INTERSTITIALS_ENABLED_PREF, enabled.toString())
+    }
+
     /** Count of eligible (ads-active) lesson finishes so far this session — drives the every-Nth gate below. */
     private var lessonFinishes = 0
 
     /**
-     * Whether a just-finished tutorial lesson should show the full-screen interstitial. Ads must be active, and
+     * Whether a just-finished tutorial lesson should show the full-screen interstitial. Full-screen ads must be
+     * active ([interstitialsActive]), and
      * only every [LESSON_INTERSTITIAL_EVERY]th eligible finish qualifies, so a run of short lessons doesn't pop
      * an ad each time. Call exactly once per lesson completion — it advances the counter as a side effect.
      */
     fun shouldShowLessonInterstitial(): Boolean {
-        if (!adsActive) return false
+        if (!interstitialsActive) return false
         lessonFinishes++
         return lessonFinishes % LESSON_INTERSTITIAL_EVERY == 0
     }
@@ -82,6 +103,7 @@ private fun initialAdsEnabled(backend: IdeBackend, host: AdHost): Boolean {
     val stamp = host.installStamp
     if (stamp != null && backend.settings.preference(ADS_ENABLED_STAMP_PREF) != stamp) {
         backend.settings.setPreference(ADS_ENABLED_PREF, true.toString())
+        backend.settings.setPreference(INTERSTITIALS_ENABLED_PREF, true.toString())
         backend.settings.setPreference(ADS_ENABLED_STAMP_PREF, stamp)
         return true
     }
@@ -98,6 +120,6 @@ val LocalAds = staticCompositionLocalOf<AdController?> { null }
 @Composable
 fun rememberAds(): AdController? = LocalAds.current
 
-/** Whether an ad should render right now (host available and ads enabled). */
+/** Whether a native ad should render right now (host available and ads enabled). */
 @Composable
 fun adsActive(): Boolean = LocalAds.current?.adsActive == true

@@ -236,7 +236,6 @@ class MainActivity : ComponentActivity() {
             // Settings "Manage ad consent" entry (UMP privacy options) and reopen the form on request.
             val adHost = remember {
                 AndroidAdHost(
-                    openUrl = { url -> fileOps.openInBrowser(url) },
                     privacyOptionsRequiredProvider = { adConsent.privacyOptionsRequired },
                     onShowPrivacyOptions = { adConsent.showPrivacyOptions(this@MainActivity) },
                     // The full-screen build interstitial needs the foreground Activity to show().

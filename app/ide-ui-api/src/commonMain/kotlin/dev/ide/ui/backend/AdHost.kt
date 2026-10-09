@@ -45,10 +45,10 @@ enum class AdPlacement {
  * [dev.ide.ui.components.AdSlot]), never as banners. The one exception is a single full-screen interstitial
  * shown occasionally at natural breaks ([preloadInterstitial]/[showInterstitial]) — currently a long-running
  * build finishing its wait and a completed tutorial lesson. Whether ads are shown at all — native slots AND
- * that interstitial — is decided in common by [dev.ide.ui.ads.AdController] from the user's "show ads"
- * preference; this port only reports whether an ad network is [available] and paints/presents the ad. There is
- * no purchase flow — removing ads is free (the toggle), and supporting the project is a plain donation link the
- * host opens itself.
+ * that interstitial — is decided in common by [dev.ide.ui.ads.AdController] from the user's "show ads" and
+ * "full-screen ads" preferences; this port only reports whether an ad network is [available] and paints/presents
+ * the ad. There is no purchase flow — removing ads is free (the toggle), and supporting the project is a plain
+ * donation link the host opens itself.
  */
 interface AdHost {
     /** Whether an ad network is wired on this host (false on desktop). Gates every ad slot. */
@@ -78,10 +78,11 @@ interface AdHost {
     val installStamp: String? get() = null
 
     /**
-     * Render a native ad for [placement] within the caller-provided [modifier] bounds. Called only when ads
-     * are active (see [dev.ide.ui.ads.AdController]); the host loads/caches the ad and paints it to match the
-     * app. A host with no ad ready may render nothing — the surrounding [dev.ide.ui.components.AdSlot] then
-     * collapses to no card.
+     * Render the native-ad slot for [placement]: once an ad has loaded, the ad inside the shared card chrome
+     * ([dev.ide.ui.components.NativeAdCard]) with [modifier] applied to that card. Called only when ads are
+     * active (see [dev.ide.ui.ads.AdController]); the host loads/caches the ad and paints it to match the app.
+     * While no ad is ready, or when none fills, the host draws nothing visible (no card, no placeholder, and not
+     * [modifier]'s padding), so the slot collapses rather than standing in for the ad with something else.
      */
     @Composable
     fun NativeAd(placement: AdPlacement, modifier: Modifier)

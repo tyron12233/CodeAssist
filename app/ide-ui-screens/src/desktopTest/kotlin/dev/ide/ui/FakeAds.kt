@@ -14,6 +14,7 @@ import dev.ide.ui.ads.AdController
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.components.NativeAdCard
 
 /**
  * A stand-in ad network for snapshots.
@@ -26,9 +27,9 @@ class FakeAdHost : AdHost {
     override val available: Boolean = true
 
     @Composable
-    override fun NativeAd(placement: AdPlacement, modifier: Modifier) {
+    override fun NativeAd(placement: AdPlacement, modifier: Modifier) = NativeAdCard(modifier) {
         Box(
-            modifier.fillMaxWidth().height(84.dp)
+            Modifier.fillMaxWidth().height(84.dp)
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest),
             contentAlignment = Alignment.Center,
         ) {

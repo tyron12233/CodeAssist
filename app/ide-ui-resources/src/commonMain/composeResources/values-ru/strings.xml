@@ -91,9 +91,13 @@
     <string name="support_star">Поставить звезду на GitHub</string>
     <string name="support_show_ads">Показывать рекламу</string>
     <string name="support_show_ads_desc">Показывать рекламу в приложении. Вы можете отключить ее в любое время.</string>
+    <string name="support_show_interstitials">Полноэкранная реклама</string>
+    <string name="support_show_interstitials_desc">Иногда полноэкранная реклама во время долгих сборок и после завершённых уроков.</string>
+    <string name="ads_off_title">Отключить рекламу?</string>
+    <string name="ads_off_body">Можно отключить только полноэкранную рекламу и оставить небольшую рекламу в списках и панелях.</string>
+    <string name="ads_off_all">Всю</string>
+    <string name="ads_off_fullscreen_only">Только полноэкранную</string>
     <string name="ad_label">Реклама</string>
-    <string name="house_ad_support_title">Нравится CodeAssist?</string>
-    <string name="house_ad_support_content">Поддержите проект в GitHub Sponsors.</string>
     <string name="no_project_yet">Проектов пока нет. Создайте один, чтобы начать.</string>
     <string name="your_projects">Ваши проекты</string>
     <string name="project_kind_android">Android</string>

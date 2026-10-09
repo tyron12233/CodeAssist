@@ -94,9 +94,13 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="support_star">Dar estrella en GitHub</string>
     <string name="support_show_ads">Mostrar anuncios</string>
     <string name="support_show_ads_desc">Mostrar anuncios en la aplicación. Puedes desactivarlos en cualquier momento.</string>
+    <string name="support_show_interstitials">Anuncios a pantalla completa</string>
+    <string name="support_show_interstitials_desc">Anuncios ocasionales a pantalla completa durante compilaciones largas y al terminar lecciones.</string>
+    <string name="ads_off_title">¿Desactivar anuncios?</string>
+    <string name="ads_off_body">Puedes desactivar solo los anuncios a pantalla completa y mantener los anuncios más pequeños en listas y paneles.</string>
+    <string name="ads_off_all">Todos</string>
+    <string name="ads_off_fullscreen_only">Solo pantalla completa</string>
     <string name="ad_label">Anuncio</string>
-    <string name="house_ad_support_title">¿Disfrutas de CodeAssist?</string>
-    <string name="house_ad_support_content">Apoya el proyecto en GitHub Sponsors.</string>
     <string name="no_project_yet">Aún no hay proyectos. Crea uno para comenzar.</string>
     <string name="your_projects">Tus proyectos</string>
     <string name="project_kind_android">Android</string>

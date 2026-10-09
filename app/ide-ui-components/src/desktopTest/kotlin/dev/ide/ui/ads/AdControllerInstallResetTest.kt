@@ -66,4 +66,33 @@ class AdControllerInstallResetTest {
         assertFalse(AdController(backend, StampedAdHost(null)).adsEnabled)
         assertFalse(backend.prefs.containsKey(ADS_ENABLED_STAMP_PREF))
     }
+
+    @Test
+    fun fullScreenAdsTurnOffOnTheirOwn() {
+        val backend = PrefBackend()
+        AdController(backend, StampedAdHost("build-1")).updateInterstitialsEnabled(false)
+
+        val ads = AdController(backend, StampedAdHost("build-1"))
+        assertTrue(ads.adsActive, "native ads stay on")
+        assertFalse(ads.interstitialsActive, "full-screen ads stay off across launches")
+        assertFalse(ads.shouldShowLessonInterstitial())
+        assertFalse(ads.shouldShowLessonInterstitial())
+    }
+
+    @Test
+    fun turningAllAdsOffAlsoStopsFullScreenAds() {
+        val ads = AdController(PrefBackend(), StampedAdHost("build-1"))
+        ads.updateAdsEnabled(false)
+
+        assertTrue(ads.interstitialsEnabled, "the separate choice is untouched")
+        assertFalse(ads.interstitialsActive)
+    }
+
+    @Test
+    fun updateTurnsFullScreenAdsBackOnWithTheRest() {
+        val backend = PrefBackend()
+        AdController(backend, StampedAdHost("build-1")).updateInterstitialsEnabled(false)
+
+        assertTrue(AdController(backend, StampedAdHost("build-2")).interstitialsEnabled)
+    }
 }

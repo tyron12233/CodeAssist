@@ -178,7 +178,7 @@ fun LessonPlayerScreen(
             // answered) so it's ready the instant they tap Finish. Ads-active gated; a no-op on desktop and when
             // ads are off. The show itself happens on Finish below, throttled to every 2nd lesson.
             LaunchedEffect(isLast, state.canAdvance) {
-                if (isLast && state.canAdvance && ads?.adsActive == true) ads.host.preloadInterstitial()
+                if (isLast && state.canAdvance && ads?.interstitialsActive == true) ads.host.preloadInterstitial()
             }
 
             // Bottom navigation bar: Back + Next / Finish.

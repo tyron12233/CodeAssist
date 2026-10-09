@@ -63,15 +63,48 @@ internal class SettingsScreenState(
 
     fun onStructuralChange() { structuralRefresh++ }
 
-    /** Apply a control edit: mirror it, then persist it (the injected ads toggle has its own store). */
+    /** Set while the "turn off ads?" question is up: turning "Show ads" off first offers to turn off only the
+     *  full-screen ads (see [turnOffFullScreenAdsOnly] / [turnOffAllAds]). */
+    var adsOffPrompt: Boolean by mutableStateOf(false)
+        private set
+
+    /** Apply a control edit: mirror it, then persist it (the injected ads toggles have their own store). */
     fun set(pageId: String, key: String, encoded: String, onSettingsChanged: () -> Unit) {
         values["$pageId.$key"] = encoded
         if (ads != null && pageId == PRIVACY_PAGE_ID && key == SHOW_ADS_KEY) {
-            ads.updateAdsEnabled(encoded.toBooleanStrictOrNull() ?: true)
+            val on = encoded.toBooleanStrictOrNull() ?: true
+            if (!on && ads.interstitialsEnabled) {
+                // Ask first: the switch stays on until the user picks what to turn off.
+                values["$pageId.$key"] = true.toString()
+                adsOffPrompt = true
+            } else {
+                ads.updateAdsEnabled(on)
+            }
+        } else if (ads != null && pageId == PRIVACY_PAGE_ID && key == SHOW_INTERSTITIALS_KEY) {
+            ads.updateInterstitialsEnabled(encoded.toBooleanStrictOrNull() ?: true)
         } else {
             backend.settings.setSetting(pageId, key, encoded)
             onSettingsChanged()
         }
+    }
+
+    /** The prompt's lighter choice: keep the ads in lists and panels, turn off only the full-screen ones. */
+    fun turnOffFullScreenAdsOnly() {
+        adsOffPrompt = false
+        ads?.updateInterstitialsEnabled(false)
+        values["$PRIVACY_PAGE_ID.$SHOW_INTERSTITIALS_KEY"] = false.toString()
+    }
+
+    /** The prompt's full choice: turn every ad off. */
+    fun turnOffAllAds() {
+        adsOffPrompt = false
+        ads?.updateAdsEnabled(false)
+        values["$PRIVACY_PAGE_ID.$SHOW_ADS_KEY"] = false.toString()
+    }
+
+    /** Close the prompt without changing anything. */
+    fun dismissAdsOffPrompt() {
+        adsOffPrompt = false
     }
 
     /** Run a settings action that the backend owns; the host handles the platform ones itself. */

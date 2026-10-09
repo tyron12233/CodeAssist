@@ -29,7 +29,7 @@ private const val BUILD_INTERSTITIAL_MIN_INTERVAL_MS = 60_000L
 
 /**
  * Drives the occasional full-screen interstitial shown over a LONG build (Android only; inert on desktop and
- * whenever ads are disabled). The moment a build starts it asks the host to preload an interstitial and arms a
+ * whenever ads or full-screen ads are turned off). The moment a build starts it asks the host to preload an interstitial and arms a
  * timer; if the build is still running [LONG_BUILD_THRESHOLD_MS] later, it shows the ad. A build that finishes
  * first cancels the timer (via [collectLatest]), so quick compiles never see one. After a show, a cooldown
  * ([BUILD_INTERSTITIAL_MIN_INTERVAL_MS]) suppresses back-to-back ads.
@@ -39,8 +39,8 @@ private const val BUILD_INTERSTITIAL_MIN_INTERVAL_MS = 60_000L
  */
 @Composable
 fun BuildAdInterstitial(backend: IdeBackend, ads: AdController?) {
-    // No ad network on this host (desktop) → nothing to arm. The user's "show ads" toggle (adsActive) is
-    // re-checked live below, so turning ads off mid-build still suppresses the show.
+    // No ad network on this host (desktop) → nothing to arm. The user's ads and full-screen-ads toggles
+    // (interstitialsActive) are re-checked live below, so turning either off mid-build still suppresses the show.
     if (ads == null || !ads.host.available) return
 
     var onCooldown by remember { mutableStateOf(false) }
@@ -53,13 +53,13 @@ fun BuildAdInterstitial(backend: IdeBackend, ads: AdController?) {
             .map { it.status == RunStatus.Running }
             .distinctUntilChanged()
             .collectLatest { running ->
-                if (!running || !ads.adsActive || onCooldown) return@collectLatest
+                if (!running || !ads.interstitialsActive || onCooldown) return@collectLatest
                 // Start loading now so the ad is ready by the threshold; a repeat call while loading is a no-op.
                 ads.host.preloadInterstitial()
                 delay(LONG_BUILD_THRESHOLD_MS)
                 // Reached only if the build is STILL running: collectLatest cancels this block the moment the
                 // status leaves Running (finished / failed / stopped), so a short build never gets here.
-                if (!ads.adsActive) return@collectLatest
+                if (!ads.interstitialsActive) return@collectLatest
                 if (ads.host.showInterstitial()) {
                     onCooldown = true
                     cooldownScope.launch {

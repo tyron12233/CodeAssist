@@ -13,6 +13,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -40,8 +43,7 @@ import dev.ide.platform.log.Log
 import dev.ide.ui.ads.NativeAdPool
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.AdPlacement
-import dev.ide.ui.components.BetaInfo
-import dev.ide.ui.components.HouseAd
+import dev.ide.ui.components.NativeAdCard
 import dev.ide.ui.theme.Ca
 
 private val adLog = Log.logger("ide.ads")
@@ -63,18 +65,17 @@ private val webViewAvailable: Boolean by lazy {
  *
  * Renders real AdMob **native** ads. The ad unit id comes from `BuildConfig.AD_NATIVE_UNIT_ID` (test id in
  * debug/profile, the real id in release — wired in build.gradle.kts), and the app id from the manifest
- * placeholder. While an ad is loading — or if loading fails — the slot shows the house "support us" ad, so the
- * placement is never empty. `MobileAds.initialize(...)` must have run first (see [MainActivity.onCreate]).
+ * placeholder. While an ad is loading, or if none fills, the slot draws nothing and takes no space; nothing
+ * stands in for the ad. `MobileAds.initialize(...)` must have run first (see [MainActivity.onCreate]).
  *
- * There is no purchase flow: ads are removed for free via the in-app toggle, and the house ad's tap opens the
- * donation page. [openUrl] backs that donation link.
+ * There is no purchase flow: ads are removed for free via the in-app toggle.
  *
  * The one non-native placement is the full-screen interstitial ([preloadInterstitial]/[showInterstitial]):
  * a real AdMob `InterstitialAd` shown occasionally at natural breaks (a long-running build, a finished tutorial
- * lesson), driven by the shared UI controllers and gated by the same "show ads" toggle.
+ * lesson), driven by the shared UI controllers and gated by the "show ads" toggle and its own "full-screen
+ * ads" one.
  */
 class AndroidAdHost(
-    private val openUrl: (String) -> Unit,
     /** Reads the host's observable UMP privacy-options requirement (see [AdConsentManager]); false by default. */
     private val privacyOptionsRequiredProvider: () -> Boolean = { false },
     /** Opens the UMP privacy-options form (needs the foreground Activity — supplied by the caller). */
@@ -218,15 +219,20 @@ class AndroidAdHost(
             }
         }
 
-        Box(
-            modifier.onGloballyPositioned { coordinates ->
-                if (!onScreen && coordinates.isAttached && coordinates.boundsInWindow().height > 0f) onScreen = true
-            }
-        ) {
+        // One container, so the slot is a single child in its parent's arrangement. Its first child is a 1px
+        // marker that reports when the slot is on screen: scrolled out of view it clips to an empty rect, in view
+        // it keeps its pixel (a zero-height marker would always read as empty). Until an ad loads, the marker is
+        // all the slot draws, so the slot takes no visible space (not even the caller's padding) instead of
+        // standing in for the ad with something else.
+        val markerHeight = with(LocalDensity.current) { 1.toDp() }
+        Column(Modifier.fillMaxWidth()) {
+            Box(
+                Modifier.fillMaxWidth().height(markerHeight).onGloballyPositioned { coordinates ->
+                    if (!onScreen && coordinates.isAttached && coordinates.boundsInWindow().height > 0f) onScreen = true
+                }
+            )
             val loaded = ad
-            if (loaded == null) {
-                HouseAd(Modifier.fillMaxWidth()) { openUrl(BetaInfo.SPONSOR_URL) }
-            } else {
+            if (loaded != null) NativeAdCard(modifier) {
                 // Theme-aware colours captured from the Compose theme and applied to the plain Android views the
                 // AdMob NativeAdView requires (its asset views can't be Compose composables — impressions/clicks
                 // are tracked on real Views registered with the SDK).
