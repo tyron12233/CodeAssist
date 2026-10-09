@@ -1,5 +1,10 @@
 package dev.ide.ui.editor
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -994,6 +999,7 @@ private fun CodeEditorContent(
         }
     }
 
+    var pointerOverGutter by remember { mutableStateOf(false) }
     Box(
         modifier
             .background(colors.editorBg)
@@ -1032,6 +1038,19 @@ private fun CodeEditorContent(
                     onPreviewKey = ::onPreviewKey,
                     onKey = ::handleKey,
                 )
+                // A text (I-beam) cursor over the code, and the normal arrow over the gutter, as in IntelliJ. Reads
+                // the hover position on the Initial pass without consuming it, so the editor's input is untouched.
+                .pointerInput(gutterWidthPx) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.type == PointerEventType.Move || event.type == PointerEventType.Enter) {
+                                pointerOverGutter = event.changes.first().position.x < gutterWidthPx
+                            }
+                        }
+                    }
+                }
+                .pointerHoverIcon(if (pointerOverGutter) PointerIcon.Default else PointerIcon.Text)
                 .drawBehind {
                     // Interpolate the drawn selection span for an in-flight expand animation (reads snapshot
                     // state → this draw re-runs per frame while it animates). Before the tween has started for
