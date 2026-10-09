@@ -78,6 +78,17 @@ class PluginConsentSnapshot {
     fun renderUnrecognisedCapability() =
         snapshot("plugin-consent-unknown-capability.png", plugin(capabilities = listOf("quantum.entangle")))
 
+    /**
+     * A plugin declaring everything, in a window shorter than its content: the body scrolls and the two
+     * answer buttons stay on screen instead of being pushed past the bottom of the dialog.
+     */
+    @Test
+    fun renderLongContentKeepsButtons() = snapshot(
+        "plugin-consent-long.png",
+        plugin(capabilities = PluginCapabilities.KNOWN.toList()),
+        height = 900,
+    )
+
     /** Shortened for reading, but both ends survive so the digest can still be compared. */
     @Test
     fun `a shortened signature keeps both ends of the digest`() {
@@ -104,8 +115,8 @@ class PluginConsentSnapshot {
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
-    private fun snapshot(name: String, plugin: UiPluginInfo) {
-        val scene = ImageComposeScene(width = 820, height = 1200, density = Density(2f)) {
+    private fun snapshot(name: String, plugin: UiPluginInfo, height: Int = 1200) {
+        val scene = ImageComposeScene(width = 820, height = height, density = Density(2f)) {
             CodeAssistTheme(dark = true) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
                     PluginConsent(plugin, onRefuse = {}, onAccept = {})
