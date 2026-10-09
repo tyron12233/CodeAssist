@@ -52,4 +52,15 @@ class ClasspathCacheTest {
             assertTrue(scan.topLevelByName.isEmpty())
         }
     }
+
+    @Test
+    fun binaryConstructorsKnowWhichParametersHaveDefaults() {
+        // `Deprecated(message: String, replaceWith: ReplaceWith = …, level: DeprecationLevel = …)`.
+        ClasspathReader(listOf(stdlibJarPath().toString())).use { r ->
+            val decoded = r.decoded("kotlin.Deprecated", null)
+            val ctor = decoded?.ownMembers?.firstOrNull { it.kind == dev.ide.lang.resolve.SymbolKind.CONSTRUCTOR }
+            kotlin.test.assertNotNull(ctor, "Deprecated's constructor should decode")
+            kotlin.test.assertEquals(listOf(false, true, true), ctor.paramHasDefault)
+        }
+    }
 }

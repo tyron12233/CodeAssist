@@ -118,4 +118,5 @@ fun KotlinSymbol.rebindTypes(ctx: KotlinTypeContext?): KotlinSymbol = KotlinSymb
     isSuspend = isSuspend,
     isDeprecated = isDeprecated,
     varargParamIndex = varargParamIndex,
+    paramHasDefault = paramHasDefault,
 )

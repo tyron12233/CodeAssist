@@ -81,7 +81,10 @@ class KotlinSignatureHelpService(
             val nm = rawName?.takeIf { it.isNotEmpty() && !isSyntheticParamName(it) }
             val ty = renderType(s.paramTypes.getOrNull(i))
             val prefix = if (s.varargParamIndex == i) "vararg " else ""
-            val partText = if (nm != null) "$prefix$nm: $ty" else "$prefix$ty"
+            // A defaulted parameter reads `name: Type = …`, as IntelliJ shows it (and as the block view tells an
+            // optional parameter from a required one).
+            val defaulted = if (s.paramHasDefault.getOrElse(i) { false }) " = \u2026" else ""
+            val partText = (if (nm != null) "$prefix$nm: $ty" else "$prefix$ty") + defaulted
             val start = sb.length
             sb.append(partText)
             infos.add(ParameterInfo(partText, start, sb.length, alreadyNamed = rawName != null && rawName in namedArgs))

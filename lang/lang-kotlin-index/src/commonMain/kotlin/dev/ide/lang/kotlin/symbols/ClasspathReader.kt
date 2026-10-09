@@ -469,7 +469,7 @@ class ClasspathReader(
 
     private companion object {
         const val FORMAT_VERSION =
-            14 // v14: + RawCallableData.isInfix (infix-function completion in the operator slot)
+            15 // v14: + RawCallableData.isInfix (infix-function completion in the operator slot); v15: binary constructors carry paramHasDefault
 
         // Cap on simultaneously-open jar handles (file descriptors). Small: the hot working set during
         // completion is a handful of jars, and reopening an evicted one is cheap behind the decode caches.

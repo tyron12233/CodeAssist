@@ -232,6 +232,7 @@ object KotlinMetadata {
                 paramNames = declaration.parameters.map { it.name },
                 declaringClassFqn = classFqn,
                 varargParamIndex = declaration.parameters.indexOfFirst { it.varargElementType != null },
+                paramHasDefault = declaration.parameters.map { it.declaresDefaultValue },
             )
         }
 
