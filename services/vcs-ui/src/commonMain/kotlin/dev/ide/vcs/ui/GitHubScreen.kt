@@ -43,8 +43,10 @@ import dev.ide.ui.ext.ScreenContext
 import dev.ide.ui.icons.CaIcons
 import dev.ide.vcs.ui.generated.resources.Res
 import dev.ide.vcs.ui.generated.resources.vcs_add_remote
+import dev.ide.vcs.ui.generated.resources.vcs_clone_sign_in
 import dev.ide.vcs.ui.generated.resources.vcs_draft
 import dev.ide.vcs.ui.generated.resources.vcs_github
+import dev.ide.vcs.ui.generated.resources.vcs_manage_accounts
 import dev.ide.vcs.ui.generated.resources.vcs_new_pull_request
 import dev.ide.vcs.ui.generated.resources.vcs_no_remote
 import dev.ide.vcs.ui.generated.resources.vcs_pr_base
@@ -65,7 +67,7 @@ import dev.ide.vcs.ui.generated.resources.vcs_remote_name
 import dev.ide.vcs.ui.generated.resources.vcs_remote_url
 import dev.ide.vcs.ui.generated.resources.vcs_remotes
 import dev.ide.vcs.ui.generated.resources.vcs_sign_in_github
-import dev.ide.vcs.ui.generated.resources.vcs_clone_sign_in
+import dev.ide.vcs.ui.generated.resources.vcs_signed_in_as
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -95,161 +97,205 @@ internal fun GitHubScreen(ctx: ScreenContext) {
 
     var prTitle by remember { mutableStateOf("") }
     var prBody by remember { mutableStateOf("") }
-    var prBase by remember { mutableStateOf("main") }
+    var prBase by remember { mutableStateOf("") }
+    // Filled from the repository's real default branch until the user types their own.
+    var prBaseEdited by remember { mutableStateOf(false) }
 
-    LaunchedEffect(reload, accounts.size) {
+    LaunchedEffect(reload, accounts) {
         remotes = vcs.remotes()
         pulls = if (remotes.isNotEmpty() && accounts.isNotEmpty()) vcs.pullRequests() else emptyList()
+        if (!prBaseEdited && remotes.isNotEmpty()) prBase = vcs.defaultBranch() ?: prBase.ifBlank { "main" }
         if (repoName.isBlank()) repoName = ctx.backend.project.name
     }
 
     fun perform(block: suspend () -> UiVcsResult) {
         scope.launch {
             val result = block()
-            if (result.message.isNotBlank()) feedback.show(result.message, isError = !result.ok)
+            feedback.show(result)
             if (result.authRequired) ctx.openScreen(VcsService.SCREEN_ACCOUNTS)
             reload++
         }
     }
 
     ExpressiveScaffold(title = stringResource(Res.string.vcs_github), onBack = ctx::back, large = false) { padding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            FeedbackStrip(feedback)
-
-            if (accounts.isEmpty()) {
-                Card {
-                    Text(
-                        stringResource(Res.string.vcs_clone_sign_in),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    PrimaryButton(
-                        stringResource(Res.string.vcs_sign_in_github),
-                        { ctx.openScreen(VcsService.SCREEN_ACCOUNTS) },
-                        icon = CaIcons.account,
-                    )
-                }
-            }
-
-            if (remotes.isEmpty()) {
-                Card {
-                    CardTitle(stringResource(Res.string.vcs_publish_title), CaIcons.cloudUpload)
-                    Text(
-                        stringResource(Res.string.vcs_publish_body),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (status.unborn) {
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            // Outside the scrolling column, so the result of a button at the bottom of the page is on screen.
+            FeedbackStrip(feedback, Modifier.padding(horizontal = 16.dp))
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (accounts.isEmpty()) {
+                    Card {
                         Text(
-                            stringResource(Res.string.vcs_publish_needs_commit),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
+                            stringResource(Res.string.vcs_clone_sign_in),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        PrimaryButton(
+                            stringResource(Res.string.vcs_sign_in_github),
+                            { ctx.openScreen(VcsService.SCREEN_ACCOUNTS) },
+                            icon = CaIcons.account,
                         )
                     }
-                    VcsField(repoName, { repoName = it }, stringResource(Res.string.vcs_publish_name), leading = CaIcons.folder)
-                    VcsField(
-                        repoDescription,
-                        { repoDescription = it },
-                        stringResource(Res.string.vcs_publish_description),
-                        leading = CaIcons.docText,
-                    )
-                    VcsCheckRow(
-                        label = stringResource(Res.string.vcs_publish_private),
-                        checked = repoPrivate,
-                        onToggle = { repoPrivate = !repoPrivate },
-                    )
-                    PrimaryButton(
-                        stringResource(Res.string.vcs_publish),
-                        { perform { vcs.publishToForge(repoName, repoDescription, repoPrivate) } },
-                        icon = CaIcons.cloudUpload,
-                    )
-                }
-            } else {
-                Card {
-                    CardTitle(stringResource(Res.string.vcs_pull_requests), CaIcons.gitPullRequest)
-                    if (pulls.isEmpty()) {
+                } else {
+                    // Once signed in, this is the way to the Accounts screen (sign out, switch, identity,
+                    // credentials for other hosts); nothing else links to it while an account exists.
+                    SignInAgainCard(accounts) { ctx.openScreen(VcsService.SCREEN_ACCOUNTS) }
+                    val active = accounts.firstOrNull { it.active } ?: accounts.first()
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceContainerLow, RoundedCornerShape(18.dp))
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(CaIcons.account, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
                         Text(
-                            stringResource(Res.string.vcs_pull_requests_empty),
+                            stringResource(Res.string.vcs_signed_in_as, active.login),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            stringResource(Res.string.vcs_manage_accounts),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { ctx.openScreen(VcsService.SCREEN_ACCOUNTS) }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+
+                if (remotes.isEmpty()) {
+                    Card {
+                        CardTitle(stringResource(Res.string.vcs_publish_title), CaIcons.cloudUpload)
+                        Text(
+                            stringResource(Res.string.vcs_publish_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (status.unborn) {
+                            Text(
+                                stringResource(Res.string.vcs_publish_needs_commit),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                        VcsField(repoName, { repoName = it }, stringResource(Res.string.vcs_publish_name), leading = CaIcons.folder)
+                        VcsField(
+                            repoDescription,
+                            { repoDescription = it },
+                            stringResource(Res.string.vcs_publish_description),
+                            leading = CaIcons.docText,
+                        )
+                        VcsCheckRow(
+                            label = stringResource(Res.string.vcs_publish_private),
+                            checked = repoPrivate,
+                            onToggle = { repoPrivate = !repoPrivate },
+                        )
+                        PrimaryButton(
+                            stringResource(Res.string.vcs_publish),
+                            { perform { vcs.publishToForge(repoName, repoDescription, repoPrivate) } },
+                            icon = CaIcons.cloudUpload,
+                        )
+                    }
+                } else {
+                    Card {
+                        CardTitle(stringResource(Res.string.vcs_pull_requests), CaIcons.gitPullRequest)
+                        if (pulls.isEmpty()) {
+                            Text(
+                                stringResource(Res.string.vcs_pull_requests_empty),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            pulls.forEach { pr ->
+                                PullRequestRow(pr) {
+                                    if (ctx.fileActions.canOpenUrl) ctx.fileActions.openUrl(pr.webUrl)
+                                }
+                            }
+                        }
+                    }
+                    Card {
+                        CardTitle(stringResource(Res.string.vcs_new_pull_request), CaIcons.gitPullRequest)
+                        if (status.branch.isNotBlank()) {
+                            Text(
+                                stringResource(Res.string.vcs_pr_from, status.branch),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                            )
+                        }
+                        VcsField(prTitle, { prTitle = it }, stringResource(Res.string.vcs_pr_title), leading = CaIcons.docText)
+                        VcsField(
+                            prBody,
+                            { prBody = it },
+                            stringResource(Res.string.vcs_pr_body),
+                            singleLine = false,
+                            minHeight = 70,
+                        )
+                        VcsField(
+                            prBase,
+                            {
+                                prBase = it
+                                prBaseEdited = true
+                            },
+                            stringResource(Res.string.vcs_pr_base),
+                            leading = CaIcons.gitBranch,
+                        )
+                        PrimaryButton(
+                            stringResource(Res.string.vcs_pr_create),
+                            { perform { vcs.createPullRequest(prTitle, prBody, prBase) } },
+                        )
+                    }
+                }
+
+                Card {
+                    CardTitle(stringResource(Res.string.vcs_remotes), CaIcons.share)
+                    if (remotes.isEmpty()) {
+                        Text(
+                            stringResource(Res.string.vcs_no_remote),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
-                        pulls.forEach { pr ->
-                            PullRequestRow(pr) {
-                                if (ctx.fileActions.canOpenUrl) ctx.fileActions.openUrl(pr.webUrl)
+                        remotes.forEach { remote ->
+                            Column(Modifier.fillMaxWidth()) {
+                                Text(
+                                    remote.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Text(
+                                    remote.url,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
                         }
                     }
-                }
-                Card {
-                    CardTitle(stringResource(Res.string.vcs_new_pull_request), CaIcons.gitPullRequest)
-                    if (status.branch.isNotBlank()) {
-                        Text(
-                            stringResource(Res.string.vcs_pr_from, status.branch),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline,
-                        )
-                    }
-                    VcsField(prTitle, { prTitle = it }, stringResource(Res.string.vcs_pr_title), leading = CaIcons.docText)
-                    VcsField(
-                        prBody,
-                        { prBody = it },
-                        stringResource(Res.string.vcs_pr_body),
-                        singleLine = false,
-                        minHeight = 70,
-                    )
-                    VcsField(prBase, { prBase = it }, stringResource(Res.string.vcs_pr_base), leading = CaIcons.gitBranch)
+                    VcsField(remoteName, { remoteName = it }, stringResource(Res.string.vcs_remote_name), leading = CaIcons.share)
+                    VcsField(remoteUrl, { remoteUrl = it }, stringResource(Res.string.vcs_remote_url), leading = CaIcons.share)
                     PrimaryButton(
-                        stringResource(Res.string.vcs_pr_create),
-                        { perform { vcs.createPullRequest(prTitle, prBody, prBase) } },
+                        stringResource(Res.string.vcs_add_remote),
+                        { perform { vcs.addRemote(remoteName, remoteUrl) } },
+                        icon = CaIcons.plus,
                     )
                 }
-            }
 
-            Card {
-                CardTitle(stringResource(Res.string.vcs_remotes), CaIcons.share)
-                if (remotes.isEmpty()) {
-                    Text(
-                        stringResource(Res.string.vcs_no_remote),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    remotes.forEach { remote ->
-                        Column(Modifier.fillMaxWidth()) {
-                            Text(
-                                remote.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            Text(
-                                remote.url,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
-                VcsField(remoteName, { remoteName = it }, stringResource(Res.string.vcs_remote_name), leading = CaIcons.share)
-                VcsField(remoteUrl, { remoteUrl = it }, stringResource(Res.string.vcs_remote_url), leading = CaIcons.share)
-                PrimaryButton(
-                    stringResource(Res.string.vcs_add_remote),
-                    { perform { vcs.addRemote(remoteName, remoteUrl) } },
-                    icon = CaIcons.plus,
-                )
+                Spacer(Modifier.height(24.dp))
             }
-
-            Spacer(Modifier.height(24.dp))
         }
     }
 }
@@ -303,7 +349,7 @@ private fun PullRequestRow(pr: UiForgePullRequest, onOpen: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (pr.draft) Chip(stringResource(Res.string.vcs_draft))
                 Chip("${pr.headBranch} → ${pr.baseBranch}")
-                if (pr.updatedLabel.isNotBlank()) Chip(pr.updatedLabel)
+                ageText(pr.updatedMs, pr.updatedLabel).takeIf { it.isNotBlank() }?.let { Chip(it) }
             }
         }
         Icon(CaIcons.arrowRight, null, Modifier.size(16.dp), tint = scheme.outline)

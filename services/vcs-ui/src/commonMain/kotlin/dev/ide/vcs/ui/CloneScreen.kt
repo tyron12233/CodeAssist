@@ -46,8 +46,8 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import dev.ide.vcs.ui.generated.resources.Res
-import dev.ide.vcs.ui.generated.resources.vcs_cancel
 import dev.ide.vcs.ui.generated.resources.vcs_accounts
+import dev.ide.vcs.ui.generated.resources.vcs_cancel
 import dev.ide.vcs.ui.generated.resources.vcs_clone_action
 import dev.ide.vcs.ui.generated.resources.vcs_clone_auth_signed_in
 import dev.ide.vcs.ui.generated.resources.vcs_clone_auth_signed_out
@@ -98,7 +98,9 @@ internal fun CloneScreen(ctx: ScreenContext) {
     var authFailed by remember { mutableStateOf(false) }
 
     // Debounced so typing a search term does not fire a request per keystroke.
-    LaunchedEffect(query, accounts.size) {
+    // Keyed on the accounts themselves, not their count: signing the same account in again after the
+    // forge refused it changes the list without changing its size.
+    LaunchedEffect(query, accounts) {
         if (accounts.isEmpty()) {
             repos = emptyList()
             return@LaunchedEffect
@@ -110,13 +112,15 @@ internal fun CloneScreen(ctx: ScreenContext) {
     }
 
     fun startClone() {
+        // A second tap while the first clone runs would start another into the same folder.
+        if (activity.busy) return
         val target = url.trim()
         val name = folder.trim().ifBlank { target.substringAfterLast('/').removeSuffix(".git") }
         scope.launch {
             unrecognized = null
             authFailed = false
             val result = vcs.cloneRepository(target, name)
-            feedback.show(result.message, isError = !result.ok)
+            feedback.show(result)
             authFailed = !result.ok && result.authRequired
             val path = result.path
             if (!result.ok || path == null) return@launch
@@ -145,7 +149,7 @@ internal fun CloneScreen(ctx: ScreenContext) {
                 )
                 if (activity.busy) {
                     Text(
-                        activity.task,
+                        localizedText(activity.taskText, activity.task),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -191,6 +195,7 @@ internal fun CloneScreen(ctx: ScreenContext) {
                     )
                 }
             } else {
+                SignInAgainCard(accounts) { ctx.openScreen(VcsService.SCREEN_ACCOUNTS) }
                 SectionHeader(stringResource(Res.string.vcs_clone_yours), repos.size)
                 VcsField(
                     query,
@@ -348,7 +353,7 @@ private fun RepoRow(repo: UiForgeRepo, onPick: () -> Unit) {
                 if (repo.private) Chip(stringResource(Res.string.vcs_private))
                 if (repo.fork) Chip(stringResource(Res.string.vcs_fork))
                 if (repo.language.isNotBlank()) Chip(repo.language)
-                if (repo.updatedLabel.isNotBlank()) Chip(repo.updatedLabel)
+                ageText(repo.updatedMs, repo.updatedLabel).takeIf { it.isNotBlank() }?.let { Chip(it) }
             }
         }
     }

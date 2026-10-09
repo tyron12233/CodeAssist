@@ -62,6 +62,7 @@ import dev.ide.vcs.ui.generated.resources.vcs_menu_repository
 import dev.ide.vcs.ui.generated.resources.vcs_menu_sync
 import dev.ide.vcs.ui.generated.resources.vcs_menu_view_changes
 import dev.ide.vcs.ui.generated.resources.vcs_no_remote_short
+import dev.ide.vcs.ui.generated.resources.vcs_not_pushed_yet
 import dev.ide.vcs.ui.generated.resources.vcs_push_after_commit
 import dev.ide.vcs.ui.generated.resources.vcs_set_up_remote
 import dev.ide.vcs.ui.generated.resources.vcs_stash_changes
@@ -79,6 +80,7 @@ import dev.ide.vcs.ui.generated.resources.vcs_tooltip_stage_all
 import dev.ide.vcs.ui.generated.resources.vcs_tooltip_unstage
 import dev.ide.vcs.ui.generated.resources.vcs_tooltip_unstage_all
 import dev.ide.vcs.ui.generated.resources.vcs_abort_merge
+import dev.ide.vcs.ui.generated.resources.vcs_abort_rebase
 import dev.ide.vcs.ui.generated.resources.vcs_bisect_in_progress
 import dev.ide.vcs.ui.generated.resources.vcs_cherry_pick_in_progress
 import dev.ide.vcs.ui.generated.resources.vcs_revert_in_progress
@@ -145,7 +147,7 @@ internal fun GitPanel(ctx: ToolWindowContext) {
     fun perform(block: suspend () -> UiVcsResult) {
         scope.launch {
             val result = block()
-            if (result.message.isNotBlank()) feedback.show(result.message, isError = !result.ok)
+            feedback.show(result)
             if (result.authRequired) ctx.openScreen(VcsService.SCREEN_ACCOUNTS)
         }
     }
@@ -156,24 +158,21 @@ internal fun GitPanel(ctx: ToolWindowContext) {
             enabled = status.present,
             onRefresh = { scope.launch { vcs.refresh() } },
             onBranches = { ctx.openScreen(VcsService.SCREEN_BRANCHES) },
-            onHistory = {
-                VcsNav.historyPath = null
-                ctx.openScreen(VcsService.SCREEN_HISTORY)
-            },
+            onHistory = { ctx.openScreen(VcsService.SCREEN_HISTORY, null) },
             onGitHub = { ctx.openScreen(VcsService.SCREEN_GITHUB) },
             onStashes = { ctx.openScreen(VcsService.SCREEN_STASHES) },
             onFetch = { perform { vcs.fetch() } },
             onIgnores = { perform { vcs.addDefaultIgnores() } },
-            onAbortMerge = if (status.operation == UiVcsStatus.OP_MERGE) {
+            onAbortMerge = if (status.operation == UiVcsStatus.OP_MERGE || status.operation == UiVcsStatus.OP_REBASE) {
                 { perform { vcs.abortMerge() } }
             } else null,
         )
-        if (activity.busy) ActivityRow(activity.task, activity.fraction)
+        if (activity.busy) ActivityRow(localizedText(activity.taskText, activity.task), activity.fraction)
         FeedbackStrip(feedback)
         // A failed status read is reported in place: an empty change list would otherwise read as "clean".
         if (status.error.isNotBlank()) {
             Text(
-                status.error,
+                localizedText(status.errorText, status.error),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
@@ -264,7 +263,11 @@ private fun PanelHeader(
                 )
                 if (onAbortMerge != null) {
                     item(
-                        stringResource(Res.string.vcs_abort_merge),
+                        if (status.operation == UiVcsStatus.OP_REBASE) {
+                            stringResource(Res.string.vcs_abort_rebase)
+                        } else {
+                            stringResource(Res.string.vcs_abort_merge)
+                        },
                         CaIcons.close,
                         danger = true,
                         onClick = onAbortMerge,
@@ -350,7 +353,7 @@ private fun SyncBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (status.upstream.isBlank()) {
+        if (!status.hasRemote) {
             // Nothing to pull from or push to yet, so say that instead of offering two dead buttons.
             Text(
                 stringResource(Res.string.vcs_no_remote_short),
@@ -383,7 +386,15 @@ private fun SyncBar(
             emphasised = status.ahead > 0,
         )
         Spacer(Modifier.weight(1f))
-        if (status.ahead == 0 && status.behind == 0) {
+        if (status.upstream.isBlank()) {
+            // A remote exists but this branch has never been pushed to it, so there are no counts to show.
+            // The first push (or pull) records the tracking link.
+            Text(
+                stringResource(Res.string.vcs_not_pushed_yet),
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.outline,
+            )
+        } else if (status.ahead == 0 && status.behind == 0) {
             Text(
                 stringResource(Res.string.vcs_up_to_date),
                 style = MaterialTheme.typography.labelSmall,
@@ -455,7 +466,9 @@ private fun WorkingCopy(
     perform: (suspend () -> UiVcsResult) -> Unit,
 ) {
     val vcs = ctx.backend.vcs
-    var message by remember(ctx.backend) { mutableStateOf("") }
+    // The panel is disposed whenever it is hidden (another panel, a full-screen diff, a closed drawer), so the
+    // draft lives outside the composition, per working copy, and survives a look at a diff.
+    var message by remember(status.root) { VcsNav.commitDraft(status.root) }
     var amend by remember(ctx.backend) { mutableStateOf(false) }
     var pushAfter by remember(ctx.backend) { mutableStateOf(true) }
     var discarding by remember { mutableStateOf<UiVcsChange?>(null) }
@@ -494,13 +507,9 @@ private fun WorkingCopy(
                     ChangeList(
                         status = status,
                         onOpenDiff = { change ->
-                            VcsNav.diff = DiffTarget(path = change.path, staged = change.staged)
-                            ctx.openScreen(VcsService.SCREEN_DIFF)
+                            ctx.openScreen(VcsService.SCREEN_DIFF, DiffTarget(path = change.path, staged = change.staged))
                         },
-                        onOpenHistory = { change ->
-                            VcsNav.historyPath = change.path
-                            ctx.openScreen(VcsService.SCREEN_HISTORY)
-                        },
+                        onOpenHistory = { change -> ctx.openScreen(VcsService.SCREEN_HISTORY, change.path) },
                         onStage = { paths -> perform { vcs.stage(paths) } },
                         onUnstage = { paths -> perform { vcs.unstage(paths) } },
                         onResolve = { paths -> perform { vcs.markResolved(paths) } },
@@ -518,10 +527,10 @@ private fun WorkingCopy(
                 pushAfter = pushAfter,
                 onPushAfter = { pushAfter = it },
                 canCommit = status.staged.isNotEmpty() || amend,
-                hasRemote = status.upstream.isNotBlank(),
+                hasRemote = status.hasRemote,
                 onCommit = {
                     val text = message
-                    val alsoPush = pushAfter && status.upstream.isNotBlank()
+                    val alsoPush = pushAfter && status.hasRemote
                     perform {
                         val committed = vcs.commit(text, amend)
                         if (!committed.ok) return@perform committed
@@ -532,21 +541,23 @@ private fun WorkingCopy(
                 },
             )
         }
-    }
 
-    val pending = discarding
-    CenteredDialog(visible = pending != null, onDismiss = { discarding = null }) {
-        if (pending != null) {
-            ConfirmCard(
-                title = stringResource(Res.string.vcs_discard_title),
-                body = stringResource(Res.string.vcs_discard_body, pending.name),
-                confirmLabel = stringResource(Res.string.vcs_discard),
-                onConfirm = {
-                    discarding = null
-                    perform { vcs.discard(listOf(pending.path)) }
-                },
-                onCancel = { discarding = null },
-            )
+        // The dialog overlays the pane, so it has to share this box with the column above. As a sibling of a
+        // fill-size box it was laid out below it at zero height, and Discard looked like it did nothing.
+        val pending = discarding
+        CenteredDialog(visible = pending != null, onDismiss = { discarding = null }) {
+            if (pending != null) {
+                ConfirmCard(
+                    title = stringResource(Res.string.vcs_discard_title),
+                    body = stringResource(Res.string.vcs_discard_body, pending.name),
+                    confirmLabel = stringResource(Res.string.vcs_discard),
+                    onConfirm = {
+                        discarding = null
+                        perform { vcs.discard(listOf(pending.path)) }
+                    },
+                    onCancel = { discarding = null },
+                )
+            }
         }
     }
 }
@@ -582,7 +593,8 @@ private fun ChangeList(
                     onPrimary = { onResolve(listOf(change.path)) },
                     onOpenDiff = { onOpenDiff(change) },
                     onOpenHistory = { onOpenHistory(change) },
-                    onDiscard = { onDiscard(change) },
+                    // Git cannot check out an unmerged path; the way back from a conflict is Abort.
+                    onDiscard = null,
                 )
             }
         }

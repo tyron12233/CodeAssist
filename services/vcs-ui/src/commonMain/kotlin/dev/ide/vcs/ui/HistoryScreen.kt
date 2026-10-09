@@ -63,7 +63,7 @@ private const val PAGE = 40
 @Composable
 internal fun HistoryScreen(ctx: ScreenContext) {
     val vcs = ctx.backend.vcs
-    val path = remember { VcsNav.historyPath }
+    val path = ctx.argument as? String
 
     var commits by remember { mutableStateOf(emptyList<UiVcsCommit>()) }
     var loadedPages by remember { mutableStateOf(1) }
@@ -113,12 +113,14 @@ internal fun HistoryScreen(ctx: ScreenContext) {
                             detail = detail?.takeIf { it.commit.id == commit.id },
                             onToggle = { expanded = if (expanded == commit.id) null else commit.id },
                             onOpenFile = { filePath ->
-                                VcsNav.diff = DiffTarget(
-                                    path = filePath,
-                                    commitId = commit.id,
-                                    commitLabel = "${commit.shortId} ${commit.summary}",
+                                ctx.openScreen(
+                                    VcsService.SCREEN_DIFF,
+                                    DiffTarget(
+                                        path = filePath,
+                                        commitId = commit.id,
+                                        commitLabel = "${commit.shortId} ${commit.summary}",
+                                    ),
                                 )
-                                ctx.openScreen(VcsService.SCREEN_DIFF)
                             },
                         )
                     }
@@ -183,9 +185,10 @@ private fun CommitRow(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(commit.shortId, style = MaterialTheme.typography.labelSmall, color = scheme.outline)
-                    if (commit.timeLabel.isNotBlank()) {
+                    val age = ageText(commit.timeMs, commit.timeLabel)
+                    if (age.isNotBlank()) {
                         Spacer(Modifier.width(6.dp))
-                        Text(commit.timeLabel, style = MaterialTheme.typography.labelSmall, color = scheme.outline)
+                        Text(age, style = MaterialTheme.typography.labelSmall, color = scheme.outline)
                     }
                 }
                 if (commit.refs.isNotEmpty() || commit.merge) {

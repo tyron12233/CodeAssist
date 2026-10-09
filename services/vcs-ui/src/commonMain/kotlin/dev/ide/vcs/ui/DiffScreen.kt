@@ -25,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiVcsDiff
@@ -39,8 +41,8 @@ import dev.ide.vcs.ui.generated.resources.vcs_deletions
 import dev.ide.vcs.ui.generated.resources.vcs_diff
 import dev.ide.vcs.ui.generated.resources.vcs_diff_binary
 import dev.ide.vcs.ui.generated.resources.vcs_diff_empty
-import dev.ide.vcs.ui.generated.resources.vcs_insertions
 import dev.ide.vcs.ui.generated.resources.vcs_file_history
+import dev.ide.vcs.ui.generated.resources.vcs_insertions
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -51,7 +53,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun DiffScreen(ctx: ScreenContext) {
     val vcs = ctx.backend.vcs
-    val target = remember { VcsNav.diff }
+    val target = ctx.argument as? DiffTarget
     var diff by remember { mutableStateOf<UiVcsDiff?>(null) }
 
     LaunchedEffect(target) {
@@ -67,10 +69,7 @@ internal fun DiffScreen(ctx: ScreenContext) {
                 VcsIconButton(
                     CaIcons.gitCommit,
                     stringResource(Res.string.vcs_file_history),
-                    {
-                        VcsNav.historyPath = target.path
-                        ctx.openScreen(VcsService.SCREEN_HISTORY)
-                    },
+                    { ctx.openScreen(VcsService.SCREEN_HISTORY, target.path) },
                 )
             }
         },
@@ -146,6 +145,16 @@ private fun DiffHeader(target: DiffTarget?, diff: UiVcsDiff?) {
 private fun DiffBody(text: String) {
     val lines = remember(text) { text.split('\n') }
     val horizontal = rememberScrollState()
+    // Every row scrolls with the one shared state, and a ScrollState's range is whatever the last row measured
+    // said it was: a short trailing line clamped it, and long lines could not be scrolled into view. Giving every
+    // row the width of the longest line gives them all the same range.
+    val measurer = rememberTextMeasurer()
+    val codeStyle = Ca.type.codeSmall
+    val density = LocalDensity.current
+    val lineWidth = remember(lines, codeStyle, density) {
+        val longest = lines.maxByOrNull { it.length }.orEmpty()
+        with(density) { measurer.measure(longest, codeStyle, softWrap = false, maxLines = 1).size.width.toDp() }
+    }
     val scheme = MaterialTheme.colorScheme
     val added = Ide.colors.gitAdded
     val deleted = Ide.colors.gitDeleted
@@ -167,18 +176,22 @@ private fun DiffBody(text: String) {
                     LineKind.HEADER -> scheme.onSurfaceVariant
                     LineKind.CONTEXT -> scheme.onSurface
                 }
-                Text(
-                    text = line.ifEmpty { " " },
-                    style = Ca.type.codeSmall,
-                    color = color,
-                    maxLines = 1,
-                    softWrap = false,
-                    modifier = Modifier
+                Box(
+                    Modifier
                         .fillMaxWidth()
                         .background(background)
                         .horizontalScroll(horizontal)
                         .padding(horizontal = 12.dp, vertical = 1.dp),
-                )
+                ) {
+                    Text(
+                        text = line.ifEmpty { " " },
+                        style = codeStyle,
+                        color = color,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.width(lineWidth),
+                    )
+                }
             }
             item { Spacer(Modifier.height(32.dp)) }
         }

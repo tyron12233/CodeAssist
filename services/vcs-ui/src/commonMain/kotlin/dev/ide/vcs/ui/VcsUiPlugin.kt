@@ -12,12 +12,17 @@ import dev.ide.ui.ext.TabDecoration
 import dev.ide.ui.ext.TabDecorationContext
 import dev.ide.ui.ext.TabDecorationContribution
 import dev.ide.ui.ext.TabDotStyle
-import dev.ide.ui.icons.IconTint
-import dev.ide.ui.theme.Ide
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.ext.ToolWindowContribution
 import dev.ide.ui.ext.UiContributionScope
 import dev.ide.ui.ext.UiPlugin
+import dev.ide.ui.icons.IconTint
+import dev.ide.ui.theme.Ide
+import dev.ide.vcs.ui.generated.resources.Res
+import dev.ide.vcs.ui.generated.resources.vcs_tab_changed
+import dev.ide.vcs.ui.generated.resources.vcs_tab_conflict
+import dev.ide.vcs.ui.generated.resources.vcs_tab_untracked
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Version control's Compose UI, as one self-contained plugin: the Git tool window plus the full screens its
@@ -71,7 +76,7 @@ object VcsUiPlugin : UiPlugin {
             TabDecorationContribution("vcs.tab.conflict", order = 40) { tab ->
                 val paths = changedPaths(tab) { it.conflicted }
                 if (tab.path in paths) {
-                    TabDecoration(IconTint.Error, "merge conflict", TabDotStyle.Outlined)
+                    TabDecoration(IconTint.Error, stringResource(Res.string.vcs_tab_conflict), TabDotStyle.Outlined)
                 } else {
                     null
                 }
@@ -83,11 +88,11 @@ object VcsUiPlugin : UiPlugin {
                 val changed = changedPaths(tab) { it.status != UiVcsChange.STATUS_UNTRACKED && !it.conflicted }
                 when (tab.path) {
                     in untracked -> TabDecoration(
-                        IconTint.Fixed(Ide.colors.gitUntracked), "not in version control", TabDotStyle.Outlined,
+                        IconTint.Fixed(Ide.colors.gitUntracked), stringResource(Res.string.vcs_tab_untracked), TabDotStyle.Outlined,
                     )
 
                     in changed -> TabDecoration(
-                        IconTint.Fixed(Ide.colors.gitModified), "changed since HEAD", TabDotStyle.Outlined,
+                        IconTint.Fixed(Ide.colors.gitModified), stringResource(Res.string.vcs_tab_changed), TabDotStyle.Outlined,
                     )
 
                     else -> null

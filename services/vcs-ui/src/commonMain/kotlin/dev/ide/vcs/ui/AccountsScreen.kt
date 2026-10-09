@@ -48,7 +48,6 @@ import dev.ide.ui.ext.ScreenContext
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.vcs.ui.generated.resources.Res
-import dev.ide.vcs.ui.generated.resources.vcs_sign_out_of
 import dev.ide.vcs.ui.generated.resources.vcs_accounts
 import dev.ide.vcs.ui.generated.resources.vcs_active_account
 import dev.ide.vcs.ui.generated.resources.vcs_cancel
@@ -74,6 +73,7 @@ import dev.ide.vcs.ui.generated.resources.vcs_sign_in_github
 import dev.ide.vcs.ui.generated.resources.vcs_sign_in_intro
 import dev.ide.vcs.ui.generated.resources.vcs_sign_in_token
 import dev.ide.vcs.ui.generated.resources.vcs_sign_out
+import dev.ide.vcs.ui.generated.resources.vcs_sign_out_of
 import dev.ide.vcs.ui.generated.resources.vcs_signing_in
 import dev.ide.vcs.ui.generated.resources.vcs_token_help
 import dev.ide.vcs.ui.generated.resources.vcs_token_hint
@@ -116,74 +116,75 @@ internal fun AccountsScreen(ctx: ScreenContext) {
     fun perform(block: suspend () -> UiVcsResult) {
         scope.launch {
             val result = block()
-            if (result.message.isNotBlank()) feedback.show(result.message, isError = !result.ok)
+            feedback.show(result)
             reload++
         }
     }
 
     ExpressiveScaffold(title = stringResource(Res.string.vcs_accounts), onBack = ctx::back, large = false) { padding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            FeedbackStrip(feedback, Modifier.padding(horizontal = 0.dp))
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            // Outside the scrolling column, so the result of a button at the bottom of the page is on screen.
+            FeedbackStrip(feedback, Modifier.padding(horizontal = 16.dp))
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                accounts.forEach { account ->
+                    AccountCard(
+                        account = account,
+                        onUse = { perform { vcs.setActiveAccount(account.id) } },
+                        onSignOut = { perform { vcs.signOut(account.id) } },
+                    )
+                }
 
-            accounts.forEach { account ->
-                AccountCard(
-                    account = account,
-                    onUse = { perform { vcs.setActiveAccount(account.id) } },
-                    onSignOut = { perform { vcs.signOut(account.id) } },
+                SignInCard(
+                    state = signIn,
+                    canUseBrowser = vcs.deviceAuthSupported(),
+                    signedIn = accounts.isNotEmpty(),
+                    onStart = { scope.launch { vcs.startSignIn() } },
+                    onCancel = { vcs.cancelSignIn() },
+                    onOpenUrl = { url -> if (ctx.fileActions.canOpenUrl) ctx.fileActions.openUrl(url) },
+                    canOpenUrl = ctx.fileActions.canOpenUrl,
+                    token = token,
+                    onToken = { token = it },
+                    onSubmitToken = {
+                        val entered = token
+                        token = ""
+                        perform { vcs.signInWithToken(entered) }
+                    },
                 )
+
+                IdentityCard(
+                    name = identityName,
+                    email = identityEmail,
+                    onName = { identityName = it },
+                    onEmail = { identityEmail = it },
+                    onSave = { perform { vcs.setIdentity(identityName, identityEmail) } },
+                )
+
+                HostCredentialsCard(
+                    hosts = hosts,
+                    host = hostName,
+                    username = hostUser,
+                    password = hostPassword,
+                    onHost = { hostName = it },
+                    onUsername = { hostUser = it },
+                    onPassword = { hostPassword = it },
+                    onSave = {
+                        val h = hostName
+                        val u = hostUser
+                        val p = hostPassword
+                        hostPassword = ""
+                        perform { vcs.saveHostCredentials(h, u, p) }
+                    },
+                    onRemove = { host -> perform { vcs.clearHostCredentials(host) } },
+                )
+
+                Spacer(Modifier.height(24.dp))
             }
-
-            SignInCard(
-                state = signIn,
-                canUseBrowser = vcs.deviceAuthSupported(),
-                signedIn = accounts.isNotEmpty(),
-                onStart = { scope.launch { vcs.startSignIn() } },
-                onCancel = { vcs.cancelSignIn() },
-                onOpenUrl = { url -> if (ctx.fileActions.canOpenUrl) ctx.fileActions.openUrl(url) },
-                canOpenUrl = ctx.fileActions.canOpenUrl,
-                token = token,
-                onToken = { token = it },
-                onSubmitToken = {
-                    val entered = token
-                    token = ""
-                    perform { vcs.signInWithToken(entered) }
-                },
-            )
-
-            IdentityCard(
-                name = identityName,
-                email = identityEmail,
-                onName = { identityName = it },
-                onEmail = { identityEmail = it },
-                onSave = { perform { vcs.setIdentity(identityName, identityEmail) } },
-            )
-
-            HostCredentialsCard(
-                hosts = hosts,
-                host = hostName,
-                username = hostUser,
-                password = hostPassword,
-                onHost = { hostName = it },
-                onUsername = { hostUser = it },
-                onPassword = { hostPassword = it },
-                onSave = {
-                    val h = hostName
-                    val u = hostUser
-                    val p = hostPassword
-                    hostPassword = ""
-                    perform { vcs.saveHostCredentials(h, u, p) }
-                },
-                onRemove = { host -> perform { vcs.clearHostCredentials(host) } },
-            )
-
-            Spacer(Modifier.height(24.dp))
         }
     }
 }
@@ -307,7 +308,7 @@ private fun SignInCard(
             }
 
             is UiVcsSignIn.Failed -> Text(
-                state.message,
+                localizedText(state.text, state.message),
                 style = MaterialTheme.typography.bodySmall,
                 color = scheme.error,
             )
@@ -330,6 +331,7 @@ private fun SignInCard(
             onValueChange = onToken,
             placeholder = stringResource(Res.string.vcs_token_hint),
             leading = CaIcons.key,
+            secret = true,
         )
         Text(
             stringResource(Res.string.vcs_token_help),
@@ -516,7 +518,7 @@ private fun HostCredentialsCard(
         }
         VcsField(host, onHost, stringResource(Res.string.vcs_host_hint), leading = CaIcons.share)
         VcsField(username, onUsername, stringResource(Res.string.vcs_username), leading = CaIcons.account)
-        VcsField(password, onPassword, stringResource(Res.string.vcs_password), leading = CaIcons.key)
+        VcsField(password, onPassword, stringResource(Res.string.vcs_password), leading = CaIcons.key, secret = true)
         PrimaryButton(stringResource(Res.string.vcs_save), onSave)
     }
 }

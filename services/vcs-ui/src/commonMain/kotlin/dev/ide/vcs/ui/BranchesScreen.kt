@@ -89,7 +89,7 @@ internal fun BranchesScreen(ctx: ScreenContext) {
     fun perform(block: suspend () -> UiVcsResult) {
         scope.launch {
             val result = block()
-            if (result.message.isNotBlank()) feedback.show(result.message, isError = !result.ok)
+            feedback.show(result)
             reload++
         }
     }

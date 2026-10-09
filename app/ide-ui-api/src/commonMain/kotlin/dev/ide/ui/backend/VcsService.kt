@@ -167,6 +167,12 @@ interface VcsService {
     /** Open a pull request from the current branch into [base]. */
     suspend fun createPullRequest(title: String, body: String, base: String): UiVcsResult = UNSUPPORTED
 
+    /**
+     * The branch pull requests should target by default: the GitHub repository's default branch, else what
+     * the remote's branches suggest, else null when there is nothing to go on.
+     */
+    suspend fun defaultBranch(): String? = null
+
     /** A no-op service for backends that wire no version control. */
     object Unsupported : VcsService
 
@@ -180,7 +186,11 @@ interface VcsService {
         const val SCREEN_STASHES: String = "vcs.stashes"
         const val SCREEN_GITHUB: String = "vcs.github"
 
-        private val UNSUPPORTED = UiVcsResult(false, "Version control is not available in this build")
+        private val UNSUPPORTED = UiVcsResult(
+            false,
+            "Version control is not available in this build",
+            text = UiVcsText(key = "vcs_msg_no_engine", text = "Version control is not available in this build"),
+        )
     }
 }
 
@@ -201,6 +211,9 @@ data class UiVcsResult(
      * Null for every command that is not a clone.
      */
     val projectKind: UiProjectFolderKind? = null,
+    /** [message] in localizable form, when the backend has one; a UI that shows it in the user's language
+     *  should prefer it, and falls back to [message]. */
+    val text: UiVcsText? = null,
 ) {
     companion object {
         val Ok: UiVcsResult = UiVcsResult(true)
@@ -208,6 +221,18 @@ data class UiVcsResult(
         fun failed(message: String): UiVcsResult = UiVcsResult(false, message)
     }
 }
+
+/**
+ * A message the UI translates: the string resource named [key], with [args] (each one itself a text) filling
+ * its `%1$s`, `%2$s`, ... placeholders. [text] is the same message already rendered in English, shown when the
+ * UI has no resource called [key]; an empty [key] means [text] is all there is (words the IDE did not write,
+ * such as a server's own error).
+ */
+data class UiVcsText(
+    val key: String = "",
+    val args: List<UiVcsText> = emptyList(),
+    val text: String = "",
+)
 
 /** One changed path as the panel lists it. [status] and [area] are the stable ids below. */
 data class UiVcsChange(
@@ -258,8 +283,17 @@ data class UiVcsStatus(
     val headShortId: String = "",
     /** Set when the last refresh failed, so the panel can show why instead of an empty list. */
     val error: String = "",
+    /** [error] in localizable form, as on [UiVcsResult.text]. */
+    val errorText: UiVcsText? = null,
+    /** Names of the configured remotes. A branch can have a remote to push to before it tracks one (a remote
+     *  added by hand, or a publish whose first push failed), so this, not [upstream], says whether the
+     *  project can sync at all. */
+    val remotes: List<String> = emptyList(),
 ) {
     val clean: Boolean get() = staged.isEmpty() && unstaged.isEmpty() && conflicted.isEmpty()
+
+    /** True when there is a remote to push to, whether or not the current branch tracks it yet. */
+    val hasRemote: Boolean get() = remotes.isNotEmpty()
     val changeCount: Int get() = staged.size + unstaged.size + conflicted.size
 
     companion object {
@@ -275,8 +309,11 @@ data class UiVcsStatus(
 /** A long-running command in flight. [fraction] is -1 when the total is unknown. */
 data class UiVcsActivity(
     val busy: Boolean = false,
+    /** The step in progress, as the transport names it (English). */
     val task: String = "",
     val fraction: Float = -1f,
+    /** The operation in progress ("Pushing"), localizable; a UI shows this in preference to [task]. */
+    val taskText: UiVcsText? = null,
 )
 
 data class UiVcsBranch(
@@ -333,6 +370,8 @@ data class UiVcsAccount(
     val name: String,
     val avatarUrl: String = "",
     val active: Boolean = false,
+    /** The forge refused this account's token (revoked, expired, or narrowed), so it has to sign in again. */
+    val needsSignIn: Boolean = false,
 )
 
 /** Where the browser sign-in flow has got to. */
@@ -354,7 +393,7 @@ sealed interface UiVcsSignIn {
     data class Done(val account: UiVcsAccount) : UiVcsSignIn
 
     /** The flow ended without an account. */
-    data class Failed(val message: String) : UiVcsSignIn
+    data class Failed(val message: String, val text: UiVcsText? = null) : UiVcsSignIn
 }
 
 /** A repository as the forge lists it, for the clone picker and the publish flow. */

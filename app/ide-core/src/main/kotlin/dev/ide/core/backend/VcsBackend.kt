@@ -1,8 +1,8 @@
 package dev.ide.core.backend
 
 import dev.ide.core.BackendContext
-import dev.ide.core.project.ImportableKind
 import dev.ide.core.plugins.VcsPlugin
+import dev.ide.core.project.ImportableKind
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.UiForgePullRequest
 import dev.ide.ui.backend.UiForgeRepo
@@ -19,10 +19,12 @@ import dev.ide.ui.backend.UiVcsResult
 import dev.ide.ui.backend.UiVcsSignIn
 import dev.ide.ui.backend.UiVcsStash
 import dev.ide.ui.backend.UiVcsStatus
+import dev.ide.ui.backend.UiVcsText
 import dev.ide.ui.backend.VcsService
 import dev.ide.vcs.AccountStore
 import dev.ide.vcs.DeviceAuthPoll
 import dev.ide.vcs.ForgeRepo
+import dev.ide.vcs.VCS_PROVIDER_EP
 import dev.ide.vcs.VcsAccount
 import dev.ide.vcs.VcsAuthException
 import dev.ide.vcs.VcsAuthor
@@ -34,15 +36,18 @@ import dev.ide.vcs.VcsCommit
 import dev.ide.vcs.VcsCredentials
 import dev.ide.vcs.VcsException
 import dev.ide.vcs.VcsMergeResult
+import dev.ide.vcs.VcsMessage
 import dev.ide.vcs.VcsOperation
-import dev.ide.vcs.VCS_PROVIDER_EP
 import dev.ide.vcs.VcsProgress
 import dev.ide.vcs.VcsProvider
 import dev.ide.vcs.VcsRepository
 import dev.ide.vcs.VcsStatus
+import dev.ide.vcs.VcsText
 import dev.ide.vcs.impl.FileAccountStore
 import dev.ide.vcs.impl.GitHubClient
 import dev.ide.vcs.impl.GitProvider
+import dev.ide.vcs.impl.hostOf
+import dev.ide.vcs.impl.redactUrl
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -114,6 +119,13 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
     /** The in-flight browser sign-in poll, so [cancelSignIn] can stop it. */
     private var signInJob: Job? = null
 
+    /**
+     * Accounts whose token the forge refused this session. Listing calls cannot return an error, so a revoked
+     * token used to read as "no repositories"; marking the account lets every screen say to sign in again.
+     * Signing that account in again clears it.
+     */
+    private val refusedAccounts: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     init {
         // A project swap invalidates the cached repository; a file-system epoch bump means something changed
         // on disk, which is exactly when the working-tree snapshot goes stale.
@@ -137,17 +149,20 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
         _status.value = withContext(Dispatchers.IO) {
             lock.withLock {
                 val repo = repositoryOrNull() ?: return@withLock UiVcsStatus(present = false)
-                runCatching { repo.status().toUi(repo.root.toString()) }.getOrElse { e ->
+                runCatching {
+                    val remotes = runCatching { repo.remotes().map { it.name } }.getOrDefault(emptyList())
+                    repo.status().toUi(repo.root.toString()).copy(remotes = remotes)
+                }.getOrElse { e ->
                     log.warn("Could not read the repository status", e)
-                    UiVcsStatus(present = true, error = e.userMessage())
+                    e.userText().let { UiVcsStatus(present = true, error = it.english, errorText = it.toUi()) }
                 }
             }
         }
     }
 
     override suspend fun initRepository(): UiVcsResult = command {
-        val root = ctx.servicesOrNull?.workspaceRoot ?: throw VcsException(NO_PROJECT)
-        val git = provider ?: throw VcsException(NO_ENGINE)
+        val root = ctx.servicesOrNull?.workspaceRoot ?: throw VcsException(VcsText.of(VcsMessage.NO_PROJECT))
+        val git = provider ?: throw VcsException(VcsText.of(VcsMessage.NO_ENGINE))
         withContext(Dispatchers.IO) {
             lock.withLock {
                 closeRepository()
@@ -159,7 +174,7 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
             }
         }
         ctx.bumpFileSystemEpoch()
-        UiVcsResult.ok("Repository created")
+        ok(VcsMessage.REPO_CREATED)
     }
 
     override suspend fun stage(paths: List<String>): UiVcsResult =
@@ -178,14 +193,17 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
         command { withRepository { it.markResolved(paths) }; UiVcsResult.Ok }
 
     override suspend fun commit(message: String, amend: Boolean): UiVcsResult = command {
-        val commit = withRepository { repo -> repo.commit(message, repo.identity() ?: configuredIdentity(), amend) }
-        UiVcsResult.ok("Committed ${commit.shortId}")
+        // The Settings identity wins over one in the repository config. Earlier builds copied it into every
+        // repository it was saved in, so a repository identity is usually a stale copy of it, and preferring
+        // that meant a later edit in Settings was silently ignored.
+        val commit = withRepository { repo -> repo.commit(message, configuredIdentity() ?: repo.identity(), amend) }
+        ok(VcsMessage.COMMITTED, commit.shortId)
     }
 
     override suspend fun addDefaultIgnores(): UiVcsResult = command {
         withRepository { it.ignore(DEFAULT_IGNORES) }
         ctx.bumpFileSystemEpoch()
-        UiVcsResult.ok("Updated .gitignore")
+        ok(VcsMessage.GITIGNORE_UPDATED)
     }
 
     // ---- branches ------------------------------------------------------------------------------
@@ -196,20 +214,20 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
     override suspend fun createBranch(name: String, startPoint: String?, checkout: Boolean): UiVcsResult = command {
         val branch = withRepository { it.createBranch(name.trim(), startPoint, checkout) }
         if (checkout) ctx.bumpFileSystemEpoch()
-        UiVcsResult.ok("Created ${branch.name}")
+        ok(VcsMessage.BRANCH_CREATED, branch.name)
     }
 
     override suspend fun checkoutBranch(name: String): UiVcsResult = command {
         withRepository { it.checkout(name) }
         ctx.bumpFileSystemEpoch()
-        UiVcsResult.ok("Switched to $name")
+        ok(VcsMessage.SWITCHED, name)
     }
 
     override suspend fun deleteBranch(name: String, force: Boolean): UiVcsResult =
-        command { withRepository { it.deleteBranch(name, force) }; UiVcsResult.ok("Deleted $name") }
+        command { withRepository { it.deleteBranch(name, force) }; ok(VcsMessage.BRANCH_DELETED, name) }
 
     override suspend fun renameBranch(from: String, to: String): UiVcsResult =
-        command { withRepository { it.renameBranch(from, to.trim()) }; UiVcsResult.ok("Renamed to ${to.trim()}") }
+        command { withRepository { it.renameBranch(from, to.trim()) }; ok(VcsMessage.BRANCH_RENAMED, to.trim()) }
 
     override suspend fun mergeBranch(name: String): UiVcsResult = command {
         val merge = withRepository { it.merge(name) }
@@ -218,13 +236,14 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
             ok = merge.status != VcsMergeResult.Status.FAILED && merge.status != VcsMergeResult.Status.ABORTED,
             message = merge.message,
             conflicts = merge.conflicts,
+            text = merge.text.toUi(),
         )
     }
 
     override suspend fun abortMerge(): UiVcsResult = command {
         withRepository { it.abortMerge() }
         ctx.bumpFileSystemEpoch()
-        UiVcsResult.ok("Merge aborted")
+        ok(VcsMessage.ABORTED)
     }
 
     // ---- history -------------------------------------------------------------------------------
@@ -255,17 +274,17 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
     override suspend fun stashPush(message: String, includeUntracked: Boolean): UiVcsResult = command {
         val stashed = withRepository { it.stashPush(message, includeUntracked) }
         ctx.bumpFileSystemEpoch()
-        UiVcsResult.ok(if (stashed) "Changes stashed" else "There was nothing to stash")
+        ok(if (stashed) VcsMessage.STASHED else VcsMessage.NOTHING_TO_STASH)
     }
 
     override suspend fun stashApply(index: Int, drop: Boolean): UiVcsResult = command {
         withRepository { it.stashApply(index, drop) }
         ctx.bumpFileSystemEpoch()
-        UiVcsResult.ok("Stash applied")
+        ok(VcsMessage.STASH_APPLIED)
     }
 
     override suspend fun stashDrop(index: Int): UiVcsResult =
-        command { withRepository { it.stashDrop(index) }; UiVcsResult.ok("Stash dropped") }
+        command { withRepository { it.stashDrop(index) }; ok(VcsMessage.STASH_DROPPED) }
 
     // ---- remotes and sync ----------------------------------------------------------------------
 
@@ -273,52 +292,61 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
         read { repo -> repo.remotes().map { UiVcsRemote(it.name, it.fetchUrl) } }.orEmpty()
 
     override suspend fun addRemote(name: String, url: String): UiVcsResult =
-        command { withRepository { it.addRemote(name.trim(), url.trim()) }; UiVcsResult.ok("Remote ${name.trim()} added") }
+        command { withRepository { it.addRemote(name.trim(), url.trim()) }; ok(VcsMessage.REMOTE_ADDED, name.trim()) }
 
     override suspend fun removeRemote(name: String): UiVcsResult =
-        command { withRepository { it.removeRemote(name) }; UiVcsResult.ok("Remote $name removed") }
+        command { withRepository { it.removeRemote(name) }; ok(VcsMessage.REMOTE_REMOVED, name) }
 
-    override suspend fun fetch(): UiVcsResult = busy("Fetching") {
+    override suspend fun fetch(): UiVcsResult = busy(VcsMessage.ACTIVITY_FETCHING) {
         command {
-            withRepository { repo -> repo.fetch(auth = credentialsFor(repo), progress = progressSink()) }
-            UiVcsResult.ok("Up to date with the remote")
+            withRepository { repo ->
+                val remote = syncRemote(repo)
+                repo.fetch(remote, auth = credentialsFor(repo, remote), progress = progressSink())
+            }
+            ok(VcsMessage.FETCHED)
         }
     }
 
-    override suspend fun pull(): UiVcsResult = busy("Pulling") {
+    override suspend fun pull(): UiVcsResult = busy(VcsMessage.ACTIVITY_PULLING) {
         command {
-            val sync = withRepository { repo -> repo.pull(auth = credentialsFor(repo), progress = progressSink()) }
+            val sync = withRepository { repo ->
+                val remote = syncRemote(repo)
+                repo.pull(remote, auth = credentialsFor(repo, remote), progress = progressSink())
+            }
             ctx.bumpFileSystemEpoch()
+            val text = sync.text.takeIf { sync.message.isNotBlank() }
+                ?: VcsText.of(if (sync.ok) VcsMessage.PULLED else VcsMessage.PULL_NOT_COMPLETED)
             UiVcsResult(
                 ok = sync.ok,
-                message = sync.message.ifBlank { if (sync.ok) "Pulled" else "The pull did not complete" },
+                message = text.english,
                 conflicts = sync.merge?.conflicts.orEmpty(),
+                text = text.toUi(),
             )
         }
     }
 
-    override suspend fun push(force: Boolean): UiVcsResult = busy("Pushing") {
+    override suspend fun push(force: Boolean): UiVcsResult = busy(VcsMessage.ACTIVITY_PUSHING) {
         command {
             val sync = withRepository { repo ->
-                repo.push(force = force, auth = credentialsFor(repo), progress = progressSink())
+                val remote = syncRemote(repo)
+                repo.push(remote, force = force, auth = credentialsFor(repo, remote, push = true), progress = progressSink())
             }
-            if (!sync.ok) throw VcsException(sync.message.ifBlank { "The remote rejected the push" })
-            UiVcsResult.ok("Pushed")
+            if (!sync.ok) throw VcsException(sync.text.takeIf { sync.message.isNotBlank() } ?: VcsText.of(VcsMessage.PUSH_REJECTED))
+            ok(VcsMessage.PUSHED)
         }
     }
 
     // ---- identity ------------------------------------------------------------------------------
 
     override suspend fun identity(): UiVcsIdentity {
-        val author = read { it.identity() } ?: configuredIdentity()
+        val author = configuredIdentity() ?: read { it.identity() }
         return UiVcsIdentity(author?.name.orEmpty(), author?.email.orEmpty())
     }
 
     override suspend fun setIdentity(name: String, email: String): UiVcsResult = command {
         ctx.manager?.setPreference(VcsPlugin.PREF_USER_NAME, name.trim())
         ctx.manager?.setPreference(VcsPlugin.PREF_USER_EMAIL, email.trim())
-        read { it.setIdentity(VcsAuthor(name.trim(), email.trim())) }
-        UiVcsResult.ok("Identity saved")
+        ok(VcsMessage.IDENTITY_SAVED)
     }
 
     // ---- accounts ------------------------------------------------------------------------------
@@ -327,7 +355,7 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
 
     override suspend fun startSignIn() {
         if (signInJob?.isActive == true) return
-        val accounts = store ?: run { _signIn.value = UiVcsSignIn.Failed(NO_ENGINE); return }
+        val accounts = store ?: run { _signIn.value = signInFailed(VcsText.of(VcsMessage.NO_ENGINE)); return }
         _signIn.value = UiVcsSignIn.Starting
         signInJob = scope.launch {
             try {
@@ -342,24 +370,29 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
                         DeviceAuthPoll.Pending -> Unit
                         is DeviceAuthPoll.SlowDown -> interval = poll.intervalSeconds.coerceAtLeast(interval + 1)
                         is DeviceAuthPoll.Failed -> {
-                            _signIn.value = UiVcsSignIn.Failed(poll.message)
+                            _signIn.value = signInFailed(poll.text)
                             return@launch
                         }
 
                         is DeviceAuthPoll.Authorized -> {
                             val account = withContext(Dispatchers.IO) {
                                 accounts.add(forge.verifyToken(poll.token).copy(kind = VcsAccount.Kind.OAUTH), poll.token)
+                                    .also { accounts.setActive(it.id) }
                             }
+                            refusedAccounts.remove(account.id)
                             reloadAccounts()
                             _signIn.value = UiVcsSignIn.Done(account.toUi(active = true))
                             return@launch
                         }
                     }
                 }
-                _signIn.value = UiVcsSignIn.Failed("The sign-in code expired. Start again.")
+                _signIn.value = signInFailed(VcsText.of(VcsMessage.SIGN_IN_CODE_EXPIRED))
+            } catch (e: CancellationException) {
+                // cancelSignIn already set Idle; reporting the cancellation as a failure would overwrite it.
+                throw e
             } catch (e: Exception) {
                 log.warn("GitHub sign-in failed", e)
-                _signIn.value = UiVcsSignIn.Failed(e.userMessage())
+                _signIn.value = signInFailed(e.userText())
             }
         }
     }
@@ -371,26 +404,29 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
     }
 
     override suspend fun signInWithToken(token: String): UiVcsResult = command {
-        val accounts = store ?: throw VcsException(NO_ENGINE)
-        if (token.isBlank()) throw VcsException("Paste a personal access token")
+        val accounts = store ?: throw VcsException(VcsText.of(VcsMessage.NO_ENGINE))
+        if (token.isBlank()) throw VcsException(VcsText.of(VcsMessage.TOKEN_REQUIRED))
         val account = withContext(Dispatchers.IO) {
+            // The account just signed in is the one the user means to use next, so it becomes the active one.
             accounts.add(forge.verifyToken(token.trim()).copy(kind = VcsAccount.Kind.TOKEN), token.trim())
+                .also { accounts.setActive(it.id) }
         }
+        refusedAccounts.remove(account.id)
         reloadAccounts()
         _signIn.value = UiVcsSignIn.Done(account.toUi(active = true))
-        UiVcsResult.ok("Signed in as ${account.login}")
+        ok(VcsMessage.SIGNED_IN, account.login)
     }
 
     override suspend fun signOut(accountId: String): UiVcsResult = command {
-        val accounts = store ?: throw VcsException(NO_ENGINE)
+        val accounts = store ?: throw VcsException(VcsText.of(VcsMessage.NO_ENGINE))
         withContext(Dispatchers.IO) { accounts.remove(accountId) }
         reloadAccounts()
         _signIn.value = UiVcsSignIn.Idle
-        UiVcsResult.ok("Signed out")
+        ok(VcsMessage.SIGNED_OUT)
     }
 
     override suspend fun setActiveAccount(accountId: String): UiVcsResult = command {
-        val accounts = store ?: throw VcsException(NO_ENGINE)
+        val accounts = store ?: throw VcsException(VcsText.of(VcsMessage.NO_ENGINE))
         withContext(Dispatchers.IO) { accounts.setActive(accountId) }
         reloadAccounts()
         UiVcsResult.Ok
@@ -402,16 +438,16 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
     }
 
     override suspend fun saveHostCredentials(host: String, username: String, password: String): UiVcsResult = command {
-        val accounts = store ?: throw VcsException(NO_ENGINE)
-        if (host.isBlank() || username.isBlank()) throw VcsException("Enter the host and your username")
+        val accounts = store ?: throw VcsException(VcsText.of(VcsMessage.NO_ENGINE))
+        if (host.isBlank() || username.isBlank()) throw VcsException(VcsText.of(VcsMessage.HOST_CREDENTIALS_REQUIRED))
         withContext(Dispatchers.IO) { accounts.saveHostCredentials(host.trim(), username.trim(), password) }
-        UiVcsResult.ok("Saved credentials for ${host.trim()}")
+        ok(VcsMessage.HOST_CREDENTIALS_SAVED, host.trim())
     }
 
     override suspend fun clearHostCredentials(host: String): UiVcsResult = command {
-        val accounts = store ?: throw VcsException(NO_ENGINE)
+        val accounts = store ?: throw VcsException(VcsText.of(VcsMessage.NO_ENGINE))
         withContext(Dispatchers.IO) { accounts.clearHostCredentials(host) }
-        UiVcsResult.ok("Removed credentials for $host")
+        ok(VcsMessage.HOST_CREDENTIALS_REMOVED, host)
     }
 
     // ---- forge ---------------------------------------------------------------------------------
@@ -421,17 +457,20 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
         return runCatching {
             withContext(Dispatchers.IO) { forge.repositories(token, query, page) }.map { it.toUi() }
         }.getOrElse { e ->
+            noteRefusal(e)
             log.warn("Could not list repositories", e)
             emptyList()
         }
     }
 
-    override suspend fun cloneRepository(url: String, directoryName: String): UiVcsResult = busy("Cloning") {
+    override suspend fun cloneRepository(url: String, directoryName: String): UiVcsResult = busy(VcsMessage.ACTIVITY_CLONING) {
         command {
-            val git = provider ?: throw VcsException(NO_ENGINE)
-            val manager = ctx.manager ?: throw VcsException(NO_PROJECT)
+            val git = provider ?: throw VcsException(VcsText.of(VcsMessage.NO_ENGINE))
+            val manager = ctx.manager ?: throw VcsException(VcsText.of(VcsMessage.NO_PROJECT))
             val name = directoryName.trim().ifBlank { url.trim().substringAfterLast('/').removeSuffix(".git") }
-            if (name.isBlank()) throw VcsException("Enter a folder name for the clone")
+            if (name.isBlank()) throw VcsException(VcsText.of(VcsMessage.CLONE_FOLDER_REQUIRED))
+            // A pasted URL may carry a token (`https://ghp_x@github.com/...`); only the clone itself may see it.
+            val shownUrl = redactUrl(url.trim())
             val target = manager.projectsRoot.resolve(name)
             val auth = store?.credentialsFor(url) ?: VcsCredentials.Anonymous
             withContext(Dispatchers.IO) {
@@ -441,34 +480,40 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
             // and report what it turned out to be: a clone that no build system recognizes is a real outcome
             // the screen has to say out loud, not a silent one the user discovers via an empty picker.
             val kind = withContext(Dispatchers.IO) {
-                runCatching { manager.adoptFolderInPlace(target, origin = url.trim()) }
+                runCatching { manager.adoptFolderInPlace(target, origin = shownUrl) }
                     .getOrElse { e ->
-                        log.warn("Cloned $url but could not adopt $target as a project", e)
+                        log.warn("Cloned $shownUrl but could not adopt $target as a project", e)
                         ImportableKind.NONE
                     }
             }
-            UiVcsResult(
-                ok = true,
-                message = "Cloned into $name",
-                path = target.toString(),
-                projectKind = kind.toUi(),
-            )
+            ok(VcsMessage.CLONED, name).copy(path = target.toString(), projectKind = kind.toUi())
         }
     }
 
     override suspend fun publishToForge(name: String, description: String, private: Boolean): UiVcsResult =
-        busy("Publishing") {
+        busy(VcsMessage.ACTIVITY_PUBLISHING) {
             command {
-                val token = activeToken() ?: return@command UiVcsResult(false, SIGN_IN_FIRST, authRequired = true)
+                val token = activeToken() ?: return@command failed(VcsText.of(VcsMessage.SIGN_IN_FIRST), authRequired = true)
+                // Everything that would make the push fail is checked before the GitHub repository exists. Creating
+                // it first left an empty repository behind on every failed attempt, and the retry then failed with
+                // "name already exists".
+                withRepository { repo ->
+                    val status = repo.status()
+                    if (status.unborn) throw VcsException(VcsText.of(VcsMessage.PUBLISH_NEEDS_COMMIT))
+                    if (status.branch == null) throw VcsException(VcsText.of(VcsMessage.PUBLISH_DETACHED))
+                    if (repo.remotes().any { it.name == VcsRepository.DEFAULT_REMOTE }) {
+                        throw VcsException(VcsText.of(VcsMessage.PUBLISH_REMOTE_EXISTS, VcsRepository.DEFAULT_REMOTE))
+                    }
+                }
                 val created = withContext(Dispatchers.IO) {
                     forge.createRepository(token, name.trim(), description.trim(), private)
                 }
                 withRepository { repo ->
                     repo.addRemote(VcsRepository.DEFAULT_REMOTE, created.cloneUrl)
-                    val sync = repo.push(auth = credentialsFor(repo), progress = progressSink())
-                    if (!sync.ok) throw VcsException(sync.message.ifBlank { "The remote rejected the push" })
+                    val sync = repo.push(auth = credentialsFor(repo, VcsRepository.DEFAULT_REMOTE, push = true), progress = progressSink())
+                    if (!sync.ok) throw VcsException(sync.text.takeIf { sync.message.isNotBlank() } ?: VcsText.of(VcsMessage.PUSH_REJECTED))
                 }
-                UiVcsResult.ok("Published to ${created.fullName}")
+                ok(VcsMessage.PUBLISHED, created.fullName)
             }
         }
 
@@ -490,20 +535,48 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
                 )
             }
         }.getOrElse { e ->
+            noteRefusal(e)
             log.warn("Could not list pull requests", e)
             emptyList()
         }
     }
 
+    override suspend fun defaultBranch(): String? {
+        val token = activeToken()
+        val slug = originSlug()
+        if (token != null && slug != null) {
+            val fromForge = runCatching {
+                withContext(Dispatchers.IO) { forge.repository(token, slug.first, slug.second) }?.defaultBranch
+            }.onFailure { noteRefusal(it) }.getOrNull()
+            if (!fromForge.isNullOrBlank()) return fromForge
+        }
+        // Offline, or not on GitHub: the remote's own branches are the next best evidence.
+        return read { repo ->
+            val remote = runCatching { syncRemote(repo) }.getOrNull() ?: return@read null
+            val names = repo.branches(includeRemote = true).filter { it.remote }.map { it.name }
+            listOf("main", "master", "trunk", "develop").firstOrNull { "$remote/$it" in names }
+        }
+    }
+
+    /** Mark the active account as needing a new sign-in when [failure] is the forge refusing its token. */
+    private suspend fun noteRefusal(failure: Throwable) {
+        if (failure !is VcsAuthException) return
+        val active = store?.let { withContext(Dispatchers.IO) { it.activeAccount() } } ?: return
+        if (refusedAccounts.add(active.id)) reloadAccounts()
+    }
+
     override suspend fun createPullRequest(title: String, body: String, base: String): UiVcsResult = command {
-        val token = activeToken() ?: return@command UiVcsResult(false, SIGN_IN_FIRST, authRequired = true)
-        val slug = originSlug() ?: throw VcsException("This project has no GitHub remote")
-        val head = _status.value.branch
-        if (head.isBlank()) throw VcsException("HEAD is detached, so there is no branch to propose")
+        val token = activeToken() ?: return@command failed(VcsText.of(VcsMessage.SIGN_IN_FIRST), authRequired = true)
+        val slug = originSlug() ?: throw VcsException(VcsText.of(VcsMessage.NO_GITHUB_REMOTE))
+        if (title.isBlank()) throw VcsException(VcsText.of(VcsMessage.PR_TITLE_REQUIRED))
+        // Read under the lock rather than from the last published status, which can predate a branch switch.
+        val head = withRepository { it.status().branch }
+            ?: throw VcsException(VcsText.of(VcsMessage.PR_DETACHED))
+        if (head == base.trim()) throw VcsException(VcsText.of(VcsMessage.PR_SAME_BRANCH, head))
         val pr = withContext(Dispatchers.IO) {
             forge.createPullRequest(token, slug.first, slug.second, title.trim(), body, head, base)
         }
-        UiVcsResult.ok("Opened pull request #${pr.number}")
+        ok(VcsMessage.PR_OPENED, pr.number)
     }
 
     // ---- repository access ---------------------------------------------------------------------
@@ -541,7 +614,7 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
     /** Run [body] against the open repository, failing when the project is not under version control. */
     private suspend fun <T> withRepository(body: (VcsRepository) -> T): T = withContext(Dispatchers.IO) {
         lock.withLock {
-            val repo = repositoryOrNull() ?: throw VcsException("This project is not under version control")
+            val repo = repositoryOrNull() ?: throw VcsException(VcsText.of(VcsMessage.NOT_UNDER_VCS))
             body(repo)
         }
     }
@@ -554,18 +627,44 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
         }
     }
 
-    private fun credentialsFor(repo: VcsRepository): VcsCredentials {
-        val url = runCatching { repo.remotes() }.getOrDefault(emptyList())
-            .firstOrNull { it.name == VcsRepository.DEFAULT_REMOTE }?.fetchUrl
-            ?: return VcsCredentials.Anonymous
+    /**
+     * The remote fetch, pull and push talk to: the one the current branch tracks, else `origin`, else the only
+     * other remote there is. A branch that tracks nothing yet still has somewhere to go, which is what lets the
+     * first push from a hand-added remote record the tracking link.
+     */
+    private fun syncRemote(repo: VcsRepository): String {
+        val names = repo.remotes().map { it.name }
+        // A remote name may itself contain a slash, so the longest name that prefixes the upstream is the one.
+        val tracked = repo.branches(includeRemote = false).firstOrNull { it.current }?.upstream
+            ?.let { upstream -> names.filter { upstream.startsWith("$it/") }.maxByOrNull { it.length } }
+        return tracked
+            ?: VcsRepository.DEFAULT_REMOTE.takeIf { it in names }
+            ?: names.firstOrNull()
+            ?: throw VcsException(VcsText.of(VcsMessage.NO_REMOTE))
+    }
+
+    /**
+     * Credentials for talking to [remote]. A push goes to the remote's push URL, which can name a different
+     * host than its fetch URL (`pushurl`, `pushInsteadOf`), so the credentials are matched to the URL the
+     * transport will actually dial.
+     */
+    private fun credentialsFor(repo: VcsRepository, remote: String, push: Boolean = false): VcsCredentials {
+        val config = runCatching { repo.remotes() }.getOrDefault(emptyList()).firstOrNull { it.name == remote }
+        val url = (if (push) config?.pushUrl else config?.fetchUrl) ?: return VcsCredentials.Anonymous
         return store?.credentialsFor(url) ?: VcsCredentials.Anonymous
     }
 
-    /** `owner` and `name` of the repository `origin` points at, or null when there is no usable remote. */
+    /**
+     * `owner` and `name` of the GitHub repository the project syncs with, or null when there is none. Only a
+     * github.com remote counts: the slug of a GitLab or self-hosted remote names some unrelated GitHub
+     * repository, or none at all.
+     */
     private suspend fun originSlug(): Pair<String, String>? {
         val url = read { repo ->
-            repo.remotes().firstOrNull { it.name == VcsRepository.DEFAULT_REMOTE }?.fetchUrl
+            val remote = runCatching { syncRemote(repo) }.getOrNull() ?: return@read null
+            repo.remotes().firstOrNull { it.name == remote }?.fetchUrl
         } ?: return null
+        if (!hostOf(url).equals("github.com", ignoreCase = true)) return null
         return parseSlug(url)
     }
 
@@ -579,7 +678,7 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
         val accounts = store ?: return
         _accounts.value = withContext(Dispatchers.IO) {
             val active = accounts.activeAccount()?.id
-            accounts.accounts().map { it.toUi(it.id == active) }
+            accounts.accounts().map { it.toUi(it.id == active).copy(needsSignIn = it.id in refusedAccounts) }
         }
     }
 
@@ -591,7 +690,9 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
     }
 
     private fun progressSink(): VcsProgress = VcsProgress { task, completed, total ->
-        _activity.value = UiVcsActivity(
+        // The transport's step names ("Receiving objects") are English only, so the operation's own
+        // localizable name stays alongside them for the UI to show.
+        _activity.value = _activity.value.copy(
             busy = true,
             task = task,
             fraction = if (total > 0) (completed.toFloat() / total).coerceIn(0f, 1f) else -1f,
@@ -599,8 +700,9 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
     }
 
     /** Mark a long-running command as in flight so the panel can show a progress row. */
-    private suspend fun <T> busy(task: String, body: suspend () -> T): T {
-        _activity.value = UiVcsActivity(busy = true, task = task)
+    private suspend fun <T> busy(task: VcsMessage, body: suspend () -> T): T {
+        val text = VcsText.of(task)
+        _activity.value = UiVcsActivity(busy = true, task = text.english, taskText = text.toUi())
         return try {
             body()
         } finally {
@@ -624,15 +726,34 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
         throw e
     } catch (e: VcsAuthException) {
         refresh()
-        UiVcsResult(false, e.userMessage(), authRequired = true)
+        failed(e.userText(), authRequired = true)
     } catch (e: Throwable) {
         log.warn("Version-control command failed", e)
         refresh()
-        UiVcsResult(false, e.userMessage())
+        failed(e.userText())
     }
 
-    private fun Throwable.userMessage(): String =
-        message?.takeIf { it.isNotBlank() } ?: "Something went wrong (${this::class.java.simpleName})"
+    /** What to tell the user about [this]: the engine's own message when it wrote one, else the raw text. */
+    private fun Throwable.userText(): VcsText = when (this) {
+        is VcsException -> text
+        is VcsAuthException -> text
+        else -> message?.takeIf { it.isNotBlank() }?.let(VcsText::literal)
+            ?: VcsText.of(VcsMessage.SOMETHING_WENT_WRONG, this::class.java.simpleName)
+    }
+
+    private fun ok(message: VcsMessage, vararg args: Any): UiVcsResult =
+        VcsText.of(message, *args).let { UiVcsResult(true, it.english, text = it.toUi()) }
+
+    private fun failed(text: VcsText, authRequired: Boolean = false): UiVcsResult =
+        UiVcsResult(false, text.english, authRequired = authRequired, text = text.toUi())
+
+    private fun signInFailed(text: VcsText): UiVcsSignIn = UiVcsSignIn.Failed(text.english, text.toUi())
+
+    private fun VcsText.toUi(): UiVcsText = UiVcsText(
+        key = message?.key.orEmpty(),
+        args = args.map { if (it is VcsText) it.toUi() else UiVcsText(text = it.toString()) },
+        text = english,
+    )
 
     // ---- mapping -------------------------------------------------------------------------------
 
@@ -708,9 +829,6 @@ internal class VcsBackend(private val ctx: BackendContext) : VcsService {
     private companion object {
         const val VCS_DIR = "vcs"
         const val SHORT_ID = 7
-        const val NO_PROJECT = "Open a project first"
-        const val NO_ENGINE = "Version control is not available in this build"
-        const val SIGN_IN_FIRST = "Sign in to GitHub first"
 
         /** What a CodeAssist project should not track: build output, IDE metadata, and signing material. */
         val DEFAULT_IGNORES = listOf(

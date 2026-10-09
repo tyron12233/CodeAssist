@@ -33,14 +33,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.ide.ui.backend.UiVcsAccount
 import dev.ide.ui.backend.UiVcsChange
+import dev.ide.ui.backend.UiVcsResult
+import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ide
 import dev.ide.vcs.ui.generated.resources.Res
+import dev.ide.vcs.ui.generated.resources.vcs_sign_in_again
+import dev.ide.vcs.ui.generated.resources.vcs_sign_in_expired
 import dev.ide.vcs.ui.generated.resources.vcs_status_added
 import dev.ide.vcs.ui.generated.resources.vcs_status_conflicted
 import dev.ide.vcs.ui.generated.resources.vcs_status_copied
@@ -168,6 +176,8 @@ internal fun VcsField(
     minHeight: Int = 44,
     maxHeight: Int? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    /** Mask the text and keep the keyboard from learning it, for tokens and passwords. */
+    secret: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     Row(
@@ -204,7 +214,12 @@ internal fun VcsField(
                     MaterialTheme.typography.bodyMedium.copy(color = scheme.onSurface),
                 ),
                 cursorBrush = SolidColor(scheme.primary),
-                keyboardOptions = keyboardOptions,
+                keyboardOptions = if (secret) {
+                    keyboardOptions.copy(keyboardType = KeyboardType.Password, autoCorrectEnabled = false)
+                } else {
+                    keyboardOptions
+                },
+                visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -226,6 +241,12 @@ internal class VcsFeedback {
         }
         error.value = isError
         message.value = text
+    }
+
+    /** Report what [result] said, in the user's language when the backend gave a localizable message. */
+    suspend fun show(result: UiVcsResult) {
+        val text = result.text?.localized() ?: result.message
+        if (text.isNotBlank()) show(text, isError = !result.ok)
     }
 
     fun clear() {
@@ -306,3 +327,27 @@ internal fun VcsEmptyState(
 
 private const val INFO_DISMISS_MS = 3_500L
 private const val ERROR_DISMISS_MS = 7_000L
+
+/**
+ * Shown when the forge refused the active account's saved token, which otherwise surfaces only as empty
+ * lists. Nothing appears for an account the forge still accepts.
+ */
+@Composable
+internal fun SignInAgainCard(accounts: List<UiVcsAccount>, onSignIn: () -> Unit) {
+    val refused = accounts.firstOrNull { it.active && it.needsSignIn } ?: return
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(scheme.errorContainer, RoundedCornerShape(18.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            stringResource(Res.string.vcs_sign_in_expired, refused.login),
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onErrorContainer,
+        )
+        PrimaryButton(stringResource(Res.string.vcs_sign_in_again), onSignIn, icon = CaIcons.account)
+    }
+}

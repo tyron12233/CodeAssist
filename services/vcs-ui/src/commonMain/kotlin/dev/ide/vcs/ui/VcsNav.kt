@@ -1,8 +1,7 @@
 package dev.ide.vcs.ui
 
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 
 /**
  * What the diff screen should show. Either a working-tree comparison ([staged] picks the side of the index)
@@ -17,17 +16,13 @@ internal data class DiffTarget(
 )
 
 /**
- * The arguments a version-control screen is opened with.
- *
- * Contributed screens are addressed by id alone, so there is no route to carry parameters on. Since exactly
- * one screen is visible at a time, the opener writes what the screen needs here and navigates; the screen
- * reads it on entry. Kept to this plugin, and small enough that the state cannot drift: each field is set
- * immediately before the navigation that consumes it.
+ * State the Git screens keep outside any one composition. Screen arguments are not here: they travel as
+ * `ScreenContext.argument` ([DiffTarget] for the diff screen, a path or null for history), which the host
+ * restores on Back. A global used to carry them, and Back then showed whichever file was opened last.
  */
 internal object VcsNav {
-    /** The comparison the diff screen renders. */
-    var diff: DiffTarget? by mutableStateOf(null)
+    private val commitDrafts = HashMap<String, MutableState<String>>()
 
-    /** A file path to narrow the history screen to, or null for the whole repository. */
-    var historyPath: String? by mutableStateOf(null)
+    /** The unsent commit message for the working copy at [root], kept for the life of the process. */
+    fun commitDraft(root: String): MutableState<String> = commitDrafts.getOrPut(root) { mutableStateOf("") }
 }

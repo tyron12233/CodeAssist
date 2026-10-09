@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiVcsResult
 import dev.ide.ui.backend.UiVcsStash
+import dev.ide.ui.components.CenteredDialog
 import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.ext.ScreenContext
@@ -42,6 +43,8 @@ import dev.ide.vcs.ui.generated.resources.Res
 import dev.ide.vcs.ui.generated.resources.vcs_stash_apply
 import dev.ide.vcs.ui.generated.resources.vcs_stash_changes
 import dev.ide.vcs.ui.generated.resources.vcs_stash_drop
+import dev.ide.vcs.ui.generated.resources.vcs_stash_drop_body
+import dev.ide.vcs.ui.generated.resources.vcs_stash_drop_title
 import dev.ide.vcs.ui.generated.resources.vcs_stash_empty
 import dev.ide.vcs.ui.generated.resources.vcs_stash_hint
 import dev.ide.vcs.ui.generated.resources.vcs_stash_untracked
@@ -65,74 +68,94 @@ internal fun StashesScreen(ctx: ScreenContext) {
     var message by remember { mutableStateOf("") }
     var includeUntracked by remember { mutableStateOf(true) }
     var reload by remember { mutableStateOf(0) }
+    var dropping by remember { mutableStateOf<UiVcsStash?>(null) }
 
     LaunchedEffect(reload, status.changeCount) { stashes = vcs.stashes() }
 
     fun perform(block: suspend () -> UiVcsResult) {
         scope.launch {
             val result = block()
-            if (result.message.isNotBlank()) feedback.show(result.message, isError = !result.ok)
+            feedback.show(result)
             reload++
         }
     }
 
     ExpressiveScaffold(title = stringResource(Res.string.vcs_stashes), onBack = ctx::back, large = false) { padding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            FeedbackStrip(feedback)
-
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            // Outside the scrolling column, so the result of a button at the bottom of the page is on screen.
+            FeedbackStrip(feedback, Modifier.padding(horizontal = 16.dp))
             Column(
                 Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainerLow, RoundedCornerShape(18.dp))
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    stringResource(Res.string.vcs_stash_changes),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                VcsField(message, { message = it }, stringResource(Res.string.vcs_stash_hint), leading = CaIcons.stash)
-                VcsCheckRow(
-                    label = stringResource(Res.string.vcs_stash_untracked),
-                    checked = includeUntracked,
-                    onToggle = { includeUntracked = !includeUntracked },
-                )
-                PrimaryButton(
-                    stringResource(Res.string.vcs_stash_changes),
-                    {
-                        val text = message
-                        message = ""
-                        perform { vcs.stashPush(text, includeUntracked) }
-                    },
-                    icon = CaIcons.stash,
-                )
-            }
-
-            if (stashes.isEmpty()) {
-                Text(
-                    stringResource(Res.string.vcs_stash_empty),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline,
-                )
-            } else {
-                stashes.forEach { stash ->
-                    StashRow(
-                        stash = stash,
-                        onApply = { perform { vcs.stashApply(stash.index, drop = true) } },
-                        onDrop = { perform { vcs.stashDrop(stash.index) } },
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow, RoundedCornerShape(18.dp))
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        stringResource(Res.string.vcs_stash_changes),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    VcsField(message, { message = it }, stringResource(Res.string.vcs_stash_hint), leading = CaIcons.stash)
+                    VcsCheckRow(
+                        label = stringResource(Res.string.vcs_stash_untracked),
+                        checked = includeUntracked,
+                        onToggle = { includeUntracked = !includeUntracked },
+                    )
+                    PrimaryButton(
+                        stringResource(Res.string.vcs_stash_changes),
+                        {
+                            val text = message
+                            message = ""
+                            perform { vcs.stashPush(text, includeUntracked) }
+                        },
+                        icon = CaIcons.stash,
                     )
                 }
+
+                if (stashes.isEmpty()) {
+                    Text(
+                        stringResource(Res.string.vcs_stash_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline,
+                    )
+                } else {
+                    stashes.forEach { stash ->
+                        StashRow(
+                            stash = stash,
+                            // Apply means apply: the stash stays until the user drops it, so a conflicting apply
+                            // never costs the only copy of those changes.
+                            onApply = { perform { vcs.stashApply(stash.index, drop = false) } },
+                            onDrop = { dropping = stash },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
             }
-            Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    val pending = dropping
+    CenteredDialog(visible = pending != null, onDismiss = { dropping = null }) {
+        if (pending != null) {
+            ConfirmCard(
+                title = stringResource(Res.string.vcs_stash_drop_title),
+                body = stringResource(Res.string.vcs_stash_drop_body, pending.message),
+                confirmLabel = stringResource(Res.string.vcs_stash_drop),
+                onConfirm = {
+                    dropping = null
+                    perform { vcs.stashDrop(pending.index) }
+                },
+                onCancel = { dropping = null },
+            )
         }
     }
 }
@@ -155,8 +178,9 @@ private fun StashRow(stash: UiVcsStash, onApply: () -> Unit, onDrop: () -> Unit)
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (stash.timeLabel.isNotBlank()) {
-                Text(stash.timeLabel, style = MaterialTheme.typography.labelSmall, color = scheme.outline)
+            val age = ageText(stash.timeMs, stash.timeLabel)
+            if (age.isNotBlank()) {
+                Text(age, style = MaterialTheme.typography.labelSmall, color = scheme.outline)
             }
         }
         Text(
