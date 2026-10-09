@@ -35,6 +35,15 @@ interface ToolWindowContext {
     /** Navigate to a contributed [ScreenContribution] by id, for a panel whose detail view is a full screen. */
     fun openScreen(id: String) {}
 
+    /**
+     * Navigate to screen [id] handing it [argument], which the screen reads as [ScreenContext.argument]. The
+     * argument rides the back stack with the screen, so returning to it with Back shows the same thing again.
+     */
+    fun openScreen(id: String, argument: Any?) {
+        ScreenArgumentHandoff.pending = argument
+        openScreen(id)
+    }
+
     /** Open [path] in the editor with the caret at [offset], for a panel that lists code the user can jump
      *  to. Defaulted to a no-op so a host that has no editor to open into (a preview, a test) needs nothing. */
     fun openFile(path: String, offset: Int = 0) {}
@@ -125,8 +134,33 @@ interface ScreenContext {
      */
     fun openScreen(id: String) {}
 
+    /** [openScreen] handing the new screen [argument]. See [ToolWindowContext.openScreen]. */
+    fun openScreen(id: String, argument: Any?) {
+        ScreenArgumentHandoff.pending = argument
+        openScreen(id)
+    }
+
+    /**
+     * What this screen was opened with ([openScreen] with an argument), or null. It is restored along with the
+     * screen when Back returns to it, so a screen showing one of many things (a diff of a given file) comes
+     * back showing the same one rather than whatever was opened last.
+     */
+    val argument: Any? get() = null
+
     /** Open [path] in the editor with the caret at [offset]. See [ToolWindowContext.openFile]. */
     fun openFile(path: String, offset: Int = 0) {}
+}
+
+/**
+ * Carries a screen argument from [ScreenContext.openScreen] to the host's navigation. Every host navigates
+ * through one place, so the argument is set here immediately before the id-only `openScreen` and taken there,
+ * which spares each context implementation from having to forward it. Hosts call [take]; plugins never touch it.
+ */
+object ScreenArgumentHandoff {
+    var pending: Any? = null
+
+    /** The argument for the navigation in progress, cleared so it cannot leak into the next one. */
+    fun take(): Any? = pending.also { pending = null }
 }
 
 /** A top-level screen reachable by [id] (e.g. from an action's `Navigate(id)` effect / `UiActionHost`). */

@@ -9,6 +9,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
+import dev.ide.ui.ext.ScreenArgumentHandoff
 import dev.ide.ui.ext.ScreenBackRegistry
 import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.ads.AdController
@@ -147,6 +148,10 @@ class CodeAssistAppState(
 
     /** Which plugin-contributed screen [Screen.PluginScreen] is showing, and where Back returns to. */
     var pluginScreenId: String? by mutableStateOf(null)
+        private set
+
+    /** What [pluginScreenId] was opened with ([ScreenContext.argument]); saved and restored with it on the stack. */
+    var pluginScreenArgument: Any? by mutableStateOf(null)
         private set
     private var pluginScreenReturn: Screen = Screen.Editor
 
@@ -412,10 +417,13 @@ class CodeAssistAppState(
      * navigation from inside a screen that is already animating away.
      */
     fun openPluginScreen(id: String) {
+        // Taken first, so a refused navigation cannot leave it pending for the next one.
+        val argument = ScreenArgumentHandoff.take()
         if (ScreenRegistry.find(id) == null) return
         if (screen != Screen.PluginScreen) pluginScreenReturn = screen
         pushEntry()
         pluginScreenId = id
+        pluginScreenArgument = argument
         screen = Screen.PluginScreen
     }
 
@@ -788,12 +796,14 @@ class CodeAssistAppState(
         val project = submitProject
         val slug = submitItemSlug
         val plugin = pluginScreenId
+        val pluginArgument = pluginScreenArgument
         backStack += NavEntry(screen) {
             storeItem = item
             publisherHandle = handle
             submitProject = project
             submitItemSlug = slug
             pluginScreenId = plugin
+            pluginScreenArgument = pluginArgument
         }
         while (backStack.size > MAX_BACK_STACK) backStack.removeAt(0)
     }
@@ -1007,6 +1017,7 @@ class CodeAssistAppState(
             // A plugin screen returns to wherever it was opened from.
             screen == Screen.PluginScreen -> {
                 pluginScreenId = null
+                pluginScreenArgument = null
                 screen = pluginScreenReturn
             }
 

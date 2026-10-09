@@ -299,6 +299,43 @@ class CodeAssistAppStateTest {
         }
     }
 
+    /**
+     * A screen's argument rides the back stack with it. It used to travel in a plugin-side global that the next
+     * navigation overwrote, so Diff(A) -> History -> Diff(B) -> Back -> Back showed B's diff instead of A's.
+     */
+    @Test
+    fun backRestoresTheArgumentEachScreenWasOpenedWith() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+        backend.epochFlow.value++
+        advanceUntilIdle()
+
+        val context = object : dev.ide.ui.ext.ScreenContext {
+            override val backend = backend
+            override fun back() = app.navigateBack()
+            override fun openScreen(id: String) = app.openPluginScreen(id)
+        }
+        withScreens("vcs.diff", "vcs.history") {
+            context.openScreen("vcs.diff", "A.kt")
+            context.openScreen("vcs.history", "A.kt")
+            context.openScreen("vcs.diff", "B.kt")
+            assertEquals("B.kt", app.pluginScreenArgument)
+
+            app.navigateBack()
+            assertEquals("vcs.history", app.pluginScreenId)
+            assertEquals("A.kt", app.pluginScreenArgument)
+
+            app.navigateBack()
+            assertEquals("vcs.diff", app.pluginScreenId)
+            assertEquals("A.kt", app.pluginScreenArgument)
+
+            // An id-only navigation never inherits an argument left over from an earlier one.
+            context.openScreen("vcs.history")
+            assertNull(app.pluginScreenArgument)
+        }
+    }
+
     /** A contributed screen opened from a listing returns to that listing, not to the tab underneath it. */
     @Test
     fun aPluginScreenOpenedFromAStoreScreenReturnsToIt() = runTest {

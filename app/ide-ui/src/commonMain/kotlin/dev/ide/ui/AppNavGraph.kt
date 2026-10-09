@@ -8,6 +8,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -310,23 +311,29 @@ internal fun AppNavGraph(
                 // exit animation, so reading it live would blank the screen mid-transition. It follows a
                 // change to another plugin screen (a diff opening that file's history), which stays on this
                 // same destination and so reuses this instance.
-                var shown by remember { mutableStateOf(app.pluginScreenId) }
-                LaunchedEffect(app.pluginScreenId) {
-                    app.pluginScreenId?.let { shown = it }
+                // The argument is held alongside for the same reason, and moves with the id: Back to an
+                // earlier entry of the same screen (one diff to another) changes only the argument.
+                var shown by remember { mutableStateOf(app.pluginScreenId to app.pluginScreenArgument) }
+                LaunchedEffect(app.pluginScreenId, app.pluginScreenArgument) {
+                    app.pluginScreenId?.let { shown = it to app.pluginScreenArgument }
                 }
-                val contribution = shown?.let { ScreenRegistry.find(it) }
+                val (shownId, shownArgument) = shown
+                val contribution = shownId?.let { ScreenRegistry.find(it) }
                 if (contribution != null) {
                     val openInEditor = LocalPluginFileOpener.current
-                    val screenCtx = remember(backend, fileActions, app, openInEditor) {
+                    val screenCtx = remember(backend, fileActions, app, openInEditor, shownArgument) {
                         object : ScreenContext {
                             override val backend = backend
                             override val fileActions = fileActions
+                            override val argument = shownArgument
                             override fun back() = app.navigateBack()
                             override fun openScreen(id: String) = app.openPluginScreen(id)
                             override fun openFile(path: String, offset: Int) = openInEditor(path, offset)
                         }
                     }
-                    contribution.content(screenCtx)
+                    // Keyed so each entry starts from fresh state: two entries of one screen with different
+                    // arguments are different pages, and one must not inherit the other's loaded content.
+                    key(shownId, shownArgument) { contribution.content(screenCtx) }
                 }
             }
 
