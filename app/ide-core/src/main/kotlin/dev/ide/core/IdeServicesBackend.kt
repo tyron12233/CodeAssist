@@ -206,7 +206,8 @@ class IdeServicesBackend(
      * threading/scheduling policy is testable + instrumentable in isolation). Shares [engineDispatcher] with
      * the direct `withContext(engineDispatcher)` call sites below, so all engine work stays on the one worker.
      *
-     *  1. [interactive] — completion: highest priority, preempts both background and preview.
+     *  1. [interactive]: completion and the read-only requests the user waits on (go to, expand selection,
+     *     format): highest priority, preempts both background and preview.
      *  2. [background] — analysis/hints/semantic/folding/signature: preempts preview, preempted by interactive
      *     (the scheduler throws [EngineCanceledException]; [background] below re-runs the call after it).
      *  3. [preview] — preview rendering/lowering: lowest priority, preempted by both; retries automatically.
@@ -226,7 +227,9 @@ class IdeServicesBackend(
         },
     )
     override suspend fun <T> interactive(op: String, block: suspend () -> T): T =
-        logEditorFailures("completion") { scheduler.interactive(label = op.ifEmpty { "completion" }, block = block) }
+        logEditorFailures(op.substringBefore(':').ifEmpty { "completion" }) {
+            scheduler.interactive(label = op.ifEmpty { "completion" }, block = block)
+        }
     /**
      * A background-lane call that waits out preemption instead of failing with it. Completion preempting this
      * lane is the scheduler's business, not the caller's: most callers (icon import, the agent's workspace

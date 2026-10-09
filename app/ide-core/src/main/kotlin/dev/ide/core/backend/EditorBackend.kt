@@ -119,6 +119,15 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         return if (ext in REPORTABLE_EXTENSIONS) "$pass:$ext" else pass
     }
 
+    /**
+     * A read-only request the user is waiting on (go to, expand selection, format). It runs on the interactive
+     * lane so it preempts a background pass already holding the worker, instead of queuing behind it; the
+     * preempted pass runs again afterwards. Calls that write files (rename, actions) and per-caret-move calls
+     * stay off this lane: the first must not be cut short, and the second would keep preempting analysis.
+     */
+    private suspend fun <T> userRequest(pass: String, path: String, block: suspend () -> T): T =
+        ctx.interactive(op = op(pass, path), block = block)
+
     /** The file-type dimension of a perf sample: the extension when it is a reportable one, else `other`. */
     private fun langOf(path: String): String {
         val ext = path.substringAfterLast('.', "").lowercase()
@@ -173,19 +182,19 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     override suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? =
-        withContext(ctx.engineDispatcher) {
+        userRequest("definition", path) {
             ctx.services.definitionAt(
                 Paths.get(path), text, offset
             )
         }?.let { (p, o) -> UiDefinition(p.toString(), o) }
 
     override suspend fun navigationTargets(path: String, text: String, offset: Int, kind: UiNavKind): List<UiNavTarget> =
-        withContext(ctx.engineDispatcher) {
+        userRequest("navigation", path) {
             ctx.services.navigationTargets(Paths.get(path), text, offset, toNavKind(kind))
         }.map { UiNavTarget(it.file.path, it.offset, it.label, it.kind) }
 
     override suspend fun navigationOptions(path: String, text: String, offset: Int): List<UiNavOption> =
-        withContext(ctx.engineDispatcher) { ctx.services.navigationOptions(Paths.get(path), text, offset) }
+        userRequest("navigation", path) { ctx.services.navigationOptions(Paths.get(path), text, offset) }
             .map { (kind, targets) ->
                 UiNavOption(fromNavKind(kind), targets.map { UiNavTarget(it.file.path, it.offset, it.label, it.kind) })
             }
@@ -222,7 +231,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
             .map { m -> UiInheritorMarker(m.offset, m.isInterface, m.targets.map { UiInheritorTarget(it.fqn, it.kind) }) }
 
     override suspend fun implementationLocationOf(contextPath: String, fqn: String): UiDefinition? =
-        withContext(ctx.engineDispatcher) { ctx.services.implementationLocation(Paths.get(contextPath), fqn) }
+        userRequest("implementation", contextPath) { ctx.services.implementationLocation(Paths.get(contextPath), fqn) }
             ?.let { (p, o) -> UiDefinition(p.toString(), o) }
 
     override suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? = try {
@@ -243,12 +252,12 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     }
 
     override suspend fun expandSelection(path: String, text: String, selStart: Int, selEnd: Int): UiTextRange? =
-        withContext(ctx.engineDispatcher) {
+        userRequest("expandSelection", path) {
             ctx.services.expandSelection(Paths.get(path), text, selStart, selEnd)
         }?.let { UiTextRange(it.start, it.end) }
 
     override suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? =
-        withContext(ctx.engineDispatcher) {
+        userRequest("prepareRename", path) {
             ctx.services.prepareRename(
                 Paths.get(path), text, offset
             )?.let { UiRenameTarget(it.oldName, it.kind) }
@@ -676,7 +685,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     override suspend fun formatDocument(path: String, text: String): List<UiTextEdit> {
         val style = currentFormatStyle(path)
-        return withContext(ctx.engineDispatcher) {
+        return userRequest("format", path) {
             ctx.services.formatDocument(Paths.get(path), text, style)
         }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
     }
@@ -685,13 +694,13 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         path: String, text: String, selStart: Int, selEnd: Int
     ): List<UiTextEdit> {
         val style = currentFormatStyle(path)
-        return withContext(ctx.engineDispatcher) {
+        return userRequest("format", path) {
             ctx.services.formatRange(Paths.get(path), text, selStart, selEnd, style)
         }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
     }
 
     override suspend fun optimizeImports(path: String, text: String): List<UiTextEdit> =
-        withContext(ctx.engineDispatcher) {
+        userRequest("optimizeImports", path) {
             ctx.services.organizeImports(Paths.get(path), text)
         }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
 

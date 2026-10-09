@@ -42,7 +42,8 @@ fun interface EngineSchedulerObserver {
  * mutable) analyzers are never touched concurrently, while a latency-critical call can still cut ahead of a
  * heavy one already holding the worker.
  *
- *  1. [interactive] — completion: highest priority, preempts both background and preview; never preempted.
+ *  1. [interactive]: completion and other requests the user is waiting on (go to declaration, expand
+ *     selection, format): highest priority, preempts both background and preview; never preempted.
  *  2. [background] — analysis/hints/semantic/folding/signature: preempts preview, preempted by interactive
  *     (surfaces as [EngineCanceledException] — the caller maps that to a "skipped, retry next edit" result).
  *  3. [preview] — preview rendering/lowering: lowest priority, preempted by both; retries automatically.

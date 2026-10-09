@@ -45,7 +45,8 @@ internal interface BackendContext {
     /** The single serialized worker the editor's language calls run on. */
     val engineDispatcher: CoroutineDispatcher
 
-    /** Highest-priority editor lane (completion): preempts background + preview. The block may suspend
+    /** Highest-priority editor lane (completion, and read-only requests the user is waiting on such as go to
+     *  declaration): preempts background + preview. The block may suspend
      *  (a contributor may do out-of-process work off the worker); the worker frees while it waits. [op] is a
      *  fine-grained crash-breadcrumb label (see [dev.ide.platform.EngineBreadcrumb]); default → the lane name. */
     suspend fun <T> interactive(op: String = "", block: suspend () -> T): T
