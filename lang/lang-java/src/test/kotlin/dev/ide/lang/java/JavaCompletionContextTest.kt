@@ -125,4 +125,27 @@ class JavaCompletionContextTest {
         val onString = itemsAt("package com.foo;\nclass U { void m() { \"x\".throw| } }").map { it.label }
         assertFalse("throw" in onString, "`.throw` must not be offered on a non-Throwable")
     }
+
+    // ---- a member access typed above an existing statement ----
+
+    @Test fun memberAccessAboveAStatementListsReceiverMembers() {
+        val labels = labelsAt(
+            "package com.foo;\nclass U { void m(String s, Box b) {\n s.|\n b.inner();\n } }"
+        )
+        assertTrue("length" in labels, "String members before a following statement: $labels")
+    }
+
+    @Test fun memberAccessWithPrefixAboveAStatementListsReceiverMembers() {
+        val labels = labelsAt(
+            "package com.foo;\nclass U { void m(String s, Box b) {\n s.len|\n b.inner();\n } }"
+        )
+        assertTrue("length" in labels, "String members with a typed prefix before a following statement: $labels")
+    }
+
+    @Test fun memberAccessAboveADeclarationListsReceiverMembers() {
+        val labels = labelsAt(
+            "package com.foo;\nclass U { void m(String s) {\n s.|\n int n = 1;\n } }"
+        )
+        assertTrue("length" in labels, "String members before a following declaration: $labels")
+    }
 }
