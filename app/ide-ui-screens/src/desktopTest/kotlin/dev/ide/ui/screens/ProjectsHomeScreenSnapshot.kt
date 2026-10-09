@@ -85,6 +85,7 @@ class ProjectsHomeScreenSnapshot {
                                     onExportProject = {},
                                     onDeleteProject = {},
                                     onImportProject = {},
+                                    onJoinDiscord = {},
                                 )
                             },
                             storeContent = {},
@@ -126,6 +127,7 @@ class ProjectsHomeScreenSnapshot {
                         onBackup = {},
                         storagePath = "/storage/emulated/0/CodeAssist",
                         onImportProject = {},
+                        onJoinDiscord = {},
                     )
                 }
               }

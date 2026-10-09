@@ -45,6 +45,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -105,6 +106,7 @@ import dev.ide.ui.generated.resources.home_share
 import dev.ide.ui.generated.resources.home_sponsor
 import dev.ide.ui.generated.resources.home_star_github
 import dev.ide.ui.generated.resources.join_the_community
+import dev.ide.ui.generated.resources.join_the_community_content
 import dev.ide.ui.generated.resources.project_opened_days
 import dev.ide.ui.generated.resources.project_opened_hours
 import dev.ide.ui.generated.resources.project_age_just_now
@@ -260,6 +262,7 @@ fun ProjectsHomeScreen(
             onDismissLegacyRecovery = onDismissLegacyRecovery,
             bell = bell,
             onOpenAccount = { sheet = HomeSheet.Account },
+            onJoinDiscord = onJoinDiscord,
         )
     } else
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
@@ -305,6 +308,11 @@ fun ProjectsHomeScreen(
                     onImportProject = onImportProject ?: {},
                     canImport = onImportProject != null,
                 )
+            }
+            if (onJoinDiscord != null) {
+                item("community") {
+                    CommunityCard(onJoinDiscord, Modifier.padding(horizontal = 20.dp).padding(top = 16.dp))
+                }
             }
             item("segments") {
                 SegmentRow(
@@ -977,6 +985,45 @@ private fun LegacyRecoveryNotice(onDismiss: () -> Unit) {
     }
 }
 
+/** Discord's brand colour, used only for the community card's tile and edge. */
+private val DiscordBlurple = Color(0xFF5865F2)
+
+/** The invitation to the community Discord, kept in sight on the home rather than only in the account sheet. */
+@Composable
+private fun CommunityCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = MaterialTheme.colorScheme
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(24.dp),
+        color = c.surfaceContainerLow,
+        contentColor = c.onSurface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, DiscordBlurple.copy(alpha = 0.35f)),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                Modifier.size(44.dp).background(DiscordBlurple, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(CaIcons.discord, contentDescription = null, modifier = Modifier.size(24.dp), tint = Color.White)
+            }
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(Res.string.join_the_community), style = MaterialTheme.typography.titleMedium, color = c.onSurface)
+                Text(
+                    stringResource(Res.string.join_the_community_content),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = c.onSurfaceVariant,
+                )
+            }
+            Symbol(CaSymbols.chevronRight, contentDescription = null, size = 22.dp, tint = c.onSurfaceVariant)
+        }
+    }
+}
+
 // ---- helpers ----
 
 @Composable
@@ -1087,6 +1134,7 @@ private fun WideProjectsHome(
     onDismissLegacyRecovery: () -> Unit,
     bell: (@Composable () -> Unit)?,
     onOpenAccount: () -> Unit,
+    onJoinDiscord: (() -> Unit)?,
 ) {
     val c = MaterialTheme.colorScheme
     var query by rememberSaveable { mutableStateOf("") }
@@ -1132,6 +1180,7 @@ private fun WideProjectsHome(
                     )
                 }
             }
+            if (onJoinDiscord != null) CommunityCard(onJoinDiscord, Modifier.padding(bottom = 16.dp))
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
