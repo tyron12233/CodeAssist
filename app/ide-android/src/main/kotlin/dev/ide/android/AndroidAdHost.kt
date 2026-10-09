@@ -398,9 +398,17 @@ private fun bindNativeAd(view: NativeAdView, ad: NativeAd, textPrimary: Int, tex
     // Main media: drive the MediaView from the ad's MediaContent (handles both static image and video). Show it
     // only when there's an actual creative, so text-only ads don't reserve an empty box. Registering the
     // MediaView on the NativeAdView (in the factory) is what clears the "MediaView not used" policy warning.
+    //
+    // Meta's adapter is the exception: it never exposes the main image, it draws its creative into the MediaView
+    // itself, and Meta records no impression unless that MediaView is shown. So for a Meta ad, mainImage is null
+    // and the check below would hide the one view that gets it counted.
     view.mediaView?.let { media ->
         val mediaContent = ad.mediaContent
-        if (mediaContent != null && (mediaContent.hasVideoContent() || mediaContent.mainImage != null)) {
+        val rendersIntoMediaView = ad.responseInfo?.mediationAdapterClassName
+            ?.contains("facebook", ignoreCase = true) == true
+        if (mediaContent != null &&
+            (rendersIntoMediaView || mediaContent.hasVideoContent() || mediaContent.mainImage != null)
+        ) {
             media.mediaContent = mediaContent
             media.visibility = android.view.View.VISIBLE
         } else {
