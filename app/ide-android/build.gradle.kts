@@ -1017,6 +1017,9 @@ dependencies {
     implementation(libs.user.messaging.platform)
     // Play in-app updates: offers the newest release to installs that came from Play. See PlayUpdateManager.
     implementation(libs.play.app.update)
+    // An ad SDK drags in androidx.fragment 1.1.0, which predates the ActivityResult API the update flow
+    // registers with; release lint refuses to build until fragment is at least 1.3.0.
+    implementation(libs.androidx.fragment)
     // AdMob mediation adapters — Meta / Pangle / Mintegral bid against AdMob to fill the same NATIVE slots
     // (higher eCPM via competition; no new placements). Only native-capable networks are wired. Each pulls its
     // network SDK transitively; the same protobuf-lite dup-class rule as the ads SDK applies, and their SDKs may

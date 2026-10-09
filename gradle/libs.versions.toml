@@ -34,6 +34,7 @@ bouncycastle = "1.78.1"   # org.bouncycastle — in-process keystore creation (k
 playServicesAds = "25.5.0"  # com.google.android.gms:play-services-ads — AdMob native ads + mediation (Android launcher only). 25.4.0 is the floor the current native-capable mediation adapters require.
 firebaseBom = "34.1.0"       # com.google.firebase:firebase-bom — aligns firebase-messaging; push notifications only.
 googleServices = "4.4.2"     # com.google.gms.google-services — processes google-services.json. Applied ONLY when that file exists.
+androidxFragment = "1.8.9"              # androidx.fragment — pinned: an SDK pulls 1.1.0, and the ActivityResult API (PlayUpdateManager) needs >= 1.3.0 (lint InvalidFragmentVersionForActivityResult)
 playAppUpdate = "2.1.0"                 # com.google.android.play:app-update — Play in-app updates (flexible flow); see PlayUpdateManager
 userMessagingPlatform = "4.0.0"        # com.google.android.ump — UMP/GDPR consent SDK; gathers consent before MobileAds.initialize (mediation prerequisite, EEA/UK)
 admobMediationMeta = "6.22.0.1"        # com.google.ads.mediation:facebook — Meta Audience Network adapter (native-capable)
@@ -185,6 +186,7 @@ firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 # BID to fill the SAME native ad slots AdMob already serves — higher eCPM through network competition, no new
 # ad placements. Only NATIVE-capable networks are wired (AppLovin removed native inventory, so it would fill
 # nothing here). Each adapter drags its network SDK in transitively and requires play-services-ads >= 25.4.0.
+androidx-fragment = { module = "androidx.fragment:fragment", version.ref = "androidxFragment" }
 play-app-update = { module = "com.google.android.play:app-update", version.ref = "playAppUpdate" }
 user-messaging-platform = { module = "com.google.android.ump:user-messaging-platform", version.ref = "userMessagingPlatform" }
 admob-mediation-meta = { module = "com.google.ads.mediation:facebook", version.ref = "admobMediationMeta" }
