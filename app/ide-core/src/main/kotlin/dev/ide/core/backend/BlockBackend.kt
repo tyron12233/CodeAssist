@@ -28,6 +28,8 @@ import dev.ide.ui.backend.UiTextEdit
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -105,7 +107,7 @@ internal class BlockBackend(private val ctx: BackendContext) : BlockService {
     }
 
     override suspend fun loadScratchStacks(path: String): String? = withContext(Dispatchers.IO) {
-        scratchFile(path)?.takeIf { Files.isRegularFile(it) }?.let { runCatching { Files.readString(it) }.getOrNull() }
+        scratchFile(path)?.takeIf { Files.isRegularFile(it) }?.let { runCatching { it.readText() }.getOrNull() }
     }
 
     override suspend fun saveScratchStacks(path: String, data: String?) = withContext(Dispatchers.IO) {
@@ -114,7 +116,7 @@ internal class BlockBackend(private val ctx: BackendContext) : BlockService {
             if (data.isNullOrBlank()) Files.deleteIfExists(file)
             else {
                 Files.createDirectories(file.parent)
-                Files.writeString(file, data)
+                file.writeText(data)
             }
         }
         Unit
