@@ -586,8 +586,55 @@ object ComposableAbi {
         }.invoke(composer, marker)
     }
 
+    /** Depth of the composer's recompose-scope stack, or -1 when this runtime's composer doesn't expose one. */
+    fun scopeDepth(composer: Any): Int = scopeStack(composer)?.size ?: -1
+
+    /**
+     * Drop the recompose scopes pushed above [depth]: the companion to [endToMarker] when a failure is contained.
+     * `endToMarker` closes the failed composable's groups with a plain `end()`, but only `endRestartGroup` pops
+     * the scope a `startRestartGroup` pushed, so each restart group the failed code opened leaves its scope on
+     * top. The runtime tolerates that only while the exception unwinds the WHOLE composition (it clears the stack
+     * on the next root). A preview contains the failure and keeps composing, so every enclosing
+     * `endRestartGroup` would pop its neighbour's scope, state read afterwards would be recorded against the dead
+     * group, and the next recomposition of that scope would land at the wrong slot ("Missed recording an
+     * endGroup"), taking down the host's composition. Trimming restores the stack the enclosing code expects.
+     */
+    fun trimScopes(composer: Any, depth: Int) {
+        if (depth < 0) return
+        val stack = scopeStack(composer) ?: return
+        while (stack.size > depth) stack.removeAt(stack.size - 1)
+    }
+
+    /** The composer's private `invalidateStack`: a `Stack` value class, so on the JVM the field is its backing
+     *  `ArrayList` (a boxed `Stack` is unwrapped through its `backing` field). Null when absent or renamed. */
+    @Suppress("UNCHECKED_CAST")
+    private fun scopeStack(composer: Any): MutableList<Any?>? {
+        val field = scopeStackFieldCache.getOrPut(composer.javaClass) {
+            FieldHolder(runCatching { findDeclaredField(composer.javaClass, "invalidateStack")?.apply { isAccessible = true } }.getOrNull())
+        }.field ?: return null
+        return when (val value = runCatching { field.get(composer) }.getOrNull()) {
+            is MutableList<*> -> value as MutableList<Any?>
+            null -> null
+            else -> runCatching {
+                findDeclaredField(value.javaClass, "backing")?.apply { isAccessible = true }?.get(value) as? MutableList<Any?>
+            }.getOrNull()
+        }
+    }
+
+    private fun findDeclaredField(cls: Class<*>, name: String): java.lang.reflect.Field? {
+        var c: Class<*>? = cls
+        while (c != null) {
+            c.declaredFields.firstOrNull { it.name == name }?.let { return it }
+            c = c.superclass
+        }
+        return null
+    }
+
+    private class FieldHolder(val field: java.lang.reflect.Field?)
+
     private val currentMarkerCache = ConcurrentHashMap<Class<*>, Method>()
     private val endToMarkerCache = ConcurrentHashMap<Class<*>, Method>()
+    private val scopeStackFieldCache = ConcurrentHashMap<Class<*>, FieldHolder>()
 
     // --- restart groups (granular recomposition) ---
 

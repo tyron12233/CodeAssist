@@ -34,6 +34,7 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
         // (a library composable that failed with a node still open) can be unwound to here rather than leaving a
         // dangling node that crashes the enclosing composition — see [ComposableAbi.endToMarker].
         val marker = ops.currentMarker(outer)
+        val scopeDepth = ops.scopeDepth(outer)
         val group = ops.startRestartGroup(outer, callSiteKey)
         dispatcher.composer = group
         val result: Any?
@@ -60,8 +61,9 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
             // The body failed mid-composition (an interpreter error, a library composable that threw with a node
             // still open, or the user's own `?: throw` for an app-level CompositionLocal a @Preview doesn't provide
             // — e.g. Jetsnack's `DestinationBar` reading `LocalSharedTransitionScope`). First unwind to the
-            // pre-restart-group marker so any dangling group/node is closed and the slot table isn't left corrupt.
-            runCatching { ops.endToMarker(outer, marker) }
+            // pre-restart-group marker so any dangling group/node is closed and the slot table isn't left corrupt,
+            // and drop the recompose scopes the unfinished restart groups left pushed (see ComposableAbi.trimScopes).
+            ops.unwind(outer, marker, scopeDepth)
             // Recomposition cancellation is control flow — never contain it.
             if (t is kotlin.coroutines.cancellation.CancellationException) throw t
             // Graceful degradation: a NESTED composable (depth > 1) is CONTAINED at its own group — record the

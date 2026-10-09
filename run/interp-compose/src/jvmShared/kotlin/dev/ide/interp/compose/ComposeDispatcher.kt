@@ -398,6 +398,7 @@ class ComposeDispatcher(
         // exactly the group we opened.
         val ops = opsFor(composer)
         val marker = ops.currentMarker(composer)
+        val scopeDepth = ops.scopeDepth(composer)
         ops.startGroup(composer, call.callSiteKey.value)
         var completed = false
         try {
@@ -453,8 +454,7 @@ class ComposeDispatcher(
         } finally {
             // Normal completion: close exactly the call-site group. Failure: unwind to the pre-call marker so
             // a composable that died with a node/group still open can't corrupt the surrounding composition.
-            if (completed) ops.endGroup(composer)
-            else runCatching { ops.endToMarker(composer, marker) }
+            if (completed) ops.endGroup(composer) else ops.unwind(composer, marker, scopeDepth)
         }
     }
 
@@ -552,6 +552,11 @@ class ComposeDispatcher(
                         // composer and hang). Runtime-derived, so it's robust to how ComposableAbi bound the args.
                         val prevSuppressed = composablesSuppressed.get()
                         composablesSuppressed.set(composerArg == null)
+                        // Where the content slot starts, so a body that throws with groups/scopes still open is
+                        // unwound back to it before the library composable carries on around the contained failure.
+                        val ops = composerArg?.let { opsFor(it) }
+                        val marker = if (ops != null) runCatching { ops.currentMarker(composerArg) }.getOrNull() else null
+                        val scopeDepth = ops?.scopeDepth(composerArg) ?: -1
                         try {
                             boxLambdaReturn(lambda.invokeFromLibrary(real), valueClassReturn)
                         } catch (ce: kotlin.coroutines.cancellation.CancellationException) {
@@ -568,6 +573,7 @@ class ComposeDispatcher(
                             // partial render surfaced through [contentLambdaError] instead of crashing. The recursion
                             // and per-pass guards (interp-core Interpreter) trip before most StackOverflow/hang cases
                             // reach here; this is the backstop for anything they don't.
+                            if (ops != null && marker != null) ops.unwind(composerArg, marker, scopeDepth)
                             contentLambdaError = contentLambdaError ?: e
                             Unit
                         } finally {
@@ -616,6 +622,7 @@ class ComposeDispatcher(
         if (slots.isEmpty()) return NOT_WINDOWED
         val ops = opsFor(composer)
         val marker = ops.currentMarker(composer)
+        val scopeDepth = ops.scopeDepth(composer)
         ops.startGroup(composer, call.callSiteKey.value)
         var completed = false
         try {
@@ -626,7 +633,7 @@ class ComposeDispatcher(
             completed = true
             return Unit
         } finally {
-            if (completed) ops.endGroup(composer) else runCatching { ops.endToMarker(composer, marker) }
+            if (completed) ops.endGroup(composer) else ops.unwind(composer, marker, scopeDepth)
         }
     }
 
@@ -668,6 +675,7 @@ class ComposeDispatcher(
         }
         val ops = opsFor(composer)
         val marker = ops.currentMarker(composer)
+        val scopeDepth = ops.scopeDepth(composer)
         ops.startGroup(composer, call.callSiteKey.value)
         var completed = false
         try {
@@ -675,8 +683,7 @@ class ComposeDispatcher(
             completed = true
             return Unit
         } finally {
-            if (completed) ops.endGroup(composer)
-            else runCatching { ops.endToMarker(composer, marker) }
+            if (completed) ops.endGroup(composer) else ops.unwind(composer, marker, scopeDepth)
         }
     }
 
@@ -798,6 +805,7 @@ class ComposeDispatcher(
         val content = matchDestination(start, collector) ?: collector.destinations.values.first()
         val ops = opsFor(composer)
         val marker = ops.currentMarker(composer)
+        val scopeDepth = ops.scopeDepth(composer)
         ops.startGroup(composer, call.callSiteKey.value)
         var completed = false
         try {
@@ -805,7 +813,7 @@ class ComposeDispatcher(
             completed = true
             return Unit
         } finally {
-            if (completed) ops.endGroup(composer) else runCatching { ops.endToMarker(composer, marker) }
+            if (completed) ops.endGroup(composer) else ops.unwind(composer, marker, scopeDepth)
         }
     }
 

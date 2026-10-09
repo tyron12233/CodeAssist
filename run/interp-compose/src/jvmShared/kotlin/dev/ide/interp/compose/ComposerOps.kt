@@ -25,6 +25,17 @@ interface ComposerOps {
     fun endRestartGroup(composer: Any): Any?
     fun currentMarker(composer: Any): Int
     fun endToMarker(composer: Any, marker: Int)
+    /** Depth of the composer's recompose-scope stack, or -1 when it can't be read. */
+    fun scopeDepth(composer: Any): Int = -1
+    /** Drop the recompose scopes pushed above [depth] (see [ComposableAbi.trimScopes]); a no-op for -1. */
+    fun trimScopes(composer: Any, depth: Int) {}
+
+    /** Contain a composable that threw mid-composition: close every group/node it left open since [marker], then
+     *  drop the recompose scopes its unfinished restart groups left pushed above [scopeDepth]. Best-effort. */
+    fun unwind(composer: Any, marker: Int, scopeDepth: Int) {
+        runCatching { endToMarker(composer, marker) }
+        runCatching { trimScopes(composer, scopeDepth) }
+    }
     fun argsChanged(composer: Any, args: List<Any?>): Boolean
     fun isSkipping(composer: Any): Boolean
     fun skipToGroupEnd(composer: Any)
@@ -39,6 +50,8 @@ object ReflectiveComposerOps : ComposerOps {
     override fun endRestartGroup(composer: Any): Any? = ComposableAbi.endRestartGroup(composer)
     override fun currentMarker(composer: Any): Int = ComposableAbi.currentMarker(composer)
     override fun endToMarker(composer: Any, marker: Int) = ComposableAbi.endToMarker(composer, marker)
+    override fun scopeDepth(composer: Any): Int = ComposableAbi.scopeDepth(composer)
+    override fun trimScopes(composer: Any, depth: Int) = ComposableAbi.trimScopes(composer, depth)
     override fun argsChanged(composer: Any, args: List<Any?>): Boolean = ComposableAbi.argsChanged(composer, args)
     override fun isSkipping(composer: Any): Boolean = ComposableAbi.isSkipping(composer)
     override fun skipToGroupEnd(composer: Any) = ComposableAbi.skipToGroupEnd(composer)
