@@ -1,5 +1,9 @@
 package dev.ide.ui.editor
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.geometry.Offset
+import dev.ide.ui.backend.UiDiagnostic
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -319,6 +323,12 @@ private fun CodeEditorContent(
     var renameError by remember(path) { mutableStateOf<String?>(null) }
     // The source-navigation dropdown / target picker (Go to Declaration / Implementation / Type / Super).
     var navMenu by remember(path) { mutableStateOf<NavMenuState?>(null) }
+    // Mouse: the hover popups, the Ctrl/⌘ link and the right-click menu (see EditorMouseSupport).
+    val hover = remember(path) { EditorHoverState() }
+    var contextMenuAt by remember(path) { mutableStateOf<Offset?>(null) }
+    // The problem popup opened by resting the pointer on a problem, by the sheet group it opened (a click that
+    // opens another group replaces it, and must not be closed when the hover hides).
+    var hoverSheetGroup by remember(path) { mutableStateOf<List<UiDiagnostic>?>(null) }
 
     /** Run one source go-to for [kind] (a keyboard shortcut): exactly one target navigates immediately; 0 or
      *  many open the dropdown (a "nothing found" note, or a target picker). */
@@ -356,6 +366,48 @@ private fun CodeEditorContent(
         val text = editorSession.doc.text
         scope.launch {
             quickDoc = runCatching { backend.editor.quickDocAt(path, text, caret) }.getOrNull()
+        }
+    }
+
+    // Resting the mouse on code: after HOVER_DELAY_MS a problem under the pointer opens its popup, and
+    // otherwise the symbol's documentation shows beside it. Moving within the shown span keeps it; leaving
+    // hides it after a short grace, unless the pointer went into the popup.
+    val obscuredNow by rememberUpdatedState(obscured)
+    LaunchedEffect(hover) {
+        hover.moves.collectLatest { p ->
+            val shown = hover.info
+            if (shown != null && p != null && p.offset in shown.start until shown.end) return@collectLatest
+            if (shown != null) {
+                delay(HOVER_HIDE_GRACE_MS)
+                if (hover.popupHovered) return@collectLatest
+                hover.info = null
+            }
+            if (p == null || p.offset < 0 || obscuredNow) return@collectLatest
+            delay(HOVER_DELAY_MS)
+            val problem = editorSession.diagnostics
+                .filter { p.offset >= it.startOffset && p.offset < it.endOffset }
+                .minByOrNull { it.severity.ordinal }
+            if (problem != null) {
+                if (acts.sheetGroup.isNotEmpty()) return@collectLatest // a clicked problem popup is already open
+                acts.openSheet(problem)
+                hoverSheetGroup = acts.sheetGroup
+                hover.info = HoverInfo.Problem(problem, problem.startOffset, maxOf(problem.endOffset, problem.startOffset + 1))
+                return@collectLatest
+            }
+            val word = identifierRangeAt(editorSession.doc.chars, p.offset) ?: return@collectLatest
+            val doc = runCatching { backend.editor.quickDocAt(path, editorSession.doc.text, p.offset) }.getOrNull()
+                ?: return@collectLatest
+            hover.info = HoverInfo.Doc(doc, word.first, word.last + 1)
+        }
+    }
+    // A hidden hover takes the problem popup it opened with it (not one a click opened since).
+    LaunchedEffect(hover) {
+        snapshotFlow { hover.info }.collect { info ->
+            val group = hoverSheetGroup
+            if (info == null && group != null) {
+                hoverSheetGroup = null
+                if (acts.sheetGroup === group) acts.closeSheet()
+            }
         }
     }
 
@@ -913,6 +965,16 @@ private fun CodeEditorContent(
     // Editor commands, handled on the Preview pass so they win over the default key path + completion keys.
     fun onPreviewKey(ev: KeyEvent): Boolean {
         if (ev.type != KeyEventType.KeyDown) return false
+        // Any key hides a hover popup, as in IntelliJ; Escape is spent doing it.
+        if (hover.info != null) {
+            hover.dismiss()
+            if (ev.key == Key.Escape) return true
+        }
+        // Escape closes the pointer's problem popup, like a click outside it.
+        if (ev.key == Key.Escape && acts.sheetGroup.isNotEmpty()) {
+            acts.closeSheet()
+            return true
+        }
         // Escape dismisses an open quick-doc popup before anything else can claim it, as it did when this was
         // a chain of conditions: the popup is modal-ish, and its Escape is not a command.
         if (quickDoc != null && ev.key == Key.Escape) {
@@ -1037,6 +1099,17 @@ private fun CodeEditorContent(
                     onDismissQuickDoc = { quickDoc = null },
                     onPreviewKey = ::onPreviewKey,
                     onKey = ::handleKey,
+                    hover = hover,
+                    onContextMenu = { pos ->
+                        completion.dismiss()
+                        hover.dismiss()
+                        contextMenuAt = pos
+                        scope.launch { acts.resolveContextMenu() }
+                    },
+                    onLinkClick = { offset ->
+                        editorSession.setCaret(offset)
+                        runNav(UiNavKind.DECLARATION)
+                    },
                 )
                 // A text (I-beam) cursor over the code, and the normal arrow over the gutter, as in IntelliJ. Reads
                 // the hover position on the Initial pass without consuming it, so the editor's input is untouched.
@@ -1050,7 +1123,13 @@ private fun CodeEditorContent(
                         }
                     }
                 }
-                .pointerHoverIcon(if (pointerOverGutter) PointerIcon.Default else PointerIcon.Text)
+                .pointerHoverIcon(
+                    when {
+                        hover.link != null -> PointerIcon.Hand // Ctrl/⌘ held over an identifier: a link
+                        pointerOverGutter -> PointerIcon.Default
+                        else -> PointerIcon.Text
+                    },
+                )
                 .drawBehind {
                     // Interpolate the drawn selection span for an in-flight expand animation (reads snapshot
                     // state → this draw re-runs per frame while it animates). Before the tween has started for
@@ -1261,7 +1340,7 @@ private fun CodeEditorContent(
         }
 
         // quick-documentation popup — a floating card; dismissed by Esc, a tap, or a navigation/edit key.
-        quickDoc?.let { QuickDocPopup(it, Modifier.align(Alignment.TopCenter)) }
+        quickDoc?.let { QuickDocPopup(it, Modifier.align(Alignment.TopCenter).padding(top = 56.dp)) }
 
         // rename prompt — a small centered card over the editor
         rename?.let { r ->
@@ -1282,14 +1361,67 @@ private fun CodeEditorContent(
 
         // diagnostic sheet: every diagnostic in the tapped area, plus the selected one's full (scrollable)
         // message and its fixes, docked at the pane bottom
-        if (engaged && acts.sheetGroup.isNotEmpty()) {
-            DiagnosticSheet(
-                diagnostics = acts.sheetGroup,
-                selected = acts.sheetSelected,
-                actions = acts.sheetActions,
-                onSelect = { acts.selectSheet(it) },
-                onPick = { acts.applySheetFix(it) },
-                onDismiss = { acts.closeSheet() },
+        // With a mouse it is a popup anchored at the problem; on touch the bottom sheet, sized for a thumb.
+        val fromHover = hoverSheetGroup != null && hoverSheetGroup === acts.sheetGroup
+        if ((engaged || fromHover) && acts.sheetGroup.isNotEmpty()) {
+            if (!isMobilePlatform || !interaction.lastInputWasTouch) {
+                val anchor = (acts.sheetGroup.getOrNull(acts.sheetSelected) ?: acts.sheetGroup.first()).startOffset
+                DiagnosticPopup(
+                    diagnostics = acts.sheetGroup,
+                    selected = acts.sheetSelected,
+                    actions = acts.sheetActions,
+                    onSelect = { acts.selectSheet(it) },
+                    onPick = { acts.applySheetFix(it) },
+                    onDismiss = { acts.closeSheet() },
+                    position = rememberLinePosition(
+                        anchor.coerceIn(0, editorSession.doc.length), { geometry.caretGeometry(it) },
+                        metrics.lineHeight, gutterWidthPx,
+                    ),
+                    modifier = if (fromHover) Modifier.trackPopupHover(hover) else Modifier,
+                )
+            } else {
+                DiagnosticSheet(
+                    diagnostics = acts.sheetGroup,
+                    selected = acts.sheetSelected,
+                    actions = acts.sheetActions,
+                    onSelect = { acts.selectSheet(it) },
+                    onPick = { acts.applySheetFix(it) },
+                    onDismiss = { acts.closeSheet() },
+                )
+            }
+        }
+
+        // The hovered symbol's documentation, beside it.
+        (hover.info as? HoverInfo.Doc)?.let { info ->
+            if (!obscured) HoverDocPopup(info, hover, { geometry.caretGeometry(it) }, metrics.lineHeight, gutterWidthPx)
+        }
+        // The Ctrl/⌘ link under the pointer.
+        hover.link?.let { LinkUnderline(it, { off -> geometry.caretGeometry(off) }, metrics.lineHeight) }
+        // The right-click menu, at the pointer.
+        contextMenuAt?.let { at ->
+            EditorContextMenu(
+                at = at,
+                hasSelection = !editorSession.selection.collapsed,
+                readOnly = readOnly,
+                pluginMenu = acts.editorMenu,
+                // Resolved again on pick: moving the caret to the click re-runs the editor's own availability
+                // pass, which can clear what the right-click resolved.
+                onShowActions = {
+                    scope.launch {
+                        acts.resolveContextMenu()
+                        if (acts.available.isNotEmpty()) acts.openMenu()
+                    }
+                },
+                onCommand = { runEditorCommand(it) },
+                onCut = { editorSession.cutSelection()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) } },
+                onCopy = { editorSession.selectedText()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) } },
+                onPaste = { clipboard.getText()?.text?.let { if (it.isNotEmpty()) editorSession.commitText(it) } },
+                onSelectAll = { editorSession.selectAll() },
+                onPluginAction = { acts.invokeMenuAction(it.id) },
+                onDismiss = {
+                    contextMenuAt = null
+                    focus.requestFocus()
+                },
             )
         }
 

@@ -1,5 +1,9 @@
 package dev.ide.ui.editor
 
+import androidx.compose.ui.input.pointer.areAnyPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.Scrollable2DState
@@ -77,6 +81,12 @@ internal fun Modifier.editorInput(
     onDismissQuickDoc: () -> Unit,
     onPreviewKey: (KeyEvent) -> Boolean,
     onKey: (KeyEvent) -> Boolean,
+    /** Mouse rest/link tracking for hover popups and Ctrl/⌘-click (see [EditorHoverState]). */
+    hover: EditorHoverState,
+    /** A right-click at this pane position: open the context menu there. */
+    onContextMenu: (Offset) -> Unit,
+    /** A Ctrl/⌘-click on the identifier at this offset: go to its declaration. */
+    onLinkClick: (Int) -> Unit,
 ): Modifier = this
     .fillMaxSize()
     .onSizeChanged { onViewportSize(it) }
@@ -115,19 +125,68 @@ internal fun Modifier.editorInput(
             .scrollable(vScroll, Orientation.Vertical, reverseDirection = true)
             .scrollable(hScroll, Orientation.Horizontal, reverseDirection = true),
     )
-    // Mouse hover (desktop): track the hovered line so an expandable fold shows its chevron on hover. Observation
-    // only — never consumes, so it doesn't disturb taps/scroll/drag.
+    // Right-click: the context menu at the pointer. Watched as a raw press on the Initial pass because Compose
+    // reports only the primary button as "pressed", so the click/drag detectors below never see a right-click.
+    // A click outside the selection moves the caret there first, so the menu acts on what was clicked; inside
+    // it, the selection is kept.
     .pointerInput(session, metrics, gutterWidthPx, wrapActive) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                if (event.type != PointerEventType.Press || !event.buttons.isSecondaryPressed) continue
+                val change = event.changes.firstOrNull() ?: continue
+                if (change.type != PointerType.Mouse) continue
+                interaction.lastInputWasTouch = false
+                focus.requestFocus()
+                if (change.position.x >= gutterWidthPx) {
+                    val at = geometry.offsetAt(change.position)
+                    val s = session.selection
+                    if (s.collapsed || at !in s.min..s.max) session.setCaret(at)
+                }
+                event.changes.forEach { it.consume() }
+                onContextMenu(change.position)
+            }
+        }
+    }
+    // Mouse hover (desktop): track the hovered line so an expandable fold shows its chevron on hover, the
+    // character the pointer rests on (for the documentation / problem popups, see [EditorHoverState]), and the
+    // identifier under it while Ctrl/⌘ is held (the go-to link). Observation only — never consumes, so it
+    // doesn't disturb taps/scroll/drag.
+    .pointerInput(session, metrics, gutterWidthPx, wrapActive) {
+        var lastChar = -2
         awaitPointerEventScope {
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Main)
                 val change = event.changes.firstOrNull()
                 when {
                     change?.type != PointerType.Mouse -> {}
-                    event.type == PointerEventType.Exit -> interaction.hoveredLine = -1
+                    event.type == PointerEventType.Exit -> {
+                        interaction.hoveredLine = -1
+                        lastChar = -2
+                        hover.moves.tryEmit(null)
+                        hover.link = null
+                    }
+                    // A click hides a hover popup, as in IntelliJ (the click itself is handled below).
+                    event.type == PointerEventType.Press -> {
+                        if (hover.info != null) hover.dismiss()
+                        lastChar = -2
+                    }
                     event.type == PointerEventType.Move || event.type == PointerEventType.Enter -> {
                         val ln = geometry.lineAtY(change.position.y)
                         if (ln != interaction.hoveredLine) interaction.hoveredLine = ln
+                        if (event.buttons.areAnyPressed) continue // a drag-select, not a rest
+                        val ch = hoveredChar(session, geometry, change.position, gutterWidthPx)
+                        if (ch != lastChar) {
+                            lastChar = ch
+                            hover.moves.tryEmit(HoverPoint(ch))
+                        }
+                        val mods = event.keyboardModifiers
+                        val link = if (ch >= 0 && (mods.isCtrlPressed || mods.isMetaPressed)) {
+                            identifierRangeAt(session.doc.chars, ch)
+                        } else {
+                            null
+                        }
+                        if (link != hover.link) hover.link = link
                     }
                 }
             }
@@ -274,6 +333,16 @@ internal fun Modifier.editorInput(
                 interaction.lastInputWasTouch = false
                 focus.requestFocus()
                 down.consume() // keep the scroll containers + detectTapGestures out of it
+                // Ctrl/⌘-click on an identifier: go to its declaration (the link the hover underlined).
+                val mods = currentEvent.keyboardModifiers
+                if ((mods.isCtrlPressed || mods.isMetaPressed) && down.position.x >= gutterWidthPx) {
+                    val ch = hoveredChar(session, geometry, down.position, gutterWidthPx)
+                    if (ch >= 0 && identifierRangeAt(session.doc.chars, ch) != null) {
+                        hover.link = null
+                        onLinkClick(ch)
+                        return@awaitEachGesture
+                    }
+                }
                 // Count consecutive clicks ourselves: 1 → caret, 2 → word, 3 → line, 4th+ → expand up the tree.
                 val anchor = geometry.offsetAt(down.position)
                 val near = (down.position - interaction.mouseLastClickPos).getDistance() < 24f
@@ -406,3 +475,21 @@ internal fun Modifier.editorInput(
             }
         }
     }
+
+/**
+ * The document offset of the character under the pointer at [pos], or -1 when the pointer is over the
+ * gutter, past the end of its line, or on a line break. Unlike [EditorGeometry.offsetAt], which picks the
+ * nearest caret position, this is the character the pointer is ON.
+ */
+internal fun hoveredChar(session: EditorSession, geometry: EditorGeometry, pos: Offset, gutterWidthPx: Float): Int {
+    if (pos.x < gutterWidthPx) return -1
+    val doc = session.doc
+    val nearest = geometry.offsetAt(pos)
+    val ch = if (geometry.caretGeometry(nearest).second > pos.x) nearest - 1 else nearest
+    if (ch < 0 || ch >= doc.length) return -1
+    val c = doc.charAt(ch)
+    if (c == '\n' || c == '\r') return -1
+    // Past the line's last character: offsetAt clamps to the line end, which is not under the pointer.
+    if (geometry.caretGeometry(ch + 1).second < pos.x) return -1
+    return ch
+}

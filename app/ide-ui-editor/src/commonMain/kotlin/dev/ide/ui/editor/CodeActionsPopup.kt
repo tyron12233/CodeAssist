@@ -1,5 +1,9 @@
 package dev.ide.ui.editor
 
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.Popup
 import dev.ide.ui.theme.Ide
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -313,16 +317,6 @@ fun DiagnosticSheet(
     onDismiss: () -> Unit,
 ) {
     val d = diagnostics.getOrNull(selected) ?: return
-    val severity = d.severity
-    val unused = d.unused
-    val color = severityColor(severity, unused)
-    val icon = severityIcon(severity)
-    val label = when (severity) {
-        UiSeverity.Error -> stringResource(Res.string.codeaction_severity_error)
-        UiSeverity.Warning -> if (unused) stringResource(Res.string.codeaction_severity_unused) else stringResource(Res.string.codeaction_severity_warning)
-        UiSeverity.Info -> stringResource(Res.string.codeaction_severity_info)
-        UiSeverity.Hint -> stringResource(Res.string.codeaction_severity_hint)
-    }
     val sheetShape = RoundedCornerShape(topStart = Ca.radius.sheet, topEnd = Ca.radius.sheet)
     // scrim over the editor pane (tap to dismiss); panel docked at the bottom for thumb reach
     Box(
@@ -340,49 +334,111 @@ fun DiagnosticSheet(
                 .pointerInput(Unit) { detectTapGestures { } } // swallow taps so the panel itself doesn't dismiss
                 .padding(horizontal = 16.dp, vertical = 14.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(icon, null, Modifier.size(18.dp), tint = color)
-                Text(label, color = color, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(0.dp).weight(1f))
-                if (diagnostics.size > 1) {
-                    Text(
-                        pluralStringResource(Res.plurals.codeaction_problems_here, diagnostics.size, diagnostics.size),
-                        color = MaterialTheme.colorScheme.outline,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-                Box(
-                    Modifier.size(30.dp).clip(CircleShape).clickable(onClick = onDismiss),
-                    contentAlignment = Alignment.Center,
-                ) { Icon(CaIcons.close, stringResource(Res.string.codeaction_dismiss), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-            }
-            if (diagnostics.size > 1) {
-                Spacer(Modifier.height(8.dp))
-                DiagnosticGroupList(diagnostics, selected, onSelect)
-                Spacer(Modifier.height(8.dp))
-                // Separates the area's problem list from the detail of the one picked out of it.
-                Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-            }
-            Spacer(Modifier.height(10.dp))
-            SelectionContainer {
-                Text(
-                    d.message,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    style = Ide.type.code,
-                    modifier = Modifier.fillMaxWidth()
-                        .heightIn(max = if (diagnostics.size > 1) 120.dp else 180.dp)
-                        .verticalScroll(rememberScrollState()),
-                )
-            }
-            if (actions.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-                Spacer(Modifier.height(6.dp))
-                Text(stringResource(Res.string.codeaction_quick_fixes), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-                val compactions = remember(actions) { importCompactions(actions) }
-                actions.forEachIndexed { i, a -> ActionRow(a, compactions[i], selected = false, onPick = { onPick(i) }, height = 48.dp) }
-            }
+            DiagnosticDetails(diagnostics, d, selected, actions, onSelect, onPick, onDismiss, compact = false)
             Spacer(Modifier.height(8.dp))
         }
+    }
+}
+
+/**
+ * The pointer's version of [DiagnosticSheet]: the same problem, message and fixes in a card anchored at the
+ * problem in the code ([position]), the way a desktop IDE shows it, instead of a bottom sheet over a scrim.
+ * Closes on a click outside it or Escape. [modifier] goes on the card (the hover tracking when it was opened
+ * by resting the pointer on the problem).
+ */
+@Composable
+fun DiagnosticPopup(
+    diagnostics: List<UiDiagnostic>,
+    selected: Int,
+    actions: List<UiAction>,
+    onSelect: (Int) -> Unit,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit,
+    position: PopupPositionProvider,
+    modifier: Modifier = Modifier,
+) {
+    val d = diagnostics.getOrNull(selected) ?: return
+    val shape = RoundedCornerShape(Ca.radius.lg)
+    Popup(popupPositionProvider = position, onDismissRequest = onDismiss, properties = PopupProperties(focusable = false)) {
+        Column(
+            modifier
+                .widthIn(min = 280.dp, max = 480.dp)
+                .background(Ide.colors.glassThick, shape)
+                .border(1.dp, Ide.colors.glassEdge, shape)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            DiagnosticDetails(diagnostics, d, selected, actions, onSelect, onPick, onDismiss, compact = true)
+        }
+    }
+}
+
+/**
+ * The body shared by [DiagnosticSheet] and [DiagnosticPopup]: the severity and count, the problems in the area
+ * when there are several, the selected one's full (selectable, scrollable) message, and its quick-fixes.
+ * [compact] tightens it for the pointer: shorter fix rows and message area.
+ */
+@Composable
+private fun DiagnosticDetails(
+    diagnostics: List<UiDiagnostic>,
+    d: UiDiagnostic,
+    selected: Int,
+    actions: List<UiAction>,
+    onSelect: (Int) -> Unit,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit,
+    compact: Boolean,
+) {
+    val severity = d.severity
+    val unused = d.unused
+    val color = severityColor(severity, unused)
+    val icon = severityIcon(severity)
+    val label = when (severity) {
+        UiSeverity.Error -> stringResource(Res.string.codeaction_severity_error)
+        UiSeverity.Warning -> if (unused) stringResource(Res.string.codeaction_severity_unused) else stringResource(Res.string.codeaction_severity_warning)
+        UiSeverity.Info -> stringResource(Res.string.codeaction_severity_info)
+        UiSeverity.Hint -> stringResource(Res.string.codeaction_severity_hint)
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(icon, null, Modifier.size(if (compact) 16.dp else 18.dp), tint = color)
+        Text(label, color = color, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(0.dp).weight(1f))
+        if (diagnostics.size > 1) {
+            Text(
+                pluralStringResource(Res.plurals.codeaction_problems_here, diagnostics.size, diagnostics.size),
+                color = MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        val closeSize = if (compact) 24.dp else 30.dp
+        Box(
+            Modifier.size(closeSize).clip(CircleShape).clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center,
+        ) { Icon(CaIcons.close, stringResource(Res.string.codeaction_dismiss), Modifier.size(if (compact) 14.dp else 16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+    if (diagnostics.size > 1) {
+        Spacer(Modifier.height(8.dp))
+        DiagnosticGroupList(diagnostics, selected, onSelect)
+        Spacer(Modifier.height(8.dp))
+        // Separates the area's problem list from the detail of the one picked out of it.
+        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+    }
+    Spacer(Modifier.height(if (compact) 6.dp else 10.dp))
+    SelectionContainer {
+        Text(
+            d.message,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = Ide.type.code,
+            modifier = Modifier.fillMaxWidth()
+                .heightIn(max = if (diagnostics.size > 1) 120.dp else if (compact) 160.dp else 180.dp)
+                .verticalScroll(rememberScrollState()),
+        )
+    }
+    if (actions.isNotEmpty()) {
+        Spacer(Modifier.height(if (compact) 8.dp else 12.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+        Spacer(Modifier.height(if (compact) 4.dp else 6.dp))
+        Text(stringResource(Res.string.codeaction_quick_fixes), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+        val compactions = remember(actions) { importCompactions(actions) }
+        actions.forEachIndexed { i, a -> ActionRow(a, compactions[i], selected = false, onPick = { onPick(i) }, height = if (compact) 36.dp else 48.dp) }
     }
 }
 

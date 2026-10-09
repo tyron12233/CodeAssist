@@ -229,7 +229,7 @@ internal fun QuickDocPopup(doc: UiQuickDoc, modifier: Modifier = Modifier) {
     val codeStyle = SpanStyle(fontFamily = Ide.type.codeFamily, color = MaterialTheme.colorScheme.primary)
     val content = remember(doc, codeStyle) { doc.doc?.takeIf { it.isNotBlank() }?.let { parseQuickDoc(it, codeStyle) } }
     Column(
-        modifier.padding(top = 56.dp).widthIn(max = 440.dp).heightIn(max = 360.dp)
+        modifier.widthIn(max = 440.dp).heightIn(max = 360.dp)
             .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
             .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
             .padding(14.dp),
