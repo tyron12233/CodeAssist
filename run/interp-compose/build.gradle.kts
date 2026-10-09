@@ -80,6 +80,8 @@ kotlin {
                 // The closed-world VM, for running this module's own preview pipeline interpreted (the way a
                 // host with no JVM, iOS, renders a preview) and checking it against the direct run.
                 implementation(project(":jvm-vm"))
+                // Emits library bytecode the desktop Compose API cannot compile (an Android-only constructor).
+                implementation(libs.ow2.asm)
             }
         }
     }

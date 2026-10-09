@@ -135,6 +135,9 @@ class VmLibraryExecutor(
             // blank instead of crashing the IDE. Detected by the receiver being a MeasureScope — the SAM's
             // erased return type is Object, so it can't be matched on the return type.
             proxyFallback = { _, args, _ -> (args.firstOrNull() as? MeasureScope)?.layout(0, 0) {} },
+            // The project's Android Material3 reaches Android-only text-style constructors the desktop host
+            // lacks (`PlatformTextStyle(includeFontPadding)`); substitute the host's neutral style.
+            missingConstructor = { owner, _, _ -> PlatformStyleCompat.construct(owner, hostLoader) },
         ),
         peerFactory = peerFactory,
     )

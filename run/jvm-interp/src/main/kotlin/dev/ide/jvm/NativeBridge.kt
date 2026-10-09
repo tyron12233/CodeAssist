@@ -49,6 +49,11 @@ class ReflectiveBridge(
      *  lambda whose zero (null `MeasureResult`) would NPE the layout pass hands back an empty result instead.
      *  Return null to fall back to [zeroReturn]. Consulted after [proxyExceptionSink]. */
     private val proxyFallback: ((java.lang.reflect.Method, Array<Any?>, Throwable) -> Any?)? = null,
+    /** Consulted when the host class has no constructor matching the descriptor: given the owner, descriptor,
+     *  and the interpreter-convention arguments, returns a substitute instance, or null to keep the "no
+     *  constructor" failure. Lets a host adapt a library compiled against a different platform build of a
+     *  bridged class (an Android-only constructor reached on the desktop). */
+    private val missingConstructor: ((owner: String, descriptor: String, args: List<Any?>) -> Any?)? = null,
 ) : NativeBridge {
 
     // Reflection resolution is deterministic given the class + name + descriptor and is repeated on every
@@ -175,7 +180,8 @@ class ReflectiveBridge(
     override fun construct(owner: String, descriptor: String, args: List<Any?>): Any {
         rejectVmObjects(args)
         val ctor = resolveConstructor(loadClass(owner), descriptor)
-            ?: throw VmUnsupportedException("no constructor $owner$descriptor")
+            ?: return missingConstructor?.invoke(owner, descriptor, args)
+                ?: throw VmUnsupportedException("no constructor $owner$descriptor")
         return invoked { ctor.newInstance(*marshalArgs(descriptor, args)) }!!
     }
 
