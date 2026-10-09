@@ -9,11 +9,14 @@ plugins {
 // BlockEdit is compiled to a minimal DocumentEdit so untouched code survives byte-for-byte.
 //
 // Backend-neutral: it consumes only the language-api DOM, so it works for any backend. The Java mapping
-// (statements + key expressions) is here; tests exercise it against the real JDT DOM (lang-jdt).
+// (statements + key expressions) and the Kotlin mapping are here; tests exercise them against the real JDT
+// DOM (lang-jdt) and the Kotlin DOM (lang-kotlin).
 dependencies {
     api(project(":block-api"))
 
     // Tests project + edit ACTUAL parsed Java via JDT's tolerant DOM (the tree the IDE really uses).
     testImplementation(project(":lang-jdt"))
+    // ...and actual parsed Kotlin through the Kotlin neutral DOM.
+    testImplementation(project(":lang-kotlin"))
     testImplementation(libs.kotlinx.coroutines.core)
 }

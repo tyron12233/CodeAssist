@@ -1,80 +1,126 @@
 package dev.ide.ui.editor
 
-import dev.ide.ui.theme.Ide
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.dp
-import dev.ide.ui.editor.blocks.DragState
+import dev.ide.ui.backend.UiBlockNode
+import dev.ide.ui.editor.blocks.BlockCanvas
+import dev.ide.ui.editor.blocks.BlockCanvasState
+import dev.ide.ui.editor.blocks.BlockDrag
+import dev.ide.ui.editor.blocks.BlockGeometry
+import dev.ide.ui.editor.blocks.BlockLayouter
+import dev.ide.ui.editor.blocks.ComposeTextMeasure
+import dev.ide.ui.editor.blocks.Gap
+import dev.ide.ui.editor.blocks.Hidden
+import dev.ide.ui.editor.blocks.OutlineScreen
+import dev.ide.ui.editor.blocks.buildOutline
+import dev.ide.ui.editor.blocks.findFirst
+import dev.ide.ui.editor.blocks.rememberBlockInk
 import dev.ide.ui.theme.CodeAssistTheme
+import dev.ide.ui.theme.Ide
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
-/** Renders the block canvas off-screen to a PNG so the new chain/depth layout can be eyeballed without a
- *  full app launch. Not an assertion — a visual snapshot dropped at [OUT]. */
+/**
+ * Renders block pages off-screen to PNGs so the canvas can be eyeballed without launching the app. Not an
+ * assertion; the snapshots land in `<tmpdir>/codeassist-snapshots`.
+ */
 class BlockRenderSnapshot {
-    @OptIn(ExperimentalComposeUiApi::class)
+
     @Test
-    fun renderTypedSample() {
-        val (file, src) = typedSampleFile()
-        snapshot("blocks-typed.png", 820, 1500) {
-            val ctx = previewCtx(src)
-            Box(Modifier.width(400.dp).heightIn(min = 740.dp).background(Ide.colors.editorBg).padding(14.dp)) {
-                PuzzleCanvas(file, ctx)
-            }
+    fun renderTypedPage() {
+        snapshot("blocks-typed.png", 900, 1300) { Page(typedSampleFile()) }
+    }
+
+    @Test
+    fun renderNestedPages() {
+        snapshot("blocks-deep.png", 1500, 500) { Page(deepSampleFile()) }
+        snapshot("blocks-ops.png", 900, 700) { Page(opSampleFile()) }
+        snapshot("blocks-loop.png", 900, 1000) { Page(sampleFile()) }
+    }
+
+    @Test
+    fun renderOutline() {
+        val (root, src) = typedSampleFile()
+        snapshot("blocks-outline.png", 822, 900) {
+            val ink = rememberBlockInk(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurface)
+            OutlineScreen(buildOutline(root, src, kotlin = false), null, {}, {}, {}, {}, {}, {}, ink, Modifier.fillMaxSize())
         }
     }
 
+    /** A page panned past the canvas edge paints nothing outside the canvas (the screen above it stays clean). */
     @OptIn(ExperimentalComposeUiApi::class)
     @Test
-    fun renderDepthCapAndFocus() {
-        // A2 canvas: a 5-deep nested call collapses its inner level to a drill-in chip.
-        val (deepFile, deepSrc) = deepSampleFile()
-        snapshot("blocks-deep.png", 1500, 760) {
-            val ctx = previewCtx(deepSrc)
-            Box(Modifier.width(720.dp).heightIn(min = 360.dp).background(Ide.colors.editorBg).padding(14.dp)) {
-                PuzzleCanvas(deepFile, ctx)
+    fun theCanvasPaintsOnlyInsideItsBounds() {
+        val (root, src) = typedSampleFile()
+        val scene = ImageComposeScene(width = 600, height = 600, density = Density(2f)) {
+            CodeAssistTheme(dark = true) {
+                val fn = remember { findFirst(root) { it.label == "method" }!! }
+                val g = BlockGeometry(LocalDensity.current.density)
+                val measurer = rememberTextMeasurer(cacheSize = 0)
+                val style = Ide.type.codeSmall
+                val measure = remember { ComposeTextMeasure(measurer, style, style) }
+                val ink = rememberBlockInk(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurface)
+                val layoutFor = remember { { h: Hidden?, gap: Gap? -> BlockLayouter(measure, g, hidden = h, gap = gap).layoutFunction(fn, src, emptyList()) } }
+                // Scrolled down, so the page's top rows sit above the canvas.
+                val state = remember { BlockCanvasState().apply { offset = androidx.compose.ui.geometry.Offset(0f, -120f) } }
+                Box(Modifier.fillMaxSize().background(Color.Black)) {
+                    Box(Modifier.padding(top = 150.dp).size(300.dp, 100.dp)) {
+                        BlockCanvas(
+                            layoutFor, state, remember { BlockDrag() }, ink, null,
+                            onTap = { _, _ -> }, startDrag = { _, _, _ -> null }, onDrop = { _, _, _, _ -> },
+                            modifier = Modifier.fillMaxSize(), zoomControls = false,
+                        )
+                    }
+                }
             }
         }
-        // A2 drill-in: the focus sheet the chip opens, with the expression re-rooted + editable.
-        val (focusNode, focusSrc) = deepFocusExpr()
-        snapshot("blocks-focus.png", 1100, 900) {
-            val ctx = previewCtx(focusSrc)
-            Box(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
-                FocusSheet(focusNode, ctx, canBack = false, onBack = {}, onClose = {})
-            }
-        }
-    }
-
-    @OptIn(ExperimentalComposeUiApi::class)
-    @Test
-    fun renderOperatorChain() {
-        // A3: a 4-operand `&&` chain in an if-condition lays out as a vertical operator block.
-        val (file, src) = opSampleFile()
-        snapshot("blocks-ops.png", 900, 900) {
-            val ctx = previewCtx(src)
-            Box(Modifier.width(440.dp).heightIn(min = 420.dp).background(Ide.colors.editorBg).padding(14.dp)) {
-                PuzzleCanvas(file, ctx)
-            }
+        try {
+            scene.render()
+            val img = scene.render(16_000_000L)
+            val bitmap = org.jetbrains.skia.Bitmap.makeFromImage(img)
+            val painted = (0 until 600).flatMap { x -> (0 until 298).map { y -> x to y } }.count { (x, y) -> bitmap.getColor(x, y) != 0xFF000000.toInt() }
+            assertEquals(0, painted, "pixels painted above the canvas")
+            val inside = (0 until 600).flatMap { x -> (300 until 500).map { y -> x to y } }.count { (x, y) -> bitmap.getColor(x, y) != 0xFF000000.toInt() }
+            assertTrue(inside > 0, "the page is drawn inside the canvas")
+        } finally {
+            scene.close()
         }
     }
 
     @Composable
-    private fun previewCtx(src: String): Ctx {
-        val drag = remember { DragState() }
-        val scope = rememberCoroutineScope()
-        return Ctx("/preview/Sample.java", PreviewBackend, scope, src, null, null, drag, {}, {}, { _, _ -> }, {})
+    private fun Page(sample: Pair<UiBlockNode, String>) {
+        val (root, src) = sample
+        val fn = remember { findFirst(root) { it.label == "method" }!! }
+        val g = BlockGeometry(LocalDensity.current.density)
+        val measurer = rememberTextMeasurer(cacheSize = 0)
+        val style = Ide.type.codeSmall
+        val measure = remember { ComposeTextMeasure(measurer, style, style) }
+        val ink = rememberBlockInk(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurface)
+        val layoutFor = remember { { h: Hidden?, gap: Gap? -> BlockLayouter(measure, g, hidden = h, gap = gap).layoutFunction(fn, src, emptyList()) } }
+        Box(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
+            BlockCanvas(
+                layoutFor, remember { BlockCanvasState() }, remember { BlockDrag() }, ink, null,
+                onTap = { _, _ -> }, startDrag = { _, _, _ -> null }, onDrop = { _, _, _, _ -> },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 
     @OptIn(ExperimentalComposeUiApi::class)

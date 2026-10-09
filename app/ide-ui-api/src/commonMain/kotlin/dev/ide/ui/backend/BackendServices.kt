@@ -242,6 +242,15 @@ interface BlockService {
 
     /** Compile a block edit against [path]'s current buffer [text] into surgical text edits. */
     suspend fun applyBlockEdit(path: String, text: String, edit: UiBlockEdit): List<UiTextEdit> = emptyList()
+
+    /**
+     * The block view's scratch stacks for [path]: blocks left loose on the canvas, kept beside the file
+     * rather than in it, in the editor's own serialized form. Null when there are none or nothing is stored.
+     */
+    suspend fun loadScratchStacks(path: String): String? = null
+
+    /** Persist [path]'s scratch stacks ([data] from the block view); null or blank removes them. */
+    suspend fun saveScratchStacks(path: String, data: String?) {}
 }
 
 // ---------------------------------------------------------------------------

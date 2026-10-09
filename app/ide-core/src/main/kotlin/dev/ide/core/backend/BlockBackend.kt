@@ -7,20 +7,28 @@ import dev.ide.block.BlockPart
 import dev.ide.block.BlockRef
 import dev.ide.block.BlockTemplate
 import dev.ide.block.Delete
+import dev.ide.block.DeleteRange
+import dev.ide.block.InsertArgument
 import dev.ide.block.InsertTemplate
+import dev.ide.block.RemoveArgument
 import dev.ide.block.Move
+import dev.ide.block.MoveRange
 import dev.ide.block.ReplaceWithText
 import dev.ide.block.SetField
 import dev.ide.block.SlotCategory
 import dev.ide.block.SlotRef
 import dev.ide.block.Wrap
+import dev.ide.block.WrapRange
 import dev.ide.core.BackendContext
 import dev.ide.ui.backend.BlockService
 import dev.ide.ui.backend.UiBlockEdit
 import dev.ide.ui.backend.UiBlockNode
 import dev.ide.ui.backend.UiBlockPart
 import dev.ide.ui.backend.UiTextEdit
+import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.Paths
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** [BlockService] over the engine's projectional editor: project the buffer into a block tree and compile a
@@ -71,12 +79,57 @@ internal class BlockBackend(private val ctx: BackendContext) : BlockService {
                 BlockRef(BlockId(edit.blockId)),
                 SlotRef(BlockId(edit.toOwnerBlockId), edit.toSlotIndex, edit.toIndex),
             )
+
+            is UiBlockEdit.MoveRange -> MoveRange(
+                BlockRef(BlockId(edit.blockId)), edit.count,
+                SlotRef(BlockId(edit.toOwnerBlockId), edit.toSlotIndex, edit.toIndex),
+            )
+
+            is UiBlockEdit.DeleteRange -> DeleteRange(BlockRef(BlockId(edit.blockId)), edit.count)
+            is UiBlockEdit.InsertArgument -> InsertArgument(BlockRef(BlockId(edit.blockId)), edit.link, edit.index, edit.text)
+            is UiBlockEdit.RemoveArgument -> RemoveArgument(BlockRef(BlockId(edit.blockId)), edit.slotIndex)
+            is UiBlockEdit.WrapRange -> WrapRange(
+                BlockRef(BlockId(edit.blockId)), edit.count,
+                BlockTemplate(
+                    label = "wrap",
+                    category = SlotCategory.STATEMENT,
+                    defaultText = edit.template.replace(UiBlockEdit.BODY_MARKER, BlockTemplate.PLACEHOLDER),
+                ),
+            )
         }
         return withContext(ctx.engineDispatcher) {
             ctx.services.blocks.computeBlockEdit(
                 Paths.get(path), text, blockEdit
             )
         }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
+    }
+
+    override suspend fun loadScratchStacks(path: String): String? = withContext(Dispatchers.IO) {
+        scratchFile(path)?.takeIf { Files.isRegularFile(it) }?.let { runCatching { Files.readString(it) }.getOrNull() }
+    }
+
+    override suspend fun saveScratchStacks(path: String, data: String?) = withContext(Dispatchers.IO) {
+        val file = scratchFile(path) ?: return@withContext
+        runCatching {
+            if (data.isNullOrBlank()) Files.deleteIfExists(file)
+            else {
+                Files.createDirectories(file.parent)
+                Files.writeString(file, data)
+            }
+        }
+        Unit
+    }
+
+    /**
+     * Where [path]'s scratch stacks live: under the project's `.platform/blocks/`, mirroring the file's path
+     * relative to the workspace root, so they never sit in a source root or reach a build. Null for a file
+     * outside the workspace.
+     */
+    private fun scratchFile(path: String): Path? {
+        val root = ctx.servicesOrNull?.workspaceRoot?.toAbsolutePath()?.normalize() ?: return null
+        val file = Paths.get(path).toAbsolutePath().normalize()
+        if (!file.startsWith(root)) return null
+        return root.resolve(".platform/blocks").resolve(root.relativize(file).toString() + ".stacks")
     }
 
     /** Map a framework [BlockNode] subtree onto the UI's neutral [UiBlockNode] DTO. */

@@ -1,6 +1,7 @@
 package dev.ide.ui.editor.blocks
 
 import dev.ide.ui.theme.Ide
+import dev.ide.ui.theme.LightSyntaxColors
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -87,6 +88,7 @@ internal fun InlineInput(
     var fieldHeight by remember { mutableIntStateOf(0) }
 
     val canComplete = docStart >= 0
+    val language = remember(ctx.path) { dev.ide.ui.editor.languageFor(ctx.path.substringAfterLast('/')) }
     val spanEnd = docStart + initial.length
 
     fun commit() {
@@ -193,6 +195,8 @@ internal fun InlineInput(
                     false
                 },
             singleLine = true, textStyle = Ide.type.code.copy(color = Ide.colors.block.socketText),
+            // Highlighted as code while it is typed; the socket is light in both themes.
+            visualTransformation = highlightAs(language, LightSyntaxColors),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { commit() }),
         )
@@ -218,3 +222,9 @@ internal fun InlineInput(
     }
     LaunchedEffect(Unit) { focus.requestFocus() }
 }
+
+/** A [VisualTransformation] that syntax-highlights a one-line code field in [language] with [syntax]. */
+internal fun highlightAs(language: dev.ide.ui.editor.CodeLanguage, syntax: dev.ide.ui.theme.SyntaxColors): androidx.compose.ui.text.input.VisualTransformation =
+    androidx.compose.ui.text.input.VisualTransformation { text ->
+        androidx.compose.ui.text.input.TransformedText(dev.ide.ui.editor.highlight(text.text, language, syntax), androidx.compose.ui.text.input.OffsetMapping.Identity)
+    }

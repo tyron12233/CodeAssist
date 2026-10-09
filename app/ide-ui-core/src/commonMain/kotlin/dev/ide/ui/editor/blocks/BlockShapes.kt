@@ -49,7 +49,7 @@ object BlockMetrics {
 }
 
 /** A block category — drives the solid fill color and which shape a block gets. */
-enum class BlockCat { Control, Data, Call, Return, Comment, Method, Op, Opaque }
+enum class BlockCat { Control, Data, Call, Return, Comment, Method, Op, Opaque, Compose }
 
 /**
  * The Scratch shape language for value sockets and the value blocks filling them: hexagon = boolean,
@@ -114,6 +114,7 @@ fun blockColor(cat: BlockCat): Color = with(Ide.colors.block) {
         BlockCat.Method -> method
         BlockCat.Op -> op
         BlockCat.Opaque -> comment
+        BlockCat.Compose -> compose
     }
 }
 

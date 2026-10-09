@@ -71,7 +71,7 @@ object JavaBlockMapping : BlockMapping {
     private fun container(node: DomNode, ctx: ProjectionContext, isBody: (DomNode) -> Boolean, bodyCategory: SlotCategory): BlockNode {
         val children = node.children
         val body = children.filter(isBody)
-        if (body.isEmpty()) return ctx.carve(node)
+        if (body.isEmpty()) return emptyContainer(node, ctx, bodyCategory) ?: ctx.carve(node)
         val firstBody = body.first().range.start
         val lastBody = body.last().range.end
         val parts = ArrayList<BlockPart>()
@@ -85,6 +85,35 @@ object JavaBlockMapping : BlockMapping {
         if (firstBody > pos) parts += BlockPart.Field(ctx.chromeField(TextRange(pos, firstBody)))
         parts += BlockPart.Slot(ctx.slot(bodyCategory, body.map { ctx.child(it) }, multiple = true, range = TextRange(firstBody, lastBody)))
         if (node.range.end > lastBody) parts += BlockPart.Field(ctx.chromeField(TextRange(lastBody, node.range.end)))
+        return ctx.block(node, node.kind, parts, labelFor(node.kind))
+    }
+
+    /**
+     * An empty `{}` block or class body still gets its (empty) list slot, anchored just inside the opening
+     * brace, so a statement or member can be dropped into it. The header children are carved as in
+     * [container]; null when there is no brace to anchor on (the caller then falls back to generic carve).
+     */
+    private fun emptyContainer(node: DomNode, ctx: ProjectionContext, bodyCategory: SlotCategory): BlockNode? {
+        if (node.kind != NodeKind.BLOCK && node.kind != NodeKind.CLASS_DECL) return null
+        val children = node.children
+        val headerEnd = children.maxOfOrNull { it.range.end } ?: node.range.start
+        val from = headerEnd.coerceAtLeast(node.range.start)
+        val brace = ctx.source.indexOf('{', from)
+        if (brace < 0 || brace >= node.range.end) return null
+        // Only whitespace may sit between the header and the brace; anything else means the brace belongs
+        // to something nested, not to this body.
+        if (ctx.source.subSequence(from, brace).isNotBlank()) return null
+        val anchor = brace + 1
+        val parts = ArrayList<BlockPart>()
+        var pos = node.range.start
+        for (c in children) {
+            if (c.range.start > pos) parts += BlockPart.Field(ctx.chromeField(TextRange(pos, c.range.start)))
+            parts += BlockPart.Slot(ctx.slot(categoryFor(c.kind), listOf(ctx.child(c)), multiple = false, range = c.range))
+            pos = c.range.end
+        }
+        if (anchor > pos) parts += BlockPart.Field(ctx.chromeField(TextRange(pos, anchor)))
+        parts += BlockPart.Slot(ctx.slot(bodyCategory, emptyList(), multiple = true, range = TextRange(anchor, anchor)))
+        if (node.range.end > anchor) parts += BlockPart.Field(ctx.chromeField(TextRange(anchor, node.range.end)))
         return ctx.block(node, node.kind, parts, labelFor(node.kind))
     }
 
@@ -154,6 +183,12 @@ object JavaBlockMapping : BlockMapping {
                 parts += BlockPart.Slot(ctx.slot(SlotCategory.ARGUMENT, listOf(ctx.child(arg)), multiple = false, range = arg.range, valueKind = ctx.produced(arg)))
                 pos = arg.range.end
             }
+            // An empty `()` still has a place for its first argument.
+            if (link.args.isEmpty()) emptyArgumentAt(ctx.source, link.name.range.end, node.range.end)?.let { at ->
+                gapTo(at)
+                parts += BlockPart.Slot(ctx.slot(SlotCategory.ARGUMENT, emptyList(), multiple = false, range = TextRange(at, at)))
+                pos = at
+            }
         }
         gapTo(node.range.end)
         return ctx.block(node, node.kind, parts, labelFor(node.kind), valueKind = ctx.produced(node))
@@ -192,13 +227,6 @@ object JavaBlockMapping : BlockMapping {
     }
 }
 
-/** Build a read-only chrome field over [range]'s source via the [ProjectionContext] factories. */
-private fun ProjectionContext.chromeField(range: TextRange) =
-    field(role = "syntax", text = textOf(range).toString(), editable = false, range = range)
-
-/** Produced-kind lookup: the engine's pass resolves it (oracle first); plain contexts fall back to the syntactic heuristic. */
-private fun ProjectionContext.produced(node: DomNode): ValueKind =
-    (this as? ValueKindResolver)?.produced(node) ?: valueKindFor(node)
 
 // ---------------------------------------------------------------------------
 // Kind classification (JDT-DOM-aware heuristics, shared by the engine + mapping).
@@ -386,9 +414,24 @@ internal fun labelFor(kind: NodeKind): String = when (kind) {
         "DoStatement" -> "do"
         "ReturnStatement" -> "return"
         "ThrowStatement" -> "throw"
+        "BreakStatement" -> "break"
+        "ContinueStatement" -> "continue"
         "TryStatement" -> "try"
         "SwitchStatement" -> "switch"
         "ExpressionStatement" -> "" // transparent — just shows its inner call/assignment
         else -> kind.id
     }
+}
+
+/**
+ * Just inside the `(` of an empty argument list that follows [from] (only whitespace between), or null when
+ * the parentheses hold anything or are not there.
+ */
+internal fun emptyArgumentAt(source: CharSequence, from: Int, limit: Int): Int? {
+    var i = from
+    while (i < limit && source[i].isWhitespace()) i++
+    if (i >= limit || source[i] != '(') return null
+    var j = i + 1
+    while (j < limit && source[j].isWhitespace()) j++
+    return if (j < limit && source[j] == ')') i + 1 else null
 }

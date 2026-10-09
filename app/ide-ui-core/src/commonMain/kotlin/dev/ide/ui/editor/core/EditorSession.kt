@@ -64,6 +64,11 @@ class EditorSession(
      * save — it is a persistence stash, not part of the edit engine.
      */
     var viewportTopLine by mutableIntStateOf(0)
+    /**
+     * State a view of this buffer keeps while another view of it is showing (the Blocks view's open function,
+     * zoom and palette while the tab is switched to Code), keyed by view. Lives as long as the tab's session.
+     */
+    val viewStates: MutableMap<String, Any> = HashMap()
     /** Bumped on every edit/caret move — the UI's bring-caret-into-view trigger. */
     var editCount by mutableIntStateOf(0)
         private set

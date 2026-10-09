@@ -3,13 +3,20 @@ package dev.ide.block.impl
 import dev.ide.block.BlockNode
 import dev.ide.block.BlockRef
 import dev.ide.block.BlockSlot
+import dev.ide.block.BlockTemplate
 import dev.ide.block.BlockTree
 import dev.ide.block.Delete
+import dev.ide.block.DeleteRange
+import dev.ide.block.InsertArgument
+import dev.ide.block.InsertTemplate
+import dev.ide.block.RemoveArgument
+import dev.ide.block.MoveRange
 import dev.ide.block.ReplaceWithText
 import dev.ide.block.SetField
 import dev.ide.block.SlotCategory
 import dev.ide.block.SlotRef
 import dev.ide.block.ValueKind
+import dev.ide.block.WrapRange
 import dev.ide.block.defaultSerialize
 import dev.ide.lang.AnnotationProcessor
 import dev.ide.lang.CompilationContext
@@ -289,7 +296,173 @@ class BlockProjectionTest {
         assertEquals(src.replace("append(x)", "append(x.trim())"), result, "exactly the first argument span changed")
     }
 
+    @Test
+    fun emptyBodyIsAnInsertableSlot() {
+        val src = """
+            class A {
+                void m(boolean a) {
+                    if (a) {}
+                }
+            }
+        """.trimIndent()
+        val tree = project(src)
+        val ifBlock = tree.find { it.kind == NodeKind("IfStatement") }!!
+        val body = ifBlock.descendants().first { it.kind == NodeKind.BLOCK }
+        val slot = body.slots.single { it.multiple }
+        assertTrue(slot.children.isEmpty(), "the empty body still exposes its list slot")
+        assertEquals(src, defaultSerialize(tree.root), "the empty body still round-trips")
+
+        val edits = engine.computeEdit(tree, src, InsertTemplate(SlotRef(body.id, body.slots.indexOf(slot), 0), template("go();")))
+        assertEquals(src.replace("if (a) {}", "if (a) {\n            go();\n        }"), applyEdits(src, edits))
+    }
+
+    @Test
+    fun insertedTemplateIsIndentedAtItsDepth() {
+        val src = """
+            class A {
+                void m() {
+                    foo();
+                }
+            }
+        """.trimIndent()
+        val tree = project(src)
+        val (body, slotIndex) = bodyOf(tree, "m")
+        val edits = engine.computeEdit(tree, src, InsertTemplate(SlotRef(body.id, slotIndex, 1), template("while (true) {\n}")))
+        assertEquals(src.replace("foo();", "foo();\n        while (true) {\n        }"), applyEdits(src, edits))
+    }
+
+    @Test
+    fun moveRangeCarriesTheTailAndReindents() {
+        val src = """
+            class A {
+                void m(boolean a) {
+                    if (a) {
+                        keep();
+                    }
+                    one();
+                    two();
+                }
+            }
+        """.trimIndent()
+        val tree = project(src)
+        val one = statement(tree, "one();")
+        val inner = tree.find { it.kind == NodeKind("IfStatement") }!!.descendants().first { it.kind == NodeKind.BLOCK }
+        val innerSlot = inner.slots.indexOfFirst { it.multiple }
+        val edits = engine.computeEdit(tree, src, MoveRange(BlockRef(one.id), 2, SlotRef(inner.id, innerSlot, 1)))
+        val expected = """
+            class A {
+                void m(boolean a) {
+                    if (a) {
+                        keep();
+                        one();
+                        two();
+                    }
+                }
+            }
+        """.trimIndent()
+        assertEquals(expected, applyEdits(src, edits))
+    }
+
+    @Test
+    fun moveRangeIntoItselfIsNoEdit() {
+        val src = """
+            class A {
+                void m(boolean a) {
+                    if (a) {
+                        keep();
+                    }
+                    after();
+                }
+            }
+        """.trimIndent()
+        val tree = project(src)
+        val ifStmt = tree.find { it.kind == NodeKind("IfStatement") }!!
+        val inner = ifStmt.descendants().first { it.kind == NodeKind.BLOCK }
+        val innerSlot = inner.slots.indexOfFirst { it.multiple }
+        assertTrue(engine.computeEdit(tree, src, MoveRange(BlockRef(ifStmt.id), 2, SlotRef(inner.id, innerSlot, 0))).isEmpty())
+        // Dropping a run where it already sits is a no-op too.
+        val (body, slotIndex) = bodyOf(tree, "m")
+        assertTrue(engine.computeEdit(tree, src, MoveRange(BlockRef(ifStmt.id), 2, SlotRef(body.id, slotIndex, 0))).isEmpty())
+    }
+
+    @Test
+    fun deleteRangeRemovesTheRunAndItsLines() {
+        val src = """
+            class A {
+                void m() {
+                    keep();
+                    one();
+                    two();
+                }
+            }
+        """.trimIndent()
+        val tree = project(src)
+        val edits = engine.computeEdit(tree, src, DeleteRange(BlockRef(statement(tree, "one();").id), 2))
+        assertEquals(src.replace("\n        one();\n        two();", ""), applyEdits(src, edits))
+    }
+
+    @Test
+    fun wrapRangeIndentsTheRunInsideTheTemplate() {
+        val src = """
+            class A {
+                void m() {
+                    one();
+                    two();
+                }
+            }
+        """.trimIndent()
+        val tree = project(src)
+        val template = BlockTemplate("while", SlotCategory.STATEMENT, "while (true) {\n${BlockTemplate.PLACEHOLDER}\n}")
+        val edits = engine.computeEdit(tree, src, WrapRange(BlockRef(statement(tree, "one();").id), 2, template))
+        val expected = """
+            class A {
+                void m() {
+                    while (true) {
+                        one();
+                        two();
+                    }
+                }
+            }
+        """.trimIndent()
+        assertEquals(expected, applyEdits(src, edits))
+    }
+
+    @Test
+    fun javaArgumentsAreInsertedAndRemovedWithTheirCommas() {
+        val src = """
+            class A {
+                void m() {
+                    go();
+                    put(a, b, c);
+                }
+            }
+        """.trimIndent()
+        val tree = project(src)
+        val go = tree.find { it.kind == NodeKind.METHOD_CALL && it.fields.any { f -> f.text == "go" } }!!
+        assertTrue(go.slots.single { it.category == SlotCategory.ARGUMENT }.children.isEmpty(), "an empty () has a hole")
+        assertEquals(src.replace("go();", "go(1);"), applyEdits(src, engine.computeEdit(tree, src, InsertArgument(BlockRef(go.id), 0, 0, "1"))))
+        val put = tree.find { it.kind == NodeKind.METHOD_CALL && it.fields.any { f -> f.text == "put" } }!!
+        val args = put.slots.withIndex().filter { it.value.category == SlotCategory.ARGUMENT }.map { it.index }
+        assertEquals(src.replace("put(a, b, c)", "put(a, c)"), applyEdits(src, engine.computeEdit(tree, src, RemoveArgument(BlockRef(put.id), args[1]))))
+        assertEquals(src.replace("put(a, b, c)", "put(a, b)"), applyEdits(src, engine.computeEdit(tree, src, RemoveArgument(BlockRef(put.id), args[2]))))
+        assertEquals(src.replace("put(a, b, c)", "put(a, b, c, d)"), applyEdits(src, engine.computeEdit(tree, src, InsertArgument(BlockRef(put.id), 0, 3, "d"))))
+        assertEquals(src.replace("put(a, b, c)", "put(a, x, b, c)"), applyEdits(src, engine.computeEdit(tree, src, InsertArgument(BlockRef(put.id), 0, 1, "x"))))
+    }
+
     // ---- helpers ----
+
+    private fun template(text: String) = BlockTemplate("insert", SlotCategory.STATEMENT, text)
+
+    /** The statement block whose source starts with [prefix]. */
+    private fun statement(tree: BlockTree, prefix: String): BlockNode =
+        tree.find { it.kind == NodeKind("ExpressionStatement") && defaultSerialize(it).startsWith(prefix) }!!
+
+    /** The body block of method [name] and the index of its statement list slot. */
+    private fun bodyOf(tree: BlockTree, name: String): Pair<BlockNode, Int> {
+        val method = tree.find { it.kind == NodeKind.METHOD_DECL && defaultSerialize(it).contains(" $name(") }!!
+        val body = method.descendants().first { it.kind == NodeKind.BLOCK }
+        return body to body.slots.indexOfFirst { it.multiple }
+    }
 
     private fun project(src: String): BlockTree = engine.project(parse(src))
 

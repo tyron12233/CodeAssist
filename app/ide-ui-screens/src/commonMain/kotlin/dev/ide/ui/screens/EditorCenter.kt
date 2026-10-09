@@ -449,6 +449,7 @@ internal fun EditorCenter(
                                 session = active.session,
                                 backend = state.backend,
                                 modifier = Modifier.weight(1f).fillMaxWidth(),
+                                previewHost = state.composePreviewHost,
                             ) else codeSurface(Modifier.weight(1f).fillMaxWidth())
 
                             EditorViewMode.Preview -> previewSurface(Modifier.weight(1f).fillMaxWidth(), false)

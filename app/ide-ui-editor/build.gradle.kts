@@ -62,6 +62,10 @@ kotlin {
                 implementation(project(":ide-ui-testing"))
                 implementation(libs.kotlinx.coroutines.test) // virtual-clock tests for the editor engine daemon
                 implementation(compose.desktop.currentOs)
+                // The block editor's end-to-end tests drive the real projection engine over parsed Kotlin.
+                implementation(project(":block-impl"))
+                implementation(project(":lang-kotlin"))
+                implementation(project(":test-support"))
             }
         }
     }

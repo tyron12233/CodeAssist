@@ -82,6 +82,8 @@ data class BlockColors(
     val socket: Color,
     val socketText: Color,
     val hole: Color,
+    /** Calls to `@Composable` functions (`Column { … }`, `Text(…)`): UI, set apart from ordinary calls. */
+    val compose: Color = Color(0xFFC2507A),
 )
 
 private val DarkBlocks = BlockColors(
@@ -102,6 +104,7 @@ private val LightBlocks = BlockColors(
     control = Color(0xFF7E4EC4), data = Color(0xFFA8701D), call = Color(0xFF3A6FB5), ret = Color(0xFFB44C4C),
     comment = Color(0xFF83868D), method = Color(0xFF1F8A77), op = Color(0xFF2F8F56), text = Color(0xFFFFFFFF),
     socket = Color.White.copy(alpha = 0.94f), socketText = Color(0xFF26282C), hole = Color.Black.copy(alpha = 0.26f),
+    compose = Color(0xFFB0446C),
 )
 
 @Immutable
@@ -171,6 +174,12 @@ private val DarkSyntax = SyntaxColors(
     mutableVar = Color(0xFFE0918A),
     suspendFn = Color(0xFFD9A0C9),
 )
+
+/**
+ * The light syntax palette, whichever theme is active: for code drawn on a fixed light surface (the block
+ * editor's white value sockets).
+ */
+val LightSyntaxColors: SyntaxColors get() = LightSyntax
 
 private val LightSyntax = SyntaxColors(
     default = Color(0xFF34363D),

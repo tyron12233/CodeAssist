@@ -31,3 +31,29 @@ data class SetField(val block: BlockRef, val role: String, val text: String) : B
  * type-text→blocks escape valve and the transient-text-slot path for mid-edit invalidity.
  */
 data class ReplaceWithText(val slot: SlotRef, val text: String) : BlockEdit
+
+/**
+ * Move a run of [count] consecutive siblings, starting at [first], to [to] (dragging a block drags the
+ * statements below it, as in Scratch). The moved text is re-indented to its new nesting depth. A move into
+ * the run itself, or to the position it already occupies, maps to no edit.
+ */
+data class MoveRange(val first: BlockRef, val count: Int, val to: SlotRef) : BlockEdit
+
+/** Delete a run of [count] consecutive siblings, starting at [first], with the lines that only held them. */
+data class DeleteRange(val first: BlockRef, val count: Int) : BlockEdit
+
+/**
+ * Wrap a run of [count] consecutive siblings, starting at [first], in [with]: its
+ * [BlockTemplate.PLACEHOLDER] marks the body, which receives the run re-indented one level deeper.
+ */
+data class WrapRange(val first: BlockRef, val count: Int, val with: BlockTemplate) : BlockEdit
+
+/**
+ * Add an argument to segment [link] of a call block (0 = the call, `i` = the `i`-th link of a fluent chain),
+ * as argument [index] among the ones written ([text] may be a named argument, `size = 12.sp`). Into an empty
+ * `()` it fills the hole; a segment written without parentheses gets them.
+ */
+data class InsertArgument(val call: BlockRef, val link: Int, val index: Int, val text: String) : BlockEdit
+
+/** Remove the argument in slot [slotIndex] of a call block, with the comma that separated it. */
+data class RemoveArgument(val call: BlockRef, val slotIndex: Int) : BlockEdit

@@ -1,1038 +1,419 @@
 package dev.ide.ui.editor
 
-import dev.ide.ui.theme.Ide
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.ide.ui.backend.BuildState
 import dev.ide.ui.backend.IdeBackend
-import dev.ide.ui.backend.IndexUiStatus
-import dev.ide.ui.backend.NodeKind
-import dev.ide.ui.backend.ProjectInfo
-import dev.ide.ui.backend.SymbolHit
-import dev.ide.ui.backend.TreeNode
-import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiBlockEdit
 import dev.ide.ui.backend.UiBlockNode
 import dev.ide.ui.backend.UiBlockPart
-import dev.ide.ui.backend.UiCompletionResult
-import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiTextEdit
+import dev.ide.ui.editor.blocks.ActiveDrag
+import dev.ide.ui.editor.blocks.BODY
+import dev.ide.ui.editor.blocks.BlockCanvas
+import dev.ide.ui.editor.blocks.BlockCanvasState
+import dev.ide.ui.editor.blocks.BlockDrag
+import dev.ide.ui.editor.blocks.BlockGeometry
+import dev.ide.ui.editor.blocks.BlockInk
+import dev.ide.ui.editor.blocks.BlockLabels
+import dev.ide.ui.editor.blocks.BlockLayouter
+import dev.ide.ui.editor.blocks.BlockPalette
+import dev.ide.ui.editor.blocks.BlockSite
+import dev.ide.ui.editor.blocks.CanvasIndex
+import dev.ide.ui.editor.blocks.ComposeTextMeasure
+import dev.ide.ui.editor.blocks.DocRef
+import dev.ide.ui.editor.blocks.DragPayload
+import dev.ide.ui.editor.blocks.DropTarget
+import dev.ide.ui.editor.blocks.EventChoice
+import dev.ide.ui.editor.blocks.EventPicker
+import dev.ide.ui.editor.blocks.FieldKind
+import dev.ide.ui.editor.blocks.FileOutline
+import dev.ide.ui.editor.blocks.FunctionForm
+import dev.ide.ui.editor.blocks.FunctionSpec
+import dev.ide.ui.editor.blocks.Gap
+import dev.ide.ui.editor.blocks.Hidden
+import dev.ide.ui.editor.blocks.ArgChipKind
+import dev.ide.ui.editor.blocks.CallSig
+import dev.ide.ui.editor.blocks.LArgChip
+import dev.ide.ui.editor.blocks.LArgHole
+import dev.ide.ui.editor.blocks.callKey
+import dev.ide.ui.editor.blocks.parseParamLabel
+import dev.ide.ui.editor.blocks.segmentParts
+import dev.ide.ui.editor.blocks.supplied
+import dev.ide.ui.editor.blocks.LKind
+import dev.ide.ui.editor.blocks.ModifierSheet
+import dev.ide.ui.editor.blocks.parseModifierChain
+import dev.ide.ui.editor.blocks.OutlineFunction
+import dev.ide.ui.editor.blocks.OutlineGroup
+import dev.ide.ui.editor.blocks.OutlineScreen
+import dev.ide.ui.editor.blocks.OutlineVariable
+import dev.ide.ui.editor.blocks.PaletteCategory
+import dev.ide.ui.editor.blocks.PaletteEntry
+import dev.ide.ui.editor.blocks.PaletteTemplate
+import dev.ide.ui.editor.blocks.ScratchCodec
+import dev.ide.ui.editor.blocks.ScratchInput
+import dev.ide.ui.editor.blocks.ScratchStack
+import dev.ide.ui.editor.blocks.SnippetWrap
+import dev.ide.ui.editor.blocks.Suggestion
+import dev.ide.ui.editor.blocks.VariableForm
+import dev.ide.ui.editor.blocks.VariableSpec
+import dev.ide.ui.editor.blocks.applyTextEdits
+import dev.ide.ui.editor.blocks.buildOutline
+import dev.ide.ui.editor.blocks.dedent
+import dev.ide.ui.editor.blocks.dragShapeOf
+import dev.ide.ui.editor.blocks.findFirst
+import dev.ide.ui.editor.blocks.functionCode
+import dev.ide.ui.editor.blocks.functionHeader
+import dev.ide.ui.editor.blocks.indentAt
+import dev.ide.ui.editor.blocks.paletteTemplates
+import dev.ide.ui.editor.blocks.parameterNames
+import dev.ide.ui.editor.blocks.parseFunctionHeader
+import dev.ide.ui.editor.blocks.rememberBlockInk
+import dev.ide.ui.editor.blocks.scratchContent
+import dev.ide.ui.editor.blocks.signatureText
+import dev.ide.ui.editor.blocks.variableCode
+import dev.ide.ui.editor.blocks.bodyOf
+import dev.ide.ui.editor.blocks.variableTemplates
+import dev.ide.ui.editor.blocks.variablesInScope
+import dev.ide.ui.editor.blocks.withoutBody
+import dev.ide.ui.editor.blocks.InlineInput
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.RangeEdit
-import dev.ide.ui.editor.blocks.BlockCat
-import dev.ide.ui.editor.blocks.BlockMetrics
-import dev.ide.ui.editor.blocks.DragGhost
-import dev.ide.ui.editor.blocks.DragPayload
-import dev.ide.ui.editor.blocks.DragState
-import dev.ide.ui.editor.blocks.DropDescriptor
-import dev.ide.ui.editor.blocks.InlineInput
-import dev.ide.ui.editor.blocks.ValueShape
-import dev.ide.ui.editor.blocks.blockColor
-import dev.ide.ui.editor.blocks.canvasOrigin
-import dev.ide.ui.editor.blocks.dragSource
-import dev.ide.ui.editor.blocks.dropZone
-import dev.ide.ui.editor.blocks.rememberBlockShape
-import dev.ide.ui.editor.blocks.rememberCBlockShape
-import dev.ide.ui.editor.blocks.rememberValueShape
-import dev.ide.ui.editor.blocks.valueShapeOf
-import dev.ide.ui.editor.blocks.valueShapePadding
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.back
-import dev.ide.ui.generated.resources.block_add_a_block
-import dev.ide.ui.generated.resources.block_add_block
-import dev.ide.ui.generated.resources.block_block_count
-import dev.ide.ui.generated.resources.block_button
+import dev.ide.ui.generated.resources.block_back_to_outline
+import dev.ide.ui.generated.resources.block_canvas_description
 import dev.ide.ui.generated.resources.block_cannot_project
 import dev.ide.ui.generated.resources.block_drop_to_delete
 import dev.ide.ui.generated.resources.block_duplicate
 import dev.ide.ui.generated.resources.block_edit_expression
 import dev.ide.ui.generated.resources.block_focus_hint
-import dev.ide.ui.generated.resources.block_fold
-import dev.ide.ui.generated.resources.block_import_count
+import dev.ide.ui.generated.resources.block_form_edit_function
+import dev.ide.ui.generated.resources.block_function_missing
+import dev.ide.ui.generated.resources.block_form_place_local
 import dev.ide.ui.generated.resources.block_keyword_to
-import dev.ide.ui.generated.resources.block_live_projection
-import dev.ide.ui.generated.resources.block_no_index_matches
-import dev.ide.ui.generated.resources.block_no_matches
-import dev.ide.ui.generated.resources.block_palette_call
-import dev.ide.ui.generated.resources.block_palette_comment
-import dev.ide.ui.generated.resources.block_palette_for_each
-import dev.ide.ui.generated.resources.block_palette_if
-import dev.ide.ui.generated.resources.block_palette_if_else
-import dev.ide.ui.generated.resources.block_palette_return
-import dev.ide.ui.generated.resources.block_palette_variable
-import dev.ide.ui.generated.resources.block_palette_while
+import dev.ide.ui.generated.resources.block_palette
+import dev.ide.ui.generated.resources.block_pick_function
 import dev.ide.ui.generated.resources.block_projecting
-import dev.ide.ui.generated.resources.block_search_placeholder
-import dev.ide.ui.generated.resources.block_searching_index
-import dev.ide.ui.generated.resources.block_statement_slot
-import dev.ide.ui.generated.resources.block_trash
+import dev.ide.ui.generated.resources.block_properties
+import dev.ide.ui.generated.resources.block_preview
 import dev.ide.ui.generated.resources.block_wrap_if
-import dev.ide.ui.generated.resources.clear
 import dev.ide.ui.generated.resources.close
 import dev.ide.ui.generated.resources.delete
-import dev.ide.ui.generated.resources.expand
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
-import dev.ide.ui.theme.CodeAssistTheme
-import org.jetbrains.compose.resources.StringResource
-import org.jetbrains.compose.resources.pluralStringResource
-import org.jetbrains.compose.resources.stringResource
-import kotlin.math.roundToInt
+import dev.ide.ui.theme.Ide
+import dev.ide.ui.theme.LightSyntaxColors
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /**
- * The projectional block editor — a Sketchware/Blockly canvas, projected from the same buffer the text
- * editor edits. Solid, content-width, category-colored puzzle blocks interlock by a notch + bump; control
- * statements are C-blocks wrapping their body behind a left arm; expressions sit in white value sockets as
- * nested reporter pills. Authoring is drag-and-drop (long-press to move a block onto a gap / the trash;
- * drag a palette block to insert) plus tap-to-type (a socket becomes an inline editor; the fragment
- * explodes into blocks on reparse). Every gesture is a surgical text edit on the one buffer.
+ * The projectional block editor, Sketchware-style: the file opens on an outline of what it declares, and
+ * each function opens on its own page as a Scratch-like stack of blocks under its hat. Everything is a live
+ * projection of the same buffer the code editor edits; every gesture compiles to a surgical text edit.
+ *
+ * On a page, blocks are dragged with the stack below them and snap to the nearest connection (a silhouette
+ * shows where); a block dropped on empty canvas becomes a scratch stack, kept beside the file rather than in
+ * it. The palette's category rail holds real blocks to drag in, and a tap on a token or socket types code
+ * with completion.
  */
+@OptIn(FlowPreview::class)
 @Composable
 fun BlockEditor(
     path: String,
     session: EditorSession,
     backend: IdeBackend,
     modifier: Modifier = Modifier,
+    /** Renders a `@Composable` page's preview beside its blocks; null where previews do not run. */
+    previewHost: dev.ide.ui.ComposePreviewHost? = null,
 ) {
-    var tree by remember(path) { mutableStateOf<UiBlockNode?>(null) }
-    var projectedText by remember(path) { mutableStateOf("") }
-    var failed by remember(path) { mutableStateOf(false) }
-    var editing by remember(path) { mutableStateOf<EditTarget?>(null) }
-    var selected by remember(path) { mutableStateOf<Selection?>(null) }
-    var paletteOpen by remember(path) { mutableStateOf(false) }
-    var focusStack by remember(path) { mutableStateOf<List<UiBlockNode>>(emptyList()) } // drill-in breadcrumb
-    val drag = remember(path) { DragState() }
     val scope = rememberCoroutineScope()
+    // The model lives on the tab's session, so switching to Code and back returns to the same page, zoom and
+    // palette instead of the outline. Its coroutine scope is this composition's, re-attached on return.
+    val model = remember(path, session, backend) {
+        (session.viewStates[BLOCKS_VIEW] as? BlockEditorModel)?.takeIf { it.path == path && it.backend === backend }
+            ?: BlockEditorModel(path, session, backend, scope).also { session.viewStates[BLOCKS_VIEW] = it }
+    }
+    model.scope = scope
 
-    // Re-project whenever the buffer's text changes (keyed on the session's revision Int, not the text
-    // String). The full text is pulled lazily here — debounced, off the typing path.
+    // Re-project whenever the buffer changes (keyed on the revision, not the text), debounced off the typing
+    // path; right after a block edit the projection is wanted at once.
     LaunchedEffect(path, session.textRevision) {
-        delay(250)
-        val text = session.doc.text
-        val projected = runCatching { backend.blocks.projectBlocks(path, text) }
-        tree = projected.getOrNull()
-        failed = projected.isFailure || projected.getOrNull() == null
-        projectedText = text
-        editing = null; selected = null; focusStack = emptyList() // node ids/offsets change on reproject
-        drag.targets.clear()
+        if (!model.awaitingProjection) delay(250)
+        model.reproject()
+    }
+    LaunchedEffect(path) { if (!model.scratchLoaded) model.loadScratch() }
+    // Persist the scratch stacks a moment after they settle.
+    LaunchedEffect(path) {
+        snapshotFlow { model.scratch.toList() }.drop(1).debounce(400).collect { backend.blocks.saveScratchStacks(path, ScratchCodec.encode(it)) }
     }
 
-    // [extra] carries doc-level edits held by inline completion (auto-imports) — applied atomically with the
-    // block edit's own edits, surgically on the shared session (applyEdits sorts descending), so untouched
-    // code survives byte-for-byte and the text editor sees the same buffer.
-    val applyEdit: (UiBlockEdit, List<UiTextEdit>) -> Unit = { edit, extra ->
-        editing = null; selected = null; focusStack = emptyList()
-        scope.launch {
-            val edits = runCatching { backend.blocks.applyBlockEdit(path, projectedText, edit) }.getOrDefault(emptyList())
-            val all = edits + extra
-            if (all.isNotEmpty()) {
-                val ranges = all.map { RangeEdit(it.start, it.end, it.newText, it.start + it.newText.length) }
-                session.applyEdits(ranges, TextRange(all.minOf { it.start }.coerceAtLeast(0)))
-            }
-        }
-    }
-    val ctx = remember(projectedText, editing, selected, drag) {
-        Ctx(path, backend, scope, projectedText, editing, selected?.blockId, drag, { editing = it }, { selected = it }, applyEdit, { paletteOpen = true }, { focusStack = focusStack + it })
-    }
+    val d = LocalDensity.current
+    val g = remember(d.density) { BlockGeometry(d.density) }
+    val measurer = rememberTextMeasurer(cacheSize = 0)
+    val baseStyle = Ide.type.codeSmall
+    val language = remember(path) { languageFor(path.substringAfterLast('/')) }
+    val measure = remember(measurer, baseStyle, language) { ComposeTextMeasure(measurer, baseStyle, baseStyle, language, LightSyntaxColors) }
+    val ink = rememberBlockInk(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurface)
+    val labels = BlockLabels(keywordTo = stringResource(Res.string.block_keyword_to))
+    model.measure = measure
+    model.previewHost = previewHost
+    model.geometry = g
+    model.labels = labels
 
-    Box(modifier.background(Ide.colors.editorBg).canvasOrigin(drag)) {
-        Column(Modifier.fillMaxSize()) {
-            val current = tree
-            when {
-                current == null && failed -> Hint(stringResource(Res.string.block_cannot_project))
-                current == null -> Hint(stringResource(Res.string.block_projecting))
-                else -> Box(
-                    Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
-                        .clickable(remember { MutableInteractionSource() }, null) { ctx.select(null) }
-                        .padding(14.dp),
-                ) { PuzzleCanvas(current, ctx) }
+    BoxWithConstraints(modifier.background(Ide.colors.editorBg)) {
+        val wide = maxWidth >= 720.dp
+        val outline = model.outline
+        when {
+            outline == null && model.failed -> Hint(stringResource(Res.string.block_cannot_project))
+            outline == null -> Hint(stringResource(Res.string.block_projecting))
+            wide -> Row(Modifier.fillMaxSize()) {
+                Outline(model, outline, ink, Modifier.width(320.dp).fillMaxHeight())
+                Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
+                Box(Modifier.weight(1f).fillMaxHeight()) {
+                    if (model.openKey != null) FunctionPage(model, outline, ink, g, wide = true)
+                    else Hint(stringResource(Res.string.block_pick_function))
+                }
             }
-            BlockBar(drag, onAddBlock = { paletteOpen = !paletteOpen })
+            model.openKey == null -> Outline(model, outline, ink, Modifier.fillMaxSize())
+            else -> FunctionPage(model, outline, ink, g, wide = false)
         }
-        if (paletteOpen) Palette(ctx) { paletteOpen = false }
-        focusStack.lastOrNull()?.let { node ->
-            FocusSheet(node, ctx, canBack = focusStack.size > 1, onBack = { focusStack = focusStack.dropLast(1) }, onClose = { focusStack = emptyList() })
-        }
-        selected?.let { sel -> ActionBar(sel, ctx, Modifier.align(Alignment.BottomCenter).padding(bottom = 58.dp)) }
-        if (drag.isDragging) DragGhost(drag)
+        model.Dialogs(outline)
+    }
+}
+
+@Composable
+private fun Outline(model: BlockEditorModel, outline: FileOutline, ink: BlockInk, modifier: Modifier) {
+    OutlineScreen(
+        outline, model.openKey,
+        onOpen = { model.open(it) },
+        onAddFunction = { model.functionForm = FunctionFormState(null, null, it.key) },
+        onAddVariable = { model.variableForm = VariableFormState(null, it.key) },
+        onAddEvent = { model.findEvents(it) },
+        onEditVariable = { model.variableForm = VariableFormState(it, it.group) },
+        onDeleteVariable = { model.edit(DocRef.File, listOf(UiBlockEdit.DeleteBlock(it.node.id))) },
+        ink = ink,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun Hint(text: String) {
+    Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.Center) {
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
 // ---------------------------------------------------------------------------
-// Top-level document: file header pill, fields, method hats.
+// A function's page.
 // ---------------------------------------------------------------------------
 
 @Composable
-internal fun PuzzleCanvas(file: UiBlockNode, ctx: Ctx) {
-    val tops = bodyChildren(file)?.children ?: listOf(file)
-    val pkg = tops.firstOrNull { it.label == "package" }?.let { sliceSource(ctx.source, it.start, it.end).removePrefix("package").trim().removeSuffix(";").trim() }
-    val imports = tops.count { it.label == "import" }
-    val cls = tops.firstOrNull { it.label == "class" }
-    val members = cls?.let { bodyChildren(it)?.children } ?: emptyList()
-
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.wrapContentWidth()) {
-        FileHeader(cls?.let { className(it, ctx.source) } ?: file.label, pkg, imports)
-        val fields = members.filter { it.label == "field" }
-        if (fields.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(BlockMetrics.stackGap)) {
-                fields.forEach { FieldBlock(it, ctx) }
+private fun FunctionPage(model: BlockEditorModel, outline: FileOutline, ink: BlockInk, g: BlockGeometry, wide: Boolean) {
+    val fn = outline.find(model.openKey ?: "", model.openName, model.openGroup)
+    Column(Modifier.fillMaxSize()) {
+        PageBar(model, fn, wide, outline.kotlin)
+        if (fn == null) { Hint(stringResource(Res.string.block_function_missing)); return@Column }
+        val showPreview = model.previewOpen && isComposable(fn)
+        // The preview sits beside the blocks when there is room, under them on a phone.
+        val split: @Composable (@Composable (Modifier) -> Unit) -> Unit = { canvas ->
+            if (!showPreview) canvas(Modifier.weight(1f).fillMaxWidth())
+            else if (wide) Row(Modifier.weight(1f).fillMaxWidth()) {
+                canvas(Modifier.weight(1f).fillMaxHeight())
+                Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
+                PagePreview(model, fn, Modifier.width(380.dp).fillMaxHeight())
+            } else {
+                canvas(Modifier.weight(1f).fillMaxWidth())
+                Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                PagePreview(model, fn, Modifier.fillMaxWidth().height(320.dp))
             }
         }
-        members.filter { it.label == "method" }.forEach { MethodHat(it, ctx) }
-        if (cls == null) {
-            // Not a class file — interlock whatever decls there are (notch+bump), same as a method body.
-            InterlockColumn(Modifier.wrapContentWidth()) {
-                tops.filter { it.label !in setOf("package", "import") }.forEach { Stmt(it, gap = null, ctx = ctx) }
+        split { canvasModifier ->
+        Box(canvasModifier.onGloballyPositioned { model.canvasWidth = it.size.width.toFloat() }) {
+            val drag = model.drag
+            LaunchedEffect(fn.key, model.projectedText) { model.loadSignatures(fn) }
+            val layoutFor = remember(fn.node, model.projectedText, model.scratchVersion, model.signatureVersion, model.lambdaPages.toList(), model.measure, model.geometry) {
+                { hidden: Hidden?, gap: Gap? -> model.layoutPage(fn, hidden, gap) }
             }
+            BlockCanvas(
+                layoutFor = layoutFor,
+                state = model.canvas,
+                drag = drag,
+                ink = ink,
+                selected = model.selected?.let { it.doc to it.blockId },
+                onTap = { hit, index -> model.tap(hit, index, fn) },
+                startDrag = { hit, index, at -> model.startDrag(hit, index, at) },
+                onDrop = { d, target, landing, trash -> model.drop(d, target, landing, trash, fn) },
+                modifier = Modifier.fillMaxSize(),
+                overlayRect = { index -> model.editRect(index) },
+                overlay = model.editing?.let { e -> { EditOverlay(model, e) } },
+                description = stringResource(Res.string.block_canvas_description),
+            )
+            if (model.paletteOpen) {
+                val paletteW = minOf(340.dp, (LocalDensity.current.run { model.canvasWidth.toDp() }) * 0.82f).coerceAtLeast(240.dp)
+                BlockPalette(
+                    categories = model.categories(outline.kotlin),
+                    entriesFor = { model.paletteEntries(it, outline, fn) },
+                    query = model.paletteQuery,
+                    onQuery = { model.searchPalette(it) },
+                    searchResults = model.searchResults,
+                    searching = model.searching,
+                    onAddVariable = { model.variableForm = VariableFormState(null, dev.ide.ui.editor.blocks.LOCAL_PLACE) },
+                    drag = drag,
+                    ink = ink,
+                    g = g,
+                    scopeTitle = model.scopeFocus?.receiver,
+                    // Faded out (not removed: the lifting gesture lives in it) while a block is being dragged.
+                    modifier = Modifier.width(paletteW).fillMaxHeight().graphicsLayer { alpha = if (drag.active != null) 0f else 1f },
+                )
+            }
+            model.selected?.let { sel ->
+                if (drag.active == null && model.editing == null) ActionBar(model, sel, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+            }
+            if (drag.active != null) Trash(drag, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+        }
         }
     }
+    LaunchedEffect(fn?.key) { model.paletteFor(outline, fn) }
+}
+
+private fun isComposable(fn: OutlineFunction) = "@Composable" in fn.signature
+
+/** The page's Compose preview: the `@Preview` that shows this function, rendered by the platform host. */
+@Composable
+private fun PagePreview(model: BlockEditorModel, fn: OutlineFunction, modifier: Modifier) {
+    dev.ide.ui.editor.preview.ComposePreviewPane(
+        path = model.path, text = model.projectedText, backend = model.backend, host = model.previewHost,
+        modifier = modifier.clipToBounds(), selected = model.previewFor(fn), split = true,
+    )
 }
 
 @Composable
-private fun FileHeader(name: String, pkg: String?, imports: Int) {
+private fun PageBar(model: BlockEditorModel, fn: OutlineFunction?, wide: Boolean, kotlin: Boolean) {
     Row(
-        Modifier.clip(RoundedCornerShape(Ca.radius.pill)).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        Icon(CaIcons.box, null, Modifier.size(15.dp), tint = Ide.colors.syntax.type)
-        Text(name, color = MaterialTheme.colorScheme.onSurface, style = Ide.type.code, fontWeight = FontWeight.SemiBold)
-        if (pkg != null) Text(pkg, color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
-        if (imports > 0) Text(pluralStringResource(Res.plurals.block_import_count, imports, imports), color = MaterialTheme.colorScheme.outline, fontSize = 10.5.sp)
-    }
-}
-
-/** A slim data-colored field block. */
-@Composable
-private fun FieldBlock(node: UiBlockNode, ctx: Ctx) {
-    val color = blockColor(BlockCat.Data)
-    Row(
-        Modifier.clip(RoundedCornerShape(BlockMetrics.corner)).blockShadow(BlockMetrics.corner).background(color, RoundedCornerShape(BlockMetrics.corner)).padding(horizontal = 12.dp, vertical = 6.dp),
+        Modifier.fillMaxWidth().height(46.dp).background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(CaIcons.docText, null, Modifier.size(14.dp), tint = Ide.colors.block.text.copy(alpha = 0.85f))
-        Text(sliceSource(ctx.source, node.start, node.end).trimEnd(';'), color = Ide.colors.block.text, style = Ide.type.codeSmall)
-    }
-}
-
-/** A method "hat": rounded-top block + the body stack directly below it. Folds on demand. */
-@Composable
-private fun MethodHat(node: UiBlockNode, ctx: Ctx) {
-    val color = blockColor(BlockCat.Method)
-    val body = bodyChildren(node)
-    var expanded by remember(node.id) { mutableStateOf(true) }
-    val hatPx = with(LocalDensity.current) { BlockMetrics.hatCorner.toPx() }
-    val shape = rememberBlockShape(notchTop = false, bumpBottom = expanded, topRadius = hatPx)
-    // Pull the body up by exactly connDepth so the first statement's notch seats into the hat's bump (no gap).
-    Column(verticalArrangement = Arrangement.spacedBy(-BlockMetrics.connDepth), modifier = Modifier.wrapContentWidth()) {
-        Row(
-            Modifier.clip(shape).background(color, shape)
-                .clickable(remember(node.id) { MutableInteractionSource() }, null) { expanded = !expanded }
-                .padding(start = 13.dp, end = 16.dp, top = 8.dp, bottom = 8.dp + if (expanded) BlockMetrics.connDepth else 0.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(if (expanded) CaIcons.caretDown else CaIcons.caretRight, stringResource(Res.string.block_fold), Modifier.size(13.dp), tint = Ide.colors.block.text.copy(alpha = 0.8f))
-            Text(signatureOf(node, ctx.source), color = Ide.colors.block.text, style = Ide.type.code, fontWeight = FontWeight.SemiBold)
-            body?.let {
-                if (!expanded) Text(pluralStringResource(Res.plurals.block_block_count, it.children.size, it.children.size),
-                    color = Ide.colors.block.text.copy(alpha = 0.78f), fontSize = 10.5.sp)
-            }
+        val lambda = model.lambdaPages.lastOrNull()
+        if (!wide || lambda != null) {
+            BarButton(CaIcons.chevronLeft, stringResource(Res.string.block_back_to_outline)) { model.closePage() }
         }
-        if (expanded && body != null) Stack(body, ctx)
-    }
-}
-
-@Composable
-@Preview
-private fun MethodHatPreview() {
-
-}
-
-// ---------------------------------------------------------------------------
-// Statement stack + dispatch.
-// ---------------------------------------------------------------------------
-
-/** An interlocking stack of statements + a trailing "add block" ghost (a drop zone). */
-@Composable
-private fun Stack(body: Body, ctx: Ctx) {
-    InterlockColumn(Modifier.wrapContentWidth()) {
-        body.children.forEachIndexed { i, child ->
-            Stmt(child, gap = DropDescriptor.StatementGap(body.ownerId, body.slotIndex, i), ctx = ctx)
-        }
-
-
-        Ghost(DropDescriptor.StatementGap(body.ownerId, body.slotIndex, body.children.size), empty = body.children.isEmpty(), ctx = ctx)
-    }
-}
-
-@Composable
-private fun Stmt(node: UiBlockNode, gap: DropDescriptor.StatementGap?, ctx: Ctx) {
-    val body = bodyChildren(node)
-    if (body != null && isControl(node)) CBlock(node, body, gap, ctx) else SimpleBlock(node, gap, ctx)
-}
-
-private val CONTROL_LABELS = setOf("if", "for", "while", "do", "try", "switch")
-
-private fun isControl(node: UiBlockNode) = node.label in CONTROL_LABELS
-
-private fun catOf(node: UiBlockNode): BlockCat = when {
-    node.label in CONTROL_LABELS -> BlockCat.Control
-    node.label == "return" || node.label == "throw" -> BlockCat.Return
-    node.label == "comment" -> BlockCat.Comment
-    node.label == "var" || node.label == "field" || node.kind == "local_var" || node.kind == "field_decl" -> BlockCat.Data
-    node.label == "" || node.kind == "method_call" || node.kind == "ExpressionStatement" -> BlockCat.Call
-    else -> BlockCat.Opaque
-}
-
-/** A simple (non-wrapping) statement block: notch + bump, content-width, with sockets/pills inline. */
-@Composable
-private fun SimpleBlock(node: UiBlockNode, gap: DropDescriptor.StatementGap?, ctx: Ctx) {
-    val color = blockColor(catOf(node))
-    StatementShell(node, color, gap, ctx) { BlockInline(node, ctx, onPill = true, skipBody = false) }
-}
-
-/**
- * A C-block (if/for/while): the header bar, the left arm, and the closing footer are drawn as one
- * continuous shape ([rememberCBlockShape]) so the whole bracket reads as a single piece; the header
- * content and the indented body are laid into the top bar and the carved-out mouth. The header's
- * bottom carries a downward inner notch; the body overlaps up into it by [BlockMetrics.connDepth] so the
- * first wrapped block's top notch interlocks, and the footer's bump links the whole C to the next block.
- */
-@Composable
-private fun CBlock(node: UiBlockNode, body: Body, gap: DropDescriptor.StatementGap?, ctx: Ctx) {
-    val color = blockColor(BlockCat.Control)
-    val selected = ctx.selectedId == node.id
-    val d = LocalDensity.current
-    val mouthInsetPx = with(d) { (BlockMetrics.arm + BlockMetrics.connInset).toPx() }
-    val armPx = with(d) { BlockMetrics.arm.toPx() }
-    val footerPx = with(d) { (BlockMetrics.footer + BlockMetrics.connDepth).toPx() }
-    val overlap = with(d) { BlockMetrics.connDepth.roundToPx() }
-    // Header height feeds the carve; measured below and fed back so the mouth ceiling matches the bar.
-    var headerPx by remember { mutableIntStateOf(with(d) { 38.dp.roundToPx() }) }
-    val shape = rememberCBlockShape(
-        headerHeightPx = headerPx.toFloat(), footerHeightPx = footerPx, armWidthPx = armPx, mouthInsetPx = mouthInsetPx,
-    )
-    Layout(
-        content = {
-            // 0: header content — the keyword + condition, laid into the top bar (the shape draws the bar).
-            Box(
-                Modifier.selectable(node, gap, ctx, selected)
-                    .padding(start = 12.dp, end = 14.dp, top = 8.dp, bottom = 8.dp + BlockMetrics.connDepth),
-            ) { BlockInline(node, ctx, onPill = true, skipBody = true) }
-            // 1: the wrapped body, indented past the arm into the carved mouth. The end padding is the
-            // right margin the footer/header bars wrap the widest child with. No bottom padding: the
-            // footer overlaps the last child's bump (below) so the bracket hugs the body height exactly.
-            Box(Modifier.padding(start = BlockMetrics.arm, end = 0.dp, top = 0.dp)) { Stack(body, ctx) }
-        },
-        // background(shape) paints the bracket fill, but must not clip(shape): the wrapped body sits in
-        // the carved mouth (outside the path), so clipping would hide it.
-        modifier = Modifier.wrapContentWidth()
-            .background(color, shape)
-            .then(gap?.let { Modifier.dropZone(ctx.drag, it) } ?: Modifier)
-            .insertionLine(gap != null && ctx.drag.hovered == gap),
-    ) { measurables, constraints ->
-        val cs = constraints.copy(minHeight = 0, minWidth = 0)
-        val header = measurables[0].measure(cs)
-        val mouth = measurables[1].measure(cs)
-        if (headerPx != header.height) headerPx = header.height
-        // mouth.width already includes the arm (start padding), so the block wraps the body exactly.
-        val width = maxOf(header.width, mouth.width).coerceIn(constraints.minWidth, constraints.maxWidth)
-        val mouthY = (header.height - overlap).coerceAtLeast(0)   // body tucks into the header's inner notch
-        // Footer overlaps the body by connDepth (last child's bump drops into it), so the bracket wraps the
-        // body height exactly instead of leaving an empty colored gap above the closing arm.
-        val height = (mouthY + mouth.height - overlap + footerPx.roundToInt()).coerceIn(constraints.minHeight, constraints.maxHeight)
-        layout(width, height) {
-            header.place(0, 0)
-            mouth.place(0, mouthY)
-        }
-    }
-}
-
-/** The shell for a notch+bump statement block: shape, fill, shadow, selection, drag, insert-line. */
-@Composable
-private fun StatementShell(node: UiBlockNode, color: Color, gap: DropDescriptor.StatementGap?, ctx: Ctx, content: @Composable () -> Unit) {
-    val selected = ctx.selectedId == node.id
-    val shape = rememberBlockShape()
-    Box(
-        Modifier.wrapContentWidth()
-            .then(gap?.let { Modifier.dropZone(ctx.drag, it) } ?: Modifier)
-            .insertionLine(gap != null && ctx.drag.hovered == gap)
-            .clip(shape).background(color, shape)
-            .selectable(node, gap, ctx, selected)
-            .padding(start = 13.dp, end = 14.dp, top = 7.dp, bottom = 7.dp + BlockMetrics.connDepth),
-    ) { content() }
-}
-
-private fun Modifier.selectable(node: UiBlockNode, gap: DropDescriptor.StatementGap?, ctx: Ctx, selected: Boolean): Modifier = composed {
-    this
-        .clickable(remember(node.id) { MutableInteractionSource() }, null) {
-            ctx.select(if (selected) null else Selection(node.id, gap, sliceSource(ctx.source, node.start, node.end)))
-        }
-        .dragSource(ctx.drag, { DragPayload.MoveBlock(node.label.ifEmpty { "block" }, node.id, sliceSource(ctx.source, node.start, node.end)) }) { drop ->
-            when (drop) {
-                is DropDescriptor.Trash -> ctx.apply(UiBlockEdit.DeleteBlock(node.id))
-                is DropDescriptor.StatementGap -> ctx.apply(UiBlockEdit.MoveBlock(node.id, drop.ownerId, drop.slotIndex, drop.index))
-                else -> {}
-            }
-        }
-}
-
-// ---------------------------------------------------------------------------
-// Inline content: keyword labels, value sockets, reporter pills.
-// ---------------------------------------------------------------------------
-
-/** Render a block's inline content (keyword + parts) as a wrapping row. [onPill] = text is on a colored block. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun BlockInline(node: UiBlockNode, ctx: Ctx, onPill: Boolean, skipBody: Boolean) {
-    val bodySlot = if (skipBody) bodySlotIndex(node) else -1
-    val keyword = keywordFor(node)
-    val strip = if (keyword != null) setOf(node.label, "for", "each") else emptySet()
-    val dividers = remember(node) { chainDividerIndices(node) }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.Center) {
-        if (keyword != null) Keyword(keyword, onPill)
-        node.parts.forEachIndexed { i, part ->
-            if (i in dividers) ChainDivider()
-            val si = slotIndexInNode(node, part)
-            when (part) {
-                is UiBlockPart.Field -> if (part.editable) Token(node.id, part, onPill, ctx) else Chrome(part.text, onPill, strip, node)
-                is UiBlockPart.Slot -> if (!part.multiple && si != bodySlot) Socket(node.id, si, part, ctx)
-            }
-        }
-    }
-}
-
-private fun keywordFor(node: UiBlockNode): String? = when (node.label) {
-    "if" -> "if"; "while" -> "while"; "do" -> "do"; "try" -> "try"; "switch" -> "switch"
-    "for" -> if (node.kind == "EnhancedForStatement") "for each" else "for"
-    "return" -> "return"; "throw" -> "throw"
-    "var" -> "set"                                              // B1: `set <type> <name> to <value>`
-    "" -> if (isCallStatement(node)) "call" else null          // B1: `call foo(args)`
-    else -> null
-}
-
-/** An expression statement whose expression is a method call — gets the `call` lead-in (B1). */
-private fun isCallStatement(node: UiBlockNode): Boolean =
-    node.kind == "ExpressionStatement" &&
-        node.parts.filterIsInstance<UiBlockPart.Slot>().any { it.children.singleOrNull()?.kind == "method_call" }
-
-/** A bold keyword label drawn directly on the block. */
-@Composable
-private fun Keyword(text: String, onPill: Boolean) {
-    Text(text, color = if (onPill) Ide.colors.block.text else MaterialTheme.colorScheme.onSurface, style = Ide.type.code, fontWeight = FontWeight.Bold)
-}
-
-/** An editable token on the block (a name) — bold white text, tap to rename (with inline completion).
- *  A collapsed call's `qualifier` reads dimmed/normal so the bold method name carries the block. */
-@Composable
-private fun Token(blockId: String, field: UiBlockPart.Field, onPill: Boolean, ctx: Ctx) {
-    val active = ctx.editing?.let { it.blockId == blockId && it.role == field.role && it.slotIndex == null } == true
-    if (active) {
-        InlineInput(field.text, docStart = field.start, expectedValueKind = null, ctx = ctx) { text, extra ->
-            ctx.apply(UiBlockEdit.SetField(blockId, field.role, text), extra)
-        }
-        return
-    }
-    val qualifier = field.role == "qualifier"
-    val base = if (onPill) Ide.colors.block.text else MaterialTheme.colorScheme.onSurface
-    Text(
-        field.text.ifEmpty { "•" },
-        color = if (qualifier) base.copy(alpha = 0.66f) else base,
-        style = Ide.type.code,
-        fontWeight = if (qualifier) FontWeight.Normal else FontWeight.SemiBold,
-        modifier = Modifier.clickable(remember(blockId + field.role) { MutableInteractionSource() }, null) { ctx.startEdit(EditTarget(blockId, field.role, null, field.text)) },
-    )
-}
-
-/** Read-only syntax chrome — keywords/braces/parens dropped; a for-each `:` reads "in", `=` kept. */
-@Composable
-private fun Chrome(text: String, onPill: Boolean, strip: Set<String>, node: UiBlockNode) {
-    var shown = cleanChrome(text, strip)
-    if (node.kind == "EnhancedForStatement" && shown == ":") shown = "in"
-    if (shown.isEmpty()) return
-    if (shown == "in") { Keyword("in", onPill); return }
-    Text(shown, color = (if (onPill) Ide.colors.block.text else Ide.colors.syntax.punctuation).copy(alpha = 0.7f), style = Ide.type.code)
-}
-
-/** A value input: the typed socket (hexagon = boolean, pill = number, …). Empty → a recessed hole
- *  hinting the expected kind; filled → a reporter; tap → type code (with inline completion). [depth] is the
- *  reporter-nesting level the filled value renders at — 0 for a statement-level socket, deeper for an
- *  operand inside a chain/operator block so its pill picks up the [Color.deepen] tint and the cap applies. */
-@Composable
-private fun Socket(ownerId: String, slotIndex: Int, slot: UiBlockPart.Slot, ctx: Ctx, depth: Int = 0) {
-    val active = ctx.editing?.let { it.blockId == ownerId && it.slotIndex == slotIndex && it.role == null } == true
-    if (active) {
-        InlineInput(sliceSource(ctx.source, slot.start, slot.end), docStart = slot.start, expectedValueKind = slot.valueKind, ctx = ctx) { text, extra ->
-            ctx.apply(UiBlockEdit.ReplaceSlot(ownerId, slotIndex, text), extra)
-        }
-        return
-    }
-    val onTap = { ctx.startEdit(EditTarget(ownerId, null, slotIndex, sliceSource(ctx.source, slot.start, slot.end))) }
-    val child = slot.children.singleOrNull()
-    if (child == null) {
-        val vShape = valueShapeOf(slot.valueKind)
-        val shape = rememberValueShape(vShape)
-        Box(
-            Modifier.heightIn(min = 22.dp).widthIn(min = 40.dp).clip(shape)
-                .background(Ide.colors.block.hole, shape)
-                .then(if (vShape == ValueShape.Type) Modifier.border(1.dp, Ide.colors.block.socket.copy(alpha = 0.5f), shape) else Modifier)
-                .clickable(remember { MutableInteractionSource() }, null, onClick = onTap)
-                .padding(horizontal = 12.dp + valueShapePadding(vShape)),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            // the hole hints the kind it expects ("boolean", "number", …); unknown falls back to the category
-            val hint = if (slot.valueKind != "unknown") slot.valueKind else slot.category.lowercase()
-            Text(hint, color = Ide.colors.block.text.copy(alpha = 0.6f), fontStyle = FontStyle.Italic, fontSize = 11.sp)
-        }
-        return
-    }
-    Box(Modifier.clickable(remember(ownerId + slotIndex) { MutableInteractionSource() }, null, onClick = onTap)) { Value(child, ctx, depth) }
-}
-
-/** A reporter value: a white pill for literals/types/raw, a colored pill for variables/calls/operators.
- *  Both take the [ValueShape] of the kind the node produces: `a < b` becomes a green hexagon, a string
- *  literal a sharp white rect; UNKNOWN keeps the rounded pill. [depth] is the reporter-nesting level
- *  (0 = a top-level socket); deeper pills lose their drop shadow and darken slightly so layers read
- *  cleanly instead of stacking shadows. A fluent chain of ≥3 links lays out vertically (one link per row)
- *  rather than wrapping mid-expression. [depth] counts *drawn pills*, so a transparent grouping (a `var`
- *  fragment, a paren) keeps it — only entering a pill's content steps it. */
-@Composable
-private fun Value(node: UiBlockNode, ctx: Ctx, depth: Int = 0) {
-    val vShape = valueShapeOf(node.valueKind)
-    // Past the nesting cap, a compound expression collapses to a chip you tap to drill into (A2). Plain
-    // leaves (a name/literal with no nested slot) stay inline however deep — they aren't noisy.
-    if (depth >= VALUE_DEPTH_CAP && node.parts.any { it is UiBlockPart.Slot }) { CollapsedChip(node, ctx); return }
-    val onlyField = node.parts.singleOrNull() as? UiBlockPart.Field
-    if (onlyField != null && onlyField.editable) {
-        if (onlyField.role == "name") Pill(BlockCat.Data, vShape, depth) { Text(onlyField.text, color = Ide.colors.block.text, style = Ide.type.code) }
-        else White(onlyField.text, vShape)
-        return
-    }
-    when {
-        node.kind == "type_ref" || node.kind.endsWith("Type") -> White(sliceSource(ctx.source, node.start, node.end), vShape) // a whole type, not its generics
-        node.kind == "method_call" && chainLinkCount(node) >= 3 -> Pill(BlockCat.Call, vShape, depth) { ChainStack(node, ctx, depth + 1) }
-        node.kind == "method_call" || node.kind == "member_access" -> Pill(BlockCat.Call, vShape, depth) { ValueInline(node, ctx, depth + 1) }
-        node.kind == "InfixExpression" && infixOperands(node).size >= 3 -> Pill(BlockCat.Op, vShape, depth) { OpStack(node, ctx, depth + 1) }
-        node.kind == "InfixExpression" -> Pill(BlockCat.Op, vShape, depth) { ValueInline(node, ctx, depth + 1) }
-        node.parts.any { it is UiBlockPart.Slot } -> ValueInline(node, ctx, depth) // transparent grouping (a fragment, paren…) — no pill, same depth
-        else -> White(sliceSource(ctx.source, node.start, node.end), vShape)
-    }
-}
-
-/** A reporter's inline content on ONE line (no FlowRow wrap — a wide reporter pushes the *statement* row
- *  to wrap at pill boundaries, which are meaningful, instead of fragmenting the pill itself). */
-@Composable
-private fun ValueInline(node: UiBlockNode, ctx: Ctx, depth: Int) {
-    val dividers = remember(node) { chainDividerIndices(node) }
-    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-        node.parts.forEachIndexed { i, part ->
-            if (i in dividers) ChainDivider()
-            ValuePart(node, part, ctx, depth)
-        }
-    }
-}
-
-/** One part of a reporter's inline content: an editable token, read-only chrome, or a nested value slot. */
-@Composable
-private fun ValuePart(node: UiBlockNode, part: UiBlockPart, ctx: Ctx, depth: Int) {
-    when (part) {
-        is UiBlockPart.Field -> if (part.editable) {
-            // role-aware: the collapsed qualifier reads dimmed, chain method names bold
-            val qualifier = part.role == "qualifier"
-            val name = node.kind == "method_call" && NAME_ROLE.matches(part.role)
+        Column(Modifier.weight(1f)) {
+            Text(lambda?.title ?: fn?.name ?: "", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val lang = remember(kotlin) { languageFor(if (kotlin) "a.kt" else "a.java") }
+            val syntax = Ide.colors.syntax
             Text(
-                part.text,
-                color = if (qualifier) Ide.colors.block.text.copy(alpha = 0.66f) else Ide.colors.block.text,
-                style = Ide.type.code,
-                fontWeight = if (qualifier) FontWeight.Normal else if (name) FontWeight.SemiBold else FontWeight.Medium,
-            )
-        } else {
-            val s = part.text.trim()
-            when {
-                // B1: a declaration's `=` reads as the word "to" (`set x to 1`).
-                s == "=" && (node.label == "var" || node.kind == "local_var" || node.kind == "field_decl") ->
-                    Text(stringResource(Res.string.block_keyword_to), color = Ide.colors.block.text, style = Ide.type.code, fontWeight = FontWeight.SemiBold)
-                s.isNotEmpty() -> Text(s, color = Ide.colors.block.text.copy(alpha = 0.7f), style = Ide.type.code)
-            }
-        }
-        is UiBlockPart.Slot -> if (!part.multiple) {
-            val c = part.children.singleOrNull()
-            // Same depth: the pill step is applied by the enclosing pill's content call, not per slot.
-            if (c != null) Value(c, ctx, depth) else White("")
-        }
-    }
-}
-
-/** The number of flattened chain links (`name`/`name1`/…) a collapsed method call carries. */
-private fun chainLinkCount(node: UiBlockNode): Int =
-    node.parts.count { it is UiBlockPart.Field && it.editable && NAME_ROLE.matches(it.role) }
-
-/**
- * A long fluent chain laid out vertically — the receiver and first call on the first row, then each
- * `.method(args)` link on its own indented row. Punctuation (`.`, `(`, `)`, `,`) is synthesized for the
- * display only; tapping anywhere on the enclosing socket still edits the whole call as text, and args
- * render as nested value reporters. This keeps `sb.append(a).append(b).append(c)` readable top-to-bottom
- * instead of wrapping into a pill-soup. */
-@Composable
-private fun ChainStack(node: UiBlockNode, ctx: Ctx, depth: Int) {
-    val parts = node.parts
-    val nameIdxs = remember(node) {
-        parts.indices.filter { val p = parts[it]; p is UiBlockPart.Field && p.editable && NAME_ROLE.matches(p.role) }
-    }
-    val first = nameIdxs.first()
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.wrapContentWidth()) {
-        // Row 0: the receiver (parts before the first method name) + the first link, on one line. Each
-        // editable piece is a real Token / Socket so it edits in place — not just the first row.
-        Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-            parts.subList(0, first).forEach { p ->
-                when (p) {
-                    is UiBlockPart.Field -> if (p.editable) Token(node.id, p, onPill = true, ctx = ctx)
-                    is UiBlockPart.Slot -> if (!p.multiple) Socket(node.id, slotIndexInNode(node, p), p, ctx, depth)
-                }
-            }
-            ChainLink(node, parts, first, nameIdxs.getOrNull(1) ?: parts.size, ctx, depth, leadingDot = first > 0)
-        }
-        // Each subsequent link on its own row, indented under the first dot.
-        for (li in 1 until nameIdxs.size) {
-            Row(Modifier.padding(start = 10.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                ChainLink(node, parts, nameIdxs[li], nameIdxs.getOrNull(li + 1) ?: parts.size, ctx, depth, leadingDot = true)
-            }
-        }
-    }
-}
-
-/** One `.method(arg, arg)` chain link, parts in `[nameIdx, end)`. The name is an editable [Token] and each
- *  argument a real [Socket], so every row edits in place. Parens render only for an actual call (a `(` in
- *  the link's chrome, or any argument) so a bare field hop (`.bar`) stays paren-less. */
-@Composable
-private fun ChainLink(node: UiBlockNode, parts: List<UiBlockPart>, nameIdx: Int, end: Int, ctx: Ctx, depth: Int, leadingDot: Boolean) {
-    val name = parts[nameIdx] as UiBlockPart.Field
-    val argSlots = parts.subList(nameIdx + 1, end).filterIsInstance<UiBlockPart.Slot>().filter { !it.multiple }
-    val isCall = argSlots.isNotEmpty() || (nameIdx + 1 until end).any { val p = parts[it]; p is UiBlockPart.Field && !p.editable && '(' in p.text }
-    val punct = Ide.colors.block.text.copy(alpha = 0.6f)
-    if (leadingDot) Text(".", color = punct, style = Ide.type.code)
-    Token(node.id, name, onPill = true, ctx = ctx)
-    if (isCall) {
-        Text("(", color = punct, style = Ide.type.code)
-        argSlots.forEachIndexed { i, slot ->
-            if (i > 0) Text(",", color = punct, style = Ide.type.code)
-            Socket(node.id, slotIndexInNode(node, slot), slot, ctx, depth)
-        }
-        Text(")", color = punct, style = Ide.type.code)
-    }
-}
-
-/** The operand slots of a (possibly flattened) infix expression — `a && b && c` has three. */
-private fun infixOperands(node: UiBlockNode): List<UiBlockPart.Slot> =
-    node.parts.filterIsInstance<UiBlockPart.Slot>().filter { !it.multiple }
-
-/** The operator symbol of an infix expression — the trimmed chrome between its operands (`&&`, `+`, …). */
-private fun infixOperator(node: UiBlockNode): String =
-    node.parts.firstNotNullOfOrNull { (it as? UiBlockPart.Field)?.takeIf { f -> !f.editable }?.text?.trim()?.ifEmpty { null } } ?: ""
-
-/**
- * A long same-operator infix chain (`x > 0 && y > 0 && z > 0 && w > 0`) laid out vertically (A3): each
- * operand on its own row as an editable [Socket], the operator in a fixed gutter so the operands align —
- * faithful to Scratch's hexagonal `and`/`or` blocks. A two-operand infix (`a < b`) stays inline. */
-@Composable
-private fun OpStack(node: UiBlockNode, ctx: Ctx, depth: Int) {
-    val operands = infixOperands(node)
-    val op = infixOperator(node)
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.wrapContentWidth()) {
-        operands.forEachIndexed { i, slot ->
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.width(22.dp), contentAlignment = Alignment.CenterEnd) {
-                    if (i > 0) Text(op, color = Ide.colors.block.text, style = Ide.type.code, fontWeight = FontWeight.SemiBold)
-                }
-                Socket(node.id, slotIndexInNode(node, slot), slot, ctx, depth)
-            }
-        }
-    }
-}
-
-/** The method-name roles a collapsed call/chain carries: `name`, `name1`, `name2`, … */
-private val NAME_ROLE = Regex("name\\d*")
-
-/**
- * Part indices where a thin divider separates one flattened chain segment from the next — before each
- * chrome dot that follows the previous link's close-paren (or its ARGUMENT slot), NOT the first `.`
- * after the qualifier. The gap-walked chrome can merge tokens (`").."`, `"()."`), so this tracks parens
- * instead of matching exact chrome strings: a `.` is a segment boundary once a `(` (or a leading `)`)
- * has gone by.
- */
-private fun chainDividerIndices(node: UiBlockNode): Set<Int> {
-    if (node.kind != "method_call") return emptySet()
-    val out = HashSet<Int>()
-    var sawParen = false
-    node.parts.forEachIndexed { i, part ->
-        val f = part as? UiBlockPart.Field ?: return@forEachIndexed
-        if (f.editable) return@forEachIndexed
-        val dot = f.text.indexOf('.')
-        if (dot >= 0 && (sawParen || f.text.take(dot).contains(')'))) out += i
-        if (f.text.contains('(')) sawParen = true
-    }
-    return out
-}
-
-/** The 1×16dp segment divider between flattened chain links. */
-@Composable
-private fun ChainDivider() {
-    Box(Modifier.width(1.dp).height(16.dp).background(Ide.colors.block.text.copy(alpha = 0.25f)))
-}
-
-@Composable
-private fun Pill(cat: BlockCat, shape: ValueShape = ValueShape.Unknown, depth: Int = 0, content: @Composable () -> Unit) {
-    val color = blockColor(cat).deepen(depth)
-    val s = rememberValueShape(shape)
-    val hpad = (if (depth == 0) 8.dp else 6.dp) + valueShapePadding(shape) // tighten nested padding
-    Box(
-        Modifier.clip(s)
-            .then(if (depth == 0) Modifier.shadow(2.dp, s, clip = false) else Modifier) // shadow only on the top layer
-            .background(color, s)
-            .heightIn(min = 22.dp).padding(horizontal = hpad, vertical = 2.dp),
-        contentAlignment = Alignment.Center,
-    ) { content() }
-}
-
-@Composable
-private fun White(text: String, shape: ValueShape = ValueShape.Unknown) {
-    val s = rememberValueShape(shape)
-    val long = shape == ValueShape.Text && text.length > 28 // a long string literal: ellipsize, tap to edit
-    Box(
-        Modifier.heightIn(min = 22.dp).clip(s).background(Ide.colors.block.socket, s)
-            .then(if (shape == ValueShape.Type) Modifier.border(1.dp, Ide.colors.block.socketText.copy(alpha = 0.3f), s) else Modifier) // the type tag's outline
-            .then(if (long) Modifier.widthIn(max = 220.dp) else Modifier)
-            .padding(horizontal = 8.dp + valueShapePadding(shape), vertical = 2.dp),
-        contentAlignment = Alignment.Center,
-    ) { Text(text.ifEmpty { " " }, color = literalColor(shape), style = Ide.type.code, maxLines = 1, overflow = if (long) TextOverflow.Ellipsis else TextOverflow.Clip) }
-}
-
-// Literal syntax colors for the value sockets. The socket is white in BOTH themes (see BlockColors), so
-// these are fixed dark-on-white tones rather than the theme-flipping editor syntax palette.
-private val LITERAL_STRING = Color(0xFF067D17)
-private val LITERAL_NUMBER = Color(0xFF1750EB)
-private val LITERAL_KEYWORD = Color(0xFF9B2393)
-
-/** A literal/value socket's text color, by the kind its shape encodes — string green, number blue, etc. */
-@Composable
-private fun literalColor(shape: ValueShape): Color = when (shape) {
-    ValueShape.Text -> LITERAL_STRING
-    ValueShape.Number -> LITERAL_NUMBER
-    ValueShape.Boolean -> LITERAL_KEYWORD
-    else -> Ide.colors.block.socketText
-}
-
-/** Darken a nested reporter's fill slightly per [depth] so layers read without stacking drop shadows. */
-private fun Color.deepen(depth: Int): Color {
-    if (depth <= 0) return this
-    val f = 1f - 0.07f * depth.coerceAtMost(3)
-    return Color(red * f, green * f, blue * f, alpha)
-}
-
-/** How deep reporter pills nest inline before collapsing to a drill-in chip (A2). Tunable. */
-private const val VALUE_DEPTH_CAP = 3
-
-/** The block category color a value reporter would use — mirrors [Value]'s dispatch. */
-private fun catForValue(node: UiBlockNode): BlockCat = when {
-    node.kind == "method_call" || node.kind == "member_access" -> BlockCat.Call
-    node.kind == "InfixExpression" -> BlockCat.Op
-    else -> BlockCat.Data
-}
-
-/** A short one-line summary of an expression for its collapsed chip — its source, middle-elided if long. */
-private fun summaryOf(node: UiBlockNode, source: String): String {
-    val t = sliceSource(source, node.start, node.end).replace(Regex("\\s+"), " ").trim()
-    return if (t.length <= 22) t else t.take(12) + "…" + t.takeLast(7)
-}
-
-/** A collapsed deep expression: a category-tinted chip showing a summary + an expand glyph; tap to drill in. */
-@Composable
-private fun CollapsedChip(node: UiBlockNode, ctx: Ctx) {
-    val s = rememberValueShape(valueShapeOf(node.valueKind))
-    Row(
-        Modifier.heightIn(min = 22.dp).clip(s).background(blockColor(catForValue(node)).deepen(2), s)
-            .clickable(remember(node.id) { MutableInteractionSource() }, null) { ctx.focus(node) }
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Text(summaryOf(node, ctx.source), color = Ide.colors.block.text, style = Ide.type.code, maxLines = 1)
-        Icon(CaIcons.braces, stringResource(Res.string.expand), Modifier.size(13.dp), tint = Ide.colors.block.text.copy(alpha = 0.7f))
-    }
-}
-
-/**
- * The drill-in focus sheet (A2): a deeply-nested expression re-rooted on its own, full-width and clutter-
- * free, with its immediate parts editable (names as tokens, arguments as real sockets via [BlockInline]).
- * Nesting inside the sheet re-expands from depth 0, so a chip here drills another level (breadcrumb stack).
- */
-@Composable
-internal fun FocusSheet(node: UiBlockNode, ctx: Ctx, canBack: Boolean, onBack: () -> Unit, onClose: () -> Unit) {
-    val color = blockColor(catForValue(node))
-    val shape = rememberBlockShape(notchTop = false, bumpBottom = false)
-    Box(
-        Modifier.fillMaxSize().background(Ide.colors.glassThick)
-            .clickable(remember { MutableInteractionSource() }, null, onClick = onClose),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            Modifier.padding(20.dp).widthIn(max = 540.dp).clip(RoundedCornerShape(Ca.radius.sheet)).background(MaterialTheme.colorScheme.surface)
-                .clickable(remember { MutableInteractionSource() }, null) {} // swallow taps so the scrim's close doesn't fire
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (canBack) Icon(CaIcons.chevronLeft, stringResource(Res.string.back), Modifier.size(20.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onBack), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Icon(CaIcons.braces, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                Text(stringResource(Res.string.block_edit_expression), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Icon(CaIcons.close, stringResource(Res.string.close), Modifier.size(18.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onClose), tint = MaterialTheme.colorScheme.outline)
-            }
-            Box(
-                Modifier.fillMaxWidth().clip(shape).background(color, shape).padding(horizontal = 14.dp, vertical = 10.dp),
-            ) { BlockInline(node, ctx, onPill = true, skipBody = false) }
-            Text(stringResource(Res.string.block_focus_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
-
-/** The trailing "add block" ghost in a stack — a dashed pill that's also a drop zone. */
-@Composable
-private fun Ghost(gap: DropDescriptor.StatementGap, empty: Boolean, ctx: Ctx) {
-    val hot = ctx.drag.hovered == gap
-    Row(
-        Modifier.padding(vertical = 12.dp, horizontal = 8.dp).dropZone(ctx.drag, gap).insertionLine(hot)
-            .clip(RoundedCornerShape(BlockMetrics.corner)).dashed(if (hot) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
-            .clickable(remember(gap) { MutableInteractionSource() }, null) { ctx.openPalette() }
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Icon(CaIcons.plus, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.outline)
-        if (empty) Text(stringResource(Res.string.block_add_block), color = MaterialTheme.colorScheme.outline, fontStyle = FontStyle.Italic, fontSize = 11.sp)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Bottom bar, palette, action bar.
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun BlockBar(drag: DragState, onAddBlock: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().height(48.dp).background(MaterialTheme.colorScheme.surface).padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (drag.payload is DragPayload.MoveBlock) {
-            Row(
-                Modifier.clip(RoundedCornerShape(Ca.radius.control)).background(if (drag.hovered == DropDescriptor.Trash) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
-                    .dropZone(drag, DropDescriptor.Trash).padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                val on = drag.hovered == DropDescriptor.Trash
-                Icon(CaIcons.close, stringResource(Res.string.block_trash), Modifier.size(16.dp), tint = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(stringResource(Res.string.block_drop_to_delete), color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            }
-        } else {
-            Row(
-                Modifier.clip(RoundedCornerShape(Ca.radius.control)).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.control))
-                    .clickable(remember { MutableInteractionSource() }, null, onClick = onAddBlock).padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Icon(CaIcons.plus, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                Text(stringResource(Res.string.block_button), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            }
-        }
-        Box(Modifier.weight(1f))
-        Box(Modifier.size(6.dp).clip(RoundedCornerShape(Ca.radius.pill)).background(Ide.colors.run))
-        Text(stringResource(Res.string.block_live_projection), color = MaterialTheme.colorScheme.outline, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-// [label] is the stable English key used to filter the palette by typed query; [labelRes] is the localized
-// text shown on the block (and in the drag preview).
-private data class PaletteItem(val label: String, val labelRes: StringResource, val cat: BlockCat, val ghost: String, val text: String)
-
-private val PALETTE = listOf(
-    PaletteItem("If", Res.string.block_palette_if, BlockCat.Control, "if ( ) { }", "if (true) {\n}"),
-    PaletteItem("If / Else", Res.string.block_palette_if_else, BlockCat.Control, "if ( ) { } else { }", "if (true) {\n} else {\n}"),
-    PaletteItem("For each", Res.string.block_palette_for_each, BlockCat.Control, "for ( : ) { }", "for (var item : items) {\n}"),
-    PaletteItem("While", Res.string.block_palette_while, BlockCat.Control, "while ( ) { }", "while (true) {\n}"),
-    PaletteItem("Return", Res.string.block_palette_return, BlockCat.Return, "return ;", "return value;"),
-    PaletteItem("Variable", Res.string.block_palette_variable, BlockCat.Data, "var = ;", "var name = value;"),
-    PaletteItem("Call", Res.string.block_palette_call, BlockCat.Call, "method();", "method();"),
-    PaletteItem("Comment", Res.string.block_palette_comment, BlockCat.Comment, "// …", "// comment"),
-)
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun Palette(ctx: Ctx, onClose: () -> Unit) {
-    var query by remember { mutableStateOf("") }
-    var hits by remember { mutableStateOf<List<Pair<SymbolHit, Boolean>>>(emptyList()) } // hit → from member search
-    var searching by remember { mutableStateOf(false) }
-    // Debounced index search: project symbols + classpath members, rendered as draggable templates.
-    LaunchedEffect(query) {
-        val q = query.trim()
-        if (q.isEmpty()) { hits = emptyList(); searching = false; return@LaunchedEffect }
-        searching = true
-        delay(150)
-        val symbols = runCatching { ctx.backend.search.searchSymbols(q, 12) }.getOrDefault(emptyList())
-        val members = runCatching { ctx.backend.search.searchMembers(q, 12) }.getOrDefault(emptyList())
-        hits = symbols.map { it to false } + members.map { it to true }
-        searching = false
-    }
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-        Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = Ca.radius.sheet, topEnd = Ca.radius.sheet)).background(MaterialTheme.colorScheme.surface).padding(16.dp).padding(bottom = 52.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(CaIcons.layers, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                Text(stringResource(Res.string.block_add_a_block), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Text(stringResource(Res.string.block_statement_slot), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
-                Icon(CaIcons.close, stringResource(Res.string.close), Modifier.size(18.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onClose), tint = MaterialTheme.colorScheme.outline)
-            }
-            PaletteSearch(query) { query = it }
-            val statics = if (query.isBlank()) PALETTE else PALETTE.filter { it.label.contains(query.trim(), ignoreCase = true) }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                statics.forEach { item -> PaletteBlock(stringResource(item.labelRes), item.ghost, item.cat, item.text, ctx) }
-                hits.forEach { (hit, fromMembers) -> PaletteBlock(hit.name, hit.detail, BlockCat.Call, templateFor(hit, fromMembers), ctx) }
-            }
-            when {
-                searching -> Text(stringResource(Res.string.block_searching_index), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
-                query.isNotBlank() && hits.isEmpty() && statics.isEmpty() -> Text(stringResource(Res.string.block_no_matches), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
-                query.isNotBlank() && hits.isEmpty() -> Text(stringResource(Res.string.block_no_index_matches), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
-}
-
-/** The palette's search row: filters the static blocks AND queries the symbol/member indexes. */
-@Composable
-private fun PaletteSearch(query: String, onQuery: (String) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.control)).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 10.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        Icon(CaIcons.search, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
-        Box(Modifier.weight(1f)) {
-            if (query.isEmpty()) Text(stringResource(Res.string.block_search_placeholder), color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
-            BasicTextField(
-                query, onQuery, singleLine = true,
-                textStyle = Ide.type.codeSmall.copy(color = MaterialTheme.colorScheme.onSurface),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier.fillMaxWidth(),
+                remember(fn?.signature, syntax) { highlight(fn?.signature ?: "", lang, syntax) },
+                style = Ide.type.codeSmall, fontSize = 11.sp, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.graphicsLayer { alpha = 0.85f },
             )
         }
-        if (query.isNotEmpty()) Icon(CaIcons.close, stringResource(Res.string.clear), Modifier.size(13.dp).clickable(remember { MutableInteractionSource() }, null) { onQuery("") }, tint = MaterialTheme.colorScheme.outline)
-    }
-}
-
-/** One draggable palette block (static or index hit): drop on a statement gap to insert [text]. */
-@Composable
-private fun PaletteBlock(label: String, ghost: String, cat: BlockCat, text: String, ctx: Ctx) {
-    val color = blockColor(cat)
-    val shape = rememberBlockShape(notchTop = true, bumpBottom = true)
-    Column(
-        Modifier.widthIn(min = 150.dp).clip(shape).background(color, shape)
-            .dragSource(ctx.drag, { DragPayload.Template(label, text, cat) }) { drop ->
-                if (drop is DropDescriptor.StatementGap) ctx.apply(UiBlockEdit.InsertTemplate(drop.ownerId, drop.slotIndex, drop.index, text))
-            }
-            .padding(start = 13.dp, end = 13.dp, top = 8.dp, bottom = 8.dp + BlockMetrics.connDepth),
-        verticalArrangement = Arrangement.spacedBy(1.dp),
-    ) {
-        Text(label, color = Ide.colors.block.text, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-        Text(ghost, color = Ide.colors.block.text.copy(alpha = 0.75f), style = Ide.type.codeSmall)
-    }
-}
-
-/** What dropping an index hit inserts: methods call themselves, classes instantiate, the rest names itself. */
-private fun templateFor(hit: SymbolHit, fromMembers: Boolean): String {
-    val kind = hit.kind.lowercase()
-    return when {
-        fromMembers || "method" in kind || "function" in kind || "constructor" in kind -> "${hit.name}();"
-        "class" in kind || "interface" in kind || "enum" in kind || "record" in kind -> "${hit.name} x = new ${hit.name}();"
-        else -> hit.name
+        if (fn != null && parseFunctionHeader(fn.signature, kotlin) != null) {
+            BarButton(CaIcons.gear, stringResource(Res.string.block_form_edit_function)) { model.editFunction(fn) }
+        }
+        if (fn != null && kotlin && isComposable(fn)) {
+            BarButton(CaIcons.eye, stringResource(Res.string.block_preview), on = model.previewOpen) { model.previewOpen = !model.previewOpen }
+        }
+        BarButton(CaIcons.layers, stringResource(Res.string.block_palette), on = model.paletteOpen) { model.paletteOpen = !model.paletteOpen }
     }
 }
 
 @Composable
-private fun ActionBar(selection: Selection, ctx: Ctx, modifier: Modifier) {
+private fun BarButton(icon: ImageVector, label: String, on: Boolean = false, onClick: () -> Unit) {
+    Box(
+        Modifier.size(36.dp).clip(RoundedCornerShape(Ca.radius.control))
+            .background(if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, label, Modifier.size(18.dp), tint = if (on) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant) }
+}
+
+@Composable
+private fun Trash(drag: BlockDrag, modifier: Modifier) {
+    val on = drag.overTrash
     Row(
-        modifier.clip(RoundedCornerShape(Ca.radius.lg)).background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.lg)).padding(horizontal = 6.dp, vertical = 5.dp),
+        modifier.clip(RoundedCornerShape(Ca.radius.control))
+            .background(if (on) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceContainerHigh)
+            .onGloballyPositioned { drag.trash["bar"] = it.boundsInRoot() }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        val fg = if (on) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSurfaceVariant
+        Icon(CaIcons.close, null, Modifier.size(16.dp), tint = fg)
+        Text(stringResource(Res.string.block_drop_to_delete), color = fg, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun ActionBar(model: BlockEditorModel, sel: Selection, modifier: Modifier) {
+    Row(
+        modifier.clip(RoundedCornerShape(Ca.radius.lg)).background(Ide.colors.glassThick).padding(horizontal = 6.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (selection.insertCtx != null) {
-            ActionItem(CaIcons.layers, stringResource(Res.string.block_wrap_if)) { ctx.apply(UiBlockEdit.WrapInIf(selection.blockId)) }
-            ActionItem(CaIcons.plus, stringResource(Res.string.block_duplicate)) { val ic = selection.insertCtx; ctx.apply(UiBlockEdit.InsertTemplate(ic.ownerId, ic.slotIndex, ic.index + 1, selection.sourceText)) }
-            Box(Modifier.width(1.dp).height(24.dp).background(MaterialTheme.colorScheme.outlineVariant))
+        val props = remember(sel, model.signatureVersion) { model.propertiesOf(sel) }
+        if (props != null) {
+            ActionItem(CaIcons.plus, stringResource(Res.string.block_properties)) { model.propertySheet = props }
         }
-        ActionItem(CaIcons.close, stringResource(Res.string.delete), tint = MaterialTheme.colorScheme.error) { ctx.apply(UiBlockEdit.DeleteBlock(selection.blockId)) }
+        if (sel.inList) {
+            ActionItem(CaIcons.layers, stringResource(Res.string.block_wrap_if)) { model.wrapInIf(sel) }
+            ActionItem(CaIcons.copy, stringResource(Res.string.block_duplicate)) { model.duplicate(sel) }
+        }
+        ActionItem(CaIcons.close, stringResource(Res.string.delete), tint = MaterialTheme.colorScheme.error) { model.edit(sel.doc, listOf(UiBlockEdit.DeleteBlock(sel.blockId))) }
     }
 }
 
 @Composable
-private fun ActionItem(icon: ImageVector, label: String, tint: Color = MaterialTheme.colorScheme.onSurface, onClick: () -> Unit) {
+private fun ActionItem(icon: ImageVector, label: String, tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface, onClick: () -> Unit) {
     Column(
-        Modifier.widthIn(min = 46.dp).clip(RoundedCornerShape(Ca.radius.sm)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick).padding(horizontal = 8.dp, vertical = 5.dp),
+        Modifier.widthIn(min = 46.dp).clip(RoundedCornerShape(Ca.radius.sm)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
         Icon(icon, label, Modifier.size(18.dp), tint = tint)
@@ -1040,557 +421,1140 @@ private fun ActionItem(icon: ImageVector, label: String, tint: Color = MaterialT
     }
 }
 
+/** The inline editor for the token or socket being typed into, with completion against its document. */
 @Composable
-private fun Hint(text: String) {
-    Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
-    }
+private fun EditOverlay(model: BlockEditorModel, e: EditTarget) {
+    val ins = e.insert
+    // A new argument is typed in place: the source it completes against already has its `, ` / `name = `.
+    val source = model.docText(e.doc).let { t -> if (ins != null && ins.closeAt in 0..t.length) t.substring(0, ins.closeAt) + ins.leading + t.substring(ins.closeAt) else t }
+    val ctx = Ctx(model.path, model.backend, model.scope, source, onEdit = { model.editing = it })
+    InlineInput(e.initial, docStart = e.docStart, expectedValueKind = e.valueKind, ctx = ctx) { text, extra -> model.commit(e, text, extra) }
 }
 
 // ---------------------------------------------------------------------------
-// State + helpers.
+// State.
 // ---------------------------------------------------------------------------
 
-internal data class EditTarget(val blockId: String, val role: String?, val slotIndex: Int?, val initial: String)
-internal data class Selection(val blockId: String, val insertCtx: DropDescriptor.StatementGap?, val sourceText: String)
+/** A token ([role] set) or socket ([slotIndex] set) being typed into. */
+internal data class EditTarget(
+    val doc: DocRef, val blockId: String, val role: String?, val slotIndex: Int?,
+    val initial: String, val docStart: Int, val valueKind: String?,
+    /** Typing a new argument into a hole rather than editing what is there. */
+    val insert: ArgInsert? = null,
+)
 
-/** Everything the canvas composables need: the projected buffer + edit/drag state, plus the host port
- *  ([path]/[backend]/[scope]) so the inline editor can run completion. `startEdit(null)` cancels. */
+/**
+ * Where a new argument goes: argument [index] of segment [link] of [callId], by [name] when set. [closeAt] and
+ * [leading] place it in the source while it is typed (for completion); [key]/[paramIndex] find its hole.
+ */
+internal data class ArgInsert(val callId: String, val link: Int, val index: Int, val name: String?, val closeAt: Int, val leading: String, val key: String, val paramIndex: Int)
+
+/** The selected statement and where it sits (for wrap/duplicate). */
+internal data class Selection(val doc: DocRef, val blockId: String, val ownerId: String, val slotIndex: Int, val index: Int, val inList: Boolean, val text: String)
+
+/**
+ * What the inline editor needs: the document it edits within (for completion), the host port, and a way to
+ * close the editor (`startEdit(null)`).
+ */
 internal class Ctx(
     val path: String,
     val backend: IdeBackend,
     val scope: CoroutineScope,
     val source: String,
-    val editing: EditTarget?,
-    val selectedId: String?,
-    val drag: DragState,
-    val startEdit: (EditTarget?) -> Unit,
-    val select: (Selection?) -> Unit,
-    private val applyEdit: (UiBlockEdit, List<UiTextEdit>) -> Unit,
-    val openPalette: () -> Unit,
-    /** Drill into a deeply-nested expression — re-roots the focus sheet at [node] so it can be read/edited
-     *  in isolation. Default no-op (previews supply their own). */
-    val focus: (UiBlockNode) -> Unit = {},
+    private val onEdit: (EditTarget?) -> Unit,
 ) {
-    /** Apply a block edit, plus [extra] doc-level edits held by inline completion (auto-imports). */
-    fun apply(edit: UiBlockEdit, extra: List<UiTextEdit> = emptyList()) = applyEdit(edit, extra)
+    fun startEdit(t: EditTarget?) = onEdit(t)
 }
 
-private data class Body(val children: List<UiBlockNode>, val ownerId: String, val slotIndex: Int)
+/** The property sheet of call [callId]'s segment [link]: its [optional] parameters still to add, and [sig]'s overloads. */
+internal class PropertySheetState(val callId: String, val link: Int, val key: String, val sig: CallSig, val optional: List<dev.ide.ui.editor.blocks.MissingParam>)
 
-private fun bodyChildren(node: UiBlockNode): Body? {
-    val slots = node.parts.filterIsInstance<UiBlockPart.Slot>()
-    slots.indexOfFirst { it.multiple }.takeIf { it >= 0 }?.let { i -> return Body(slots[i].children, node.id, i) }
-    val blockChild = slots.firstNotNullOfOrNull { s -> s.children.singleOrNull()?.takeIf { it.kind == "block" } }
-    if (blockChild != null) {
-        val inner = blockChild.parts.filterIsInstance<UiBlockPart.Slot>()
-        val mi = inner.indexOfFirst { it.multiple }
-        if (mi >= 0) return Body(inner[mi].children, blockChild.id, mi)
+/** The modifier chain in socket [slotIndex] of [ownerId] (source [start]..[end]), being edited in its sheet. */
+internal class ModifierSheetState(
+    val doc: DocRef, val ownerId: String, val slotIndex: Int, val chain: dev.ide.ui.editor.blocks.ModifierChain, val group: String,
+    val start: Int, val end: Int,
+)
+
+internal class VariableFormState(val existing: OutlineVariable?, val group: String)
+internal class FunctionFormState(val existing: OutlineFunction?, val spec: FunctionSpec?, val group: String)
+
+/** The key the Blocks view keeps its state under in [EditorSession.viewStates]. */
+private const val BLOCKS_VIEW = "blocks"
+
+internal class BlockEditorModel(
+    val path: String,
+    private val session: EditorSession,
+    val backend: IdeBackend,
+    var scope: CoroutineScope,
+) {
+    val kotlin = path.endsWith(".kt") || path.endsWith(".kts")
+    private val wrap = SnippetWrap(kotlin)
+
+    var tree by mutableStateOf<UiBlockNode?>(null); private set
+    var projectedText by mutableStateOf(""); private set
+    var failed by mutableStateOf(false); private set
+    var outline by mutableStateOf<FileOutline?>(null); private set
+    /** A block edit was applied to the file and its projection has not caught up: hold further edits. */
+    var awaitingProjection = false; private set
+
+    var openKey by mutableStateOf<String?>(null); private set
+    var openName by mutableStateOf<String?>(null); private set
+    var openGroup by mutableStateOf<String?>(null); private set
+    /** A function just added: open it once the projection shows it. */
+    private var pendingOpen: Pair<String, String>? = null
+
+    var editing by mutableStateOf<EditTarget?>(null)
+    var selected by mutableStateOf<Selection?>(null)
+    var paletteOpen by mutableStateOf(false)
+    var variableForm by mutableStateOf<VariableFormState?>(null)
+    var functionForm by mutableStateOf<FunctionFormState?>(null)
+    var events by mutableStateOf<List<EventChoice>?>(null)
+    var eventsOpen by mutableStateOf(false)
+    var focus by mutableStateOf<UiBlockNode?>(null)
+    var modifierSheet by mutableStateOf<ModifierSheetState?>(null)
+
+    val canvas = BlockCanvasState()
+    val drag = BlockDrag()
+    var canvasWidth by mutableStateOf(0f)
+    var previewHost: dev.ide.ui.ComposePreviewHost? = null
+    var previewOpen by mutableStateOf(false)
+
+    /**
+     * The `@Preview` that shows [fn]: [fn] itself when it is one, else a preview in the file that calls it,
+     * else null (the pane then shows the file's first preview).
+     */
+    fun previewFor(fn: OutlineFunction): String? {
+        val all = outline?.functions ?: return null
+        if ("@Preview" in fn.signature) return fn.name
+        return all.firstOrNull { p -> "@Preview" in p.signature && Regex("\\b" + Regex.escape(fn.name) + "\\s*\\(").containsMatchIn(slice(DocRef.File, p.node.start, p.node.end)) }?.name
     }
-    return null
-}
 
-private fun bodySlotIndex(node: UiBlockNode): Int {
-    val slots = node.parts.filterIsInstance<UiBlockPart.Slot>()
-    slots.indexOfFirst { it.multiple }.takeIf { it >= 0 }?.let { return it }
-    return slots.indexOfFirst { s -> s.children.singleOrNull()?.kind == "block" }
-}
+    lateinit var measure: dev.ide.ui.editor.blocks.TextMeasure
+    lateinit var geometry: BlockGeometry
+    var labels = BlockLabels()
 
-private fun slotIndexInNode(node: UiBlockNode, part: UiBlockPart): Int =
-    if (part is UiBlockPart.Slot) node.parts.filterIsInstance<UiBlockPart.Slot>().indexOf(part) else -1
+    // ---- the file ----
 
-/** A method's signature text — everything before its `{` body (e.g. `public int sum(int[] xs)`). */
-private fun signatureOf(node: UiBlockNode, source: String): String {
-    val bodyStart = node.parts.filterIsInstance<UiBlockPart.Slot>()
-        .firstNotNullOfOrNull { s -> s.children.singleOrNull()?.takeIf { it.kind == "block" }?.start }
-        ?: node.end
-    return sliceSource(source, node.start, bodyStart).trim().trimEnd('{').trim().replace(Regex("\\s+"), " ")
-}
+    suspend fun reproject() {
+        val text = session.doc.text
+        val projected = runCatching { backend.blocks.projectBlocks(path, text) }
+        val root = projected.getOrNull()
+        tree = root
+        failed = projected.isFailure || root == null
+        projectedText = text
+        outline = root?.let { buildOutline(it, text, kotlin) }
+        awaitingProjection = false
+        editing = null; selected = null
+        pendingOpen?.let { (group, name) ->
+            outline?.functions?.firstOrNull { it.group == group && it.name == name }?.let { open(it); pendingOpen = null }
+        }
+        openKey?.let { key -> outline?.find(key, openName, openGroup)?.let { openKey = it.key; openName = it.name } }
+    }
 
-/** The class name from a class node's header parts (the editable `name` token), or its label. */
-private fun className(cls: UiBlockNode, source: String): String =
-    cls.parts.filterIsInstance<UiBlockPart.Slot>().firstNotNullOfOrNull { s -> s.children.firstOrNull { it.kind == "name_ref" } }
-        ?.let { sliceSource(source, it.start, it.end) } ?: "class"
+    fun open(fn: OutlineFunction) {
+        if (openKey != fn.key) { canvas.reset(); lambdaPages.clear(); scopeFocus = null }
+        openKey = fn.key; openName = fn.name; openGroup = fn.group
+        selected = null; editing = null
+    }
 
-private fun cleanChrome(text: String, strip: Set<String>): String {
-    var t = text
-    for (w in strip) t = t.replace(Regex("\\b" + Regex.escape(w) + "\\b"), "")
-    t = t.filterNot { it in "(){}" }
-    return t.trim().replace(Regex("\\s+"), " ")
-}
+    fun closePage() {
+        if (lambdaPages.isNotEmpty()) { lambdaPages.removeAt(lambdaPages.lastIndex); selected = null; editing = null; return }
+        openKey = null; openName = null; openGroup = null; paletteOpen = false; selected = null; editing = null; scopeFocus = null
+    }
 
-private fun sliceSource(source: String, start: Int, end: Int): String =
-    if (start in 0..source.length && end in start..source.length) source.substring(start, end) else ""
+    /** The scratch page key: stable across a function's body edits (unlike its outline key). */
+    private fun pageOf(fn: OutlineFunction) = "${fn.group}/${fn.kind}:${fn.name}"
 
-/** A subtle drop shadow for depth (the reference's `0 1px 2px`). Used on rounded pills/fields. */
-private fun Modifier.blockShadow(corner: androidx.compose.ui.unit.Dp = BlockMetrics.corner): Modifier =
-    this.shadow(2.dp, RoundedCornerShape(corner), clip = false)
+    // ---- scratch stacks ----
 
-/** A custom vertical layout that overlaps children so a block's bump drops into the next block's notch. */
-@Composable
-private fun InterlockColumn(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    val overlap = BlockMetrics.connDepth - BlockMetrics.stackGap
-    Layout(content, modifier) { measurables, constraints ->
-        val ov = overlap.roundToPx().coerceAtLeast(0)
-        val placeables = measurables.map { it.measure(constraints.copy(minHeight = 0, minWidth = 0)) }
-        val width = (placeables.maxOfOrNull { it.width } ?: 0).coerceIn(constraints.minWidth, constraints.maxWidth)
-        var y = 0
-        val ys = IntArray(placeables.size)
-        placeables.forEachIndexed { i, p -> ys[i] = y; y += (p.height - ov).coerceAtLeast(0) }
-        val height = (if (placeables.isEmpty()) 0 else y + ov).coerceIn(constraints.minHeight, constraints.maxHeight)
-        layout(width, height) { placeables.forEachIndexed { i, p -> p.place(0, ys[i]) } }
+    val scratch = mutableStateListOf<ScratchStack>()
+    private val scratchRoots = mutableStateMapOf<Long, Pair<String, UiBlockNode>>()
+    var scratchVersion by mutableStateOf(0); private set
+    private var nextKey = 1L
+
+    var scratchLoaded = false; private set
+
+    suspend fun loadScratch() {
+        scratchLoaded = true
+        val stacks = ScratchCodec.decode(runCatching { backend.blocks.loadScratchStacks(path) }.getOrNull())
+        scratch.clear(); scratch.addAll(stacks)
+        nextKey = (stacks.maxOfOrNull { it.key } ?: 0L) + 1
+        stacks.forEach { projectScratch(it) }
+    }
+
+    private suspend fun projectScratch(s: ScratchStack) {
+        val wrapped = wrap.wrap(s.text, s.isValue)
+        val root = runCatching { backend.blocks.projectBlocks(path, wrapped) }.getOrNull() ?: return
+        scratchRoots[s.key] = wrapped to root
+        scratchVersion++
+    }
+
+    private fun setScratch(updated: ScratchStack?, key: Long) {
+        val i = scratch.indexOfFirst { it.key == key }
+        if (updated == null || updated.text.isBlank()) {
+            if (i >= 0) scratch.removeAt(i)
+            scratchRoots.remove(key); scratchVersion++
+            return
+        }
+        if (i >= 0) scratch[i] = updated else scratch += updated
+        scope.launch { projectScratch(updated) }
+    }
+
+    private fun addScratch(page: String, at: Offset, text: String, isValue: Boolean) =
+        setScratch(ScratchStack(nextKey, page, at.x, at.y, isValue, text), nextKey++)
+
+    private fun stackOf(doc: DocRef): ScratchStack? = (doc as? DocRef.Scratch)?.let { d -> scratch.firstOrNull { it.key == d.key } }
+
+    fun docText(doc: DocRef): String = when (doc) {
+        DocRef.File -> projectedText
+        is DocRef.Scratch -> scratchRoots[doc.key]?.first ?: ""
+    }
+
+    private fun docRoot(doc: DocRef): UiBlockNode? = when (doc) {
+        DocRef.File -> tree
+        is DocRef.Scratch -> scratchRoots[doc.key]?.second
+    }
+
+    // ---- call signatures ----
+
+    /** The callee parameters of the open page's calls, by [callKey]; filled in after each projection. */
+    private val signatures = mutableStateMapOf<String, CallSig>()
+    /** Optional parameters picked from the property sheet, by call key: shown as holes to fill. */
+    private val revealed = mutableStateMapOf<String, Set<Int>>()
+    /** Calls whose optional parameters are unfolded on the block. */
+    private val expandedCalls = androidx.compose.runtime.mutableStateSetOf<String>()
+    private val overloadChoice = HashMap<String, Int>()
+    var signatureVersion by mutableStateOf(0); private set
+    private var signaturesFor: Pair<String, String>? = null
+
+    /**
+     * Ask the resolver what each call segment on [fn]'s page takes: signature help at the segment's last
+     * argument (or inside its empty `()`), the same query the code editor's parameter popup makes.
+     */
+    suspend fun loadSignatures(fn: OutlineFunction) {
+        val text = projectedText
+        if (signaturesFor == fn.key to text) return
+        signaturesFor = fn.key to text
+        // Where to ask: after the last argument, in an empty `()`, or (a call written with only a trailing
+        // lambda) in a `()` added after its name, so `Column { }` still learns its lambda's receiver.
+        val probes = HashMap<String, Pair<String, Int>>()
+        fun visit(n: UiBlockNode) {
+            if (n.kind == "method_call") {
+                val links = n.parts.count { it is UiBlockPart.Field && it.editable && Regex("name\\d*").matches(it.role) }
+                for (link in 0 until links) {
+                    val seg = segmentParts(n, link) ?: continue
+                    val s = supplied(seg)
+                    val at = s.written.lastOrNull()?.end ?: s.emptySlot?.start
+                    if (at != null) { probes[callKey(n.start, link)] = text to at; continue }
+                    val name = seg.firstOrNull() as? UiBlockPart.Field ?: continue
+                    if (s.trailingLambda && name.end in 0..text.length) {
+                        probes[callKey(n.start, link)] = (text.substring(0, name.end) + "()" + text.substring(name.end)) to name.end + 1
+                    }
+                }
+            }
+            for (p in n.parts) if (p is UiBlockPart.Slot) p.children.forEach(::visit)
+        }
+        visit(fn.node)
+        val resolved = HashMap<String, CallSig>()
+        for ((key, probe) in probes) {
+            val (probed, at) = probe
+            val help = runCatching { backend.editor.signatureHelp(path, probed, at) }.getOrNull() ?: continue
+            if (help.signatures.isEmpty()) continue
+            val overloads = help.signatures.map { sig -> sig.parameters.map { parseParamLabel(it.label, kotlin) } }
+            val chosen = (overloadChoice[key] ?: help.activeSignature).coerceIn(0, overloads.size - 1)
+            resolved[key] = CallSig(overloads, chosen)
+        }
+        if (projectedText != text) return
+        signatures.clear(); signatures.putAll(resolved)
+        signatureVersion++
+    }
+
+    // ---- layout ----
+
+    fun layoutPage(fn: OutlineFunction, hidden: Hidden?, gap: Gap?): dev.ide.ui.editor.blocks.CanvasLayout {
+        val layouter = BlockLayouter(
+            measure, geometry, labels, hidden = hidden, gap = gap, signatures = signatures, revealed = revealed, expandedCalls = expandedCalls,
+            composables = outline?.functions?.filter { "@Composable" in it.signature }?.map { it.name }?.toSet() ?: emptySet(), kotlin = kotlin,
+        )
+        openLambda()?.let { return layouter.layoutLambda(it, lambdaPages.last().title, projectedText) }
+        return layouter.layoutFunction(fn.node, projectedText, scratch.filter { it.page == pageOf(fn) }.mapNotNull { s ->
+            scratchRoots[s.key]?.let { (text, root) -> ScratchInput(s.key, s.x, s.y, root, text, s.isValue) }
+        })
+    }
+
+    fun editRect(index: CanvasIndex): Rect? {
+        val e = editing ?: return null
+        e.insert?.let { ins ->
+            return index.actions.firstOrNull { a ->
+                a.doc == e.doc && when (val it = a.item) {
+                    is LArgHole -> it.key == ins.key && it.paramIndex == ins.paramIndex
+                    is LArgChip -> it.key == ins.key && it.kind == ArgChipKind.Add && ins.paramIndex < 0
+                    else -> false
+                }
+            }?.rect
+        }
+        return if (e.role != null) index.tokens.firstOrNull { it.doc == e.doc && it.token.blockId == e.blockId && it.token.field.role == e.role }?.rect
+        else index.sockets.firstOrNull { it.doc == e.doc && it.socket.ownerId == e.blockId && it.socket.slotIndex == e.slotIndex }?.rect
+    }
+
+    // ---- applying edits ----
+
+    /**
+     * Compile [edits] against [doc]'s projected text, all at once (so their offsets agree), and apply them
+     * with [extra] text edits; [then] runs after. A refused edit (stale ids, overlap) changes nothing.
+     */
+    fun edit(doc: DocRef, edits: List<UiBlockEdit>, extra: List<UiTextEdit> = emptyList(), then: (() -> Unit)? = null) {
+        if (awaitingProjection && doc == DocRef.File) return
+        editing = null; selected = null
+        val text = docText(doc)
+        scope.launch {
+            val compiled = ArrayList<UiTextEdit>()
+            for (e in edits) {
+                val r = runCatching { backend.blocks.applyBlockEdit(path, text, e) }.getOrDefault(emptyList())
+                if (r.isEmpty()) return@launch
+                compiled += r
+            }
+            applyText(doc, text, compiled + extra)
+            then?.invoke()
+        }
+    }
+
+    private fun applyText(doc: DocRef, text: String, all: List<UiTextEdit>) {
+        if (all.isEmpty()) return
+        when (doc) {
+            DocRef.File -> {
+                if (applyTextEdits(text, all) == null) return
+                awaitingProjection = true
+                session.applyEdits(all.map { RangeEdit(it.start, it.end, it.newText, it.start + it.newText.length) }, TextRange(all.minOf { it.start }.coerceAtLeast(0)))
+            }
+            is DocRef.Scratch -> {
+                val s = stackOf(doc) ?: return
+                val next = applyTextEdits(text, all)?.let { wrap.unwrap(it, s.isValue) } ?: return
+                setScratch(s.copy(text = next), s.key)
+            }
+        }
+    }
+
+    // ---- taps ----
+
+    fun tap(hit: CanvasIndex.Hit?, index: CanvasIndex, fn: OutlineFunction) {
+        editing = null
+        when (hit) {
+            null -> selected = null
+            is CanvasIndex.Hit.Action -> argAction(hit.placed)
+            is CanvasIndex.Hit.Token -> {
+                val f = hit.placed.token.field
+                if (f.editable) editing = EditTarget(hit.placed.doc, hit.placed.token.blockId, f.role, null, f.text, f.start, null)
+            }
+            is CanvasIndex.Hit.Socket -> editSocket(hit.placed.doc, hit.placed.socket.ownerId, hit.placed.socket.slotIndex, hit.placed.socket.slot)
+            is CanvasIndex.Hit.Block -> {
+                val p = hit.placed
+                val b = p.block
+                when {
+                    b.kind == LKind.Hat -> editFunction(fn)
+                    b.kind == LKind.Chip -> focus = b.node
+                    b.modifierChain && p.site is BlockSite.InSocket -> {
+                        val site = p.site as BlockSite.InSocket
+                        val n = b.node ?: return
+                        val src = docText(site.doc)
+                        val text = slice(site.doc, n.start, n.end)
+                        val second = text.substringAfter('\n', "").takeWhile { it == ' ' || it == '\t' }
+                        val indent = if ('\n' in text) second else indentAt(src, n.start) + "    "
+                        parseModifierChain(text, indent)?.let { modifierSheet = ModifierSheetState(site.doc, site.ownerId, site.slotIndex, it, fn.group, n.start, n.end) }
+                            ?: editSocket(site.doc, site.ownerId, site.slotIndex, findSlot(site.doc, site.ownerId, site.slotIndex) ?: return)
+                    }
+                    p.site is BlockSite.InSocket -> {
+                        val site = p.site as BlockSite.InSocket
+                        val slot = findSlot(site.doc, site.ownerId, site.slotIndex) ?: return
+                        editSocket(site.doc, site.ownerId, site.slotIndex, slot)
+                    }
+                    p.site is BlockSite.InList -> {
+                        val site = p.site as BlockSite.InList
+                        val id = b.id ?: return
+                        selected = if (selected?.blockId == id && selected?.doc == site.doc) null
+                        else Selection(site.doc, id, site.ownerId, site.slotIndex, site.index, site.droppable, b.node?.let { slice(site.doc, it.start, it.end) } ?: "")
+                        // The body this block sits in becomes the palette's scope, if it is a scoped lambda.
+                        if (site.doc == DocRef.File) scopeOfBody(site.ownerId)?.let { (call, link) -> focusScope(site.ownerId, site.slotIndex, call.id, link) }
+                    }
+                }
+            }
+        }
+    }
+
+    /** A tap on an argument hole (type the argument), `+N`/`−` (show or fold optional ones), or `1/3`. */
+    private fun argAction(placed: dev.ide.ui.editor.blocks.PlacedAction) {
+        when (val item = placed.item) {
+            is LArgHole -> editing = EditTarget(
+                placed.doc, item.callId, null, null, "", docStart = if (item.closeAt >= 0) item.closeAt + item.leading.length else -1,
+                valueKind = item.shape.name.lowercase(), insert = ArgInsert(item.callId, item.link, item.insertIndex, if (item.named) item.name else null, item.closeAt, item.leading, item.key, item.paramIndex),
+            )
+            is LArgChip -> when (item.kind) {
+                ArgChipKind.More -> { expandedCalls += item.key; signatureVersion++ }
+                ArgChipKind.Fewer -> { expandedCalls -= item.key; signatureVersion++ }
+                ArgChipKind.Overload -> {}
+                ArgChipKind.Add -> editing = EditTarget(
+                    placed.doc, item.callId, null, null, "", docStart = if (item.closeAt >= 0) item.closeAt + item.leading.length else -1,
+                    valueKind = null, insert = ArgInsert(item.callId, item.link, item.insertIndex, null, item.closeAt, item.leading, item.key, -1),
+                )
+                ArgChipKind.Open -> node(placed.doc, item.key)?.let { block ->
+                    val call = node(placed.doc, item.callId)
+                    val name = call?.let { segmentParts(it, item.link)?.firstOrNull() as? UiBlockPart.Field }?.text ?: ""
+                    lambdaPages += LambdaPage(block.start, "$name { }")
+                    selected = null
+                }
+                ArgChipKind.Scope -> {
+                    val (owner, slot) = item.key.substringBeforeLast(':') to (item.key.substringAfterLast(':').toIntOrNull() ?: 0)
+                    focusScope(owner, slot, item.callId, item.link)
+                    scopePickerOpen = true
+                }
+            }
+            else -> {}
+        }
+    }
+
+    private fun editSocket(doc: DocRef, ownerId: String, slotIndex: Int, slot: UiBlockPart.Slot) {
+        editing = EditTarget(doc, ownerId, null, slotIndex, slice(doc, slot.start, slot.end), slot.start, slot.valueKind)
+    }
+
+    // ---- lambda pages ----
+
+    /** A lambda body opened on its own page: found again by its source start, titled after its call. */
+    data class LambdaPage(val start: Int, val title: String)
+
+    /** Lambda bodies opened from the current function page, innermost last. */
+    val lambdaPages = mutableStateListOf<LambdaPage>()
+
+    /** The `{ … }` block node of the innermost open lambda page, if it is still in the file. */
+    fun openLambda(): UiBlockNode? {
+        val page = lambdaPages.lastOrNull() ?: return null
+        return tree?.let { root -> findFirst(root) { it.kind == "block" && it.start == page.start } }
+    }
+
+    // ---- scopes ----
+
+    /** A lambda body in focus for the palette's Scope tab: its list slot, and the call whose lambda it is. */
+    data class ScopeFocus(val ownerId: String, val slotIndex: Int, val callId: String, val link: Int, val receiver: String)
+
+    var scopeFocus by mutableStateOf<ScopeFocus?>(null); private set
+    var scopeFunctions by mutableStateOf<List<PaletteTemplate>?>(null); private set
+    var scopePickerOpen by mutableStateOf(false)
+    private var scopeJob: kotlinx.coroutines.Job? = null
+
+    /** The call (and segment) whose trailing lambda is the body block [bodyId], if it runs with a receiver. */
+    private fun scopeOfBody(bodyId: String): Pair<UiBlockNode, Int>? {
+        val root = tree ?: return null
+        var found: Pair<UiBlockNode, Int>? = null
+        findFirst(root) { n ->
+            if (n.kind == "method_call") {
+                val at = n.parts.indexOfFirst { p -> p is UiBlockPart.Slot && p.category == "STATEMENT" && p.children.singleOrNull()?.id == bodyId }
+                if (at >= 0) {
+                    val link = (n.parts.subList(0, at).count { it is UiBlockPart.Field && it.editable && Regex("name\\d*").matches(it.role) } - 1).coerceAtLeast(0)
+                    val sig = signatures[callKey(n.start, link)]
+                    if (sig != null && dev.ide.ui.editor.blocks.lambdaReceiver(sig.params.lastOrNull()?.type ?: "") != null) found = n to link
+                }
+            }
+            found != null
+        }
+        return found
+    }
+
+    /** Make the lambda body [ownerId]'s list the palette's scope, and load what it can call. */
+    fun focusScope(ownerId: String, slotIndex: Int, callId: String, link: Int) {
+        val call = node(DocRef.File, callId) ?: return
+        val receiver = signatures[callKey(call.start, link)]?.params?.lastOrNull()?.type?.let { dev.ide.ui.editor.blocks.lambdaReceiver(it) } ?: return
+        val focus = ScopeFocus(ownerId, slotIndex, callId, link, receiver)
+        if (focus == scopeFocus && scopeFunctions != null) return
+        scopeFocus = focus
+        scopeFunctions = null
+        scopeJob?.cancel()
+        scopeJob = scope.launch { scopeFunctions = loadScopeFunctions(focus) }
+    }
+
+    /**
+     * What a lambda body's scope adds: completion on an empty line at the end of the body, less completion on
+     * an empty line at the top of the enclosing function (functions only), each as a call template carrying
+     * the import completion would add for it.
+     */
+    private suspend fun loadScopeFunctions(focus: ScopeFocus): List<PaletteTemplate> {
+        val src = projectedText
+        val owner = node(DocRef.File, focus.ownerId) ?: return emptyList()
+        val list = owner.parts.filterIsInstance<UiBlockPart.Slot>().getOrNull(focus.slotIndex) ?: return emptyList()
+        val inside = list.children.lastOrNull()?.end ?: list.start
+        val fn = outline?.find(openKey ?: "", openName, openGroup)
+        val fnBody = fn?.let { bodyOf(it.node) }
+        val fnList = fnBody?.let { b -> node(DocRef.File, b.ownerId)?.parts?.filterIsInstance<UiBlockPart.Slot>()?.getOrNull(b.slotIndex) }
+        val outside = fnList?.start ?: return emptyList()
+        suspend fun methodsAt(at: Int): List<dev.ide.ui.backend.UiCompletionItem> {
+            val indent = indentAt(src, at) + "    "
+            val probed = src.substring(0, at) + "\n" + indent + src.substring(at)
+            val result = runCatching { backend.editor.complete(path, probed, at + 1 + indent.length) }.getOrNull() ?: return emptyList()
+            return result.items.filter { it.kind == dev.ide.ui.backend.UiCompletionKind.Method }
+        }
+        val outer = methodsAt(outside).map { it.label }.toSet()
+        return methodsAt(inside).filter { it.label !in outer }.distinctBy { it.label }.sortedBy { it.label.lowercase() }.take(40).map { item ->
+            val imports = item.additionalEdits.mapNotNull { Regex("import\\s+([\\w.]+)").find(it.newText)?.groupValues?.get(1) }
+            PaletteTemplate(dev.ide.ui.editor.blocks.callTemplate(item.label), false, imports)
+        }
+    }
+
+    /** Add [t] at the end of the focused scope's body (the scope `+` handle's quick list). */
+    fun insertInScope(t: PaletteTemplate) {
+        val focus = scopeFocus ?: return
+        scopePickerOpen = false
+        val owner = node(DocRef.File, focus.ownerId) ?: return
+        val size = owner.parts.filterIsInstance<UiBlockPart.Slot>().getOrNull(focus.slotIndex)?.children?.size ?: return
+        val plain = withoutBody(t.text)
+        edit(DocRef.File, listOf(UiBlockEdit.InsertTemplate(focus.ownerId, focus.slotIndex, size, plain)), importsFor(DocRef.File, plain) + templateImports(t))
+    }
+
+    /** The import edits a template's own imports need in the file now. */
+    private fun templateImports(t: PaletteTemplate): List<UiTextEdit> {
+        if (t.imports.isEmpty() || !kotlin) return emptyList()
+        val declared = Regex("^\\s*import\\s+([\\w.]*\\w(?:\\.\\*)?)", RegexOption.MULTILINE).findAll(projectedText).map { it.groupValues[1] }.toSet()
+        return dev.ide.ui.editor.blocks.importEdits(projectedText, t.imports.filter { it !in declared && "${it.substringBeforeLast('.')}.*" !in declared })
+    }
+
+    // ---- the property picker ----
+
+    /** The selected statement's call (a Kotlin call statement, or what a Java expression statement calls). */
+    private fun callOf(sel: Selection): UiBlockNode? {
+        val n = node(sel.doc, sel.blockId) ?: return null
+        if (n.kind == "method_call") return n
+        return n.parts.filterIsInstance<UiBlockPart.Slot>().firstNotNullOfOrNull { s -> s.children.singleOrNull()?.takeIf { it.kind == "method_call" } }
+    }
+
+    /** What the property sheet for the selection offers, or null when the callee is not known. */
+    fun propertiesOf(sel: Selection): PropertySheetState? {
+        if (sel.doc != DocRef.File) return null
+        val call = callOf(sel) ?: return null
+        val links = call.parts.count { it is UiBlockPart.Field && it.editable && Regex("name\\d*").matches(it.role) }
+        val link = (links - 1).coerceAtLeast(0)
+        val key = callKey(call.start, link)
+        val sig = signatures[key] ?: return null
+        val seg = segmentParts(call, link) ?: return null
+        val s = supplied(seg)
+        val open = dev.ide.ui.editor.blocks.missingParams(sig, s, kotlin, expanded = true).first.filter { it.param.optional && it.index !in (revealed[key] ?: emptySet()) }
+        if (open.isEmpty() && sig.overloads.size < 2) return null
+        return PropertySheetState(call.id, link, key, sig, open)
+    }
+
+    var propertySheet by mutableStateOf<PropertySheetState?>(null)
+
+    /** Show optional parameter [m] as a hole on its call and start typing into it. */
+    fun pickProperty(state: PropertySheetState, m: dev.ide.ui.editor.blocks.MissingParam) {
+        propertySheet = null
+        revealed[state.key] = (revealed[state.key] ?: emptySet()) + m.index
+        signatureVersion++
+        val call = node(DocRef.File, state.callId) ?: return
+        val s = supplied(segmentParts(call, state.link) ?: return)
+        val closeAt = s.written.lastOrNull()?.end ?: s.emptySlot?.start ?: -1
+        val named = m.named || !(m.index == s.positional && s.named.isEmpty())
+        val leading = (if (s.written.isNotEmpty()) ", " else "") + if (named && m.param.name != null) "${m.param.name} = " else ""
+        editing = EditTarget(
+            DocRef.File, state.callId, null, null, "", docStart = if (closeAt >= 0) closeAt + leading.length else -1,
+            valueKind = dev.ide.ui.editor.blocks.shapeOfType(m.param.type).name.lowercase(),
+            insert = ArgInsert(state.callId, state.link, if (named) s.written.size else m.index, if (named) m.param.name else null, closeAt, leading, state.key, m.index),
+        )
+    }
+
+    fun pickOverload(state: PropertySheetState, index: Int) {
+        overloadChoice[state.key] = index
+        signatures[state.key]?.let { signatures[state.key] = it.copy(chosen = index) }
+        signatureVersion++
+        propertySheet = null
+    }
+
+    /** For a Kotlin file: the imports [code] would need here, as edits (none for a scratch stack or Java). */
+    fun importsFor(doc: DocRef, code: String): List<UiTextEdit> =
+        if (!kotlin || doc != DocRef.File) emptyList() else dev.ide.ui.editor.blocks.importEdits(projectedText, dev.ide.ui.editor.blocks.missingImports(code, projectedText))
+
+    /** Write what was typed into [e]: a token, a socket, or a new argument. */
+    fun commit(e: EditTarget, text: String, extra: List<UiTextEdit>) {
+        editing = null
+        val ins = e.insert
+        val edit = when {
+            ins != null -> if (text.isBlank()) null else UiBlockEdit.InsertArgument(ins.callId, ins.link, ins.index, (ins.name?.let { "$it = " } ?: "") + text.trim())
+            e.role != null -> UiBlockEdit.SetField(e.blockId, e.role, text)
+            // Clearing an argument removes it (and its comma) rather than leaving `f(a, )`.
+            text.isBlank() && isArgument(e.doc, e.blockId, e.slotIndex ?: 0) -> UiBlockEdit.RemoveArgument(e.blockId, e.slotIndex ?: 0)
+            else -> UiBlockEdit.ReplaceSlot(e.blockId, e.slotIndex ?: 0, text)
+        } ?: return
+        // Auto-import edits sit above the insertion point, so they apply to the file as they are.
+        edit(e.doc, listOf(edit), if (e.doc == DocRef.File) extra.filter { ins == null || it.end <= ins.closeAt } else emptyList())
+    }
+
+    /** Whether slot [slotIndex] of [ownerId] is a call argument holding a value. */
+    fun isArgument(doc: DocRef, ownerId: String, slotIndex: Int): Boolean =
+        findSlot(doc, ownerId, slotIndex)?.let { it.category == "ARGUMENT" && it.children.isNotEmpty() } == true
+
+    private fun slice(doc: DocRef, start: Int, end: Int): String {
+        val t = docText(doc)
+        return if (start in 0..t.length && end in start..t.length) t.substring(start, end) else ""
+    }
+
+    private fun node(doc: DocRef, id: String): UiBlockNode? = docRoot(doc)?.let { r -> findFirst(r) { it.id == id } }
+
+    private fun findSlot(doc: DocRef, ownerId: String, slotIndex: Int): UiBlockPart.Slot? =
+        node(doc, ownerId)?.parts?.filterIsInstance<UiBlockPart.Slot>()?.getOrNull(slotIndex)
+
+    // ---- the action bar ----
+
+    fun wrapInIf(sel: Selection) = edit(sel.doc, listOf(UiBlockEdit.WrapRange(sel.blockId, 1, "if (true) {\n$BODY\n}")))
+
+    fun duplicate(sel: Selection) {
+        val text = dedent(sel.text, indentAt(docText(sel.doc), node(sel.doc, sel.blockId)?.start ?: 0))
+        edit(sel.doc, listOf(UiBlockEdit.InsertTemplate(sel.ownerId, sel.slotIndex, sel.index + 1, text)))
+    }
+
+    // ---- dragging ----
+
+    /** What pressing [hit] lifts: the statement and those below it, a value, or a whole scratch value. */
+    fun startDrag(hit: CanvasIndex.Hit, index: CanvasIndex, at: Offset): ActiveDrag? {
+        if (awaitingProjection) return null
+        editing = null; selected = null
+        val placed = when (hit) {
+            is CanvasIndex.Hit.Action -> return null
+            is CanvasIndex.Hit.Block -> hit.placed
+            is CanvasIndex.Hit.Token -> index.block(hit.placed.doc, hit.placed.token.blockId)
+            is CanvasIndex.Hit.Socket -> index.block(hit.placed.doc, hit.placed.socket.ownerId)
+        } ?: return null
+        val doc = placed.site.doc
+        val grab = at - placed.rect.topLeft
+        val layouter = BlockLayouter(measure, geometry, labels, kotlin = kotlin)
+        val text = docText(doc)
+        return when (val site = placed.site) {
+            is BlockSite.InList -> {
+                val owner = node(doc, site.ownerId) ?: return null
+                val list = owner.parts.filterIsInstance<UiBlockPart.Slot>().getOrNull(site.slotIndex)?.children ?: return null
+                val count = if (site.droppable) site.tail else 1
+                val run = list.drop(site.index).take(count).ifEmpty { return null }
+                val runText = text.substring(run.first().start, run.last().end)
+                val whole = doc is DocRef.Scratch && site.index == 0 && run.size == list.size
+                val body = layouter.layoutStatements(run, text, doc)
+                ActiveDrag(
+                    DragPayload.Run(doc, run.first().id, run.size, run.map { it.id }.toSet(), runText, indentAt(text, run.first().start), whole),
+                    body, null, dragShapeOf(body, null), grab,
+                )
+            }
+            is BlockSite.InSocket -> {
+                val value = placed.block.node ?: return null
+                val v = layouter.layoutReporter(value, text, doc)
+                ActiveDrag(
+                    DragPayload.Value(doc, site.ownerId, site.slotIndex, value.id, text.substring(value.start, value.end), false, argument = isArgument(doc, site.ownerId, site.slotIndex)),
+                    null, v, dragShapeOf(null, v), grab,
+                )
+            }
+            is BlockSite.Top -> {
+                // A scratch stack's lone value lifts whole; a function's hat does not move.
+                if (doc !is DocRef.Scratch || placed.block.kind == LKind.Hat) return null
+                val value = placed.block.node ?: return null
+                val (ownerId, slot) = parentSlot(doc, value.id) ?: return null
+                val v = layouter.layoutReporter(value, text, doc)
+                ActiveDrag(DragPayload.Value(doc, ownerId, slot, value.id, text.substring(value.start, value.end), true), null, v, dragShapeOf(null, v), grab)
+            }
+        }
+    }
+
+    private fun parentSlot(doc: DocRef, id: String): Pair<String, Int>? {
+        val root = docRoot(doc) ?: return null
+        var found: Pair<String, Int>? = null
+        findFirst(root) { n ->
+            val slots = n.parts.filterIsInstance<UiBlockPart.Slot>()
+            val i = slots.indexOfFirst { s -> s.children.any { it.id == id } }
+            if (i >= 0) found = n.id to i
+            found != null
+        }
+        return found
+    }
+
+    /**
+     * Resolve a drop. Within one document a move is one batch of edits; between the file and a scratch
+     * stack it is an insert in one and a removal from the other. Nothing under the drop and not the trash:
+     * the blocks become (or move) a scratch stack at [landing].
+     */
+    fun drop(d: ActiveDrag, target: DropTarget?, landing: Offset, trash: Boolean, fn: OutlineFunction) {
+        val page = pageOf(fn)
+        when (val p = d.payload) {
+            is DragPayload.Run -> dropRun(p, d, target, landing, trash, page)
+            is DragPayload.Value -> dropValue(p, target, landing, trash, page)
+            is DragPayload.Template -> dropTemplate(p.template, target, landing, page)
+        }
+    }
+
+    private fun dropRun(p: DragPayload.Run, d: ActiveDrag, target: DropTarget?, landing: Offset, trash: Boolean, page: String) {
+        val text = dedent(p.text, p.indent)
+        val remove: () -> Unit = {
+            val s = stackOf(p.doc)
+            if (p.wholeScratch && s != null) setScratch(null, s.key)
+            else edit(p.doc, listOf(UiBlockEdit.DeleteRange(p.firstId, p.count)))
+        }
+        when {
+            trash -> remove()
+            target is DropTarget.Stack -> {
+                if (target.above) stackOf(target.doc)?.let { s -> setScratch(s.copy(y = s.y - d.shape.height), s.key) }
+                if (target.doc == p.doc) edit(p.doc, listOf(UiBlockEdit.MoveRange(p.firstId, p.count, target.ownerId, target.slotIndex, target.index)))
+                else edit(target.doc, listOf(UiBlockEdit.InsertTemplate(target.ownerId, target.slotIndex, target.index, text)), then = remove)
+            }
+            target is DropTarget.Wrap -> {
+                val template = wrapTemplate(p) ?: return
+                if (target.doc == p.doc) {
+                    if (wrapContains(target, p)) return
+                    edit(p.doc, listOf(UiBlockEdit.WrapRange(target.firstId, target.count, template), UiBlockEdit.DeleteRange(p.firstId, p.count)))
+                } else edit(target.doc, listOf(UiBlockEdit.WrapRange(target.firstId, target.count, template)), then = remove)
+            }
+            target is DropTarget.Socket -> {}
+            p.wholeScratch -> stackOf(p.doc)?.let { s -> setScratch(s.copy(x = landing.x, y = landing.y), s.key) }
+            else -> { addScratch(page, landing, text, isValue = false); remove() }
+        }
+    }
+
+    /** A lifted C-block as a wrap template: its empty body replaced by the body marker. */
+    private fun wrapTemplate(p: DragPayload.Run): String? {
+        if (p.count != 1) return null
+        val block = node(p.doc, p.firstId) ?: return null
+        val bodyAt = emptyBodyOffset(block) ?: return null
+        val rel = bodyAt - block.start
+        val t = p.text
+        if (rel !in 0..t.length) return null
+        return dedent(t.substring(0, rel).trimEnd() + "\n" + BODY + "\n" + t.substring(rel).trimStart(), p.indent)
+    }
+
+    private fun emptyBodyOffset(block: UiBlockNode): Int? {
+        for (part in block.parts) {
+            val slot = part as? UiBlockPart.Slot ?: continue
+            val child = slot.children.singleOrNull() ?: continue
+            if (slot.category == "STATEMENT" && child.kind == "block") {
+                val list = child.parts.filterIsInstance<UiBlockPart.Slot>().firstOrNull { it.multiple } ?: return null
+                return if (list.children.isEmpty()) list.start else null
+            }
+        }
+        return null
+    }
+
+    /** Whether the list a C-block would wrap holds the C-block itself. */
+    private fun wrapContains(t: DropTarget.Wrap, p: DragPayload.Run): Boolean {
+        val first = node(t.doc, t.firstId) ?: return true
+        val (owner, slot) = parentSlot(t.doc, first.id) ?: return true
+        val list = node(t.doc, owner)?.parts?.filterIsInstance<UiBlockPart.Slot>()?.getOrNull(slot)?.children ?: return true
+        val dragged = node(p.doc, p.firstId) ?: return true
+        return dragged.start >= list.first().start && dragged.end <= list.last().end
+    }
+
+    private fun dropValue(p: DragPayload.Value, target: DropTarget?, landing: Offset, trash: Boolean, page: String) {
+        // Lifting a call's argument takes the argument out, comma and all; any other value leaves its socket empty.
+        val clear = if (p.argument) UiBlockEdit.RemoveArgument(p.ownerId, p.slotIndex) else UiBlockEdit.ReplaceSlot(p.ownerId, p.slotIndex, "")
+        val remove: () -> Unit = {
+            val s = stackOf(p.doc)
+            if (p.wholeScratch && s != null) setScratch(null, s.key)
+            else edit(p.doc, listOf(clear))
+        }
+        when {
+            trash -> remove()
+            target is DropTarget.Socket -> {
+                if (target.doc == p.doc && !p.wholeScratch) {
+                    edit(p.doc, listOf(UiBlockEdit.ReplaceSlot(target.ownerId, target.slotIndex, p.text), clear))
+                } else edit(target.doc, listOf(UiBlockEdit.ReplaceSlot(target.ownerId, target.slotIndex, p.text)), then = remove)
+            }
+            target != null -> {}
+            p.wholeScratch -> stackOf(p.doc)?.let { s -> setScratch(s.copy(x = landing.x, y = landing.y), s.key) }
+            else -> { addScratch(page, landing, p.text, isValue = true); remove() }
+        }
+    }
+
+    private fun dropTemplate(t: PaletteTemplate, target: DropTarget?, landing: Offset, page: String) {
+        val plain = withoutBody(t.text)
+        when (target) {
+            is DropTarget.Stack -> {
+                if (target.above) stackOf(target.doc)?.let { s -> setScratch(s.copy(y = s.y - templateHeight(t)), s.key) }
+                edit(target.doc, listOf(UiBlockEdit.InsertTemplate(target.ownerId, target.slotIndex, target.index, plain)), importsFor(target.doc, plain) + if (target.doc == DocRef.File) templateImports(t) else emptyList())
+            }
+            is DropTarget.Wrap -> if (BODY in t.text) edit(target.doc, listOf(UiBlockEdit.WrapRange(target.firstId, target.count, t.text)), importsFor(target.doc, plain))
+            is DropTarget.Socket -> edit(target.doc, listOf(UiBlockEdit.ReplaceSlot(target.ownerId, target.slotIndex, plain)), importsFor(target.doc, plain))
+            null -> addScratch(page, landing, plain, t.isValue)
+        }
+    }
+
+    private fun templateHeight(t: PaletteTemplate): Float = paletteCache[t]?.let { it.body?.h ?: it.value?.h } ?: 0f
+
+    // ---- the palette ----
+
+    private val paletteCache = mutableStateMapOf<PaletteTemplate, PaletteEntry>()
+    var paletteQuery by mutableStateOf(""); private set
+    var searchResults by mutableStateOf<List<PaletteEntry>>(emptyList()); private set
+    var searching by mutableStateOf(false); private set
+    private var searchJob: kotlinx.coroutines.Job? = null
+
+    fun categories(kotlin: Boolean): List<PaletteCategory> = PaletteCategory.entries.filter {
+        when (it) {
+            PaletteCategory.Compose -> kotlin && "androidx.compose" in projectedText
+            PaletteCategory.Scope -> scopeFocus != null
+            else -> true
+        }
+    }
+
+    private fun templatesFor(c: PaletteCategory, outline: FileOutline, fn: OutlineFunction): List<PaletteTemplate> =
+        if (c == PaletteCategory.Variables) variableTemplates(dev.ide.ui.editor.blocks.localNames(fn, projectedText) + parameterNames(fn, kotlin) + variablesInScope(outline, fn).map { it.name }, kotlin)
+        else paletteTemplates(c, kotlin)
+
+    fun paletteEntries(c: PaletteCategory, outline: FileOutline, fn: OutlineFunction): List<PaletteEntry> {
+        val templates = if (c == PaletteCategory.Scope) scopeFunctions ?: emptyList() else templatesFor(c, outline, fn)
+        if (c == PaletteCategory.Scope) templates.filter { it !in paletteCache }.forEach { t -> scope.launch { projectTemplate(t) } }
+        return templates.map { paletteCache[it] ?: PaletteEntry(it, null, null) }
+    }
+
+    /** Project every template on the page's palette, category by category, so each is drawn as itself. */
+    suspend fun paletteFor(outline: FileOutline, fn: OutlineFunction?) {
+        fn ?: return
+        for (c in categories(kotlin)) if (c != PaletteCategory.Scope) for (t in templatesFor(c, outline, fn)) projectTemplate(t)
+    }
+
+    private suspend fun projectTemplate(t: PaletteTemplate): PaletteEntry? {
+        paletteCache[t]?.let { return it }
+        val wrapped = wrap.wrap(withoutBody(t.text), t.isValue)
+        val root = runCatching { backend.blocks.projectBlocks(path, wrapped) }.getOrNull() ?: return null
+        val content = scratchContent(root, t.isValue) ?: return null
+        val layouter = BlockLayouter(measure, geometry, labels, kotlin = kotlin)
+        val entry = if (t.isValue) content.value?.let { PaletteEntry(t, null, layouter.layoutReporter(it, wrapped, DocRef.File)) }
+        else content.body?.takeIf { it.children.isNotEmpty() }?.let { PaletteEntry(t, layouter.layoutStatements(it.children, wrapped, DocRef.File), null) }
+        if (entry != null) paletteCache[t] = entry
+        return entry
+    }
+
+    /** Search the palette: matching templates, plus project symbols and classpath members as calls/types. */
+    fun searchPalette(q: String) {
+        paletteQuery = q
+        searchJob?.cancel()
+        if (q.isBlank()) { searchResults = emptyList(); searching = false; return }
+        searchJob = scope.launch {
+            searching = true
+            delay(150)
+            val query = q.trim()
+            val statics = PaletteCategory.entries.flatMap { paletteTemplates(it, kotlin) }.filter { query.lowercase() in it.text.lowercase() }
+            val symbols = runCatching { backend.search.searchSymbols(query, 10) }.getOrDefault(emptyList())
+            val members = runCatching { backend.search.searchMembers(query, 10) }.getOrDefault(emptyList())
+            val hits = (symbols.map { it to false } + members.map { it to true }).map { (h, member) ->
+                val kind = h.kind.lowercase()
+                when {
+                    member || "method" in kind || "function" in kind -> PaletteTemplate(if (kotlin) "${h.name}()" else "${h.name}();", false)
+                    "class" in kind || "interface" in kind || "enum" in kind || "record" in kind || "object" in kind ->
+                        PaletteTemplate(if (kotlin) "val value = ${h.name}()" else "${h.name} value = new ${h.name}();", false)
+                    else -> PaletteTemplate(h.name, true)
+                }
+            }
+            val all = (statics + hits).distinct()
+            searchResults = all.map { paletteCache[it] ?: PaletteEntry(it, null, null) }
+            for (t in all) projectTemplate(t)?.let { e -> searchResults = searchResults.map { if (it.template == t) e else it } }
+            searching = false
+        }
+    }
+
+    // ---- form suggestions ----
+
+    /**
+     * Completion for a form field, from the same engine the code editor uses: [text] is placed where it would
+     * sit in the file (a type annotation, an `@annotation`, an initializer) at the end of the group the
+     * declaration goes into, and the items for that position come back as whole-field replacements, each
+     * with the auto-import it needs. Modifiers are the language's keywords.
+     */
+    suspend fun suggest(kind: FieldKind, text: String, groupKey: String): List<Suggestion> {
+        if (kind == FieldKind.Modifier) return modifierSuggestions(text)
+        val outline = outline ?: return emptyList()
+        val src = projectedText
+        val group = outline.groups.firstOrNull { it.key == groupKey } ?: outline.groups.firstOrNull { it.body != null } ?: return emptyList()
+        val body = group.body ?: return emptyList()
+        val owner = node(DocRef.File, body.ownerId) ?: return emptyList()
+        val list = owner.parts.filterIsInstance<UiBlockPart.Slot>().getOrNull(body.slotIndex) ?: return emptyList()
+        val at = list.children.lastOrNull()?.end?.let { e -> if (src.getOrNull(e) == ';') e + 1 else e } ?: list.start
+        val indent = list.children.firstOrNull()?.let { indentAt(src, it.start) } ?: "    "
+        val lead = when (kind) {
+            FieldKind.Type -> if (kotlin) "val __probe: " else ""
+            FieldKind.Annotation -> "@"
+            FieldKind.Value -> if (kotlin) "val __probe = " else "Object __probe = "
+            FieldKind.Modifier -> ""
+        }
+        val bare = if (kind == FieldKind.Annotation) text.removePrefix("@") else text
+        val probe = "\n" + indent + lead + bare
+        val probed = src.substring(0, at) + probe + src.substring(at)
+        val caret = at + probe.length
+        val result = runCatching { backend.editor.complete(path, probed, caret) }.getOrNull() ?: return emptyList()
+        val fieldStart = caret - bare.length
+        val tokenStart = (result.replaceStart - fieldStart).coerceIn(0, bare.length)
+        val typeKinds = setOf(
+            dev.ide.ui.backend.UiCompletionKind.Class, dev.ide.ui.backend.UiCompletionKind.Interface, dev.ide.ui.backend.UiCompletionKind.Enum,
+            dev.ide.ui.backend.UiCompletionKind.Record, dev.ide.ui.backend.UiCompletionKind.TypeParameter, dev.ide.ui.backend.UiCompletionKind.AnnotationType,
+        )
+        return result.items.asSequence()
+            .filter { item ->
+                when (kind) {
+                    FieldKind.Type, FieldKind.Annotation -> item.kind in typeKinds
+                    else -> item.kind != dev.ide.ui.backend.UiCompletionKind.Snippet && item.kind != dev.ide.ui.backend.UiCompletionKind.Word
+                }
+            }
+            .filter { "__probe" !in it.label }
+            .take(8)
+            .map { item ->
+                val replaced = bare.substring(0, tokenStart) + item.insertText
+                Suggestion(item.label, item.container ?: item.detail, if (kind == FieldKind.Annotation) "@$replaced" else replaced, item.additionalEdits.filter { it.end <= at })
+            }
+            .toList()
+    }
+
+    /**
+     * [chain] written back in place of the sheet's expression with link [link]'s arguments set to [args], and
+     * the offset just after them: the real call site, so completion and parameter info answer for that link.
+     */
+    private fun probeModifier(sheet: ModifierSheetState, chain: dev.ide.ui.editor.blocks.ModifierChain, link: Int, args: String): Pair<String, Int>? {
+        if (sheet.doc != DocRef.File) return null
+        val src = projectedText
+        if (sheet.start !in 0..src.length || sheet.end !in sheet.start..src.length) return null
+        val marker = '\u0000'
+        val links = chain.links.toMutableList()
+        val l = links.getOrNull(link) ?: return null
+        links[link] = l.copy(args = args + marker)
+        val code = chain.copy(links = links).code()
+        val at = code.indexOf(marker)
+        if (at < 0) return null
+        return (src.substring(0, sheet.start) + code.removeRange(at, at + 1) + src.substring(sheet.end)) to (sheet.start + at)
+    }
+
+    /**
+     * Imports for links the table does not know: completion asked at each link's name in the chain (as
+     * `Modifier.foo|`), keeping the auto-import of the item that is exactly that name.
+     */
+    private suspend fun linkImports(sheet: ModifierSheetState, chain: dev.ide.ui.editor.blocks.ModifierChain): List<UiTextEdit> {
+        val src = projectedText
+        val out = ArrayList<UiTextEdit>()
+        for ((i, link) in chain.links.withIndex()) {
+            if (link.name in dev.ide.ui.editor.blocks.COMPOSE_IMPORTS) continue
+            val head = chain.copy(links = chain.links.take(i)).code() + (if (chain.multiline && i > 0) "\n" + chain.indent else "") + "." + link.name
+            if (sheet.start !in 0..src.length || sheet.end !in sheet.start..src.length) continue
+            val probed = src.substring(0, sheet.start) + head + src.substring(sheet.end)
+            val caret = sheet.start + head.length
+            val result = runCatching { backend.editor.complete(path, probed, caret) }.getOrNull() ?: continue
+            result.items.firstOrNull { it.label.substringBefore('(') == link.name }?.additionalEdits?.filter { it.end <= sheet.start }?.let { out += it }
+        }
+        return out
+    }
+
+    /** Import edits with the same text at the same place, once. */
+    private fun dedupeImports(edits: List<UiTextEdit>): List<UiTextEdit> {
+        val seen = HashSet<String>()
+        return edits.filter { e -> val k = "${e.start}:${e.newText}"; seen.add(k) && !(e.newText.contains("import ") && e.newText.trim().removePrefix("import ").trim().let { fqn -> projectedText.contains("import $fqn\n") }) }
+    }
+
+    /** Completion for a modifier link's arguments, asked at that argument in the file (named parameters first). */
+    suspend fun modifierArgSuggestions(sheet: ModifierSheetState, chain: dev.ide.ui.editor.blocks.ModifierChain, link: Int, args: String): List<Suggestion> {
+        val (probed, caret) = probeModifier(sheet, chain, link, args) ?: return emptyList()
+        val result = runCatching { backend.editor.complete(path, probed, caret) }.getOrNull() ?: return emptyList()
+        val argStart = caret - args.length
+        val tokenStart = (result.replaceStart - argStart).coerceIn(0, args.length)
+        return result.items.asSequence()
+            .filter { it.kind != dev.ide.ui.backend.UiCompletionKind.Word && it.kind != dev.ide.ui.backend.UiCompletionKind.Snippet }
+            .take(8)
+            .map { item -> Suggestion(item.label, item.container ?: item.detail, args.substring(0, tokenStart) + item.insertText, item.additionalEdits.filter { it.end <= sheet.start }) }
+            .toList()
+    }
+
+    /** The parameters of a modifier link, as the code editor's parameter info shows them. */
+    suspend fun modifierParams(sheet: ModifierSheetState, chain: dev.ide.ui.editor.blocks.ModifierChain, link: Int): List<String>? {
+        val args = chain.links.getOrNull(link)?.args ?: return null
+        val (probed, caret) = probeModifier(sheet, chain, link, args) ?: return null
+        val help = runCatching { backend.editor.signatureHelp(path, probed, caret) }.getOrNull() ?: return null
+        return help.signatures.getOrNull(help.activeSignature)?.parameters?.map { it.label }
+    }
+
+    private fun modifierSuggestions(text: String): List<Suggestion> {
+        val words = if (kotlin) listOf("private", "protected", "internal", "public", "open", "override", "abstract", "suspend", "inline", "const", "lateinit", "operator", "infix")
+        else listOf("public", "private", "protected", "static", "final", "abstract", "synchronized")
+        val head = text.substringBeforeLast(' ', "").let { if (it.isEmpty()) "" else "$it " }
+        val typed = text.substringAfterLast(' ')
+        val have = text.split(' ').toSet()
+        return words.filter { it.startsWith(typed) && it !in have }.map { Suggestion(it, null, "$head$it ", emptyList()) }
+    }
+
+    // ---- forms ----
+
+    fun editFunction(fn: OutlineFunction) {
+        val spec = parseFunctionHeader(fn.signature, kotlin) ?: return
+        functionForm = FunctionFormState(fn, spec, fn.group)
+    }
+
+    private fun groupOf(outline: FileOutline, key: String): OutlineGroup? = outline.groups.firstOrNull { it.key == key }
+
+    fun saveVariable(outline: FileOutline, form: VariableFormState, spec: VariableSpec, groupKey: String, extra: List<UiTextEdit> = emptyList()) {
+        val code = variableCode(spec, kotlin)
+        val existing = form.existing
+        if (existing != null) {
+            val n = existing.node
+            applyText(DocRef.File, projectedText, listOf(UiTextEdit(n.start, n.end + if (!kotlin && projectedText.getOrNull(n.end) == ';') 1 else 0, code)) + extra.filter { it.end <= n.start })
+            return
+        }
+        if (groupKey == dev.ide.ui.editor.blocks.LOCAL_PLACE) {
+            // A local goes at the top of the open function's body, without modifiers.
+            val fn = outline.find(openKey ?: return, openName, openGroup) ?: return
+            val fnBody = bodyOf(fn.node) ?: return
+            val local = variableCode(spec.copy(modifiers = ""), kotlin)
+            edit(DocRef.File, listOf(UiBlockEdit.InsertTemplate(fnBody.ownerId, fnBody.slotIndex, 0, local)), extra + importsFor(DocRef.File, local))
+            return
+        }
+        val body = groupOf(outline, groupKey)?.body ?: return
+        // After the group's last variable, else at the top of its members (in a Kotlin file, after imports).
+        val lastVar = body.children.indexOfLast { it.label == "field" }
+        val lastHeader = body.children.indexOfLast { it.label == "package" || it.label == "import" || it.label == "imports" }
+        val at = maxOf(lastVar, lastHeader) + 1
+        edit(DocRef.File, listOf(UiBlockEdit.InsertTemplate(body.ownerId, body.slotIndex, at, code)), extra + importsFor(DocRef.File, code))
+    }
+
+    fun saveFunction(outline: FileOutline, form: FunctionFormState, spec: FunctionSpec, groupKey: String, extra: List<UiTextEdit> = emptyList()) {
+        val existing = form.existing
+        if (existing != null) {
+            // Rewrite just the header; the body stays as it is. Callers are not renamed: that is a refactoring
+            // the code view's Rename does across the project.
+            val n = existing.node
+            val old = signatureText(n, projectedText)
+            val start = n.start
+            val src = projectedText
+            var end = start
+            var matched = 0
+            // Walk the raw header until the collapsed signature is consumed (it collapsed whitespace).
+            while (end < src.length && matched < old.length) {
+                val c = src[end]
+                if (c.isWhitespace()) { if (old[matched] == ' ') matched++; end++; while (end < src.length && src[end].isWhitespace()) end++; continue }
+                if (c != old[matched]) return
+                matched++; end++
+            }
+            applyText(DocRef.File, src, listOf(UiTextEdit(start, end, functionHeader(spec, kotlin).replace("\n", "\n" + indentAt(src, start)))) + extra.filter { it.end <= start })
+            openName = spec.name
+            return
+        }
+        val body = groupOf(outline, groupKey)?.body ?: return
+        pendingOpen = groupKey to spec.name
+        edit(DocRef.File, listOf(UiBlockEdit.InsertTemplate(body.ownerId, body.slotIndex, body.children.size, functionCode(spec, kotlin))), extra + importsFor(DocRef.File, functionCode(spec, kotlin)))
+    }
+
+    /**
+     * Offer the methods [group]'s class may override, as completion offers them at a member position, and
+     * insert the chosen stub at the end of the class.
+     */
+    fun findEvents(group: OutlineGroup) {
+        val body = group.body ?: return
+        val src = projectedText
+        val owner = node(DocRef.File, body.ownerId) ?: return
+        val list = owner.parts.filterIsInstance<UiBlockPart.Slot>().getOrNull(body.slotIndex) ?: return
+        val at = list.children.lastOrNull()?.end?.let { e -> if (src.getOrNull(e) == ';') e + 1 else e } ?: list.start
+        val memberIndent = list.children.firstOrNull()?.let { indentAt(src, it.start) } ?: (indentAt(src, group.node?.start ?: 0) + "    ")
+        val probe = "\n" + memberIndent + if (kotlin) "override fun " else ""
+        val probed = src.substring(0, at) + probe + src.substring(at)
+        val caret = at + probe.length
+        events = null
+        eventsOpen = true
+        scope.launch {
+            val result = runCatching { backend.editor.complete(path, probed, caret) }.getOrNull()
+            val stubs = result?.items.orEmpty().filter { "@Override" in it.insertText || (kotlin && it.detail == "override") }
+            events = stubs.map { item ->
+                EventChoice(item.label, item.container ?: item.detail.orEmpty()) {
+                    eventsOpen = false
+                    val replaced = applyTextEdits(probed, listOf(UiTextEdit(result!!.replaceStart, caret, item.insertText)) + item.additionalEdits) ?: return@EventChoice
+                    val tailLen = src.length - at
+                    if (!replaced.startsWith(src.substring(0, at)) || !replaced.endsWith(src.substring(at))) return@EventChoice
+                    val inserted = replaced.substring(at, replaced.length - tailLen)
+                    applyText(DocRef.File, src, listOf(UiTextEdit(at, at, if (inserted.startsWith("\n")) inserted else "\n$inserted")))
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun Dialogs(outline: FileOutline?) {
+        outline ?: return
+        val groups = outline.groups.filter { it.body != null }
+        variableForm?.let { form ->
+            VariableForm(
+                form.existing, kotlin, groups, form.group,
+                localPlace = if (openKey != null) stringResource(Res.string.block_form_place_local) else null,
+                suggest = { kind, text, g -> suggest(kind, text, g) },
+                onSave = { spec, g, extra -> variableForm = null; saveVariable(outline, form, spec, g, extra) },
+                onDelete = form.existing?.let { v -> { variableForm = null; edit(DocRef.File, listOf(UiBlockEdit.DeleteBlock(v.node.id))) } },
+                onDismiss = { variableForm = null },
+            )
+        }
+        functionForm?.let { form ->
+            FunctionForm(
+                form.spec, editing = form.existing != null, kotlin = kotlin, groups = groups, group = form.group,
+                suggest = { kind, text, g -> suggest(kind, text, g) },
+                onSave = { spec, g, extra -> functionForm = null; saveFunction(outline, form, spec, g, extra) },
+                onDismiss = { functionForm = null },
+            )
+        }
+        if (eventsOpen) EventPicker(events) { eventsOpen = false }
+        if (scopePickerOpen) dev.ide.ui.editor.blocks.ScopePicker(scopeFocus?.receiver ?: "", scopeFunctions, kotlin, onPick = { insertInScope(it) }) { scopePickerOpen = false }
+        propertySheet?.let { sheet ->
+            dev.ide.ui.editor.blocks.PropertySheet(
+                sheet.sig, sheet.optional, kotlin,
+                onPick = { pickProperty(sheet, it) }, onOverload = { pickOverload(sheet, it) }, onDismiss = { propertySheet = null },
+            )
+        }
+        modifierSheet?.let { sheet ->
+            ModifierSheet(
+                sheet.chain, sheet.group, suggest = { kind, text, g -> suggest(kind, text, g) },
+                suggestArgs = { chain, link, args -> modifierArgSuggestions(sheet, chain, link, args) },
+                paramsOf = { chain, link -> modifierParams(sheet, chain, link) },
+                onSave = { chain, extra ->
+                    modifierSheet = null
+                    val code = if (chain.links.isEmpty()) chain.base else chain.code()
+                    scope.launch {
+                        // Imports: the known names the chain now uses, and any link only completion knows.
+                        val known = importsFor(sheet.doc, code)
+                        val probed = if (sheet.doc == DocRef.File) linkImports(sheet, chain) else emptyList()
+                        val all = (if (sheet.doc == DocRef.File) extra else emptyList()) + known + probed
+                        edit(sheet.doc, listOf(UiBlockEdit.ReplaceSlot(sheet.ownerId, sheet.slotIndex, code)), dedupeImports(all))
+                    }
+                },
+                onDismiss = { modifierSheet = null },
+            )
+        }
+        focus?.let { node -> FocusSheet(this, node) { focus = null } }
     }
 }
-
-/** A 2px accent line along the top edge, shown when a drag hovers this gap. */
-private fun Modifier.insertionLine(show: Boolean): Modifier = composed {
-    val accent = MaterialTheme.colorScheme.primary
-    if (!show) this else this.drawBehind { drawRect(accent, size = Size(size.width, 2.dp.toPx())) }
-}
-
-/** A dashed rounded border (Compose has no dashed [androidx.compose.foundation.border]). */
-private fun Modifier.dashed(color: Color): Modifier = this.drawBehind {
-    val r = BlockMetrics.corner.toPx()
-    drawRoundRect(
-        color = color,
-        style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 5f))),
-        cornerRadius = CornerRadius(r, r),
-    )
-}
-
-// ===========================================================================
-// Compose previews — render the canvas from hand-built sample UiBlockNode trees
-// (the real projection needs JDT, which is JVM-only). The samples mirror what the
-// projection produces so the previews exercise every block kind without launching
-// the app.
-// ===========================================================================
 
 /**
- * Builds sample [UiBlockNode]s while assembling the backing source string, so each node's offsets line up
- * with the text — exactly what the renderer slices for types, sockets, signatures, and the package line.
+ * The drill-in sheet for a value nested too deep to inline: the expression re-rooted on its own canvas,
+ * tokens and sockets still editable (each tap edits the file).
  */
-private class BlockSample {
-    val sb = StringBuilder()
-    private var n = 0
-    private fun id() = "s${n++}"
-
-    fun chrome(t: String): UiBlockPart.Field { val s = sb.length; sb.append(t); return UiBlockPart.Field("syntax", t, false, s, sb.length) }
-    fun field(role: String, t: String): UiBlockPart.Field { val s = sb.length; sb.append(t); return UiBlockPart.Field(role, t, true, s, sb.length) }
-    fun gap() { sb.append("\n            ") }
-    fun leaf(kind: String, label: String, role: String, t: String, valueKind: String = "unknown"): UiBlockNode {
-        val s = sb.length; sb.append(t)
-        return UiBlockNode(id(), kind, label, label, s, sb.length, listOf(UiBlockPart.Field(role, t, true, s, sb.length)), valueKind = valueKind)
+@Composable
+private fun FocusSheet(model: BlockEditorModel, node: UiBlockNode, onClose: () -> Unit) {
+    val ink = rememberBlockInk(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurface)
+    val state = remember(node) { BlockCanvasState() }
+    val layoutFor = remember(node, model.projectedText) {
+        { _: Hidden?, _: Gap? -> BlockLayouter(model.measure, model.geometry, model.labels, kotlin = model.kotlin).layoutValue(node, model.projectedText) }
     }
-    fun build(kind: String, label: String, valueKind: String = "unknown", f: () -> List<UiBlockPart>): UiBlockNode {
-        val s = sb.length; val parts = f()
-        return UiBlockNode(id(), kind, label, label, s, sb.length, parts, valueKind = valueKind)
-    }
-    fun single(cat: String, child: UiBlockNode, valueKind: String = "unknown") =
-        UiBlockPart.Slot(cat, false, child.start, child.end, listOf(child), valueKind = valueKind)
-    fun empty(cat: String, valueKind: String = "unknown") =
-        UiBlockPart.Slot(cat, false, sb.length, sb.length, emptyList(), valueKind = valueKind)
-    fun list(cat: String, children: List<UiBlockNode>) =
-        UiBlockPart.Slot(cat, true, children.firstOrNull()?.start ?: sb.length, children.lastOrNull()?.end ?: sb.length, children)
-}
-
-private fun BlockSample.call(recv: String?, name: String, args: List<String>): UiBlockNode = build("method_call", "call") {
-    buildList {
-        if (recv != null) { add(single("EXPRESSION", leaf("name_ref", "name", "name", recv))); add(chrome(".")) }
-        add(single("NAME", leaf("name_ref", "name", "name", name)))
-        add(chrome("("))
-        args.forEachIndexed { i, a -> if (i > 0) add(chrome(", ")); add(single("ARGUMENT", leaf("name_ref", "name", "name", a))) }
-        add(chrome(")"))
-    }
-}
-
-private fun BlockSample.declStmt(): UiBlockNode = build("local_var", "var") {
-    val type = single("TYPE", leaf("type_ref", "type", "type", "List<Note>"))
-    val sp = chrome(" ")
-    val frag = build("local_var", "var") {
-        val nm = single("NAME", leaf("name_ref", "name", "name", "result"))
-        val eq = chrome(" = ")
-        val init = single("EXPRESSION", leaf("ClassInstanceCreation", "value", "code", "new ArrayList<>()"))
-        listOf(nm, eq, init)
-    }
-    listOf(type, sp, single("EXPRESSION", frag), chrome(";"))
-}
-
-private fun BlockSample.ifStmt(): UiBlockNode = build("IfStatement", "if") {
-    val pre = chrome("if (")
-    val cond = single("EXPRESSION", call("note", "isPinned", emptyList()))
-    val cl = chrome(") ")
-    val block = build("block", "block") {
-        val open = chrome("{")
-        val stmt = build("ExpressionStatement", "") { listOf(single("EXPRESSION", call("result", "add", listOf("note"))), chrome(";")) }
-        val close = chrome("}")
-        listOf(open, list("STATEMENT", listOf(stmt)), close)
-    }
-    listOf(pre, cond, cl, single("STATEMENT", block))
-}
-
-private fun BlockSample.forEachStmt(): UiBlockNode = build("EnhancedForStatement", "for") {
-    val pre = chrome("for (")
-    val param = build("parameter", "param") {
-        val t = single("TYPE", leaf("type_ref", "type", "type", "Note"))
-        val sp = chrome(" ")
-        val nm = single("NAME", leaf("name_ref", "name", "name", "note"))
-        listOf(t, sp, nm)
-    }
-    val colon = chrome(" : ")
-    val iter = single("EXPRESSION", leaf("name_ref", "name", "name", "notes"))
-    val cl = chrome(") ")
-    val block = build("block", "block") {
-        val open = chrome("{")
-        val ifS = ifStmt()
-        val close = chrome("}")
-        listOf(open, list("STATEMENT", listOf(ifS)), close)
-    }
-    listOf(pre, single("PARAMETER", param), colon, iter, cl, single("STATEMENT", block))
-}
-
-private fun BlockSample.returnStmt(): UiBlockNode = build("ReturnStatement", "return") {
-    listOf(chrome("return "), single("EXPRESSION", leaf("name_ref", "name", "name", "result")), chrome(";"))
-}
-
-/** A whole compilation unit: package + imports + a class with a field and a control-flow-rich method. */
-private fun sampleFile(): Pair<UiBlockNode, String> {
-    val x = BlockSample()
-    val file = x.build("compilation_unit", "file") {
-        val pkg = x.leaf("package_decl", "package", "code", "package com.example.notes.data;")
-        x.chrome("\n")
-        val imp1 = x.leaf("import_decl", "import", "code", "import java.util.ArrayList;")
-        x.chrome("\n")
-        val imp2 = x.leaf("import_decl", "import", "code", "import java.util.List;")
-        x.chrome("\n\n")
-        val cls = x.build("class_decl", "class") {
-            val pre = x.chrome("public final class ")
-            val name = x.single("NAME", x.leaf("name_ref", "name", "name", "NoteRepository"))
-            x.chrome(" {\n    ")
-            val field = x.build("field_decl", "field") { listOf(x.chrome("private int total = 0;")) }
-            x.chrome("\n    ")
-            val method = x.build("method_decl", "method") {
-                val sig = x.chrome("public List<Note> pinned(List<Note> notes) ")
-                val block = x.build("block", "block") {
-                    val open = x.chrome("{")
-                    val decl = x.declStmt(); x.gap()
-                    val forE = x.forEachStmt(); x.gap()
-                    val ret = x.returnStmt()
-                    val close = x.chrome("}")
-                    listOf(open, x.list("STATEMENT", listOf(decl, forE, ret)), close)
-                }
-                listOf(sig, x.single("STATEMENT", block))
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
+        Column(
+            Modifier.widthIn(max = 560.dp).clip(RoundedCornerShape(Ca.radius.sheet)).background(MaterialTheme.colorScheme.surface).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(CaIcons.braces, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                Text(stringResource(Res.string.block_edit_expression), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Icon(CaIcons.close, stringResource(Res.string.close), Modifier.size(18.dp).clickable(onClick = onClose), tint = MaterialTheme.colorScheme.outline)
             }
-            x.chrome("\n}")
-            listOf(pre, name, x.list("DECLARATION", listOf(field, method)))
-        }
-        listOf(x.list("DECLARATION", listOf(pkg, imp1, imp2, cls)))
-    }
-    return file to x.sb.toString()
-}
-
-// ---- the typed/collapsed-call showcase (mirrors what the new JavaBlockMapping emits: qualifier +
-// name/name1 fields + per-arg ARGUMENT slots, valueKinds on slots and nodes) ----
-
-/** `<type> <name> = <literal>;` — the initializer slot (and literal) typed by the declared type. */
-private fun BlockSample.typedDecl(type: String, name: String, kind: String, literal: String): UiBlockNode = build("local_var", "var") {
-    val t = single("TYPE", leaf("type_ref", "type", "type", type, valueKind = "type"))
-    val sp = chrome(" ")
-    val frag = build("local_var", "var") {
-        val nm = single("NAME", leaf("name_ref", "name", "name", name))
-        val eq = chrome(" = ")
-        val init = single("EXPRESSION", leaf("literal", "value", "code", literal, valueKind = kind), valueKind = kind)
-        listOf(nm, eq, init)
-    }
-    listOf(t, sp, single("EXPRESSION", frag), chrome(";"))
-}
-
-/** `System.out.println("hi");` collapsed to ONE call block: dimmed qualifier + bold name + arg slot. */
-private fun BlockSample.printlnStmt(): UiBlockNode = build("ExpressionStatement", "") {
-    val call = build("method_call", "call") {
-        listOf(
-            field("qualifier", "System.out"), chrome("."), field("name", "println"), chrome("("),
-            single("ARGUMENT", leaf("literal", "value", "code", "\"hi\"", valueKind = "string"), valueKind = "string"),
-            chrome(")"),
-        )
-    }
-    listOf(single("EXPRESSION", call), chrome(";"))
-}
-
-/** `sb.append(x).append(y).append(z);` flattened to ONE block — with ≥3 links it lays out vertically
- *  (one `.append(..)` per row) via [ChainStack] instead of wrapping inline. */
-private fun BlockSample.chainStmt(): UiBlockNode = build("ExpressionStatement", "") {
-    val call = build("method_call", "call") {
-        listOf(
-            field("qualifier", "sb"), chrome("."), field("name", "append"), chrome("("),
-            single("ARGUMENT", leaf("name_ref", "name", "name", "x")),
-            chrome(")."), field("name1", "append"), chrome("("),
-            single("ARGUMENT", leaf("name_ref", "name", "name", "y")),
-            chrome(")."), field("name2", "append"), chrome("("),
-            single("ARGUMENT", leaf("name_ref", "name", "name", "z")),
-            chrome(")"),
-        )
-    }
-    listOf(single("EXPRESSION", call), chrome(";"))
-}
-
-/** An if whose boolean condition socket holds a boolean-producing infix — the green hexagon. */
-private fun BlockSample.typedIfStmt(): UiBlockNode = build("IfStatement", "if") {
-    val pre = chrome("if (")
-    val cmp = build("InfixExpression", "", valueKind = "boolean") {
-        listOf(
-            single("EXPRESSION", leaf("name_ref", "name", "name", "n")),
-            chrome(" < "),
-            single("EXPRESSION", leaf("literal", "value", "code", "10", valueKind = "number"), valueKind = "number"),
-        )
-    }
-    val cond = single("EXPRESSION", cmp, valueKind = "boolean")
-    val cl = chrome(") ")
-    val block = build("block", "block") {
-        val open = chrome("{")
-        val stmt = printlnStmt()
-        val close = chrome("}")
-        listOf(open, list("STATEMENT", listOf(stmt)), close)
-    }
-    listOf(pre, cond, cl, single("STATEMENT", block))
-}
-
-/** A while with an EMPTY boolean condition — the hexagon hole hinting "boolean". */
-private fun BlockSample.whileEmptyStmt(): UiBlockNode = build("WhileStatement", "while") {
-    val pre = chrome("while (")
-    val cond = empty("EXPRESSION", valueKind = "boolean")
-    val cl = chrome(") ")
-    val block = build("block", "block") { listOf(chrome("{"), list("STATEMENT", emptyList()), chrome("}")) }
-    listOf(pre, cond, cl, single("STATEMENT", block))
-}
-
-/** Typed sockets + collapsed calls in one unit: decls, a println, a fluent chain, an if, an empty while. */
-internal fun typedSampleFile(): Pair<UiBlockNode, String> {
-    val x = BlockSample()
-    val file = x.build("compilation_unit", "file") {
-        val pkg = x.leaf("package_decl", "package", "code", "package com.example.notes.demo;")
-        x.chrome("\n\n")
-        val cls = x.build("class_decl", "class") {
-            val pre = x.chrome("public final class ")
-            val name = x.single("NAME", x.leaf("name_ref", "name", "name", "Typed"))
-            x.chrome(" {\n    ")
-            val method = x.build("method_decl", "method") {
-                val sig = x.chrome("void demo(StringBuilder sb, int x, int y) ")
-                val block = x.build("block", "block") {
-                    val open = x.chrome("{")
-                    val d1 = x.typedDecl("int", "n", "number", "1"); x.gap()
-                    val d2 = x.typedDecl("String", "s", "string", "\"x\""); x.gap()
-                    val d3 = x.typedDecl("boolean", "ok", "boolean", "true"); x.gap()
-                    val p = x.printlnStmt(); x.gap()
-                    val c = x.chainStmt(); x.gap()
-                    val ifS = x.typedIfStmt(); x.gap()
-                    val w = x.whileEmptyStmt()
-                    val close = x.chrome("}")
-                    listOf(open, x.list("STATEMENT", listOf(d1, d2, d3, p, c, ifS, w)), close)
-                }
-                listOf(sig, x.single("STATEMENT", block))
-            }
-            x.chrome("\n}")
-            listOf(pre, name, x.list("DECLARATION", listOf(method)))
-        }
-        listOf(x.list("DECLARATION", listOf(pkg, cls)))
-    }
-    return file to x.sb.toString()
-}
-
-/** A 5-deep nested call `sanitize(normalize(trim(lower(read(text)))))` for the A2 depth-cap demo: past 3
- *  reporter levels the inner call collapses to a drill-in chip. Built outer-in so the text lands in order. */
-private fun BlockSample.deepCall(): UiBlockNode {
-    fun nest(name: String, inner: () -> UiBlockNode) = build("method_call", "call") {
-        listOf(single("NAME", leaf("name_ref", "name", "name", name)), chrome("("), single("ARGUMENT", inner()), chrome(")"))
-    }
-    return nest("sanitize") { nest("normalize") { nest("trim") { nest("lower") { nest("read") {
-        leaf("name_ref", "name", "name", "text")
-    } } } } }
-}
-
-/** A unit with one statement whose initializer is [deepCall] — the canvas shows 3 nested pills then a chip. */
-internal fun deepSampleFile(): Pair<UiBlockNode, String> {
-    val x = BlockSample()
-    val file = x.build("compilation_unit", "file") {
-        val pkg = x.leaf("package_decl", "package", "code", "package com.example.notes.demo;")
-        x.chrome("\n\n")
-        val cls = x.build("class_decl", "class") {
-            val pre = x.chrome("public final class ")
-            val name = x.single("NAME", x.leaf("name_ref", "name", "name", "Deep"))
-            x.chrome(" {\n    ")
-            val method = x.build("method_decl", "method") {
-                val sig = x.chrome("String demo(String text) ")
-                val block = x.build("block", "block") {
-                    val open = x.chrome("{")
-                    val stmt = x.build("local_var", "var") {
-                        val t = x.single("TYPE", x.leaf("type_ref", "type", "type", "String", valueKind = "type"))
-                        val sp = x.chrome(" ")
-                        val frag = x.build("local_var", "var") {
-                            val nm = x.single("NAME", x.leaf("name_ref", "name", "name", "r"))
-                            val eq = x.chrome(" = ")
-                            val init = x.single("EXPRESSION", x.deepCall())
-                            listOf(nm, eq, init)
-                        }
-                        listOf(t, sp, x.single("EXPRESSION", frag), x.chrome(";"))
-                    }
-                    val close = x.chrome("}")
-                    listOf(open, x.list("STATEMENT", listOf(stmt)), close)
-                }
-                listOf(sig, x.single("STATEMENT", block))
-            }
-            x.chrome("\n}")
-            listOf(pre, name, x.list("DECLARATION", listOf(method)))
-        }
-        listOf(x.list("DECLARATION", listOf(pkg, cls)))
-    }
-    return file to x.sb.toString()
-}
-
-/** The expression a user drills into from the chip: `lower(read(text))`, for the [FocusSheet] demo. */
-internal fun deepFocusExpr(): Pair<UiBlockNode, String> {
-    val x = BlockSample()
-    val node = x.build("method_call", "call") {
-        listOf(
-            x.single("NAME", x.leaf("name_ref", "name", "name", "lower")), x.chrome("("),
-            x.single("ARGUMENT", x.build("method_call", "call") {
-                listOf(x.single("NAME", x.leaf("name_ref", "name", "name", "read")), x.chrome("("), x.single("ARGUMENT", x.leaf("name_ref", "name", "name", "text")), x.chrome(")"))
-            }),
-            x.chrome(")"),
-        )
-    }
-    return node to x.sb.toString()
-}
-
-/** A `name > 0` boolean comparison, for [opSampleFile]'s operands. */
-private fun BlockSample.cmp(nm: String): UiBlockNode = build("InfixExpression", "", valueKind = "boolean") {
-    listOf(
-        single("EXPRESSION", leaf("name_ref", "name", "name", nm)),
-        chrome(" > "),
-        single("EXPRESSION", leaf("literal", "value", "code", "0", valueKind = "number"), valueKind = "number"),
-    )
-}
-
-/** A unit with `if (x > 0 && y > 0 && z > 0 && w > 0)` — the 4-operand `&&` chain renders as an [OpStack]. */
-internal fun opSampleFile(): Pair<UiBlockNode, String> {
-    val x = BlockSample()
-    val file = x.build("compilation_unit", "file") {
-        val pkg = x.leaf("package_decl", "package", "code", "package com.example.notes.demo;")
-        x.chrome("\n\n")
-        val cls = x.build("class_decl", "class") {
-            val pre = x.chrome("public final class ")
-            val name = x.single("NAME", x.leaf("name_ref", "name", "name", "Ops"))
-            x.chrome(" {\n    ")
-            val method = x.build("method_decl", "method") {
-                val sig = x.chrome("void demo(int x, int y, int z, int w) ")
-                val block = x.build("block", "block") {
-                    val open = x.chrome("{")
-                    val ifS = x.build("IfStatement", "if") {
-                        val preIf = x.chrome("if (")
-                        val cond = x.build("InfixExpression", "", valueKind = "boolean") {
-                            listOf(
-                                x.single("EXPRESSION", x.cmp("x"), valueKind = "boolean"), x.chrome(" && "),
-                                x.single("EXPRESSION", x.cmp("y"), valueKind = "boolean"), x.chrome(" && "),
-                                x.single("EXPRESSION", x.cmp("z"), valueKind = "boolean"), x.chrome(" && "),
-                                x.single("EXPRESSION", x.cmp("w"), valueKind = "boolean"),
-                            )
-                        }
-                        val cl = x.chrome(") ")
-                        val body = x.build("block", "block") {
-                            listOf(x.chrome("{"), x.list("STATEMENT", listOf(x.printlnStmt())), x.chrome("}"))
-                        }
-                        listOf(preIf, x.single("EXPRESSION", cond, valueKind = "boolean"), cl, x.single("STATEMENT", body))
-                    }
-                    val close = x.chrome("}")
-                    listOf(open, x.list("STATEMENT", listOf(ifS)), close)
-                }
-                listOf(sig, x.single("STATEMENT", block))
-            }
-            x.chrome("\n}")
-            listOf(pre, name, x.list("DECLARATION", listOf(method)))
-        }
-        listOf(x.list("DECLARATION", listOf(pkg, cls)))
-    }
-    return file to x.sb.toString()
-}
-
-/** A no-op backend so previews can build a [Ctx] (completion/search return nothing). */
-internal object PreviewBackend : IdeBackend,
-    dev.ide.ui.backend.FileService, dev.ide.ui.backend.EditorService, dev.ide.ui.backend.BlockService,
-    dev.ide.ui.backend.PreviewService, dev.ide.ui.backend.SearchService, dev.ide.ui.backend.BuildService,
-    dev.ide.ui.backend.DependencyService, dev.ide.ui.backend.ModuleService, dev.ide.ui.backend.SigningService,
-    dev.ide.ui.backend.ProjectService,
-    dev.ide.ui.backend.SdkService, dev.ide.ui.backend.SettingsService, dev.ide.ui.backend.ActionService,
-    dev.ide.ui.backend.DiagnosticsService {
-    override val files get() = this
-    override val editor get() = this
-    override val blocks get() = this
-    override val preview get() = this
-    override val search get() = this
-    override val build get() = this
-    override val deps get() = this
-    override val modules get() = this
-    override val signing get() = this
-    override val projects get() = this
-    override val sdk get() = this
-    override val settings get() = this
-    override val actions get() = this
-    override val diagnostics get() = this
-
-    override val project = ProjectInfo("preview", "/preview", 1)
-    override fun fileTree(mode: TreeViewMode) = TreeNode("root", "preview", NodeKind.Workspace, null)
-    override fun readFile(path: String) = ""
-    override fun moduleNameForFile(path: String): String? = null
-    override fun updateDocument(path: String, text: String) {}
-    override fun saveFile(path: String, text: String) {}
-    override suspend fun complete(path: String, text: String, offset: Int) = UiCompletionResult(emptyList(), offset, offset)
-    override suspend fun analyze(path: String, text: String): List<UiDiagnostic> = emptyList()
-    override val indexStatus: StateFlow<IndexUiStatus> = MutableStateFlow(IndexUiStatus())
-    override suspend fun searchSymbols(query: String, limit: Int): List<SymbolHit> = emptyList()
-    override suspend fun searchMembers(query: String, limit: Int): List<SymbolHit> = emptyList()
-    override val buildState: StateFlow<BuildState> = MutableStateFlow(BuildState())
-    override fun runBuild() {}
-    override fun stopBuild() {}
-}
-
-/** Render the canvas from a sample tree with no-op callbacks (no projection effect; a stub backend). */
-@Composable
-private fun SamplePreview(dark: Boolean, sample: () -> Pair<UiBlockNode, String> = ::sampleFile) {
-    val (file, src) = remember { sample() }
-    CodeAssistTheme(dark = dark) {
-        val drag = remember { DragState() }
-        val scope = rememberCoroutineScope()
-        val ctx = remember { Ctx("/preview/Sample.java", PreviewBackend, scope, src, null, null, drag, {}, {}, { _, _ -> }, {}) }
-        Box(Modifier.width(380.dp).heightIn(min = 560.dp).background(Ide.colors.editorBg).padding(14.dp)) {
-            PuzzleCanvas(file, ctx)
+            BlockCanvas(
+                layoutFor = layoutFor, state = state, drag = remember { BlockDrag() }, ink = ink, selected = null,
+                onTap = { hit, index ->
+                    if (hit is CanvasIndex.Hit.Token || hit is CanvasIndex.Hit.Socket) model.tap(hit, index, dummyFunction(node)) else model.editing = null
+                },
+                startDrag = { _, _, _ -> null },
+                onDrop = { _, _, _, _ -> },
+                modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(12.dp)).background(Ide.colors.editorBg),
+                overlayRect = { index -> model.editRect(index) },
+                overlay = model.editing?.let { e -> { EditOverlay(model, e) } },
+                zoomControls = false,
+            )
+            Text(stringResource(Res.string.block_focus_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
 
-@Preview
-@Composable
-private fun PreviewBlocksDark() = SamplePreview(dark = true)
-
-@Preview
-@Composable
-private fun PreviewBlocksLight() = SamplePreview(dark = false)
-
-@Preview
-@Composable
-private fun PreviewTypedBlocksDark() = SamplePreview(dark = true, sample = ::typedSampleFile)
-
-@Preview
-@Composable
-private fun PreviewTypedBlocksLight() = SamplePreview(dark = false, sample = ::typedSampleFile)
-
-@Preview
-@Composable
-private fun PreviewBlockPalette() {
-    CodeAssistTheme(dark = true) {
-        val drag = remember { DragState() }
-        val scope = rememberCoroutineScope()
-        val ctx = remember { Ctx("/preview/Sample.java", PreviewBackend, scope, "", null, null, drag, {}, {}, { _, _ -> }, {}) }
-        Box(Modifier.width(380.dp).height(440.dp).background(MaterialTheme.colorScheme.background)) {
-            Palette(ctx) {}
-        }
-    }
-}
+/** A stand-in page owner for taps routed from the drill-in sheet (they never reach a hat). */
+private fun dummyFunction(node: UiBlockNode) =
+    OutlineFunction(node, dev.ide.ui.editor.blocks.FunctionKind.Function, "", "", "", 0, "")
