@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,10 +73,22 @@ fun CompletionList(
     maxListHeight: Dp = 296.dp,
     // Wide screens put the doc panel beside the list; narrow screens (no room) flip the popup to docs on demand.
     docsBeside: Boolean = true,
+    listState: LazyListState = rememberLazyListState(),
 ) {
-    val listState = rememberLazyListState()
     LaunchedEffect(selectedIndex) {
         if (selectedIndex in items.indices) listState.animateScrollToItem(selectedIndex)
+    }
+    // Each keystroke replaces [items], and the rows are keyed, so the list keeps the viewport on the row that was
+    // first VISIBLE: a new best match ranked above it lands just off the top while the selection (still index 0)
+    // doesn't move, so the effect above never scrolls. Only a list taller than the popup can sit scrolled, which
+    // is why it shows once the build console trims the popup. Re-anchor on the selection whenever the list
+    // changes; a SideEffect runs before this frame's layout, so the stale position is never drawn.
+    val anchoredItems = remember(listState) { arrayOfNulls<List<UiCompletionItem>>(1) }
+    SideEffect {
+        if (anchoredItems[0] !== items) {
+            anchoredItems[0] = items
+            if (selectedIndex in items.indices) listState.requestScrollToItem(selectedIndex)
+        }
     }
     val selected = items.getOrNull(selectedIndex)
     val doc = selected?.documentation?.takeIf { it.isNotBlank() }

@@ -271,7 +271,6 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="completion_no_suggestions">Nenhuma sugestão</string>
     <string name="completion_back_to_suggestions">Voltar às sugestões</string>
     <string name="completion_show_documentation">Mostrar documentação</string>
-    <string name="sig_more">+%1$d mais</string>
     <string name="sig_peek_tip">Toque para espiar a definição completa</string>
     <string name="sig_peek_collapse">Toque para recolher</string>
     <string name="symbolbar_move_line_up">Mover linha para cima</string>

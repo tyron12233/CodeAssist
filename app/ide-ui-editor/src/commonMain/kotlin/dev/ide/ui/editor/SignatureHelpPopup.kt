@@ -40,26 +40,24 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiSignature
 import dev.ide.ui.backend.UiSignatureHelp
 import dev.ide.ui.generated.resources.Res
-import dev.ide.ui.generated.resources.sig_more
 import dev.ide.ui.generated.resources.sig_peek_collapse
 import dev.ide.ui.generated.resources.sig_peek_tip
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The parameter-info panel (IntelliJ-style), floated above the call. Each applicable overload is one line; the
- * active overload is shown in full color with the parameter the caret currently sits on bolded + accented,
- * while the other overloads are dimmed. It is purely informational — non-focusable, never steals keystrokes
- * from the editor (the host dismisses it on Esc / when the caret leaves the call).
+ * The parameter-info panel, floated above the call. It is purely informational — non-focusable, never steals
+ * keystrokes from the editor (the host dismisses it on Esc / when the caret leaves the call).
  *
- * On [mobile] the panel adapts so a many-parameter call (e.g. a Compose `Text`) can't swallow the screen: its
- * height is capped to a fraction of the window (overflow scrolls), its width to the screen width, and instead of
- * stacking every overload it shows ONE overload at a time with a `‹ i/n ›` stepper. The compact line elides
- * parameters that don't fit, so a **long-press peek** (a hint invites it) expands the shown overload to its whole
- * definition — full signature + documentation — with a second long-press (or a tap on the hint) collapsing it.
+ * The same compact layout serves every screen, so a many-parameter call (a Compose `Text`, ~20 params, often
+ * with several overloads) can't swallow the editor on a phone, a tablet, or a desktop window: ONE overload at a
+ * time with a `‹ i/n ›` stepper, its parameters windowed around the one the caret sits on (bolded + accented),
+ * and the panel's size capped (overflow scrolls). A **peek** (long-press, or a tap/click on the hint that
+ * invites it) expands the shown overload to its whole definition — full signature + documentation — and a
+ * second long-press (or a tap on the hint) collapses it.
  */
 @Composable
-fun SignatureHelpPopup(help: UiSignatureHelp, mobile: Boolean = false, modifier: Modifier = Modifier) {
+fun SignatureHelpPopup(help: UiSignatureHelp, modifier: Modifier = Modifier) {
     if (help.signatures.isEmpty()) return
     val scroll = rememberScrollState()
     val density = LocalDensity.current
@@ -67,11 +65,10 @@ fun SignatureHelpPopup(help: UiSignatureHelp, mobile: Boolean = false, modifier:
     val winH = with(density) { window.height.toDp() }
     val winW = with(density) { window.width.toDp() }
 
-    // Mobile "peek": a long-press expands the compact (windowed) line into the whole definition + docs.
+    // The "peek": a long-press expands the compact (windowed) line into the whole definition + docs.
     var peek by remember { mutableStateOf(false) }
-    val expanded = mobile && peek
 
-    // Which overload the mobile single-line / peek view shows: it follows the backend's active overload, but a
+    // Which overload the single-line / peek view shows: it follows the backend's active overload, but a
     // manual step (‹ ›) sticks until the active overload changes again. Lifted here so the stepper and the peek
     // stay on the same overload when the user long-presses.
     var shown by remember { mutableStateOf(help.activeSignature) }
@@ -82,25 +79,23 @@ fun SignatureHelpPopup(help: UiSignatureHelp, mobile: Boolean = false, modifier:
     }
     val shownIndex = shown.coerceIn(0, help.signatures.lastIndex)
 
-    // Cap the panel so it can never grow into a full-screen wall; the verticalScroll handles any overflow. A peek
-    // gets more room since it carries the whole signature plus documentation.
-    val maxH = when {
-        expanded -> (winH * 0.6f).coerceAtLeast(160.dp)
-        mobile -> (winH * 0.38f).coerceAtLeast(120.dp)
-        else -> minOf(winH - 24.dp, 360.dp)
-    }
-    val maxW = if (mobile) (winW - 24.dp).coerceIn(120.dp, 560.dp) else 560.dp
+    // Cap the panel so it can never grow into a full-screen wall; the verticalScroll handles any overflow. The
+    // caps are a fraction of the window on a phone and a fixed ceiling on a tablet / desktop window, where a
+    // fraction alone would still be most of the editor. A peek gets more room since it carries the whole
+    // signature plus documentation.
+    val maxH = if (peek) (winH * 0.6f).coerceIn(160.dp, 420.dp) else (winH * 0.38f).coerceIn(120.dp, 240.dp)
+    val maxW = (winW - 24.dp).coerceIn(120.dp, 560.dp)
 
-    // Mobile gestures on the panel: a long-press anywhere toggles the peek; once expanded, a tap anywhere
-    // collapses it (a tap that lands on the stepper arrows is consumed by them first, so it steps instead). Keyed
-    // on [expanded] so the collapse-on-tap handler is armed only while peeking. It coexists with the column's
-    // verticalScroll (hold/tap vs drag) and captures the stable `peek` state object.
-    val gestures = if (mobile) Modifier.pointerInput(expanded) {
+    // Gestures on the panel: a long-press anywhere toggles the peek; once expanded, a tap anywhere collapses it
+    // (a tap that lands on the stepper arrows is consumed by them first, so it steps instead). Keyed on [peek] so
+    // the collapse-on-tap handler is armed only while peeking. It coexists with the column's verticalScroll
+    // (hold/tap vs drag) and captures the stable `peek` state object.
+    val gestures = Modifier.pointerInput(peek) {
         detectTapGestures(
-            onTap = if (expanded) ({ peek = false }) else null,
+            onTap = if (peek) ({ peek = false }) else null,
             onLongPress = { peek = !peek },
         )
-    } else Modifier
+    }
 
     Column(
         modifier
@@ -112,58 +107,23 @@ fun SignatureHelpPopup(help: UiSignatureHelp, mobile: Boolean = false, modifier:
             .padding(horizontal = 12.dp, vertical = 7.dp)
             .verticalScroll(scroll),
     ) {
-        when {
-            expanded -> SignaturePeek(help, shownIndex, onStep = { shown = it }, onCollapse = { peek = false })
-            mobile -> {
-                MobileSignature(help, shownIndex, onStep = { shown = it })
-                if (peekWorthwhile(help.signatures[shownIndex])) {
-                    PeekHint(stringResource(Res.string.sig_peek_tip), onActivate = { peek = true })
-                }
+        if (peek) {
+            SignaturePeek(help, shownIndex, onStep = { shown = it }, onCollapse = { peek = false })
+        } else {
+            CompactSignature(help, shownIndex, onStep = { shown = it })
+            if (peekWorthwhile(help.signatures[shownIndex])) {
+                PeekHint(stringResource(Res.string.sig_peek_tip), onActivate = { peek = true })
             }
-            else -> DesktopSignatures(help)
         }
-    }
-}
-
-/** Desktop / wide view: every applicable overload stacked, the active one marked with `▸` and its active
- *  parameter accented, capped at [MAX_SIGNATURES] so a heavily-overloaded call (println, valueOf, …) stays a
- *  panel, not a wall. */
-@Composable
-private fun DesktopSignatures(help: UiSignatureHelp) {
-    val shown = help.signatures.take(MAX_SIGNATURES)
-    shown.forEachIndexed { index, sig ->
-        Row(verticalAlignment = Alignment.Top) {
-            if (help.signatures.size > 1) {
-                Text(
-                    text = if (index == help.activeSignature) "▸ " else "   ",
-                    style = Ide.type.codeSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-            SignatureLine(
-                sig = sig,
-                activeParameter = sig.activeParameter ?: help.activeParameter,
-                active = index == help.activeSignature,
-                windowed = false,
-            )
-        }
-    }
-    if (help.signatures.size > shown.size) {
-        Text(
-            stringResource(Res.string.sig_more, help.signatures.size - shown.size),
-            style = Ide.type.codeSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 2.dp),
-        )
     }
 }
 
 /**
- * Mobile compact view: the [shownIndex] overload as a single (windowed) line, with a `‹ i/n ›` stepper above it
+ * The compact view: the [shownIndex] overload as a single (windowed) line, with a `‹ i/n ›` stepper above it
  * when the call is overloaded.
  */
 @Composable
-private fun MobileSignature(help: UiSignatureHelp, shownIndex: Int, onStep: (Int) -> Unit) {
+private fun CompactSignature(help: UiSignatureHelp, shownIndex: Int, onStep: (Int) -> Unit) {
     if (help.signatures.size > 1) StepperRow(help, shownIndex, onStep)
     val sig = help.signatures[shownIndex]
     SignatureLine(
@@ -175,7 +135,7 @@ private fun MobileSignature(help: UiSignatureHelp, shownIndex: Int, onStep: (Int
 }
 
 /**
- * Mobile peek (long-press) view: the [shownIndex] overload rendered in FULL — the whole signature (no windowing,
+ * The peek (long-press) view: the [shownIndex] overload rendered in FULL — the whole signature (no windowing,
  * wrapping across lines) plus its documentation when the backend supplies any — so a truncated call can be read
  * in its entirety. The stepper stays available to browse overloads; a `Long-press to collapse` hint (also
  * tappable) returns to the compact line.
@@ -248,7 +208,7 @@ private fun SignatureLine(sig: UiSignature, activeParameter: Int, active: Boolea
 /**
  * The rendered signature line: the active parameter bolded + [accent]-coloured against the full [sig.label].
  *
- * When [windowed] (small screens) and the call has more than [SIGNATURE_WINDOW_THRESHOLD] parameters, only a
+ * When [windowed] (the compact view) and the call has more than [SIGNATURE_WINDOW_THRESHOLD] parameters, only a
  * window of [SIGNATURE_WINDOW_RADIUS] parameters either side of the active one is shown, with a [dim] `…`
  * standing in for the elided runs — so a Compose `Text` (≈20 params) reads as `Text(…, color, modifier, …)`
  * instead of swallowing the screen. The call prefix (`Text(`) and suffix (`)` / `): Unit`) are always kept.
@@ -323,13 +283,13 @@ internal fun signatureAnnotated(
     }
 }
 
-/** Whether a peek would reveal more than the compact mobile line already shows: a windowed (parameter-eliding)
+/** Whether a peek would reveal more than the compact line already shows: a windowed (parameter-eliding)
  *  signature, or attached documentation. Drives the discovery hint so it appears only when it helps. */
 internal fun peekWorthwhile(sig: UiSignature): Boolean =
     !sig.documentation.isNullOrBlank() || signatureWouldWindow(sig)
 
-/** Mirror of [signatureAnnotated]'s windowing decision (with `windowed = true`): true when the compact mobile
- *  line would elide parameters, i.e. the peek shows strictly more of the signature. */
+/** Mirror of [signatureAnnotated]'s windowing decision (with `windowed = true`): true when the compact line
+ *  would elide parameters, i.e. the peek shows strictly more of the signature. */
 internal fun signatureWouldWindow(sig: UiSignature): Boolean {
     val params = sig.parameters
     val rangesValid = params.isNotEmpty() &&
@@ -340,8 +300,7 @@ internal fun signatureWouldWindow(sig: UiSignature): Boolean {
 /** Clamp the active-parameter index to a valid window centre (a trailing/vararg caret centres on the last param). */
 private fun windowCenter(activeParameter: Int, lastIndex: Int): Int = activeParameter.coerceIn(0, lastIndex)
 
-private const val MAX_SIGNATURES = 10
-/** Params shown either side of the active one when windowing a small-screen signature. */
+/** Params shown either side of the active one when windowing the compact signature. */
 private const val SIGNATURE_WINDOW_RADIUS = 1
-/** Only window calls with more than this many parameters (short calls show in full even on mobile). */
+/** Only window calls with more than this many parameters (short calls show in full). */
 private const val SIGNATURE_WINDOW_THRESHOLD = 5

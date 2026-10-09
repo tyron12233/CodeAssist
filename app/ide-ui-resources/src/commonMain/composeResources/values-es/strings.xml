@@ -289,7 +289,6 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="completion_show_documentation">Mostrar documentación</string>
 
     <!-- Signature help -->
-    <string name="sig_more">+%1$d más</string>
     <string name="sig_peek_tip">Toca para ver la definición completa</string>
     <string name="sig_peek_collapse">Toca para contraer</string>
 

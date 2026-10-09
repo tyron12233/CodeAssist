@@ -239,7 +239,6 @@
     <string name="completion_no_suggestions">Нет предложений</string>
     <string name="completion_back_to_suggestions">Назад к предложениям</string>
     <string name="completion_show_documentation">Показать документацию</string>
-    <string name="sig_more">+%1$d ещё</string>
     <string name="sig_peek_tip">Нажмите, чтобы посмотреть полное определение</string>
     <string name="sig_peek_collapse">Нажмите, чтобы свернуть</string>
     <string name="symbolbar_move_line_up">Переместить строку вверх</string>

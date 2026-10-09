@@ -430,7 +430,6 @@
     <string name="completion_no_suggestions">لا توجد اقتراحات</string>
     <string name="completion_back_to_suggestions">العودة إلى الاقتراحات</string>
     <string name="completion_show_documentation">إظهار التوثيق</string>
-    <string name="sig_more">+%1$d المزيد</string>
     <string name="sig_peek_tip">انقر لمعاينة التعريف الكامل</string>
     <string name="sig_peek_collapse">انقر للطي</string>
     <string name="symbolbar_move_line_up">تحريك السطر لأعلى</string>

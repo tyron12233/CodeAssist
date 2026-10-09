@@ -1423,7 +1423,6 @@ private fun SignatureHelpLayer(
         // In the pane, not a `Popup` (see [aboveLineInPane]): it stays up for as long as the caret is in a call.
         SignatureHelpPopup(
             sigHelp,
-            mobile = isMobilePlatform,
             modifier = Modifier.aboveLineInPane(
                 anchor = { caretGeometry(caretOffset).let { (_, x, top) -> x to top } },
                 lineHeightPx = lineHeightPx,

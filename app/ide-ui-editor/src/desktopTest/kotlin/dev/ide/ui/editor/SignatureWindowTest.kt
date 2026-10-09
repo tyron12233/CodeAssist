@@ -7,8 +7,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Verifies the small-screen windowing of [signatureAnnotated]: a many-parameter call collapses to the active
- * parameter plus its immediate neighbours with `…` for the elided runs, while short calls and the desktop
+ * Verifies the compact windowing of [signatureAnnotated]: a many-parameter call collapses to the active
+ * parameter plus its immediate neighbours with `…` for the elided runs, while short calls and the peek
  * (un-windowed) path render the full signature.
  */
 class SignatureWindowTest {
