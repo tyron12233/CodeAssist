@@ -136,8 +136,10 @@ class DamagedWorkspaceLoadTest {
         assertEquals(listOf("app"), data.projects.map { it.name }, "the readable project must still load")
     }
 
+    // Block body: as an expression body ending in assertFailsWith this returned a value, so JUnit skipped it
+    // and the missing-file half went unnoticed when the read stopped throwing.
     @Test
-    fun aMissingWorkspaceFileAndANewerSchemaStillFail() = withTempDir("codeassist-damaged") { dir ->
+    fun aMissingWorkspaceFileAndANewerSchemaStillFail() { withTempDir("codeassist-damaged") { dir ->
         twoModuleWorkspace(dir)
         val ws = dir.resolve(".platform/workspace.json")
         val original = Files.readString(ws)
@@ -148,7 +150,40 @@ class DamagedWorkspaceLoadTest {
 
         // With no workspace.json there is nothing to recover, so this stays a hard failure.
         Files.delete(ws)
-        assertFailsWith<java.nio.file.NoSuchFileException> { ModelPersistence.load(dir.toString()) }
+        assertFailsWith<ModelFileMissingException> { ModelPersistence.load(dir.toString()) }
+    } }
+
+    @Test
+    fun aMissingManifestIsReportedAsMissingNotAsANullPointer() = withTempDir("codeassist-damaged") { dir ->
+        twoModuleWorkspace(dir)
+        Files.delete(dir.resolve("shared/module.toml"))
+
+        val causes = ArrayList<Throwable?>()
+        val sink = LogSink { r -> if (r.tag == "ide.model" && r.level == LogLevel.ERROR) causes += r.throwable }
+        Log.addSink(sink)
+        try {
+            ModelPersistence.load(dir.toString(), opening = true)
+        } finally {
+            Log.removeSink(sink)
+        }
+        assertTrue(causes.single() is ModelFileMissingException, "reported cause: ${causes.single()}")
+    }
+
+    @Test
+    fun aManifestThatCannotBeWrittenIsReportedNotDropped() = withTempDir("codeassist-damaged") { dir ->
+        // A regular file where the module directory should be: the write cannot create its parent.
+        val blocker = dir.resolve("blocked")
+        Files.writeString(blocker, "")
+
+        val errors = ArrayList<Throwable?>()
+        val sink = LogSink { r -> if (r.tag == "ide.model" && r.level == LogLevel.ERROR) errors += r.throwable }
+        Log.addSink(sink)
+        try {
+            CrashSafeWriter.write(blocker.resolve("module.toml").toString(), "[module]\n")
+        } finally {
+            Log.removeSink(sink)
+        }
+        assertTrue(errors.single() is ModelFileUnwritableException, "reported: $errors")
     }
 
     /** The levels a load logs at, captured off the [Log] hub. ERROR is what raises the critical-error dialog. */

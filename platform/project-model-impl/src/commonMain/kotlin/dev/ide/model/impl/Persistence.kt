@@ -36,13 +36,38 @@ import dev.ide.platform.writeFileAtomically
  * which the model relies on: a module's directory may not exist until its manifest is written).
  */
 object CrashSafeWriter {
+    private val log = Log.logger("ide.model")
+
+    /**
+     * A failed write is logged at ERROR rather than thrown. Dropping the result silently left a module's
+     * directory created with no manifest in it, which the next open reported as a damaged module with no
+     * trace of why; throwing instead would reach the many save() callers that run on background threads
+     * without a catch.
+     */
     fun write(target: String, content: String) {
-        writeFileAtomically(target, content.encodeToByteArray())
+        if (!writeFileAtomically(target, content.encodeToByteArray())) {
+            log.error("could not write $target; the project model on disk is out of date", ModelFileUnwritableException(target))
+        }
     }
 }
 
-/** The file's text, or the empty string when it cannot be read. */
-private fun readTextAt(path: String): String = readFile(path)?.decodeToString().orEmpty()
+/** A model file that is not on disk at all. */
+class ModelFileMissingException(path: String) : IllegalStateException("$path does not exist")
+
+/** A model file that could not be written (permissions, storage full or gone, an I/O error). */
+class ModelFileUnwritableException(path: String) : IllegalStateException("$path could not be written")
+
+/** A model file that is on disk but could not be read (permissions, storage gone, an I/O error). */
+class ModelFileUnreadableException(path: String) : IllegalStateException("$path could not be read")
+
+/**
+ * The file's text. A file that is missing or unreadable throws rather than reading as empty: an empty
+ * `module.toml` failed later as a bare NullPointerException, and a field report carries the exception type
+ * but not its message, so the cause could not be told apart from a manifest that is genuinely blank.
+ */
+private fun readTextAt(path: String): String =
+    readFile(path)?.decodeToString()
+        ?: throw if (fileInfo(path) == null) ModelFileMissingException(path) else ModelFileUnreadableException(path)
 
 /**
  * Loads and saves a [WorkspaceData] snapshot as the on-disk format:
@@ -379,7 +404,9 @@ object ModelPersistence {
                 "module.toml schema version ${v.toInt()} is newer than supported $MODULE_SCHEMA_VERSION ($name)"
             }
         }
-        val moduleTable = doc["module"].asObject()
+        @Suppress("UNCHECKED_CAST")
+        val moduleTable = doc["module"] as? Map<String, Any?>
+            ?: throw IllegalArgumentException("$MODULE_FILE of module '$name' has no [module] table")
         val typeId = moduleTable["type"] as String
         // A module.toml written by an older/newer build can carry a languageLevel this build's enum doesn't
         // have (Java levels come and go over time). Fall back to the default rather than failing the whole

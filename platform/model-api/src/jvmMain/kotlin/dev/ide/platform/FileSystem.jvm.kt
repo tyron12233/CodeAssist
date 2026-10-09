@@ -1,5 +1,6 @@
 package dev.ide.platform
 
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -41,7 +42,13 @@ actual fun writeFileAtomically(path: String, bytes: ByteArray): Boolean = runCat
     val temporary = Files.createTempFile(directory, file.name, ".tmp")
     try {
         Files.write(temporary, bytes)
-        Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        try {
+            Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } catch (_: AtomicMoveNotSupportedException) {
+            // Some storage (FUSE and SAF-backed mounts among them) cannot rename atomically. A plain replace
+            // still beats not writing at all, which is what this did before the fallback was restored.
+            Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING)
+        }
         true
     } finally {
         Files.deleteIfExists(temporary)
