@@ -2009,4 +2009,7 @@
     <string name="block_scope_loading">جارٍ البحث عمّا يمكن استدعاؤه هنا…</string>
     <string name="block_scope_none">لا يضيف هذا النطاق شيئًا للاستدعاء.</string>
     <string name="block_lambda_page">لامدا</string>
+    <string name="update_ready_message">التحديث جاهز. أعد التشغيل لتثبيته.</string>
+    <string name="update_ready_later">لاحقًا</string>
+    <string name="update_ready_restart">إعادة التشغيل</string>
 </resources>

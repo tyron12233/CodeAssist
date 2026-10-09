@@ -1945,4 +1945,7 @@
     <string name="block_scope_loading">正在查找此作用域可调用的函数…</string>
     <string name="block_scope_none">此作用域没有可调用的内容。</string>
     <string name="block_lambda_page">Lambda</string>
+    <string name="update_ready_message">更新已就绪。重启即可安装。</string>
+    <string name="update_ready_later">稍后</string>
+    <string name="update_ready_restart">重启</string>
 </resources>

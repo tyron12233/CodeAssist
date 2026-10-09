@@ -52,6 +52,9 @@ class MainActivity : ComponentActivity() {
     /** UMP consent flow (gathers ad consent before AdMob init; drives the "Manage ad consent" Settings entry). */
     private val adConsent by lazy { AdConsentManager(this) }
 
+    /** Play in-app updates. Created in [onCreate] (it registers an activity-result launcher). */
+    private lateinit var playUpdates: PlayUpdateManager
+
     /**
      * A store sign-in redirect that arrived before the engine finished booting.
      *
@@ -81,6 +84,8 @@ class MainActivity : ComponentActivity() {
         // Gather UMP consent BEFORE initializing the Ads SDK (mediation + EEA/UK requirement); only initialize
         // once consent allows ad requests. Failure resolves too, so a consent hiccup never blocks the IDE.
         adConsent.gather(this) { if (adConsent.canRequestAds) initAds(applicationContext) }
+        playUpdates = PlayUpdateManager(this)
+        playUpdates.check()
 
         setContent {
             var backend by remember { mutableStateOf<IdeBackend?>(null) }
@@ -291,6 +296,7 @@ class MainActivity : ComponentActivity() {
                     b,
                     fileActions = fileActions,
                     adHost = adHost,
+                    appUpdate = playUpdates,
                     composePreviewHost = previewHost,
                     importPackagePath = importPackagePath,
                     openStoreItemId = storeLink.value,
@@ -360,8 +366,14 @@ class MainActivity : ComponentActivity() {
         store.completeSignIn(url)
     }
 
+    override fun onResume() {
+        super.onResume()
+        playUpdates.onResume()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        playUpdates.close()
         // Close the *active* engine (a project switch may have swapped it), not just the initial one.
         session?.backend?.close()
     }

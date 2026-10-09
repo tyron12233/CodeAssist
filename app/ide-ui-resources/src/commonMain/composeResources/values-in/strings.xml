@@ -1061,4 +1061,7 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     </plurals>
     <string name="close_project_building">Build masih berjalan.</string>
     <string name="close_project_save_and_close">Simpan &amp; tutup</string>
+    <string name="update_ready_message">Pembaruan siap. Mulai ulang untuk memasangnya.</string>
+    <string name="update_ready_later">Nanti</string>
+    <string name="update_ready_restart">Mulai ulang</string>
 </resources>

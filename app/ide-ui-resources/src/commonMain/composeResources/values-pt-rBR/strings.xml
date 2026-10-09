@@ -1138,4 +1138,7 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     </plurals>
     <string name="close_project_building">Uma compilação ainda está em andamento.</string>
     <string name="close_project_save_and_close">Salvar e fechar</string>
+    <string name="update_ready_message">Uma atualização está pronta. Reinicie para instalá-la.</string>
+    <string name="update_ready_later">Depois</string>
+    <string name="update_ready_restart">Reiniciar</string>
 </resources>

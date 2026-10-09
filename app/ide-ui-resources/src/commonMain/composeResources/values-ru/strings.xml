@@ -1111,4 +1111,7 @@
     </plurals>
     <string name="close_project_building">Сборка ещё выполняется.</string>
     <string name="close_project_save_and_close">Сохранить и закрыть</string>
+    <string name="update_ready_message">Обновление готово. Перезапустите, чтобы установить его.</string>
+    <string name="update_ready_later">Позже</string>
+    <string name="update_ready_restart">Перезапустить</string>
 </resources>

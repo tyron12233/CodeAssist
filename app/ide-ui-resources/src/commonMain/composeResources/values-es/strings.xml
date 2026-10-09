@@ -1246,4 +1246,7 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="block_scope_loading">Buscando qué se puede llamar aquí…</string>
     <string name="block_scope_none">Este ámbito no añade nada que llamar.</string>
     <string name="block_lambda_page">Lambda</string>
+    <string name="update_ready_message">Hay una actualización lista. Reinicia para instalarla.</string>
+    <string name="update_ready_later">Más tarde</string>
+    <string name="update_ready_restart">Reiniciar</string>
 </resources>

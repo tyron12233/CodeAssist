@@ -1988,4 +1988,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="block_scope_loading">Finding what this scope can call…</string>
     <string name="block_scope_none">This scope adds nothing to call.</string>
     <string name="block_lambda_page">Lambda</string>
+    <string name="update_ready_message">An update is ready. Restart to install it.</string>
+    <string name="update_ready_later">Later</string>
+    <string name="update_ready_restart">Restart</string>
 </resources>

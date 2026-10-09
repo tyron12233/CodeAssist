@@ -21,10 +21,12 @@ import androidx.compose.ui.text.font.FontFamily
 import dev.ide.ui.ads.BuildAdInterstitial
 import dev.ide.ui.ads.LocalAds
 import dev.ide.ui.backend.AdHost
+import dev.ide.ui.backend.AppUpdateHost
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAccent
 import dev.ide.ui.components.OnboardingSheet
+import dev.ide.ui.components.UpdateReadyBanner
 import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.import_gradle_failed
@@ -59,6 +61,8 @@ fun CodeAssistApp(
     fileActions: FileActions = FileActions.None,
     /** Platform advertising bridge (AdMob on Android, [AdHost.None] on desktop). Ads render only through this. */
     adHost: AdHost = AdHost.None,
+    /** The host's store update channel (Play in-app updates on Android, [AppUpdateHost.None] elsewhere). */
+    appUpdate: AppUpdateHost = AppUpdateHost.None,
     composePreviewHost: ComposePreviewHost? = null,
     /** A `.caproj` path handed in from outside the app (Android "Open with"). When it changes to a
      *  non-null value, the import preview opens for it. Null on desktop / normal launch. */
@@ -191,6 +195,16 @@ fun CodeAssistApp(
                         importError = importErrorMessage,
                         onDismissImportError = app::dismissImportError,
                         importBusy = app.importBusy,
+                    )
+                    // A downloaded store update waiting for a restart. Installing takes the process down, so
+                    // every modified buffer is written first, the same as the Plugins screen's restart.
+                    UpdateReadyBanner(
+                        visible = appUpdate.readyToInstall,
+                        onRestart = {
+                            state.saveAllNow()
+                            appUpdate.install()
+                        },
+                        onLater = appUpdate::dismiss,
                     )
                     ImportSourceDialog(
                         visible = app.showImportSourceChoice,
