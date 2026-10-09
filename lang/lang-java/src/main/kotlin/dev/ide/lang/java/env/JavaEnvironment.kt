@@ -111,6 +111,13 @@ class JavaEnvironment private constructor(
      * [dev.ide.psi.IntellijPsiHost.parse], which uses the same shape for the same reasons.
      */
     fun parse(name: String, text: CharSequence): PsiJavaFile = IntellijPsiHost.withParseLock {
+        val file = parseFile(name, text)
+        syncOverlay(focalFqn = qualifiedFileName(file))
+        file
+    }
+
+    /** [parse] without the overlay check, for the injected finder, which parses in the middle of a lookup. */
+    private fun parseFile(name: String, text: CharSequence): PsiJavaFile = IntellijPsiHost.withParseLock {
         val fileName = if (name.endsWith(".java")) name else "$name.java"
         val file = fileFactory.createFileFromText(
             fileName, JavaLanguage.INSTANCE, text,
@@ -118,6 +125,41 @@ class JavaEnvironment private constructor(
         ) as PsiJavaFile
         IntellijPsiHost.forceFullParse(file)
         file
+    }
+
+    private fun qualifiedFileName(file: PsiJavaFile): String {
+        val simple = file.name.removeSuffix(".java")
+        return if (file.packageName.isEmpty()) simple else "${file.packageName}.$simple"
+    }
+
+    /** The overlay as it was when the facade's caches were last dropped for it. Guarded by the parse lock. */
+    private var overlayBase: Map<String, CharArray>? = null
+
+    /**
+     * Drop the facade's cached lookups when an open buffer other than [focalFqn] changed since the last drop.
+     * The facade caches `findClass` results until the modification count moves, so without this a dependent
+     * keeps resolving the first unsaved version of a class it looked up. The file being parsed is left out:
+     * it resolves against its own fresh tree, and including it would drop every cache on each keystroke.
+     */
+    private fun syncOverlay(focalFqn: String?) {
+        val current = runCatching { overlayProvider() }.getOrNull() ?: return
+        val base = overlayBase
+        if (base === current) return
+        if (base != null && sameOverlayExcept(base, current, focalFqn)) return
+        overlayBase = current
+        if (base != null) dropCaches()
+    }
+
+    private fun sameOverlayExcept(a: Map<String, CharArray>, b: Map<String, CharArray>, skip: String?): Boolean {
+        val aSize = a.size - (if (skip != null && skip in a) 1 else 0)
+        val bSize = b.size - (if (skip != null && skip in b) 1 else 0)
+        if (aSize != bSize) return false
+        for ((key, value) in a) {
+            if (key == skip) continue
+            val other = b[key] ?: return false
+            if (other !== value && !other.contentEquals(value)) return false
+        }
+        return true
     }
 
     override fun close() = Disposer.dispose(disposable)
@@ -205,7 +247,7 @@ class JavaEnvironment private constructor(
             val finder = JavaInjectedElementFinder(
                 synthetic = { syntheticProvider() },
                 overlay = { overlayProvider() },
-                parse = { name, text -> parse(name, text) },
+                parse = { name, text -> parseFile(name, text) },
                 psiManager = { com.intellij.psi.PsiManager.getInstance(project) },
             )
             injectedFinder = finder

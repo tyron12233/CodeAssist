@@ -1438,16 +1438,49 @@ class IdeServices private constructor(
         store.liveModuleContainers().forEach { it.peekService(MODULE_ANALYZERS)?.invalidateCaches(reason) }
     }
 
-    /** The open buffers as an FQCN -> source overlay for the name environment, plus synthetic light classes. */
+    /** One open `.java` buffer's overlay entry, kept until that buffer's text changes. */
+    private class JavaOverlayEntry(val text: String, val fqcn: String?, val chars: CharArray)
+
+    /** The overlay map last handed out, with the inputs it was built from. */
+    private class JavaOverlaySnapshot(
+        val synthetic: Map<String, CharArray>,
+        val entries: List<JavaOverlayEntry>,
+        val map: Map<String, CharArray>,
+    )
+
+    private val javaOverlayEntries = ConcurrentHashMap<Path, JavaOverlayEntry>()
+
+    @Volatile
+    private var javaOverlaySnapshot: JavaOverlaySnapshot? = null
+
+    /**
+     * The open `.java` buffers as an FQCN -> source overlay for the name environment, plus synthetic light
+     * classes. The resolver asks for this on every class lookup, so the map is rebuilt only when a buffer's
+     * text or the synthetic set changed; otherwise the same map, with the same arrays, is returned.
+     */
     private fun overlay(): Map<String, CharArray> {
         val synthetic = syntheticOverlay()
-        val map = HashMap<String, CharArray>(synthetic.size + openDocuments.size)
-        map.putAll(synthetic)
+        val entries = ArrayList<JavaOverlayEntry>()
         for ((path, content) in openDocuments) {
-            val fqcn = fqcnOf(path, content) ?: continue
-            map[fqcn] =
-                content.toCharArray() // a real, open file overrides a synthetic of the same FQCN
+            if (!path.toString().endsWith(".java")) continue
+            val entry = javaOverlayEntries[path]?.takeIf { it.text == content }
+                ?: JavaOverlayEntry(content, fqcnOf(path, content), content.toCharArray())
+                    .also { javaOverlayEntries[path] = it }
+            entries += entry
         }
+        javaOverlaySnapshot?.let { last ->
+            if (last.synthetic === synthetic && last.entries.size == entries.size &&
+                last.entries.indices.all { last.entries[it] === entries[it] }
+            ) return last.map
+        }
+        javaOverlayEntries.keys.retainAll(openDocuments.keys)
+        val map = HashMap<String, CharArray>(synthetic.size + entries.size)
+        map.putAll(synthetic)
+        for (e in entries) {
+            // A real, open file overrides a synthetic of the same FQCN.
+            map[e.fqcn ?: continue] = e.chars
+        }
+        javaOverlaySnapshot = JavaOverlaySnapshot(synthetic, entries, map)
         return map
     }
 

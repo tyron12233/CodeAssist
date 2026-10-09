@@ -9,7 +9,6 @@ import com.intellij.psi.impl.file.PsiPackageImpl
 import com.intellij.psi.search.GlobalSearchScope
 import dev.ide.lang.java.synthetic.JavaSyntheticSource
 import dev.ide.lang.synthetic.SyntheticClass
-import dev.ide.platform.ContentHash
 
 /**
  * A [PsiElementFinder] on the resolution env's project that resolves Java classes with NO file on disk:
@@ -33,8 +32,10 @@ import dev.ide.platform.ContentHash
  * Only synthetic classes feed the package view — never the open-buffer overlay, whose files live in real
  * packages the built-in finder already enumerates (adding them here would duplicate the disk copy).
  *
- * Misses are cheap (a map + small-list lookup, no parse); a hit parses once, content-cached. Parsing goes
- * through [parse] (the env's locked full parse), so it is ART-safe and reentrant under the semantic pass.
+ * Misses are cheap (a map + small-list lookup, no parse). A hit parses once and keeps one parsed file per
+ * class name, reused while the source is the same array or the same synthetic class, or has equal content,
+ * so a lookup neither copies nor hashes the buffer and the cache holds at most one file per name. Parsing
+ * goes through [parse] (the env's locked full parse), so it is ART-safe and reentrant under the semantic pass.
  */
 internal class JavaInjectedElementFinder(
     private val synthetic: () -> List<SyntheticClass>,
@@ -43,20 +44,44 @@ internal class JavaInjectedElementFinder(
     private val psiManager: () -> PsiManager,
 ) : PsiElementFinder() {
 
-    // content hash -> parsed file (synthetic + overlay). Concurrent: findClass runs on many resolution
-    // threads; parses serialize under the env's write lock, but hit-path reads must not race a write.
-    private val cache = java.util.concurrent.ConcurrentHashMap<String, PsiJavaFile>()
+    private class OverlayParse(val source: CharArray, val file: PsiJavaFile)
+    private class SyntheticParse(val source: SyntheticClass, val file: PsiJavaFile)
+
+    // FQN -> parsed file, one per name. Concurrent: findClass runs on many resolution threads; parses
+    // serialize under the env's write lock, but hit-path reads must not race a write.
+    private val overlayParses = java.util.concurrent.ConcurrentHashMap<String, OverlayParse>()
+    private val syntheticParses = java.util.concurrent.ConcurrentHashMap<String, SyntheticParse>()
 
     override fun findClass(qualifiedName: String, scope: GlobalSearchScope): PsiClass? {
         overlay()[qualifiedName]?.let { src ->
-            classIn(parseCached(String(src), "${qualifiedName.substringAfterLast('.')}.java"), qualifiedName)?.let { return it }
+            classIn(overlayFile(qualifiedName, src), qualifiedName)?.let { return it }
         }
         for (c in synthetic()) {
-            if (declares(c, qualifiedName)) {
-                return classIn(parseCached(JavaSyntheticSource.emit(c), "${c.fqName.substringAfterLast('.')}.java"), qualifiedName)
-            }
+            if (declares(c, qualifiedName)) return classIn(syntheticFile(c), qualifiedName)
         }
         return null
+    }
+
+    private fun overlayFile(fqn: String, src: CharArray): PsiJavaFile {
+        overlayParses[fqn]?.let { cached ->
+            if (cached.source === src) return cached.file
+            if (cached.source.contentEquals(src)) {
+                overlayParses[fqn] = OverlayParse(src, cached.file)
+                return cached.file
+            }
+        }
+        val file = parse("${fqn.substringAfterLast('.')}.java", String(src))
+        overlayParses[fqn] = OverlayParse(src, file)
+        return file
+    }
+
+    private fun syntheticFile(c: SyntheticClass): PsiJavaFile {
+        syntheticParses[c.fqName]?.let { if (it.source === c) return it.file }
+        val text = JavaSyntheticSource.emit(c)
+        val previous = syntheticParses[c.fqName]?.file
+        val file = previous?.takeIf { it.text == text } ?: parse("${c.fqName.substringAfterLast('.')}.java", text)
+        syntheticParses[c.fqName] = SyntheticParse(c, file)
+        return file
     }
 
     override fun findClasses(qualifiedName: String, scope: GlobalSearchScope): Array<PsiClass> =
@@ -111,13 +136,13 @@ internal class JavaInjectedElementFinder(
         return out
     }
 
-    private fun parseCached(text: String, name: String): PsiJavaFile =
-        cache.getOrPut(ContentHash.of(text).value) { parse(name, text) }
-
-    /** Drop parsed synthetic/overlay files (their content-hash keying makes a changed class parse fresh anyway,
-     *  but a resource/synthetic change also needs the FACADE's class-resolution cache dropped — see
-     *  [JavaEnvironment.dropCaches]; this clears the now-dead entries so they don't accumulate). */
-    fun clearCache() = cache.clear()
+    /** Drop parsed synthetic/overlay files (a changed source already parses fresh, but a resource/synthetic
+     *  change also needs the FACADE's class-resolution cache dropped, see [JavaEnvironment.dropCaches]; this
+     *  releases the files the facade no longer reaches). */
+    fun clearCache() {
+        overlayParses.clear()
+        syntheticParses.clear()
+    }
 
     private fun declares(c: SyntheticClass, fqn: String): Boolean =
         c.fqName == fqn || c.nestedClasses.any { declares(it, fqn) }

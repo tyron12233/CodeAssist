@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 class IdeServicesTest {
 
     @Test
-    fun runBuildCompilesAndRunsTheConsoleApp() = withTempDir("ide-run") { dir ->
+    fun runBuildCompilesAndRunsTheConsoleApp(): Unit = withTempDir("ide-run") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             ide.build.runBuild()
             awaitBuild(ide)
@@ -29,7 +29,7 @@ class IdeServicesTest {
     }
 
     @Test
-    fun runBuildReflectsUnsavedEditorChanges() = withTempDir("ide-edit") { dir ->
+    fun runBuildReflectsUnsavedEditorChanges(): Unit = withTempDir("ide-edit") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val app = ide.modules().first { it.name == "app" }
             val main = ide.sourceRoots(app).first().resolve("com/example/app/Main.java")
@@ -49,7 +49,7 @@ class IdeServicesTest {
     }
 
     @Test
-    fun runBuildFailsOnACompileError() = withTempDir("ide-err") { dir ->
+    fun runBuildFailsOnACompileError(): Unit = withTempDir("ide-err") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val app = ide.modules().first { it.name == "app" }
             val main = ide.sourceRoots(app).first().resolve("com/example/app/Main.java")
@@ -70,7 +70,7 @@ class IdeServicesTest {
     }
 
     @Test
-    fun bootstrapsDemoProjectWithModulesAndSources() = withTempDir("ide-demo") { dir ->
+    fun bootstrapsDemoProjectWithModulesAndSources(): Unit = withTempDir("ide-demo") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             assertEquals(setOf("core", "util", "app"), ide.modules().map { it.name }.toSet())
             val core = ide.modules().first { it.name == "core" }
@@ -82,7 +82,7 @@ class IdeServicesTest {
     }
 
     @Test
-    fun completesDirectTransitiveAndPlatformMembers() = withTempDir("ide-demo") { dir ->
+    fun completesDirectTransitiveAndPlatformMembers(): Unit = withTempDir("ide-demo") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val app = ide.modules().first { it.name == "app" }
             // A probe file in :app's source root (JDT requires the unit name to match the class).
@@ -110,7 +110,7 @@ class IdeServicesTest {
     }
 
     @Test
-    fun completesInsideAnOnDiskFileBeingEdited() = withTempDir("ide-demo") { dir ->
+    fun completesInsideAnOnDiskFileBeingEdited(): Unit = withTempDir("ide-demo") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val app = ide.modules().first { it.name == "app" }
             val mainFile = ide.sourceRoots(app).first().resolve("com/example/app/Main.java") // exists on disk
@@ -129,7 +129,7 @@ class IdeServicesTest {
     }
 
     @Test
-    fun editingADependencyInTheEditorIsReflectedInDependents() = withTempDir("ide-demo") { dir ->
+    fun editingADependencyInTheEditorIsReflectedInDependents(): Unit = withTempDir("ide-demo") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val util = ide.modules().first { it.name == "util" }
@@ -146,6 +146,29 @@ class IdeServicesTest {
                 "package com.example.util; import com.example.core.StringUtils; class Probe { void m(){ StringUtils.|CARET| } }",
             )
             assertTrue("brandNew" in labels, "unsaved edit to a dependency should be visible to dependents: $labels")
+        }
+        dir.toFile().deleteRecursively()
+    }
+
+    @Test
+    fun aSecondUnsavedEditToADependencyReplacesTheFirst(): Unit = withTempDir("ide-demo") { dir ->
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val core = ide.modules().first { it.name == "core" }
+            val util = ide.modules().first { it.name == "util" }
+            val stringUtils = ide.sourceRoots(core).first().resolve("com/example/core/StringUtils.java")
+            val probe = ide.sourceRoots(util).first().resolve("com/example/util/Probe.java")
+            val probeCode =
+                "package com.example.util; import com.example.core.StringUtils; class Probe { void m(){ StringUtils.|CARET| } }"
+            val base = Files.readString(stringUtils).trimEnd().dropLast(1)
+
+            ide.updateDocument(stringUtils, "$base public static String firstEdit() { return \"\"; } }")
+            labelsAt(ide, probe, probeCode).let { l -> assertTrue("firstEdit" in l, "first unsaved edit: $l") }
+
+            ide.updateDocument(stringUtils, "$base public static String secondEdit() { return \"\"; } }")
+            labelsAt(ide, probe, probeCode).let { l ->
+                assertTrue("secondEdit" in l, "second unsaved edit should be visible: $l")
+                assertTrue("firstEdit" !in l, "the first edit's member should be gone: $l")
+            }
         }
         dir.toFile().deleteRecursively()
     }
