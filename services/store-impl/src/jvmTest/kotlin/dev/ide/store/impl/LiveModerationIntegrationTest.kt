@@ -145,6 +145,16 @@ class LiveModerationIntegrationTest {
                 description = "A description",
                 category = category,
                 version = "1.0.0",
+                // A listing with no screenshots on it must be sent one.
+                screenshotPaths = listOf(
+                    File(root, "shot.png").also {
+                        it.writeBytes(
+                            java.util.Base64.getDecoder().decode(
+                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==",
+                            ),
+                        )
+                    }.absolutePath,
+                ),
             ),
             packed.value,
         )

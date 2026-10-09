@@ -57,6 +57,11 @@ class SupabaseSubmissionService(
         packaged: PackagedProject,
     ): StoreResult<StoreSubmissionStatus> {
         if (!configured) return StoreResult.Unavailable("Submissions are not configured in this build")
+        // A listing needs at least one screenshot. A new version that sends none keeps the listing's own
+        // gallery, so only a first submission can be refused here; the database enforces both cases.
+        if (request.itemSlug == null && request.screenshotPaths.isEmpty()) {
+            return StoreResult.Failed(NO_SCREENSHOTS)
+        }
         val account = accounts.current()
             ?: return StoreResult.Failed("Sign in to submit a project")
         val token = accounts.bearer()
@@ -75,6 +80,11 @@ class SupabaseSubmissionService(
 
         // 2. Upload. First, because a row without its payload is worse than an orphaned object.
         val shots = uploadScreenshots("${account.userId}/$slug/${request.version}-shots", request.screenshotPaths, token)
+        // Every image was dropped. Going on would publish a new listing with none, or keep an update's old
+        // gallery when the publisher sent a new one, and neither is what was asked for.
+        if (request.screenshotPaths.isNotEmpty() && shots.isEmpty()) {
+            return StoreResult.Failed(SCREENSHOTS_NOT_UPLOADED)
+        }
         val icon = uploadIcon("${account.userId}/$slug/${request.version}-icon", request.iconPath, token)
         when (val up = upload(objectPath, archive, token)) {
             is StoreResult.Ok -> Unit
@@ -688,6 +698,10 @@ class SupabaseSubmissionService(
 
         /** Matches the CHECK on `store_item_versions.screenshot_paths`. */
         const val MAX_SCREENSHOTS = 6
+
+        const val NO_SCREENSHOTS = "Add at least one screenshot. It is what people look at before they install anything."
+        const val SCREENSHOTS_NOT_UPLOADED =
+            "None of the screenshots could be uploaded. Use PNG, JPEG or WebP images under 2 MB, then send again."
 
         /** Matches `cardinality(tags) <= 10` on `store_items`, and the patch column's own CHECK. */
         const val MAX_TAGS = 10

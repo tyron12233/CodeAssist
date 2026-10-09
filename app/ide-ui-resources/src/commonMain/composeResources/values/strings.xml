@@ -667,7 +667,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="submit_category_unavailable">Categories could not be loaded. Every submission has to name one, so this needs a connection before you can send it.</string>
     <string name="submit_category_retry">Try again</string>
     <string name="submit_screenshots">Screenshots</string>
-    <string name="submit_screenshots_desc">Up to six images. This is what people look at before they install anything.</string>
+    <string name="submit_screenshots_desc">Up to six images, and at least one. This is what people look at before they install anything.</string>
     <string name="submit_add_screenshot">Add a screenshot</string>
     <string name="submit_send">Submit for review</string>
     <string name="submit_sending">Submitting…</string>
@@ -684,6 +684,8 @@ We never collect your code, file or project names, which features you use, or an
     <string name="submit_category_current">Staying in %1$s. The category list could not be loaded, so it cannot be changed right now.</string>
     <string name="submit_field_changelog">What changed</string>
     <string name="submit_required_version">Give the version as three numbers, like 1.2.0.</string>
+    <string name="submit_required_screenshot">Add at least one screenshot. It is what people look at before they install anything.</string>
+    <string name="submit_screenshots_unavailable">A new listing needs at least one screenshot, and images cannot be picked here. Send it from CodeAssist on Android or desktop.</string>
     <string name="submit_mine_title">Your submissions</string>
     <string name="submit_withdraw">Withdraw</string>
     <string name="submit_unavailable">Publishing isn't available in this build.</string>

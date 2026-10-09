@@ -59,6 +59,7 @@ import dev.ide.ui.generated.resources.submit_no_projects
 import dev.ide.ui.generated.resources.submit_packaging
 import dev.ide.ui.generated.resources.submit_pick_project
 import dev.ide.ui.generated.resources.submit_required
+import dev.ide.ui.generated.resources.submit_required_screenshot
 import dev.ide.ui.generated.resources.submit_required_version
 import dev.ide.ui.generated.resources.submit_target
 import dev.ide.ui.generated.resources.submit_target_new
@@ -92,6 +93,7 @@ import dev.ide.ui.generated.resources.submit_screenshots
 import dev.ide.ui.generated.resources.submit_screenshots_desc
 import dev.ide.ui.generated.resources.submit_screenshots_kept
 import dev.ide.ui.generated.resources.submit_screenshots_offline
+import dev.ide.ui.generated.resources.submit_screenshots_unavailable
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -161,6 +163,7 @@ fun SubmitProjectScreen(
     // Resolved here rather than inside the click handler: a string resource needs composition.
     val requiredText = stringResource(Res.string.submit_required)
     val versionText = stringResource(Res.string.submit_required_version)
+    val screenshotText = stringResource(Res.string.submit_required_screenshot)
 
     val projects = remember { runCatching { backend.projects.projects() }.getOrDefault(emptyList()) }
     val notifications = rememberNotificationPermissionController()
@@ -401,6 +404,17 @@ fun SubmitProjectScreen(
                         // Hidden rather than disabled on a host that cannot pick files: there is nothing the
                         // user could do to make it work.
                         val picker = fileActions?.takeIf { it.canPickFile }
+                        // A listing needs at least one screenshot. An update that sends none keeps the ones the
+                        // listing has, so it only needs new ones when the listing has none yet.
+                        val needsScreenshot = screenshots.isEmpty() && updating?.screenshots.isNullOrEmpty()
+                        if (picker == null && needsScreenshot) {
+                            // Said rather than hidden: without it the send button refuses for a reason the
+                            // form never shows.
+                            Spacer(Modifier.height(18.dp))
+                            Eyebrow(stringResource(Res.string.submit_screenshots))
+                            Spacer(Modifier.height(4.dp))
+                            Body(stringResource(Res.string.submit_screenshots_unavailable))
+                        }
                         if (picker != null) {
                             Spacer(Modifier.height(18.dp))
                             Eyebrow(stringResource(Res.string.submit_screenshots))
@@ -490,8 +504,9 @@ fun SubmitProjectScreen(
                         // The store's own check on the column, applied here so a malformed version is
                         // answered in the form rather than by a rejected upload.
                         val versionOk = VERSION_FORMAT.matches(draft.version.trim())
-                        val complete = versionOk && draft.title.isNotBlank() && draft.summary.isNotBlank() &&
+                        val fieldsDone = draft.title.isNotBlank() && draft.summary.isNotBlank() &&
                             draft.description.isNotBlank() && draft.category.isNotBlank()
+                        val complete = versionOk && fieldsDone && !needsScreenshot
                         PrimaryActionButton(
                             label = if (sending) {
                                 stringResource(Res.string.submit_sending)
@@ -501,7 +516,11 @@ fun SubmitProjectScreen(
                             glyph = CaSymbols.upload,
                             onClick = {
                                 if (!complete) {
-                                    message = if (!versionOk) versionText else requiredText
+                                    message = when {
+                                        !versionOk -> versionText
+                                        !fieldsDone -> requiredText
+                                        else -> screenshotText
+                                    }
                                 } else if (!sending) {
                                     sending = true
                                 }

@@ -665,7 +665,7 @@
     <string name="submit_category_unavailable">无法加载分类。每份提交都必须选择分类，因此发送前需要网络连接。</string>
     <string name="submit_category_retry">重试</string>
     <string name="submit_screenshots">截图</string>
-    <string name="submit_screenshots_desc">最多六张。这是别人在安装之前最先看的东西。</string>
+    <string name="submit_screenshots_desc">最多六张，至少一张。这是别人在安装之前最先看的东西。</string>
     <string name="submit_add_screenshot">添加截图</string>
     <string name="submit_send">提交审核</string>
     <string name="submit_sending">正在提交…</string>
@@ -682,6 +682,8 @@
     <string name="submit_category_current">保留分类 %1$s。分类列表无法加载，暂时无法更改。</string>
     <string name="submit_field_changelog">变更内容</string>
     <string name="submit_required_version">版本号请使用三段数字，如 1.2.0。</string>
+    <string name="submit_required_screenshot">请至少添加一张截图。这是别人在安装之前最先看的东西。</string>
+    <string name="submit_screenshots_unavailable">新作品至少需要一张截图，但这里无法选择图片。请在 Android 或桌面版 CodeAssist 中提交。</string>
     <string name="submit_mine_title">你的提交</string>
     <string name="submit_withdraw">撤回</string>
     <string name="submit_unavailable">此构建版本不支持发布。</string>

@@ -161,6 +161,7 @@ class LiveSubmissionIntegrationTest {
             language = "Kotlin",
             tags = listOf("test"),
             version = "1.0.$unique",
+            screenshotPaths = oneShot(),
         )
         val submitted = service.submit(request, p)
         assertTrue(submitted is StoreResult.Ok, "submit failed: $submitted")
@@ -243,6 +244,12 @@ class LiveSubmissionIntegrationTest {
     }
 
     /** The smallest valid PNG, so the upload is a real image rather than bytes named `.png`. */
+    /** One screenshot, the least a new listing may be sent with. */
+    private fun oneShot(): List<String> = listOf(
+        File(kotlin.io.path.createTempDirectory("ca-live-shot-").toFile().also { temps += it }, "s.png")
+            .also { it.writeBytes(onePixelPng()) }.absolutePath,
+    )
+
     private fun onePixelPng(): ByteArray = java.util.Base64.getDecoder().decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==",
     )
@@ -299,6 +306,7 @@ class LiveSubmissionIntegrationTest {
                     // report THAT instead of the quota, which is a different code path.
                     title = "Quota Probe $run $i",
                     summary = "s", description = "d", category = "java", version = "2.0.$i",
+                    screenshotPaths = oneShot(),
                 ),
                 packed.value,
             )
@@ -330,6 +338,7 @@ class LiveSubmissionIntegrationTest {
         fun send(v: String) = service.submit(
             dev.ide.store.StoreSubmissionRequest(
                 title = title, summary = "s", description = "d", category = "java", version = v,
+                screenshotPaths = oneShot(),
             ),
             packed.value,
         )

@@ -712,7 +712,7 @@
     <string name="submit_category_unavailable">تعذّر تحميل الفئات. كل إرسال لا بد أن يحدد فئة، لذا يحتاج هذا إلى اتصال قبل أن ترسله.</string>
     <string name="submit_category_retry">إعادة المحاولة</string>
     <string name="submit_screenshots">لقطات الشاشة</string>
-    <string name="submit_screenshots_desc">حتى ست صور. هذا ما ينظر إليه الناس قبل أن يثبّتوا أي شيء.</string>
+    <string name="submit_screenshots_desc">حتى ست صور، وصورة واحدة على الأقل. هذا ما ينظر إليه الناس قبل أن يثبّتوا أي شيء.</string>
     <string name="submit_add_screenshot">إضافة لقطة شاشة</string>
     <string name="submit_send">إرسال للمراجعة</string>
     <string name="submit_sending">جاري الإرسال…</string>
@@ -729,6 +729,8 @@
     <string name="submit_category_current">ستبقى في %1$s. تعذّر تحميل قائمة الفئات، لذا لا يمكن تغييرها الآن.</string>
     <string name="submit_field_changelog">ما الذي تغيّر</string>
     <string name="submit_required_version">اكتب الإصدار في ثلاثة أرقام، مثل 1.2.0.</string>
+    <string name="submit_required_screenshot">أضف لقطة شاشة واحدة على الأقل. هذا ما ينظر إليه الناس قبل أن يثبّتوا أي شيء.</string>
+    <string name="submit_screenshots_unavailable">تحتاج القائمة الجديدة إلى لقطة شاشة واحدة على الأقل، ولا يمكن اختيار الصور هنا. أرسلها من CodeAssist على أندرويد أو سطح المكتب.</string>
     <string name="submit_mine_title">إرسالاتك</string>
     <string name="submit_withdraw">سحب</string>
     <string name="submit_unavailable">النشر غير متاح في هذا الإصدار.</string>
