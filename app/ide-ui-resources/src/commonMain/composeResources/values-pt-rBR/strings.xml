@@ -1128,4 +1128,11 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
         <item quantity="one">%1$d arquivo</item>
         <item quantity="other">%1$d arquivos</item>
     </plurals>
+    <string name="home_account">Conta</string>
+    <string name="home_search_projects">Pesquisar projetos</string>
+    <string name="home_no_match">Nenhum projeto corresponde a “%1$s”.</string>
+    <string name="home_sort">Ordenar projetos</string>
+    <string name="home_sort_recent">Recentes</string>
+    <string name="home_sort_name">Nome</string>
+    <string name="home_clear_search">Limpar pesquisa</string>
 </resources>

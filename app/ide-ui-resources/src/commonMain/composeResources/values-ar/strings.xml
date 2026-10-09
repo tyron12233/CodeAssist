@@ -605,6 +605,13 @@
     <string name="home_challenges">اليومي</string>
     <!-- Home / Projects tab, Material 3 Expressive redesign -->
     <string name="home_your_projects">مشاريعك</string>
+    <string name="home_account">الحساب</string>
+    <string name="home_search_projects">البحث في المشاريع</string>
+    <string name="home_no_match">لا توجد مشاريع تطابق «%1$s».</string>
+    <string name="home_sort">ترتيب المشاريع</string>
+    <string name="home_sort_recent">الأحدث</string>
+    <string name="home_sort_name">الاسم</string>
+    <string name="home_clear_search">مسح البحث</string>
     <string name="home_good_morning">صباح الخير</string>
     <string name="home_good_afternoon">طاب يومك</string>
     <string name="home_good_evening">مساء الخير</string>

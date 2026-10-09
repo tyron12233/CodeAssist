@@ -557,6 +557,13 @@
     <string name="home_challenges">每日</string>
     <!-- Home / Projects tab, Material 3 Expressive redesign -->
     <string name="home_your_projects">你的项目</string>
+    <string name="home_account">账户</string>
+    <string name="home_search_projects">搜索项目</string>
+    <string name="home_no_match">没有与“%1$s”匹配的项目。</string>
+    <string name="home_sort">排序项目</string>
+    <string name="home_sort_recent">最近</string>
+    <string name="home_sort_name">名称</string>
+    <string name="home_clear_search">清除搜索</string>
     <string name="home_good_morning">早上好</string>
     <string name="home_good_afternoon">下午好</string>
     <string name="home_good_evening">晚上好</string>

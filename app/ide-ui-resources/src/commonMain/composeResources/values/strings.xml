@@ -559,6 +559,13 @@ We never collect your code, file or project names, which features you use, or an
     <string name="home_challenges">Daily</string>
     <!-- Home / Projects tab, Material 3 Expressive redesign -->
     <string name="home_your_projects">Your projects</string>
+    <string name="home_account">Account</string>
+    <string name="home_search_projects">Search projects</string>
+    <string name="home_no_match">No projects match “%1$s”.</string>
+    <string name="home_sort">Sort projects</string>
+    <string name="home_sort_recent">Recent</string>
+    <string name="home_sort_name">Name</string>
+    <string name="home_clear_search">Clear search</string>
     <string name="home_good_morning">Good morning</string>
     <string name="home_good_afternoon">Good afternoon</string>
     <string name="home_good_evening">Good evening</string>

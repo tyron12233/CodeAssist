@@ -1,5 +1,26 @@
 package dev.ide.ui.screens
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.generated.resources.home_account
+import dev.ide.ui.generated.resources.home_search_projects
+import dev.ide.ui.generated.resources.home_no_match
+import dev.ide.ui.generated.resources.home_sort
+import dev.ide.ui.generated.resources.home_sort_recent
+import dev.ide.ui.generated.resources.home_sort_name
+import dev.ide.ui.generated.resources.home_clear_search
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -190,6 +211,12 @@ fun ProjectsHomeScreen(
      * a `<bitmap>`, and without this those layers render as a placeholder instead of the artwork.
      */
     loadIconImage: (suspend (String) -> ByteArray?)? = null,
+    /**
+     * Set by the wide home's sidebar to open the account sheet here (it lives on this tab); the screen
+     * opens it and calls [onAccountRequestHandled] so the request is consumed once.
+     */
+    accountRequested: Boolean = false,
+    onAccountRequestHandled: () -> Unit = {},
 ) {
     var segment by remember { mutableStateOf(HomeSegment.Projects) }
     // Deleting wipes the project from disk and nothing else in this flow asks first.
@@ -208,7 +235,34 @@ fun ProjectsHomeScreen(
     var isRefreshing by remember { mutableStateOf(false) }
     val refreshState = rememberPullToRefreshState()
 
-    Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
+    LaunchedEffect(accountRequested) {
+        if (accountRequested) {
+            sheet = HomeSheet.Account
+            onAccountRequestHandled()
+        }
+    }
+
+    BoxWithConstraints(modifier.fillMaxSize()) {
+    if (maxWidth >= ProjectsWideBreakpoint) {
+        WideProjectsHome(
+            projects = ordered,
+            now = now,
+            icons = icons,
+            loadIcon = loadIcon,
+            loadIconImage = loadIconImage,
+            onOpen = onOpen,
+            onNewProject = onNewProject,
+            onImportProject = onImportProject,
+            onCloneRepository = onCloneRepository,
+            onExportProject = onExportProject,
+            onRequestDelete = onDeleteProject?.let { { project: ProjectInfo -> pendingDelete = project } },
+            showLegacyRecovery = showLegacyRecovery,
+            onDismissLegacyRecovery = onDismissLegacyRecovery,
+            bell = bell,
+            onOpenAccount = { sheet = HomeSheet.Account },
+        )
+    } else
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
       PullToRefreshBox(
         isRefreshing = isRefreshing,
         onRefresh = {
@@ -300,6 +354,7 @@ fun ProjectsHomeScreen(
             }
         }
       }
+    }
     }
 
     when (sheet) {
@@ -994,5 +1049,293 @@ private fun relativeOpened(lastOpened: Long, now: Long): String? {
         days < 1 -> pluralStringResource(Res.plurals.project_opened_hours, hours, hours)
         weeks < 1 -> pluralStringResource(Res.plurals.project_opened_days, days, days)
         else -> pluralStringResource(Res.plurals.project_opened_weeks, weeks, weeks)
+    }
+}
+
+/** From this width the Projects tab is the dense, searchable desktop list rather than the phone's cards. */
+private val ProjectsWideBreakpoint = 600.dp
+
+/** The wide list's maximum width: past this, rows only spread their columns further apart. */
+private val ProjectsWideMaxWidth = 1120.dp
+
+/** From this width the wide rows also show the kind and module count as a column of their own. */
+private val ProjectsKindColumnBreakpoint = 760.dp
+
+private enum class ProjectSort { Recent, Name }
+
+/**
+ * The Projects tab on a tablet or desktop window, after IntelliJ's welcome screen: the title with Import,
+ * Clone and New project as buttons in the header, a search field and a sort over a dense list of two-line
+ * rows (name over path), and the per-project actions on hover. There is no resume card: the list is sorted
+ * by last opened, so its first row is already the project to continue. The inbox and account buttons stay
+ * in the header only when no home sidebar is offering them ([LocalHomeSidebarShown]).
+ */
+@Composable
+private fun WideProjectsHome(
+    projects: List<ProjectInfo>,
+    now: Long,
+    icons: ProjectIconCache,
+    loadIcon: (suspend (ProjectInfo) -> UiProjectIcon?)?,
+    loadIconImage: (suspend (String) -> ByteArray?)?,
+    onOpen: (ProjectInfo) -> Unit,
+    onNewProject: () -> Unit,
+    onImportProject: (() -> Unit)?,
+    onCloneRepository: (() -> Unit)?,
+    onExportProject: ((ProjectInfo) -> Unit)?,
+    onRequestDelete: ((ProjectInfo) -> Unit)?,
+    showLegacyRecovery: Boolean,
+    onDismissLegacyRecovery: () -> Unit,
+    bell: (@Composable () -> Unit)?,
+    onOpenAccount: () -> Unit,
+) {
+    val c = MaterialTheme.colorScheme
+    var query by rememberSaveable { mutableStateOf("") }
+    var sort by rememberSaveable { mutableStateOf(ProjectSort.Recent) }
+    val shown = remember(projects, query, sort) {
+        val q = query.trim()
+        projects
+            .filter { q.isEmpty() || it.name.contains(q, ignoreCase = true) || it.rootPath.contains(q, ignoreCase = true) }
+            .let { list -> if (sort == ProjectSort.Name) list.sortedBy { it.name.lowercase() } else list }
+    }
+    val sidebarShown = LocalHomeSidebarShown.current
+    BoxWithConstraints(Modifier.fillMaxSize().background(c.background)) {
+        val showKind = maxWidth >= ProjectsKindColumnBreakpoint
+        Column(Modifier.widthIn(max = ProjectsWideMaxWidth).fillMaxSize().padding(horizontal = 28.dp)) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    stringResource(Res.string.home_your_projects),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = c.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (onImportProject != null) {
+                    HeaderButton(CaSymbols.folderOpen, stringResource(Res.string.home_import_project), primary = false, onClick = onImportProject)
+                }
+                if (onCloneRepository != null) {
+                    HeaderButton(CaSymbols.forkRight, stringResource(Res.string.home_clone_repository), primary = false, onClick = onCloneRepository)
+                }
+                HeaderButton(CaSymbols.add, stringResource(Res.string.home_new_project), primary = true, onClick = onNewProject)
+                if (!sidebarShown) {
+                    bell?.invoke()
+                    SquareToneButton(
+                        glyph = CaSymbols.accountCircle,
+                        contentDescription = stringResource(Res.string.home_account),
+                        onClick = onOpenAccount,
+                        shape = CircleShape,
+                        size = 44.dp,
+                    )
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                ProjectSearchField(query, { query = it }, Modifier.weight(1f, fill = false).widthIn(max = 380.dp))
+                Spacer(Modifier.weight(0.0001f))
+                SortChooser(sort) { sort = it }
+            }
+            if (showLegacyRecovery) LegacyRecoveryNotice(onDismissLegacyRecovery)
+            LazyColumn(
+                Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
+                if (shown.isEmpty()) {
+                    item("empty") {
+                        if (projects.isEmpty()) {
+                            EmptyList()
+                        } else {
+                            Text(
+                                stringResource(Res.string.home_no_match, query.trim()),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = c.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 24.dp),
+                            )
+                        }
+                    }
+                }
+                itemsIndexedKeyed(shown, key = { _, p -> p.rootPath }) { i, project ->
+                    DenseProjectRow(
+                        project = project,
+                        index = i,
+                        now = now,
+                        icon = projectIconImage(project, icons, loadIcon, loadIconImage),
+                        showKind = showKind,
+                        onOpen = { onOpen(project) },
+                        onShare = onExportProject?.let { export -> { export(project) } },
+                        onDelete = onRequestDelete?.let { request -> { request(project) } },
+                    )
+                }
+                item("ad") { AdSlot(AdPlacement.PROJECTS, Modifier.padding(top = 16.dp)) }
+            }
+        }
+    }
+}
+
+/** A compact header button: filled for the primary action, outlined for the others. */
+@Composable
+private fun HeaderButton(glyph: Char, label: String, primary: Boolean, onClick: () -> Unit) {
+    val content: @Composable RowScope.() -> Unit = {
+        Symbol(glyph, contentDescription = null, size = 18.dp)
+        Spacer(Modifier.width(8.dp))
+        Text(label, maxLines = 1, style = MaterialTheme.typography.labelLarge)
+    }
+    val padding = PaddingValues(start = 14.dp, end = 18.dp)
+    if (primary) {
+        Button(onClick = onClick, contentPadding = padding, modifier = Modifier.height(40.dp), content = content)
+    } else {
+        OutlinedButton(onClick = onClick, contentPadding = padding, modifier = Modifier.height(40.dp), content = content)
+    }
+}
+
+/** The project list's filter: matches a project's name or its folder path, ignoring case. */
+@Composable
+private fun ProjectSearchField(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
+    val c = MaterialTheme.colorScheme
+    Row(
+        modifier.height(40.dp).clip(RoundedCornerShape(50)).background(c.surfaceContainerHigh).padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Symbol(CaSymbols.search, contentDescription = null, size = 18.dp, tint = c.onSurfaceVariant)
+        BasicTextField(
+            value = query,
+            onValueChange = onQuery,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = c.onSurface),
+            cursorBrush = SolidColor(c.primary),
+            modifier = Modifier.weight(1f),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (query.isEmpty()) {
+                        Text(stringResource(Res.string.home_search_projects), style = MaterialTheme.typography.bodyMedium, color = c.outline)
+                    }
+                    inner()
+                }
+            },
+        )
+        if (query.isNotEmpty()) {
+            IconButtonCa(CaIcons.close, stringResource(Res.string.home_clear_search), { onQuery("") }, iconSize = 14, boxSize = 24)
+        }
+    }
+}
+
+/** Recent (the default, most recently opened first) or alphabetical. */
+@Composable
+private fun SortChooser(sort: ProjectSort, onSort: (ProjectSort) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val label: @Composable (ProjectSort) -> String = {
+        stringResource(if (it == ProjectSort.Recent) Res.string.home_sort_recent else Res.string.home_sort_name)
+    }
+    Box {
+        TextButton(onClick = { open = true }, contentPadding = PaddingValues(horizontal = 12.dp)) {
+            Symbol(CaSymbols.sort, contentDescription = stringResource(Res.string.home_sort), size = 18.dp)
+            Spacer(Modifier.width(6.dp))
+            Text(label(sort), style = MaterialTheme.typography.labelLarge)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            ProjectSort.entries.forEach { option ->
+                DropdownMenuItem(text = { Text(label(option)) }, onClick = { open = false; onSort(option) })
+            }
+        }
+    }
+}
+
+/**
+ * One project in the wide list: icon, name over path, then (when there is room) kind and module count, the
+ * last-opened time, and the actions menu. The row highlights on hover and opens on click; the menu shows on
+ * hover, while its menu is open, and always on touch, where there is no hover to reveal it.
+ */
+@Composable
+private fun DenseProjectRow(
+    project: ProjectInfo,
+    index: Int,
+    now: Long,
+    icon: ImageBitmap?,
+    showKind: Boolean,
+    onOpen: () -> Unit,
+    onShare: (() -> Unit)?,
+    onDelete: (() -> Unit)?,
+) {
+    val c = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    var menuOpen by remember(project.rootPath) { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(12.dp))
+            .background(if (hovered || menuOpen) c.surfaceContainerHigh else Color.Transparent)
+            .clickable(interaction, indication = null, onClick = onOpen)
+            .padding(start = 12.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        if (icon != null) {
+            Box(Modifier.size(34.dp).clip(tileShape(index)).background(tonalPair(index).container)) {
+                Image(icon, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            }
+        } else {
+            TonalTile(symbolForProject(project), tonalPair(index), tileShape(index), size = 34.dp)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                project.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = c.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            // Shortened from the front, so the project's own folder at the end of the path always shows
+            // (TextOverflow.StartEllipsis is not honoured on every target, so the cut is done here).
+            Text(
+                shortenPath(project.rootPath, maxSegments = 4),
+                style = MaterialTheme.typography.bodySmall,
+                color = c.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (showKind) {
+            Text(
+                "${kindLabel(project)} · ${moduleLabel(project.moduleCount)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = c.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.width(170.dp),
+            )
+        }
+        Text(
+            relativeAge(project.lastOpened, now).orEmpty(),
+            style = MaterialTheme.typography.bodySmall,
+            color = c.outline,
+            maxLines = 1,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(110.dp),
+        )
+        if (onShare != null || onDelete != null) {
+            Box(Modifier.alpha(if (hovered || menuOpen || isMobilePlatform) 1f else 0f)) {
+                IconButtonCa(CaIcons.ellipsis, stringResource(Res.string.home_more_actions), { menuOpen = true }, iconSize = 18, boxSize = 36)
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    if (onShare != null) {
+                        DropdownMenuItem(text = { Text(stringResource(Res.string.home_share)) }, onClick = { menuOpen = false; onShare() })
+                    }
+                    if (onDelete != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(Res.string.home_delete), color = c.error) },
+                            onClick = { menuOpen = false; onDelete() },
+                        )
+                    }
+                }
+            }
+        } else {
+            Spacer(Modifier.width(36.dp))
+        }
     }
 }

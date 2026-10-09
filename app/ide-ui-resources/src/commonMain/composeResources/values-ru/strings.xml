@@ -1099,4 +1099,11 @@
         <item quantity="other">%1$d версий разрешено автоматически (приоритет у новейшей версии)</item>
     </plurals>
 
+    <string name="home_account">Аккаунт</string>
+    <string name="home_search_projects">Поиск проектов</string>
+    <string name="home_no_match">Нет проектов по запросу «%1$s».</string>
+    <string name="home_sort">Сортировка проектов</string>
+    <string name="home_sort_recent">Недавние</string>
+    <string name="home_sort_name">Имя</string>
+    <string name="home_clear_search">Очистить поиск</string>
 </resources>

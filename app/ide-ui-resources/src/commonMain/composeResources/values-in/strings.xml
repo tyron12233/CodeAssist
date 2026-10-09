@@ -1052,4 +1052,11 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="block_palette_variable">Variabel</string>
     <string name="block_palette_call">Panggil</string>
     <string name="block_palette_comment">Komentar</string>
+    <string name="home_account">Akun</string>
+    <string name="home_search_projects">Cari proyek</string>
+    <string name="home_no_match">Tidak ada proyek yang cocok dengan “%1$s”.</string>
+    <string name="home_sort">Urutkan proyek</string>
+    <string name="home_sort_recent">Terbaru</string>
+    <string name="home_sort_name">Nama</string>
+    <string name="home_clear_search">Hapus pencarian</string>
 </resources>

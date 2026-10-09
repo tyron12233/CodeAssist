@@ -55,6 +55,61 @@ class ProjectsHomeScreenSnapshot {
     @Test
     fun renderEmpty() = snapshot("home-empty.png", emptyList(), dark = true)
 
+    /** A desktop window (sidebar + dense list) and a tablet in portrait (bottom bar + dense list). */
+    @Test
+    fun renderWide() {
+        val many = projects + listOf(
+            project("Compose", "/Users/dev/CodeAssist/Compose", 1, android = true, hoursAgo = 500),
+            project("KotlinConsole", "/Users/dev/CodeAssist/KotlinConsole", 1, hoursAgo = 1500),
+            project("android-demo", "/Users/dev/CodeAssist/android-demo", 3, android = true, hoursAgo = 0),
+        )
+        wideSnapshot("home-wide-desktop.png", many, wDp = 1280, hDp = 800)
+        wideSnapshot("home-wide-tablet.png", many, wDp = 800, hDp = 1100)
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    private fun wideSnapshot(name: String, projects: List<ProjectInfo>, wDp: Int, hDp: Int) {
+        val scene = ImageComposeScene(width = wDp * 2, height = hDp * 2, density = Density(2f)) {
+            CodeAssistTheme(dark = true) {
+                CompositionLocalProvider(LocalAds provides fakeAdController(StubBackend())) {
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                        HomeScreen(
+                            tab = dev.ide.ui.HomeTab.Projects,
+                            onSelectTab = {},
+                            projectsContent = {
+                                ProjectsHomeScreen(
+                                    projects = projects,
+                                    onOpen = {},
+                                    onNewProject = {},
+                                    onCloneRepository = {},
+                                    onExportProject = {},
+                                    onDeleteProject = {},
+                                    onImportProject = {},
+                                )
+                            },
+                            storeContent = {},
+                            learnContent = {},
+                            challengesContent = {},
+                            projectCount = projects.size,
+                            sidebarFooter = {
+                                HomeSidebarItem(dev.ide.ui.icons.CaSymbols.inbox, "Notifications", count = 3, countIsAlert = true) {}
+                                HomeSidebarItem(dev.ide.ui.icons.CaSymbols.accountCircle, "Account") {}
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        try {
+            scene.render()
+            for (frame in 1..30) scene.render(frame * 50_000_000L)
+            val png = scene.render(6_000_000_000L).encodeToData(EncodedImageFormat.PNG)!!.bytes
+            File("$OUT_DIR/$name").apply { parentFile?.mkdirs() }.writeBytes(png)
+        } finally {
+            scene.close()
+        }
+    }
+
     @OptIn(ExperimentalComposeUiApi::class)
     private fun snapshot(name: String, projects: List<ProjectInfo>, dark: Boolean) {
         val scene = ImageComposeScene(width = WIDTH, height = HEIGHT, density = Density(2f)) {

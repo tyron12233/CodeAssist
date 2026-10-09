@@ -1159,4 +1159,11 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="block_palette_variable">Variable</string>
     <string name="block_palette_call">Llamada</string>
     <string name="block_palette_comment">Comentario</string>
+    <string name="home_account">Cuenta</string>
+    <string name="home_search_projects">Buscar proyectos</string>
+    <string name="home_no_match">Ningún proyecto coincide con «%1$s».</string>
+    <string name="home_sort">Ordenar proyectos</string>
+    <string name="home_sort_recent">Recientes</string>
+    <string name="home_sort_name">Nombre</string>
+    <string name="home_clear_search">Borrar búsqueda</string>
 </resources>

@@ -1,5 +1,9 @@
 package dev.ide.ui
 
+import dev.ide.ui.generated.resources.home_account
+import dev.ide.ui.generated.resources.notif_title
+import dev.ide.ui.icons.CaSymbols
+import dev.ide.ui.screens.HomeSidebarItem
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -524,14 +528,53 @@ private fun HomeRoute(app: CodeAssistAppState, fileActions: FileActions) {
         ProjectPickerRoute(app, fileActions, projects)
         return
     }
+    // The wide home's sidebar reaches the inbox and the account sheet from every tab. Account lives on the
+    // Projects tab, so its entry switches there and asks that tab to open the sheet.
+    var notificationsVisible by remember { mutableStateOf(false) }
+    var accountRequested by remember { mutableStateOf(false) }
     HomeScreen(
         tab = app.homeTab,
         onSelectTab = app::selectHomeTab,
-        projectsContent = { ProjectPickerRoute(app, fileActions, projects) },
+        projectsContent = {
+            ProjectPickerRoute(
+                app, fileActions, projects,
+                accountRequested = accountRequested,
+                onAccountRequestHandled = { accountRequested = false },
+            )
+        },
         storeContent = { StoreRoute(app, fileActions) },
         learnContent = { LearnRoute(app, fileActions) },
         challengesContent = { ChallengeRoute(app, fileActions) },
+        projectCount = projects.size,
+        sidebarFooter = {
+            val unread by app.backend.notifications.unreadCount().collectAsState()
+            HomeSidebarItem(
+                glyph = CaSymbols.inbox,
+                label = stringResource(Res.string.notif_title),
+                count = unread,
+                countIsAlert = true,
+                onClick = { notificationsVisible = true },
+            )
+            HomeSidebarItem(
+                glyph = CaSymbols.accountCircle,
+                label = stringResource(Res.string.home_account),
+                onClick = {
+                    app.selectHomeTab(HomeTab.Projects)
+                    accountRequested = true
+                },
+            )
+        },
     )
+    if (notificationsVisible) {
+        NotificationsSheet(
+            backend = app.backend,
+            onDismiss = { notificationsVisible = false },
+            onOpenTarget = { n ->
+                notificationsVisible = false
+                app.openNotificationTarget(n)
+            },
+        )
+    }
 }
 
 @Composable
@@ -539,11 +582,15 @@ private fun ProjectPickerRoute(
     app: CodeAssistAppState,
     fileActions: FileActions,
     projects: List<ProjectInfo>,
+    accountRequested: Boolean = false,
+    onAccountRequestHandled: () -> Unit = {},
 ) {
     val backend = app.backend
     var notificationsVisible by remember { mutableStateOf(false) }
     ProjectsHomeScreen(
         bell = { NotificationBell(backend, onClick = { notificationsVisible = true }) },
+        accountRequested = accountRequested,
+        onAccountRequestHandled = onAccountRequestHandled,
         projects = projects,
         onOpen = app::openProject,
         // Straight to the full-screen Create-Project gallery, which owns the template picker.
