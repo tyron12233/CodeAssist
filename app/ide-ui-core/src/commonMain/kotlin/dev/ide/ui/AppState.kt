@@ -987,14 +987,15 @@ class IdeUiState(
      */
     fun reloadAfterRename(activePath: String?, newPath: String?) {
         scope.launch {
-            for (i in openFiles.indices) {
-                val f = openFiles[i]
+            for (f in openFiles.toList()) {
                 if (f.readOnly) continue
                 val followsFileRename = newPath != null && f.path == activePath
                 if (!followsFileRename && f.modified) continue
                 val diskPath = if (followsFileRename) newPath!! else f.path
                 val text = readTabText(diskPath) ?: continue
                 if (!followsFileRename && text == f.savedText) continue // untouched → preserve session/undo/caret
+                // The read suspends, and a tab closed meanwhile shifts every index after it.
+                val i = openFiles.indexOfFirst { it.tabId == f.tabId }.takeIf { it >= 0 } ?: continue
                 val name = diskPath.substringAfterLast('/').substringAfterLast('\\')
                 openFiles[i] = OpenFile(diskPath, name, text, tabId = f.tabId)
                 backend.editor.updateDocument(diskPath, text)
@@ -1131,16 +1132,19 @@ class IdeUiState(
 
     /** Re-point open tabs at [oldPath] (or under it, for a directory) to [newPath], re-reading from disk. */
     private suspend fun rebaseTabs(oldPath: String, newPath: String) {
-        for (i in openFiles.indices) {
-            val p = openFiles[i].path
+        for (f in openFiles.toList()) {
+            val p = f.path
             val rebased = when {
                 p == oldPath -> newPath
                 underPath(p, oldPath) -> newPath + p.substring(oldPath.length)
                 else -> continue
             }
             val text = readTabText(rebased) ?: continue
+            // The read suspends, and a tab closed meanwhile shifts every index after it, so a captured index
+            // threw IndexOutOfBounds in the field. Find the tab again by its id.
+            val i = openFiles.indexOfFirst { it.tabId == f.tabId }.takeIf { it >= 0 } ?: continue
             val name = rebased.substringAfterLast('/').substringAfterLast('\\')
-            openFiles[i] = OpenFile(rebased, name, text, tabId = openFiles[i].tabId)
+            openFiles[i] = OpenFile(rebased, name, text, tabId = f.tabId)
             backend.editor.updateDocument(rebased, text)
         }
         dedupeTabsByPath()
