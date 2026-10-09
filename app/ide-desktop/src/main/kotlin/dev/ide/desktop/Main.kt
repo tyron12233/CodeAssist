@@ -2,6 +2,7 @@ package dev.ide.desktop
 
 import androidx.compose.material.Button
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -51,12 +52,15 @@ fun main(args: Array<String>) {
             state = state,
             title = "CodeAssist",
         ) {
+            // Remembered: the app state is keyed on it, so a new instance on recomposition (the title bar's height
+            // changes whenever the editor is left) would start the app over and land back in the editor.
+            val fileActions = remember { DesktopFileActions(backend) }
             // IntelliJ-style: the app draws the title bar (the editor's top bar, or a plain strip elsewhere)
             // with the native window controls on top of it.
             CompositionLocalProvider(LocalWindowTitleBar provides rememberJbrWindowTitleBar(window, state)) {
                 CodeAssistApp(
                     backend,
-                    fileActions = DesktopFileActions(backend),
+                    fileActions = fileActions,
                     composePreviewHost = previewHost,
                 )
             }
