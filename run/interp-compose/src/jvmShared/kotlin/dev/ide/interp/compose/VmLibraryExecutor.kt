@@ -140,6 +140,13 @@ class VmLibraryExecutor(
             missingConstructor = { owner, _, _ -> PlatformStyleCompat.construct(owner, hostLoader) },
         ),
         peerFactory = peerFactory,
+        // Android-only facade calls (`WindowInsets.systemBars` from the project's Material3 Scaffold) go to the
+        // host's own `actual` rather than interpreting Android platform code with no View behind it.
+        staticRedirect = PlatformFacadeRedirect(
+            hostLoader,
+            hostLoadable = ::isHostLoadable,
+            keepInterpreted = { n -> projectPreferredPrefixes.any { n.startsWith(it) } },
+        ),
     )
 
     /** Runs library reified inline functions (which cannot be dispatched reflectively) INTERPRETED, applying the

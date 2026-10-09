@@ -1177,6 +1177,11 @@ internal class Interpreter(private val vm: Vm) {
                 ?: throw VmUnsupportedException("no reified type bound for `$typeName`")
             return
         }
+        vm.staticRedirect?.hostOwner(insn.owner, insn.name, insn.desc)?.let { hostOwner ->
+            val sh = shape(insn.desc)
+            pushResult(sh, vm.bridgeStatic(hostOwner, insn.name, insn.desc, popBoxedArgs(sh, frame)), frame)
+            return
+        }
         val cls = vm.resolve(insn.owner)
         if (cls != null) {
             vm.ensureInitialized(cls)

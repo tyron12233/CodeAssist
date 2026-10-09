@@ -38,6 +38,16 @@ fun interface InterpretPolicy {
 }
 
 /**
+ * Sends an interpreted `invokestatic` to a host class instead, when the host has a counterpart for a static
+ * method whose interpreted body cannot run on it: e.g. an Android-only Kotlin file facade (`X_androidKt`) whose
+ * `actual` on the host lives in a differently-named facade. Returns the host owner's internal name, or null to
+ * keep the normal resolution. Consulted on every `invokestatic`, so it must reject cheaply.
+ */
+fun interface StaticRedirect {
+    fun hostOwner(owner: String, name: String, descriptor: String): String?
+}
+
+/**
  * A stack-based interpreter for JVM class-file bytecode. It parses classes from [source] that [policy] marks
  * interpretable, runs their methods instruction by instruction (see [Interpreter]), and routes every other
  * call through [bridge]. Interpreted code never reaches the host class loader; access to classes the policy
@@ -64,6 +74,8 @@ class Vm(
      *  (jvm-interp's own tests, the preview). Covers `new Thread(...)`; executor-pool threads and interpreted
      *  `Thread` subclasses keep the host default. */
     private val threadStackSize: Long = 0,
+    /** See [StaticRedirect]; null (the default) never redirects. */
+    internal val staticRedirect: StaticRedirect? = null,
 ) {
     private val classes = java.util.concurrent.ConcurrentHashMap<String, VmClass>()
     private val interpreter = Interpreter(this)
