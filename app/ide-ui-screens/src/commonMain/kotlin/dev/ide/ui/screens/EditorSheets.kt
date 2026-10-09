@@ -45,6 +45,14 @@ import dev.ide.ui.generated.resources.more
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.theme.Ca
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.material3.Icon
+import dev.ide.ui.components.PillToggle
+import dev.ide.ui.ext.ToolWindowAnchor
+import dev.ide.ui.ext.ToolWindowRegistry
+import dev.ide.ui.generated.resources.sidebar_right_tool_window_bar
+import dev.ide.ui.generated.resources.sidebar_right_tool_window_bar_desc
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -138,10 +146,19 @@ internal fun DestinationSheets(
                 override fun openFile(path: String, offset: Int) { state.moreOpen = false; state.openAt(path, offset) }
             }
         }
+        // The wide layout's right tool-window stripe can be hidden from its own context menu; this is the way back.
+        UiPluginHost.ensureLoaded()
+        val hasRightTools = !compact && ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).isNotEmpty()
         MoreSheetContent(
             backend = state.backend,
             host = moreHost,
             modifier = Modifier.fillMaxWidth().weight(1f),
+            extraRows = {
+                if (hasRightTools) {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                    ToolWindowBarToggleRow(state.rightStripeVisible, { state.setRightStripeShown(it) }, Modifier.padding(horizontal = 6.dp))
+                }
+            },
         )
     }
     // The Logs viewer — opened from the More menu; a tall sheet so a stack trace has room.
@@ -166,6 +183,7 @@ internal fun MoreSheetContent(
     backend: IdeBackend,
     host: UiActionHost,
     modifier: Modifier = Modifier,
+    extraRows: @Composable ColumnScope.() -> Unit = {},
 ) {
     UiPluginHost.ensureLoaded()
     val actions = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, host)
@@ -197,6 +215,8 @@ internal fun MoreSheetContent(
                 FtpServerToggleRow(enabled = on, onChange = { on = it; backend.agent.setFtpServerEnabled(it) })
             }
         }
+
+        extraRows()
     }
 }
 
@@ -216,5 +236,32 @@ private fun MoreRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title
             Text(subtitle, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         }
         androidx.compose.material3.Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
+    }
+}
+
+/** The More-sheet switch for the wide layout's right tool-window stripe. */
+@Composable
+private fun ToolWindowBarToggleRow(shown: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth()
+            .clickable(remember { MutableInteractionSource() }, indication = null) { onChange(!shown) }
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(CaIcons.panelRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.weight(1f)) {
+            Text(
+                stringResource(Res.string.sidebar_right_tool_window_bar),
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                stringResource(Res.string.sidebar_right_tool_window_bar_desc),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        PillToggle(shown, onChange)
     }
 }

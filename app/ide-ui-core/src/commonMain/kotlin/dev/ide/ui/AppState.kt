@@ -414,6 +414,33 @@ class IdeUiState(
     /** Open (and switch to) a RIGHT panel — the mobile right-overlay switcher uses this. */
     fun selectRightPanel(id: String) { selectedRightPanel = id }
 
+    /** Whether the wide layout shows the RIGHT tool-window stripe. When hidden, the top bar carries a toggle for
+     *  the primary right tool window instead. Persisted app-globally. */
+    var rightStripeVisible by mutableStateOf(true)
+        private set
+    fun setRightStripeShown(shown: Boolean) {
+        rightStripeVisible = shown
+        backend.settings.setPreference(RIGHT_STRIPE_PREF, shown.toString())
+    }
+
+    /** The docked LEFT / RIGHT pane widths in dp, as last dragged. The layout clamps them to the space it has,
+     *  so a width saved on a large monitor still leaves the editor room in a smaller window. */
+    var leftPaneWidth by mutableStateOf(DEFAULT_LEFT_PANE_WIDTH)
+    var rightPaneWidth by mutableStateOf(DEFAULT_RIGHT_PANE_WIDTH)
+    /** The tool window being worked in: a left/right panel id, or [CONSOLE_TOOL_WINDOW]. Set by a press inside
+     *  it and cleared by a press in the editor; drives IntelliJ's "actions show on the active tool window". */
+    var activeToolWindow by mutableStateOf<String?>(null)
+
+    /** Keep tool window header actions visible even while idle (the Appearance setting). */
+    var alwaysShowToolWindowActions by mutableStateOf(false)
+        private set
+
+    /** Persist both pane widths (called when a splitter drag ends, not per frame). */
+    fun savePaneWidths() {
+        backend.settings.setPreference(LEFT_PANE_WIDTH_PREF, leftPaneWidth.toString())
+        backend.settings.setPreference(RIGHT_PANE_WIDTH_PREF, rightPaneWidth.toString())
+    }
+
     /** The bottom-nav slot that reflects the current state (or null when none of its slots is active). */
     fun bottomNavSelection(): RailDestination? = when {
         moreOpen -> RailDestination.More
@@ -570,6 +597,9 @@ class IdeUiState(
         // remembers it for the next time the drawer is toggled on.
         backend.settings.preference(LEFT_PANEL_PREF)?.let { lastLeftPanel = it }
         if (!isMobilePlatform) selectedLeftPanel = lastLeftPanel
+        backend.settings.preference(RIGHT_STRIPE_PREF)?.let { rightStripeVisible = it != "false" }
+        backend.settings.preference(LEFT_PANE_WIDTH_PREF)?.toFloatOrNull()?.let { leftPaneWidth = it }
+        backend.settings.preference(RIGHT_PANE_WIDTH_PREF)?.toFloatOrNull()?.let { rightPaneWidth = it }
     }
 
     /**
@@ -600,6 +630,7 @@ class IdeUiState(
 
     /** Push persisted IDE settings into the live editor-pref fields (called on creation + on each settings change). */
     fun applySettings(s: UiSettings) {
+        alwaysShowToolWindowActions = s.alwaysShowToolWindowActions
         inlayHintsEnabled = s.inlayHints
         editorFontScale = s.editorFontScale
         fontLigaturesEnabled = s.fontLigatures
@@ -1205,6 +1236,18 @@ class IdeUiState(
         /** App preference: the last-open LEFT sidebar panel id ([LeftPanelId] or a plugin tool-window id), so
          *  the activity rail reopens to the same panel next launch. */
         const val LEFT_PANEL_PREF = "sidebar.leftPanel"
+
+        /** App preference: "false" once the user hides the right tool-window stripe on the wide layout. */
+        const val RIGHT_STRIPE_PREF = "sidebar.rightStripe"
+
+        /** [activeToolWindow]'s id for the bottom build console. */
+        const val CONSOLE_TOOL_WINDOW = "console"
+
+        /** App preferences: the docked left / right pane widths in dp, as last dragged. */
+        const val LEFT_PANE_WIDTH_PREF = "sidebar.leftWidth"
+        const val RIGHT_PANE_WIDTH_PREF = "sidebar.rightWidth"
+        const val DEFAULT_LEFT_PANE_WIDTH = 280f
+        const val DEFAULT_RIGHT_PANE_WIDTH = 380f
     }
 }
 

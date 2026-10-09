@@ -1,5 +1,8 @@
 package dev.ide.ui.components
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
 import dev.ide.ui.LtrContent
 import dev.ide.ui.clipForClipboard
 import dev.ide.ui.theme.Ide
@@ -90,9 +93,11 @@ import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.buildc_build
+import dev.ide.ui.generated.resources.buildc_notice_dismiss
+import dev.ide.ui.generated.resources.buildc_notice_details
+import dev.ide.ui.generated.resources.buildc_notice_less
 import dev.ide.ui.generated.resources.stop
 import dev.ide.ui.generated.resources.run
-import dev.ide.ui.generated.resources.buildc_collapse
 import dev.ide.ui.generated.resources.buildc_status_idle
 import dev.ide.ui.generated.resources.buildc_status_running
 import dev.ide.ui.generated.resources.buildc_status_succeeded
@@ -166,6 +171,12 @@ fun BuildConsole(
     activeFilePath: String? = null,
     /** Live logcat-style logs from the running (debug) app, shown in the Logcat tab. */
     appLog: AppLogUi = AppLogUi(),
+    /**
+     * The large-screen layout (the docked bottom pane): the tabs sit in the header row, each tab's filters fit on
+     * one row, and the log fills the pane edge to edge. The caller then passes no padding; the console pads its
+     * own controls. False is the phone sheet's stacked layout.
+     */
+    wide: Boolean = false,
 ) {
     val running = buildState.status == RunStatus.Running
     val errors = buildState.diagnostics.count { it.severity == UiSeverity.Error }
@@ -186,16 +197,36 @@ fun BuildConsole(
         }
     }
 
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Header(buildState, errors, warnings, tab, activePluginTab != null, canRun, onRun, onStop, onCollapse)
-        if (indexStatus.building) IndexingSection(indexStatus)
-        buildState.banner?.let { FirstBuildBanner(it) }
-        if (running) RunningStrip(buildState.steps)
+    // A notice the user hid stays hidden for this project until its text changes (a different minSdk, say).
+    val bannerKey = buildState.banner?.let { "buildc.bannerDismissed." + (backend?.project?.rootPath + "|" + it).hashCode() }
+    var bannerDismissed by remember(bannerKey) {
+        mutableStateOf(bannerKey != null && backend?.settings?.preference(bannerKey) == "true")
+    }
+    val tabs: @Composable () -> Unit = {
         ConsoleTabs(
             tab, errors, warnings, done, buildState.steps.size, appLog, pluginTabs, activePluginTab,
             onSelect = { tab = it; activePluginTab = null },
             onSelectPlugin = { activePluginTab = it },
+            inline = wide,
         )
+    }
+    CompositionLocalProvider(LocalWideConsole provides wide) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(if (wide) 6.dp else 10.dp)) {
+        Header(
+            buildState, errors, warnings, tab, activePluginTab != null, canRun, onRun, onStop, onCollapse,
+            inlineTabs = if (wide) tabs else null,
+        )
+        if (wide) Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+        if (indexStatus.building) Box(Modifier.chromePadding()) { IndexingSection(indexStatus) }
+        val banner = buildState.banner
+        if (banner != null && !bannerDismissed) {
+            NoticeStrip(banner, Modifier.chromePadding()) {
+                bannerDismissed = true
+                bannerKey?.let { backend?.settings?.setPreference(it, "true") }
+            }
+        }
+        if (running) Box(Modifier.chromePadding()) { RunningStrip(buildState.steps) }
+        if (!wide) tabs()
         Box(Modifier.fillMaxWidth().weight(1f)) {
             val plugin = pluginTabs.firstOrNull { it.id == activePluginTab }
             if (plugin != null && backend != null) {
@@ -218,9 +249,9 @@ fun BuildConsole(
                 // level and tag columns, indented snippets and stack traces. An RTL locale would mirror those
                 // columns and strand each line's indent on the wrong edge, so they opt out of RTL while the
                 // console's own chrome (tabs, filters, header) stays mirrored with the rest of the app.
-                BuildTab.Problems -> LtrContent { ProblemsTab(buildState.diagnostics, onOpenDiagnostic) }
+                BuildTab.Problems -> LtrContent { Box(Modifier.chromePadding()) { ProblemsTab(buildState.diagnostics, onOpenDiagnostic) } }
                 BuildTab.Log -> LtrContent { LogTab(buildState.log, running) }
-                BuildTab.Steps -> StepsTab(buildState.steps)
+                BuildTab.Steps -> Box(Modifier.chromePadding()) { StepsTab(buildState.steps) }
                 BuildTab.Logcat -> LtrContent { LogcatTab(appLog) { backend?.build?.clearAppLog() } }
             }
         }
@@ -228,7 +259,29 @@ fun BuildConsole(
         // over a running build. Renders nothing unless ads are active.
         if (!running) AdSlot(AdPlacement.BUILD_CONSOLE)
     }
+    }
 }
+
+/** Whether the console is in its large-screen layout (see [BuildConsole]'s `wide`). */
+private val LocalWideConsole = staticCompositionLocalOf { false }
+
+/** In the wide console, the horizontal inset of the controls; the log lists themselves run edge to edge. */
+@Composable
+private fun Modifier.chromePadding(): Modifier = if (LocalWideConsole.current) padding(horizontal = 12.dp) else this
+
+/** The surface of the Log and Logcat lists: a bordered card on the phone sheet, flush with the pane when wide. */
+@Composable
+private fun Modifier.consoleListSurface(): Modifier =
+    if (LocalWideConsole.current) {
+        background(Ide.colors.consoleBg).padding(horizontal = 12.dp, vertical = 6.dp)
+    } else {
+        background(Ide.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
+            .padding(10.dp)
+    }
+
+/** The filter field's width in a wide toolbar, where filling the row would leave a search box ~1,700px long. */
+private val WideSearchWidth = 260.dp
 
 private enum class BuildTab { Problems, Log, Steps, Logcat }
 
@@ -260,10 +313,13 @@ private fun Header(
     canRun: Boolean,
     onRun: () -> Unit,
     onStop: () -> Unit,
-    onCollapse: () -> Unit
+    onCollapse: () -> Unit,
+    /** The wide layout's tabs, placed after the title instead of on a row of their own. */
+    inlineTabs: (@Composable () -> Unit)? = null,
 ) {
     val running = state.status == RunStatus.Running
     Row(
+        Modifier.chromePadding().then(if (inlineTabs != null) Modifier.padding(top = 6.dp) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -280,10 +336,19 @@ private fun Header(
                 color = MaterialTheme.colorScheme.outline,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                // On the phone the name takes the slack and gives way first, so the controls on the right
+                // (down to the hide button) never get pushed off a narrow sheet.
+                modifier = if (inlineTabs == null) Modifier.weight(1f) else Modifier,
             )
         }
-        Spacer(Modifier.weight(1f))
+        if (inlineTabs != null) {
+            Box(Modifier.padding(horizontal = 6.dp).width(1.dp).height(16.dp).background(MaterialTheme.colorScheme.outlineVariant))
+            // Offset by the tab underline's height, so the tab labels line up with the title, not above it.
+            Box(Modifier.weight(1f).padding(top = 7.dp)) { inlineTabs() }
+        } else if (state.moduleName.isEmpty()) {
+            Spacer(Modifier.weight(1f))
+        }
         if (errors > 0) MiniCount(CaIcons.error, errors, MaterialTheme.colorScheme.error)
         if (warnings > 0) MiniCount(CaIcons.warning, warnings, Ide.colors.warning)
         if (state.elapsedMs > 0 && !running) {
@@ -296,6 +361,13 @@ private fun Header(
             )
         }
         StatusPill(state.status)
+        // The window's actions fade when the console is idle and not hovered (see ToolWindowFrame); the
+        // build's own status above stays.
+        Row(
+            Modifier.toolWindowActionsAlpha(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
         val (copyTab, copyProvide) = copyForTab(state, tab, pluginActive)
         if (copyProvide != null) CopyButton(stringResource(copyTab.label), copyProvide)
         if (running) IconButtonCa(
@@ -314,7 +386,8 @@ private fun Header(
             iconSize = 16,
             tint = Ide.colors.run
         )
-        IconButtonCa(CaIcons.chevronDown, stringResource(Res.string.buildc_collapse), onCollapse, boxSize = 28, iconSize = 16)
+        HideToolWindowButton(onCollapse)
+        }
     }
 }
 
@@ -511,6 +584,8 @@ private fun ConsoleTabs(
     activePluginTab: String?,
     onSelect: (BuildTab) -> Unit,
     onSelectPlugin: (String) -> Unit,
+    /** In the wide header: no full-width rule under the tabs (the header draws one across the pane). */
+    inline: Boolean = false,
 ) {
     // A built-in tab reads as selected only while no plugin tab is active.
     val builtInActive = activePluginTab == null
@@ -545,7 +620,7 @@ private fun ConsoleTabs(
                 TabItem(tw.title, activePluginTab == tw.id) { onSelectPlugin(tw.id) }
             }
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+        if (!inline) Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
     }
 }
 
@@ -794,13 +869,36 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
         }
     }
 
+    val wide = LocalWideConsole.current
+    val levelChips: @Composable () -> Unit = {
+        LogLevelFilter.entries.forEach { f -> ConsoleChip(stringResource(f.label), f == level) { level = f } }
+        // Says the quiet log is a choice, not the whole story, and where the rest went.
+        if (hiddenByVerbose > 0) {
+            Text(
+                stringResource(Res.string.buildc_verbose_hidden, hiddenByVerbose),
+                color = MaterialTheme.colorScheme.outline,
+                style = Ide.type.codeSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 2.dp),
+            )
+        }
+    }
     Column(Modifier.fillMaxSize()) {
+        // Wide: one row, filters on the left and a capped search field with the actions on the right. Phone: the
+        // search row above the filter row.
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            Modifier.fillMaxWidth().chromePadding().padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (wide) 6.dp else 8.dp)
         ) {
-            SearchField(query, { query = it }, Modifier.weight(1f))
+            if (wide) {
+                levelChips()
+                Spacer(Modifier.weight(1f))
+                SearchField(query, { query = it }, Modifier.width(WideSearchWidth))
+            } else {
+                SearchField(query, { query = it }, Modifier.weight(1f))
+            }
             if (log.isNotEmpty()) {
                 CopyButton(
                     stringResource(BuildTab.Log.label),
@@ -820,28 +918,14 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
                 tint = if (verbose) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Row(
-            Modifier.fillMaxWidth().padding(bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            LogLevelFilter.entries.forEach { f -> ConsoleChip(stringResource(f.label), f == level) { level = f } }
-            // Says the quiet log is a choice, not the whole story, and where the rest went.
-            if (hiddenByVerbose > 0) {
-                Text(
-                    stringResource(Res.string.buildc_verbose_hidden, hiddenByVerbose),
-                    color = MaterialTheme.colorScheme.outline,
-                    style = Ide.type.codeSmall,
-                    modifier = Modifier.padding(start = 2.dp),
-                )
-            }
+        if (!wide) {
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) { levelChips() }
         }
-        Box(
-            Modifier.weight(1f).fillMaxWidth()
-                .background(Ide.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
-                .padding(10.dp),
-        ) {
+        Box(Modifier.weight(1f).fillMaxWidth().consoleListSurface()) {
             if (filtered.isEmpty()) {
                 Text(
                     if (log.isEmpty()) stringResource(Res.string.buildc_empty_log) else stringResource(Res.string.buildc_no_log_match),
@@ -972,8 +1056,9 @@ private fun LogGroupHeader(task: String, count: Int, expanded: Boolean, onToggle
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f, fill = false),
         )
+        // Right after the task name rather than at the far edge, where on a wide pane it lost its row.
         Text("$count", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
     }
 }
@@ -1109,14 +1194,22 @@ private fun LogcatBody(
         }
     }
 
+    val wide = LocalWideConsole.current && !fullScreen
     Column(Modifier.fillMaxSize()) {
+        // Wide: status and level filters on the left, a capped search field with the actions on the right.
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            Modifier.fillMaxWidth().then(if (wide) Modifier.chromePadding() else Modifier).padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             LogcatStatus(appLog)
-            SearchField(query, onQuery, Modifier.weight(1f))
+            if (wide) {
+                LogLevelFilter.entries.forEach { f -> ConsoleChip(stringResource(f.label), f == level) { onLevel(f) } }
+                Spacer(Modifier.weight(1f))
+                SearchField(query, onQuery, Modifier.width(WideSearchWidth))
+            } else {
+                SearchField(query, onQuery, Modifier.weight(1f))
+            }
             // Copy-all: the WHOLE buffer, not the filtered view (same rule as the other tabs' copy — the
             // point is capturing a run off a device with no `adb`). Hidden while there's nothing to copy.
             if (appLog.lines.isNotEmpty()) {
@@ -1138,14 +1231,17 @@ private fun LogcatBody(
                 boxSize = 30, iconSize = 16, tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Row(
-            Modifier.fillMaxWidth().padding(bottom = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            LogLevelFilter.entries.forEach { f -> ConsoleChip(stringResource(f.label), f == level) { onLevel(f) } }
+        if (!wide) {
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                LogLevelFilter.entries.forEach { f -> ConsoleChip(stringResource(f.label), f == level) { onLevel(f) } }
+            }
         }
         Box(
-            Modifier.weight(1f).fillMaxWidth()
+            if (wide) Modifier.weight(1f).fillMaxWidth().consoleListSurface()
+            else Modifier.weight(1f).fillMaxWidth()
                 .background(Ide.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
                 .padding(10.dp),
@@ -1385,21 +1481,47 @@ private fun StatusIcon(status: StepStatus) {
 // ---------------------------------------------------------------------------
 
 /**
- * An informational notice above the tabs — currently the first-build warning that dexing has no cache yet,
- * so this build is slower and the next one will be much faster. Quiet accent styling: it's reassurance.
+ * An informational notice above the tabs (the first-build and minSdk dexing notes), on one line: the text
+ * truncates, with Details to read it in full, and ✕ hides it ([onDismiss] remembers that). Quiet accent styling:
+ * it's reassurance, not an error.
  */
 @Composable
-private fun FirstBuildBanner(text: String) {
+private fun NoticeStrip(text: String, modifier: Modifier = Modifier, onDismiss: () -> Unit) {
+    var expanded by remember(text) { mutableStateOf(false) }
+    var overflows by remember(text) { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth()
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(Ca.radius.md))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.Top,
+        modifier.fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.sm))
+            .padding(start = 10.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = if (expanded) Alignment.Top else Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(CaIcons.info, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        Icon(
+            CaIcons.info, null,
+            Modifier.padding(top = if (expanded) 7.dp else 0.dp).size(14.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = if (expanded) Int.MAX_VALUE else 1,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
+            modifier = Modifier.weight(1f).padding(vertical = 6.dp),
+        )
+        if (overflows || expanded) {
+            Text(
+                stringResource(if (expanded) Res.string.buildc_notice_less else Res.string.buildc_notice_details),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(RoundedCornerShape(Ca.radius.sm))
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
+            )
+        }
+        IconButtonCa(CaIcons.close, stringResource(Res.string.buildc_notice_dismiss), onDismiss, boxSize = 26, iconSize = 14)
     }
 }
 

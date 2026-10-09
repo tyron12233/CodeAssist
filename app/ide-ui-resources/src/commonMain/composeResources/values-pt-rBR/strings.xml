@@ -215,6 +215,9 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
 
     <!-- buildc (BuildConsole/BuildDock) -->
     <string name="buildc_build">Compilar</string>
+    <string name="buildc_notice_details">Detalhes</string>
+    <string name="buildc_notice_less">Menos</string>
+    <string name="buildc_notice_dismiss">Dispensar</string>
     <string name="buildc_collapse">Recolher</string>
     <string name="buildc_status_idle">Ocioso</string>
     <string name="buildc_status_running">Em execução…</string>
@@ -286,6 +289,10 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">Arquivos</string>
     <string name="edchrome_more">Mais</string>
+    <string name="sidebar_hide_tool_window_bar">Ocultar barra de janelas de ferramentas</string>
+    <string name="toolwindow_hide">Ocultar</string>
+    <string name="sidebar_right_tool_window_bar">Barra de ferramentas à direita</string>
+    <string name="sidebar_right_tool_window_bar_desc">Mostrar os ícones das janelas de ferramentas na borda direita</string>
     <string name="edchrome_settings_and_tools">Configurações e ferramentas</string>
     <string name="edchrome_toggle_navigator">Alternar navegador</string>
     <string name="edchrome_find_replace">Localizar / substituir</string>

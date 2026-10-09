@@ -490,6 +490,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
             else -> UiAccent.Lime
         },
         customAccentColor = accentColor,
+        alwaysShowToolWindowActions = alwaysShowToolWindowActions,
         editorFontScale = editorFontScale,
         codeFont = codeFont,
         fontLigatures = fontLigatures,

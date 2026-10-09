@@ -1,6 +1,8 @@
 package dev.ide.ui.components
 
 import dev.ide.ui.itemsIndexedKeyed
+import dev.ide.ui.platform.claimWindowTitleBar
+import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedContent
@@ -186,6 +188,8 @@ fun EditorTopBar(
     rightToolTitle: String = "",
     rightToolOpen: Boolean = false,
     onToggleRightTool: () -> Unit = {},
+    /** Wide layout only: show the right tool window toggle in the bar, because the user hid the right stripe. */
+    rightToolInBar: Boolean = false,
     inlayHintsOn: Boolean = true,
     onToggleInlayHints: () -> Unit = {},
     showPreview: Boolean = false,
@@ -203,17 +207,35 @@ fun EditorTopBar(
     compact: Boolean = false,
 ) {
     val dim = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+    // On a desktop window with a custom title bar, the wide bar IS the title bar (IntelliJ's main toolbar):
+    // its empty space drags the window, and it leaves room for the native window controls.
+    val titleBar = if (compact) null else claimWindowTitleBar(TopBarHeight)
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().then(titleBar?.run { Modifier.titleBarArea() } ?: Modifier),
         color = MaterialTheme.colorScheme.surfaceContainer,
         tonalElevation = 2.dp,
     ) {
         Row(
-            Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp),
+            Modifier.fillMaxWidth().height(TopBarHeight).padding(
+                start = when {
+                    compact -> 12.dp
+                    titleBar != null && titleBar.startInset > 0.dp -> titleBar.startInset
+                    else -> 0.dp
+                },
+                end = 12.dp + (titleBar?.endInset ?: 0.dp),
+            ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp),
         ) {
-            SidebarToggleButton(navFraction, onToggleNav)
+            if (compact || (titleBar != null && titleBar.startInset > 0.dp)) {
+                // After the traffic lights the toggle can no longer sit over the stripe; it just follows them.
+                SidebarToggleButton(navFraction, onToggleNav)
+            } else {
+                // Centred over the left tool-window stripe below, so the bar's first button caps that column.
+                Box(Modifier.width(ToolStripeWidth), contentAlignment = Alignment.Center) {
+                    SidebarToggleButton(navFraction, onToggleNav)
+                }
+            }
             // The name takes the flexible middle and truncates — the right-hand cluster keeps its size.
             Text(
                 projectName,
@@ -226,8 +248,11 @@ fun EditorTopBar(
             )
             if (compatibilityMode) CompatModeChip(compact = compact, onClick = onCompatClick)
             IndexStatusChip(indexStatus, compact = compact, onClick = onIndexClick)
-            // Accent-tinted while there are unsaved changes; saves the active tab (Cmd/Ctrl-S also works).
-            IconButtonCa(CaIcons.save, stringResource(Res.string.save), onSave, active = hasUnsavedChanges)
+            // Accent-tinted while there are unsaved changes; saves the active tab (Cmd/Ctrl-S also works). A desktop
+            // has the keyboard for it and the tab's unsaved dot for the state, so only touch hosts show it.
+            if (compact || isMobilePlatform) {
+                IconButtonCa(CaIcons.save, stringResource(Res.string.save), onSave, active = hasUnsavedChanges)
+            }
             if (compact) {
                 // Save · Undo · Redo · Run are the prioritized inline actions even on a phone — one tap away,
                 // never buried. Everything else (find, reformat, palette, inlay hints, console, preview, the AI
@@ -259,45 +284,49 @@ fun EditorTopBar(
                     onPickVariant = onPickVariant,
                 )
             } else {
-                // Edit actions (undo/redo/find) sit just before Run — disabled-tinted with no file open.
-                if (hasActiveFile) {
+                // IntelliJ-lean: the bar keeps what has no other home. Undo/redo stay inline only on touch (no
+                // keyboard there); the console and preview toggles live on the left stripe and the breadcrumb row;
+                // find, reformat, imports and inlay hints move into the ⋯ menu below.
+                if (isMobilePlatform && hasActiveFile) {
                     IconButtonCa(CaIcons.undo, stringResource(Res.string.undo), onUndo, tint = if (canUndo) null else dim)
                     IconButtonCa(CaIcons.redo, stringResource(Res.string.redo), onRedo, tint = if (canRedo) null else dim)
-                    IconButtonCa(CaIcons.search, stringResource(Res.string.edchrome_find_replace), onFind)
-                    IconButtonCa(CaIcons.braces, stringResource(Res.string.edchrome_reformat_code), onReformat)
                 }
                 IconButtonCa(CaIcons.command, stringResource(Res.string.edchrome_command_palette), onOpenPalette)
-                IconButtonCa(
-                    CaIcons.eye,
-                    stringResource(Res.string.edchrome_toggle_inlay_hints),
-                    onToggleInlayHints,
-                    active = inlayHintsOn
-                )
-                IconButtonCa(
-                    CaIcons.terminal,
-                    stringResource(Res.string.edchrome_build_console),
-                    onToggleConsole,
-                    active = consoleOpen
-                )
-                // Shown when the open file has @Preview composables — renders/checks them via the interpreter.
-                if (showPreview) IconButtonCa(
-                    CaIcons.image,
-                    stringResource(Res.string.edchrome_compose_preview),
-                    onPreview,
-                    active = previewBusy
-                )
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
-                if (activeVariant != null) VariantChip(
-                    activeVariant,
-                    variants,
-                    onPickVariant,
-                    compact = false
-                )
-                RunControl(runTasks, onPickTask, compact = false)
+                RunCluster(activeVariant, variants, onPickVariant, runTasks, onPickTask)
+                if (rightToolInBar && rightToolIconId != null) {
+                    IconButtonCa(actionIcon(rightToolIconId), rightToolTitle, onToggleRightTool, active = rightToolOpen)
+                }
+                if (hasActiveFile) {
+                    EditorOverflowMenu(
+                        onOpenPalette = onOpenPalette,
+                        hasActiveFile = true,
+                        onFind = onFind,
+                        onReformat = onReformat,
+                        onOptimizeImports = onOptimizeImports,
+                        inlayHintsOn = inlayHintsOn,
+                        onToggleInlayHints = onToggleInlayHints,
+                        consoleOpen = consoleOpen,
+                        onToggleConsole = onToggleConsole,
+                        showPreview = showPreview,
+                        onPreview = onPreview,
+                        rightToolIconId = null,
+                        rightToolTitle = rightToolTitle,
+                        rightToolOpen = rightToolOpen,
+                        onToggleRightTool = onToggleRightTool,
+                        activeVariant = null,
+                        variants = variants,
+                        onPickVariant = onPickVariant,
+                        editOnly = true,
+                    )
+                }
             }
         }
     }
 }
+
+/** Height of the editor's top bar (and, on a desktop window with a custom title bar, of the title bar). */
+private val TopBarHeight = 52.dp
 
 /**
  * The navigator toggle: a **miniature of the screen** whose drawer pane grows and tints accent exactly in
@@ -404,6 +433,9 @@ private fun EditorOverflowMenu(
     activeVariant: String?,
     variants: () -> List<String>,
     onPickVariant: (String) -> Unit,
+    /** The wide bar's menu: only the file's edit actions and inlay hints, since everything else is inline there
+     *  or has its own place (the stripe's console toggle, the breadcrumb row's view switch). */
+    editOnly: Boolean = false,
 ) {
     var open by remember { mutableStateOf(false) }
     // The variant list scans the module, so it's fetched only when its submenu opens. Both the menu and the
@@ -418,7 +450,7 @@ private fun EditorOverflowMenu(
                 OverflowItem(CaIcons.braces, stringResource(Res.string.edchrome_reformat_code)) { open = false; onReformat() }
                 OverflowItem(CaIcons.layers, stringResource(Res.string.edchrome_optimize_imports)) { open = false; onOptimizeImports() }
             }
-            OverflowItem(CaIcons.command, stringResource(Res.string.edchrome_command_palette)) { open = false; onOpenPalette() }
+            if (!editOnly) OverflowItem(CaIcons.command, stringResource(Res.string.edchrome_command_palette)) { open = false; onOpenPalette() }
             // The AI assistant panel — a toggle, its on-state accented like the other tool windows.
             if (rightToolIconId != null) {
                 OverflowItem(actionIcon(rightToolIconId), rightToolTitle, active = rightToolOpen) {
@@ -430,10 +462,10 @@ private fun EditorOverflowMenu(
                 if (inlayHintsOn) stringResource(Res.string.edchrome_hide_inlay_hints) else stringResource(Res.string.edchrome_show_inlay_hints),
                 active = inlayHintsOn,
             ) { open = false; onToggleInlayHints() }
-            OverflowItem(CaIcons.terminal, stringResource(Res.string.edchrome_build_console), active = consoleOpen) {
+            if (!editOnly) OverflowItem(CaIcons.terminal, stringResource(Res.string.edchrome_build_console), active = consoleOpen) {
                 open = false; onToggleConsole()
             }
-            if (showPreview) OverflowItem(CaIcons.image, stringResource(Res.string.edchrome_compose_preview)) {
+            if (showPreview && !editOnly) OverflowItem(CaIcons.image, stringResource(Res.string.edchrome_compose_preview)) {
                 open = false; onPreview()
             }
             // The build-variant (flavor) switcher — a flyout submenu of the module's variants, shown only for an
@@ -726,6 +758,30 @@ private fun UnresolvedDepsBanner(state: DepsResolveState, onRetry: () -> Unit) {
 }
 
 /** The Run button + a dropdown to pick which task to run/assemble (with a search box once the list grows). */
+/**
+ * The wide bar's run group, IntelliJ's run widget: the build variant (Android modules only) and Run in one
+ * container, split by a hairline, so they read as one control instead of two loose buttons.
+ */
+@Composable
+private fun RunCluster(
+    activeVariant: String?,
+    variants: () -> List<String>,
+    onPickVariant: (String) -> Unit,
+    runTasks: () -> List<RunTaskOption>,
+    onPickTask: (RunTaskOption) -> Unit,
+) {
+    Row(
+        Modifier.clip(RoundedCornerShape(Ca.radius.sm)).background(MaterialTheme.colorScheme.surfaceContainerHigh),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (activeVariant != null) {
+            VariantChip(activeVariant, variants, onPickVariant, compact = false)
+            Box(Modifier.width(1.dp).height(18.dp).background(MaterialTheme.colorScheme.outlineVariant))
+        }
+        RunControl(runTasks, onPickTask, compact = false)
+    }
+}
+
 @Composable
 private fun RunControl(
     tasks: () -> List<RunTaskOption>,

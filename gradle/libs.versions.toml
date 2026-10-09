@@ -78,6 +78,9 @@ jetbrains-annotations = "26.0.2"
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
+# JetBrains Runtime API: the desktop window's custom title bar (native window controls over our own bar).
+# Resolves to a no-op on any other JDK, so the launcher still runs there with an ordinary title bar.
+jbr-api = { module = "org.jetbrains.runtime:jbr-api", version = "1.9.0" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 jdt-core = { module = "org.eclipse.jdt:org.eclipse.jdt.core", version.ref = "jdt" }
 # ecj (the standalone Eclipse compiler) arrives transitively via jdt.core; named here so :ide-android

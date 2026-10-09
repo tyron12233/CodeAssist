@@ -26,9 +26,9 @@ import java.io.File
 import kotlin.test.Test
 
 /**
- * Off-screen renders of the new sidebar: the left activity rail (built-in panels + a plugin), with its sliding
- * selection indicator on different panels, and the mobile segmented switcher. Not an assertion — the PNGs are
- * for eyeballing the design (the sliding indicator, labels, and pane).
+ * Off-screen renders of the sidebar: the left and right tool-window stripes with docked panes, the stripes
+ * alone, a floating pane in a short window, and the mobile segmented switcher. Not an assertion; the PNGs are
+ * for eyeballing the design.
  */
 class SidebarRailSnapshot {
 
@@ -44,38 +44,71 @@ class SidebarRailSnapshot {
     @Test
     fun renderRailAndPane() {
         val panels = panels()
-        // Left rail (Search selected) + its docked pane, as the ExpandedLayout composes them.
-        snapshot("sidebar-rail-search.png", 460, 520) {
+        val left = panels.dropLast(1)
+        val right = panels.takeLast(1)
+        // The wide layout: left stripe + docked Search pane · editor · docked AI pane + right stripe.
+        snapshot("sidebar-rail-search.png", 2000, 900) {
             Box(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
                 Row(Modifier.fillMaxSize()) {
                     ActivityRail(
-                        panels = panels,
+                        panels = left,
                         selectedId = "search",
                         onSelect = {},
-                        header = { ProjectTile("Demo", size = 42.dp) },
                         footer = {
+                            RailActionItem(CaIcons.terminal, "Build", active = true) {}
+                            RailDivider()
                             RailActionItem(CaIcons.ellipsis, "More") {}
                             RailActionItem(CaIcons.gear, "Settings") {}
                         },
                     )
-                    SidebarPane(panels, "search", RailSide.Left, paneWidth = 260.dp)
-                    Box(Modifier.fillMaxHeight().width(120.dp).background(Ide.colors.editorBg))
+                    SidebarPane(left, "search", RailSide.Left, paneWidth = 280.dp, onResize = {})
+                    Box(Modifier.weight(1f).fillMaxHeight().background(Ide.colors.editorBg))
+                    SidebarPane(right, "ai", RailSide.Right, paneWidth = 300.dp, onResize = {})
+                    ActivityRail(panels = right, selectedId = "ai", onSelect = {}, side = RailSide.Right, menu = {})
                 }
             }
         }
-        // Same rail with Structure selected — the indicator sits on a different icon.
-        snapshot("sidebar-rail-structure.png", 200, 520) {
+        // Nothing open: just the two stripes framing the editor.
+        snapshot("sidebar-rail-structure.png", 2000, 900) {
             Box(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
-                ActivityRail(
-                    panels = panels,
-                    selectedId = "structure",
-                    onSelect = {},
-                    header = { ProjectTile("Demo", size = 42.dp) },
-                    footer = {
-                        RailActionItem(CaIcons.ellipsis, "More") {}
-                        RailActionItem(CaIcons.gear, "Settings") {}
-                    },
-                )
+                Row(Modifier.fillMaxSize()) {
+                    ActivityRail(
+                        panels = left,
+                        selectedId = null,
+                        onSelect = {},
+                        footer = {
+                            RailActionItem(CaIcons.terminal, "Build") {}
+                            RailDivider()
+                            RailActionItem(CaIcons.ellipsis, "More") {}
+                            RailActionItem(CaIcons.gear, "Settings") {}
+                        },
+                    )
+                    Box(Modifier.weight(1f).fillMaxHeight().background(Ide.colors.editorBg))
+                    ActivityRail(panels = right, selectedId = null, onSelect = {}, side = RailSide.Right, menu = {})
+                }
+            }
+        }
+        // A short, narrow window (phone landscape): the pane floats over a dimmed editor, the footer stays pinned.
+        snapshot("sidebar-rail-floating.png", 1720, 760) {
+            Box(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
+                Row(Modifier.fillMaxSize()) {
+                    ActivityRail(
+                        panels = left,
+                        selectedId = "files",
+                        onSelect = {},
+                        footer = {
+                            RailActionItem(CaIcons.terminal, "Build") {}
+                            RailDivider()
+                            RailActionItem(CaIcons.ellipsis, "More") {}
+                            RailActionItem(CaIcons.gear, "Settings") {}
+                        },
+                    )
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)))
+                        SidebarPane(left, "files", RailSide.Left, Modifier.align(Alignment.CenterStart), paneWidth = 280.dp, floating = true)
+                    }
+                    ActivityRail(panels = right, selectedId = null, onSelect = {}, side = RailSide.Right, menu = {})
+                }
             }
         }
         // The mobile in-drawer segmented switcher.
@@ -101,8 +134,7 @@ class SidebarRailSnapshot {
             CodeAssistTheme(dark = true) { content() }
         }
         try {
-            // Pump several frames so the measured sliding indicator (onGloballyPositioned → state → relayout)
-            // and its spring settle before capture — a single frame renders before the measurement lands.
+            // Pump several frames so the pane's open animation settles before capture.
             scene.render()
             var t = 0L
             repeat(12) { t += 32_000_000L; scene.render(t) }

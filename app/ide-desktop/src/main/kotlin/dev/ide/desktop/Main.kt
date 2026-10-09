@@ -1,6 +1,7 @@
 package dev.ide.desktop
 
 import androidx.compose.material.Button
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -12,6 +13,7 @@ import dev.ide.ui.CodeAssistApp
 import dev.ide.ui.editor.preview.ImageSceneComposer
 import dev.ide.ui.editor.preview.OffscreenPreviewRenderer
 import dev.ide.ui.ext.PreviewSnapshots
+import dev.ide.ui.platform.LocalWindowTitleBar
 import java.nio.file.Path
 
 /**
@@ -49,11 +51,15 @@ fun main(args: Array<String>) {
             state = state,
             title = "CodeAssist",
         ) {
-            CodeAssistApp(
-                backend,
-                fileActions = DesktopFileActions(backend),
-                composePreviewHost = previewHost,
-            )
+            // IntelliJ-style: the app draws the title bar (the editor's top bar, or a plain strip elsewhere)
+            // with the native window controls on top of it.
+            CompositionLocalProvider(LocalWindowTitleBar provides rememberJbrWindowTitleBar(window, state)) {
+                CodeAssistApp(
+                    backend,
+                    fileActions = DesktopFileActions(backend),
+                    composePreviewHost = previewHost,
+                )
+            }
         }
     }
     backend.close()

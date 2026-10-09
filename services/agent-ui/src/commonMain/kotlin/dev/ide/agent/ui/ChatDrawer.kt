@@ -142,7 +142,6 @@ import dev.ide.agent.ui.generated.resources.chat_image_failed
 import dev.ide.agent.ui.generated.resources.chat_undo
 import dev.ide.agent.ui.generated.resources.chat_undone
 import dev.ide.agent.ui.generated.resources.chat_use_model
-import dev.ide.agent.ui.generated.resources.chat_close
 import dev.ide.agent.ui.generated.resources.chat_copied
 import dev.ide.agent.ui.generated.resources.chat_copy
 import dev.ide.agent.ui.generated.resources.chat_usage_cached
@@ -242,22 +241,42 @@ fun ChatDrawer(
 
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxSize()) {
-            ChatChrome {
-                ChatHeader(
-                cfg = cfg,
-                models = models.ifEmpty { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.models ?: emptyList() },
-                modelMenuOpen = modelMenuOpen,
-                onModelMenu = { modelMenuOpen = it },
-                onPickModel = { backend.agent.setModel(it); cfg = backend.agent.config() },
-                onManage = { showProviders = true },
-                onHistory = { showHistory = true },
-                onCycleMode = {
-                    backend.agent.setPermissionMode(nextMode(cfg.mode))
-                    cfg = backend.agent.config()
+            val headerModels = models.ifEmpty { cfg.providers.firstOrNull { it.id == cfg.selectedProvider }?.models ?: emptyList() }
+            val onPickModel: (String) -> Unit = { backend.agent.setModel(it); cfg = backend.agent.config() }
+            val onCycleMode = {
+                backend.agent.setPermissionMode(nextMode(cfg.mode))
+                cfg = backend.agent.config()
+            }
+            // In a tool window the host header carries the title and the hide button; the model picker, the mode
+            // chip and the menu go into it rather than a second header row.
+            val hosted = ToolWindowHeaderActions(
+                leading = {
+                    ModelPicker(cfg = cfg, models = headerModels, open = modelMenuOpen, onOpen = { modelMenuOpen = it }, onPick = onPickModel)
                 },
-                onNew = { backend.agent.newSession() },
-                onClose = onClose,
-                )
+                actions = {
+                    ModeChip(cfg.mode, onCycleMode)
+                    ChatMenu(
+                        onNew = { backend.agent.newSession() },
+                        onHistory = { showHistory = true },
+                        onManage = { showProviders = true },
+                    )
+                },
+            )
+            if (!hosted) {
+                ChatChrome {
+                    ChatHeader(
+                        cfg = cfg,
+                        models = headerModels,
+                        modelMenuOpen = modelMenuOpen,
+                        onModelMenu = { modelMenuOpen = it },
+                        onPickModel = onPickModel,
+                        onManage = { showProviders = true },
+                        onHistory = { showHistory = true },
+                        onCycleMode = onCycleMode,
+                        onNew = { backend.agent.newSession() },
+                        onClose = onClose,
+                    )
+                }
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (chat.messages.isEmpty()) {
@@ -459,39 +478,49 @@ private fun ChatHeader(
             )
             ModelPicker(cfg = cfg, models = models, open = modelMenuOpen, onOpen = onModelMenu, onPick = onPickModel)
         }
-        // The permission mode cycles on tap, and is tinted by how much it lets the agent do: a session left
-        // on auto-accept applies edits without asking, which should be visible in the header rather than
-        // something you have to open settings to discover. The dense house chip keeps the 52dp bar intact
-        // where an M3 chip's own padding would crowd out the title.
-        val scheme = MaterialTheme.colorScheme
-        val modeFill = when (cfg.mode) {
-            UiAgentPermissionMode.AUTO_ACCEPT -> scheme.tertiaryContainer
-            UiAgentPermissionMode.PLAN_ONLY -> scheme.secondaryContainer
-            UiAgentPermissionMode.ASK_EACH -> scheme.surfaceContainerHighest
-        }
-        val modeText = when (cfg.mode) {
-            UiAgentPermissionMode.AUTO_ACCEPT -> scheme.onTertiaryContainer
-            UiAgentPermissionMode.PLAN_ONLY -> scheme.onSecondaryContainer
-            UiAgentPermissionMode.ASK_EACH -> scheme.onSurfaceVariant
-        }
-        Chip(
-            text = modeLabel(cfg.mode),
-            modifier = Modifier.clip(RoundedCornerShape(Ca.radius.pill)).clickable(onClick = onCycleMode),
-            fill = modeFill,
-            textColor = modeText,
-        )
-        // The occasional actions share one menu, which leaves the title and the model name room to read.
-        var menuOpen by remember { mutableStateOf(false) }
-        Box {
-            IconButtonCa(CaIcons.ellipsis, stringResource(Res.string.chat_more), { menuOpen = true }, iconSize = 16, boxSize = 30)
-            CaDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                HeaderMenuItem(CaIcons.plus, stringResource(Res.string.chat_new)) { menuOpen = false; onNew() }
-                HeaderMenuItem(CaIcons.clock, stringResource(Res.string.chat_history)) { menuOpen = false; onHistory() }
-                HeaderMenuItem(CaIcons.key, stringResource(Res.string.chat_manage_keys)) { menuOpen = false; onManage() }
-            }
-        }
-        if (onClose != null) {
-            IconButtonCa(CaIcons.close, stringResource(Res.string.chat_close), onClose, iconSize = 16, boxSize = 30)
+        ModeChip(cfg.mode, onCycleMode)
+        ChatMenu(onNew = onNew, onHistory = onHistory, onManage = onManage)
+        if (onClose != null) HideToolWindowButton(onClose)
+    }
+}
+
+/**
+ * The permission mode chip. It cycles on tap, and is tinted by how much it lets the agent do: a session left on
+ * auto-accept applies edits without asking, which should be visible in the header rather than something you have
+ * to open settings to discover. The dense house chip keeps a compact header intact where an M3 chip's own padding
+ * would crowd out the title.
+ */
+@Composable
+private fun ModeChip(mode: UiAgentPermissionMode, onCycleMode: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val modeFill = when (mode) {
+        UiAgentPermissionMode.AUTO_ACCEPT -> scheme.tertiaryContainer
+        UiAgentPermissionMode.PLAN_ONLY -> scheme.secondaryContainer
+        UiAgentPermissionMode.ASK_EACH -> scheme.surfaceContainerHighest
+    }
+    val modeText = when (mode) {
+        UiAgentPermissionMode.AUTO_ACCEPT -> scheme.onTertiaryContainer
+        UiAgentPermissionMode.PLAN_ONLY -> scheme.onSecondaryContainer
+        UiAgentPermissionMode.ASK_EACH -> scheme.onSurfaceVariant
+    }
+    Chip(
+        text = modeLabel(mode),
+        modifier = Modifier.clip(RoundedCornerShape(Ca.radius.pill)).clickable(onClick = onCycleMode),
+        fill = modeFill,
+        textColor = modeText,
+    )
+}
+
+/** The header's occasional actions, in one menu so the title and the model name keep room to read. */
+@Composable
+private fun ChatMenu(onNew: () -> Unit, onHistory: () -> Unit, onManage: () -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        IconButtonCa(CaIcons.ellipsis, stringResource(Res.string.chat_more), { menuOpen = true }, iconSize = 16, boxSize = 28)
+        CaDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            HeaderMenuItem(CaIcons.plus, stringResource(Res.string.chat_new)) { menuOpen = false; onNew() }
+            HeaderMenuItem(CaIcons.clock, stringResource(Res.string.chat_history)) { menuOpen = false; onHistory() }
+            HeaderMenuItem(CaIcons.key, stringResource(Res.string.chat_manage_keys)) { menuOpen = false; onManage() }
         }
     }
 }

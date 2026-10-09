@@ -1,12 +1,39 @@
 package dev.ide.ui.components
 
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.PopupPositionProvider
+import dev.ide.ui.platform.horizontalResizeCursor
+import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.platform.secondaryClickable
+import kotlinx.coroutines.launch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -38,7 +65,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.SaveableStateHolder
@@ -49,14 +75,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.LocalHostFileActions
 import dev.ide.ui.LocalPluginFileOpener
@@ -69,7 +92,6 @@ import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
-import kotlin.math.roundToInt
 
 /**
  * The sidebar model (IntelliJ/VSCode activity bar). A [SidebarPanel] is one dockable panel — a built-in pane
@@ -101,6 +123,9 @@ enum class RailSide { Left, Right }
  * under more than one id (a stale selection falling back to the first panel) passes the id it resolved from
  * instead, since two slots alive at once under one key is an error.
  *
+ * [headerSlot] is where the panel's own header controls go when the host draws its tool window header (see
+ * [ToolWindowHeaderActions]); null when there is no host header.
+ *
  * The slot clips to its bounds. Hosts pin a footer (the sidebar ad) under it, and a panel whose content
  * outgrows the slot must be cut off at the slot's edge rather than drawn underneath that footer, where it
  * looks present but cannot be reached.
@@ -111,14 +136,30 @@ fun PanelContent(
     holder: SaveableStateHolder,
     modifier: Modifier = Modifier,
     key: Any? = null,
+    headerSlot: ToolWindowHeaderSlot? = null,
 ) {
     Box(modifier.clipToBounds()) {
-        if (panel != null) holder.SaveableStateProvider(key ?: panel.id) { panel.content() }
+        if (panel != null) {
+            CompositionLocalProvider(LocalToolWindowHeader provides headerSlot) {
+                holder.SaveableStateProvider(key ?: panel.id) { panel.content() }
+            }
+        }
     }
 }
 
-private val RailWidth = 76.dp
-private val RailIconBox = 46.dp
+/** Stripe width: IntelliJ's 40px tool window bar on a pointer host, 48dp on touch so each button keeps a usable
+ *  target. Public so the top bar can line its leading button up over the left stripe. */
+val ToolStripeWidth: Dp get() = if (isMobilePlatform) 48.dp else 40.dp
+private val StripeButtonSize: Dp get() = if (isMobilePlatform) 40.dp else 32.dp
+private val StripeIconSize = 20.dp
+private val StripeGap = 4.dp
+
+/** The side of the stripe being composed, so its buttons (including host-supplied footer items) place their
+ *  tooltips on the editor-facing side. */
+private val LocalRailSide = staticCompositionLocalOf { RailSide.Left }
+
+/** The narrowest a docked pane can be dragged. */
+val MinPaneWidth = 200.dp
 
 /**
  * Map the plugin tool windows registered for [anchor] (`ToolWindowRegistry`) to [SidebarPanel]s over a neutral
@@ -146,10 +187,14 @@ fun pluginPanels(anchor: ToolWindowAnchor, backend: IdeBackend, activeFilePath: 
 }
 
 /**
- * The vertical activity rail (glass, 76px): one icon per [SidebarPanel], with an accent-soft **sliding
- * indicator** that glides between icons on selection (the signature motion). [header] (the project tile on the
- * left rail) and [footer] (the More/Settings buttons) bracket the panel icons. Tapping an icon calls
- * [onSelect]; the host decides open-vs-collapse (tap-again collapses).
+ * The vertical tool-window stripe (IntelliJ's tool window bar): one icon-only button per [SidebarPanel]. A
+ * panel's name shows as a tooltip on hover, or on long-press on touch, beside the stripe on its editor-facing
+ * side. [header] and [footer] bracket the panel icons; the footer stays pinned while the panel icons scroll when
+ * the window is too short to show them all (a phone in landscape). Tapping an icon calls [onSelect]; the host
+ * decides open-vs-collapse (tap-again collapses).
+ *
+ * [menu], when given, is the stripe's context menu: it opens on a secondary click anywhere on the stripe, or a
+ * long-press on its empty area, and receives a `dismiss` callback.
  */
 @Composable
 fun ActivityRail(
@@ -157,90 +202,144 @@ fun ActivityRail(
     selectedId: String?,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    side: RailSide = RailSide.Left,
     header: @Composable (ColumnScope.() -> Unit)? = null,
     footer: @Composable (ColumnScope.() -> Unit)? = null,
+    menu: (@Composable ColumnScope.(dismiss: () -> Unit) -> Unit)? = null,
 ) {
-    GlassSurface(modifier.width(RailWidth).fillMaxHeight(), GlassMaterial.Regular) {
-        // Each icon reports its top Y in root coordinates; the indicator's position is that minus the rail's
-        // own root Y (both read live, so it self-corrects regardless of which lays out first).
-        var railTop by remember { mutableStateOf(0f) }
-        val itemY = remember { mutableStateMapOf<String, Float>() }
-        val target = selectedId?.let { id -> itemY[id]?.let { it - railTop } }
-        val indicatorY by animateFloatAsState(
-            target ?: 0f,
-            spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow),
-            label = "railIndicator",
-        )
-        Box(Modifier.fillMaxHeight().onGloballyPositioned { railTop = it.positionInRoot().y }) {
-            if (target != null) {
-                Box(
-                    Modifier.align(Alignment.TopCenter)
-                        .offset { IntOffset(0, indicatorY.roundToInt()) }
-                        .size(RailIconBox)
-                        .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.sm)),
-                )
-            }
-            Column(
-                Modifier.fillMaxHeight().padding(top = 18.dp, bottom = 16.dp, start = 8.dp, end = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+    var menuOpen by remember { mutableStateOf(false) }
+    CompositionLocalProvider(LocalRailSide provides side) {
+        Row(modifier.fillMaxHeight()) {
+            if (side == RailSide.Right) SidebarDivider()
+            Box(
+                Modifier.width(ToolStripeWidth).fillMaxHeight()
+                    // The top bar's colour, so bar and stripes read as one frame around the editor.
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .secondaryClickable(enabled = menu != null) { menuOpen = true },
             ) {
-                header?.invoke(this)
-                panels.forEach { panel ->
-                    RailIcon(
-                        panel = panel,
-                        active = panel.id == selectedId,
-                        onClick = { onSelect(panel.id) },
-                        reportY = { y -> itemY[panel.id] = y },
-                    )
+                // Below the buttons, so a long-press only reaches it on the stripe's empty area.
+                if (menu != null) {
+                    Box(Modifier.matchParentSize().pointerInput(Unit) { detectTapGestures(onLongPress = { menuOpen = true }) })
                 }
-                Box(Modifier.weight(1f))
-                footer?.invoke(this)
+                Column(
+                    Modifier.fillMaxSize().padding(vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(StripeGap),
+                ) {
+                    Column(
+                        Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(StripeGap),
+                    ) {
+                        header?.invoke(this)
+                        panels.forEach { panel ->
+                            StripeButton(panel.icon, panel.title, active = panel.id == selectedId) { onSelect(panel.id) }
+                        }
+                    }
+                    footer?.invoke(this)
+                }
+                if (menu != null) {
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        menu { menuOpen = false }
+                    }
+                }
             }
+            if (side == RailSide.Left) SidebarDivider()
         }
     }
 }
 
-/** One rail icon + label. The accent-soft background is drawn by the rail's sliding indicator (so it animates
- *  between items), not per-item — the button itself only tints its glyph/label when active. */
+/** A short horizontal rule between groups of stripe buttons (e.g. tool windows above, bottom tools below). */
 @Composable
-private fun RailIcon(
-    panel: SidebarPanel,
-    active: Boolean,
-    onClick: () -> Unit,
-    reportY: (Float) -> Unit,
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp),
+fun RailDivider() {
+    Box(Modifier.padding(vertical = 3.dp).width(StripeButtonSize - 12.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+}
+
+/**
+ * One icon-only stripe button. [active] fills it (the selected tool window, or a lit toggle); hover gets a faint
+ * fill on a pointer host. [label] is the tooltip, shown on hover or long-press, and the accessibility label.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StripeButton(icon: ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val tooltip = rememberTooltipState()
+    val scope = rememberCoroutineScope()
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    TooltipBox(
+        positionProvider = rememberStripeTooltipPosition(LocalRailSide.current),
+        tooltip = { PlainTooltip { Text(label, style = MaterialTheme.typography.labelMedium) } },
+        state = tooltip,
+        // Hover is handled by the box; on touch the long-press below drives it, so it can't also count as a tap.
+        enableUserInput = !isMobilePlatform,
     ) {
-        Box(Modifier.onGloballyPositioned { reportY(it.positionInRoot().y) }) {
-            IconButtonCa(
-                icon = panel.icon,
-                contentDescription = panel.title,
-                onClick = onClick,
-                active = false, // the sliding indicator provides the selected background
-                iconSize = 22,
-                boxSize = 46,
-                tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        Box(
+            Modifier.size(StripeButtonSize)
+                .pressScale(interaction)
+                .background(
+                    when {
+                        active -> scheme.secondaryContainer
+                        hovered -> scheme.onSurface.copy(alpha = 0.08f)
+                        else -> Color.Transparent
+                    },
+                    MaterialTheme.shapes.small,
+                )
+                .combinedClickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    onLongClick = { scope.launch { tooltip.show() } },
+                    onClick = onClick,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon,
+                label,
+                Modifier.size(StripeIconSize),
+                tint = if (active) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
             )
         }
-        Text(
-            panel.title,
-            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-            fontSize = 10.5f.sp,
-            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+    }
+}
+
+/** Places a stripe tooltip beside its button, on the editor-facing side, vertically centred on it. */
+@Composable
+private fun rememberStripeTooltipPosition(side: RailSide): PopupPositionProvider {
+    val gap = with(LocalDensity.current) { 6.dp.roundToPx() }
+    return remember(side, gap) {
+        object : PopupPositionProvider {
+            override fun calculatePosition(
+                anchorBounds: IntRect,
+                windowSize: IntSize,
+                layoutDirection: LayoutDirection,
+                popupContentSize: IntSize,
+            ): IntOffset {
+                // RailSide is the start/end edge; in RTL the "left" stripe is laid out on the right.
+                val toRight = (side == RailSide.Left) == (layoutDirection == LayoutDirection.Ltr)
+                val x = if (toRight) anchorBounds.right + gap else anchorBounds.left - gap - popupContentSize.width
+                val y = anchorBounds.top + (anchorBounds.height - popupContentSize.height) / 2
+                return IntOffset(
+                    x.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
+                    y.coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)),
+                )
+            }
+        }
     }
 }
 
 /**
  * The docked panel host: slides open/collapse ([expandHorizontally]/[shrinkHorizontally] + fade) as
  * [selectedId] goes non-null/null, and cross-slides between panels ([AnimatedContent], direction following the
- * rail-index delta) when switched. A hairline divider sits on the editor-facing edge. The last-selected panel
+ * stripe-index delta) when switched. A hairline divider sits on the editor-facing edge. The last-selected panel
  * keeps rendering through the collapse so the content doesn't blink out before the pane finishes shrinking.
+ *
+ * [onResize], when given, makes the editor-facing edge a splitter: dragging it reports the change in pane width
+ * (positive = wider), and [onResizeEnd] fires when the drag ends. [floating] renders the pane as an elevated
+ * sheet over the editor instead of beside it (narrow windows), without dividers. The pane is headed by a
+ * [ToolWindowHeader] carrying the panel's title, its own controls, and a hide button calling [onHide]. Those
+ * controls show while the pane is hovered or [active] (or always, with [alwaysShowActions]); a press inside
+ * calls [onActivate].
  */
 @Composable
 fun SidebarPane(
@@ -249,11 +348,19 @@ fun SidebarPane(
     side: RailSide,
     modifier: Modifier = Modifier,
     paneWidth: Dp = 300.dp,
+    floating: Boolean = false,
+    onResize: ((Dp) -> Unit)? = null,
+    onResizeEnd: () -> Unit = {},
+    onHide: (() -> Unit)? = null,
+    active: Boolean = false,
+    alwaysShowActions: Boolean = true,
+    onActivate: () -> Unit = {},
 ) {
     // Each panel's own saveable state, held here rather than inside the pane: the pane's content is disposed
     // when the pane collapses or another panel is selected, so this is what brings a panel back scrolled to
     // where it was left. Keyed by panel id, so plugin tool windows get it too.
     val panelState = rememberSaveableStateHolder()
+    val headerSlots = rememberToolWindowHeaderSlots()
     // Hold the last non-null selection so the exit animation still has content to show (updated off-composition).
     var displayId by remember { mutableStateOf(selectedId) }
     LaunchedEffect(selectedId) { if (selectedId != null) displayId = selectedId }
@@ -270,36 +377,63 @@ fun SidebarPane(
         modifier = modifier,
     ) {
         Row(Modifier.fillMaxHeight()) {
-            if (side == RailSide.Right) SidebarDivider()
-            GlassSurface(Modifier.width(paneWidth).fillMaxHeight(), GlassMaterial.Regular) {
-                Column(Modifier.fillMaxSize()) {
-                    // Key on the stable id (not the panel object, which the host rebuilds every recomposition) so
-                    // the switch animation fires only on a real panel change — not on every incidental recompose
-                    // (e.g. while the IME inset animates), which would otherwise restart the transition per frame.
-                    AnimatedContent(
-                        targetState = display?.id,
-                        transitionSpec = {
-                            val fromIdx = panels.indexOfFirst { it.id == initialState }
-                            val toIdx = panels.indexOfFirst { it.id == targetState }
-                            val dir = if (toIdx >= fromIdx) 1 else -1
-                            (fadeIn(tween(Motion.BASE)) +
-                                slideInVertically(tween(Motion.BASE, easing = Motion.quiet)) { h -> dir * h / 14 }) togetherWith
-                                (fadeOut(tween(Motion.FAST)) +
-                                    slideOutVertically(tween(Motion.BASE, easing = Motion.quiet)) { h -> -dir * h / 14 })
-                        },
-                        label = "sidebarPanelSwitch",
-                        modifier = Modifier.weight(1f),
-                    ) { id ->
-                        PanelContent(panels.firstOrNull { it.id == id }, panelState, Modifier.fillMaxSize())
-                    }
-                    // A native ad pinned to the foot of the LEFT tool pane — below the tool content, off the
-                    // editor canvas entirely. AdSlot self-collapses when ads are inactive (desktop / ads off).
-                    if (side == RailSide.Left) {
-                        AdSlot(AdPlacement.SIDEBAR, Modifier.padding(horizontal = 10.dp, vertical = 10.dp))
+            if (side == RailSide.Right && !floating) SidebarDivider()
+            ToolWindowFrame(
+                active = active,
+                alwaysShowActions = alwaysShowActions,
+                onActivate = onActivate,
+                modifier = Modifier.width(paneWidth).fillMaxHeight()
+                    .then(if (floating) Modifier.shadow(12.dp) else Modifier),
+            ) {
+                GlassSurface(Modifier.fillMaxSize(), if (floating) GlassMaterial.Thick else GlassMaterial.Regular) {
+                    Column(Modifier.fillMaxSize()) {
+                        if (display != null) ToolWindowHeader(display.title, headerSlots.of(display.id), onHide)
+                        // Key on the stable id (not the panel object, which the host rebuilds every recomposition) so
+                        // the switch animation fires only on a real panel change — not on every incidental recompose
+                        // (e.g. while the IME inset animates), which would otherwise restart the transition per frame.
+                        AnimatedContent(
+                            targetState = display?.id,
+                            transitionSpec = {
+                                val fromIdx = panels.indexOfFirst { it.id == initialState }
+                                val toIdx = panels.indexOfFirst { it.id == targetState }
+                                val dir = if (toIdx >= fromIdx) 1 else -1
+                                (fadeIn(tween(Motion.BASE)) +
+                                    slideInVertically(tween(Motion.BASE, easing = Motion.quiet)) { h -> dir * h / 14 }) togetherWith
+                                    (fadeOut(tween(Motion.FAST)) +
+                                        slideOutVertically(tween(Motion.BASE, easing = Motion.quiet)) { h -> -dir * h / 14 })
+                            },
+                            label = "sidebarPanelSwitch",
+                            modifier = Modifier.weight(1f),
+                        ) { id ->
+                            PanelContent(
+                                panels.firstOrNull { it.id == id }, panelState, Modifier.fillMaxSize(),
+                                headerSlot = id?.let(headerSlots::of),
+                            )
+                        }
+                        // A native ad pinned to the foot of the LEFT tool pane — below the tool content, off the
+                        // editor canvas entirely. AdSlot self-collapses when ads are inactive (desktop / ads off).
+                        if (side == RailSide.Left) {
+                            AdSlot(AdPlacement.SIDEBAR, Modifier.padding(horizontal = 10.dp, vertical = 10.dp))
+                        }
                     }
                 }
+                if (onResize != null) {
+                    // An invisible grab strip just inside the editor-facing edge, so resizing takes no layout space.
+                    val density = LocalDensity.current
+                    val sign = if ((side == RailSide.Left) == (LocalLayoutDirection.current == LayoutDirection.Ltr)) 1f else -1f
+                    Box(
+                        Modifier.align(if (side == RailSide.Left) Alignment.CenterEnd else Alignment.CenterStart)
+                            .width(if (isMobilePlatform) 10.dp else 6.dp).fillMaxHeight()
+                            .horizontalResizeCursor()
+                            .draggable(
+                                orientation = Orientation.Horizontal,
+                                state = rememberDraggableState { dx -> onResize(with(density) { (dx * sign).toDp() }) },
+                                onDragStopped = { onResizeEnd() },
+                            ),
+                    )
+                }
             }
-            if (side == RailSide.Left) SidebarDivider()
+            if (side == RailSide.Left && !floating) SidebarDivider()
         }
     }
 }
@@ -310,25 +444,12 @@ fun SidebarDivider() {
     Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
 }
 
-/** A non-panel rail action (icon + label), styled like a [RailIcon] but without the sliding indicator — used
- *  for the left rail's footer (Build console, More, Settings & Tools). [active] renders it as a lit toggle
- *  (used by the bottom-tool-window button so it reflects whether the console is open). */
+/** A non-panel stripe action, styled like a panel button: used for the left stripe's footer (Build console,
+ *  More, Settings & Tools). [active] renders it as a lit toggle (the bottom-tool-window button uses this so it
+ *  reflects whether the console is open). [label] is its tooltip. */
 @Composable
 fun RailActionItem(icon: ImageVector, label: String, active: Boolean = false, onClick: () -> Unit) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        IconButtonCa(icon, label, onClick, active = active, iconSize = 22, boxSize = 46)
-        Text(
-            label,
-            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-            fontSize = 10.5f.sp,
-            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
+    StripeButton(icon, label, active, onClick)
 }
 
 /**
@@ -342,12 +463,13 @@ fun SegmentedPanelSwitcher(
     selectedId: String?,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    horizontalPadding: Dp = 12.dp,
 ) {
     if (panels.size < 2) return
     val selectedIndex = panels.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
     val showLabels = panels.size <= 3
     BoxWithConstraints(
-        modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)
+        modifier.fillMaxWidth().padding(horizontal = horizontalPadding, vertical = 10.dp)
             .height(40.dp)
             .clip(RoundedCornerShape(Ca.radius.md))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh),

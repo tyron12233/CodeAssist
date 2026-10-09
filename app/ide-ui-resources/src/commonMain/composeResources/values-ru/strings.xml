@@ -185,6 +185,9 @@
     <string name="filetree_directory">Каталог</string>
     <string name="filetree_new_in">Создать в %1$s</string>
     <string name="buildc_build">Сборка</string>
+    <string name="buildc_notice_details">Подробнее</string>
+    <string name="buildc_notice_less">Свернуть</string>
+    <string name="buildc_notice_dismiss">Скрыть</string>
     <string name="buildc_collapse">Свернуть</string>
     <string name="buildc_status_idle">Ожидание</string>
     <string name="buildc_status_running">Выполняется…</string>
@@ -252,6 +255,10 @@
     <string name="breadcrumb_split">Разделение</string>
     <string name="edchrome_files">Файлы</string>
     <string name="edchrome_more">Ещё</string>
+    <string name="sidebar_hide_tool_window_bar">Скрыть панель инструментов</string>
+    <string name="toolwindow_hide">Скрыть</string>
+    <string name="sidebar_right_tool_window_bar">Правая панель инструментов</string>
+    <string name="sidebar_right_tool_window_bar_desc">Показывать значки окон инструментов у правого края</string>
     <string name="edchrome_settings_and_tools">Настройки и инструменты</string>
     <string name="edchrome_toggle_navigator">Переключить навигатор</string>
     <string name="edchrome_find_replace">Найти / заменить</string>

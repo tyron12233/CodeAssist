@@ -323,6 +323,9 @@ We never collect your code, file or project names, which features you use, or an
 
     <!-- buildc (BuildConsole/BuildDock) — uses StringResource fields on LogLevelFilter + statusTag -->
     <string name="buildc_build">Build</string>
+    <string name="buildc_notice_details">Details</string>
+    <string name="buildc_notice_less">Less</string>
+    <string name="buildc_notice_dismiss">Dismiss</string>
     <string name="buildc_collapse">Collapse</string>
     <string name="buildc_fullscreen">Full screen</string>
     <string name="buildc_exit_fullscreen">Exit full screen</string>
@@ -456,6 +459,10 @@ We never collect your code, file or project names, which features you use, or an
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">Files</string>
     <string name="edchrome_more">More</string>
+    <string name="sidebar_hide_tool_window_bar">Hide tool window bar</string>
+    <string name="toolwindow_hide">Hide</string>
+    <string name="sidebar_right_tool_window_bar">Right tool window bar</string>
+    <string name="sidebar_right_tool_window_bar_desc">Show the tool window icons along the right edge</string>
     <string name="edchrome_settings_and_tools">Settings &amp; Tools</string>
     <string name="edchrome_toggle_navigator">Toggle navigator</string>
     <string name="edchrome_find_replace">Find / replace</string>

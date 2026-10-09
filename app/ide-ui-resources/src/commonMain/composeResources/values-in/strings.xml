@@ -212,6 +212,9 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="filetree_directory">Direktori</string>
     <string name="filetree_new_in">Baru di %1$s</string>
     <string name="buildc_build">Build</string>
+    <string name="buildc_notice_details">Detail</string>
+    <string name="buildc_notice_less">Ringkas</string>
+    <string name="buildc_notice_dismiss">Tutup</string>
     <string name="buildc_collapse">Ciutkan</string>
     <string name="buildc_status_idle">Menganggur</string>
     <string name="buildc_status_running">Berjalan…</string>
@@ -279,6 +282,10 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="breadcrumb_split">Terpisah</string>
     <string name="edchrome_files">File</string>
     <string name="edchrome_more">Lainnya</string>
+    <string name="sidebar_hide_tool_window_bar">Sembunyikan bilah jendela alat</string>
+    <string name="toolwindow_hide">Sembunyikan</string>
+    <string name="sidebar_right_tool_window_bar">Bilah jendela alat kanan</string>
+    <string name="sidebar_right_tool_window_bar_desc">Tampilkan ikon jendela alat di tepi kanan</string>
     <string name="edchrome_settings_and_tools">Setelan &amp; Alat</string>
     <string name="edchrome_toggle_navigator">Alihkan navigator</string>
     <string name="edchrome_find_replace">Cari / ganti</string>

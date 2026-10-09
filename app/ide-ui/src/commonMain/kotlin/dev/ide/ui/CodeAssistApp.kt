@@ -1,5 +1,8 @@
 package dev.ide.ui
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import dev.ide.ui.components.WindowTitleStrip
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -153,15 +156,19 @@ fun CodeAssistApp(
             // Renders nothing — it just observes the build state and asks the host to present an interstitial.
             BuildAdInterstitial(backend, app.adController)
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                    AppNavGraph(
-                        app = app,
-                        state = state,
-                        fileActions = fileActions,
-                        codeFont = codeFont,
-                        dark = dark,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                    // Desktop with a custom title bar: the title strip for screens that draw none of their own.
+                    WindowTitleStrip(title = "CodeAssist")
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        AppNavGraph(
+                            app = app,
+                            state = state,
+                            fileActions = fileActions,
+                            codeFont = codeFont,
+                            dark = dark,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
                 AppOverlays(
                     backend = backend,

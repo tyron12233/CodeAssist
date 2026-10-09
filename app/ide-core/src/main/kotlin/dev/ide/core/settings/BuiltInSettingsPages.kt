@@ -170,6 +170,11 @@ object BuiltInSettingsPages {
                 "accentColor", "Custom color", "Pick any color; the full Material You theme regenerates from it",
                 default = d.accentColor,
             ),
+            SettingControl.Toggle(
+                "toolWindowActions", "Always show tool window actions",
+                "Keep the buttons in tool window headers visible. Off shows them only while the pointer is over a tool window or it is the one you're working in (mouse and trackpad only)",
+                default = d.alwaysShowToolWindowActions,
+            ),
         )
     }
 

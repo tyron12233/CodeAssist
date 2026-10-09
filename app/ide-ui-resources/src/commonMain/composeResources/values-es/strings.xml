@@ -229,6 +229,9 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
 
     <!-- Build console -->
     <string name="buildc_build">Compilar</string>
+    <string name="buildc_notice_details">Detalles</string>
+    <string name="buildc_notice_less">Menos</string>
+    <string name="buildc_notice_dismiss">Descartar</string>
     <string name="buildc_collapse">Contraer</string>
     <string name="buildc_status_idle">Inactivo</string>
     <string name="buildc_status_running">Ejecutando…</string>
@@ -310,6 +313,10 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <!-- Editor chrome -->
     <string name="edchrome_files">Archivos</string>
     <string name="edchrome_more">Más</string>
+    <string name="sidebar_hide_tool_window_bar">Ocultar barra de ventanas de herramientas</string>
+    <string name="toolwindow_hide">Ocultar</string>
+    <string name="sidebar_right_tool_window_bar">Barra de herramientas derecha</string>
+    <string name="sidebar_right_tool_window_bar_desc">Mostrar los iconos de ventanas de herramientas en el borde derecho</string>
     <string name="edchrome_settings_and_tools">Configuración y herramientas</string>
     <string name="edchrome_toggle_navigator">Alternar navegador</string>
     <string name="edchrome_find_replace">Buscar / reemplazar</string>

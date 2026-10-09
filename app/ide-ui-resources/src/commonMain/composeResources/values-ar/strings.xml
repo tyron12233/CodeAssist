@@ -361,6 +361,9 @@
 
     <!-- buildc (BuildConsole/BuildDock) — uses StringResource fields on LogLevelFilter + statusTag -->
     <string name="buildc_build">بناء</string>
+    <string name="buildc_notice_details">التفاصيل</string>
+    <string name="buildc_notice_less">أقل</string>
+    <string name="buildc_notice_dismiss">تجاهل</string>
     <string name="buildc_collapse">طي</string>
     <string name="buildc_fullscreen">ملء الشاشة</string>
     <string name="buildc_exit_fullscreen">إنهاء ملء الشاشة</string>
@@ -496,6 +499,10 @@
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">الملفات</string>
     <string name="edchrome_more">المزيد</string>
+    <string name="sidebar_hide_tool_window_bar">إخفاء شريط نوافذ الأدوات</string>
+    <string name="toolwindow_hide">إخفاء</string>
+    <string name="sidebar_right_tool_window_bar">شريط نوافذ الأدوات الأيمن</string>
+    <string name="sidebar_right_tool_window_bar_desc">إظهار أيقونات نوافذ الأدوات على الحافة اليمنى</string>
     <string name="edchrome_settings_and_tools">الإعدادات والأدوات</string>
     <string name="edchrome_toggle_navigator">تبديل المتصفح</string>
     <string name="edchrome_find_replace">بحث / استبدال</string>

@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.components.ToolWindowHeaderActions
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
@@ -57,13 +58,16 @@ import org.jetbrains.compose.resources.stringResource
 internal fun StructureOutline(state: IdeUiState, onNavigated: () -> Unit = {}, modifier: Modifier = Modifier) {
     val active = state.active
     Column(modifier.fillMaxSize()) {
-        Text(
-            stringResource(Res.string.structure_title),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp),
-        )
+        // In a tool window the host header already carries the title.
+        if (!ToolWindowHeaderActions()) {
+            Text(
+                stringResource(Res.string.structure_title),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp),
+            )
+        }
         if (active == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(

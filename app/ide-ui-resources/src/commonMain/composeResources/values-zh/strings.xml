@@ -322,6 +322,9 @@
 
     <!-- buildc (BuildConsole/BuildDock) — uses StringResource fields on LogLevelFilter + statusTag -->
     <string name="buildc_build">构建</string>
+    <string name="buildc_notice_details">详情</string>
+    <string name="buildc_notice_less">收起</string>
+    <string name="buildc_notice_dismiss">关闭</string>
     <string name="buildc_collapse">收起</string>
     <string name="buildc_fullscreen">全屏</string>
     <string name="buildc_exit_fullscreen">退出全屏</string>
@@ -454,6 +457,10 @@
     <!-- edchrome (EditorChrome/SideRail) -->
     <string name="edchrome_files">文件</string>
     <string name="edchrome_more">更多</string>
+    <string name="sidebar_hide_tool_window_bar">隐藏工具窗口栏</string>
+    <string name="toolwindow_hide">隐藏</string>
+    <string name="sidebar_right_tool_window_bar">右侧工具窗口栏</string>
+    <string name="sidebar_right_tool_window_bar_desc">在右侧边缘显示工具窗口图标</string>
     <string name="edchrome_settings_and_tools">设置与工具</string>
     <string name="edchrome_toggle_navigator">切换导航器</string>
     <string name="edchrome_find_replace">查找 / 替换</string>

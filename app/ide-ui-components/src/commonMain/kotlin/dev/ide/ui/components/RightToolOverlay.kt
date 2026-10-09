@@ -74,6 +74,7 @@ fun RightToolOverlay(state: IdeUiState) {
     // The panels' saveable state (their scroll positions above all), held outside the `if (visible)` below:
     // a closed drawer composes nothing, so this is what brings a panel back where the user left it.
     val panelState = rememberSaveableStateHolder()
+    val headerSlots = rememberToolWindowHeaderSlots()
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
@@ -164,7 +165,7 @@ fun RightToolOverlay(state: IdeUiState) {
 
         if (visible) {
             // Dimming scrim (modal): it blocks touches to the editor behind it and, on mobile, can be dragged
-            // to close, but a plain tap does NOT dismiss — closing is explicit (header switch/back, or swipe).
+            // to close, but a plain tap does NOT dismiss — closing is explicit (the header's hide button, back, or swipe).
             Box(
                 Modifier.fillMaxSize()
                     .graphicsLayer { alpha = (shown.value / openPx).coerceIn(0f, 1f) }
@@ -188,10 +189,12 @@ fun RightToolOverlay(state: IdeUiState) {
             ) {
                 GlassSurface(Modifier.fillMaxSize(), GlassMaterial.Thick) {
                     Column(Modifier.fillMaxSize()) {
-                        SegmentedPanelSwitcher(
+                        ToolWindowSwitcherHeader(
                             panels = panels,
-                            selectedId = selectedId,
+                            selectedId = effectiveId,
                             onSelect = { state.selectRightPanel(it) },
+                            slots = headerSlots,
+                            onHide = { state.selectedRightPanel = null },
                         )
                         // Key on the stable id (not the panel object) so the crossfade doesn't restart on every
                         // incidental recompose (e.g. while the drawer slides).
@@ -208,6 +211,7 @@ fun RightToolOverlay(state: IdeUiState) {
                                 panelState,
                                 Modifier.fillMaxSize(),
                                 key = id,
+                                headerSlot = headerSlots.of(id),
                             )
                         }
                     }

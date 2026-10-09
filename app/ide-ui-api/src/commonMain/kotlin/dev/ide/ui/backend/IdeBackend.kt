@@ -1978,6 +1978,8 @@ data class UiSettings(
     val accent: UiAccent = UiAccent.Lime,
     /** The seed color for [UiAccent.Custom], as an `0xAARRGGBB` ARGB long. Ignored unless accent is Custom. */
     val customAccentColor: Long = 0xFF8B5CF6L,
+    /** Keep tool window header actions always visible (off = only while the tool window is hovered or active). */
+    val alwaysShowToolWindowActions: Boolean = false,
     val editorFontScale: Float = 1f,
     /** "jetbrains" (bundled JetBrains Mono) | "monospace" (system monospace). */
     val codeFont: String = "jetbrains",

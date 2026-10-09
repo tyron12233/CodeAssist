@@ -1,5 +1,8 @@
 package dev.ide.ui.screens
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import dev.ide.ui.components.ToolWindowHeaderActions
 import dev.ide.ui.itemsKeyed
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
@@ -129,12 +132,16 @@ internal fun SearchScreen(
         searching = false
     }
 
-    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        // Title + search field
-        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-            Text(stringResource(Res.string.search), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    // In a tool window the host header already carries the title, and the pane its surface.
+    val hosted = ToolWindowHeaderActions()
+    Column(modifier.fillMaxSize().then(if (hosted) Modifier else Modifier.background(MaterialTheme.colorScheme.background))) {
+        // Title + search field.
+        Column(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = if (hosted) 4.dp else 12.dp, bottom = 12.dp)) {
+            if (!hosted) {
+                Text(stringResource(Res.string.search), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
             Row(
-                Modifier.fillMaxWidth().padding(top = 10.dp)
+                Modifier.fillMaxWidth().padding(top = if (hosted) 0.dp else 10.dp)
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
                     .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -162,8 +169,9 @@ internal fun SearchScreen(
         }
 
         // Tabs
+        // Scrolls sideways rather than squeezing a pill's label into one letter per line in a narrow pane.
         Row(
-            Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             SearchTab.entries.forEach { t -> TabPill(t, t == tab) { tab = t } }
@@ -292,7 +300,7 @@ private fun TabPill(tab: SearchTab, active: Boolean, onClick: () -> Unit) {
     ) {
         Icon(tab.icon, null, Modifier.size(14.dp), tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
         Text(stringResource(tab.labelRes), color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
-            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium)
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, softWrap = false)
     }
 }
 

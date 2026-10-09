@@ -21,6 +21,9 @@ data class IdeSettings(
     val accent: String = ACCENT_LIME,
     /** Seed for [ACCENT_CUSTOM] — an `0xAARRGGBB` ARGB long. Ignored unless [accent] is custom. */
     val accentColor: Long = 0xFF8B5CF6L,
+    /** Keep tool window header actions visible at all times (off = only while a tool window is hovered or
+     *  active, IntelliJ-style). Pointer hosts only; touch always shows them. */
+    val alwaysShowToolWindowActions: Boolean = false,
 
     // ---- editor ----
     /** Code-font zoom, 1.0 = the theme's default size (also driven live by pinch / Ctrl-+ / Ctrl--). */

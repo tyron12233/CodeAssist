@@ -8,3 +8,9 @@ import androidx.compose.ui.Modifier
  * actual is a no-op.
  */
 expect fun Modifier.verticalResizeCursor(): Modifier
+
+/**
+ * Show a horizontal (east/west) resize cursor while the pointer hovers a vertical splitter, such as the edge of
+ * a docked tool-window pane. A no-op on touch hosts, like [verticalResizeCursor].
+ */
+expect fun Modifier.horizontalResizeCursor(): Modifier
