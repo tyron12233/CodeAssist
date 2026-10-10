@@ -54,12 +54,9 @@ internal object BundlePackaging {
                 }
             }
 
-            // 2) dex/classes*.dex — renumber every .dex across the merged layers (project/lib/ext) contiguously.
-            val dexFiles = dexDirs.filter { Files.isDirectory(it) }.flatMap { dir ->
-                Files.walk(dir).use { s -> s.filter { it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList()) }
-            }
-            dexFiles.forEachIndexed { i, dex ->
-                val name = "dex/" + if (i == 0) "classes.dex" else "classes${i + 1}.dex"
+            // 2) dex/classes*.dex, in the same order and under the same names as the APK ([ApkPackaging.packagedDex]).
+            for ((dexName, dex) in ApkPackaging.packagedDex(dexDirs)) {
+                val name = "dex/$dexName"
                 if (written.add(name)) putDeflated(zos, name, dex)
             }
 

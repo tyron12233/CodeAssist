@@ -15,7 +15,15 @@ import java.nio.file.Path
  * and runs on both the desktop JVM and ART. A subprocess form ([BundletoolSubprocess]) is offered for a
  * host that ships the bundletool **all** (fat) jar and prefers to fork.
  */
-data class BundleRequest(val moduleZips: List<Path>, val outputAab: Path)
+data class BundleRequest(
+    val moduleZips: List<Path>,
+    val outputAab: Path,
+    /** Files for the bundle's `BUNDLE-METADATA/` (e.g. the compiled Baseline Profile), which Play reads. */
+    val metadataFiles: List<BundleMetadataFile> = emptyList(),
+)
+
+/** One `BUNDLE-METADATA/<directory>/<fileName>` entry, copied from [file]. */
+data class BundleMetadataFile(val directory: String, val fileName: String, val file: Path)
 
 interface Bundler {
     fun bundle(request: BundleRequest): ToolResult
@@ -37,6 +45,7 @@ class BundletoolInProcess : Bundler {
             BuildBundleCommand.builder()
                 .setModulesPaths(ImmutableList.copyOf(present))
                 .setOutputPath(request.outputAab)
+                .apply { request.metadataFiles.forEach { addMetadataFile(it.directory, it.fileName, it.file) } }
                 .build()
                 .execute()
             ToolResult.ok(listOf("bundletool (in-process) built ${request.outputAab.fileName}"))
@@ -83,7 +92,7 @@ class BundletoolSubprocess(private val bundletoolJar: Path, private val javaLaun
             "--modules=${present.joinToString(",")}",
             "--output=${request.outputAab}",
             "--overwrite",
-        )
+        ) + request.metadataFiles.map { "--metadata-file=${it.directory}/${it.fileName}:${it.file}" }
         return Subprocess.run(cmd)
     }
 }

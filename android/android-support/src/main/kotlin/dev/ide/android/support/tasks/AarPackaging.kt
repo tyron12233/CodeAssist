@@ -1,6 +1,7 @@
 package dev.ide.android.support.tasks
 
 import dev.ide.android.support.tools.AarMetadata
+import dev.ide.android.support.tools.ArtProfiles
 import dev.ide.build.Task
 import dev.ide.build.TaskContext
 import dev.ide.build.TaskInputs
@@ -43,6 +44,7 @@ internal object AarPackaging {
         proguardText: String,
         compileSdk: Int,
         outAar: Path,
+        artProfileText: String = "",
     ): List<String> {
         outAar.parent?.let { Files.createDirectories(it) }
         val written = LinkedHashSet<String>()
@@ -70,6 +72,10 @@ internal object AarPackaging {
             aidlDirs.forEach { putTree(zos, "aidl", it, written) }
             // proguard.txt — consumer keep rules applied by the app's R8 (omitted when there are none).
             if (proguardText.isNotBlank()) putBytes(zos, "proguard.txt", proguardText.toByteArray(Charsets.UTF_8), written)
+            // baseline-prof.txt — Baseline Profile rules the consuming app compiles into its own profile.
+            if (artProfileText.isNotBlank()) {
+                putBytes(zos, ArtProfiles.RULES_FILE, artProfileText.toByteArray(Charsets.UTF_8), written)
+            }
             // The AGP metadata consumers read (minCompileSdk gate + format versions).
             putBytes(zos, AarMetadata.ENTRY_PATH, metadataProperties(compileSdk), written)
         }
@@ -116,8 +122,8 @@ internal object AarPackaging {
 /**
  * The `bundleAar` step: package [outAar] from the library's compiled [classesJar], [manifest], raw
  * [resDirs]/[assetsDirs], the [rTxt] symbol table, native libs under [jniLibDirs], the `.aidl` under
- * [aidlDirs], and consumer keep rules (the readable files in [consumerProguardFiles] plus
- * [inlineProguardRules]).
+ * [aidlDirs], consumer keep rules (the readable files in [consumerProguardFiles] plus
+ * [inlineProguardRules]), and the library's Baseline Profile rules ([artProfileRules], as `baseline-prof.txt`).
  */
 internal class PackageAarTask(
     override val name: TaskName,
@@ -133,6 +139,7 @@ internal class PackageAarTask(
     private val inlineProguardRules: List<String>,
     private val compileSdk: Int,
     private val outAar: Path,
+    private val artProfileRules: List<Path> = emptyList(),
 ) : Task {
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
@@ -147,6 +154,7 @@ internal class PackageAarTask(
             property("package", packageName)
             property("inlineProguard", inlineProguardRules.joinToString("\n"))
             property("compileSdk", compileSdk.toString())
+            filePaths("artProfile", artProfileRules.filter { Files.isRegularFile(it) })
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("aar", outAar) }
 
@@ -156,8 +164,11 @@ internal class PackageAarTask(
             consumerProguardFiles.filter { Files.isRegularFile(it) }.forEach { append(it.readText()).append('\n') }
             inlineProguardRules.forEach { append(it).append('\n') }
         }
+        // Joined as AGP's prepareArtProfile joins them.
+        val artProfile = artProfileRules.filter { Files.isRegularFile(it) }.joinToString("\n") { it.readText() }
         val entries = AarPackaging.assembleAar(
             classesJar, manifest, packageName, resDirs, rTxt, assetsDirs, jniLibDirs, aidlDirs, proguard, compileSdk, outAar,
+            artProfile,
         )
         ctx.debug("Packaged ${entries.size} entries into ${outAar.fileName}")
         return TaskResult.Success

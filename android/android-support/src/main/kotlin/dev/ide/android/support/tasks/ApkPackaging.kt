@@ -1,8 +1,10 @@
 package dev.ide.android.support.tasks
 
+import dev.ide.android.support.tools.ArtProfiles
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.stream.Collectors
+import java.util.zip.CRC32
 import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -31,11 +33,24 @@ internal object ApkPackaging {
     }
 
     /**
+     * The dex files across [dexDirs] in the order they are packaged, each with its packaged name
+     * (`classes.dex`, `classes2.dex`, …). Native multidex packages the project / lib / external layers
+     * separately, so every layer's files are renumbered into one contiguous sequence. The APK, the bundle and
+     * the Baseline Profile compiler all take the order from here: a profile names each dex by the name it is
+     * packaged under, so the three have to agree.
+     */
+    fun packagedDex(dexDirs: List<Path>): List<Pair<String, Path>> =
+        dexDirs.filter { Files.isDirectory(it) }.flatMap { dir ->
+            Files.walk(dir).use { s -> s.filter { it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList()) }
+        }.mapIndexed { i, dex -> (if (i == 0) "classes.dex" else "classes${i + 1}.dex") to dex }
+
+    /**
      * Build [outApk] from [resourcesAp] plus the dex files in [dexDir], the files under each
      * [assetsDirs] (mapped to `assets/…`), the native libs under each [jniLibDirs] (mapped to
      * `lib/<abi>/…`), and the merged Java resources in each of [javaResJars] (their entries copied to the
      * APK root). aapt2's output is written first, so a Java resource can never shadow the manifest /
-     * `resources.arsc` / `res/`. Returns the entry names written, for diagnostics.
+     * `resources.arsc` / `res/`. [artProfile] is the compiled Baseline Profile pair (`.prof`, `.profm`) when
+     * the build made one. Returns the entry names written, for diagnostics.
      */
     fun assembleApk(
         resourcesAp: Path,
@@ -44,6 +59,7 @@ internal object ApkPackaging {
         jniLibDirs: List<Path>,
         outApk: Path,
         javaResJars: List<Path> = emptyList(),
+        artProfile: Pair<Path, Path>? = null,
     ): List<String> {
         outApk.parent?.let { Files.createDirectories(it) }
         val written = LinkedHashSet<String>()
@@ -65,17 +81,21 @@ internal object ApkPackaging {
                 }
             }
 
-            // 2) classes.dex / classes2.dex … — collect every .dex across the dex dirs (native multidex packages
-            // the project / lib / external layers separately) and renumber into one contiguous sequence.
-            val dexFiles = dexDirs.filter { Files.isDirectory(it) }.flatMap { dir ->
-                Files.walk(dir).use { s -> s.filter { it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList()) }
-            }
-            dexFiles.forEachIndexed { i, dex ->
-                val name = if (i == 0) "classes.dex" else "classes${i + 1}.dex"
+            // 2) classes.dex / classes2.dex …
+            for ((name, dex) in packagedDex(dexDirs)) {
                 if (written.add(name)) putDeflated(zos, name, dex)
             }
 
-            // 3) assets/**
+            // 3) The compiled Baseline Profile, ahead of assets/** so a stale copy under a source `assets/dexopt/`
+            //    cannot take its place. STORED: profileinstaller opens it as a file descriptor, which a
+            //    compressed entry cannot give, and then installs nothing.
+            artProfile?.let { (prof, profm) ->
+                for ((name, file) in listOf(ArtProfiles.APK_PROFILE to prof, ArtProfiles.APK_PROFILE_METADATA to profm)) {
+                    if (Files.isRegularFile(file) && written.add(name)) putStored(zos, name, file)
+                }
+            }
+
+            // 4) assets/**
             for (dir in assetsDirs.filter { Files.isDirectory(it) }) {
                 allFiles(dir).forEach { f ->
                     val name = "assets/" + dir.relativize(f).toString().replace('\\', '/')
@@ -83,7 +103,7 @@ internal object ApkPackaging {
                 }
             }
 
-            // 4) native libs: an AAR's jni/<abi>/*.so maps to the APK's lib/<abi>/…
+            // 5) native libs: an AAR's jni/<abi>/*.so maps to the APK's lib/<abi>/…
             for (dir in jniLibDirs.filter { Files.isDirectory(it) }) {
                 allFiles(dir).forEach { f ->
                     val name = "lib/" + dir.relativize(f).toString().replace('\\', '/')
@@ -91,7 +111,7 @@ internal object ApkPackaging {
                 }
             }
 
-            // 5) Java resources (already merged + filtered by MergeJavaResourcesTask): entries copied to the
+            // 6) Java resources (already merged + filtered by MergeJavaResourcesTask): entries copied to the
             //    APK root. aapt2's output was written first, so it always wins a collision (dedup below).
             for (jar in javaResJars.filter { Files.isRegularFile(it) }) {
                 // A merged-java-res.jar with no entries is the 22-byte empty archive, which ART's ZipFile
@@ -115,6 +135,20 @@ internal object ApkPackaging {
     private fun putDeflated(zos: ZipOutputStream, name: String, file: Path) {
         zos.putNextEntry(ZipEntry(name).apply { method = ZipEntry.DEFLATED })
         Files.newInputStream(file).use { it.copyTo(zos) }
+        zos.closeEntry()
+    }
+
+    /** A STORED entry needs its size and CRC up front. Only used for the small profile files, so reading the
+     *  file whole is fine. */
+    private fun putStored(zos: ZipOutputStream, name: String, file: Path) {
+        val bytes = Files.readAllBytes(file)
+        zos.putNextEntry(ZipEntry(name).apply {
+            method = ZipEntry.STORED
+            size = bytes.size.toLong()
+            compressedSize = bytes.size.toLong()
+            crc = CRC32().apply { update(bytes) }.value
+        })
+        zos.write(bytes)
         zos.closeEntry()
     }
 

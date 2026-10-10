@@ -2,6 +2,7 @@ package dev.ide.android.support
 
 import dev.ide.android.support.tools.AarExtractor
 import dev.ide.android.support.tools.AarMetadata
+import dev.ide.android.support.tools.ArtProfiles
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.DependencyScope
 import dev.ide.model.MavenClasspath
@@ -37,6 +38,8 @@ class ResolvedLibraries(
     /** Why a `natives`-scoped dependency contributed no native library (see [NativeLibraries.unpack]). The
      *  build logs these: the declaration resolved fine, so nothing else would report it. */
     val nativeWarnings: List<String> = emptyList(),
+    /** Packaged AARs' `baseline-prof.txt` Baseline Profile rules, compiled into a release build's profile. */
+    val artProfiles: List<Path> = emptyList(),
 )
 
 /**
@@ -71,6 +74,7 @@ object AndroidLibraries {
         val aarManifests = ArrayList<Path>()
         val aarMetadata = ArrayList<AarMetadataRef>()
         val aarSymbols = ArrayList<AarSymbolTable>()
+        val artProfiles = ArrayList<Path>()
 
         val cache = HashMap<Path, AarExtractor.Exploded>()
         fun explode(aar: Path) = cache.getOrPut(aar) { AarExtractor.explode(aar, explodeRoot.resolve(AarExtractor.explodeDirName(aar))) }
@@ -107,9 +111,14 @@ object AndroidLibraries {
             }
             isJar(root) -> compileJars.add(root)
         }
+        // The runtime set is what gets packaged, so it is also whose Baseline Profile rules apply (AGP reads
+        // them from the runtime classpath too).
         for (root in runtimeRoots) when {
-            isAar(root) -> dexJars.addAll(explode(root).classesJars)
-            isExplodedAar(root) -> dexJars.add(root)
+            isAar(root) -> explode(root).let { dexJars.addAll(it.classesJars); it.artProfile?.let(artProfiles::add) }
+            isExplodedAar(root) -> {
+                dexJars.add(root)
+                root.parent.resolve(ArtProfiles.RULES_FILE).takeIf { Files.isRegularFile(it) }?.let(artProfiles::add)
+            }
             isJar(root) -> dexJars.add(root)
         }
         val nativesRoot = explodeRoot.resolve("natives")
@@ -140,6 +149,7 @@ object AndroidLibraries {
             jniLibDirs.distinct(), aidlDirs.distinct(), aarPackages.distinct(), consumerProguardFiles.distinct(),
             aarManifests.distinct(), aarMetadata.distinct(), aarSymbols.distinct(),
             natives.warnings,
+            artProfiles.distinct(),
         )
     }
 

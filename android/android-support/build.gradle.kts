@@ -46,6 +46,10 @@ dependencies {
     testImplementation(libs.bouncycastle.pkix) // KeystoreCrypto.create round-trip test runs on the desktop JVM
 }
 
+// profgen, AGP's Baseline Profile compiler, vendored unmodified in its own source root so "what is upstream's"
+// never has to be guessed and a re-sync is an overwrite. See src/main/vendor/VENDOR.md.
+kotlin.sourceSets.named("main") { kotlin.srcDir("src/main/vendor") }
+
 // The core-library-desugaring test needs the desugar runtime + config jars as real files (L8 dexes the
 // runtime; D8/R8 read the config). Resolve them into a dedicated configuration and hand the paths to the
 // test JVM, so it does not depend on a particular Gradle-cache layout.

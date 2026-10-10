@@ -13,10 +13,10 @@ import kotlin.io.path.writeText
 /**
  * `java.util.zip`, which both the JVM and ART have.
  *
- * Alongside the `classes.jar`, the AAR's `res/`, `assets/`, `jni/` and `AndroidManifest.xml` are unpacked
- * into the same exploded dir — so a consumer (the IDE's resource model / the Android build) finds a
- * library's resources as a `res/` sibling of its `classes.jar`, and its package name in the sibling
- * manifest, with no further unzip at use time.
+ * Alongside the `classes.jar`, the AAR's `res/`, `assets/`, `jni/`, `AndroidManifest.xml` and
+ * `baseline-prof.txt` are unpacked into the same exploded dir — so a consumer (the IDE's resource model /
+ * the Android build) finds a library's resources as a `res/` sibling of its `classes.jar`, and its package
+ * name in the sibling manifest, with no further unzip at use time.
  */
 internal actual fun explodeAar(aar: String, dir: String): String? =
     explode(Paths.get(aar), Paths.get(dir)).toString()
@@ -60,7 +60,9 @@ private fun explode(aar: Path, dir: Path): Path {
                     foundClasses = true
                 }
                 name.startsWith("res/") || name.startsWith("assets/") ||
-                    name.startsWith("jni/") || name == "AndroidManifest.xml" -> {
+                    name.startsWith("jni/") || name == "AndroidManifest.xml" ||
+                    // Baseline Profile rules: a release build compiles them into the app's profile.
+                    name == "baseline-prof.txt" -> {
                     val target = dir.resolve(name).normalize()
                     if (target.startsWith(dir)) { // zip-slip guard
                         Files.createDirectories(target.parent)

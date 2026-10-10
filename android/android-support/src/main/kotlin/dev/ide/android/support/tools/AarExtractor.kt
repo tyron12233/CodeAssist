@@ -29,6 +29,7 @@ object AarExtractor {
         val proguardTxt: Path?,        // the AAR's consumer keep rules (root `proguard.txt`), applied by the app's R8
         val aarMetadata: Path?,        // META-INF/.../aar-metadata.properties (AGP's minCompileSdk etc.); null if absent
         val rTxt: Path?,               // the AAR's `R.txt` symbol table — the ONLY record of its own R fields
+        val artProfile: Path? = null,  // the AAR's `baseline-prof.txt` Baseline Profile rules
     )
 
     /**
@@ -62,6 +63,7 @@ object AarExtractor {
             proguardTxt = into.resolve("proguard.txt").takeIf { Files.isRegularFile(it) },
             aarMetadata = into.resolve(AarMetadata.ENTRY_PATH).takeIf { Files.isRegularFile(it) },
             rTxt = into.resolve("R.txt").takeIf { Files.isRegularFile(it) },
+            artProfile = into.resolve(ArtProfiles.RULES_FILE).takeIf { Files.isRegularFile(it) },
         )
     }
 

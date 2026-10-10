@@ -1272,8 +1272,10 @@ private fun GA.excludedBy(exclusions: Set<GA>): Boolean = exclusions.any {
  *  [MavenDependencyResolver.extractClassesJar] changes WHAT it lays down (e.g. the res/assets/jni unpacking
  *  added after the initial classes.jar-only explosion), so a dir left by an older build is treated as stale
  *  and re-extracted instead of reused missing its `res/`. Folded into the dependency-reconcile fingerprint so
- *  a bump forces a one-time re-resolve that heals existing caches on the next open. */
-const val AAR_EXPLODE_VERSION = "4"
+ *  a bump forces a one-time re-resolve that heals existing caches on the next open.
+ *
+ *  5: `baseline-prof.txt` is unpacked too, for release builds' Baseline Profile. */
+const val AAR_EXPLODE_VERSION = "5"
 
 /**
  * Version of the resolved GRAPH's semantics. Bump whenever a resolver change makes the same declared set

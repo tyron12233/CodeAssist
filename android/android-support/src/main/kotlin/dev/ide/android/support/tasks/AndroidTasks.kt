@@ -2107,6 +2107,8 @@ internal class PackageApkTask(
     private val jniLibDirs: List<Path>,
     private val outApk: Path,
     private val javaResJars: List<Path> = emptyList(),
+    /** The compiled Baseline Profile (`.prof`, `.profm`) from [CompileArtProfileTask], packaged when present. */
+    private val artProfile: Pair<Path, Path>? = null,
 ) : Task {
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
@@ -2115,6 +2117,7 @@ internal class PackageApkTask(
             dirPaths("assets", assetsDirs)
             dirPaths("jni", jniLibDirs)
             filePaths("javaRes", javaResJars)
+            artProfile?.let { (prof, profm) -> filePaths("artProfile", listOf(prof, profm).filter { Files.exists(it) }) }
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("apk", outApk) }
 
@@ -2122,7 +2125,7 @@ internal class PackageApkTask(
         ctx.checkCanceled()
         return runCatching {
             val names =
-                ApkPackaging.assembleApk(resourcesAp, dexDirs, assetsDirs, jniLibDirs, outApk, javaResJars)
+                ApkPackaging.assembleApk(resourcesAp, dexDirs, assetsDirs, jniLibDirs, outApk, javaResJars, artProfile)
             ctx.debug("packageApk -> ${outApk.fileName} (${names.size} entries)")
             TaskResult.Success as TaskResult
         }.getOrElse { TaskResult.Failed("packageApk failed: ${it.message}", it) }

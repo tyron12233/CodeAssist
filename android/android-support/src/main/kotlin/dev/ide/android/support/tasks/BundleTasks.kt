@@ -1,5 +1,7 @@
 package dev.ide.android.support.tasks
 
+import dev.ide.android.support.tools.ArtProfiles
+import dev.ide.android.support.tools.BundleMetadataFile
 import dev.ide.android.support.tools.BundleRequest
 import dev.ide.android.support.tools.BundleSigner
 import dev.ide.android.support.tools.Bundler
@@ -31,6 +33,8 @@ internal class BundleTask(
     private val baseModuleZip: Path,
     private val bundler: Bundler,
     private val javaResJars: List<Path> = emptyList(),
+    /** The compiled Baseline Profile (`.prof`, `.profm`) from [CompileArtProfileTask], added as bundle metadata. */
+    private val artProfile: Pair<Path, Path>? = null,
 ) : Task {
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
@@ -39,6 +43,7 @@ internal class BundleTask(
             dirPaths("assets", assetsDirs)
             dirPaths("jni", jniLibDirs)
             filePaths("javaRes", javaResJars)
+            artProfile?.let { (prof, profm) -> filePaths("artProfile", listOf(prof, profm).filter { Files.exists(it) }) }
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("aab", outAab) }
 
@@ -49,7 +54,12 @@ internal class BundleTask(
         return runCatching {
             val entries = BundlePackaging.buildBaseModuleZip(protoAp, dexDirs, assetsDirs, jniLibDirs, baseModuleZip, javaResJars)
             ctx.debug("bundle module -> base.zip (${entries.size} entries)")
-            val r = bundler.bundle(BundleRequest(listOf(baseModuleZip), outAab))
+            val metadata = artProfile?.let { (prof, profm) ->
+                listOf(ArtProfiles.PROFILE_NAME to prof, ArtProfiles.PROFILE_METADATA_NAME to profm)
+                    .filter { Files.isRegularFile(it.second) }
+                    .map { (fileName, file) -> BundleMetadataFile(ArtProfiles.BUNDLE_METADATA_DIR, fileName, file) }
+            }.orEmpty()
+            val r = bundler.bundle(BundleRequest(listOf(baseModuleZip), outAab, metadata))
             ctx.reportTool("bundletool", r, DiagnosticKind.PACKAGING)
             if (r.success) TaskResult.Success as TaskResult
             else TaskResult.Failed("bundletool build-bundle failed")

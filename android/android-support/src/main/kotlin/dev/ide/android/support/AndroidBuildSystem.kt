@@ -10,6 +10,7 @@ import dev.ide.android.support.tasks.AndroidKotlinCompileTask
 import dev.ide.android.support.tasks.BundleTask
 import dev.ide.android.support.tasks.CheckAarMetadataTask
 import dev.ide.android.support.tasks.CompileAidlTask
+import dev.ide.android.support.tasks.CompileArtProfileTask
 import dev.ide.android.support.tasks.ConvertResourcesTask
 import dev.ide.android.support.tasks.DexArchiveBuilderTask
 import dev.ide.android.support.tasks.DexExternalLibsTask
@@ -43,6 +44,7 @@ import dev.ide.android.support.tools.ApkSigner
 import dev.ide.android.support.tools.ApkSignerTool
 import dev.ide.android.support.tools.ApksigBundleSigner
 import dev.ide.android.support.tools.ApksigSigner
+import dev.ide.android.support.tools.ArtProfiles
 import dev.ide.android.support.tools.BundleSigner
 import dev.ide.android.support.tools.Bundler
 import dev.ide.android.support.tools.BundletoolInProcess
@@ -806,6 +808,34 @@ class AndroidBuildSystem(
             pkgDeps = pkgDeps + listOf(l8)
         }
 
+        // Baseline Profile (AGP's merge/compile<Variant>ArtProfile): release builds only, since ART does not
+        // AOT-compile a debuggable app. The app's and its library modules' rules count as the project's own (a
+        // rule that does not parse fails the build); an AAR's are the library's (skipped with a warning). It
+        // compiles against the final dex, so it waits on everything that produces one.
+        var artProfile: Pair<Path, Path>? = null
+        if (release) {
+            val rules = ArtProfiles.sourceRules(layout.moduleDir.resolve("src"), sourceSetNames(app, variant))
+                .map { ArtProfiles.RulesFile(it, own = true) } +
+                depAndroidLibs.flatMap { dep ->
+                    ArtProfiles.sourceRules(
+                        moduleDir(dep).resolve("src"),
+                        sourceSetNames(dep, AndroidVariants.matchLibraryVariant(dep, variant, facet)),
+                    ).map { ArtProfiles.RulesFile(it, own = true) }
+                } +
+                libs.artProfiles.map { ArtProfiles.RulesFile(it, own = false) }
+            if (rules.isNotEmpty()) {
+                val compileArtProfile = step("compileArtProfile")
+                tasks.task(compileArtProfile, pkgDeps) {
+                    CompileArtProfileTask(
+                        compileArtProfile, rules, dexDirs, mapping = if (minify) layout.mappingTxt else null,
+                        layout.mergedArtProfile, layout.binaryArtProfile, layout.binaryArtProfileMetadata,
+                    )
+                }
+                artProfile = layout.binaryArtProfile to layout.binaryArtProfileMetadata
+                pkgDeps = pkgDeps + listOf(compileArtProfile)
+            }
+        }
+
         // The packaging step also waits on the native-lib + Java-resource merges (common to both the APK and
         // bundle terminals, and to the minify + debug dex paths).
         pkgDeps = pkgDeps + packagingDeps
@@ -820,7 +850,7 @@ class AndroidBuildSystem(
             val bundleResAp = if (shrinkResources) layout.shrunkProtoAp else layout.protoAp
             val packageBundle = step("packageBundle")
             tasks.task(packageBundle, pkgDeps) {
-                BundleTask(packageBundle, bundleResAp, dexDirs, assetsDirs, listOf(layout.mergedNativeLibs), layout.unsignedAab, layout.baseModuleZip, bundler, javaResJars = listOf(layout.mergedJavaRes))
+                BundleTask(packageBundle, bundleResAp, dexDirs, assetsDirs, listOf(layout.mergedNativeLibs), layout.unsignedAab, layout.baseModuleZip, bundler, javaResJars = listOf(layout.mergedJavaRes), artProfile = artProfile)
             }
             val signBundle = step("signBundle")
             tasks.task(signBundle, listOf(packageBundle)) {
@@ -831,7 +861,7 @@ class AndroidBuildSystem(
             return
         }
 
-        tasks.task(pkg, pkgDeps) { PackageApkTask(pkg, layout.resourcesAp, dexDirs, assetsDirs, listOf(layout.mergedNativeLibs), layout.unsignedApk, javaResJars = listOf(layout.mergedJavaRes)) }
+        tasks.task(pkg, pkgDeps) { PackageApkTask(pkg, layout.resourcesAp, dexDirs, assetsDirs, listOf(layout.mergedNativeLibs), layout.unsignedApk, javaResJars = listOf(layout.mergedJavaRes), artProfile = artProfile) }
         tasks.task(sign, listOf(pkg)) { SignApkTask(sign, layout.unsignedApk, layout.signedApk, variantSigning, signer) }
         // Top-level lifecycle aggregate (AGP's `assemble<Variant>`): fronts the signed APK.
         val assemble = step("assemble")
@@ -1049,6 +1079,8 @@ class AndroidBuildSystem(
                 inlineProguardRules = inlineProguard,
                 compileSdk = facet.compileSdk,
                 outAar = aarPath(lib, variant.name),
+                // The library's Baseline Profile rules travel in the AAR, for the consuming app to compile.
+                artProfileRules = ArtProfiles.sourceRules(moduleDir.resolve("src"), sourceSetNames(lib, libVariant)),
             )
         }
         val assembleAar = TaskName(":${lib.name}:assembleAar")
@@ -1371,6 +1403,10 @@ class AndroidBuildSystem(
             .resolve("${module.name}-$variantName.aab")
         // mapping.txt for stack-trace de-obfuscation; AGP's outputs/mapping/<variant>/mapping.txt.
         val mappingTxt: Path = buildDir.resolve("outputs").resolve("mapping").resolve(variantName).resolve("mapping.txt")
+        // compileArtProfile: the merged Baseline Profile rules, and the binary pair compiled from them.
+        val mergedArtProfile: Path = inter.resolve("art_profile").resolve(ArtProfiles.RULES_FILE)
+        val binaryArtProfile: Path = inter.resolve("art_profile").resolve(ArtProfiles.PROFILE_NAME)
+        val binaryArtProfileMetadata: Path = inter.resolve("art_profile").resolve(ArtProfiles.PROFILE_METADATA_NAME)
 
         val moduleDir: Path get() = this@Layout.moduleDirField
         fun manifest(facet: AndroidFacet): Path = moduleDirField.resolve(facet.manifest)
