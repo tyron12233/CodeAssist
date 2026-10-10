@@ -78,6 +78,9 @@ object KotlinDiagnosticCodes {
     const val FUNCTION_NO_BODY = "kt.functionNoBody"
     /** A use of a `@Deprecated` declaration (call, member read). */
     const val DEPRECATION = "kt.deprecation"
+    /** A platform API newer than the module's `minSdk`, not covered by an `SDK_INT` guard or `@RequiresApi`.
+     *  Shared with the Java editor. */
+    const val NEW_API = dev.ide.lang.resolve.ApiGuards.NEW_API
     /** Use of an experimental API (a `@RequiresOptIn(level = WARNING)` marker) without opting in — the
      *  compiler's OPT_IN_USAGE. Resolved via [KotlinSymbolService.optInMarkersOf]. */
     const val OPT_IN_USAGE = "kt.optInUsage"

@@ -32,7 +32,9 @@ import dev.ide.lang.kotlin.resolve.KotlinResolver
 import dev.ide.lang.kotlin.resolve.approximateEscapingLocalType
 import dev.ide.lang.kotlin.resolve.delegatedValueType
 import dev.ide.lang.kotlin.resolve.inferType
+import dev.ide.lang.resolve.ApiLevel
 import dev.ide.lang.resolve.Modifier
+import dev.ide.lang.resolve.PlatformApiLevels
 import dev.ide.lang.resolve.SourceDocProvider
 import dev.ide.lang.resolve.Symbol
 import dev.ide.lang.resolve.SymbolKind
@@ -97,6 +99,9 @@ class KotlinSymbolService(
      *  answers instead. A same-project Java source class is treated as VOLATILE (never pinned in the classpath
      *  memos) so both live-buffer and post-save edits show at once. */
     private val javaSourceMemberProvider: (String) -> List<MemberValue>? = { null },
+    /** Optional: the Android platform API-level table, for the "Added in API N" line of a platform symbol's
+     *  docs. Null for a module that is not an Android module. */
+    private val apiLevels: () -> PlatformApiLevels? = { null },
 ) : KotlinTypeContext, AutoCloseable {
 
     // Kotlin's stdlib is an IMPLICIT dependency of every Kotlin file (like java.lang for Java). Always
@@ -2181,6 +2186,29 @@ class KotlinSymbolService(
         val doc = s.documentation() ?: md.doc
         return if (names === s.paramNames && doc == s.documentation()) s
         else s.withSourceDoc(names = names, sig = sig, docText = doc)
+    }
+
+    /**
+     * The platform API level of a BINARY symbol: a method or constructor by its declaring class, a Java
+     * accessor property by its getter, a class by its name. Null for project code, for a module with no
+     * table, and for an API the table does not list.
+     */
+    fun apiLevelOf(s: KotlinSymbol): ApiLevel? {
+        if (s.origin.fromSource || s.isExtension) return null
+        val levels = apiLevels() ?: return null
+        val owner = s.declaringClassFqn
+        return when (s.kind) {
+            SymbolKind.METHOD -> owner?.let { levels.methodLevel(it, s.name, null, s.paramTypes.size) }
+            SymbolKind.CONSTRUCTOR -> owner?.let { levels.methodLevel(it, "<init>", null, s.paramTypes.size) ?: levels.classLevel(it) }
+            SymbolKind.FIELD -> owner?.let {
+                val getter = if (s.name.length > 2 && s.name.startsWith("is") && s.name[2].isUpperCase()) s.name
+                else "get" + s.name.replaceFirstChar { c -> c.uppercaseChar() }
+                levels.methodLevel(it, getter, null, 0)
+            }
+            SymbolKind.CLASS, SymbolKind.INTERFACE, SymbolKind.ENUM, SymbolKind.ANNOTATION_TYPE ->
+                ((s.type as? KotlinType)?.qualifiedName ?: owner)?.let(levels::classLevel)
+            else -> null
+        }
     }
 
     /** `p0`/`p1`/… — the placeholder names Java bytecode surfaces when real ones were stripped. */

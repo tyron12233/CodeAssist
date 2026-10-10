@@ -10,8 +10,19 @@ plugins {
 dependencies {
     implementation(project(":android-support"))
     implementation(libs.ow2.asm) // ClassReader for the View class hierarchy (no class loading)
+    implementation(libs.android.r8) // BackportedMethodList: the java.* methods D8 backports, exempt from the minSdk check
 }
 
 application {
     mainClass.set("dev.ide.android.support.metadata.gen.SdkMetadataGeneratorKt")
+}
+
+// The API-level table generator (api-versions.xml -> android-api-levels.bin):
+//   ./gradlew :android-sdk-metadata:generateApiLevels --args "<api-versions.xml> <output.bin>"
+tasks.register<JavaExec>("generateApiLevels") {
+    group = "application"
+    description = "Generates the bundled Android API-level table from a platform's api-versions.xml."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.ide.android.support.metadata.gen.ApiLevelsGeneratorKt")
+    workingDir = rootDir
 }

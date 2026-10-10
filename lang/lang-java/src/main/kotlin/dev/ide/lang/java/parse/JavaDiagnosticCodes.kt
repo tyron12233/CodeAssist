@@ -66,4 +66,10 @@ object JavaDiagnosticCodes {
 
     /** A binary/polyadic operator applied to an operand of an incompatible type (`"x" - 1`). */
     const val BAD_OPERAND = "java.badOperand"
+
+    /** A source feature newer than the module's Java language level (`var` at 8, a record at 11). */
+    const val LANGUAGE_LEVEL = "java.languageLevel"
+
+    /** A platform API newer than the module's `minSdk`, not covered by an `SDK_INT` guard or `@RequiresApi`. */
+    const val NEW_API = dev.ide.lang.resolve.ApiGuards.NEW_API
 }

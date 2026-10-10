@@ -26,6 +26,8 @@ import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.folding.FoldingService
 import dev.ide.lang.highlight.SemanticHighlightService
 import dev.ide.lang.hints.InlayHintService
+import dev.ide.lang.java.resolve.JavaApiLevelCheck
+import dev.ide.lang.resolve.AndroidApiContext
 import dev.ide.lang.signature.SignatureHelpService
 import dev.ide.lang.java.completion.JavaCompletion
 import dev.ide.lang.java.services.JavaFolder
@@ -95,7 +97,7 @@ class JavaSourceAnalyzer private constructor(
     }
     private val env: JavaEnvironment by envLazy
 
-    private val javaIncrementalParser by lazy { JavaIncrementalParser(env) }
+    private val javaIncrementalParser by lazy { JavaIncrementalParser(env, { androidApi() }, { languageLevel }) }
     override val incrementalParser: IncrementalParser get() = javaIncrementalParser
 
     // --- JvmIndexScopeProvider: the roots this analyzer contributes to the workspace index scope ----------
@@ -161,6 +163,17 @@ class JavaSourceAnalyzer private constructor(
     /** Inheritor lookup for `new`-position subtype completion, injected by the host (a subtype-index BFS over
      *  a supertype FQN). Default empty keeps completion working index-free. */
     var subtypeIndexQuery: (String) -> List<JavaCompletion.IndexedType> = { emptyList() }
+
+    /** The module's minSdk + platform API-level table, injected by the host for an Android module. Read on
+     *  every diagnostics pass, so a minSdk edit takes effect without rebuilding the analyzer. */
+    @Volatile
+    var androidApi: () -> AndroidApiContext? = { null }
+
+    /** The module's Java language level (`8`, `17`, ...): syntax newer than it is reported, as the build's
+     *  compiler would. Files are still parsed at the highest level so a newer construct reads as itself.
+     *  Unset (the default) reports nothing. */
+    @Volatile
+    var languageLevel: Int = Int.MAX_VALUE
 
     private val completion: JavaCompletion by lazy {
         JavaCompletion(
@@ -254,7 +267,7 @@ class JavaSourceAnalyzer private constructor(
     private fun cachedParse(file: VirtualFile): JavaParsedFile {
         val hash = file.contentHash()
         cache[file.path]?.let { if (it.first == hash) return it.second }
-        val tree = JavaParsedFile(env.parse(file.name, file.readText()), file, version.incrementAndGet())
+        val tree = JavaParsedFile(env.parse(file.name, file.readText()), file, version.incrementAndGet(), { androidApi() }, { languageLevel })
         cache[file.path] = hash to tree
         return tree
     }
@@ -396,7 +409,9 @@ class JavaSourceAnalyzer private constructor(
                 name = sym.name,
                 kind = sym.kind,
                 container = owner,
-                doc = sym.documentation(),
+                // A platform API's doc opens with the level that added it ("Added in API 26").
+                doc = androidApi()?.levels?.let { JavaApiLevelCheck.levelOf(target, it) }
+                    ?.prependTo(sym.documentation()) ?: sym.documentation(),
                 docFormat = DocFormat.JAVADOC,
             )
         }

@@ -1,11 +1,16 @@
 package dev.ide.lang.java.analysis
 
+import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiClassType
+import com.intellij.psi.PsiCodeBlock
+import com.intellij.psi.PsiDeclarationStatement
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiJavaFile
+import com.intellij.psi.PsiMember
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiModifier
+import com.intellij.psi.PsiStatement
 import com.intellij.psi.PsiVariable
 import com.intellij.psi.util.PsiTreeUtil
 import dev.ide.analysis.ACTION_PROVIDER_EP
@@ -43,6 +48,7 @@ object JavaPsiAnalysisSupport {
         extensions.register(QUICK_FIX_PROVIDER_EP, AddExceptionToThrowsFixProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, ChangeVariableTypeFixProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, CreateMethodFromUsageFixProvider(), plugin)
+        extensions.register(QUICK_FIX_PROVIDER_EP, NewApiFixProvider(), plugin)
         extensions.register(ACTION_PROVIDER_EP, ImplementMembersActionProvider(), plugin)
     }
 }
@@ -234,6 +240,86 @@ private fun renderStub(m: PsiMethod): String {
     return "\n$i@Override\n$i$vis $ret ${m.name}($params) {\n$i${i}throw new UnsupportedOperationException();\n$i}\n"
 }
 
+/**
+ * The minSdk check's fixes, the two Android lint offers: `@RequiresApi(N)` on the enclosing method (or class),
+ * `@TargetApi(N)` when androidx's annotation is not on the classpath; and `if (Build.VERSION.SDK_INT >= N)`
+ * around the statement. A local declaration is not wrapped, since the guard would end its scope.
+ */
+internal class NewApiFixProvider : QuickFixProvider {
+    override val forCodes = setOf(JavaDiagnosticCodes.NEW_API)
+    override val languages = setOf(JAVA)
+
+    override fun fixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix> {
+        val level = Regex("""requires API level (\d+)""").find(diagnostic.message)?.groupValues?.get(1)?.toIntOrNull()
+            ?: return emptyList()
+        val offset = diagnostic.range.start
+        val plan = IntellijPsiHost.withParseLock {
+            val (file, el) = leafAt(target, offset) ?: return@withParseLock null
+            val owner = annotationTarget(el)
+            val annotation = if (JavaPsiFacade.getInstance(file.project).findClass(REQUIRES_API, file.resolveScope) != null)
+                REQUIRES_API else TARGET_API
+            Triple(owner?.name, annotation, statementAt(el) != null)
+        } ?: return emptyList()
+        val (ownerName, annotationFqn, canWrap) = plan
+        val simple = annotationFqn.substringAfterLast('.')
+        val out = ArrayList<QuickFix>()
+        if (ownerName != null) out += object : QuickFix {
+            override val title = "Add @$simple($level) to '$ownerName'"
+            override val kind = CodeActionKind.QUICK_FIX
+            override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit = IntellijPsiHost.withParseLock {
+                val (file, el) = leafAt(ctx.target, offset) ?: return@withParseLock WorkspaceEdit.EMPTY
+                val owner = annotationTarget(el) ?: return@withParseLock WorkspaceEdit.EMPTY
+                val at = owner.modifierList?.textRange?.startOffset ?: owner.textRange.startOffset
+                val edits = mutableListOf(DocumentEdit(at, 0, "@$simple($level)\n${indentAt(file.text, at)}"))
+                importEditFor(file, annotationFqn)?.let(edits::add)
+                WorkspaceEdit.of(ctx.target.file, *edits.toTypedArray())
+            }
+        }
+        if (canWrap) out += object : QuickFix {
+            override val title = "Surround with if (Build.VERSION.SDK_INT >= $level)"
+            override val kind = CodeActionKind.QUICK_FIX
+            override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit = IntellijPsiHost.withParseLock {
+                val (file, el) = leafAt(ctx.target, offset) ?: return@withParseLock WorkspaceEdit.EMPTY
+                val statement = statementAt(el) ?: return@withParseLock WorkspaceEdit.EMPTY
+                val r = statement.textRange
+                val indent = indentAt(file.text, r.startOffset)
+                val body = statement.text.replace("\n", "\n    ")
+                val edits = mutableListOf(
+                    DocumentEdit(r.startOffset, r.endOffset - r.startOffset, "if (Build.VERSION.SDK_INT >= $level) {\n$indent    $body\n$indent}"),
+                )
+                importEditFor(file, "android.os.Build")?.let(edits::add)
+                WorkspaceEdit.of(ctx.target.file, *edits.toTypedArray())
+            }
+        }
+        return out
+    }
+
+    /** The innermost method enclosing [el], else its class. */
+    private fun annotationTarget(el: PsiElement): PsiMember? =
+        PsiTreeUtil.getParentOfType(el, PsiMethod::class.java) ?: PsiTreeUtil.getParentOfType(el, PsiClass::class.java)
+
+    /** The statement of a code block holding [el]; null for a local declaration or outside a method body. */
+    private fun statementAt(el: PsiElement): PsiStatement? {
+        val statement = PsiTreeUtil.getParentOfType(el, PsiStatement::class.java) ?: return null
+        var s: PsiStatement = statement
+        while (s.parent !is PsiCodeBlock) s = PsiTreeUtil.getParentOfType(s, PsiStatement::class.java) ?: return null
+        return s.takeUnless { it is PsiDeclarationStatement }
+    }
+
+    private companion object {
+        const val REQUIRES_API = "androidx.annotation.RequiresApi"
+        const val TARGET_API = "android.annotation.TargetApi"
+    }
+}
+
+/** The whitespace that starts the line holding [offset]. */
+private fun indentAt(text: String, offset: Int): String {
+    val lineStart = if (offset == 0) 0 else text.lastIndexOf('\n', offset - 1) + 1
+    var end = lineStart
+    while (end < text.length && (text[end] == ' ' || text[end] == '\t')) end++
+    return text.substring(lineStart, end)
+}
+
 private fun leafAt(target: AnalysisTarget, offset: Int): Pair<PsiJavaFile, PsiElement>? {
     val file = (target.parsed as? JavaParsedFile)?.javaFile ?: return null
     val len = file.textLength
@@ -243,8 +329,11 @@ private fun leafAt(target: AnalysisTarget, offset: Int): Pair<PsiJavaFile, PsiEl
 
 /** An `import <fqn>;` edit for [type], or null when none is needed (primitive, java.lang, same package, or
  *  already imported). */
-private fun importEditFor(file: PsiJavaFile, type: PsiClassType): DocumentEdit? {
-    val fqn = type.resolve()?.qualifiedName ?: return null
+private fun importEditFor(file: PsiJavaFile, type: PsiClassType): DocumentEdit? =
+    type.resolve()?.qualifiedName?.let { importEditFor(file, it) }
+
+/** An `import <fqn>;` edit, or null when [fqn] needs none here. */
+private fun importEditFor(file: PsiJavaFile, fqn: String): DocumentEdit? {
     val pkg = fqn.substringBeforeLast('.', "")
     if (pkg.isEmpty() || pkg == "java.lang" || pkg == file.packageName) return null
     file.importList?.importStatements?.forEach { imp ->

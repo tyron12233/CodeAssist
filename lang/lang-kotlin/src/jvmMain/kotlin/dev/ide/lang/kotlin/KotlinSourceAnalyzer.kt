@@ -153,6 +153,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var isAndroidModule: Boolean? = null
 
+    /** Injected by the host for an Android module: its minSdk + the platform API-level table, for the minSdk
+     *  check and the "Added in API N" doc line. Read on every pass, so a minSdk edit applies without a rebuild. */
+    @Volatile
+    var androidApi: () -> dev.ide.lang.resolve.AndroidApiContext? = { null }
+
     /** Injected by the host: the current live editor buffers (VirtualFile path → text) for CROSS-file
      *  freshness — a declaration just typed in ANOTHER open file resolves/completes here before it is saved
      *  and reindexed. Pushed into the symbol model at each analyze/complete/resolve; the model diffs the
@@ -218,6 +223,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             excludedTypePrefixes = if (androidNamespacesVisible(isAndroidModule, classpathJars)) emptyList() else ANDROID_TYPE_PREFIXES,
             syntheticMemberProviders = { syntheticMemberProviders() },
             javaSourceMemberProvider = { javaSourceMemberProvider(it) },
+            apiLevels = { androidApi()?.levels },
         )
     }
     private val service: KotlinSymbolService get() = serviceLazy.value
@@ -516,7 +522,8 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     private val incrementalAnalysisLazy = lazy {
         IncrementalSemanticAnalysis(
             service,
-            ::sharedCachesFor
+            ::sharedCachesFor,
+            androidApi = { androidApi() },
         )
     }
     private val incrementalAnalysis by incrementalAnalysisLazy
@@ -544,6 +551,9 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     fun implementMembersFix(file: VirtualFile, offset: Int): KotlinImportFix? = features.implementMembersFix(file, offset)
 
     fun suspendModifierFix(file: VirtualFile, offset: Int): KotlinImportFix? = features.suspendModifierFix(file, offset)
+
+    /** The minSdk check's quick fixes (`@RequiresApi`, an `SDK_INT` guard); see [KotlinEditorFeatures.newApiFixes]. */
+    fun newApiFixes(file: VirtualFile, offset: Int, level: Int): List<KotlinImportFix> = features.newApiFixes(file, offset, level)
 
     // --- resolution / inference ---
 

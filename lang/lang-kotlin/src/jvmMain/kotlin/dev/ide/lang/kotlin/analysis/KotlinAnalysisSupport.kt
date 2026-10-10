@@ -15,6 +15,7 @@ import dev.ide.analysis.QuickFix
 import dev.ide.analysis.QuickFixProvider
 import dev.ide.analysis.WorkspaceEdit
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.kotlin.KotlinApiLevelFixes
 import dev.ide.lang.kotlin.KotlinDiagnosticCodes
 import dev.ide.lang.kotlin.KotlinLanguageBackend
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
@@ -98,6 +99,26 @@ class KotlinSuspendModifierFixProvider : QuickFixProvider {
     }
 }
 
+/** Code-keyed quick-fixes for the minSdk check: `@RequiresApi(N)` on the enclosing declaration, or an
+ *  `SDK_INT >= N` guard around the statement. */
+class KotlinNewApiFixProvider : QuickFixProvider {
+    override val forCodes = setOf(KotlinDiagnosticCodes.NEW_API)
+    override val languages = setOf(KOTLIN)
+
+    override fun fixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix> {
+        val analyzer = target.resolver as? KotlinSourceAnalyzer ?: return emptyList()
+        val level = KotlinApiLevelFixes.levelIn(diagnostic.message) ?: return emptyList()
+        return analyzer.newApiFixes(target.file, diagnostic.range.start, level).map { fix ->
+            object : QuickFix {
+                override val title = fix.title
+                override val kind = CodeActionKind.QUICK_FIX
+                override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit =
+                    WorkspaceEdit.of(ctx.target.file, *fix.edits.toTypedArray())
+            }
+        }
+    }
+}
+
 object KotlinAnalysisSupport {
     val PLUGIN = PluginId("kotlin-analysis")
 
@@ -106,6 +127,7 @@ object KotlinAnalysisSupport {
         extensions.register(ACTION_PROVIDER_EP, KotlinImportActionProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, KotlinImplementMembersFixProvider(), plugin)
         extensions.register(QUICK_FIX_PROVIDER_EP, KotlinSuspendModifierFixProvider(), plugin)
+        extensions.register(QUICK_FIX_PROVIDER_EP, KotlinNewApiFixProvider(), plugin)
         // Caret intentions (see KotlinEditorActions).
         extensions.register(ACTION_PROVIDER_EP, KotlinSurroundActionProvider(), plugin)
         extensions.register(ACTION_PROVIDER_EP, KotlinIntroduceVariableActionProvider(), plugin)

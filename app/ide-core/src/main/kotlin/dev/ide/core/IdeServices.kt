@@ -25,6 +25,7 @@ import dev.ide.android.support.AndroidVariants
 import dev.ide.android.support.AndroidViewBindingProvider
 import dev.ide.android.support.PreviewResourceLinker
 import dev.ide.android.support.SampleAndroidProject
+import dev.ide.android.support.apilevels.AndroidApiDatabase
 import dev.ide.android.support.index.AndroidResourceIndex
 import dev.ide.android.support.index.ResourceDeclValue
 import dev.ide.android.support.metadata.AndroidSdkMetadata
@@ -189,6 +190,7 @@ import dev.ide.lang.kotlin.index.KotlinTypeShapeIndex
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
 import dev.ide.lang.kotlin.synthetic.KotlinSyntheticClassProvider
+import dev.ide.lang.resolve.AndroidApiContext
 import dev.ide.lang.resolve.SourceDocProvider
 import dev.ide.lang.signature.SignatureHelp
 import dev.ide.lang.signature.SignatureHelpRequest
@@ -1921,6 +1923,19 @@ class IdeServices private constructor(
         ) { ModuleCompilationContext.create(store.workspace, module, variant) }
     }
 
+    /**
+     * The minSdk check's inputs for the module [id] as the model holds it NOW (so editing minSdk in Module
+     * Settings applies on the next analysis pass), or null for a module without an Android facet or when the
+     * API-level table is not bundled.
+     */
+    private fun androidApiContext(id: ModuleId): AndroidApiContext? {
+        val module = store.workspace.projects.firstNotNullOfOrNull { p -> p.modules.firstOrNull { it.id == id } }
+            ?: return null
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return null
+        val levels = AndroidApiDatabase.bundled() ?: return null
+        return AndroidApiContext(facet.minSdk, facet.compileSdk, levels)
+    }
+
     /** Construct the analyzer for [module] in [language]. Invoked once by the module-scoped analyzer
      *  service factory; the module container caches and disposes the result. */
     private fun buildAnalyzer(module: Module, language: LanguageId): SourceAnalyzer =
@@ -1939,6 +1954,8 @@ class IdeServices private constructor(
                     // `new <caret>` subtype completion: a supertype FQN → its concrete implementations, via a
                     // bounded BFS over the subtype index (same index find-implementations uses).
                     it.subtypeIndexQuery = ::javaSubtypesOf
+                    // The minSdk check and the "Added in API N" doc line, from the module's current facet.
+                    it.androidApi = { androidApiContext(module.id) }
                     sdkManager.jdkSourceOverride()?.let { zip -> it.addSourceJars(listOf(zip)) }
                     module.facets.get(AndroidFacet.KEY)?.let { facet ->
                         sdkManager.androidSourcesDir(facet.compileSdk)?.let { dir -> it.addSourceDirs(listOf(dir)) }
@@ -1981,6 +1998,7 @@ class IdeServices private constructor(
                     // analyzer also self-detects androidx on its own classpath, so this need not be exhaustive.)
                     it.isAndroidModule =
                         module.facets.get(AndroidFacet.KEY) != null || module.type.platform == PlatformKind.ANDROID
+                    it.androidApi = { androidApiContext(module.id) }
                     it.extensionCacheDir = store.rootPath.resolve(".platform/caches/kotlin-ext")
                     // Lowered Compose-preview declarations persist across launches, so the first preview after
                     // a reopen decodes instead of re-running overload resolution over the reachable closure.

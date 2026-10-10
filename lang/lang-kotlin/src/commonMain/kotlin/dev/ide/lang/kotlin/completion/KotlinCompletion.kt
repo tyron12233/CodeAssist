@@ -306,7 +306,10 @@ class KotlinCompletion(
                 bareCallable = pos.bareCallable,
                 typeParamCount = typeParamCount,
                 ctorRequiredArgs = ctorRequiredArgs,
-            )
+            ).let { item ->
+                // A platform API's doc opens with the level that added it ("Added in API 26").
+                service.apiLevelOf(c.symbol)?.let { item.copy(documentation = it.prependTo(item.documentation)) } ?: item
+            }
         }
 
         // Keyword / live-template contributions, appended after the symbol candidates so a real symbol always

@@ -23,7 +23,11 @@ import java.util.Collections
  * analyzer's content-hash-keyed parse of the on-disk bytes, which would place tokens at stale offsets after an
  * edit.
  */
-class JavaIncrementalParser(private val env: JavaEnvironment) : IncrementalParser {
+class JavaIncrementalParser(
+    private val env: JavaEnvironment,
+    private val androidApi: () -> dev.ide.lang.resolve.AndroidApiContext? = { null },
+    private val languageLevel: () -> Int = { Int.MAX_VALUE },
+) : IncrementalParser {
 
     /** A parse together with the exact text it was parsed from, so an unchanged buffer is never reparsed. */
     private class Live(val text: String, val tree: JavaParsedFile)
@@ -52,7 +56,7 @@ class JavaIncrementalParser(private val env: JavaEnvironment) : IncrementalParse
     override fun parseFull(snapshot: DocumentSnapshot): ParsedFile {
         latestIfText(snapshot.file.path, snapshot.text)?.let { return it }
         val text = snapshot.text.toString()
-        val tree = JavaParsedFile(env.parse(snapshot.file.name, text), snapshot.file, snapshot.version)
+        val tree = JavaParsedFile(env.parse(snapshot.file.name, text), snapshot.file, snapshot.version, androidApi, languageLevel)
         latest[snapshot.file.path] = Live(text, tree)
         return tree
     }

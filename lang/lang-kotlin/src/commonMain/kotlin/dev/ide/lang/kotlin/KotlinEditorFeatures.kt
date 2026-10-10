@@ -601,6 +601,15 @@ class KotlinEditorFeatures(
         }
     }
 
+    /**
+     * The minSdk check's quick fixes for a diagnostic at [offset] requiring API [level]: `@RequiresApi(level)` on
+     * the enclosing declaration, and an `SDK_INT` guard around the statement.
+     */
+    fun newApiFixes(file: VirtualFile, offset: Int, level: Int): List<KotlinImportFix> {
+        val parsed = parsedFor(file.path) ?: return emptyList()
+        return KotlinApiLevelFixes.fixes(parsed.ktFile, offset, level, service.isKnownType("androidx.annotation.RequiresApi"))
+    }
+
     /** The innermost function enclosing [offset] (the suspend-override diagnostic anchors on its name). */
     private fun functionCovering(ktFile: KtFile, offset: Int): KtNamedFunction? {
         var n: KtElement? =
@@ -668,7 +677,8 @@ class KotlinEditorFeatures(
         val rawKdoc = (declPsi as? KtDeclaration)?.docComment?.text?.takeIf { it.isNotBlank() }
         val (doc, fmt) = if (rawKdoc != null) rawKdoc to DocFormat.KDOC
         else sym.documentation() to DocFormat.PLAIN
-        return QuickDocInfo(sig, sym.name, sym.kind, container, doc, fmt)
+        val level = service.apiLevelOf(sym)
+        return QuickDocInfo(sig, sym.name, sym.kind, container, level?.prependTo(doc) ?: doc, fmt)
     }
 
     private fun declarationDoc(decl: KtNamedDeclaration): QuickDocInfo {

@@ -62,6 +62,7 @@ class JavaLanguageBackend : LanguageBackend {
         // Deferred: the host builds an analyzer per module to read its index scope, and the IntelliJ
         // environment behind it is only worth standing up once a Java file is actually parsed.
         return JavaSourceAnalyzer.deferred(classpath, sourceRoots, jdkHome).also {
+            it.languageLevel = ctx.languageLevel.javaVersion
             // The library `-sources.jar`s the model declares, plus the JDK `src.zip` / Android framework
             // sources derived from the boot classpath. This is what the source-doc index and its live-parse
             // fallback read for real parameter names + javadoc, so leaving it empty renders every library
