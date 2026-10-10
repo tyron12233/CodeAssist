@@ -1146,14 +1146,28 @@
 
     <!-- settings (SettingsScreen/SettingsControls/SettingsHubScreen) — provides settings_title reused by CodeAssistApp -->
     <string name="settings_title">设置</string>
+    <string name="settings_group_editor">外观与编辑器</string>
+    <string name="settings_group_code">代码智能</string>
+    <string name="settings_group_build">构建与运行</string>
+    <string name="settings_group_extensions">扩展</string>
+    <string name="settings_group_system">系统</string>
+    <string name="settings_scope_project">此项目</string>
+    <string name="settings_search_placeholder">搜索设置</string>
+    <string name="settings_search_empty">没有与“%1$s”匹配的设置</string>
+    <string name="settings_page_appearance_subtitle">主题、强调色与工具窗口</string>
+    <string name="settings_page_editor_subtitle">字体、换行、折叠与手势</string>
+    <string name="settings_page_keymap_subtitle">键盘快捷键</string>
+    <string name="settings_page_completion_subtitle">建议、后缀模板与时机</string>
+    <string name="settings_page_analysis_subtitle">实时分析与检查</string>
+    <string name="settings_page_preview_subtitle">预览沙盒与进程</string>
+    <string name="settings_page_build_subtitle">依赖冲突的解决方式</string>
+    <string name="settings_page_buildRuntime_subtitle">内存、构建进程与编译器</string>
+    <string name="settings_page_privacy_subtitle">分析数据、缓存与日志</string>
     <string name="settings_no_settings_available">没有可用设置。</string>
     <string name="settings_all_settings">全部设置</string>
     <string name="settings_backup_ready">备份已就绪</string>
     <string name="settings_inspections_for_language">%1$s 检查项</string>
     <string name="settings_advanced">高级</string>
-    <string name="settings_hub_title">设置与工具</string>
-    <string name="settings_settings">设置</string>
-    <string name="settings_settings_subtitle">外观、编辑器、代码补全与分析</string>
     <string name="settings_code_style">代码样式</string>
     <string name="settings_code_style_subtitle">按语言配置格式化方案和实时预览</string>
     <string name="settings_symbols">符号与宏</string>
@@ -1780,7 +1794,7 @@
     <string name="action_close_project">关闭项目</string>
     <string name="action_close_project_desc">返回全部项目</string>
     <string name="action_dependencies">管理依赖项</string>
-    <string name="action_hub">设置与工具</string>
+    <string name="action_hub">设置</string>
     <string name="action_hub_desc">设置 · 代码样式 · SDK 管理器 · 密钥库管理器</string>
     <string name="action_icons">图标管理器</string>
     <string name="action_icons_desc">浏览并导入图标，更换应用图标</string>

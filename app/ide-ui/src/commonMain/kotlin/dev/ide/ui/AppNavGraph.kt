@@ -4,13 +4,17 @@ import dev.ide.ui.generated.resources.home_account
 import dev.ide.ui.generated.resources.notif_title
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.screens.HomeSidebarItem
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +36,7 @@ import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.ext.ScreenContext
 import dev.ide.ui.ext.ScreenRegistry
 import dev.ide.ui.navigation.ScreenHost
+import dev.ide.ui.theme.Motion
 import dev.ide.ui.screens.ModerationScreen
 import dev.ide.ui.screens.NotificationBell
 import dev.ide.ui.screens.NotificationsSheet
@@ -68,6 +73,12 @@ import dev.ide.ui.screens.ExploreFeed
 import dev.ide.ui.screens.ProjectsStoreScreen
 import dev.ide.ui.screens.RunScreen
 import dev.ide.ui.screens.SdkManagerScreen
+import dev.ide.ui.screens.HubSection
+import dev.ide.ui.screens.HubTarget
+import dev.ide.ui.screens.HubTool
+import dev.ide.ui.screens.hubSections
+import dev.ide.ui.screens.HubTwoPaneBreakpoint
+import dev.ide.ui.screens.SettingsHubPane
 import dev.ide.ui.screens.SettingsHubScreen
 import dev.ide.ui.screens.SettingsScreen
 import dev.ide.ui.screens.SettingsView
@@ -76,6 +87,7 @@ import dev.ide.ui.screens.StoreItemScreen
 import dev.ide.ui.screens.StoreSearchScreen
 import dev.ide.ui.screens.SymbolMacroEditorScreen
 import org.jetbrains.compose.resources.stringResource
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
@@ -95,427 +107,538 @@ internal fun AppNavGraph(
     dark: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val backend = app.backend
     val scope = rememberCoroutineScope()
-    ScreenHost(app.screen, back = app.navigatingBack, modifier = modifier) { s ->
-        when (s) {
-            Screen.Projects -> HomeRoute(app, fileActions)
-
-            Screen.CreateProject -> CreateProjectScreen(
-                backend = backend,
-                onCancel = { app.navigateTo(Screen.Projects) },
-                onCreated = { app.navigateTo(Screen.Editor) },
-                initialTemplateId = app.createTemplateId,
-            )
-
-            Screen.ImportProject -> {
-                val preview = app.importPreview
-                val path = app.importArchivePath
-                if (preview != null && path != null) {
-                    ImportPreviewScreen(
-                        backend = backend,
-                        archivePath = path,
-                        preview = preview,
-                        onCancel = app::cancelImportPreview,
-                        onImported = app::finishImportPreview,
-                    )
+    // The destination the wide Settings pane last showed. Kept through Settings' own exit animation, when the
+    // app has already moved on and the current screen is no longer one of its destinations.
+    val lastHubPane = remember { arrayOf<HubTarget?>(null) }
+    BoxWithConstraints(modifier) {
+        val twoPane = maxWidth >= HubTwoPaneBreakpoint
+        SideEffect { app.hubTwoPane = twoPane }
+        // On a wide window Settings and its destinations are ONE route: switching between them changes the
+        // pane, not the screen, so the sidebar stays put instead of animating out and back in.
+        val route = if (twoPane && app.isHubPane(app.screen)) Screen.Hub else app.screen
+        ScreenHost(route, back = app.navigatingBack, modifier = Modifier.fillMaxSize()) { s ->
+            if (s == Screen.Hub && twoPane) {
+                HubPaneRoute(app, rememberHubSections(app, state), lastHubPane) { target ->
+                    when (target) {
+                        is HubTarget.Page -> SettingsRoute(app, state, codeFont, fileActions, target.id)
+                        is HubTarget.Tool -> AppRoute(screenOf(target.tool), app, state, fileActions, codeFont, dark, scope)
+                    }
                 }
+            } else {
+                AppRoute(s, app, state, fileActions, codeFont, dark, scope)
             }
+        }
+    }
+}
 
-            Screen.ExportProject -> {
-                val target = app.exportTarget
-                if (target != null) {
-                    ExportProjectScreen(
-                        backend = backend,
-                        project = target,
-                        fileActions = fileActions,
-                        initialAuthor = app.exportAuthor(),
-                        onAuthorRemembered = app::rememberExportAuthor,
-                        onReveal = if (fileActions.canReveal) ({ path -> fileActions.reveal(path) }) else null,
-                        onSaveCopy = if (fileActions.canExport) ({ path -> fileActions.exportFile(path) }) else null,
-                        onShare = if (fileActions.canShare) ({ path -> fileActions.share(path) }) else null,
-                        onDone = app::finishExport,
-                        // The other way to share the same project. Hidden when this build cannot publish.
-                        onPublish = if (backend.store.submissionsAvailable()) {
-                            // `target` is the project this export flow was opened for, so publishing
-                            // continues with it rather than asking again.
-                            { app.finishExport(); app.openSubmitProject(target) }
-                        } else {
-                            null
-                        },
-                    )
-                }
+/**
+ * Settings' destinations for where it was opened from: with a project open (entered from the editor) the
+ * project-scoped pages join the app ones; from the picker only the app pages show. Re-read on every
+ * navigation, so a page a plugin adds or drops is reflected the next time Settings is shown.
+ */
+@Composable
+private fun rememberHubSections(app: CodeAssistAppState, state: IdeUiState): List<HubSection> {
+    val global = app.hubReturn != Screen.Editor
+    val pages = remember(state.backend, global, app.screen) {
+        state.backend.settings.settingsPages().filter { !global || it.scope == "app" }
+    }
+    return hubSections(pages)
+}
+
+/**
+ * Wide Settings: [SettingsHubPane]'s sidebar beside the destination that is open, which [route] renders with
+ * the same arguments the full-screen route would give it.
+ */
+@Composable
+private fun HubPaneRoute(
+    app: CodeAssistAppState,
+    sections: List<HubSection>,
+    last: Array<HubTarget?>,
+    route: @Composable (HubTarget) -> Unit,
+) {
+    hubTargetOf(app, app.screen)?.let { last[0] = it }
+    val available = sections.flatMap { it.entries }.map { it.target }
+    // Opened on Settings itself, or the last page is gone (a project page after the project closed): the
+    // first destination, so the pane is never empty.
+    val shown = last[0]?.takeIf { it in available } ?: available.firstOrNull() ?: return
+    SettingsHubPane(
+        sections = sections,
+        selected = shown,
+        onSelect = { openHubTarget(app, it) },
+        onBack = { app.navigateTo(app.hubReturn) },
+    ) {
+        Crossfade(shown, animationSpec = tween(Motion.FAST), label = "hubPane") { pane -> route(pane) }
+    }
+}
+
+/** The Settings destination [s] shows, or null for Settings itself and every screen outside it. */
+private fun hubTargetOf(app: CodeAssistAppState, s: Screen): HubTarget? = when (s) {
+    Screen.Settings -> app.settingsPageId?.let { HubTarget.Page(it) }
+    Screen.CodeStyle -> HubTarget.Tool(HubTool.CodeStyle)
+    Screen.ColorScheme -> HubTarget.Tool(HubTool.Colors)
+    Screen.EditorSymbols -> HubTarget.Tool(HubTool.Symbols)
+    Screen.SdkManager -> HubTarget.Tool(HubTool.SdkManager)
+    Screen.KeystoreManager -> if (app.isHubPane(s)) HubTarget.Tool(HubTool.Keystore) else null
+    Screen.Plugins -> HubTarget.Tool(HubTool.Plugins)
+    Screen.Storage -> HubTarget.Tool(HubTool.Storage)
+    else -> null
+}
+
+private fun screenOf(tool: HubTool): Screen = when (tool) {
+    HubTool.Colors -> Screen.ColorScheme
+    HubTool.CodeStyle -> Screen.CodeStyle
+    HubTool.Symbols -> Screen.EditorSymbols
+    HubTool.SdkManager -> Screen.SdkManager
+    HubTool.Keystore -> Screen.KeystoreManager
+    HubTool.Plugins -> Screen.Plugins
+    HubTool.Storage -> Screen.Storage
+}
+
+private fun openHubTarget(app: CodeAssistAppState, target: HubTarget) {
+    when (target) {
+        is HubTarget.Page -> app.openSettingsPage(target.id)
+        // The keystore manager remembers that it was entered from Settings (its Back and its signing row).
+        is HubTarget.Tool -> if (target.tool == HubTool.Keystore) app.openKeystoreManagerFromHub() else app.navigateTo(screenOf(target.tool))
+    }
+}
+
+/**
+ * A settings page. [pageId] null (nothing in the app opens Settings that way any more, but the route still
+ * takes it) shows every page with its own category navigation.
+ */
+@Composable
+private fun SettingsRoute(
+    app: CodeAssistAppState,
+    state: IdeUiState,
+    codeFont: FontFamily,
+    fileActions: FileActions,
+    pageId: String?,
+) {
+    SettingsScreen(
+        backend = state.backend,
+        onBack = { app.navigateTo(Screen.Hub) },
+        onSettingsChanged = app::reloadSettings,
+        // The logs viewer is an editor overlay; only meaningful with a project open.
+        onOpenLogs = {
+            if (app.epoch > 0) {
+                state.logsOpen = true
+                app.navigateTo(Screen.Editor)
             }
+        },
+        view = if (app.hubReturn == Screen.Editor) SettingsView.All else SettingsView.Global,
+        title = stringResource(Res.string.settings_title),
+        codeFont = codeFont,
+        fileActions = fileActions,
+        pageId = pageId,
+    )
+}
 
-            Screen.LessonTrack -> LessonTrackScreen(
-                backend = backend,
-                trackId = app.currentTrackId,
-                epoch = app.learnEpoch,
-                onOpenLesson = { id -> app.openLesson(id) },
-                onBack = app::exitLessonTrack,
-            )
+/** One route's screen, with its arguments and callbacks wired to [app]. */
+@Composable
+private fun AppRoute(
+    s: Screen,
+    app: CodeAssistAppState,
+    state: IdeUiState,
+    fileActions: FileActions,
+    codeFont: FontFamily,
+    dark: Boolean,
+    scope: CoroutineScope,
+) {
+    val backend = app.backend
+    when (s) {
+        Screen.Projects -> HomeRoute(app, fileActions)
 
-            Screen.LessonPlayer -> LessonPlayerScreen(
-                backend = backend,
-                lessonId = app.currentLessonId,
-                initialStep = app.lessonInitialStep,
-                inlayHintsEnabled = state.inlayHintsEnabled,
-                host = state.composePreviewHost,
-                onExit = app::exitLessonPlayer,
-            )
+        Screen.CreateProject -> CreateProjectScreen(
+            backend = backend,
+            onCancel = { app.navigateTo(Screen.Projects) },
+            onCreated = { app.navigateTo(Screen.Editor) },
+            initialTemplateId = app.createTemplateId,
+        )
 
-            Screen.ChallengePlayer -> ChallengePlayerScreen(
-                backend = backend,
-                date = app.challengeDate,
-                inlayHintsEnabled = state.inlayHintsEnabled,
-                onExit = app::exitChallenge,
-                onSolved = app::refreshChallenges,
-            )
-
-            Screen.ChallengeBoard -> ChallengeBoardScreen(
-                backend = backend,
-                date = app.challengeDate,
-                onBack = app::exitChallengeBoard,
-            )
-
-            Screen.PublisherProfile -> PublisherProfileScreen(
-                backend = backend,
-                handle = app.publisherHandle.orEmpty(),
-                onBack = app::navigateBack,
-                onOpenItem = app::openStoreItem,
-                // Following needs an account; null would hide the button, which is not the same as it
-                // being unavailable, so it asks instead.
-                onNeedSignIn = { app.navigateTo(Screen.Projects) },
-            )
-
-            Screen.You -> YouScreen(
-                backend = backend,
-                onBack = app::navigateBack,
-                onOpenItem = app::openStoreItemById,
-                onOpenPublicProfile = app::openPublisher,
-                onPublish = if (backend.store.submissionsAvailable()) ({ app.openSubmitProject() }) else null,
-                onUpdateListing = if (backend.store.submissionsAvailable()) {
-                    ({ slug: String -> app.openSubmitProject(itemSlug = slug) })
-                } else {
-                    null
-                },
-                // Signing out from here lands back on the store, so the only way this renders signed out is
-                // a session that expired while it was open. Offering sign-in is the whole of that case.
-                onSignIn = { app.navigateTo(Screen.Projects) },
-                // Null in a build with no moderation transport; the screen additionally draws it only for
-                // an account the profile says moderates.
-                onModerate = if (backend.store.moderationAvailable()) ({ app.openModeration() }) else null,
-            )
-
-            Screen.Moderation -> ModerationScreen(
-                backend = backend,
-                onBack = app::navigateBack,
-                onOpenItem = app::openStoreItemById,
-                onOpenPublisher = app::openPublisher,
-            )
-
-            Screen.PublishingGuide -> PublishingGuideScreen(
-                onBack = app::navigateBack,
-                onPublish = if (backend.store.submissionsAvailable()) ({ app.openSubmitProject() }) else null,
-            )
-
-            Screen.SubmitProject -> SubmitProjectScreen(
-                backend = backend,
-                initialProject = app.submitProject,
-                initialItemSlug = app.submitItemSlug,
-                // Without this the screenshot picker has no host to ask, which reads on screen as an
-                // "Add a screenshot" button that does nothing.
-                fileActions = fileActions,
-                onBack = app::navigateBack,
-                // To the You screen on success, where the submission is now listed as in review: that is
-                // where its state lives and where its decision will arrive.
-                onSubmitted = app::finishSubmission,
-            )
-
-            Screen.StoreItem -> {
-                val storeScope = rememberCoroutineScope()
-                // The bookmark IS the like now: saving a project is the signal that you rate it, so the
-                // store counts saves publicly rather than asking twice for one opinion. Server-backed, with
-                // the device list as the offline answer (see StoreLikes), which is why a reinstall or a
-                // second device keeps the list.
-                var saved by remember(app.storeItem?.id) {
-                    mutableStateOf(app.storeItem?.let { backend.store.isLiked(it.id) } == true)
-                }
-                StoreItemScreen(
+        Screen.ImportProject -> {
+            val preview = app.importPreview
+            val path = app.importArchivePath
+            if (preview != null && path != null) {
+                ImportPreviewScreen(
                     backend = backend,
-                    item = app.storeItem,
-                    onBack = app::navigateBack,
-                    onCreateFromTemplate = { id -> app.createProject(id) },
-                    isSaved = saved,
-                    onToggleSaved = app.storeItem?.let { current ->
-                        {
-                            val next = !saved
-                            // Flip first: the local write is what makes the tap feel like it landed, and a
-                            // refusal puts it back rather than leaving the button lying.
-                            saved = next
-                            storeScope.launch {
-                                if (backend.store.setLike(current.id, next) != null) saved = !next
-                            }
-                        }
-                    },
-                    // Signing in to review needs a browser; null on a host that cannot open one, which the
-                    // sheet reports rather than working around.
-                    onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
-                    onOpenPublisher = { handle -> app.openPublisher(handle) },
-                    // What "Open in editor" opens. Without it the button was inert, which is the half of
-                    // this the user could see; the other half was the feed's own Open re-downloading.
-                    onOpenInstalled = { path -> app.openInstalledProject(path) },
+                    archivePath = path,
+                    preview = preview,
+                    onCancel = app::cancelImportPreview,
+                    onImported = app::finishImportPreview,
                 )
             }
+        }
 
-            Screen.Editor -> EditorScreen(
-                state = state,
-                onToggleTheme = { app.toggleTheme(dark) },
-                onOpenHub = { app.openHub(Screen.Editor) },
-                onOpenIconManager = { app.openIconManager(Screen.Editor) },
-                onNewImageAsset = { resDir -> app.openIconManager(Screen.Editor, resDir) },
-                onOpenDependencies = { module -> app.openModuleConfig(module, ModulesTab.Dependencies) },
-                onOpenModuleConfig = { module -> app.openModuleConfig(module, ModulesTab.Settings) },
-                onCloseProject = { app.navigateTo(Screen.Projects) },
-                closeProjectConfirm = app.confirmCloseProject,
-                onCloseProjectConfirmChange = { app.confirmCloseProject = it },
-                onOpenRun = { app.navigateTo(Screen.Run) },
-                fileActions = fileActions,
-            )
-
-            Screen.Run -> RunScreen(
-                backend = state.backend,
-                onBack = { app.navigateTo(Screen.Editor) },
-                onOpenDiagnostic = { d ->
-                    d.file?.let {
-                        state.openAtLine(it, d.line, d.column)
-                        app.navigateTo(Screen.Editor)
-                    }
-                },
-            )
-
-            Screen.ModuleConfig -> ModuleConfigScreen(
-                backend = state.backend,
-                initialModule = app.configModule,
-                initialTab = app.modulesTab,
-                onBack = { app.navigateTo(Screen.Editor) },
-                onOpenKeystoreManager = { app.openKeystoreManager(Screen.ModuleConfig, inProject = true) },
-                codeFont = codeFont,
-                fileActions = fileActions,
-            )
-
-            Screen.SdkManager -> SdkManagerScreen(
-                backend = state.backend,
-                onBack = { app.navigateTo(Screen.Hub) },
-            )
-
-            // A plugin-contributed screen (ScreenRegistry). The route is generic: the contribution renders its
-            // own body against the backend, the host bridges, and a Back that pops to wherever it came from.
-            Screen.PluginScreen -> {
-                // Hold the id this instance is showing rather than reading it live. Navigating away clears
-                // `pluginScreenId` while [ScreenHost]'s AnimatedContent still composes this branch for the
-                // exit animation, so reading it live would blank the screen mid-transition. It follows a
-                // change to another plugin screen (a diff opening that file's history), which stays on this
-                // same destination and so reuses this instance.
-                // The argument is held alongside for the same reason, and moves with the id: Back to an
-                // earlier entry of the same screen (one diff to another) changes only the argument.
-                var shown by remember { mutableStateOf(app.pluginScreenId to app.pluginScreenArgument) }
-                LaunchedEffect(app.pluginScreenId, app.pluginScreenArgument) {
-                    app.pluginScreenId?.let { shown = it to app.pluginScreenArgument }
-                }
-                val (shownId, shownArgument) = shown
-                val contribution = shownId?.let { ScreenRegistry.find(it) }
-                if (contribution != null) {
-                    val openInEditor = LocalPluginFileOpener.current
-                    val screenCtx = remember(backend, fileActions, app, openInEditor, shownArgument) {
-                        object : ScreenContext {
-                            override val backend = backend
-                            override val fileActions = fileActions
-                            override val argument = shownArgument
-                            override fun back() = app.navigateBack()
-                            override fun openScreen(id: String) = app.openPluginScreen(id)
-                            override fun openFile(path: String, offset: Int) = openInEditor(path, offset)
-                        }
-                    }
-                    // Keyed so each entry starts from fresh state: two entries of one screen with different
-                    // arguments are different pages, and one must not inherit the other's loaded content.
-                    key(shownId, shownArgument) { contribution.content(screenCtx) }
-                }
-            }
-
-            Screen.Plugins -> PluginsScreen(
-                backend = state.backend,
-                onBack = { app.navigateTo(Screen.Hub) },
-                // The Logs viewer is an editor overlay, so the row offers it only with a project open.
-                onOpenLogs = if (app.epoch > 0) {
-                    { pluginId ->
-                        state.logsSource = pluginId
-                        state.logsOpen = true
-                        app.navigateTo(Screen.Editor)
-                    }
-                } else null,
-                // A restart takes the whole app down, so every modified buffer is written first. Offered only
-                // where the host can restart itself; the screen states the restart either way.
-                onRestart = if (state.backend.settings.canRestartApplication()) {
-                    {
-                        state.saveAllNow()
-                        state.backend.settings.restartApplication()
-                    }
-                } else null,
-            )
-
-            Screen.Storage -> StorageScreen(
-                backend = state.backend,
-                onBack = { app.navigateTo(Screen.Hub) },
-            )
-
-            Screen.CodeStyle -> CodeStyleScreen(
-                backend = state.backend,
-                // The live formatter preview is engine-backed: available when the hub (hence Code Style) was
-                // opened from the editor, not from the project picker.
-                hasProject = app.hubReturn == Screen.Editor,
-                onBack = { app.navigateTo(Screen.Hub) },
-            )
-
-            // The editor color scheme. It needs no backend: schemes live on the app preference store, and
-            // the scheme it edits is the one the running theme is already rendering with, so every change
-            // repaints the app — including this screen's own preview — as it is made.
-            Screen.ColorScheme -> ColorSchemeScreen(
-                store = app.colorSchemes,
-                isDark = isDarkTheme(app.settings, isSystemInDarkTheme()),
-                onApply = app::applyColorScheme,
-                // A scheme is a file people hand to each other, so it goes in and out by file where the
-                // host has a picker and by clipboard everywhere (the screen always offers the clipboard).
-                onImportFile = if (fileActions.canPickFile) {
-                    { onJson ->
-                        fileActions.pickFile(listOf("json")) { path ->
-                            if (path != null) runCatching { state.backend.files.readFile(path) }.getOrNull()?.let(onJson)
-                        }
-                    }
-                } else {
-                    null
-                },
-                onExportFile = if (fileActions.canShare || fileActions.canExport) {
-                    { fileName, json ->
-                        state.backend.settings.writeSharedFile(fileName, json)?.let { path ->
-                            if (fileActions.canExport) fileActions.exportFile(path) else fileActions.share(path)
-                        }
-                    }
-                } else {
-                    null
-                },
-                onBack = { app.navigateTo(Screen.Hub) },
-            )
-
-            Screen.EditorSymbols -> SymbolMacroEditorScreen(
-                state = state,
-                onBack = { app.navigateTo(Screen.Hub) },
-            )
-
-            Screen.KeystoreManager -> KeystoreManagerScreen(
-                backend = state.backend,
-                onBack = { app.navigateTo(app.keystoreReturn) },
-                onCreate = { app.navigateTo(Screen.KeystoreCreate) },
-                onImport = app::openKeystoreImport,
-                // Signing assignment is per-project: only offered when the manager was opened from a project
-                // context (the editor's hub or a module's Signing tab), never from the picker's hub. So it stays
-                // hidden with no project open and cannot navigate into one.
-                onManageSigning = if (app.keystoreInProject) app::openSigningAssignment else null,
-                fileActions = fileActions,
-            )
-
-            Screen.IconManager -> {
-                val tab = state.active
-                // The reference form depends on the buffer, not just the file name (a Compose file wants a
-                // painter, a plain one wants `R.`), so the target is computed from the live text once on
-                // entry rather than per frame: materialising the rope is not free.
-                val insertionTarget = remember(tab?.path) {
-                    tab?.let { UiInsertionTarget(it.path, composeContext = IconSnippets.looksLikeCompose(it.text)) }
-                }
-                IconManagerScreen(
-                    backend = state.backend,
-                    onBack = { app.navigateTo(app.iconManagerReturn) },
-                    onOpenAppIconStudio = { repoId, name -> app.openAppIconStudio(repoId, name) },
-                    // Offered only when there is an editor tab to write into; the edits drive that tab's own
-                    // session, then the user is handed back to it so they see the result in place.
-                    onInsert = if (tab == null) null else { ref ->
-                        scope.launch {
-                            val edits = state.backend.icons.iconInsertion(
-                                path = tab.path,
-                                text = tab.text,
-                                caret = tab.session.selection.min,
-                                ref = ref,
-                            )
-                            if (state.applyEdits(edits)) app.navigateTo(Screen.Editor)
-                        }
-                    },
-                    insertionTarget = insertionTarget,
-                    initialResDir = app.iconManagerResDir,
+        Screen.ExportProject -> {
+            val target = app.exportTarget
+            if (target != null) {
+                ExportProjectScreen(
+                    backend = backend,
+                    project = target,
                     fileActions = fileActions,
+                    initialAuthor = app.exportAuthor(),
+                    onAuthorRemembered = app::rememberExportAuthor,
+                    onReveal = if (fileActions.canReveal) ({ path -> fileActions.reveal(path) }) else null,
+                    onSaveCopy = if (fileActions.canExport) ({ path -> fileActions.exportFile(path) }) else null,
+                    onShare = if (fileActions.canShare) ({ path -> fileActions.share(path) }) else null,
+                    onDone = app::finishExport,
+                    // The other way to share the same project. Hidden when this build cannot publish.
+                    onPublish = if (backend.store.submissionsAvailable()) {
+                        // `target` is the project this export flow was opened for, so publishing
+                        // continues with it rather than asking again.
+                        { app.finishExport(); app.openSubmitProject(target) }
+                    } else {
+                        null
+                    },
                 )
             }
+        }
 
-            Screen.AppIconStudio -> AppIconStudioScreen(
-                backend = state.backend,
-                onBack = { app.navigateTo(Screen.IconManager) },
-                onChooseIcon = { app.navigateTo(Screen.IconManager) },
-                seedRepoId = app.appIconSeedRepoId,
-                seedIconName = app.appIconSeedName,
-                fileActions = fileActions,
-            )
+        Screen.LessonTrack -> LessonTrackScreen(
+            backend = backend,
+            trackId = app.currentTrackId,
+            epoch = app.learnEpoch,
+            onOpenLesson = { id -> app.openLesson(id) },
+            onBack = app::exitLessonTrack,
+        )
 
-            Screen.KeystoreCreate -> KeystoreCreateScreen(
-                backend = state.backend,
-                onBack = { app.navigateTo(Screen.KeystoreManager) },
-                onDone = { app.navigateTo(Screen.KeystoreManager) },
-            )
+        Screen.LessonPlayer -> LessonPlayerScreen(
+            backend = backend,
+            lessonId = app.currentLessonId,
+            initialStep = app.lessonInitialStep,
+            inlayHintsEnabled = state.inlayHintsEnabled,
+            host = state.composePreviewHost,
+            onExit = app::exitLessonPlayer,
+        )
 
-            Screen.KeystoreImport -> {
-                val path = app.keystoreImportPath
-                if (path == null) {
-                    app.navigateTo(Screen.KeystoreManager)
-                } else {
-                    KeystoreImportScreen(
-                        backend = state.backend,
-                        path = path,
-                        onBack = { app.navigateTo(Screen.KeystoreManager) },
-                        onDone = { app.navigateTo(Screen.KeystoreManager) },
-                    )
-                }
+        Screen.ChallengePlayer -> ChallengePlayerScreen(
+            backend = backend,
+            date = app.challengeDate,
+            inlayHintsEnabled = state.inlayHintsEnabled,
+            onExit = app::exitChallenge,
+            onSolved = app::refreshChallenges,
+        )
+
+        Screen.ChallengeBoard -> ChallengeBoardScreen(
+            backend = backend,
+            date = app.challengeDate,
+            onBack = app::exitChallengeBoard,
+        )
+
+        Screen.PublisherProfile -> PublisherProfileScreen(
+            backend = backend,
+            handle = app.publisherHandle.orEmpty(),
+            onBack = app::navigateBack,
+            onOpenItem = app::openStoreItem,
+            // Following needs an account; null would hide the button, which is not the same as it
+            // being unavailable, so it asks instead.
+            onNeedSignIn = { app.navigateTo(Screen.Projects) },
+        )
+
+        Screen.You -> YouScreen(
+            backend = backend,
+            onBack = app::navigateBack,
+            onOpenItem = app::openStoreItemById,
+            onOpenPublicProfile = app::openPublisher,
+            onPublish = if (backend.store.submissionsAvailable()) ({ app.openSubmitProject() }) else null,
+            onUpdateListing = if (backend.store.submissionsAvailable()) {
+                ({ slug: String -> app.openSubmitProject(itemSlug = slug) })
+            } else {
+                null
+            },
+            // Signing out from here lands back on the store, so the only way this renders signed out is
+            // a session that expired while it was open. Offering sign-in is the whole of that case.
+            onSignIn = { app.navigateTo(Screen.Projects) },
+            // Null in a build with no moderation transport; the screen additionally draws it only for
+            // an account the profile says moderates.
+            onModerate = if (backend.store.moderationAvailable()) ({ app.openModeration() }) else null,
+        )
+
+        Screen.Moderation -> ModerationScreen(
+            backend = backend,
+            onBack = app::navigateBack,
+            onOpenItem = app::openStoreItemById,
+            onOpenPublisher = app::openPublisher,
+        )
+
+        Screen.PublishingGuide -> PublishingGuideScreen(
+            onBack = app::navigateBack,
+            onPublish = if (backend.store.submissionsAvailable()) ({ app.openSubmitProject() }) else null,
+        )
+
+        Screen.SubmitProject -> SubmitProjectScreen(
+            backend = backend,
+            initialProject = app.submitProject,
+            initialItemSlug = app.submitItemSlug,
+            // Without this the screenshot picker has no host to ask, which reads on screen as an
+            // "Add a screenshot" button that does nothing.
+            fileActions = fileActions,
+            onBack = app::navigateBack,
+            // To the You screen on success, where the submission is now listed as in review: that is
+            // where its state lives and where its decision will arrive.
+            onSubmitted = app::finishSubmission,
+        )
+
+        Screen.StoreItem -> {
+            val storeScope = rememberCoroutineScope()
+            // The bookmark IS the like now: saving a project is the signal that you rate it, so the
+            // store counts saves publicly rather than asking twice for one opinion. Server-backed, with
+            // the device list as the offline answer (see StoreLikes), which is why a reinstall or a
+            // second device keeps the list.
+            var saved by remember(app.storeItem?.id) {
+                mutableStateOf(app.storeItem?.let { backend.store.isLiked(it.id) } == true)
             }
-
-            Screen.Hub -> SettingsHubScreen(
-                onBack = { app.navigateTo(app.hubReturn) },
-                onOpenGlobalSettings = { app.navigateTo(Screen.Settings) },
-                onOpenCodeStyle = { app.navigateTo(Screen.CodeStyle) },
-                onOpenColors = { app.navigateTo(Screen.ColorScheme) },
-                onOpenSymbols = { app.navigateTo(Screen.EditorSymbols) },
-                onOpenSdkManager = { app.navigateTo(Screen.SdkManager) },
-                onOpenKeystoreManager = app::openKeystoreManagerFromHub,
-                onOpenPlugins = { app.navigateTo(Screen.Plugins) },
-                onOpenStorage = { app.navigateTo(Screen.Storage) },
-            )
-
-            // Settings, reached from the hub. With a project open (hub entered from the editor) the
-            // project-scoped pages (dependency conflicts, inspections) merge in; from the picker only the
-            // global app pages show.
-            Screen.Settings -> SettingsScreen(
-                backend = state.backend,
-                onBack = { app.navigateTo(Screen.Hub) },
-                onSettingsChanged = app::reloadSettings,
-                // The logs viewer is an editor overlay; only meaningful with a project open.
-                onOpenLogs = {
-                    if (app.epoch > 0) {
-                        state.logsOpen = true
-                        app.navigateTo(Screen.Editor)
+            StoreItemScreen(
+                backend = backend,
+                item = app.storeItem,
+                onBack = app::navigateBack,
+                onCreateFromTemplate = { id -> app.createProject(id) },
+                isSaved = saved,
+                onToggleSaved = app.storeItem?.let { current ->
+                    {
+                        val next = !saved
+                        // Flip first: the local write is what makes the tap feel like it landed, and a
+                        // refusal puts it back rather than leaving the button lying.
+                        saved = next
+                        storeScope.launch {
+                            if (backend.store.setLike(current.id, next) != null) saved = !next
+                        }
                     }
                 },
-                view = if (app.hubReturn == Screen.Editor) SettingsView.All else SettingsView.Global,
-                title = stringResource(Res.string.settings_title),
-                codeFont = codeFont,
+                // Signing in to review needs a browser; null on a host that cannot open one, which the
+                // sheet reports rather than working around.
+                onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
+                onOpenPublisher = { handle -> app.openPublisher(handle) },
+                // What "Open in editor" opens. Without it the button was inert, which is the half of
+                // this the user could see; the other half was the feed's own Open re-downloading.
+                onOpenInstalled = { path -> app.openInstalledProject(path) },
+            )
+        }
+
+        Screen.Editor -> EditorScreen(
+            state = state,
+            onToggleTheme = { app.toggleTheme(dark) },
+            onOpenHub = { app.openHub(Screen.Editor) },
+            onOpenIconManager = { app.openIconManager(Screen.Editor) },
+            onNewImageAsset = { resDir -> app.openIconManager(Screen.Editor, resDir) },
+            onOpenDependencies = { module -> app.openModuleConfig(module, ModulesTab.Dependencies) },
+            onOpenModuleConfig = { module -> app.openModuleConfig(module, ModulesTab.Settings) },
+            onCloseProject = { app.navigateTo(Screen.Projects) },
+            closeProjectConfirm = app.confirmCloseProject,
+            onCloseProjectConfirmChange = { app.confirmCloseProject = it },
+            onOpenRun = { app.navigateTo(Screen.Run) },
+            fileActions = fileActions,
+        )
+
+        Screen.Run -> RunScreen(
+            backend = state.backend,
+            onBack = { app.navigateTo(Screen.Editor) },
+            onOpenDiagnostic = { d ->
+                d.file?.let {
+                    state.openAtLine(it, d.line, d.column)
+                    app.navigateTo(Screen.Editor)
+                }
+            },
+        )
+
+        Screen.ModuleConfig -> ModuleConfigScreen(
+            backend = state.backend,
+            initialModule = app.configModule,
+            initialTab = app.modulesTab,
+            onBack = { app.navigateTo(Screen.Editor) },
+            onOpenKeystoreManager = { app.openKeystoreManager(Screen.ModuleConfig, inProject = true) },
+            codeFont = codeFont,
+            fileActions = fileActions,
+        )
+
+        Screen.SdkManager -> SdkManagerScreen(
+            backend = state.backend,
+            onBack = { app.navigateTo(Screen.Hub) },
+        )
+
+        // A plugin-contributed screen (ScreenRegistry). The route is generic: the contribution renders its
+        // own body against the backend, the host bridges, and a Back that pops to wherever it came from.
+        Screen.PluginScreen -> {
+            // Hold the id this instance is showing rather than reading it live. Navigating away clears
+            // `pluginScreenId` while [ScreenHost]'s AnimatedContent still composes this branch for the
+            // exit animation, so reading it live would blank the screen mid-transition. It follows a
+            // change to another plugin screen (a diff opening that file's history), which stays on this
+            // same destination and so reuses this instance.
+            // The argument is held alongside for the same reason, and moves with the id: Back to an
+            // earlier entry of the same screen (one diff to another) changes only the argument.
+            var shown by remember { mutableStateOf(app.pluginScreenId to app.pluginScreenArgument) }
+            LaunchedEffect(app.pluginScreenId, app.pluginScreenArgument) {
+                app.pluginScreenId?.let { shown = it to app.pluginScreenArgument }
+            }
+            val (shownId, shownArgument) = shown
+            val contribution = shownId?.let { ScreenRegistry.find(it) }
+            if (contribution != null) {
+                val openInEditor = LocalPluginFileOpener.current
+                val screenCtx = remember(backend, fileActions, app, openInEditor, shownArgument) {
+                    object : ScreenContext {
+                        override val backend = backend
+                        override val fileActions = fileActions
+                        override val argument = shownArgument
+                        override fun back() = app.navigateBack()
+                        override fun openScreen(id: String) = app.openPluginScreen(id)
+                        override fun openFile(path: String, offset: Int) = openInEditor(path, offset)
+                    }
+                }
+                // Keyed so each entry starts from fresh state: two entries of one screen with different
+                // arguments are different pages, and one must not inherit the other's loaded content.
+                key(shownId, shownArgument) { contribution.content(screenCtx) }
+            }
+        }
+
+        Screen.Plugins -> PluginsScreen(
+            backend = state.backend,
+            onBack = { app.navigateTo(Screen.Hub) },
+            // The Logs viewer is an editor overlay, so the row offers it only with a project open.
+            onOpenLogs = if (app.epoch > 0) {
+                { pluginId ->
+                    state.logsSource = pluginId
+                    state.logsOpen = true
+                    app.navigateTo(Screen.Editor)
+                }
+            } else null,
+            // A restart takes the whole app down, so every modified buffer is written first. Offered only
+            // where the host can restart itself; the screen states the restart either way.
+            onRestart = if (state.backend.settings.canRestartApplication()) {
+                {
+                    state.saveAllNow()
+                    state.backend.settings.restartApplication()
+                }
+            } else null,
+        )
+
+        Screen.Storage -> StorageScreen(
+            backend = state.backend,
+            onBack = { app.navigateTo(Screen.Hub) },
+        )
+
+        Screen.CodeStyle -> CodeStyleScreen(
+            backend = state.backend,
+            // The live formatter preview is engine-backed: available when the hub (hence Code Style) was
+            // opened from the editor, not from the project picker.
+            hasProject = app.hubReturn == Screen.Editor,
+            onBack = { app.navigateTo(Screen.Hub) },
+        )
+
+        // The editor color scheme. It needs no backend: schemes live on the app preference store, and
+        // the scheme it edits is the one the running theme is already rendering with, so every change
+        // repaints the app — including this screen's own preview — as it is made.
+        Screen.ColorScheme -> ColorSchemeScreen(
+            store = app.colorSchemes,
+            isDark = isDarkTheme(app.settings, isSystemInDarkTheme()),
+            onApply = app::applyColorScheme,
+            // A scheme is a file people hand to each other, so it goes in and out by file where the
+            // host has a picker and by clipboard everywhere (the screen always offers the clipboard).
+            onImportFile = if (fileActions.canPickFile) {
+                { onJson ->
+                    fileActions.pickFile(listOf("json")) { path ->
+                        if (path != null) runCatching { state.backend.files.readFile(path) }.getOrNull()?.let(onJson)
+                    }
+                }
+            } else {
+                null
+            },
+            onExportFile = if (fileActions.canShare || fileActions.canExport) {
+                { fileName, json ->
+                    state.backend.settings.writeSharedFile(fileName, json)?.let { path ->
+                        if (fileActions.canExport) fileActions.exportFile(path) else fileActions.share(path)
+                    }
+                }
+            } else {
+                null
+            },
+            onBack = { app.navigateTo(Screen.Hub) },
+        )
+
+        Screen.EditorSymbols -> SymbolMacroEditorScreen(
+            state = state,
+            onBack = { app.navigateTo(Screen.Hub) },
+        )
+
+        Screen.KeystoreManager -> KeystoreManagerScreen(
+            backend = state.backend,
+            onBack = { app.navigateTo(app.keystoreReturn) },
+            onCreate = { app.navigateTo(Screen.KeystoreCreate) },
+            onImport = app::openKeystoreImport,
+            // Signing assignment is per-project: only offered when the manager was opened from a project
+            // context (the editor's hub or a module's Signing tab), never from the picker's hub. So it stays
+            // hidden with no project open and cannot navigate into one.
+            onManageSigning = if (app.keystoreInProject) app::openSigningAssignment else null,
+            fileActions = fileActions,
+        )
+
+        Screen.IconManager -> {
+            val tab = state.active
+            // The reference form depends on the buffer, not just the file name (a Compose file wants a
+            // painter, a plain one wants `R.`), so the target is computed from the live text once on
+            // entry rather than per frame: materialising the rope is not free.
+            val insertionTarget = remember(tab?.path) {
+                tab?.let { UiInsertionTarget(it.path, composeContext = IconSnippets.looksLikeCompose(it.text)) }
+            }
+            IconManagerScreen(
+                backend = state.backend,
+                onBack = { app.navigateTo(app.iconManagerReturn) },
+                onOpenAppIconStudio = { repoId, name -> app.openAppIconStudio(repoId, name) },
+                // Offered only when there is an editor tab to write into; the edits drive that tab's own
+                // session, then the user is handed back to it so they see the result in place.
+                onInsert = if (tab == null) null else { ref ->
+                    scope.launch {
+                        val edits = state.backend.icons.iconInsertion(
+                            path = tab.path,
+                            text = tab.text,
+                            caret = tab.session.selection.min,
+                            ref = ref,
+                        )
+                        if (state.applyEdits(edits)) app.navigateTo(Screen.Editor)
+                    }
+                },
+                insertionTarget = insertionTarget,
+                initialResDir = app.iconManagerResDir,
                 fileActions = fileActions,
             )
         }
+
+        Screen.AppIconStudio -> AppIconStudioScreen(
+            backend = state.backend,
+            onBack = { app.navigateTo(Screen.IconManager) },
+            onChooseIcon = { app.navigateTo(Screen.IconManager) },
+            seedRepoId = app.appIconSeedRepoId,
+            seedIconName = app.appIconSeedName,
+            fileActions = fileActions,
+        )
+
+        Screen.KeystoreCreate -> KeystoreCreateScreen(
+            backend = state.backend,
+            onBack = { app.navigateTo(Screen.KeystoreManager) },
+            onDone = { app.navigateTo(Screen.KeystoreManager) },
+        )
+
+        Screen.KeystoreImport -> {
+            val path = app.keystoreImportPath
+            if (path == null) {
+                app.navigateTo(Screen.KeystoreManager)
+            } else {
+                KeystoreImportScreen(
+                    backend = state.backend,
+                    path = path,
+                    onBack = { app.navigateTo(Screen.KeystoreManager) },
+                    onDone = { app.navigateTo(Screen.KeystoreManager) },
+                )
+            }
+        }
+
+        Screen.Hub -> SettingsHubScreen(
+            sections = rememberHubSections(app, state),
+            onBack = { app.navigateTo(app.hubReturn) },
+            onOpen = { openHubTarget(app, it) },
+        )
+
+        Screen.Settings -> SettingsRoute(app, state, codeFont, fileActions, app.settingsPageId)
     }
 }
 

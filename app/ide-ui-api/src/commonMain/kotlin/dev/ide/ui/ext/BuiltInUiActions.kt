@@ -33,7 +33,7 @@ object BuiltInUiPlugin : UiPlugin {
         scope.action(
             SimpleUiAction(
                 "ui.hub",
-                "Settings & Tools",
+                "Settings",
                 setOf(more, palette),
                 "Settings · code style · SDK manager · keystore manager",
                 "gear",

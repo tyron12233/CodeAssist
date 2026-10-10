@@ -676,14 +676,28 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
 
     <!-- Settings hub -->
     <string name="settings_title">Configuración</string>
+    <string name="settings_group_editor">Apariencia y editor</string>
+    <string name="settings_group_code">Inteligencia de código</string>
+    <string name="settings_group_build">Compilar y ejecutar</string>
+    <string name="settings_group_extensions">Extensiones</string>
+    <string name="settings_group_system">Sistema</string>
+    <string name="settings_scope_project">Este proyecto</string>
+    <string name="settings_search_placeholder">Buscar configuración</string>
+    <string name="settings_search_empty">Ninguna configuración coincide con «%1$s»</string>
+    <string name="settings_page_appearance_subtitle">Tema, color de acento y ventanas</string>
+    <string name="settings_page_editor_subtitle">Fuente, ajuste, plegado y gestos</string>
+    <string name="settings_page_keymap_subtitle">Atajos de teclado</string>
+    <string name="settings_page_completion_subtitle">Sugerencias, plantillas postfijas y tiempo</string>
+    <string name="settings_page_analysis_subtitle">Análisis en vivo e inspecciones</string>
+    <string name="settings_page_preview_subtitle">Sandbox y proceso de la vista previa</string>
+    <string name="settings_page_build_subtitle">Cómo se resuelven los conflictos de dependencias</string>
+    <string name="settings_page_buildRuntime_subtitle">Memoria, proceso de compilación y compiladores</string>
+    <string name="settings_page_privacy_subtitle">Analíticas, cachés y registros</string>
     <string name="settings_no_settings_available">No hay opciones disponibles.</string>
     <string name="settings_all_settings">Todas las opciones</string>
     <string name="settings_backup_ready">Copia de seguridad lista</string>
     <string name="settings_inspections_for_language">Inspecciones de %1$s</string>
     <string name="settings_advanced">Avanzado</string>
-    <string name="settings_hub_title">Configuración y herramientas</string>
-    <string name="settings_settings">Configuración</string>
-    <string name="settings_settings_subtitle">Apariencia, editor, autocompletado y análisis</string>
     <string name="settings_code_style">Estilo de código</string>
     <string name="settings_code_style_subtitle">Perfiles de formato por lenguaje y vista previa en vivo</string>
     <string name="settings_sdk_manager">Administrador de SDK</string>

@@ -13,12 +13,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.back
 import dev.ide.ui.icons.CaIcons
 import org.jetbrains.compose.resources.stringResource
+
+/**
+ * True while a screen renders as the detail pane of a two-pane host (the wide Settings & Tools hub). The
+ * host's sidebar is the navigation there, so [ExpressiveScaffold] drops its back arrow and uses the compact
+ * bar: a collapsing large title beside a persistent sidebar is a phone idiom wasting the top of a window.
+ */
+val LocalEmbeddedPane = staticCompositionLocalOf { false }
 
 /**
  * The shared Material 3 Expressive screen frame: a [Scaffold] with a collapsing [LargeTopAppBar] (a big
@@ -29,7 +37,8 @@ import org.jetbrains.compose.resources.stringResource
  * `contentPadding`) so content scrolls under the collapsing bar.
  *
  * Set [large] = false for a compact (non-collapsing) [TopAppBar] on dense/secondary screens. A screen whose
- * commit action must stay reachable while its content scrolls passes it as [bottomBar].
+ * commit action must stay reachable while its content scrolls passes it as [bottomBar]. Inside a
+ * [LocalEmbeddedPane] both [onBack] and [large] are ignored.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,18 +55,21 @@ fun ExpressiveScaffold(
     large: Boolean = true,
     content: @Composable (PaddingValues) -> Unit,
 ) {
+    val embedded = LocalEmbeddedPane.current
+    val back = onBack.takeUnless { embedded }
+    val largeBar = large && !embedded
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
         modifier = modifier.fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             val nav: @Composable () -> Unit = {
-                if (onBack != null) IconButton(onClick = onBack) {
+                if (back != null) IconButton(onClick = back) {
                     Icon(CaIcons.chevronLeft, stringResource(Res.string.back))
                 }
             }
             val titleContent: @Composable () -> Unit = { Text(title) }
-            if (large) {
+            if (largeBar) {
                 LargeTopAppBar(title = titleContent, navigationIcon = nav, actions = actions, scrollBehavior = scroll)
             } else {
                 TopAppBar(title = titleContent, navigationIcon = nav, actions = actions, scrollBehavior = scroll)

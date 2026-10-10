@@ -214,6 +214,34 @@ class CodeAssistAppStateTest {
         assertEquals(Screen.Editor, app.screen)
     }
 
+    @Test
+    fun wideHubLeavesFromAnyPaneOnBack() = runTest {
+        val backend = settled()
+        val app = appState(backend)
+        advanceUntilIdle()
+        app.hubTwoPane = true
+
+        // The wide hub and its destinations are one surface: stepping "back to the hub" would show the same
+        // sidebar again, so Back leaves to where the hub was opened from.
+        app.openHub(Screen.Editor)
+        app.navigateTo(Screen.Settings)
+        app.navigateTo(Screen.Storage)
+        app.navigateBack()
+        assertEquals(Screen.Editor, app.screen)
+
+        app.openHub(Screen.Projects)
+        app.openKeystoreManagerFromHub()
+        app.navigateBack()
+        assertEquals(Screen.Projects, app.screen)
+
+        // Its create sub-screen still steps back to the manager, in the pane.
+        app.openHub(Screen.Projects)
+        app.openKeystoreManagerFromHub()
+        app.navigateTo(Screen.KeystoreCreate)
+        app.navigateBack()
+        assertEquals(Screen.KeystoreManager, app.screen)
+    }
+
     // ---- plugin-contributed screens ----
 
     /** Register a contributed screen for the duration of [block], so navigation to it is possible. */

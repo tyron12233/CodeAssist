@@ -1148,18 +1148,32 @@ We never collect your code, file or project names, which features you use, or an
 
     <!-- settings (SettingsScreen/SettingsControls/SettingsHubScreen) — provides settings_title reused by CodeAssistApp -->
     <string name="settings_title">Settings</string>
+    <string name="settings_group_editor">Appearance &amp; Editor</string>
+    <string name="settings_group_code">Code Intelligence</string>
+    <string name="settings_group_build">Build &amp; Run</string>
+    <string name="settings_group_extensions">Extensions</string>
+    <string name="settings_group_system">System</string>
+    <string name="settings_scope_project">This project</string>
+    <string name="settings_search_placeholder">Search settings</string>
+    <string name="settings_search_empty">No settings match “%1$s”</string>
+    <string name="settings_page_appearance_subtitle">Theme, accent color &amp; tool windows</string>
+    <string name="settings_page_editor_subtitle">Font, wrapping, folding &amp; gestures</string>
+    <string name="settings_page_keymap_subtitle">Keyboard shortcuts</string>
+    <string name="settings_page_completion_subtitle">Suggestions, postfix &amp; timing</string>
+    <string name="settings_page_analysis_subtitle">On-the-fly analysis &amp; inspections</string>
+    <string name="settings_page_preview_subtitle">Preview sandbox &amp; process</string>
+    <string name="settings_page_build_subtitle">How dependency conflicts resolve</string>
+    <string name="settings_page_buildRuntime_subtitle">Memory, build process &amp; compilers</string>
+    <string name="settings_page_privacy_subtitle">Analytics, caches &amp; logs</string>
     <string name="settings_no_settings_available">No settings available.</string>
     <string name="settings_all_settings">All settings</string>
     <string name="settings_backup_ready">Backup ready</string>
     <string name="settings_inspections_for_language">%1$s inspections</string>
     <string name="settings_advanced">Advanced</string>
-    <string name="settings_hub_title">Settings &amp; Tools</string>
-    <string name="settings_settings">Settings</string>
-    <string name="settings_settings_subtitle">Appearance, editor, completion &amp; analysis</string>
     <string name="settings_code_style">Code Style</string>
-    <string name="settings_code_style_subtitle">Per-language formatting profiles &amp; live preview</string>
+    <string name="settings_code_style_subtitle">Formatting rules per language</string>
     <string name="settings_symbols">Symbols &amp; Macros</string>
-    <string name="settings_symbols_subtitle">Customize the keyboard symbol bar &amp; text macros</string>
+    <string name="settings_symbols_subtitle">Keyboard symbol bar &amp; text macros</string>
     <string name="settings_sdk_manager">SDK Manager</string>
     <string name="settings_sdk_manager_subtitle">Download Android SDK &amp; JDK sources</string>
     <string name="settings_keystore_manager">Keystore Manager</string>
@@ -1782,7 +1796,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="action_close_project">Close project</string>
     <string name="action_close_project_desc">Back to all projects</string>
     <string name="action_dependencies">Manage dependencies</string>
-    <string name="action_hub">Settings &amp; Tools</string>
+    <string name="action_hub">Settings</string>
     <string name="action_hub_desc">Settings · code style · SDK manager · keystore manager</string>
     <string name="action_icons">Icon Manager</string>
     <string name="action_icons_desc">Browse and import icons, and change the app icon</string>
@@ -1902,7 +1916,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="colors_overlay_note">Layered on top of whatever the symbol already is.</string>
     <string name="colors_reset_entry">Reset this entry</string>
     <string name="settings_colors">Editor Colors</string>
-    <string name="settings_colors_subtitle">Syntax colors, the editor surface, and the gutter</string>
+    <string name="settings_colors_subtitle">Syntax, surface &amp; gutter colors</string>
     <string name="close_project_title">Close %1$s?</string>
     <string name="close_project_body">You'll go back to your projects.</string>
     <plurals name="close_project_unsaved">

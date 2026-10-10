@@ -141,6 +141,9 @@ fun SettingsScreen(
     title: String = stringResource(Res.string.settings_title),
     codeFont: FontFamily = FontFamily.Monospace,
     fileActions: FileActions = FileActions.None,
+    /** Show only this page, titled with its name: the Settings hub lists the pages itself, so a page opened
+     *  from it must not repeat that list. Null shows every page with its own category navigation. */
+    pageId: String? = null,
 ) {
     // The ads on/off control (moved off the picker's support card). Shown only where an ad network exists
     // (AdController.manageable, i.e. Android, never desktop) and prepended to the Privacy & Data page; its
@@ -206,9 +209,12 @@ fun SettingsScreen(
         }
     }
 
-    ExpressiveScaffold(title = title, onBack = onBack) { innerPadding ->
+    val single = pageId?.let { id -> pages.firstOrNull { it.id == id } }
+    ExpressiveScaffold(title = single?.let { localizedPageTitle(it) } ?: title, onBack = onBack) { innerPadding ->
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
-            if (pages.isEmpty()) {
+            if (single != null) {
+                PageContent(backend, single, state.values, codeFont, onSet, onAction, state::onStructuralChange)
+            } else if (pages.isEmpty() || pageId != null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(stringResource(Res.string.settings_no_settings_available), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
                 }
@@ -255,7 +261,7 @@ private fun WideLayout(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             pages.forEach { page ->
-                SettingsCategoryItem(localizedPageTitle(page), iconFor(page.iconId), page.id == selectedId, showChevron = false) { selectedId = page.id }
+                SettingsCategoryItem(localizedPageTitle(page), settingsPageIcon(page.iconId), page.id == selectedId, showChevron = false) { selectedId = page.id }
             }
         }
         Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
@@ -284,7 +290,7 @@ private fun NarrowLayout(
     if (open == null) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             itemsKeyed(pages, key = { it.id }) { page ->
-                SettingsCategoryItem(localizedPageTitle(page), iconFor(page.iconId), selected = false, showChevron = true) { openId = page.id }
+                SettingsCategoryItem(localizedPageTitle(page), settingsPageIcon(page.iconId), selected = false, showChevron = true) { openId = page.id }
             }
         }
     } else {
@@ -496,7 +502,10 @@ private fun encodeValue(c: UiSettingControl): String? = when (c) {
 }
 
 /** Map a page's icon id (resolved generically, so plugin icons work too) to a glyph; gear is the fallback. */
-private fun iconFor(iconId: String): ImageVector = when (iconId) {
+internal fun settingsPageIcon(iconId: String): ImageVector = when (iconId) {
+    "moon" -> CaIcons.moon
+    "keyboard" -> CaIcons.command
+    "git" -> CaIcons.gitBranch
     "eye" -> CaIcons.eye
     "code" -> CaIcons.code
     "sparkle" -> CaIcons.sparkle

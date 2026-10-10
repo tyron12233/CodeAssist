@@ -164,6 +164,22 @@ class CodeAssistAppState(
     var hubReturn: Screen by mutableStateOf(Screen.Editor)
         private set
 
+    /**
+     * Whether the window is wide enough that Settings shows as a sidebar beside its open destination
+     * (reported by the nav graph, which is what measures the window). Then the hub and its destinations are
+     * one surface, so Back from any of them leaves the hub instead of stepping to a "hub" that looks the same.
+     */
+    var hubTwoPane: Boolean by mutableStateOf(false)
+
+    /** Whether [s] is one of the hub's destinations shown in its pane while [hubTwoPane]. The Keystore Manager
+     *  only counts when entered from the hub, not from a module's Signing tab. */
+    fun isHubPane(s: Screen): Boolean = when (s) {
+        Screen.Hub, Screen.Settings, Screen.CodeStyle, Screen.ColorScheme, Screen.EditorSymbols,
+        Screen.SdkManager, Screen.Plugins, Screen.Storage -> true
+        Screen.KeystoreManager -> keystoreReturn == Screen.Hub
+        else -> false
+    }
+
     /** Where the Keystore Manager returns on Back: the hub (its normal entry) or the module Signing tab (the
      *  "manage keystores" cross-link from project signing). */
     var keystoreReturn: Screen by mutableStateOf(Screen.Hub)
@@ -431,10 +447,20 @@ class CodeAssistAppState(
         screen = Screen.PluginScreen
     }
 
-    /** Open the Settings and Tools hub, remembering [from] as its Back destination. */
+    /** Open Settings (the hub), remembering [from] as its Back destination. */
     fun openHub(from: Screen) {
         hubReturn = from
         screen = Screen.Hub
+    }
+
+    /** The settings page [Screen.Settings] shows, by id. Null shows every page with its own navigation. */
+    var settingsPageId: String? by mutableStateOf(null)
+        private set
+
+    /** Open one settings page from the hub. */
+    fun openSettingsPage(id: String) {
+        settingsPageId = id
+        screen = Screen.Settings
     }
 
     /** Open the Keystore Manager, remembering its Back destination and whether it was reached with a project
@@ -1005,6 +1031,8 @@ class CodeAssistAppState(
 
             // The keystore Create/Import sub-screens step back to their manager, not all the way out.
             screen == Screen.KeystoreCreate || screen == Screen.KeystoreImport -> screen = Screen.KeystoreManager
+            // The wide hub is one surface with its destinations: Back leaves it from any of them.
+            hubTwoPane && isHubPane(screen) -> screen = hubReturn
             // The hub's sub-screens step back to the hub; the keystore manager honours its entry origin.
             screen == Screen.SdkManager || screen == Screen.Settings || screen == Screen.CodeStyle ||
                 screen == Screen.ColorScheme || screen == Screen.EditorSymbols ||

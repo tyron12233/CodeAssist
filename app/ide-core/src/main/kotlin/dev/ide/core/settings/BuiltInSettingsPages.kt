@@ -143,7 +143,7 @@ object BuiltInSettingsPages {
         appearance, editor, completion, analysis, preview, build, buildRuntime, privacy(analyticsAvailable),
     )
 
-    private val appearance = page(APPEARANCE, "Appearance", "eye", 0) {
+    private val appearance = page(APPEARANCE, "Appearance", "moon", 0) {
         listOf(
             SettingControl.Choice(
                 "themeMode", "Theme", "Use a fixed theme or follow the operating system",
