@@ -796,11 +796,11 @@ class IdeServices private constructor(
         // synthetic-R provider and the XML resource host are all registered ONCE, app-global (in
         // [registerStaticPlugins]), and resolve THIS engine via the scope / [ApplicationEnvironment.activeEngine].
         registerScopedServices()
+        // Register the downloaded Android platforms before any analyzer resolves its module's SDK.
+        if (!buildOnly) runCatching { syncPlatformSdks() }
         // Provision kotlin-stdlib as a real project dependency (bundled jar, never the host runtime) before
         // anything reads a Kotlin module's classpath.
         runCatching { ensureKotlinStdlib() }
-        // Register the downloaded Android platforms before any analyzer resolves its module's SDK.
-        if (!buildOnly) runCatching { syncPlatformSdks() }
         // App-log capture (the Logcat tab): tell the channel which app applicationIds this project can run, so a
         // running debug app is recognized whether launched from the IDE or the device launcher — decoupled from
         // the Run button. UI engine only; the headless :build daemon never hosts the sink. Re-run on any config
@@ -2031,7 +2031,8 @@ class IdeServices private constructor(
         val module = store.workspace.projects.firstNotNullOfOrNull { p -> p.modules.firstOrNull { it.id == id } }
             ?: return null
         val facet = module.facets.get(AndroidFacet.KEY) ?: return null
-        val levels = AndroidApiDatabase.bundled() ?: return null
+        val platformJar = SdkResolution.sdkFor(store.workspace, module)?.bootClasspath?.firstOrNull()?.let { Paths.get(it.path) }
+        val levels = AndroidApiDatabase.forPlatform(platformJar) ?: return null
         return AndroidApiContext(facet.minSdk, facet.compileSdk, levels)
     }
 
@@ -4751,6 +4752,9 @@ class IdeServices private constructor(
          * migration-safe: it also augments an OLDER workspace whose sdks.json holds only the Android SDK
          * (adds the missing core-Java SDK on reopen). [baseDir] roots the filtered-jar cache on-device.
          */
+        /** The SDK-table names [syncPlatformSdks] owns: `android-34`, one per installed platform. */
+        private val PLATFORM_SDK_NAME = Regex("""android-\d+""")
+
         private fun ensureSdks(store: ProjectModelStore, primary: SdkData?, baseDir: Path) {
             val current = store.data.sdks.toMutableList()
             if (current.isEmpty()) primary?.let { current.add(it) }
@@ -4792,9 +4796,6 @@ class IdeServices private constructor(
             ensureSdks(store, defaultDesktopSdk(), root)
             return IdeServices(platform, store, env = env)
         }
-        /** The SDK-table names [syncPlatformSdks] owns: `android-34`, one per installed platform. */
-        private val PLATFORM_SDK_NAME = Regex("""android-\d+""")
-
 
         private fun openStore(
             root: Path,
