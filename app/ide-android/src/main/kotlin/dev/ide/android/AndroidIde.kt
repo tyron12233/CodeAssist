@@ -199,6 +199,15 @@ object AndroidIde {
         // pulls it from build-tools (IdeServices.detectAndroidSdk); on ART it ships as an asset.
         val coreLambdaStubs =
             copyAsset(context, "core-lambda-stubs.jar", File(home, "core-lambda-stubs.jar"))
+        // Index segments for android.jar, these stubs and kotlin-stdlib, generated at build time from the same
+        // bytes (see :ide-android generatePrebuiltIndexAsset). Unpacked into the shared index cache just before a
+        // project's first index pass, once per app version, so the phone never indexes android.jar itself.
+        val updateStamp = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+        }.getOrDefault(0L).toString()
+        dev.ide.core.PrebuiltIndexSegments.source = dev.ide.core.PrebuiltIndexSegments.Source(updateStamp) {
+            context.assets.open(dev.ide.core.PrebuiltIndexSegments.ASSET)
+        }
         // The on-device Kotlin compiler (K2JVMCompiler) is dexed, but IntelliJ-core boots its extension
         // registry by reading XML descriptors (META-INF/extensions/*.xml) from a real filesystem path, which
         // a dex APK doesn't expose. Extract the bundled kotlinc-resources.zip (the compiler jar minus its

@@ -109,6 +109,48 @@ val stripAndroidJarAsset = tasks.register<Zip>("stripAndroidJarAsset") {
     isPreserveFileTimestamps = false
 }
 
+// --- Prebuilt index segments for the bundled jars -------------------------------------------------
+// The IDE indexes android.jar (about 90% of all index entries), the desugar stubs and kotlin-stdlib before
+// completion works, and on a fresh install that meant several seconds on the phone. Instead, run the IDE's own
+// index build (dev.ide.core.PrebuiltIndexSegments, the real IndexServiceImpl with the built-in extensions) on
+// the build host over the exact bytes the APK ships, and package the segment store as an asset. On device it
+// is unpacked into the shared index cache before the first index pass, which then finds every one as a cache
+// hit. About 3 MB compressed. A segment that doesn't match (another SDK, a newer index format) is just never
+// looked up, and the device builds it as before.
+val prebuiltIndexTool: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage::class.java, Usage.JAVA_RUNTIME))
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category::class.java, Category.LIBRARY))
+        attribute(
+            TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
+            objects.named(TargetJvmEnvironment::class.java, TargetJvmEnvironment.STANDARD_JVM),
+        )
+        attribute(org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.attribute, org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.jvm)
+    }
+}
+dependencies { prebuiltIndexTool(project(":ide-core")) }
+
+val generatePrebuiltIndexAsset = tasks.register<JavaExec>("generatePrebuiltIndexAsset") {
+    description = "Index the bundled jars with the IDE's own extensions into a prebuilt segment-store asset."
+    val androidJar = stripAndroidJarAsset.flatMap { it.archiveFile }
+    val lambdaStubs = layout.projectDirectory.file("src/main/assets/core-lambda-stubs.jar")
+    val outZip = layout.buildDirectory.file("prebuilt-index-asset/index-prebuilt.zip")
+    classpath = prebuiltIndexTool
+    mainClass.set("dev.ide.core.PrebuiltIndexSegments")
+    // Cacheable: a pure function of the shipped jars and the indexing code (the tool classpath, by content).
+    inputs.file(androidJar).withPropertyName("androidJar").withPathSensitivity(PathSensitivity.NONE)
+    inputs.file(lambdaStubs).withPropertyName("lambdaStubs").withPathSensitivity(PathSensitivity.NONE)
+    inputs.files(prebuiltIndexTool).withPropertyName("tool").withNormalizer(ClasspathNormalizer::class)
+    outputs.file(outZip).withPropertyName("prebuiltIndex")
+    outputs.cacheIf("the segments are a pure function of the bundled jars and the indexing code") { true }
+    maxHeapSize = "2g"
+    argumentProviders.add(CommandLineArgumentProvider {
+        listOf(outZip.get().asFile.absolutePath, androidJar.get().asFile.absolutePath, lambdaStubs.asFile.absolutePath)
+    })
+}
+
 // --- Compose runtime asset (on-device Compose-compile spike) -------------------------------------
 // The Compose-on-ART spike (KotlinCompilerArtSpikeTest.composeCompilesOnArt) compiles a @Composable with
 // the Compose plugin and needs the `androidx.compose.runtime.*` shapes on its compile -classpath. The app's
@@ -488,6 +530,7 @@ android {
     // on-device compiler can load them. AGP 9 disallows a Provider here, so register the static dirs the
     // tasks write to; ordering is carried by the `preBuild.dependsOn(...)` below (same pattern as aapt2).
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("android-jar-asset").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("prebuilt-index-asset").get().asFile)
     // DEBUG ONLY. The shipping app reads the stdlib as the `/kotlin-stdlib.jar` classpath resource that
     // :lang-kotlin bundles (BundledKotlinStdlib), and the forked compiler puts the APK itself on its -cp for
     // exactly that reason — so this second, byte-identical copy is only there for the androidTest spikes,
@@ -743,7 +786,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, stripAndroidJarAsset, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleVcsUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
+    dependsOn(fetchAndroidBuildTools, stripAndroidJarAsset, generatePrebuiltIndexAsset, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleVcsUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset, bundleAwtFixtureAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui-resources'

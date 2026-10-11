@@ -623,44 +623,51 @@ private class CompletionBuiltinsPlugin(private val env: ApplicationEnvironment) 
     }
 }
 
-/** All built-in symbol/member/resource index extensions. */
+/**
+ * All built-in symbol/member/resource index extensions, in registration order. Also what the prebuilt index
+ * segments shipped in the APK are generated with ([dev.ide.core.PrebuiltIndexSegments]), so a segment built at
+ * build time and one built on device come from the same extensions.
+ */
+internal val BUILT_IN_INDEX_EXTENSIONS: List<dev.ide.index.IndexExtension<*, *>> = listOf(
+    JavaClassNamesIndex,
+    JavaPackagesIndex,
+    JavaPackageTypesIndex,
+    JavaClassLocatorIndex,
+    JavaSourceSymbolsIndex,
+    JavaMembersIndex,
+    JavaMembersByOwnerIndex,
+    KotlinClassNamesIndex,
+    KotlinPackagesIndex,
+    KotlinPackageTypesIndex,
+    KotlinSourceSymbolsIndex,
+    KotlinMembersIndex,
+    KotlinTypeShapeIndex,
+    KotlinBuiltinsIndex,
+    KotlinCallableIndex,
+    KotlinBuiltinCallableIndex,
+    KotlinSourceCallableIndex,
+    KotlinPackageDeclIndex,
+    JavaSourceDocIndex,
+    KotlinSourceDocIndex,
+    JavaMainIndex,
+    KotlinMainIndex,
+    AndroidResourceIndex,
+    BinarySubtypeIndex,
+    BinaryAnnotationIndex,
+    KotlinSourceSubtypeIndex,
+    KotlinSourceAnnotationIndex,
+    JavaSourceSubtypeIndex,
+    JavaSourceAnnotationIndex,
+)
+
+/** Registers [BUILT_IN_INDEX_EXTENSIONS]. */
 private class IndexingPlugin : Plugin {
     override val manifest = PluginManifest(
         id = "indexing", name = "Indexing",
         description = "Symbol, member, and Android-resource indexes powering completion, go-to, and search.",
     )
     override fun register(reg: PluginRegistration) {
-        listOf(
-            JavaClassNamesIndex,
-            JavaPackagesIndex,
-            JavaPackageTypesIndex,
-            JavaClassLocatorIndex,
-            JavaSourceSymbolsIndex,
-            JavaMembersIndex,
-            JavaMembersByOwnerIndex,
-            KotlinClassNamesIndex,
-            KotlinPackagesIndex,
-            KotlinPackageTypesIndex,
-            KotlinSourceSymbolsIndex,
-            KotlinMembersIndex,
-            KotlinTypeShapeIndex,
-            KotlinBuiltinsIndex,
-            KotlinCallableIndex,
-            KotlinBuiltinCallableIndex,
-            KotlinSourceCallableIndex,
-            KotlinPackageDeclIndex,
-            JavaSourceDocIndex,
-            KotlinSourceDocIndex,
-            JavaMainIndex,
-            KotlinMainIndex,
-            AndroidResourceIndex,
-            BinarySubtypeIndex,
-            BinaryAnnotationIndex,
-            KotlinSourceSubtypeIndex,
-            KotlinSourceAnnotationIndex,
-            JavaSourceSubtypeIndex,
-            JavaSourceAnnotationIndex,
-        ).forEach { reg.register(INDEX_EP, it) }
+        BUILT_IN_INDEX_EXTENSIONS.forEach { reg.register(INDEX_EP, it) }
     }
 }
 

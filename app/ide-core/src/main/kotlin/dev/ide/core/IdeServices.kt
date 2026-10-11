@@ -476,6 +476,9 @@ class IdeServices private constructor(
     @Volatile
     private var openJob: Job? = null
 
+    /** The shared library/SDK segment store (see [indexService]). */
+    private val indexCacheRoot: Path = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("index")
+
     /** The workspace index (class names, packages, members, source symbols). Built in the background. The index
      *  extensions are contributed app-global (see [registerStaticPlugins]); this just queries them. */
     val indexService: IndexService = run {
@@ -485,7 +488,7 @@ class IdeServices private constructor(
             // segments), so share them across projects under the host's shared cache root (like the dex and
             // Maven caches) instead of re-indexing the same AndroidX/Compose/stdlib jars per project. The
             // in-memory source side stays per-project regardless of where this points.
-            (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("index"),
+            indexCacheRoot,
             // On-device (androidTools present) ART has a tight heap, so the index builds narrowly there. Its hot
             // block cache is the desktop size unless the device is low on memory: completion's class-name
             // queries thrash a smaller one, re-reading blocks from disk on every keystroke.
@@ -866,6 +869,9 @@ class IdeServices private constructor(
                 }
                 try {
                     memLog.info("project open (before index): ${MemSample.now().fmt()} tier=${DeviceMemory.tier}")
+                    // The app's prebuilt segments for the jars it ships, unpacked once per app version, so this
+                    // pass finds android.jar as a cache hit instead of indexing it on the phone.
+                    PrebuiltIndexSegments.ensureInstalled(indexCacheRoot)
                     runIndexPass(IndexPassTrigger.OPEN)
                     memLog.info("after index build: ${MemSample.now().fmt()}")
                 } finally {
@@ -1630,7 +1636,7 @@ class IdeServices private constructor(
         val bundled = (compileBootClasspath + listOfNotNull(BundledKotlinStdlib.jar()))
             .map { it.toAbsolutePath().normalize().toString() }
         if (norm !in bundled) return null
-        return "${p.fileName}-${runCatching { Files.size(p) }.getOrDefault(0L)}"
+        return PrebuiltIndexSegments.stableId(p)
     }
 
     private fun fqcnOf(path: Path, text: String): String? {
