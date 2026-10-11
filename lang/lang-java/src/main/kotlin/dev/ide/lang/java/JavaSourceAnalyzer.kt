@@ -27,6 +27,8 @@ import dev.ide.lang.folding.FoldingService
 import dev.ide.lang.highlight.SemanticHighlightService
 import dev.ide.lang.hints.InlayHintService
 import dev.ide.lang.java.resolve.JavaApiLevelCheck
+import dev.ide.lang.java.resolve.JavaLibraryDocs
+import dev.ide.lang.resolve.SourceDocProvider
 import dev.ide.lang.resolve.AndroidApiContext
 import dev.ide.lang.signature.SignatureHelpService
 import dev.ide.lang.java.completion.JavaCompletion
@@ -175,6 +177,13 @@ class JavaSourceAnalyzer private constructor(
     @Volatile
     var languageLevel: Int = Int.MAX_VALUE
 
+    /** Real parameter names and javadoc for COMPILED classpath symbols (attached sources, the source-doc index,
+     *  the bundled Android docs), injected by the host. Source symbols answer from their own PSI. */
+    @Volatile
+    var sourceDocProvider: SourceDocProvider = SourceDocProvider.NONE
+
+    private val libraryDocs = JavaLibraryDocs { sourceDocProvider }
+
     private val completion: JavaCompletion by lazy {
         JavaCompletion(
             env,
@@ -186,6 +195,7 @@ class JavaSourceAnalyzer private constructor(
                     ?: emptyList()
             },
             subtypeSearch = { superFqn -> subtypeIndexQuery(superFqn) },
+            paramNames = libraryDocs::paramNames,
         )
     }
 
@@ -212,8 +222,8 @@ class JavaSourceAnalyzer private constructor(
     override val importOrganizer: dev.ide.lang.imports.ImportOrganizerService = JavaImportOrganizer { name, text -> env.parse(name, text) }
     override val folding: FoldingService = JavaFolder(::psiFor)
     override val semanticHighlighter: SemanticHighlightService = JavaSemanticHighlighter(::psiFor)
-    override val signatureHelp: SignatureHelpService by lazy { JavaSignatureHelp(env) }
-    override val inlayHints: InlayHintService = JavaInlayHints(::psiFor)
+    override val signatureHelp: SignatureHelpService by lazy { JavaSignatureHelp(env, libraryDocs::paramNames, libraryDocs::plainDoc) }
+    override val inlayHints: InlayHintService = JavaInlayHints(::psiFor, libraryDocs::paramNames)
 
     private val version = AtomicLong(0)
     // On-disk parses by path, least recently used first out: a project-wide pass reaches every file, and each
@@ -409,17 +419,20 @@ class JavaSourceAnalyzer private constructor(
                 name = sym.name,
                 kind = sym.kind,
                 container = owner,
-                // A platform API's doc opens with the level that added it ("Added in API 26").
-                doc = androidApi()?.levels?.let { JavaApiLevelCheck.levelOf(target, it) }
-                    ?.prependTo(sym.documentation()) ?: sym.documentation(),
+                // A platform API's doc opens with the level that added it ("Added in API 26"). A compiled symbol
+                // has no comment of its own, so its doc comes from sources or the bundled docs.
+                doc = (sym.documentation() ?: libraryDocs.rawDoc(target)).let { doc ->
+                    androidApi()?.levels?.let { JavaApiLevelCheck.levelOf(target, it) }?.prependTo(doc) ?: doc
+                },
                 docFormat = DocFormat.JAVADOC,
             )
         }
 
     private fun signatureOf(psi: PsiElement): String = when (psi) {
         is PsiMethod -> {
-            val params = psi.parameterList.parameters.joinToString(", ") {
-                "${it.type.presentableText} ${it.name}"
+            val names = libraryDocs.paramNames(psi)
+            val params = psi.parameterList.parameters.withIndex().joinToString(", ") { (i, p) ->
+                "${p.type.presentableText} ${names[i]}"
             }
             "${psi.returnType?.presentableText ?: "void"} ${psi.name}($params)"
         }

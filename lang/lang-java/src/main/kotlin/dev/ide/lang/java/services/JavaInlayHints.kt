@@ -32,7 +32,11 @@ import dev.ide.vfs.VirtualFile
  *
  * All types/parameters are resolved through IntelliJ's engine (`resolveMethod`, `PsiType`).
  */
-class JavaInlayHints(private val psiFor: (VirtualFile) -> PsiJavaFile) : InlayHintService {
+class JavaInlayHints(
+    private val psiFor: (VirtualFile) -> PsiJavaFile,
+    /** A method's parameter names, real ones in place of a compiled method's made-up `p`/`p1`. */
+    private val paramNames: (com.intellij.psi.PsiMethod) -> List<String> = { m -> m.parameterList.parameters.map { it.name } },
+) : InlayHintService {
 
     // Under the parse lock (exclusive): the type/parameter/chaining hints resolve methods and expression types,
     // which can lazily `buildTree` classpath PSI — must not race another parse on ART (as JavaSemanticHighlighter).
@@ -91,7 +95,9 @@ class JavaInlayHints(private val psiFor: (VirtualFile) -> PsiJavaFile) : InlayHi
             if (!inRange(call)) return@forEach
             val args = call.argumentList?.expressions ?: return@forEach
             if (args.isEmpty()) return@forEach
-            val params = call.resolveMethod()?.parameterList?.parameters ?: return@forEach
+            val method = call.resolveMethod() ?: return@forEach
+            val params = method.parameterList.parameters
+            val names by lazy { paramNames(method) }
             args.forEachIndexed { i, arg ->
                 if (i >= params.size) return@forEachIndexed
                 // Only literal / negated-literal args (IntelliJ suppresses hints on self-descriptive args).
@@ -99,7 +105,7 @@ class JavaInlayHints(private val psiFor: (VirtualFile) -> PsiJavaFile) : InlayHi
                     val p = params[i]
                     out += InlayHint(
                         offset = arg.textRange.startOffset,
-                        parts = listOf(InlayHintPart("${p.name}:", JavaSymbol(p))),
+                        parts = listOf(InlayHintPart("${names[i]}:", JavaSymbol(p))),
                         kind = InlayHintKind.PARAMETER,
                         paddingRight = true,
                     )

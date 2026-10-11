@@ -79,6 +79,9 @@ class JavaCompletion(
      *  index. Supplied by the host; drives `new <caret>` in an `Foo x = new …` position to offer Foo's
      *  concrete implementations. Empty default keeps completion working index-free. */
     private val subtypeSearch: (String) -> List<IndexedType> = { emptyList() },
+    /** A method's parameter names; the host replaces a compiled method's made-up ones (`p`, `p1`) with real
+     *  names from sources or bundled docs. The default reads the PSI. */
+    private val paramNames: (PsiMethod) -> List<String> = { m -> m.parameterList.parameters.map { it.name } },
 ) : CompletionContributor {
 
     /** A type the index knows about: its fully-qualified name and declaration kind (class/interface/…). */
@@ -822,8 +825,9 @@ class JavaCompletion(
 
     private fun overrideItem(m: PsiMethod, indent: String): CompletionItem {
         val ret = m.returnType?.presentableText ?: "void"
-        val params = m.parameterList.parameters.joinToString(", ") { "${it.type.presentableText} ${it.name}" }
-        val argNames = m.parameterList.parameters.joinToString(", ") { it.name ?: "arg" }
+        val names = paramNames(m)
+        val params = m.parameterList.parameters.withIndex().joinToString(", ") { (i, p) -> "${p.type.presentableText} ${names[i]}" }
+        val argNames = names.joinToString(", ")
         val vis = when {
             m.hasModifierProperty(PsiModifier.PUBLIC) -> "public "
             m.hasModifierProperty(PsiModifier.PROTECTED) -> "protected "
@@ -864,7 +868,8 @@ class JavaCompletion(
     private fun methodItem(m: PsiMethod, proximity: Int = 0, callableWeight: Int = 0): CompletionItem {
         val hasParams = m.parameterList.parametersCount > 0
         val insert = "${m.name}()"
-        val paramText = m.parameterList.parameters.joinToString(", ") { "${it.type.presentableText} ${it.name}" }
+        val names = paramNames(m)
+        val paramText = m.parameterList.parameters.withIndex().joinToString(", ") { (i, p) -> "${p.type.presentableText} ${names[i]}" }
         return CompletionItem(
             label = m.name,
             insertText = insert,

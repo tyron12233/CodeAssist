@@ -26,6 +26,7 @@ import dev.ide.android.support.AndroidViewBindingProvider
 import dev.ide.android.support.PreviewResourceLinker
 import dev.ide.android.support.SampleAndroidProject
 import dev.ide.android.support.apilevels.AndroidApiDatabase
+import dev.ide.android.support.docs.AndroidPlatformDocs
 import dev.ide.android.support.index.AndroidResourceIndex
 import dev.ide.android.support.index.ResourceDeclValue
 import dev.ide.android.support.metadata.AndroidSdkMetadata
@@ -192,6 +193,7 @@ import dev.ide.lang.kotlin.interp.ResolvedFunction
 import dev.ide.lang.kotlin.synthetic.KotlinSyntheticClassProvider
 import dev.ide.lang.resolve.AndroidApiContext
 import dev.ide.lang.resolve.SourceDocProvider
+import dev.ide.lang.resolve.orElse
 import dev.ide.lang.signature.SignatureHelp
 import dev.ide.lang.signature.SignatureHelpRequest
 import dev.ide.lang.signature.SignatureHelpTrigger
@@ -2036,6 +2038,17 @@ class IdeServices private constructor(
         return AndroidApiContext(facet.minSdk, facet.compileSdk, levels)
     }
 
+    /**
+     * The Android platform's bundled parameter names and javadoc, for an Android module: what its editors
+     * show for framework and `java.*` APIs until real platform sources are attached. Empty elsewhere.
+     */
+    private fun platformDocs(module: Module): SourceDocProvider {
+        val android = module.facets.get(AndroidFacet.KEY) != null || module.type.platform == PlatformKind.ANDROID
+        if (!android) return SourceDocProvider.NONE
+        return AndroidPlatformDocs.bundled((sharedCachesRoot ?: store.rootPath).resolve("caches"))
+            ?: SourceDocProvider.NONE
+    }
+
     /** Construct the analyzer for [module] in [language]. Invoked once by the module-scoped analyzer
      *  service factory; the module container caches and disposes the result. */
     private fun buildAnalyzer(module: Module, language: LanguageId): SourceAnalyzer =
@@ -2060,6 +2073,10 @@ class IdeServices private constructor(
                     module.facets.get(AndroidFacet.KEY)?.let { facet ->
                         sdkManager.androidSourcesDir(facet.compileSdk)?.let { dir -> it.addSourceDirs(listOf(dir)) }
                     }
+                    // Docs + real parameter names for compiled classpath symbols: attached sources (index, then
+                    // a live parse of this analyzer's roots), then the bundled Android docs.
+                    it.sourceDocProvider = IndexBackedSourceDocs(indexService, AnalyzerSourceDocs(it))
+                        .orElse(platformDocs(module))
                 }
 
                 is JdtSourceAnalyzer -> {
@@ -2116,7 +2133,7 @@ class IdeServices private constructor(
                     // named `p0` in Kotlin (the index covers LIBRARY_SOURCE only, never project sources).
                     val liveFallback = (analyzerFor(module) as? JvmIndexScopeProvider)
                         ?.let { a -> AnalyzerSourceDocs(a) } ?: SourceDocProvider.NONE
-                    it.sourceDocProvider = IndexBackedSourceDocs(indexService, liveFallback)
+                    it.sourceDocProvider = IndexBackedSourceDocs(indexService, liveFallback).orElse(platformDocs(module))
                     // Live editor buffers (path → text) so cross-file completion/resolution/diagnostics see
                     // unsaved edits in OTHER open .kt files before they're saved + reindexed.
                     it.liveOverlayProvider = ::kotlinOverlay

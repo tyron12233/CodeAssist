@@ -23,7 +23,13 @@ import dev.ide.lang.signature.SignatureInfo
  * multi-resolve for method calls and the class's constructors for `new` — renders each overload's signature
  * with per-parameter label ranges, and reports the active parameter from the comma count before the caret.
  */
-class JavaSignatureHelp(private val env: JavaEnvironment) : SignatureHelpService {
+class JavaSignatureHelp(
+    private val env: JavaEnvironment,
+    /** A method's parameter names, real ones in place of a compiled method's made-up `p`/`p1`. */
+    private val paramNames: (PsiMethod) -> List<String> = { m -> m.parameterList.parameters.map { it.name } },
+    /** A compiled method's plain-text javadoc from sources or bundled docs (its PSI carries none). */
+    private val libraryDoc: (PsiMethod) -> String? = { null },
+) : SignatureHelpService {
 
     // Under the parse lock (exclusive): `multiResolve` / `resolve` can lazily `buildTree` classpath PSI, which
     // must not race another parse on ART (same rule as JavaSemanticHighlighter). `withParseLock` isn't inline,
@@ -67,16 +73,17 @@ class JavaSignatureHelp(private val env: JavaEnvironment) : SignatureHelpService
     private fun signatureInfo(m: PsiMethod): SignatureInfo {
         val sb = StringBuilder(m.name).append('(')
         val params = ArrayList<ParameterInfo>()
+        val names = paramNames(m)
         m.parameterList.parameters.forEachIndexed { i, p ->
             if (i > 0) sb.append(", ")
             val start = sb.length
-            sb.append(p.type.presentableText).append(' ').append(p.name)
+            sb.append(p.type.presentableText).append(' ').append(names[i])
             params += ParameterInfo(label = sb.substring(start), labelStart = start, labelEnd = sb.length)
         }
         sb.append(')')
         if (!m.isConstructor) m.returnType?.let { sb.append(": ").append(it.presentableText) }
         // Clean the raw `/** … */` block to plain text (the peek/doc panel shows this verbatim).
-        val doc = m.docComment?.text?.let { JavaDoc.clean(it) }?.takeIf { it.isNotEmpty() }
+        val doc = m.docComment?.text?.let { JavaDoc.clean(it) }?.takeIf { it.isNotEmpty() } ?: libraryDoc(m)
         return SignatureInfo(sb.toString(), params, documentation = doc)
     }
 }

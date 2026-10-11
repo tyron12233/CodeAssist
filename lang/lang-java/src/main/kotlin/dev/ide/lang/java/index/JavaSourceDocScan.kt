@@ -43,8 +43,9 @@ internal object JavaSourceDocScan {
     private val GT_COUNT: Map<IElementType, Int> =
         mapOf(JavaTokenType.GT to 1, JavaTokenType.GTGT to 2, JavaTokenType.GTGTGT to 3)
 
-    fun scan(text: CharSequence): Map<String, Collection<SourceDocValue>> = runCatching { walk(text) }
-        .getOrDefault(emptyMap())
+    /** [rawDocs] keeps each javadoc block as written (`/** … */`, markup and tags) instead of cleaning it. */
+    fun scan(text: CharSequence, rawDocs: Boolean = false): Map<String, Collection<SourceDocValue>> =
+        runCatching { walk(text, rawDocs) }.getOrDefault(emptyMap())
 
     /** Lex into significant tokens (whitespace + line/block comments dropped; javadoc kept as a doc token). */
     private fun lex(text: CharSequence): List<Tok> {
@@ -70,7 +71,7 @@ internal object JavaSourceDocScan {
     /** One type on the nesting stack: its FQN, simple name, and the brace depth of its body. */
     private class Frame(val fqn: String, val simple: String, val bodyDepth: Int)
 
-    private fun walk(text: CharSequence): Map<String, Collection<SourceDocValue>> {
+    private fun walk(text: CharSequence, rawDocs: Boolean): Map<String, Collection<SourceDocValue>> {
         val toks = lex(text)
         val n = toks.size
         val out = HashMap<String, MutableList<SourceDocValue>>()
@@ -108,7 +109,7 @@ internal object JavaSourceDocScan {
         var i = 0
         while (i < n) {
             val tk = toks[i]
-            if (tk.isDoc) { pendingDoc = JavaDoc.clean(tk.text).ifEmpty { null }; i++; continue }
+            if (tk.isDoc) { pendingDoc = (if (rawDocs) tk.text else JavaDoc.clean(tk.text)).ifEmpty { null }; i++; continue }
             when (tk.type) {
                 JavaTokenType.PACKAGE_KEYWORD -> {
                     var j = i + 1
