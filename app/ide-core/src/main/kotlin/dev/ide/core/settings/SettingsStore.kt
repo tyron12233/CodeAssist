@@ -20,6 +20,8 @@ import dev.ide.core.settings.IdeSettings.Companion.MIN_REPARSE_DELAY_MS
 class SettingsStore(
     private val get: (String) -> String?,
     private val set: (String, String) -> Unit,
+    /** Writes several keys at once; [saveCodeStyle] saves its ~30 fields through this as ONE file write. */
+    private val setAll: (Map<String, String>) -> Unit = { it.forEach { (k, v) -> set(k, v) } },
 ) {
     fun load(): IdeSettings {
         val d = IdeSettings()
@@ -92,7 +94,8 @@ class SettingsStore(
 
     /** Persist a per-language code style profile under `codeStyle.<lang>.<field>`. */
     fun saveCodeStyle(languageId: String, s: CodeStyleSettings) {
-        fun p(name: String, v: String) = put("codeStyle.$languageId.$name", v)
+        val batch = LinkedHashMap<String, String>()
+        fun p(name: String, v: String) { batch[key("codeStyle.$languageId.$name")] = v }
         p("preset", s.preset)
         p("indentSize", s.indentSize.toString())
         p("continuationIndent", s.continuationIndent.toString())
@@ -120,6 +123,7 @@ class SettingsStore(
         p("spaceAfterTypeCast", s.spaceAfterTypeCast.toString())
         p("formatComments", s.formatComments.toString())
         p("wrapComments", s.wrapComments.toString())
+        setAll(batch)
     }
 
     private fun wrapOf(k: String, def: String): String =

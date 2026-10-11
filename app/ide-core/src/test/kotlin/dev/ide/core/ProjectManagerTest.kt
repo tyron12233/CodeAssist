@@ -42,6 +42,27 @@ class ProjectManagerTest {
         }
     }
 
+    /**
+     * Preferences are served from memory but still follow the file: a write from another manager on the same
+     * home (another process, like the `:build` daemon) is seen on the next read, and a batch lands in one write.
+     */
+    @Test
+    fun preferencesFollowWritesFromAnotherManager() {
+        withTempDir("cm-prefs") { root ->
+            val ui = ProjectManager.desktop(root.resolve("projects"))
+            val daemon = ProjectManager.desktop(root.resolve("projects"))
+            assertEquals(null, ui.preference("a"))
+
+            ui.setPreferences(mapOf("a" to "1", "b" to "2"))
+            assertEquals("1", ui.preference("a"))
+            assertEquals("2", daemon.preference("b"))
+
+            daemon.setPreference("a", "changed")
+            assertEquals("changed", ui.preference("a"), "the other manager's write must not be hidden by the cache")
+            assertEquals("2", ui.preference("b"))
+        }
+    }
+
     /** A backup zips project sources (and skips build outputs). */
     @Test
     fun backsUpProjectSourcesToZip() {

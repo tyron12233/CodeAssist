@@ -168,6 +168,8 @@ fun SettingsSliderRow(
     max: Int,
     step: Int,
     unit: String?,
+    /** Called once the drag or tap ends; a caller that persists should do it here, not on every step. */
+    onChangeFinished: (() -> Unit)? = null,
     onChange: (Int) -> Unit,
 ) {
     val steps = (((max - min) / step) - 1).coerceAtLeast(0)
@@ -184,6 +186,7 @@ fun SettingsSliderRow(
             },
             valueRange = min.toFloat()..max.toFloat(),
             steps = steps,
+            onValueChangeFinished = onChangeFinished,
             colors = SliderDefaults.colors(
                 thumbColor = MaterialTheme.colorScheme.primary,
                 activeTrackColor = MaterialTheme.colorScheme.primary,

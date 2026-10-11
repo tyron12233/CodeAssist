@@ -363,8 +363,12 @@ private fun ControlRow(
         is UiSettingControl.Toggle -> SettingsToggleRow(title, description, stored?.toBooleanStrictOrNull() ?: c.value) {
             onSet(pageId, c.key, it.toString()); onStructuralChange()
         }
-        is UiSettingControl.Slider -> SettingsSliderRow(title, description, stored?.toIntOrNull() ?: c.value, c.min, c.max, c.step, localizedUnit(c.unit)) {
-            onSet(pageId, c.key, it.toString())
+        // A drag only moves the mirror; the value is saved (and the app re-reads its settings) once, on release.
+        is UiSettingControl.Slider -> SettingsSliderRow(
+            title, description, stored?.toIntOrNull() ?: c.value, c.min, c.max, c.step, localizedUnit(c.unit),
+            onChangeFinished = { values["$pageId.${c.key}"]?.let { onSet(pageId, c.key, it) } },
+        ) {
+            values["$pageId.${c.key}"] = it.toString()
         }
         is UiSettingControl.Choice -> SettingsChoiceRow(title, description, stored ?: c.value, c.options.map { it.value to localizedOptionLabel(pageId, c.key, it) }) {
             onSet(pageId, c.key, it); onStructuralChange()

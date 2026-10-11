@@ -156,6 +156,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
     private val settingsStore = SettingsStore(
         get = { k -> ctx.manager?.preference(k) },
         set = { k, v -> ctx.manager?.setPreference(k, v) },
+        setAll = { ctx.manager?.setPreferences(it) },
     )
 
     override fun settings(): UiSettings {

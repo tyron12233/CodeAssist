@@ -358,6 +358,10 @@ class IdeServices private constructor(
      *  backend points at this engine on project swap. */
     private val env: ApplicationEnvironment,
 ) : AutoCloseable {
+    // The project-settings cache (see [cachedProjectSettings]), declared first: initializers below read settings.
+    private val projectSettingsLock = Any()
+    private var projectSettingsCache: java.util.Properties? = null
+    private var projectSettingsStamp: List<Any?>? = null
 
     // Phase-0 build-process-isolation instrumentation (docs/build-process-isolation.md): the most recent
     // build/run and project-open heap peaks. [lastBuildPeak] is read by the analytics bridge to attach to
@@ -1714,12 +1718,32 @@ class IdeServices private constructor(
     private val inspectionsFile: Path get() = store.rootPath.resolve(".platform/inspections.properties")
 
     /** Read a per-project generic-settings value (the store behind PROJECT-scoped settings pages). */
-    fun projectPref(key: String): String? = loadProps(projectSettingsFile).getProperty(key)
+    fun projectPref(key: String): String? = cachedProjectSettings().getProperty(key)
 
     /** Write a per-project generic-settings value. */
-    fun setProjectPref(key: String, value: String) {
-        val props = loadProps(projectSettingsFile).apply { setProperty(key, value) }
+    fun setProjectPref(key: String, value: String) = synchronized(projectSettingsLock) {
+        val props = java.util.Properties().apply { putAll(cachedProjectSettings()) }
+        props.setProperty(key, value)
+        projectSettingsCache = props
         storeProps(projectSettingsFile, props, "CodeAssist project settings")
+        projectSettingsStamp = fileStamp(projectSettingsFile)
+    }
+
+    /** The file's id, modification time and size: what changes when this or another process rewrites it. */
+    private fun fileStamp(file: Path): List<Any?>? = runCatching {
+        val a = Files.readAttributes(file, java.nio.file.attribute.BasicFileAttributes::class.java)
+        listOf(a.fileKey(), a.lastModifiedTime().toMillis(), a.size())
+    }.getOrNull()
+
+    /**
+     * The project settings as last read, re-read only when the file changed. Each project-scoped control on a
+     * Settings page reads one key, and opening and parsing the file per key (often on shared storage, on the
+     * UI thread) made those pages lag. The result is shared: callers must not mutate it.
+     */
+    private fun cachedProjectSettings(): java.util.Properties = synchronized(projectSettingsLock) {
+        val stamp = fileStamp(projectSettingsFile)
+        projectSettingsCache?.takeIf { stamp == projectSettingsStamp }?.let { return it }
+        return loadProps(projectSettingsFile).also { projectSettingsCache = it; projectSettingsStamp = stamp }
     }
 
     // --- active build variant (per module) -----------------------------------------------------

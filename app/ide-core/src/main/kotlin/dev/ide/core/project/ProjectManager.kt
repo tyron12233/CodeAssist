@@ -57,6 +57,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.Properties
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -158,6 +159,13 @@ class ProjectManager private constructor(
     private val hostVersion: String? = null,
 ) {
     private val log = dev.ide.platform.log.Log.logger("ide.projects")
+
+    // Declared before anything the constructor runs: [env] below already reads preferences.
+    private val prefsLock = Any()
+
+    /** The last-read prefs and the file identity it was read from; see [cachedPrefs]. Guarded by [prefsLock]. */
+    private var prefsCache: Properties? = null
+    private var prefsStamp: PrefsStamp? = null
 
     init {
         Files.createDirectories(projectsRoot)
@@ -296,7 +304,7 @@ class ProjectManager private constructor(
         val dirs = runCatching { Files.newDirectoryStream(projectsRoot).use { it.toList() } }
             .onFailure { log.warn("project list: $projectsRoot could not be read", it) }
             .getOrElse { return emptyList() }
-        val prefs = loadPrefs()
+        val prefs = cachedPrefs()
         return dirs
             .filter { runCatching { Files.isDirectory(it) && ModelPersistence.exists(it.toString()) }.getOrDefault(false) }
             .map { dir ->
@@ -511,7 +519,7 @@ class ProjectManager private constructor(
 
     // --- preferences (onboarding flag, last project, …) ---
 
-    fun preference(key: String): String? = loadPrefs().getProperty(key)
+    fun preference(key: String): String? = cachedPrefs().getProperty(key)
 
     /**
      * Persist one app-global preference.
@@ -523,8 +531,22 @@ class ProjectManager private constructor(
      * never a crash, since callers are UI toggles and background bookkeeping (a failing write was killing
      * the process from `setPreference` in the field).
      */
-    fun setPreference(key: String, value: String) {
-        val props = loadPrefs().apply { setProperty(key, value) }
+    fun setPreference(key: String, value: String) = setPreferences(mapOf(key to value))
+
+    /**
+     * Persist several app-global preferences in ONE write. A caller saving a group of keys (a whole code
+     * style profile) must use this: one [setPreference] per key rewrote the file once per key on the UI thread.
+     */
+    fun setPreferences(values: Map<String, String>) {
+        if (values.isEmpty()) return
+        synchronized(prefsLock) { writePrefs(values) }
+    }
+
+    private fun writePrefs(values: Map<String, String>) {
+        val props = Properties().apply { putAll(cachedPrefs()) }
+        values.forEach { (k, v) -> props.setProperty(k, v) }
+        // The in-memory copy takes the new values even if the disk write fails, so the session sees them.
+        prefsCache = props
         runCatching {
             Files.createDirectories(prefsFile.parent)
             val tmp = prefsFile.resolveSibling("${prefsFile.fileName}.tmp")
@@ -534,7 +556,8 @@ class ProjectManager private constructor(
             } catch (_: AtomicMoveNotSupportedException) {
                 Files.move(tmp, prefsFile, StandardCopyOption.REPLACE_EXISTING)
             }
-        }.onFailure { log.warn("preference '$key' could not be saved to $prefsFile", it) }
+            prefsStamp = stampOf(prefsFile)
+        }.onFailure { log.warn("preferences ${values.keys} could not be saved to $prefsFile", it) }
     }
 
     // --- built-in plugin enable/disable (app-global; applied on the next launch) ---
@@ -569,6 +592,28 @@ class ProjectManager private constructor(
 
     /** The host's restarter, or null on a host that cannot restart itself (desktop, tests). */
     fun appRestarter(): AppRestarter? = env.container.getServiceOrNull(APP_RESTARTER)
+
+    /** What tells this process the prefs file changed under it: the id of the file (a write from another
+     *  process renames a new one over it), its modification time and its size. */
+    private data class PrefsStamp(val fileKey: Any?, val modified: Long, val size: Long)
+
+    private fun stampOf(file: Path): PrefsStamp? = runCatching {
+        val a = Files.readAttributes(file, BasicFileAttributes::class.java)
+        PrefsStamp(a.fileKey(), a.lastModifiedTime().toMillis(), a.size())
+    }.getOrNull()
+
+    /**
+     * The prefs as last read, re-read only when the file changed. Every [preference] call used to open and
+     * parse the whole file, and Settings reads dozens of keys per frame it rebuilds (one per control, about
+     * 30 per [dev.ide.core.settings.SettingsStore.load]), on the UI thread: that was the lag in the settings
+     * screens. One stat per read still sees a write from another process (the `:build` daemon shares this
+     * file). Callers must not mutate the result.
+     */
+    private fun cachedPrefs(): Properties = synchronized(prefsLock) {
+        val stamp = stampOf(prefsFile)
+        prefsCache?.takeIf { stamp == prefsStamp }?.let { return it }
+        return loadPrefs().also { prefsCache = it; prefsStamp = stamp }
+    }
 
     private fun loadPrefs(): Properties = Properties().apply {
         // Unreadable prefs mean defaults, not a failure to start: every caller has one.
