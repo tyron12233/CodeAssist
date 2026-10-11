@@ -2009,4 +2009,11 @@ We never collect your code, file or project names, which features you use, or an
     <string name="block_scope_loading">Finding what this scope can call…</string>
     <string name="block_scope_none">This scope adds nothing to call.</string>
     <string name="block_lambda_page">Lambda</string>
+    <string name="switcher_title">Switcher</string>
+    <string name="switcher_recent_title">Recent Files</string>
+    <string name="switcher_hint">Release Ctrl to open · Del closes a tab</string>
+    <string name="switcher_recent_hint">Type to filter · Enter opens · Esc closes</string>
+    <string name="switcher_no_match">No matching files</string>
+    <string name="shortcut_no_build_task">Nothing to build on its own here. Use Run instead.</string>
+    <string name="shortcut_nothing_to_reopen">No closed tab to reopen</string>
 </resources>

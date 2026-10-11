@@ -23,6 +23,7 @@ import dev.ide.core.project.CaprojFormat
 import dev.ide.core.IdeServicesBackend
 import dev.ide.ui.CodeAssistApp
 import dev.ide.ui.editor.preview.OffscreenPreviewRenderer
+import dev.ide.ui.ext.AppKeys
 import dev.ide.ui.ext.PreviewSnapshots
 import dev.ide.android.preview.SurfaceComposer
 import dev.ide.ui.backend.FileActions
@@ -301,6 +302,23 @@ class MainActivity : ComponentActivity() {
                 else -> Splash("Starting CodeAssist…")
             }
         }
+    }
+
+    /**
+     * An app shortcut pressed while nothing in the Compose content has focus. With a focused node the root
+     * listener in [CodeAssistApp] already had it; this only sees a key the content left unconsumed.
+     */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean =
+        super.dispatchKeyEvent(event) || AppKeys.onKey(androidx.compose.ui.input.key.KeyEvent(event))
+
+    /** The app's shortcuts in Android's Keyboard Shortcuts list (Meta+/). */
+    override fun onProvideKeyboardShortcuts(
+        data: MutableList<android.view.KeyboardShortcutGroup>,
+        menu: android.view.Menu?,
+        deviceId: Int,
+    ) {
+        super.onProvideKeyboardShortcuts(data, menu, deviceId)
+        data.addAll(AppKeyboardShortcuts.groups())
     }
 
     override fun onNewIntent(intent: Intent) {

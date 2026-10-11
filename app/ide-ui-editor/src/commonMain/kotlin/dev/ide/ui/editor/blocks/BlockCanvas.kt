@@ -42,7 +42,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.PointerType
+import dev.ide.ui.platform.isMouse
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.pointerInput
@@ -257,7 +257,7 @@ internal fun BlockCanvas(
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    val mouse = down.type == PointerType.Mouse
+                    val mouse = down.isMouse
                     val idx = currentIndex
                     val at = state.toCanvas(down.position)
                     val hit = idx.hitAt(at)

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
@@ -28,6 +29,7 @@ import dev.ide.ui.components.BottomSheet
 import dev.ide.ui.components.CommandPalette
 import dev.ide.ui.actions.applyActionEffects
 import dev.ide.ui.components.PaletteEditorTarget
+import dev.ide.ui.components.PaletteFilter
 import dev.ide.ui.components.DropdownOverlay
 import dev.ide.ui.LocalPluginNavigator
 import dev.ide.ui.ext.UiPluginHost
@@ -56,11 +58,14 @@ internal fun PaletteOverlay(
         state, onToggleTheme, onOpenHub, onOpenIconManager, onOpenDependencies, onOpenModuleConfig, onCloseProject,
         onDone = { state.paletteOpen = false },
     )
+    // A scope set by a go-to shortcut lasts for that opening only; the toolbar button opens on All.
+    LaunchedEffect(state.paletteOpen) { if (!state.paletteOpen) state.paletteFilter = null }
     DropdownOverlay(
         visible = state.paletteOpen,
         onDismiss = { state.paletteOpen = false },
     ) {
         CommandPalette(
+            initialFilter = PaletteFilter.entries.firstOrNull { it.name == state.paletteFilter } ?: PaletteFilter.All,
             files = openableFiles(state.tree),
             backend = state.backend,
             uiHost = paletteHost,

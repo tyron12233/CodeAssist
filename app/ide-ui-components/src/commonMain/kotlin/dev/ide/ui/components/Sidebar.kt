@@ -238,7 +238,7 @@ fun ActivityRail(
                         ) {
                             header?.invoke(this)
                             panels.forEach { panel ->
-                                StripeButton(panel.icon, panel.title, active = panel.id == selectedId) { onSelect(panel.id) }
+                                StripeButton(panel.icon, withShortcut(panel.title, panel.id), active = panel.id == selectedId) { onSelect(panel.id) }
                             }
                         }
                         if (footer != null) {
@@ -522,4 +522,16 @@ fun SegmentedPanelSwitcher(
             }
         }
     }
+}
+
+/** A stripe button's tooltip with the shortcut that toggles its panel, when it has one and a keyboard is attached. */
+@Composable
+private fun withShortcut(title: String, panelId: String): String {
+    val actionId = when (panelId) {
+        "files" -> dev.ide.ui.ext.AppCommands.TOGGLE_PROJECT
+        "search" -> dev.ide.ui.ext.AppCommands.FIND_IN_FILES
+        else -> return title
+    }
+    if (!dev.ide.ui.platform.hasHardwareKeyboard()) return title
+    return dev.ide.ui.platform.shortcutTextFor(actionId)?.let { "$title ($it)" } ?: title
 }

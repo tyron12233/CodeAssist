@@ -21,6 +21,12 @@ expect val isMobilePlatform: Boolean
 expect val hasSystemBack: Boolean
 
 /**
+ * Whether shortcuts here are written with the Command key (macOS, iPadOS) rather than Control. Decides how a
+ * keymap's `primary` modifier is shown in a menu; the keymap itself accepts either key everywhere.
+ */
+expect val usesCommandKey: Boolean
+
+/**
  * Dispatcher for blocking disk I/O (the JVM `Dispatchers.IO` pool on every target). File reads must run here,
  * never on the Compose main thread: on device a tap on a file-tree row that read the file inline stalled the
  * UI thread on FUSE-backed storage and tripped "App not responding". `Dispatchers.IO` isn't visible in

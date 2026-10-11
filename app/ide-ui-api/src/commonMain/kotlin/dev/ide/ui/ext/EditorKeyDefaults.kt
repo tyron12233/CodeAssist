@@ -77,6 +77,8 @@ val EDITOR_KEY_DEFAULTS: List<EditorKeyDefault> = listOf(
     EditorKeyDefault("editor.moveLineDown", "Down", alt = true, shift = true),
     EditorKeyDefault("editor.codeActions", "Enter", alt = true),
     EditorKeyDefault("editor.codeActionsAlternate", "Period", primary = true),
+    // The keyboard's Menu key. Shift+F10 would be the Windows convention, but IntelliJ gives it to Run.
+    EditorKeyDefault("editor.showContextMenu", "Menu"),
 )
 
 /**

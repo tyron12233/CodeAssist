@@ -342,6 +342,7 @@ internal fun EditorCenter(
                                 findEpoch = findEpoch,
                                 formatEpoch = formatEpoch,
                                 optimizeImportsEpoch = optimizeImportsEpoch,
+                                focusEpoch = state.editorFocusEpoch,
                                 fontScale = state.editorFontScale,
                                 onFontScaleChange = { state.editorFontScale = it },
                                 completionAutoPopup = state.completionAutoPopup,

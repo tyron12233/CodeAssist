@@ -74,7 +74,14 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-class PaletteEntry(val section: String, val label: String, val sub: String?, val run: () -> Unit)
+class PaletteEntry(
+    val section: String,
+    val label: String,
+    val sub: String?,
+    /** The command's action id, for its shortcut hint; null for a file or a symbol. */
+    val actionId: String? = null,
+    val run: () -> Unit,
+)
 
 /**
  * The IntelliJ-style scope tabs across the top of the palette: a narrowing lens over the result sections.
@@ -114,9 +121,11 @@ fun CommandPalette(
     /** Applies a command's effects. Supplied by the host, which owns the editor and navigation; without it
      *  the palette can only honor "open this file". */
     onEffects: suspend (List<UiActionEffect>) -> Unit = { },
+    /** The scope tab to open on: the go-to shortcuts open it on Files, Symbols, ... */
+    initialFilter: PaletteFilter = PaletteFilter.All,
 ) {
     var query by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf(PaletteFilter.All) }
+    var filter by remember(initialFilter) { mutableStateOf(initialFilter) }
     var symbols by remember { mutableStateOf<List<SymbolHit>>(emptyList()) }
     var members by remember { mutableStateOf<List<SymbolHit>>(emptyList()) }
     val focus = remember { FocusRequester() }
@@ -189,8 +198,8 @@ fun CommandPalette(
     val allEntries = buildList {
         if (q.isEmpty()) {
             // Engine commands (Run/Stop/Re-index + dex plugins) and UI commands (nav/theme + in-UI plugins).
-            pluginCommands.forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null) { runCommand(cmd.id) }) }
-            uiCommands.forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null) { cmd.perform(uiHost) }) }
+            pluginCommands.forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null, cmd.id) { runCommand(cmd.id) }) }
+            uiCommands.forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null, cmd.id) { cmd.perform(uiHost) }) }
             files.take(12).forEach { f -> add(PaletteEntry("Go to", f.name, null) { onOpenFile(f) }) }
         } else {
             symbols.forEach { s ->
@@ -202,9 +211,9 @@ fun CommandPalette(
                 .forEach { f -> add(PaletteEntry("Files", f.name, null) { onOpenFile(f) }) }
             members.forEach { m -> add(PaletteEntry("Members", m.name, m.detail) {}) }
             pluginCommands.filter { it.text.contains(q, ignoreCase = true) }
-                .forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null) { runCommand(cmd.id) }) }
+                .forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null, cmd.id) { runCommand(cmd.id) }) }
             uiCommands.filter { it.text.contains(q, ignoreCase = true) }
-                .forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null) { cmd.perform(uiHost) }) }
+                .forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null, cmd.id) { cmd.perform(uiHost) }) }
         }
     }
     val entries = allEntries.filter { filter.keeps(it.section) }
@@ -335,6 +344,7 @@ private fun PaletteRow(entry: PaletteEntry, onClose: () -> Unit) {
             Spacer(Modifier.width(8.dp))
             Text(entry.sub, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+        entry.actionId?.let { ShortcutHint(it) }
     }
 }
 

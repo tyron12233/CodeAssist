@@ -31,6 +31,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -109,6 +111,9 @@ internal fun SearchScreen(
     // Hoisted so a search survives the panel being disposed on navigate-and-return (see [SearchState]). The
     // default keeps the screen self-contained for standalone/preview use; the panel host passes a remembered one.
     searchState: SearchState = remember { SearchState() },
+    /** Bumped by the Find in Files shortcut: switch to Text, seed the query, and focus it. 0 = no request. */
+    findInFilesEpoch: Int = 0,
+    findInFilesSeed: () -> String? = { null },
 ) {
     var tab by searchState.tab
     var query by searchState.query
@@ -117,6 +122,13 @@ internal fun SearchScreen(
     var matches by searchState.matches
     var searching by searchState.searching
     var options by searchState.options
+    val queryFocus = remember { FocusRequester() }
+    LaunchedEffect(findInFilesEpoch) {
+        if (findInFilesEpoch == 0) return@LaunchedEffect
+        tab = SearchTab.Text
+        findInFilesSeed()?.let { query = it }
+        runCatching { queryFocus.requestFocus() }
+    }
 
     // Debounced query — re-runs on the active tab and (for text) the options. ≥2 chars, like the palette.
     LaunchedEffect(query, tab, options) {
@@ -161,7 +173,7 @@ internal fun SearchScreen(
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().focusRequester(queryFocus),
                     )
                 }
                 if (searching) CircularProgressIndicator(Modifier.size(14.dp), color = MaterialTheme.colorScheme.outline, strokeWidth = 2.dp)

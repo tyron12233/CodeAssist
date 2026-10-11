@@ -57,6 +57,7 @@ object EditorCommands {
     const val MOVE_LINE_DOWN = "editor.moveLineDown"
     const val CODE_ACTIONS = "editor.codeActions"
     const val CODE_ACTIONS_ALTERNATE = "editor.codeActionsAlternate"
+    const val SHOW_CONTEXT_MENU = "editor.showContextMenu"
 }
 
 /** Resolve [ev] against the installed keymap, in the editor context. */

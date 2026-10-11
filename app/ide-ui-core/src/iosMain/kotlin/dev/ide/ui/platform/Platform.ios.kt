@@ -12,6 +12,8 @@ actual val isMobilePlatform: Boolean = true
 // iOS has no system back; every way out of something is an affordance the app draws itself.
 actual val hasSystemBack: Boolean = false
 
+actual val usesCommandKey: Boolean = true
+
 // `Dispatchers.IO` is internal on Native in coroutines 1.11.0, and Default is the CPU pool — the wrong
 // place for work that blocks, now that this host has a backend that reads files and talks to the store.
 // See `dev.ide.platform.ioDispatcher` for what replaced it and why; it is one pool for the whole app.

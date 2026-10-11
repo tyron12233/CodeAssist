@@ -3,6 +3,7 @@ package dev.ide.ui.components
 import dev.ide.ui.itemsIndexedKeyed
 import dev.ide.ui.platform.claimWindowTitleBar
 import dev.ide.ui.platform.touchInput
+import dev.ide.ui.ext.AppCommands
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedContent
@@ -524,9 +525,14 @@ private fun OverflowItem(
     label: String,
     active: Boolean = false,
     enabled: Boolean = true,
+    /** The app command this row runs, for its shortcut hint. */
+    shortcutFor: String? = null,
     onClick: () -> Unit,
 ) {
-    CaMenuItem(label = label, onClick = onClick, icon = icon, enabled = enabled, selected = active)
+    CaMenuItem(
+        label = label, onClick = onClick, icon = icon, enabled = enabled, selected = active,
+        trailing = shortcutFor?.let { id -> { ShortcutHint(id) } },
+    )
 }
 
 /**
@@ -1244,8 +1250,13 @@ private fun EditorTab(
             }
         }
         CaDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            OverflowItem(CaIcons.close, stringResource(Res.string.close)) { menuOpen = false; onClose() }
-            OverflowItem(CaIcons.close, stringResource(Res.string.tab_close_others), enabled = canCloseOthers) {
+            OverflowItem(CaIcons.close, stringResource(Res.string.close), shortcutFor = AppCommands.CLOSE_TAB) {
+                menuOpen = false; onClose()
+            }
+            OverflowItem(
+                CaIcons.close, stringResource(Res.string.tab_close_others), enabled = canCloseOthers,
+                shortcutFor = AppCommands.CLOSE_OTHER_TABS,
+            ) {
                 menuOpen = false; onCloseOthers()
             }
             OverflowItem(CaIcons.chevronRight, stringResource(Res.string.tab_close_to_the_right), enabled = canCloseRight) {
@@ -1254,15 +1265,18 @@ private fun EditorTab(
             OverflowItem(CaIcons.chevronLeft, stringResource(Res.string.tab_close_to_the_left), enabled = canCloseLeft) {
                 menuOpen = false; onCloseToLeft()
             }
-            OverflowItem(CaIcons.close, stringResource(Res.string.tab_close_all)) { menuOpen = false; onCloseAll() }
+            OverflowItem(CaIcons.close, stringResource(Res.string.tab_close_all), shortcutFor = AppCommands.CLOSE_ALL_TABS) {
+                menuOpen = false; onCloseAll()
+            }
         }
     }
 }
 
-/** Leading file-type icon for a tab — the same glyph/badge the file tree shows, resolved from the file name
- *  ([fileIconId]). Files are always leaves, so a Folder-shaped id collapses to its closed glyph. */
+/** Leading file-type icon for a tab (and the file switcher's rows): the same glyph/badge the file tree shows,
+ *  resolved from the file name ([fileIconId]). Files are always leaves, so a Folder-shaped id collapses to its
+ *  closed glyph. */
 @Composable
-private fun TabFileIcon(name: String) {
+fun TabFileIcon(name: String) {
     when (val ic = TreeIcons.resolve(fileIconId(name))) {
         is TreeIcon.Glyph -> Icon(ic.image, null, Modifier.size(15.dp), tint = resolveTint(ic.tint))
         is TreeIcon.Folder -> Icon(ic.closed, null, Modifier.size(15.dp), tint = resolveTint(ic.tint))

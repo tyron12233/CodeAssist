@@ -42,6 +42,8 @@ private val KEY_NAMES: Map<Key, String> = buildMap {
     put(Key.Backspace, "Backspace")
     put(Key.Delete, "Delete")
     put(Key.Insert, "Insert")
+    // The context-menu key (between the right Alt and Ctrl on a PC keyboard).
+    put(Key.Menu, "Menu")
 
     put(Key.Slash, "Slash"); put(Key.Backslash, "Backslash")
     // Both the main-row and numpad forms of the zoom keys, since a shortcut written `primary+Equals` should

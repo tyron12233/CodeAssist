@@ -36,7 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.pointer.PointerType
+import dev.ide.ui.platform.isMouse
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -218,7 +218,7 @@ private fun PaletteBlock(entry: PaletteEntry, drag: BlockDrag, ink: BlockInk, g:
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    val mouse = down.type == PointerType.Mouse
+                    val mouse = down.isMouse
                     val slop = viewConfiguration.touchSlop
                     // Touch lifts on a long-press (a plain swipe scrolls the list); a mouse lifts on movement.
                     val lift = if (mouse) {

@@ -13,15 +13,17 @@ import dev.ide.plugin.keymap.KeyBinding
 import dev.ide.plugin.keymap.KeyContext
 import dev.ide.plugin.keymap.KeyPress
 import dev.ide.plugin.keymap.Shortcut
+import dev.ide.ui.ext.APP_KEY_DEFAULTS
 import dev.ide.ui.ext.EDITOR_KEY_DEFAULTS
 import dev.ide.ui.ext.displayShortcut
 import dev.ide.ui.ext.KeymapHost
 
 /**
- * The keymap, wired: the editor's defaults as bindings, the resolver the UI asks, and the Settings page the
- * user rebinds from.
+ * The keymap, wired: the editor's and the app's defaults as bindings, the resolver the UI asks, and the Settings
+ * page the user rebinds from.
  *
- * The defaults themselves live in `dev.ide.ui.ext.EDITOR_KEY_DEFAULTS` rather than here, and this reads them.
+ * The defaults themselves live in `dev.ide.ui.ext.EDITOR_KEY_DEFAULTS` and `APP_KEY_DEFAULTS` rather than
+ * here, and this reads them.
  * The editor needs them with no engine present (a preview, a snapshot test), and the engine needs them as
  * bindings so a plugin can see what is taken and the user can change one; one table read from two directions
  * is the only arrangement where those cannot drift.
@@ -56,6 +58,20 @@ class EditorKeymapPlugin(
             reg.register(KEY_BINDING_EP, KeyBinding(default.actionId, shortcut, KeyContext.Editor))
         }
 
+        // The app-wide commands (tabs, go-to, tool windows, run): Global, so they fire wherever focus is, the
+        // editor included. Every spec is a binding, the aliases too; the first is the one menus show and the
+        // one a user's rebinding replaces (an override replaces all of an action's defaults).
+        for (default in APP_KEY_DEFAULTS) {
+            for (spec in default.specs) {
+                val shortcut = Shortcut.parse(spec)
+                if (shortcut == null) {
+                    log.warn("built-in shortcut '$spec' for ${default.actionId} did not parse")
+                    continue
+                }
+                reg.register(KEY_BINDING_EP, KeyBinding(default.actionId, shortcut, KeyContext.Global))
+            }
+        }
+
         // The resolver reads the extension registry live, so it must be built over the same one this
         // registration writes to. `contributeVia` is the documented way to reach it and runs synchronously.
         lateinit var resolver: KeymapResolver
@@ -79,6 +95,8 @@ class EditorKeymapPlugin(
             labeler = { actionId -> resolver.shortcutFor(actionId)?.let(::displayLabel) },
         )
         reg.onDispose { installation.dispose() }
+        val specs = KeymapHost.installSpecs { actionId -> resolver.shortcutFor(actionId)?.toString() }
+        reg.onDispose { specs.dispose() }
 
         reg.register(SETTINGS_PAGE_EP, KeymapSettingsPage(resolver))
 
@@ -93,12 +111,12 @@ class EditorKeymapPlugin(
     /** The user's rebindings, as `actionId -> spec`, read fresh so a change applies without a restart. */
     private fun userBindings(): Map<String, String> {
         val out = LinkedHashMap<String, String>()
-        for (default in EDITOR_KEY_DEFAULTS) {
-            val stored = preference(preferenceKey(default.actionId)) ?: continue
+        for ((actionId, spec) in defaultSpecs()) {
+            val stored = preference(preferenceKey(actionId)) ?: continue
             // A stored value equal to the default is not an override; skipping it keeps the resolver's
             // override list to what the user actually changed.
-            if (stored == default.spec) continue
-            out[default.actionId] = stored
+            if (stored == spec) continue
+            out[actionId] = stored
         }
         return out
     }
@@ -120,32 +138,41 @@ class EditorKeymapPlugin(
 
         override fun controls(): List<SettingControl> {
             val conflicts = resolver.conflicts()
-            return EDITOR_KEY_DEFAULTS.map { default ->
-                val inForce = resolver.shortcutFor(default.actionId)?.toString()
-                val contested = inForce != null && conflicts.containsKey(inForce)
-                SettingControl.Shortcut(
-                    key = preferenceKey(default.actionId),
-                    title = commandTitle(default.actionId),
+            fun control(actionId: String, title: String, default: String, group: String): SettingControl {
+                val inForce = resolver.shortcutFor(actionId)?.toString()
+                // An action's own aliases share nothing with each other, so only another command is a conflict.
+                val others = inForce?.let { conflicts[it] }?.filter { it != actionId }.orEmpty()
+                return SettingControl.Shortcut(
+                    key = preferenceKey(actionId),
+                    title = title,
                     description = buildString {
-                        if (contested) {
+                        if (others.isNotEmpty()) {
                             append("Also bound to ")
-                            append(
-                                conflicts.getValue(inForce).filter { it != default.actionId }
-                                    .joinToString(", ") { commandTitle(it) },
-                            )
+                            append(others.joinToString(", ") { titleOf(it) })
                             append(". ")
                         }
                         append("Press a shortcut to change it; Backspace clears it.")
                     },
-                    default = default.spec,
-                    group = "Editor",
+                    default = default,
+                    group = group,
                 )
             }
+            return APP_KEY_DEFAULTS.map { control(it.actionId, it.title, it.specs.firstOrNull().orEmpty(), it.group) } +
+                EDITOR_KEY_DEFAULTS.map { control(it.actionId, commandTitle(it.actionId), it.spec, "Editor") }
         }
     }
 
     private companion object {
         fun preferenceKey(actionId: String) = "keymap.$actionId"
+
+        /** Every bindable command's default spec (the first, for an app command with aliases; "" for none). */
+        fun defaultSpecs(): List<Pair<String, String>> =
+            APP_KEY_DEFAULTS.map { it.actionId to it.specs.firstOrNull().orEmpty() } +
+                EDITOR_KEY_DEFAULTS.map { it.actionId to it.spec }
+
+        /** The title a command is listed under: an app command's own, else derived from its id. */
+        fun titleOf(actionId: String): String =
+            APP_KEY_DEFAULTS.firstOrNull { it.actionId == actionId }?.title ?: commandTitle(actionId)
 
         /** `editor.goToDeclaration` as `Go to declaration`. */
         fun commandTitle(actionId: String): String {

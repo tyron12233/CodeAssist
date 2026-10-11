@@ -150,7 +150,8 @@ class EditorKeymapTest {
 
     @Test
     fun everyKeyADefaultNamesIsAKeyTheToolkitCanReport() {
-        val named = EDITOR_KEY_DEFAULTS.mapTo(HashSet()) { it.key }
+        val named = EDITOR_KEY_DEFAULTS.mapTo(HashSet()) { it.key } +
+            dev.ide.ui.ext.APP_KEY_DEFAULTS.flatMap { d -> d.specs.map { it.substringAfterLast('+') } }
         val known = KNOWN_KEYS.mapNotNull { keymapKeyName(it) }.toSet()
         assertEquals(
             emptySet(),
@@ -227,7 +228,7 @@ class EditorKeymapTest {
             Key.F1, Key.F2, Key.F3, Key.F4, Key.F5, Key.F6, Key.F7, Key.F8, Key.F9, Key.F10, Key.F11, Key.F12,
             Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight,
             Key.MoveHome, Key.MoveEnd, Key.PageUp, Key.PageDown,
-            Key.Enter, Key.Escape, Key.Tab, Key.Spacebar, Key.Backspace, Key.Delete, Key.Insert,
+            Key.Enter, Key.Escape, Key.Tab, Key.Spacebar, Key.Backspace, Key.Delete, Key.Insert, Key.Menu,
             Key.Slash, Key.Backslash, Key.Minus, Key.Equals, Key.Comma, Key.Period,
             Key.Semicolon, Key.Apostrophe, Key.Grave, Key.LeftBracket, Key.RightBracket,
         )

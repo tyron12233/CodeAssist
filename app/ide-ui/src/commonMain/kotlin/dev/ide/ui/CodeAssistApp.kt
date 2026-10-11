@@ -1,5 +1,8 @@
 package dev.ide.ui
 
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import dev.ide.ui.ext.AppKeys
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import dev.ide.ui.components.WindowTitleStrip
@@ -158,7 +161,13 @@ fun CodeAssistApp(
             BuildAdInterstitial(backend, app.adController)
             // Mouse or touch, from the last pointer event, for the parts of the UI that size and reveal by pointer.
             PointerInputModeHost {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                // App-wide shortcuts. At the root so they see a key on its way down (the switcher's modal keys,
+                // double Shift) and, last, any key nothing inside consumed. On Android this also runs before
+                // Compose's own Tab focus traversal, which would otherwise eat Ctrl+Tab.
+                Surface(
+                    Modifier.fillMaxSize().onPreviewKeyEvent(AppKeys::onPreviewKey).onKeyEvent(AppKeys::onKey),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
                     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                         // Desktop with a custom title bar: the title strip for screens that draw none of their own.
                         WindowTitleStrip(title = "CodeAssist")

@@ -5,6 +5,7 @@ import dev.ide.plugin.keymap.KEY_BINDING_EP
 import dev.ide.plugin.keymap.KeyBinding
 import dev.ide.plugin.keymap.KeyContext
 import dev.ide.plugin.keymap.Shortcut
+import dev.ide.ui.ext.APP_KEY_DEFAULTS
 import dev.ide.ui.ext.EDITOR_KEY_DEFAULTS
 import dev.ide.ui.ext.KeymapHost
 import kotlin.test.AfterTest
@@ -41,6 +42,7 @@ class KeymapE2ETest {
         val environment = start()
 
         val bindings = environment.platform.extensions.extensions(KEY_BINDING_EP)
+            .filter { it.actionId.startsWith("editor.") }
         assertEquals(
             EDITOR_KEY_DEFAULTS.size,
             bindings.size,
@@ -102,10 +104,58 @@ class KeymapE2ETest {
         val outcome = KeymapHost.resolve("L", ctrl = true, alt = true, inEditor = true)
         assertEquals("editor.reformat", assertIs<KeymapHost.Outcome.Command>(outcome).actionId)
         assertEquals(
-            EDITOR_KEY_DEFAULTS.size,
+            ALL_DEFAULT_BINDINGS,
             environment.platform.extensions.extensions(KEY_BINDING_EP).size,
             "nothing was added or replaced",
         )
+    }
+
+    // ---- app-wide commands ----
+
+    @Test
+    fun appCommandsAreGlobalBindingsWithTheirAliases() {
+        val environment = start()
+
+        val app = environment.platform.extensions.extensions(KEY_BINDING_EP).filter { it.actionId.startsWith("app.") }
+        assertEquals(APP_KEY_DEFAULTS.sumOf { it.specs.size }, app.size, "every default spec, aliases included")
+        assertTrue(app.all { it.context == KeyContext.Global }, "app commands fire wherever focus is")
+    }
+
+    @Test
+    fun anAppCommandFiresInsideAndOutsideTheEditor() {
+        start()
+
+        for (inEditor in listOf(false, true)) {
+            val close = KeymapHost.resolve("W", ctrl = true, inEditor = inEditor)
+            assertEquals("app.closeTab", assertIs<KeymapHost.Outcome.Command>(close).actionId)
+            // The IntelliJ key for the same command is an alias, not a second command.
+            val alias = KeymapHost.resolve("F4", ctrl = true, inEditor = inEditor)
+            assertEquals("app.closeTab", assertIs<KeymapHost.Outcome.Command>(alias).actionId)
+        }
+        // Ctrl+Tab is the physical Control key, so Command+Tab (the macOS app switcher) is not taken.
+        val switcher = KeymapHost.resolve("Tab", ctrl = true)
+        assertEquals("app.switcher", assertIs<KeymapHost.Outcome.Command>(switcher).actionId)
+        assertIs<KeymapHost.Outcome.None>(KeymapHost.resolve("Tab", meta = true))
+    }
+
+    @Test
+    fun rebindingAnAppCommandReplacesItsAliases() {
+        start(mapOf("keymap.app.closeTab" to "primary+shift+Q"))
+
+        val rebound = KeymapHost.resolve("Q", ctrl = true, shift = true)
+        assertEquals("app.closeTab", assertIs<KeymapHost.Outcome.Command>(rebound).actionId)
+        assertIs<KeymapHost.Outcome.None>(KeymapHost.resolve("W", ctrl = true))
+        assertIs<KeymapHost.Outcome.None>(KeymapHost.resolve("F4", ctrl = true))
+        assertEquals("primary+shift+Q", KeymapHost.shortcutSpec("app.closeTab"))
+    }
+
+    @Test
+    fun noAppDefaultCollidesWithAnEditorDefault() {
+        val editor = EDITOR_KEY_DEFAULTS.map { it.spec }.toSet()
+        val clashes = APP_KEY_DEFAULTS.flatMap { d -> d.specs.filter { it in editor }.map { "$it (${d.actionId})" } }
+        assertTrue(clashes.isEmpty(), "app shortcuts that would shadow an editor command: $clashes")
+        val app = APP_KEY_DEFAULTS.flatMap { it.specs }
+        assertEquals(app.size, app.toSet().size, "two app commands share a default: ${app.groupBy { it }.filterValues { it.size > 1 }.keys}")
     }
 
     @Test
@@ -116,7 +166,7 @@ class KeymapE2ETest {
             .single { it.id == "keymap" }
 
         val controls = page.controls()
-        assertEquals(EDITOR_KEY_DEFAULTS.size, controls.size, "one row per bindable command")
+        assertEquals(EDITOR_KEY_DEFAULTS.size + APP_KEY_DEFAULTS.size, controls.size, "one row per bindable command")
         assertTrue(
             controls.all { it is dev.ide.platform.settings.SettingControl.Shortcut },
             "each row records a shortcut rather than asking the user to type a spec",
@@ -195,5 +245,9 @@ class KeymapE2ETest {
             assertIs<KeymapHost.Outcome.Command>(outcome).actionId,
             "a user's rebinding outranks any contribution, or rebinding would be advisory",
         )
+    }
+
+    private companion object {
+        val ALL_DEFAULT_BINDINGS = EDITOR_KEY_DEFAULTS.size + APP_KEY_DEFAULTS.sumOf { it.specs.size }
     }
 }

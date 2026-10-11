@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import androidx.compose.foundation.layout.padding
 import dev.ide.ui.theme.Ide
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.BorderStroke
@@ -220,4 +221,22 @@ fun CaMenuItem(
 @Composable
 fun CaMenuCheck() {
     Icon(CaIcons.check, null, Modifier.size(CaMenuDefaults.IconSize), tint = MaterialTheme.colorScheme.primary)
+}
+
+/**
+ * The shortcut in force for [actionId], set quietly at the end of a menu row or a palette row: `Ctrl+W` on
+ * Android, `⌘W` on a Mac. Nothing when the command has no shortcut, or when no hardware keyboard is attached
+ * (a phone has no use for it). Pass it as a [CaMenuItem]'s `trailing`.
+ */
+@Composable
+fun ShortcutHint(actionId: String, modifier: Modifier = Modifier) {
+    if (!dev.ide.ui.platform.hasHardwareKeyboard()) return
+    val text = dev.ide.ui.platform.shortcutTextFor(actionId) ?: return
+    Text(
+        text,
+        modifier = modifier.padding(start = 16.dp),
+        color = MaterialTheme.colorScheme.outline,
+        style = MaterialTheme.typography.labelMedium,
+        maxLines = 1,
+    )
 }

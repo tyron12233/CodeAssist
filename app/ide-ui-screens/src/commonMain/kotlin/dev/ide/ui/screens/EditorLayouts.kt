@@ -186,6 +186,8 @@ internal fun buildLeftPanels(
                 onOpenAt = { p, o -> state.openAt(p, o); closeDrawer() },
                 modifier = Modifier.fillMaxSize(),
                 searchState = searchState,
+                findInFilesEpoch = state.findInFilesEpoch,
+                findInFilesSeed = { state.findInFilesSeed },
             )
         },
         SidebarPanel(LeftPanelId.STRUCTURE, structureTitle, CaIcons.code, order = 30) {

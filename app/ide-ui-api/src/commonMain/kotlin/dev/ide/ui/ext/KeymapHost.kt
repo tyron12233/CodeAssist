@@ -47,10 +47,16 @@ object KeymapHost {
         fun label(actionId: String): String?
     }
 
+    /** The shortcut spec in force for an action id (`primary+shift+N`), for a surface that renders it itself. */
+    fun interface SpecLookup {
+        fun spec(actionId: String): String?
+    }
+
     // Observable so a UI that shows a shortcut re-reads it when the user rebinds one. The resolver itself is
     // called from a key handler rather than from composition, but the labeler is read while composing.
     private val resolverState = mutableStateOf<Resolver?>(null)
     private val labelerState = mutableStateOf<Labeler?>(null)
+    private val specState = mutableStateOf<SpecLookup?>(null)
 
     /** Install the keymap. Called once by the host at startup; replacing it is how a test drives one. */
     fun install(resolver: Resolver, labeler: Labeler): Registration {
@@ -61,6 +67,24 @@ object KeymapHost {
             labelerState.value = null
         }
     }
+
+    /** Install the spec lookup that goes with the installed keymap, so [shortcutSpec] follows rebindings. */
+    fun installSpecs(lookup: SpecLookup): Registration {
+        specState.value = lookup
+        return Registration { specState.value = null }
+    }
+
+    /**
+     * The shortcut spec in force for [actionId], or null when it has none. Like [shortcutLabel], the defaults
+     * answer only when no keymap is installed: an installed one answering null means the user removed it.
+     */
+    fun shortcutSpec(actionId: String): String? {
+        val lookup = specState.value ?: return defaultSpec(actionId)
+        return runCatching { lookup.spec(actionId) }.getOrElse { defaultSpec(actionId) }
+    }
+
+    private fun defaultSpec(actionId: String): String? =
+        EditorKeyFallback.specFor(actionId) ?: appKeyDefault(actionId)?.specs?.firstOrNull()
 
     /** Whether a keymap is installed at all. */
     val isInstalled: Boolean get() = resolverState.value != null
@@ -93,17 +117,14 @@ object KeymapHost {
      * default they deleted would be worse than showing nothing.
      */
     fun shortcutLabel(actionId: String): String? {
-        val labeler = labelerState.value
-            ?: return EditorKeyFallback.specFor(actionId)?.let(::displayShortcut)
-        return runCatching { labeler.label(actionId) }
-            .getOrElse { EditorKeyFallback.specFor(actionId)?.let(::displayShortcut) }
+        val labeler = labelerState.value ?: return defaultSpec(actionId)?.let(::displayShortcut)
+        return runCatching { labeler.label(actionId) }.getOrElse { defaultSpec(actionId)?.let(::displayShortcut) }
     }
 
     /**
-     * The editor's own defaults, used when no keymap is installed and when an installed one throws.
-     *
-     * Editor commands only, so a press outside the editor answers nothing: an app-wide binding is contributed
-     * by the engine tier, and with no engine there is nothing to fall back to.
+     * The built-in defaults, used when no keymap is installed and when an installed one throws: the app-wide
+     * commands anywhere, and the editor's own inside an editor, which wins a collision there (there is none
+     * in the defaults; a test checks).
      */
     private fun fallback(
         key: String,
@@ -113,8 +134,9 @@ object KeymapHost {
         meta: Boolean,
         inEditor: Boolean,
     ): Outcome {
-        if (!inEditor) return Outcome.None
-        val actionId = EditorKeyFallback.resolve(key, ctrl, shift, alt, meta) ?: return Outcome.None
+        val actionId = (if (inEditor) EditorKeyFallback.resolve(key, ctrl, shift, alt, meta) else null)
+            ?: AppKeyFallback.resolve(key, ctrl, shift, alt, meta)
+            ?: return Outcome.None
         return Outcome.Command(actionId)
     }
 }

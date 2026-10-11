@@ -68,6 +68,7 @@ import dev.ide.ui.clipForClipboard
 import dev.ide.ui.editor.core.EditorDocument
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.MEASURER_CACHE_ENTRIES
+import dev.ide.ui.ext.AppCommandHost
 import dev.ide.ui.ext.KeymapHost
 import dev.ide.ui.editor.core.RangeEdit
 import dev.ide.ui.editor.core.isLarge
@@ -122,6 +123,8 @@ fun CodeEditor(
     formatEpoch: Int = 0,
     /** Bump from the host (the Optimize Imports menu action) to reorganize imports; 0 = no request. */
     optimizeImportsEpoch: Int = 0,
+    /** Bump from the host (an app shortcut that returns to the editor) to take keyboard focus; 0 = no request. */
+    focusEpoch: Int = 0,
     /** Editor text zoom; 1.0 = the theme's code size. Driven by pinch + Ctrl-+/-/0; hoisted so it persists across tabs. */
     fontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
@@ -184,6 +187,7 @@ fun CodeEditor(
             findEpoch,
             formatEpoch,
             optimizeImportsEpoch,
+            focusEpoch,
             fontScale,
             onFontScaleChange,
             onPreview,
@@ -215,6 +219,7 @@ private fun CodeEditorContent(
     findEpoch: Int = 0,
     formatEpoch: Int = 0,
     optimizeImportsEpoch: Int = 0,
+    focusEpoch: Int = 0,
     fontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
     onPreview: (variantId: String) -> Unit = {},
@@ -688,6 +693,10 @@ private fun CodeEditorContent(
     LaunchedEffect(findEpoch) { if (findEpoch > 0) find.openBar(replace = false) }
     LaunchedEffect(formatEpoch) { if (formatEpoch > 0) runFormat(0, 0) }
     LaunchedEffect(optimizeImportsEpoch) { if (optimizeImportsEpoch > 0) runOptimizeImports() }
+    // Only a request made while this editor is showing: one bumped earlier must not make every editor that
+    // opens afterwards take focus (from the Search panel that opened it, say).
+    val mountFocusEpoch = remember { focusEpoch }
+    LaunchedEffect(focusEpoch) { if (focusEpoch > mountFocusEpoch) runCatching { focus.requestFocus() } }
 
     // recompute find matches when the query/options change or the buffer edits (debounced).
     LaunchedEffect(find.open, find.query, find.options, editorSession.textRevision) {
@@ -888,8 +897,22 @@ private fun CodeEditorContent(
      * which command is now data (`EDITOR_KEY_DEFAULTS`, overridable by the user and by a plugin), and the
      * variants that used to be branches on a modifier are separate ids.
      */
+    /** Open the editor's context menu at [pos] (pane coordinates): a right-click, or the Menu key at the caret. */
+    fun openContextMenu(pos: Offset) {
+        completion.dismiss()
+        hover.dismiss()
+        contextMenuAt = pos
+        scope.launch { acts.resolveContextMenu() }
+    }
+
     fun runEditorCommand(id: String): Boolean {
         when (id) {
+            // The keyboard's way to the context menu: under the caret, as IntelliJ places it.
+            EditorCommands.SHOW_CONTEXT_MENU -> {
+                val (_, x, top) = geometry.caretGeometry(editorSession.selection.end)
+                openContextMenu(Offset(x, top + metrics.lineHeight))
+            }
+
             // Reformat: the selection if any, else the whole file.
             EditorCommands.REFORMAT -> {
                 val sel = editorSession.selection
@@ -985,7 +1008,11 @@ private fun CodeEditorContent(
         // below (the code-action menu, a live template, the completion popup), which own their keys while they
         // are open and are not rebindable for that reason.
         when (val outcome = resolveEditorCommand(ev)) {
-            is KeymapHost.Outcome.Command -> if (runEditorCommand(outcome.actionId)) return true
+            // A Global binding resolves here too (the editor is inside the IDE). The editor does not run those
+            // itself; it hands them to the screen's app-command runner, so the key is resolved exactly once,
+            // which the keymap's chord state needs.
+            is KeymapHost.Outcome.Command ->
+                if (runEditorCommand(outcome.actionId) || AppCommandHost.run(outcome.actionId)) return true
             // The first half of a chord: consume it so it does not also reach the buffer.
             is KeymapHost.Outcome.Pending -> return true
             KeymapHost.Outcome.None -> Unit
@@ -1100,12 +1127,7 @@ private fun CodeEditorContent(
                     onPreviewKey = ::onPreviewKey,
                     onKey = ::handleKey,
                     hover = hover,
-                    onContextMenu = { pos ->
-                        completion.dismiss()
-                        hover.dismiss()
-                        contextMenuAt = pos
-                        scope.launch { acts.resolveContextMenu() }
-                    },
+                    onContextMenu = ::openContextMenu,
                     onLinkClick = { offset ->
                         editorSession.setCaret(offset)
                         runNav(UiNavKind.DECLARATION)

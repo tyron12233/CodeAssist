@@ -339,7 +339,10 @@ class IdeUiState(
     private suspend fun publishActiveEditor() {
         snapshotFlow { active?.path }
             .distinctUntilChanged()
-            .collect { backend.editor.onActiveEditorChanged(it) }
+            .collect {
+                backend.editor.onActiveEditorChanged(it)
+                if (it != null) noteRecent(it)
+            }
     }
 
     // The caret/selection, debounced so it fires on settle rather than on every keystroke (collectLatest
@@ -462,6 +465,60 @@ class IdeUiState(
     var consoleOpen by mutableStateOf(!isMobilePlatform)
 
     var paletteOpen by mutableStateOf(false)
+
+    /** The scope tab the palette opens on (a `PaletteFilter` name: Files, Symbols, ...); null = All. Set by the
+     *  go-to shortcuts just before they open it. */
+    var paletteFilter by mutableStateOf<String?>(null)
+
+    /** Bumped to make the active editor take keyboard focus (an app shortcut that returns to the editor). */
+    var editorFocusEpoch by mutableIntStateOf(0)
+
+    /** Bumped to open Find in Files with [findInFilesSeed] (the editor's selection) as the query. */
+    var findInFilesEpoch by mutableIntStateOf(0)
+    var findInFilesSeed: String? = null
+
+    // ---- recently used files and closed tabs: the Ctrl+Tab switcher, Recent Files, Reopen Closed Tab ----
+
+    /** Paths in most-recently-active order, newest first, open or since closed. Fed by [publishActiveEditor]. */
+    val recentPaths = mutableStateListOf<String>()
+    private val recentNames = HashMap<String, String>()
+    private val closedTabs = ArrayDeque<Pair<String, String>>()
+
+    private fun noteRecent(path: String) {
+        openFiles.firstOrNull { it.path == path }?.let { recentNames[path] = it.name }
+        recentPaths.remove(path)
+        recentPaths.add(0, path)
+        while (recentPaths.size > RECENT_LIMIT) recentNames.remove(recentPaths.removeAt(recentPaths.lastIndex))
+    }
+
+    /** The display name of a recent [path]: its tab's name when it had one, else the file name. */
+    fun recentName(path: String): String =
+        recentNames[path] ?: path.substringAfterLast('/').substringAfterLast('\\')
+
+    /** The open tabs, most recently active first; a tab never activated this session follows in strip order. */
+    fun openTabsByRecency(): List<OpenFile> {
+        val byPath = openFiles.associateBy { it.path }
+        val recent = recentPaths.mapNotNull { byPath[it] }
+        return recent + openFiles.filter { it !in recent }
+    }
+
+    /** Activate the tab [delta] places along the strip from the active one, wrapping at the ends. */
+    fun cycleTab(delta: Int) {
+        if (openFiles.isEmpty()) return
+        val n = openFiles.size
+        activeIndex = ((activeIndex.coerceAtLeast(0) + delta) % n + n) % n
+    }
+
+    /** Reopen the most recently closed tab that is not open again already. False when there is none. */
+    fun reopenClosedTab(): Boolean {
+        while (closedTabs.isNotEmpty()) {
+            val (path, name) = closedTabs.removeLast()
+            if (openFiles.any { it.path == path }) continue
+            if (path.startsWith(LIBRARY_SCHEME)) openLibrary(path) else open(path, name)
+            return true
+        }
+        return false
+    }
     /** Whether the "More" actions sheet is showing (rail footer / bottom-nav More). */
     var moreOpen by mutableStateOf(false)
 
@@ -808,6 +865,8 @@ class IdeUiState(
         if (idx < 0) return
         openFiles.removeAt(idx)
         activeIndex = activeIndex.coerceAtMost(openFiles.lastIndex)
+        closedTabs.addLast(file.path to file.name)
+        while (closedTabs.size > CLOSED_TAB_LIMIT) closedTabs.removeFirst()
         backend.editor.onFileClosed(file.path)
     }
 
@@ -1260,6 +1319,8 @@ class IdeUiState(
 
         /** [activeToolWindow]'s id for the bottom build console. */
         const val CONSOLE_TOOL_WINDOW = "console"
+        private const val RECENT_LIMIT = 50
+        private const val CLOSED_TAB_LIMIT = 30
 
         /** App preferences: the docked left / right pane widths in dp, as last dragged. */
         const val LEFT_PANE_WIDTH_PREF = "sidebar.leftWidth"

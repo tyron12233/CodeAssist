@@ -1,6 +1,7 @@
 package dev.ide.ui.editor
 
 import androidx.compose.ui.input.pointer.areAnyPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
@@ -38,6 +39,7 @@ import dev.ide.ui.editor.core.EditorImeHandle
 import dev.ide.ui.editor.core.EditorImeOptions
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.editorTextInput
+import dev.ide.ui.platform.isMouse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -125,6 +127,36 @@ internal fun Modifier.editorInput(
             .scrollable(vScroll, Orientation.Vertical, reverseDirection = true)
             .scrollable(hScroll, Orientation.Horizontal, reverseDirection = true),
     )
+    // The mouse wheel / trackpad scroll when the 2D state is in use: `scrollable2D` ignores scroll events (only the
+    // 1D `scrollable` handles them), so on a touch platform with a mouse attached the wheel did nothing. Shift
+    // turns a vertical wheel horizontal. Consumed so no ancestor scrolls as well.
+    //
+    // Android delivers a trackpad (or a smooth-scrolling mouse) as whole wheel notches, one per frame for as long
+    // as the fingers move; the emulator does the same for the host's trackpad. At a wheel's three lines a notch
+    // one swipe flew ninety lines, so a notch that follows the last within [WHEEL_STREAM_MS] is part of such a
+    // stream and moves one line. A wheel click on its own still moves three.
+    .then(
+        if (!useTwoAxisScroll) Modifier else Modifier.pointerInput(metrics) {
+            var lastWheelMs = Long.MIN_VALUE
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    if (event.type != PointerEventType.Scroll) continue
+                    var delta = Offset.Zero
+                    event.changes.forEach { if (!it.isConsumed) delta += it.scrollDelta }
+                    if (delta == Offset.Zero) continue
+                    if (event.keyboardModifiers.isShiftPressed && delta.x == 0f) delta = Offset(delta.y, 0f)
+                    val now = event.changes.first().uptimeMillis
+                    val streaming = now - lastWheelMs in 0 until WHEEL_STREAM_MS
+                    lastWheelMs = now
+                    val step = metrics.lineHeight * (if (streaming) WHEEL_STREAM_LINES else WHEEL_LINES)
+                    if (delta.y != 0f) vScroll.dispatchRawDelta(delta.y * step)
+                    if (delta.x != 0f) hScroll.dispatchRawDelta(delta.x * step)
+                    event.changes.forEach { it.consume() }
+                }
+            }
+        },
+    )
     // Right-click: the context menu at the pointer. Watched as a raw press on the Initial pass because Compose
     // reports only the primary button as "pressed", so the click/drag detectors below never see a right-click.
     // A click outside the selection moves the caret there first, so the menu acts on what was clicked; inside
@@ -135,7 +167,7 @@ internal fun Modifier.editorInput(
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 if (event.type != PointerEventType.Press || !event.buttons.isSecondaryPressed) continue
                 val change = event.changes.firstOrNull() ?: continue
-                if (change.type != PointerType.Mouse) continue
+                if (change.type == PointerType.Touch) continue
                 interaction.lastInputWasTouch = false
                 focus.requestFocus()
                 if (change.position.x >= gutterWidthPx) {
@@ -159,7 +191,7 @@ internal fun Modifier.editorInput(
                 val event = awaitPointerEvent(PointerEventPass.Main)
                 val change = event.changes.firstOrNull()
                 when {
-                    change?.type != PointerType.Mouse -> {}
+                    change?.isMouse != true -> {}
                     event.type == PointerEventType.Exit -> {
                         interaction.hoveredLine = -1
                         lastChar = -2
@@ -203,7 +235,7 @@ internal fun Modifier.editorInput(
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Main)
                 val change = event.changes.firstOrNull() ?: continue
-                if (change.type == PointerType.Mouse) continue
+                if (change.isMouse) continue
                 when (event.type) {
                     PointerEventType.Press -> {
                         interaction.touchDownPos = change.position
@@ -329,7 +361,7 @@ internal fun Modifier.editorInput(
     .pointerInput(session, metrics, gutterWidthPx, wrapActive) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true)
-            if (down.type == PointerType.Mouse) {
+            if (down.isMouse) {
                 interaction.lastInputWasTouch = false
                 focus.requestFocus()
                 down.consume() // keep the scroll containers + detectTapGestures out of it
@@ -493,3 +525,12 @@ internal fun hoveredChar(session: EditorSession, geometry: EditorGeometry, pos: 
     if (geometry.caretGeometry(ch + 1).second < pos.x) return -1
     return ch
 }
+
+/** Lines the editor scrolls per mouse-wheel notch on the two-axis (touch) scroll path, as in IntelliJ. */
+private const val WHEEL_LINES = 3f
+
+/** Lines per notch while notches stream in from a trackpad or a smooth-scrolling mouse (see the wheel handler). */
+private const val WHEEL_STREAM_LINES = 1f
+
+/** Notches closer together than this are one continuous stream; Android sends a trackpad's at one per frame. */
+private const val WHEEL_STREAM_MS = 20L

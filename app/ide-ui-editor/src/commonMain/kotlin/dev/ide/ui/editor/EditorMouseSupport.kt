@@ -36,6 +36,7 @@ import dev.ide.ui.backend.UiMenuNode
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.components.CaDropdownMenu
 import dev.ide.ui.components.CaMenuItem
+import dev.ide.ui.components.ShortcutHint
 import dev.ide.ui.components.CaSubmenuItem
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.codeaction_show_context_actions
@@ -236,23 +237,23 @@ internal fun EditorContextMenu(
     Box(Modifier.offset { IntOffset(at.x.toInt(), at.y.toInt()) }.size(1.dp)) {
         CaDropdownMenu(expanded = true, onDismissRequest = onDismiss, offset = DpOffset.Zero) {
             fun run(action: () -> Unit) { onDismiss(); action() }
-            CaMenuItem(stringResource(Res.string.codeaction_show_context_actions), onClick = { run(onShowActions) }, modifier = Dense)
+            CaMenuItem(stringResource(Res.string.codeaction_show_context_actions), onClick = { run(onShowActions) }, modifier = Dense, trailing = { ShortcutHint(EditorCommands.CODE_ACTIONS) })
             CaSubmenuItem(stringResource(Res.string.nav_go_to), icon = null, expanded = goToOpen, onExpandedChange = { goToOpen = it }) {
-                CaMenuItem(stringResource(Res.string.nav_declaration), onClick = { run { onCommand(EditorCommands.GO_TO_DECLARATION) } }, modifier = Dense)
-                CaMenuItem(stringResource(Res.string.nav_implementations), onClick = { run { onCommand(EditorCommands.GO_TO_IMPLEMENTATION) } }, modifier = Dense)
-                CaMenuItem(stringResource(Res.string.nav_type_declaration), onClick = { run { onCommand(EditorCommands.GO_TO_TYPE_DECLARATION) } }, modifier = Dense)
-                CaMenuItem(stringResource(Res.string.nav_super), onClick = { run { onCommand(EditorCommands.GO_TO_SUPER) } }, modifier = Dense)
+                CaMenuItem(stringResource(Res.string.nav_declaration), onClick = { run { onCommand(EditorCommands.GO_TO_DECLARATION) } }, modifier = Dense, trailing = { ShortcutHint(EditorCommands.GO_TO_DECLARATION) })
+                CaMenuItem(stringResource(Res.string.nav_implementations), onClick = { run { onCommand(EditorCommands.GO_TO_IMPLEMENTATION) } }, modifier = Dense, trailing = { ShortcutHint(EditorCommands.GO_TO_IMPLEMENTATION) })
+                CaMenuItem(stringResource(Res.string.nav_type_declaration), onClick = { run { onCommand(EditorCommands.GO_TO_TYPE_DECLARATION) } }, modifier = Dense, trailing = { ShortcutHint(EditorCommands.GO_TO_TYPE_DECLARATION) })
+                CaMenuItem(stringResource(Res.string.nav_super), onClick = { run { onCommand(EditorCommands.GO_TO_SUPER) } }, modifier = Dense, trailing = { ShortcutHint(EditorCommands.GO_TO_SUPER) })
             }
-            CaMenuItem(stringResource(Res.string.rename), onClick = { run { onCommand(EditorCommands.RENAME) } }, enabled = !readOnly, modifier = Dense)
-            CaMenuItem(stringResource(Res.string.edoverlay_quick_documentation), onClick = { run { onCommand(EditorCommands.QUICK_DOC) } }, modifier = Dense)
+            CaMenuItem(stringResource(Res.string.rename), onClick = { run { onCommand(EditorCommands.RENAME) } }, enabled = !readOnly, modifier = Dense, trailing = { ShortcutHint(EditorCommands.RENAME) })
+            CaMenuItem(stringResource(Res.string.edoverlay_quick_documentation), onClick = { run { onCommand(EditorCommands.QUICK_DOC) } }, modifier = Dense, trailing = { ShortcutHint(EditorCommands.QUICK_DOC) })
             MenuSeparator()
             CaMenuItem(stringResource(Res.string.edoverlay_cut), onClick = { run(onCut) }, enabled = hasSelection && !readOnly, modifier = Dense)
             CaMenuItem(stringResource(Res.string.copy), onClick = { run(onCopy) }, enabled = hasSelection, modifier = Dense)
             CaMenuItem(stringResource(Res.string.edoverlay_paste), onClick = { run(onPaste) }, enabled = !readOnly, modifier = Dense)
             CaMenuItem(stringResource(Res.string.edoverlay_select_all), onClick = { run(onSelectAll) }, modifier = Dense)
             MenuSeparator()
-            CaMenuItem(stringResource(Res.string.edchrome_reformat_code), onClick = { run { onCommand(EditorCommands.REFORMAT) } }, enabled = !readOnly, modifier = Dense)
-            CaMenuItem(stringResource(Res.string.edchrome_optimize_imports), onClick = { run { onCommand(EditorCommands.OPTIMIZE_IMPORTS) } }, enabled = !readOnly, modifier = Dense)
+            CaMenuItem(stringResource(Res.string.edchrome_reformat_code), onClick = { run { onCommand(EditorCommands.REFORMAT) } }, enabled = !readOnly, modifier = Dense, trailing = { ShortcutHint(EditorCommands.REFORMAT) })
+            CaMenuItem(stringResource(Res.string.edchrome_optimize_imports), onClick = { run { onCommand(EditorCommands.OPTIMIZE_IMPORTS) } }, enabled = !readOnly, modifier = Dense, trailing = { ShortcutHint(EditorCommands.OPTIMIZE_IMPORTS) })
             if (pluginMenu.items.isNotEmpty()) {
                 MenuSeparator()
                 PluginMenuNodes(pluginMenu.items) { run { onPluginAction(it) } }

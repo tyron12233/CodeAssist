@@ -249,6 +249,12 @@ fun EditorScreen(
                 onCloseProject()
             },
         )
+        // The app-wide keyboard commands (tabs, go-to, tool windows, run) and the Ctrl+Tab switcher.
+        AppShortcutsHost(
+            state = state,
+            onOpenSettings = onOpenHub,
+            onNewFile = { dir -> onNewFile(dir, emptyList()) },
+        )
         // While a console run is active but its terminal isn't on screen (the user backed out mid-run), a
         // tappable pill returns to it — the run keeps going in the background until then.
         RunningIndicator(

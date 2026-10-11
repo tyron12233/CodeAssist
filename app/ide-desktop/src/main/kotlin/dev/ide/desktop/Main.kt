@@ -1,5 +1,6 @@
 package dev.ide.desktop
 
+import dev.ide.ui.ext.AppKeys
 import androidx.compose.material.Button
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -51,6 +52,9 @@ fun main(args: Array<String>) {
             onCloseRequest = ::exitApplication,
             state = state,
             title = "CodeAssist",
+            // An app shortcut pressed while nothing in the window has focus (the root listener inside the app
+            // only hears keys that reach a focused node). Runs only for a key the content did not consume.
+            onKeyEvent = { AppKeys.onKey(it) },
         ) {
             // Remembered: the app state is keyed on it, so a new instance on recomposition (the title bar's height
             // changes whenever the editor is left) would start the app over and land back in the editor.
