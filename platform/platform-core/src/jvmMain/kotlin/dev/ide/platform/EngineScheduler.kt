@@ -75,6 +75,14 @@ class EngineScheduler(
      */
     private val previewQuietPeriod: Duration = 60.milliseconds,
 ) {
+    /** The constructor as published before [previewQuietPeriod] existed, kept so a plugin built against it links. */
+    @Deprecated("Kept for binary compatibility", level = DeprecationLevel.HIDDEN)
+    constructor(
+        dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
+        observer: EngineSchedulerObserver? = null,
+        previewRetryDelay: Duration = 150.milliseconds,
+    ) : this(dispatcher, observer, previewRetryDelay, 60.milliseconds)
+
     private val quietNanos = previewQuietPeriod.inWholeNanoseconds
     /** When the worker last finished an interactive or background call ([System.nanoTime]). */
     @Volatile private var editorWorkEndedAt = System.nanoTime() - quietNanos - 1
