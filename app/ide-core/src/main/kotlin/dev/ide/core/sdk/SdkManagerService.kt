@@ -122,7 +122,8 @@ class SdkManagerService(
         val text = (repository ?: fetchRepository()).licenses[id] ?: return@withContext
         val file = licensesDir.resolve(id)
         Files.createDirectories(licensesDir)
-        Files.writeString(file, licenseHash(text) + "\n")
+        // Files.write, not writeString: the latter is not Android API.
+        Files.write(file, (licenseHash(text) + "\n").toByteArray())
     }
 
     /** True when the user accepted [id] with this exact [text]; a reworded license must be accepted again. */
