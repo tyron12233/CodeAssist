@@ -41,6 +41,16 @@ class NativeAdPool<A : Any>(
         fun loaded(ad: A)
         fun failed()
         fun impression()
+
+        /**
+         * Whether a slot still waits on this request. A host that holds a request back before sending it (see
+         * `AndroidAdHost`, which waits for launch to settle) checks this first, so it never fetches an ad for
+         * a slot that came and went in the meantime.
+         */
+        val wanted: Boolean get() = true
+
+        /** The host dropped this request without sending it. Unlike [failed], the placement is not backed off. */
+        fun cancelled() {}
     }
 
     /** One loaded ad and when it was loaded and first seen. */
@@ -59,6 +69,10 @@ class NativeAdPool<A : Any>(
         override fun impression() {
             entry?.let { if (it.impressionAt == NO_IMPRESSION) it.impressionAt = now() }
         }
+
+        override val wanted: Boolean get() = !closed && owner?.acquired == true
+
+        override fun cancelled() = onCancelled(this)
     }
 
     /**
@@ -174,6 +188,11 @@ class NativeAdPool<A : Any>(
     private fun onFailed(request: Request) {
         requests -= request
         failedAt[request.placement] = now()
+        request.owner?.let { if (it.request === request) it.request = null }
+    }
+
+    private fun onCancelled(request: Request) {
+        requests -= request
         request.owner?.let { if (it.request === request) it.request = null }
     }
 

@@ -174,6 +174,24 @@ class EngineScheduler(
     }
 
     /**
+     * Suspends until the worker has gone [period] without interactive or background work, counted from no
+     * earlier than this call, so a caller that arrives before the editor's first pass still waits a full
+     * spell instead of reading the start-up default as "quiet". For heavy work outside the worker that should
+     * not compete with the editor for CPU (the Kotlin compiler warm-up at project open). Never returns while
+     * the user keeps the editor busy; cancel the caller to give up.
+     */
+    suspend fun awaitQuiet(period: Duration) {
+        val periodNanos = period.inWholeNanoseconds
+        val calledAt = System.nanoTime()
+        while (true) {
+            val busy = interactivePending.get() > 0 || backgroundPending.get() > 0
+            val left = periodNanos - (System.nanoTime() - maxOf(editorWorkEndedAt, calledAt))
+            if (!busy && left <= 0) return
+            delay(if (busy || left > periodNanos) period else left.nanoseconds)
+        }
+    }
+
+    /**
      * Lowest-priority engine work (preview rendering/lowering). Preempted by both [interactive] and
      * [background]; retries automatically after [previewRetryDelay] so the caller suspends until the engine is
      * free rather than getting a one-shot cancellation. Only [kotlinx.coroutines.CancellationException] (outer

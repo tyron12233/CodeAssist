@@ -933,6 +933,11 @@ class IdeServices private constructor(
         }
     }
 
+    /** Suspends until the project-open index build has finished (at once when there is none). */
+    suspend fun awaitOpenIndex() {
+        openJob?.join()
+    }
+
     /** Cheap check (bounded, short-circuiting) for any `.kt` under the project's source roots. */
     fun hasKotlinSources(): Boolean = runCatching {
         modules().any { m ->

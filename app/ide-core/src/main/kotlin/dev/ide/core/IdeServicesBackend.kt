@@ -76,6 +76,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.seconds
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import java.nio.file.Paths
@@ -134,7 +135,14 @@ class IdeServicesBackend(
                 val runner = if (factory != null && separateBuildProcessEnabled()) factory(services) else services.buildRunner
                 // Only the chosen runner warms its compiler: the in-process one here, the remote one in the
                 // `:build` process. Warming both would leave a second compiler resident that never compiles.
-                runCatching { runner.warmCompiler() }
+                // Not straight away: the warm-up is seconds of CPU and heap (a forked compiler VM either way),
+                // and project open is when the index reopen and the editor's first analysis of the open file
+                // need the device most. Wait for the index, then for the editor to go quiet.
+                engineScope.launch {
+                    services.awaitOpenIndex()
+                    scheduler.awaitQuiet(COMPILER_WARMUP_QUIET)
+                    runCatching { runner.warmCompiler() }
+                }
                 runner
             }
         }
@@ -842,6 +850,13 @@ private fun renderStandaloneLayout(
 
 /** Frames per [IdeServicesBackend.recordFrame] summary event. */
 private const val FRAME_WINDOW = 600
+
+/**
+ * How long the editor's engine must sit idle before the Kotlin compiler warm-up starts. Spans the gap between
+ * the index finishing and the editor re-running its passes on the now-ready index, so the warm-up lands after
+ * that run rather than in the middle of it.
+ */
+private val COMPILER_WARMUP_QUIET = 3.seconds
 
 /** The `index_perf` event for one finished index pass. See [IndexPassReport] for what each part means. */
 internal fun indexPerfProps(pass: IndexPassReport): Map<String, String> = buildMap {

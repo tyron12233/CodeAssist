@@ -40,6 +40,47 @@ private class FakeNetwork {
 
 class NativeAdPoolTest {
 
+    /**
+     * A request held back by the host (launch has not settled) whose slot leaves before it is sent is no
+     * longer wanted, and cancelling it neither loads an ad nor backs the placement off.
+     */
+    @Test
+    fun aHeldRequestWhoseSlotLeftIsUnwantedAndCancelsWithoutBackoff() {
+        val net = FakeNetwork()
+        val slot = net.pool.lease(AdPlacement.PROJECTS)
+        net.pool.acquire(slot)
+        val (_, held) = net.pending.single()
+        assertTrue(held.wanted)
+
+        net.pool.release(slot)
+        assertTrue(!held.wanted)
+        net.pending.clear()
+        held.cancelled()
+
+        // The user opens the project list a moment later: it asks at once, no failure backoff.
+        net.clock += 1_000
+        val next = net.pool.lease(AdPlacement.PROJECTS)
+        net.pool.acquire(next)
+        assertEquals(1, net.pending.size)
+        assertTrue(net.pending.single().second.wanted)
+    }
+
+    /** A held request adopted by a new slot of the same placement before it is sent is wanted again. */
+    @Test
+    fun aHeldRequestAdoptedByANewSlotIsWantedAgain() {
+        val net = FakeNetwork()
+        val first = net.pool.lease(AdPlacement.SIDEBAR)
+        net.pool.acquire(first)
+        val (_, held) = net.pending.single()
+        net.pool.release(first)
+        assertTrue(!held.wanted)
+
+        val second = net.pool.lease(AdPlacement.SIDEBAR)
+        net.pool.acquire(second)
+        assertTrue(held.wanted)
+        assertEquals(1, net.pending.size, "the new slot adopts the held request instead of asking again")
+    }
+
     @Test
     fun aSlotThatComesBackReusesItsAdWithoutANewRequest() {
         val net = FakeNetwork()

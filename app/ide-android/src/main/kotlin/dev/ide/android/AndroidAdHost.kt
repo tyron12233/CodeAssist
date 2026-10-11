@@ -66,7 +66,8 @@ private val webViewAvailable: Boolean by lazy {
  * Renders real AdMob **native** ads. The ad unit id comes from `BuildConfig.AD_NATIVE_UNIT_ID` (test id in
  * debug/profile, the real id in release — wired in build.gradle.kts), and the app id from the manifest
  * placeholder. While an ad is loading, or if none fills, the slot draws nothing and takes no space; nothing
- * stands in for the ad. `MobileAds.initialize(...)` must have run first (see [MainActivity.onCreate]).
+ * stands in for the ad. Nothing loads until [start], which MainActivity calls once launch has settled, right
+ * after `MobileAds.initialize(...)`.
  *
  * There is no purchase flow: ads are removed for free via the in-app toggle.
  *
@@ -102,7 +103,7 @@ class AndroidAdHost(
     override fun preloadInterstitial() {
         // AdMob load must run on the main thread; hop there defensively if a caller ever invokes us off it.
         mainHandler.post {
-            if (!webViewAvailable || interstitial != null || loadingInterstitial) return@post
+            if (!started || !webViewAvailable || interstitial != null || loadingInterstitial) return@post
             val ctx = activityProvider()?.applicationContext ?: return@post
             loadingInterstitial = true
             runCatching {
@@ -160,10 +161,41 @@ class AndroidAdHost(
         now = SystemClock::elapsedRealtime,
     )
 
+    // Ads start once launch has settled (MainActivity calls [start] after ADS_STARTUP_DELAY_MS). Until then a
+    // native request waits here instead of reaching the SDK: the first request stands up AdMob's WebView on
+    // the main thread, most of a second of frozen frames while the engine is still opening the project. Main
+    // thread only, like the pool.
+    private var started = false
+    private val held = mutableListOf<Pair<AdPlacement, NativeAdPool.Callbacks<NativeAd>>>()
+
+    /**
+     * Lets ads load. Sends the held native requests whose slot is still waiting and drops the rest, so a slot
+     * that was only on screen during launch (the project list, when the app resumes into a project) never
+     * fetches an ad nobody sees. Idempotent; main thread.
+     */
+    fun start() {
+        if (started) return
+        started = true
+        val queued = held.toList()
+        held.clear()
+        for ((placement, callbacks) in queued) {
+            if (!callbacks.wanted || !sendNativeAd(placement, callbacks)) callbacks.cancelled()
+        }
+    }
+
     /** Destroys the pooled native ads. Called when the hosting Activity goes away. */
-    fun close() = nativeAds.close()
+    fun close() {
+        held.clear()
+        nativeAds.close()
+    }
 
     private fun loadNativeAd(placement: AdPlacement, callbacks: NativeAdPool.Callbacks<NativeAd>): Boolean {
+        if (started) return sendNativeAd(placement, callbacks)
+        held += placement to callbacks
+        return true
+    }
+
+    private fun sendNativeAd(placement: AdPlacement, callbacks: NativeAdPool.Callbacks<NativeAd>): Boolean {
         // AdLoader.Builder reads the system WebView user-agent as it's built (and loadAd needs it too), so on an
         // image with no WebView provider it throws MissingWebViewPackageException. `webViewAvailable` short-
         // circuits that common case; the runCatching backstops any other SDK failure. Either way the slot keeps

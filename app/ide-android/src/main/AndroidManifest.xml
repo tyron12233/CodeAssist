@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?><!-- The package/namespace comes from android.namespace in build.gradle.kts (AGP 9.x). -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Maven dependency resolution downloads artifacts from Maven Central (the Dependencies screen). -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -251,6 +252,15 @@
                 <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
             </intent-filter>
         </provider>
+
+        <!-- Meta Audience Network starts itself from this provider at process start, before ad consent, and
+             costs ~0.5s of dex loading plus ~1.7s of background file hashing on every launch. The AdMob Meta
+             adapter calls AudienceNetworkAds.initialize() when mediation starts, which MainActivity defers
+             until launch has settled (ADS_STARTUP_DELAY_MS), so the network still initializes, just later. -->
+        <provider
+                android:name="com.facebook.ads.AudienceNetworkContentProvider"
+                android:authorities="${applicationId}.AudienceNetworkContentProvider"
+                tools:node="remove" />
     </application>
 
 </manifest>

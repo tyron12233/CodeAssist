@@ -32,6 +32,30 @@ import kotlin.time.Duration.Companion.milliseconds
 class EngineSchedulerTest {
 
     /**
+     * [EngineScheduler.awaitQuiet] waits a full spell even when nothing has run yet (the start-up default must
+     * not read as quiet), and a background run that starts during the wait pushes it past that run's end.
+     */
+    @Test
+    fun awaitQuietWaitsAFullSpellAfterTheLastEditorWork() = runBlocking {
+        val sched = EngineScheduler()
+        val spell = 200.milliseconds
+
+        val idleWait = timeMs { withTimeout(2_000) { sched.awaitQuiet(spell) } }
+        assertTrue(idleWait >= 190, "an idle engine still waits the whole spell from the call, waited ${idleWait}ms")
+
+        val t0 = System.nanoTime()
+        val pass = launch(Dispatchers.Default) {
+            delay(50)
+            sched.background("analyze") { busy(300) }
+        }
+        withTimeout(3_000) { sched.awaitQuiet(spell) }
+        val waited = (System.nanoTime() - t0) / 1_000_000
+        pass.join()
+        // The pass ends ~350ms in, so the quiet spell cannot end before ~550ms.
+        assertTrue(waited >= 530, "the wait must outlast the pass plus a spell, waited ${waited}ms")
+    }
+
+    /**
      * The editor's daemon runs its passes as separate back-to-back background calls. A preview lowering slipped
      * into the instant between two of them would hold the worker to its end (lowering does not poll), so the
      * passes after it would wait. The preview lane waits for a quiet spell instead, which lands it after the run.
