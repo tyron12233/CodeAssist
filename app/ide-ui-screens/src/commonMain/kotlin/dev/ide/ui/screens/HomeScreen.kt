@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectableGroup
@@ -26,6 +28,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -120,9 +123,16 @@ fun HomeScreen(
                 }
             }
         } else {
+            // The app pads for the keyboard at its root (`safeDrawing`), so a bar at the foot of this column
+            // rode up on top of the soft keyboard whenever a tab's field took focus (the store's search).
+            // It hides while the keyboard is up instead, as the editor's does. The IME inset is read raw,
+            // since that root padding would zero a consumed one. Always 0 on desktop.
+            val keyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
             Column(Modifier.fillMaxSize()) {
                 content(Modifier.weight(1f).fillMaxWidth())
-                AppNavBar(destinations = destinations, selectedId = tab.name, onSelect = select)
+                if (!keyboardOpen) {
+                    AppNavBar(destinations = destinations, selectedId = tab.name, onSelect = select)
+                }
             }
         }
     }
