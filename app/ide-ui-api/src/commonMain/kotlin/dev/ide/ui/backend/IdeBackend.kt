@@ -1027,7 +1027,13 @@ data class UiModuleConfig(
     val resolvedSdk: String = "",
     /** The platform SDKs installed in the workspace, offered in the picker (plus an implicit "Auto"). */
     val availableSdks: List<UiSdkOption> = emptyList(),
+    /** Set when an Android module's compileSdk has no installed platform, so it compiles and completes
+     *  against another level; the screen points at the SDK Manager. */
+    val missingPlatform: UiMissingPlatform? = null,
 )
+
+/** An Android module's compileSdk ([compileSdk]) is not installed, so it uses the [usedLevel] platform. */
+data class UiMissingPlatform(val compileSdk: Int, val usedLevel: Int)
 
 /** A selectable platform SDK: [name] is the value persisted to `module.toml`, [label] the display text. */
 data class UiSdkOption(val name: String, val label: String)
@@ -1951,8 +1957,9 @@ data class UiSdkDownload(
     val detail: String = "",
 )
 
-/** An installable Android SDK package. [category] is always SOURCES (the SDK Manager is sources/docs only).
- *  [incomplete] ⇒ a previous install was interrupted; re-installing resumes/repairs it. */
+/** An installable Android SDK package. [category] is SOURCES or PLATFORMS. [incomplete] ⇒ a previous install
+ *  was interrupted; re-installing resumes/repairs it. [license] is the id of the license the user must accept
+ *  before installing ([licenseAccepted] once they have). */
 data class UiSdkPackage(
     val path: String,
     val displayName: String,
@@ -1961,6 +1968,8 @@ data class UiSdkPackage(
     val installed: Boolean,
     val installable: Boolean,
     val incomplete: Boolean = false,
+    val license: String? = null,
+    val licenseAccepted: Boolean = true,
 )
 
 /** The active JDK and whether its sources are available for docs. [androidRuntime] = true on ART, where the

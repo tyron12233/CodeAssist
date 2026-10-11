@@ -311,6 +311,14 @@ interface Facet {
     val key: FacetKey<*>
 }
 
+/**
+ * A facet that names the platform SDK its module compiles against, such as Android's `android-34` for
+ * compileSdk 34. [SdkResolution] picks that SDK when the table has it, ahead of the module type's default.
+ */
+interface PlatformSdkFacet : Facet {
+    val preferredSdkName: String
+}
+
 interface FacetContainer {
     fun <T : Facet> get(key: FacetKey<T>): T?
     val all: List<Facet>

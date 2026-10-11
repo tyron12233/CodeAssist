@@ -24,6 +24,8 @@ internal class SdkBackend(private val ctx: BackendContext) : SdkService {
     override suspend fun sdkPackages(): List<UiSdkPackage> = ctx.sdkManager?.androidPackages() ?: emptyList()
     override suspend fun installSdkPackage(path: String): String =
         ctx.sdkManager?.installAndroidPackage(path) ?: "No SDK manager available."
+    override suspend fun sdkLicenseText(id: String): String? = ctx.sdkManager?.licenseText(id)
+    override suspend fun acceptSdkLicense(id: String) { ctx.sdkManager?.acceptLicense(id) }
     override fun cancelSdkDownload(id: String) { ctx.sdkManager?.cancelSdkDownload(id) }
     override fun clearSdkDownloads() { ctx.sdkManager?.clearSdkDownloads() }
     override fun jdkInfo(): UiJdkInfo? = ctx.sdkManager?.jdkInfo()

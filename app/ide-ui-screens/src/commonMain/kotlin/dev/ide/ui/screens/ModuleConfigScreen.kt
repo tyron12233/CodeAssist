@@ -137,6 +137,7 @@ import dev.ide.ui.generated.resources.modcfg_no_roots
 import dev.ide.ui.generated.resources.modcfg_no_rows_yet
 import dev.ide.ui.generated.resources.modcfg_no_source_sets
 import dev.ide.ui.generated.resources.modcfg_output
+import dev.ide.ui.generated.resources.modcfg_platform_missing
 import dev.ide.ui.generated.resources.modcfg_platform_sdk
 import dev.ide.ui.generated.resources.modcfg_platform_sdk_auto
 import dev.ide.ui.generated.resources.modcfg_remove
@@ -829,6 +830,13 @@ private fun ConfigForm(
                         LevelChip(stringResource(Res.string.modcfg_platform_sdk_auto, config.resolvedSdk), sdk == "") { sdk = "" }
                         config.availableSdks.forEach { opt -> LevelChip(opt.label, sdk == opt.name) { sdk = opt.name } }
                     }
+                }
+                config.missingPlatform?.let { mp ->
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        stringResource(Res.string.modcfg_platform_missing, mp.compileSdk, mp.usedLevel),
+                        color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
         }

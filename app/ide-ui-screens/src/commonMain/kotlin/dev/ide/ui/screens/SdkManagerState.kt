@@ -25,6 +25,9 @@ internal sealed interface SdkStatus {
     data class Message(val text: String) : SdkStatus
 }
 
+/** A package waiting on its license: [text] is the license wording, null when it could not be loaded. */
+internal data class LicensePrompt(val pkg: UiSdkPackage, val license: String, val text: String?)
+
 /**
  * State and intents for the SDK Manager: the installable packages, the JDK summary, the live download
  * queue, and the install/cancel actions. The list re-reads itself whenever a download finishes, since
@@ -47,6 +50,10 @@ internal class SdkManagerState(
         private set
 
     val jdk: UiJdkInfo? = runCatching { backend.sdk.jdkInfo() }.getOrNull()
+
+    /** The license the user is being asked to accept before an install starts, or null. */
+    var licensePrompt: LicensePrompt? by mutableStateOf(null)
+        private set
 
     /** The packages with a download in flight, so their rows show progress instead of an Install action. */
     val activeIds: Set<String>
@@ -71,8 +78,30 @@ internal class SdkManagerState(
         scope.launch { reloadNow() }
     }
 
+    /** Install [pkg], first asking for its license when the user has not accepted it yet. */
     fun install(pkg: UiSdkPackage) {
+        val license = pkg.license
+        if (license != null && !pkg.licenseAccepted) {
+            scope.launch { licensePrompt = LicensePrompt(pkg, license, runCatching { backend.sdk.sdkLicenseText(license) }.getOrNull()) }
+            return
+        }
         scope.launch { status = SdkStatus.Message(backend.sdk.installSdkPackage(pkg.path)) }
+    }
+
+    /** Accept the prompted license and start the install that was waiting on it. */
+    fun acceptLicense() {
+        val prompt = licensePrompt ?: return
+        licensePrompt = null
+        scope.launch {
+            backend.sdk.acceptSdkLicense(prompt.license)
+            val started = backend.sdk.installSdkPackage(prompt.pkg.path)
+            reloadNow() // the row's license state changed; the reload clears the status line, so set it after
+            status = SdkStatus.Message(started)
+        }
+    }
+
+    fun declineLicense() {
+        licensePrompt = null
     }
 
     fun downloadJdkSources(feature: Int) {

@@ -64,4 +64,15 @@ object AndroidApiLevels {
 
     /** "API 36 · Android 16" for a known level, else just the number. */
     fun label(api: Int): String = LEVELS.firstOrNull { it.api == api }?.label ?: "API $api"
+
+    /**
+     * The API level of the platform [androidJar] comes from: its `platforms/android-<level>` dir (a minor
+     * like `android-36.1` reads as 36), or [LATEST] for a jar outside any platform dir, which is the one
+     * bundled with the IDE.
+     */
+    fun levelOfPlatformJar(androidJar: java.nio.file.Path): Int =
+        androidJar.parent?.fileName?.toString()
+            ?.let { Regex("""android-(\d+)(?:\.\d+)?""").matchEntire(it) }
+            ?.groupValues?.get(1)?.toInt()
+            ?: LATEST
 }

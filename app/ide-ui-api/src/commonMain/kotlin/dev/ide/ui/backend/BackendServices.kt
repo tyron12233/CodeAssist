@@ -1404,7 +1404,7 @@ interface LearnService {
 // SDK / toolchain manager
 // ---------------------------------------------------------------------------
 
-/** The SDK manager: download editor sources/docs for the Android SDK + JDK. */
+/** The SDK manager: download Android platforms, and editor sources/docs for the Android SDK + JDK. */
 interface SdkService {
     /** Live download queue + progress. */
     val sdkManagerState: StateFlow<UiSdkManagerState> get() = MutableStateFlow(UiSdkManagerState())
@@ -1414,6 +1414,12 @@ interface SdkService {
 
     /** Start downloading one Android package by id; returns immediately. */
     suspend fun installSdkPackage(path: String): String = "Not supported."
+
+    /** The text of SDK license [id] (a package's [UiSdkPackage.license]), or null when unavailable. */
+    suspend fun sdkLicenseText(id: String): String? = null
+
+    /** Record that the user accepted SDK license [id]. */
+    suspend fun acceptSdkLicense(id: String) {}
 
     /** Cancel an in-flight SDK/JDK download by id. */
     fun cancelSdkDownload(id: String) {}

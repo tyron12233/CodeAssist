@@ -1,5 +1,6 @@
 package dev.ide.core.services
 
+import dev.ide.android.support.AndroidApiLevels
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidFeatureDependencies
 import dev.ide.android.support.AndroidPackaging
@@ -36,6 +37,7 @@ import dev.ide.ui.backend.UiCompilerPlugins
 import dev.ide.ui.backend.UiConfigField
 import dev.ide.ui.backend.UiConfigResult
 import dev.ide.ui.backend.UiFacetConfig
+import dev.ide.ui.backend.UiMissingPlatform
 import dev.ide.ui.backend.UiMissingProguardFile
 import dev.ide.ui.backend.UiModuleConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
@@ -98,8 +100,8 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
      * codec-backed facet (Android, future ones) renders without bespoke UI.
      */
     fun getModuleConfig(moduleName: String): UiModuleConfig? {
-        val base = model.moduleConfig(moduleName) ?: return null
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return null
+        val base = model.moduleConfig(moduleName)?.copy(missingPlatform = missingPlatform(module)) ?: return null
         // The one field the model cannot answer: which `main` this module would run. Detecting it needs the
         // module's sources analyzed, and running it needs a JVM, so it is added here rather than shared.
         if (!isConsoleRunModule(module)) return base
@@ -111,6 +113,21 @@ internal class ModuleService(private val ctx: EngineContext) : ModuleSources {
                 autoDetected = detected.firstOrNull(),
             ),
         )
+    }
+
+    /**
+     * The compileSdk of an Android [module] when no platform for it is installed, with the level it uses
+     * instead: the default Android SDK's, the bundled jar on device. Null when it resolves its own platform,
+     * or when the user pinned an SDK explicitly.
+     */
+    private fun missingPlatform(module: Module): UiMissingPlatform? {
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return null
+        if (module.sdk != null) return null
+        val sdk = SdkResolution.sdkFor(ctx.store.workspace, module) ?: return null
+        if (sdk.kind != PlatformKind.ANDROID) return null
+        val jar = sdk.bootClasspath.firstOrNull()?.let { Paths.get(it.path) } ?: return null
+        val used = AndroidApiLevels.levelOfPlatformJar(jar)
+        return if (used == facet.compileSdk) null else UiMissingPlatform(facet.compileSdk, used)
     }
 
     /** Persist [edit] (language level + facet values) to [moduleName] through a model transaction + save. */

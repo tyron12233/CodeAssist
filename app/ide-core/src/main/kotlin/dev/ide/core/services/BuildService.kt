@@ -204,6 +204,13 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
         }
     }
 
+    /** The installed platform `android.jar` for a compileSdk, from the `android-<level>` SDK the IDE registers
+     *  for it ([AndroidFacet.platformSdkName]); null leaves the module on the default Android SDK. */
+    private val platformJarFor: (Int) -> Path? = { level ->
+        ctx.store.workspace.sdkTable.byName(AndroidFacet.platformSdkName(level))
+            ?.bootClasspath?.firstOrNull()?.let { Paths.get(it.path) }
+    }
+
     private val androidBuild: AndroidBuildSystem? by lazy {
         // A content-addressed library-dex cache shared across every project (alongside the resolved-deps
         // cache), so a library jar is dexed once per machine, not once per project — the big win when many
@@ -254,6 +261,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                         )
                     }
                 },
+                platformFor = platformJarFor,
             )
         }
         val sdk =
@@ -271,6 +279,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
             classTransforms = classTransforms,
             dexCacheRoot = dexCache,
             signingResolver = signingResolver,
+            platformFor = platformJarFor,
         )
     }
 

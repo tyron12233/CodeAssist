@@ -1,6 +1,9 @@
 package dev.ide.model.impl
 
 import dev.ide.model.BuildSystemId
+import dev.ide.model.FacetCodec
+import dev.ide.model.FacetKey
+import dev.ide.model.PlatformSdkFacet
 import dev.ide.model.FacetCodecRegistry
 import dev.ide.model.Module
 import dev.ide.model.ModuleTypeRegistry
@@ -82,5 +85,47 @@ class SdkResolutionTest {
         }
         // Legacy explicit form: an SdkDependency naming the Android SDK is honored over the JVM type default.
         assertEquals("android", SdkResolution.sdkFor(store.workspace, module(store, "lib"))?.name)
+    }
+
+    private data class LevelFacet(val level: Int) : PlatformSdkFacet {
+        override val key = KEY
+        override val preferredSdkName get() = "android-$level"
+        companion object { val KEY = FacetKey<LevelFacet>("level") }
+    }
+
+    private object LevelFacetCodec : FacetCodec<LevelFacet> {
+        override val key = LevelFacet.KEY
+        override val tomlTable = "level"
+        override fun encode(facet: LevelFacet): Map<String, Any?> = mapOf("level" to facet.level.toLong())
+        override fun decode(values: Map<String, Any?>) = LevelFacet((values["level"] as Number).toInt())
+    }
+
+    @Test
+    fun platformFacetPicksItsSdkWhenInstalled() = dev.ide.testkit.withWorkspace(
+        codecs = FacetCodecRegistry().register(LevelFacetCodec),
+    ) { platform, store ->
+        val types = ModuleTypeRegistry(platform.extensions)
+        types.register(TestModuleType("android-app"), PluginId("android-support"))
+        store.replaceSdks(
+            listOf(
+                SdkData("android", listOf("/assets/android.jar"), buildToolsPath = null, kind = PlatformKind.ANDROID),
+                SdkData("core-java", listOf("/cache/core-java.jar"), buildToolsPath = null, kind = PlatformKind.JVM),
+                SdkData("android-34", listOf("/sdk/platforms/android-34/android.jar"), buildToolsPath = null, kind = PlatformKind.ANDROID),
+            ),
+        )
+        store.workspace.beginModification().apply {
+            addProject("app", BuildSystemId.NATIVE, store.vfs.root()); commit()
+        }
+        store.workspace.projects.single().beginModification().apply {
+            addModule("on34", types.resolve("android-app")).apply { putFacet(LevelFacet(34)) }
+            addModule("on35", types.resolve("android-app")).apply { putFacet(LevelFacet(35)) }
+            addModule("pinned", types.resolve("android-app")).apply { putFacet(LevelFacet(34)); sdk = SdkRef("android") }
+            commit()
+        }
+        assertEquals("android-34", SdkResolution.sdkFor(store.workspace, module(store, "on34"))?.name)
+        // No android-35 installed: the default Android SDK, never the JVM one or another level.
+        assertEquals("android", SdkResolution.sdkFor(store.workspace, module(store, "on35"))?.name)
+        // An explicit override still wins over the facet.
+        assertEquals("android", SdkResolution.sdkFor(store.workspace, module(store, "pinned"))?.name)
     }
 }

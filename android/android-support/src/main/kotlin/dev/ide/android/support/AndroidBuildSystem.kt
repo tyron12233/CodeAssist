@@ -174,6 +174,9 @@ class AndroidBuildSystem(
      *  byte-identical to before. `:ide-android` supplies the bundled runtime when the "Forward app logs"
      *  setting is on. See [AndroidAppLogRuntime]. */
     private val appLogRuntime: () -> AndroidAppLogRuntime? = { null },
+    /** The installed platform `android.jar` for a compileSdk level, or null to use [sdk]'s. Lets each module
+     *  compile against its own compileSdk rather than the one platform the SDK was detected with. */
+    private val platformFor: (compileSdk: Int) -> Path? = { null },
 ) : BuildSystem {
 
     override val id: BuildSystemId = BuildSystemId.NATIVE
@@ -186,6 +189,18 @@ class AndroidBuildSystem(
      */
     private val compileBootclasspath: List<Path> =
         listOf(sdk.androidJar) + listOfNotNull(sdk.coreLambdaStubs.takeIf { Files.exists(it) })
+
+    /** [facet]'s compileSdk `android.jar` from [platformFor], or the build's default when it is not installed. */
+    private fun androidJarFor(facet: AndroidFacet): Path =
+        platformFor(facet.compileSdk)?.takeIf { Files.isRegularFile(it) } ?: sdk.androidJar
+
+    /** [compileBootclasspath] with [androidJar] in place of the default `android.jar`. */
+    private fun compileBootclasspathFor(androidJar: Path): List<Path> =
+        if (androidJar == sdk.androidJar) compileBootclasspath else listOf(androidJar) + compileBootclasspath.drop(1)
+
+    /** [bootClasspath] with [androidJar] in place of the default `android.jar` (on ART the boot path holds it). */
+    private fun bootClasspathFor(androidJar: Path): List<Path> =
+        bootClasspath.map { if (it == sdk.androidJar) androidJar else it }
 
     override fun supports(moduleType: ModuleType): Boolean = moduleType.id.startsWith("android")
 
@@ -268,6 +283,12 @@ class AndroidBuildSystem(
         config: BuildConfiguration,
     ) {
         val facet = app.facets.get(AndroidFacet.KEY) ?: return
+        // The module's compileSdk platform when one is installed, else the build's default android.jar, for
+        // compiling, linking and shrinking. D8 keeps the default jar: it reads it only to desugar, and the shared
+        // library-dex cache stays valid whichever platform a module compiles against.
+        val androidJar = androidJarFor(facet)
+        val compileBootclasspath = compileBootclasspathFor(androidJar)
+        val bootClasspath = bootClasspathFor(androidJar)
         val layout = Layout(app, variant.name)
         val v = variant.name.cap()
         fun step(s: String) = TaskName(":${app.name}:$s$v")
@@ -447,7 +468,7 @@ class AndroidBuildSystem(
         // (AGP's checkAarMetadata). Gates processManifest so a violation stops the build with a clear message.
         val checkAarMeta = step("checkAarMetadata")
         tasks.task(checkAarMeta) {
-            CheckAarMetadataTask(checkAarMeta, libs.aarMetadata, facet.compileSdk, layout.aarMetadataCheck, sdk.androidJar)
+            CheckAarMetadataTask(checkAarMeta, libs.aarMetadata, facet.compileSdk, layout.aarMetadataCheck, androidJar)
         }
         // Merge dependency-library + AAR manifests into the app manifest (so their components/permissions
         // land in the APK), substituting ${applicationId} etc. The linked manifest is the merged one.
@@ -482,7 +503,7 @@ class AndroidBuildSystem(
                 aapt2Link,
                 layout.compiledRes,
                 linkManifest,
-                sdk.androidJar,
+                androidJar,
                 facet.namespace,
                 extraPackages,
                 facet.minSdk,
@@ -678,7 +699,7 @@ class AndroidBuildSystem(
             val minifyTask = TaskName(":${app.name}:minify${v}WithR8")
             tasks.task(minifyTask, listOf(aapt2Link, generateRFile, compile) + listOfNotNull(transformHilt, instrument) + moduleJarProducers) {
                 R8MinifyTask(
-                    minifyTask, dexProjectClasses + subProjectJars + externalJars + rJars, sdk.androidJar, facet.minSdk,
+                    minifyTask, dexProjectClasses + subProjectJars + externalJars + rJars, androidJar, facet.minSdk,
                     keepRuleFiles, inlineRules, facet.r8FullMode,
                     layout.dexArchives.resolve("r8-staging"), layout.dex, shrinker,
                     mappingOutput = layout.mappingTxt,
@@ -887,6 +908,12 @@ class AndroidBuildSystem(
             .filter { it.kind == ClasspathEntryKind.MODULE_OUTPUT }.map { Paths.get(it.root.path) }
         val level = levelOf(m.languageLevel)
         val facet = m.facets.get(AndroidFacet.KEY)!!
+        // The module's compileSdk platform when one is installed, else the build's default android.jar, for
+        // compiling, linking and shrinking. D8 keeps the default jar: it reads it only to desugar, and the shared
+        // library-dex cache stays valid whichever platform a module compiles against.
+        val androidJar = androidJarFor(facet)
+        val compileBootclasspath = compileBootclasspathFor(androidJar)
+        val bootClasspath = bootClasspathFor(androidJar)
         // Upstream modules' Kotlin output (sibling of their Java output) joins this lib's compile classpath.
         val upstreamKotlin = moduleOutputs.map { it.resolveSibling("kotlin-classes") }
         // Non-transitive R: a library's own `R` holds only its own resources, so reading a DEPENDENCY
@@ -909,7 +936,7 @@ class AndroidBuildSystem(
                 generateR,
                 srcRoots(ContentRole.ANDROID_RES),
                 buildDir.parent.resolve(facet.manifest),
-                sdk.androidJar,
+                androidJar,
                 facet.namespace,
                 facet.minSdk,
                 rRoot.resolve("res"),
@@ -1502,8 +1529,8 @@ class AndroidBuildSystem(
          * Desktop wiring: every tool is a subprocess over an installed SDK (`java -cp d8.jar …`,
          * `java -jar apksigner.jar …`, native aapt2/zipalign). No statically-linked tool jars needed.
          */
-        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, generators: List<SourceGenerator> = emptyList(), classTransforms: List<ClassTransform> = emptyList(), dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, appLogRuntime: () -> AndroidAppLogRuntime? = { null }): AndroidBuildSystem =
-            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, plugins = plugins, generators = generators, classTransforms = classTransforms, dexCacheRoot = dexCacheRoot, desugarLib = desugarLib, signingResolver = signingResolver, appLogRuntime = appLogRuntime)
+        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, generators: List<SourceGenerator> = emptyList(), classTransforms: List<ClassTransform> = emptyList(), dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, appLogRuntime: () -> AndroidAppLogRuntime? = { null }, platformFor: (Int) -> Path? = { null }): AndroidBuildSystem =
+            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, plugins = plugins, generators = generators, classTransforms = classTransforms, dexCacheRoot = dexCacheRoot, desugarLib = desugarLib, signingResolver = signingResolver, appLogRuntime = appLogRuntime, platformFor = platformFor)
 
         /**
          * On-device-shaped wiring: the native tools (aapt2, zipalign) run as subprocesses against the
@@ -1512,7 +1539,7 @@ class AndroidBuildSystem(
          * ART (where `java -jar` is impossible); the desktop test runs it too, so the on-device dex/sign
          * code path is exercised on the host.
          */
-        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, generators: List<SourceGenerator> = emptyList(), classTransforms: List<ClassTransform> = emptyList(), dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, shrinker: Shrinker? = null, dexer: Dexer? = null, mergeDexer: Dexer? = null, mergeChunk: () -> Int = { DexMergeTask.DEFAULT_MERGE_CHUNK }, appLogRuntime: () -> AndroidAppLogRuntime? = { null }): AndroidBuildSystem =
+        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, generators: List<SourceGenerator> = emptyList(), classTransforms: List<ClassTransform> = emptyList(), dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, shrinker: Shrinker? = null, dexer: Dexer? = null, mergeDexer: Dexer? = null, mergeChunk: () -> Int = { DexMergeTask.DEFAULT_MERGE_CHUNK }, appLogRuntime: () -> AndroidAppLogRuntime? = { null }, platformFor: (Int) -> Path? = { null }): AndroidBuildSystem =
             AndroidBuildSystem(
                 sdk, signing, bootClasspath,
                 // The dexBuilder ARCHIVE dexer. The host can inject a forked-VM D8 (an [OffHeapArchiveDexer]) so a
@@ -1535,6 +1562,7 @@ class AndroidBuildSystem(
                 signingResolver = signingResolver,
                 mergeChunk = mergeChunk,
                 appLogRuntime = appLogRuntime,
+                platformFor = platformFor,
             )
 
         /** A debug-signed [subprocess] build system, creating the shared debug keystore on demand. */

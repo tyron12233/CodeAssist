@@ -1,5 +1,6 @@
 package dev.ide.android.support.apilevels
 
+import dev.ide.android.support.AndroidApiLevels
 import dev.ide.lang.resolve.ApiLevel
 import dev.ide.lang.resolve.PlatformApiLevels
 import java.io.ByteArrayInputStream
@@ -7,6 +8,8 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.InputStream
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
@@ -52,6 +55,19 @@ class AndroidApiDatabase private constructor(
     }
 
     private val decoded = ConcurrentHashMap<String, Decoded>()
+
+    /**
+     * Every D8-backported method in the table as `owner#name(desc)ret`, the owner by internal name (the form
+     * [ApiVersionsXml.parse] takes). Decodes each record without caching it, for a one-off table rebuild.
+     */
+    fun desugaredMethods(): Set<String> {
+        val out = HashSet<String>()
+        for (offset in directory.values) {
+            val r = readClass(DataInputStream(ByteArrayInputStream(bytes, offset, bytes.size - offset)))
+            r.methods.filter { it.desugared }.mapTo(out) { "${r.internalName}#${it.key}" }
+        }
+        return out
+    }
 
     private fun lookup(className: String): Decoded? {
         val key = canonical(className)
@@ -115,6 +131,28 @@ class AndroidApiDatabase private constructor(
                     return null
                 }
                 return stream.use { read(it) }.also { bundled = it }
+            }
+        }
+
+        private val platformTables = ConcurrentHashMap<Path, AndroidApiDatabase>()
+
+        /**
+         * The table for the platform [androidJar] belongs to. A platform newer than the bundled table (an
+         * installed `android-37` when the IDE ships 36) is read from its own `data/api-versions.xml`, once per
+         * session, with the D8-backported methods carried over from the bundled table. Anything else, or a
+         * platform whose file cannot be read, gets the [bundled] table.
+         */
+        fun forPlatform(androidJar: Path?): AndroidApiDatabase? {
+            val base = bundled() ?: return null
+            val dir = androidJar?.parent ?: return base
+            if (AndroidApiLevels.levelOfPlatformJar(androidJar) <= base.platformLevel) return base
+            val xml = dir.resolve("data").resolve("api-versions.xml")
+            if (!Files.isRegularFile(xml)) return base
+            return platformTables.getOrPut(dir) {
+                runCatching {
+                    val parsed = Files.newInputStream(xml).use { ApiVersionsXml.parse(it, base.desugaredMethods()) }
+                    read(write(parsed.platformLevel, parsed.classes).inputStream())
+                }.getOrDefault(base)
             }
         }
 

@@ -1,8 +1,8 @@
 package dev.ide.android.support.tasks
 
 import dev.ide.android.support.AarMetadataRef
+import dev.ide.android.support.AndroidApiLevels
 import dev.ide.android.support.tools.AarMetadata
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.build.BuildDiagnostic
 import dev.ide.build.BuildSeverity
 import dev.ide.build.DiagnosticKind
@@ -30,7 +30,7 @@ import java.nio.file.Path
  * back to the highest installed platform when the requested one is absent, so a module set to compile against
  * API 36 on a machine that has only `android-34` silently builds against 34 and fails later on a symbol that
  * does not exist there. A warning, not a failure: the build is still the best one this machine can do, and
- * the IDE cannot install a platform for the user.
+ * installing the platform is the user's call (the SDK Manager offers it).
  *
  * The output [stamp] is a marker (no real product); it exists only so the check is up-to-date-cacheable and
  * so downstream tasks can depend on it. Re-runs when a dependency's metadata changes or [compileSdk] moves.
@@ -59,7 +59,7 @@ internal class CheckAarMetadataTask(
         resolvedLevel()?.takeIf { it < compileSdk }?.let { level ->
             ctx.warn(
                 "compileSdk $compileSdk is not installed; compiling against API $level instead. " +
-                    "Install the android-$compileSdk platform, or lower compileSdk in Module Settings.",
+                    "Install Android SDK Platform $compileSdk in the SDK Manager, or lower compileSdk in Module Settings.",
             )
         }
         val errors = ArrayList<String>()
@@ -85,8 +85,7 @@ internal class CheckAarMetadataTask(
         return TaskResult.Success
     }
 
-    /** The API level of the platform jar the build resolved (`platforms/android-36/android.jar` -> 36), or
-     *  null when there is no jar to read a level from (the on-device bundled asset has no platform dir). */
-    private fun resolvedLevel(): Int? =
-        platformJar?.parent?.fileName?.toString()?.let { AndroidSdk.apiLevelOf(it) }?.takeIf { it > 0 }
+    /** The API level of the platform jar the build resolved (`platforms/android-36/android.jar` -> 36, the
+     *  bundled jar's level for one outside a platform dir), or null when there is no jar. */
+    private fun resolvedLevel(): Int? = platformJar?.let(AndroidApiLevels::levelOfPlatformJar)
 }

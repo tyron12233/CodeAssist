@@ -18,12 +18,23 @@ class AndroidSdkInstallerTest {
     private val xml = """
         <sdk:sdk-repository xmlns:sdk="http://schemas.android.com/sdk/android/repo/repository2/03"
                             xmlns:common="http://schemas.android.com/repository/android/common/02">
+          <license id="android-sdk-license" type="text">Terms and Conditions
+        This is the Android Software Development Kit License Agreement</license>
           <remotePackage path="platforms;android-34">
             <display-name>Android SDK Platform 34</display-name>
             <revision><major>3</major></revision>
+            <uses-license ref="android-sdk-license"/>
             <archives>
               <archive><complete><size>1000</size><url>platform-34_r03.zip</url></complete></archive>
             </archives>
+          </remotePackage>
+          <remotePackage path="platforms;android-34-ext12">
+            <display-name>Android SDK Platform 34-ext12</display-name>
+            <archives><archive><complete><size>1</size><url>p34e.zip</url></complete></archive></archives>
+          </remotePackage>
+          <remotePackage path="platforms;android-37.2-beta1">
+            <display-name>Android SDK Platform 37.2 beta</display-name>
+            <archives><archive><complete><size>1</size><url>p37b.zip</url></complete></archive></archives>
           </remotePackage>
           <remotePackage path="build-tools;34.0.0">
             <display-name>Android SDK Build-Tools 34</display-name>
@@ -48,10 +59,15 @@ class AndroidSdkInstallerTest {
     """.trimIndent()
 
     @Test
-    fun parsesSourcesOnly() {
+    fun parsesSourcesAndStablePlatforms() {
         val pkgs = AndroidSdkInstaller.parsePackages(xml)
-        // Sources only — platforms/build-tools/cmdline-tools/extras are all dropped.
-        assertEquals(setOf("sources;android-34"), pkgs.map { it.path }.toSet())
+        // Sources and stable platforms; extension/beta platforms, build-tools and extras are dropped.
+        assertEquals(setOf("sources;android-34", "platforms;android-34"), pkgs.map { it.path }.toSet())
+
+        val platform = pkgs.first { it.path == "platforms;android-34" }
+        assertEquals(AndroidSdkInstaller.Category.PLATFORMS, platform.category)
+        assertEquals("android-sdk-license", platform.license)
+        assertNull(pkgs.first { it.path == "sources;android-34" }.license)
 
         val sources = pkgs.first { it.path == "sources;android-34" }
         assertEquals(AndroidSdkInstaller.Category.SOURCES, sources.category)
@@ -81,10 +97,23 @@ class AndroidSdkInstallerTest {
     }
 
     @Test
+    fun parsesLicenseText() {
+        val text = AndroidSdkInstaller.parseLicenses(xml)["android-sdk-license"]!!
+        assertTrue(text.startsWith("Terms and Conditions"), text)
+        assertTrue("Android Software Development Kit License Agreement" in text, text)
+    }
+
+    @Test
     fun categoryOfClassifies() {
         assertEquals(AndroidSdkInstaller.Category.SOURCES, AndroidSdkInstaller.categoryOf("sources;android-34"))
-        // Everything that isn't a source is OTHER (and so never offered for install).
-        assertEquals(AndroidSdkInstaller.Category.OTHER, AndroidSdkInstaller.categoryOf("platforms;android-34"))
+        assertEquals(AndroidSdkInstaller.Category.PLATFORMS, AndroidSdkInstaller.categoryOf("platforms;android-34"))
+        assertEquals(AndroidSdkInstaller.Category.PLATFORMS, AndroidSdkInstaller.categoryOf("platforms;android-36.1"))
+        assertEquals(36, AndroidSdkInstaller.platformLevel("platforms;android-36.1"))
+        // Extension, preview and pre-21 platforms are not offered; nor is anything that isn't a source or platform.
+        assertEquals(AndroidSdkInstaller.Category.OTHER, AndroidSdkInstaller.categoryOf("platforms;android-34-ext12"))
+        assertEquals(AndroidSdkInstaller.Category.OTHER, AndroidSdkInstaller.categoryOf("platforms;android-37.2-beta1"))
+        assertEquals(AndroidSdkInstaller.Category.OTHER, AndroidSdkInstaller.categoryOf("platforms;android-CANARY"))
+        assertEquals(AndroidSdkInstaller.Category.OTHER, AndroidSdkInstaller.categoryOf("platforms;android-19"))
         assertEquals(AndroidSdkInstaller.Category.OTHER, AndroidSdkInstaller.categoryOf("build-tools;34.0.0"))
         assertEquals(AndroidSdkInstaller.Category.OTHER, AndroidSdkInstaller.categoryOf("cmdline-tools;latest"))
         assertEquals(AndroidSdkInstaller.Category.OTHER, AndroidSdkInstaller.categoryOf("ndk;26.0.0"))
@@ -125,6 +154,105 @@ class AndroidSdkInstallerTest {
         assertNull(AndroidSdkInstaller.install(pkg, sdkRoot, sdkRoot.resolve("dl"), zipFetcher("Foo.java", "class Foo {}")))
         assertTrue(AndroidSdkInstaller.incompletePackages(sdkRoot).isEmpty())
         assertEquals(setOf("sources;android-34"), AndroidSdkInstaller.installedPackages(sdkRoot))
+        }
+    }
+
+    /** A platform archive as the SDK repo ships it: one root dir holding the jar plus files a slim install skips. */
+    private fun platformZip(): ByteArray {
+        // Incompressible payloads, so the skipped entries are a real share of the archive.
+        val random = java.util.Random(1)
+        fun noise(n: Int) = ByteArray(n).also(random::nextBytes)
+        val bytes = java.io.ByteArrayOutputStream()
+        ZipOutputStream(bytes).use { z ->
+            fun put(name: String, content: ByteArray, stored: Boolean = false) {
+                val e = ZipEntry(name)
+                if (stored) {
+                    e.method = ZipEntry.STORED; e.size = content.size.toLong(); e.compressedSize = content.size.toLong()
+                    e.crc = java.util.zip.CRC32().also { it.update(content) }.value
+                }
+                z.putNextEntry(e); z.write(content); z.closeEntry()
+            }
+            put("android-34/", ByteArray(0))
+            put("android-34/android.jar", noise(200_000))
+            put("android-34/framework.aidl", "parcelable android.os.Bundle;".toByteArray(), stored = true)
+            put("android-34/data/api-versions.xml", "<api version=\"3\"/>".toByteArray())
+            put("android-34/data/res/values/attrs.xml", noise(50_000))
+            put("android-34/android-stubs-src.jar", noise(80_000))
+            put("android-34/optional/org.apache.http.legacy.jar", ByteArray(1000))
+            put("android-34/skins/WVGA800/layout", ByteArray(100))
+        }
+        return bytes.toByteArray()
+    }
+
+    /** Serves [zip] for every URL; Range requests too unless [ranges] is off. Counts the bytes it sends. */
+    private class ZipServer(val zip: ByteArray, val ranges: Boolean, val xmlText: String) : SdkNetFetcher {
+        var rangeBytes = 0L
+        var fullDownloads = 0
+        override fun fetchText(url: String): String = xmlText
+        override fun download(url: String, dest: Path, onProgress: (Long, Long) -> Unit): Boolean {
+            fullDownloads++
+            Files.write(dest, zip); onProgress(zip.size.toLong(), zip.size.toLong()); return true
+        }
+        override fun openRange(url: String, start: Long, endInclusive: Long): java.io.InputStream? {
+            if (!ranges) return null
+            val end = minOf(endInclusive, zip.size - 1L)
+            rangeBytes += end - start + 1
+            return java.io.ByteArrayInputStream(zip, start.toInt(), (end - start + 1).toInt())
+        }
+    }
+
+    private fun platformPkg(size: Long) =
+        AndroidSdkInstaller.parsePackages(xml).first { it.path == "platforms;android-34" }.copy(sizeBytes = size)
+
+    @Test
+    fun slimPlatformInstallFetchesOnlyTheFilesTheIdeReads() {
+        withTempDir("sdkslim") { tmp ->
+            val zip = platformZip()
+            val server = ZipServer(zip, ranges = true, xmlText = xml)
+            val sdkRoot = tmp.resolve("sdk")
+            val err = AndroidSdkInstaller.install(platformPkg(zip.size.toLong()), sdkRoot, tmp.resolve("dl"), server, slim = true)
+            assertNull(err)
+            val dir = sdkRoot.resolve("platforms/android-34")
+            assertEquals(200_000L, Files.size(dir.resolve("android.jar")))
+            assertEquals("parcelable android.os.Bundle;", Files.readString(dir.resolve("framework.aidl")))
+            assertTrue(Files.isRegularFile(dir.resolve("data/api-versions.xml")))
+            assertTrue(Files.isRegularFile(dir.resolve("optional/org.apache.http.legacy.jar")))
+            assertFalse(Files.exists(dir.resolve("data/res")))
+            assertFalse(Files.exists(dir.resolve("android-stubs-src.jar")))
+            assertFalse(Files.exists(dir.resolve("skins")))
+            assertEquals(0, server.fullDownloads)
+            assertTrue(server.rangeBytes < zip.size, "fetched ${server.rangeBytes} of ${zip.size}")
+            assertEquals(setOf("platforms;android-34"), AndroidSdkInstaller.installedPackages(sdkRoot))
+            assertEquals(mapOf(34 to dir.resolve("android.jar")), AndroidSdkInstaller.installedPlatforms(sdkRoot))
+        }
+    }
+
+    @Test
+    fun slimInstallFallsBackToTheWholeArchiveWithoutRangeSupport() {
+        withTempDir("sdkslim2") { tmp ->
+            val zip = platformZip()
+            val server = ZipServer(zip, ranges = false, xmlText = xml)
+            val sdkRoot = tmp.resolve("sdk")
+            assertNull(AndroidSdkInstaller.install(platformPkg(zip.size.toLong()), sdkRoot, tmp.resolve("dl"), server, slim = true))
+            assertEquals(1, server.fullDownloads)
+            // The whole archive arrived, so everything is installed.
+            assertTrue(Files.exists(sdkRoot.resolve("platforms/android-34/data/res/values/attrs.xml")))
+        }
+    }
+
+    @Test
+    fun installedPlatformsPreferThePlainRevisionAndSkipBrokenDirs() {
+        withTempDir("sdkplat") { tmp ->
+            val platforms = tmp.resolve("platforms")
+            fun platform(name: String, jar: Boolean = true) {
+                val d = Files.createDirectories(platforms.resolve(name))
+                if (jar) Files.write(d.resolve("android.jar"), byteArrayOf(1))
+            }
+            platform("android-36.1"); platform("android-36"); platform("android-35.1"); platform("android-35.2")
+            platform("android-34", jar = false)
+            platform("android-33"); Files.createFile(platforms.resolve("android-33.installing"))
+            val got = AndroidSdkInstaller.installedPlatforms(tmp)
+            assertEquals(mapOf(35 to platforms.resolve("android-35.2/android.jar"), 36 to platforms.resolve("android-36/android.jar")), got)
         }
     }
 

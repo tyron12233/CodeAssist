@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -41,6 +43,7 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiSdkDownload
 import dev.ide.ui.backend.UiSdkPackage
 import dev.ide.ui.components.AdSlot
+import dev.ide.ui.components.CenteredDialog
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.LinearProgressIndicator
 import dev.ide.ui.components.pressScale
@@ -67,9 +70,15 @@ import dev.ide.ui.generated.resources.sdk_jdk_no_sources
 import dev.ide.ui.generated.resources.sdk_jdk_sources
 import dev.ide.ui.generated.resources.sdk_jdk_sources_available
 import dev.ide.ui.generated.resources.sdk_jdk_version
+import dev.ide.ui.generated.resources.sdk_license_accept
+import dev.ide.ui.generated.resources.sdk_license_decline
+import dev.ide.ui.generated.resources.sdk_license_title
+import dev.ide.ui.generated.resources.sdk_license_unavailable
 import dev.ide.ui.generated.resources.sdk_loading_packages
 import dev.ide.ui.generated.resources.sdk_manager_title
 import dev.ide.ui.generated.resources.sdk_no_packages
+import dev.ide.ui.generated.resources.sdk_platforms
+import dev.ide.ui.generated.resources.sdk_platforms_desc
 import dev.ide.ui.generated.resources.sdk_resume
 import dev.ide.ui.generated.resources.sdk_sources_documentation
 import dev.ide.ui.generated.resources.sdk_sources_documentation_desc
@@ -111,7 +120,7 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
                 }
                 Text(text, style = MaterialTheme.typography.bodyMedium, color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
             }
-            // Purpose: these downloads power editor docs, not building.
+            // Purpose: the sources power editor docs; platforms (below) are what modules compile against.
             Card {
                 Text(stringResource(Res.string.sdk_sources_documentation), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(4.dp))
@@ -175,28 +184,77 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
                 }
             }
 
+            // Android platforms: the android.jar a module's compileSdk compiles and completes against.
+            val platforms = state.packages.filter { it.category == "PLATFORMS" }
+            if (platforms.isNotEmpty()) {
+                SectionHeader(stringResource(Res.string.sdk_platforms))
+                Text(stringResource(Res.string.sdk_platforms_desc), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                PackageList(platforms.sortedWith(compareByDescending<UiSdkPackage> { platformOrder(it.path) }), state, activeIds)
+            }
+
             // Android platform sources (the documentation payload). Build tooling is bundled, never downloaded.
+            val sources = state.packages.filter { it.category != "PLATFORMS" }
             SectionHeader(stringResource(Res.string.sdk_android_sources))
             if (state.loading && state.packages.isEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                     Text(stringResource(Res.string.sdk_loading_packages), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            } else if (state.packages.isEmpty()) {
+            } else if (sources.isEmpty()) {
                 Text(stringResource(Res.string.sdk_no_packages), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
             } else {
-                Card {
-                    val sorted = state.packages.sortedByDescending { it.path }
-                    sorted.forEachIndexed { i, p ->
-                        if (i > 0) { Spacer(Modifier.height(4.dp)); RowDivider(); Spacer(Modifier.height(4.dp)) }
-                        PackageRow(p, downloading = p.path in activeIds, onInstall = { state.install(p) },
-                            onCancel = { state.cancel(p.path) })
-                    }
-                }
+                PackageList(sources.sortedByDescending { it.path }, state, activeIds)
             }
 
             // A native ad at the foot of this browse/download surface — dead time behind the download bars.
             AdSlot(AdPlacement.SDK_MANAGER)
+        }
+    }
+    state.licensePrompt?.let { prompt ->
+        LicenseDialog(prompt, onAccept = state::acceptLicense, onDecline = state::declineLicense)
+    }
+}
+
+@Composable
+private fun PackageList(packages: List<UiSdkPackage>, state: SdkManagerState, activeIds: Set<String>) {
+    Card {
+        packages.forEachIndexed { i, p ->
+            if (i > 0) { Spacer(Modifier.height(4.dp)); RowDivider(); Spacer(Modifier.height(4.dp)) }
+            PackageRow(p, downloading = p.path in activeIds, onInstall = { state.install(p) }, onCancel = { state.cancel(p.path) })
+        }
+    }
+}
+
+/** Sorts `platforms;android-36.1` above `platforms;android-36` above `platforms;android-9`: by level, then minor. */
+private fun platformOrder(path: String): Double =
+    path.substringAfterLast("android-").toDoubleOrNull() ?: 0.0
+
+/** The license a package needs accepted before it installs, shown in full with Accept and Decline. */
+@Composable
+private fun LicenseDialog(prompt: LicensePrompt, onAccept: () -> Unit, onDecline: () -> Unit) {
+    CenteredDialog(visible = true, onDismiss = onDecline) {
+        Column(
+            Modifier.widthIn(max = 520.dp).padding(horizontal = 16.dp)
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(stringResource(Res.string.sdk_license_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            Text(prompt.pkg.displayName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Box(
+                Modifier.fillMaxWidth().heightIn(max = 360.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md))
+                    .verticalScroll(rememberScrollState()).padding(12.dp),
+            ) {
+                Text(
+                    prompt.text ?: stringResource(Res.string.sdk_license_unavailable),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PillButton(stringResource(Res.string.sdk_license_decline), null, accent = false, onClick = onDecline)
+                PillButton(stringResource(Res.string.sdk_license_accept), CaIcons.check, accent = true, enabled = prompt.text != null, onClick = onAccept)
+            }
         }
     }
 }

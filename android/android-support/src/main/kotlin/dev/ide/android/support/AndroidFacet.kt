@@ -2,6 +2,7 @@ package dev.ide.android.support
 
 import dev.ide.model.Facet
 import dev.ide.model.FacetKey
+import dev.ide.model.PlatformSdkFacet
 
 /**
  * The Android domain configuration attached to an `android-app` / `android-lib` [dev.ide.model.Module].
@@ -67,14 +68,20 @@ data class AndroidFacet(
     val buildFeatures: BuildFeatures = BuildFeatures(),
     /** AGP's `android { packaging { … } }`: how Java resources + native libs are merged into the APK. */
     val packaging: AndroidPackaging = AndroidPackaging(),
-) : Facet {
+) : PlatformSdkFacet {
     override val key: FacetKey<AndroidFacet> get() = KEY
+
+    /** The downloaded platform for [compileSdk] (see [platformSdkName]); without it, the default Android SDK. */
+    override val preferredSdkName: String get() = platformSdkName(compileSdk)
 
     val buildType: (String) -> BuildType? get() = { n -> buildTypes.firstOrNull { it.name == n } }
 
     companion object {
         /** The single shared key — facet lookup is identity-based, so always reference this instance. */
         val KEY = FacetKey<AndroidFacet>("android")
+
+        /** The SDK-table name of the installed platform for API [level]: `android-34`. */
+        fun platformSdkName(level: Int): String = "android-$level"
 
         /** AGP's `defaultConfig` version defaults. A facet still holding these is treated as "unset", so a
          *  manifest-declared `android:versionCode`/`versionName` is respected; an explicit non-default value

@@ -29,7 +29,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The SDK / toolchain manager — it acquires **sources and documentation** for the editor (SDK platform
- * sources, JDK `src.zip`) so javadoc, parameter names, and go-to-source resolve against the real APIs.
+ * sources, JDK `src.zip`) so javadoc, parameter names, and go-to-source resolve against the real APIs, and
+ * Android **platforms**, so a module compiles and completes against its own compileSdk's `android.jar`
+ * (the engine registers each installed one as an `android-<level>` SDK).
  *
  * Downloads run on a long-lived [scope] (not the caller's), so they keep going after the SDK Manager screen
  * is closed — the UI observes the shared [state] (a per-item queue) exactly like the Dependencies screen
@@ -86,31 +88,86 @@ class SdkManagerService(
     /** Where Android packages install: the detected SDK, else a conventional per-OS location (created on use). */
     fun androidSdkRoot(): Path = AndroidSdk.findSdkRoot(workspaceRoot) ?: defaultAndroidSdkRoot()
 
-    /** List the installable Android **source** packages, each flagged [UiSdkPackage.installed]/
-     *  [UiSdkPackage.incomplete]. The SDK Manager is for sources/docs only ([AndroidSdkInstaller] fetches no
-     *  other category), so platforms/build-tools/command-line tools never appear. Empty when offline. */
+    /** The last repository manifest read, for the license texts its packages reference. */
+    @Volatile
+    private var repository: AndroidSdkInstaller.Repository? = null
+
+    private fun fetchRepository(): AndroidSdkInstaller.Repository =
+        AndroidSdkInstaller.fetchRepository(fetcher).also { repository = it }
+
+    /** List the installable Android **source** and **platform** packages, each flagged [UiSdkPackage.installed]/
+     *  [UiSdkPackage.incomplete] and with its license state. Build-tools and command-line tools never appear
+     *  ([AndroidSdkInstaller] fetches no other category). Throws when offline. */
     suspend fun androidPackages(): List<UiSdkPackage> = withContext(Dispatchers.IO) {
         val root = androidSdkRoot()
         val installed = runCatching { AndroidSdkInstaller.installedPackages(root) }.getOrDefault(emptySet())
         val incomplete = runCatching { AndroidSdkInstaller.incompletePackages(root) }.getOrDefault(emptySet())
-        AndroidSdkInstaller.fetchPackages(fetcher)
-            .map { UiSdkPackage(it.path, it.displayName, it.category.name, it.sizeBytes, it.path in installed, it.archiveUrl != null, it.path in incomplete) }
+        val repo = fetchRepository()
+        repo.packages.map {
+            UiSdkPackage(
+                it.path, it.displayName, it.category.name, it.sizeBytes, it.path in installed, it.archiveUrl != null,
+                it.path in incomplete, license = it.license,
+                licenseAccepted = it.license.let { id -> id == null || isLicenseAccepted(id, repo.licenses[id]) },
+            )
+        }
     }
 
-    /** Start downloading one Android **source** package by its sdkmanager id (`sources;android-34`) on the
-     *  background scope. Returns immediately; progress streams on [state]. */
+    /** The text of the repository license [id] (`android-sdk-license`), or null when it is unknown. */
+    suspend fun licenseText(id: String): String? = withContext(Dispatchers.IO) {
+        (repository ?: runCatching { fetchRepository() }.getOrNull())?.licenses?.get(id)?.trim()
+    }
+
+    /** Record that the user accepted license [id] as the repository currently words it. */
+    suspend fun acceptLicense(id: String): Unit = withContext(Dispatchers.IO) {
+        val text = (repository ?: fetchRepository()).licenses[id] ?: return@withContext
+        val file = licensesDir.resolve(id)
+        Files.createDirectories(licensesDir)
+        Files.writeString(file, licenseHash(text) + "\n")
+    }
+
+    /** True when the user accepted [id] with this exact [text]; a reworded license must be accepted again. */
+    private fun isLicenseAccepted(id: String, text: String?): Boolean {
+        if (text == null) return false
+        val file = licensesDir.resolve(id)
+        return Files.isRegularFile(file) && licenseHash(text) in Files.readAllLines(file).map { it.trim() }
+    }
+
+    private val licensesDir: Path = platformDir.resolve("licenses")
+
+    private fun licenseHash(text: String): String =
+        java.security.MessageDigest.getInstance("SHA-1").digest(text.trim().toByteArray())
+            .joinToString("") { "%02x".format(it) }
+
+    /**
+     * The installed Android platforms by API level (`platforms/android-34/android.jar` → 34), from the SDK
+     * Manager's root: the user's SDK on desktop, the IDE's own on device.
+     */
+    fun installedPlatforms(): Map<Int, Path> =
+        runCatching { AndroidSdkInstaller.installedPlatforms(androidSdkRoot()) }.getOrDefault(emptyMap())
+
+    /** Start downloading one Android source or platform package by its sdkmanager id (`sources;android-34`,
+     *  `platforms;android-34`) on the background scope. A package under a license needs [acceptLicense]
+     *  first. Returns immediately; progress streams on [state]. */
     fun installAndroidPackage(path: String): String {
         if (jobs.containsKey(path)) return "Already downloading $path."
-        // Sources only: the SDK Manager never offers anything else, so reject a stale/foreign id outright.
-        if (!path.startsWith("sources;")) return "Only SDK sources can be installed."
+        val category = AndroidSdkInstaller.categoryOf(path)
+        if (category == AndroidSdkInstaller.Category.OTHER) return "Only SDK sources and platforms can be installed."
         launchDownload(path, path) {
-            val pkg = withContext(Dispatchers.IO) { AndroidSdkInstaller.fetchPackages(fetcher).firstOrNull { it.path == path } }
+            val repo = withContext(Dispatchers.IO) { fetchRepository() }
+            val pkg = repo.packages.firstOrNull { it.path == path }
                 ?: return@launchDownload "Package $path not found in the repository."
+            val license = pkg.license
+            if (license != null && !isLicenseAccepted(license, repo.licenses[license])) {
+                return@launchDownload "Accept the license for ${pkg.displayName} first."
+            }
             update(path) { it.copy(label = pkg.displayName) }
             val root = androidSdkRoot()
             runCatching { Files.createDirectories(root) }
             AndroidSdkInstaller.install(
                 pkg, root, downloadsDir, fetcher,
+                // Fetch only what the IDE reads, into the SDK root it owns. A user's own SDK gets the whole
+                // platform, so Android Studio and sdkmanager still find it complete.
+                slim = category == AndroidSdkInstaller.Category.PLATFORMS && root.startsWith(platformDir),
                 onProgress = { read, total ->
                     abortIfCancelled(path)
                     update(path) { it.copy(status = "DOWNLOADING", fraction = frac(read, total), detail = bytes(read, total)) }

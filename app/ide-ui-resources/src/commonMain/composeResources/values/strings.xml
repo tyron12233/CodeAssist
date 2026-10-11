@@ -1175,7 +1175,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="settings_symbols">Symbols &amp; Macros</string>
     <string name="settings_symbols_subtitle">Keyboard symbol bar &amp; text macros</string>
     <string name="settings_sdk_manager">SDK Manager</string>
-    <string name="settings_sdk_manager_subtitle">Download Android SDK &amp; JDK sources</string>
+    <string name="settings_sdk_manager_subtitle">Download Android platforms, SDK &amp; JDK sources</string>
     <string name="settings_keystore_manager">Keystore Manager</string>
     <string name="settings_keystore_manager_subtitle">Create, import &amp; manage signing keystores</string>
     <string name="settings_plugins">Plugins</string>
@@ -1275,6 +1275,12 @@ We never collect your code, file or project names, which features you use, or an
     <string name="sdk_download_installing">Installing…</string>
     <string name="sdk_installed">Installed</string>
     <string name="sdk_resume">Resume</string>
+    <string name="sdk_platforms">Android SDK platforms</string>
+    <string name="sdk_platforms_desc">The android.jar a module compiles and completes against, matched to its compileSdk. A module whose platform is not installed uses the default one.</string>
+    <string name="sdk_license_title">License agreement</string>
+    <string name="sdk_license_accept">Accept</string>
+    <string name="sdk_license_decline">Decline</string>
+    <string name="sdk_license_unavailable">The license text could not be loaded. Check your connection and try again.</string>
 
     <!-- dep (DependenciesScreen) — enums use @Composable label() extensions -->
     <string name="dep_declared">Declared</string>
@@ -1555,6 +1561,7 @@ We never collect your code, file or project names, which features you use, or an
 
     <string name="modcfg_platform_sdk">Platform SDK</string>
     <string name="modcfg_platform_sdk_auto">Auto (%1$s)</string>
+    <string name="modcfg_platform_missing">compileSdk %1$d is not installed, so this module compiles and completes against API %2$d. Install Android SDK Platform %1$d in the SDK Manager.</string>
 
     <!-- AI coding agent -->
 

@@ -110,4 +110,39 @@ class AndroidApiDatabaseTest {
         assertEquals(1, db.classLevel("android.app.Activity")?.since)
         assertTrue(db.methodLevel("java.util.Objects", "requireNonNull", null)!!.desugared)
     }
+
+    @Test
+    fun desugaredMethodsListsTheBackportedOnes() {
+        val db = db(desugared = setOf("java/util/List#of()Ljava/util/List;"))
+        assertEquals(setOf("java/util/List#of()Ljava/util/List;"), db.desugaredMethods())
+        assertTrue(AndroidApiDatabase.bundled()!!.desugaredMethods().any { it.startsWith("java/util/Objects#requireNonNull(") })
+    }
+
+    @Test
+    fun aNewerPlatformAnswersFromItsOwnApiVersions() {
+        val bundled = AndroidApiDatabase.bundled()!!
+        val root = java.nio.file.Files.createTempDirectory("platforms")
+        fun platform(name: String, apiXml: String?): java.nio.file.Path {
+            val dir = java.nio.file.Files.createDirectories(root.resolve(name))
+            apiXml?.let { java.nio.file.Files.createDirectories(dir.resolve("data")); java.nio.file.Files.writeString(dir.resolve("data/api-versions.xml"), it) }
+            return java.nio.file.Files.write(dir.resolve("android.jar"), byteArrayOf(1))
+        }
+        val newer = bundled.platformLevel + 1
+        val apiXml = """
+            <api version="3">
+                <class name="android/app/Brand${'$'}New" since="$newer"/>
+                <class name="java/util/Objects" since="19">
+                    <method name="requireNonNull(Ljava/lang/Object;)Ljava/lang/Object;"/>
+                </class>
+            </api>
+        """.trimIndent()
+        val db = AndroidApiDatabase.forPlatform(platform("android-$newer", apiXml))!!
+        assertEquals(newer, db.classLevel("android.app.Brand.New")?.since)
+        // D8's backports come over from the bundled table, so they stay exempt.
+        assertTrue(db.methodLevel("java.util.Objects", "requireNonNull", null)!!.desugared)
+        // An older platform, a platform without the file, and no platform at all keep the bundled table.
+        assertTrue(AndroidApiDatabase.forPlatform(platform("android-34", apiXml)) === bundled)
+        assertTrue(AndroidApiDatabase.forPlatform(platform("android-${newer + 1}", null)) === bundled)
+        assertTrue(AndroidApiDatabase.forPlatform(null) === bundled)
+    }
 }

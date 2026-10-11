@@ -13,8 +13,9 @@ package dev.ide.model
  * Precedence (first match wins):
  *  1. [Module.sdk] — an explicit `sdk = "<name>"` override in `module.toml` (e.g. to pin an API level).
  *  2. An [SdkDependency] order entry naming an SDK in the table (legacy/explicit form).
- *  3. The module type's [ModuleType.platform] default — the first table SDK whose [Sdk.kind] matches.
- *  4. Any SDK in the table (last-resort back-compat, so an unconfigured workspace still resolves something).
+ *  3. The SDK a [PlatformSdkFacet] names (Android's `android-<compileSdk>`), when the table has it.
+ *  4. The module type's [ModuleType.platform] default — the first table SDK whose [Sdk.kind] matches.
+ *  5. Any SDK in the table (last-resort back-compat, so an unconfigured workspace still resolves something).
  */
 object SdkResolution {
 
@@ -26,6 +27,11 @@ object SdkResolution {
         module.dependencies.asSequence()
             .filterIsInstance<SdkDependency>()
             .firstNotNullOfOrNull { table.byName(it.sdk.name) }
+            ?.let { return it }
+
+        module.facets.all.asSequence()
+            .filterIsInstance<PlatformSdkFacet>()
+            .firstNotNullOfOrNull { table.byName(it.preferredSdkName) }
             ?.let { return it }
 
         val kind = module.type.platform

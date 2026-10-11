@@ -3,6 +3,7 @@ package dev.ide.android.support.tools
 import org.w3c.dom.Element
 import java.io.BufferedInputStream
 import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
@@ -14,25 +15,30 @@ import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
- * A self-contained Android SDK **sources** downloader, talking to Google's SDK repository directly (so it
- * works on desktop and on-device, where no `sdkmanager` exists). It fetches the repository manifest, lists the
- * installable source packages, and installs one by downloading its archive and extracting it into the SDK
- * layout. Network and disk are the only side effects; all I/O goes through an injected [SdkNetFetcher] so the
- * parsing/selection/path logic is unit-testable offline.
+ * A self-contained Android SDK downloader for **sources** and **platforms**, talking to Google's SDK
+ * repository directly (so it works on desktop and on-device, where no `sdkmanager` exists). It fetches the
+ * repository manifest, lists the installable packages, and installs one by downloading its archive and
+ * extracting it into the SDK layout. Network and disk are the only side effects; all I/O goes through an
+ * injected [SdkNetFetcher] so the parsing/selection/path logic is unit-testable offline.
  *
- * Sources only, by design: they exist to power editor docs (javadoc, parameter names, go-to-source), and are
- * architecture-independent. Platforms/build-tools/command-line tools are not offered — on-device the build
- * uses bundled tools (aapt2, in-process D8/apksig) and the bundled android.jar, so there is nothing to fetch.
+ * Sources power editor docs (javadoc, parameter names, go-to-source). Platforms supply the `android.jar` a
+ * module's compileSdk compiles against when it is not the bundled one; a [slim][install] platform install
+ * fetches only the files the IDE reads ([SLIM_PLATFORM_FILES]). Build-tools and command-line tools are not
+ * offered: on-device the build uses bundled tools (aapt2, in-process D8/apksig).
  */
 object AndroidSdkInstaller {
 
     const val REPO_BASE = "https://dl.google.com/android/repository/"
     private const val REPO_XML = "repository2-3.xml"
 
-    enum class Category { SOURCES, OTHER }
+    enum class Category { SOURCES, PLATFORMS, OTHER }
+
+    /** The oldest platform offered; older ones predate every minSdk the IDE builds for. */
+    const val MIN_PLATFORM = 21
 
     /** One installable package from the repository manifest. [path] is the sdkmanager-style id
-     *  (`platforms;android-34`); [archiveUrl] is absolute (or null if no archive fits this host). */
+     *  (`platforms;android-34`); [archiveUrl] is absolute (or null if no archive fits this host); [license]
+     *  is the id of the license the user must accept first (`android-sdk-license`). */
     data class RepoPackage(
         val path: String,
         val displayName: String,
@@ -40,19 +46,38 @@ object AndroidSdkInstaller {
         val category: Category,
         val archiveUrl: String?,
         val sizeBytes: Long,
+        val license: String? = null,
     ) {
         /** Where this package installs under an SDK root: `platforms;android-34` → `platforms/android-34`. */
         fun installDir(sdkRoot: Path): Path = path.split(';').fold(sdkRoot) { acc, seg -> acc.resolve(seg) }
     }
 
-    /** Fetch + parse the repository manifest into the available packages. Empty on a network/parse failure. */
-    fun fetchPackages(fetcher: SdkNetFetcher = HttpSdkNetFetcher): List<RepoPackage> {
+    /** The parsed manifest: its packages and the text of each license they reference, by id. */
+    data class Repository(val packages: List<RepoPackage>, val licenses: Map<String, String>)
+
+    /** Fetch + parse the repository manifest into the available packages. Empty on a parse failure. */
+    fun fetchPackages(fetcher: SdkNetFetcher = HttpSdkNetFetcher): List<RepoPackage> = fetchRepository(fetcher).packages
+
+    /** Fetch + parse the repository manifest. Throws when it cannot be reached; empty on a parse failure. */
+    fun fetchRepository(fetcher: SdkNetFetcher = HttpSdkNetFetcher): Repository {
         val xml = fetcher.fetchText(REPO_BASE + REPO_XML)
             ?: throw IOException("Could not reach the Android SDK repository (${REPO_BASE}${REPO_XML}). Check your internet connection.")
-        return runCatching { parsePackages(xml) }.getOrDefault(emptyList())
+        return runCatching { Repository(parsePackages(xml), parseLicenses(xml)) }.getOrDefault(Repository(emptyList(), emptyMap()))
     }
 
-    internal fun parsePackages(xml: String): List<RepoPackage> {
+    internal fun parseLicenses(xml: String): Map<String, String> {
+        val doc = parseXml(xml)
+        val out = LinkedHashMap<String, String>()
+        val licenses = doc.getElementsByTagNameNS("*", "license")
+        for (i in 0 until licenses.length) {
+            val l = licenses.item(i) as? Element ?: continue
+            val id = l.getAttribute("id").ifEmpty { continue }
+            out[id] = l.textContent
+        }
+        return out
+    }
+
+    private fun parseXml(xml: String): org.w3c.dom.Document {
         val dbf = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
             // Disable external entity resolution: prevents the parser from opening network connections
@@ -61,7 +86,11 @@ object AndroidSdkInstaller {
             runCatching { setFeature("http://xml.org/sax/features/external-general-entities", false) }
             runCatching { setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
         }
-        val doc = dbf.newDocumentBuilder().also { it.setEntityResolver { _, _ -> org.xml.sax.InputSource("".reader()) } }.parse(xml.byteInputStream())
+        return dbf.newDocumentBuilder().also { it.setEntityResolver { _, _ -> org.xml.sax.InputSource("".reader()) } }.parse(xml.byteInputStream())
+    }
+
+    internal fun parsePackages(xml: String): List<RepoPackage> {
+        val doc = parseXml(xml)
         val out = ArrayList<RepoPackage>()
         val remotes = doc.getElementsByTagNameNS("*", "remotePackage")
         for (i in 0 until remotes.length) {
@@ -72,7 +101,8 @@ object AndroidSdkInstaller {
             val displayName = childText(pkg, "display-name") ?: path
             val revision = revisionOf(pkg)
             val (url, size) = chooseArchive(pkg)
-            out += RepoPackage(path, displayName, revision, category, url?.let { REPO_BASE + it }, size)
+            val license = firstChild(pkg, "uses-license")?.getAttribute("ref")?.ifEmpty { null }
+            out += RepoPackage(path, displayName, revision, category, url?.let { REPO_BASE + it }, size, license)
         }
         return out
     }
@@ -87,13 +117,37 @@ object AndroidSdkInstaller {
 
     private fun scanPackages(sdkRoot: Path, accept: (Path) -> Boolean): Set<String> {
         val out = HashSet<String>()
-        fun listDirs(rel: String, idPrefix: String) {
+        fun listDirs(rel: String, idPrefix: String, complete: (Path) -> Boolean = { true }) {
             val d = sdkRoot.resolve(rel)
             if (!Files.isDirectory(d)) return
-            Files.list(d).use { s -> s.filter { Files.isDirectory(it) && accept(it) }.forEach { out += "$idPrefix${it.fileName}" } }
+            Files.list(d).use { s -> s.filter { Files.isDirectory(it) && accept(it) && complete(it) }.forEach { out += "$idPrefix${it.fileName}" } }
         }
         listDirs("sources", "sources;")
+        listDirs("platforms", "platforms;") { dir -> Files.exists(markerFor(dir)) || Files.isRegularFile(dir.resolve("android.jar")) }
         return out
+    }
+
+    /**
+     * The installed platforms under [sdkRoot] by API level: `platforms/android-34/android.jar` → 34. When a
+     * level has several revisions (`android-36` and `android-36.1`), the plain one wins, then the newest
+     * minor. Interrupted installs are skipped.
+     */
+    fun installedPlatforms(sdkRoot: Path): Map<Int, Path> {
+        val dir = sdkRoot.resolve("platforms")
+        if (!Files.isDirectory(dir)) return emptyMap()
+        val byLevel = HashMap<Int, Pair<Int, Path>>() // level -> (minor, jar); plain = Int.MAX_VALUE
+        Files.list(dir).use { s ->
+            s.forEach { d ->
+                val m = PLATFORM_DIR.matchEntire(d.fileName.toString()) ?: return@forEach
+                val jar = d.resolve("android.jar")
+                if (Files.exists(markerFor(d)) || !Files.isRegularFile(jar)) return@forEach
+                val level = m.groupValues[1].toInt()
+                val rank = m.groupValues[2].ifEmpty { null }?.toInt() ?: Int.MAX_VALUE
+                val cur = byLevel[level]
+                if (cur == null || rank > cur.first) byLevel[level] = rank to jar
+            }
+        }
+        return byLevel.mapValues { it.value.second }.toSortedMap()
     }
 
     /** The sibling marker file flagging an install dir as in-progress (created during install, deleted on success). */
@@ -115,9 +169,22 @@ object AndroidSdkInstaller {
         fetcher: SdkNetFetcher = HttpSdkNetFetcher,
         onProgress: (Long, Long) -> Unit = { _, _ -> },
         onStage: (String) -> Unit = {},
+        /** For a platform: fetch only [SLIM_PLATFORM_FILES] out of the archive (falling back to the whole
+         *  archive when the server ignores Range requests). Leaves a platform other SDK tools may find
+         *  incomplete, so only for an SDK root the IDE owns. */
+        slim: Boolean = false,
     ): String? {
         val url = pkg.archiveUrl ?: return "No archive available for this host."
         Files.createDirectories(downloadsDir)
+        if (slim && pkg.category == Category.PLATFORMS) {
+            val result = try {
+                installSlim(pkg, url, sdkRoot, downloadsDir, fetcher, onProgress, onStage)
+            } catch (e: Exception) {
+                "Install failed: ${e.message}"
+            }
+            // FULL_DOWNLOAD: the server cannot serve ranges, so download the whole archive below.
+            if (result != FULL_DOWNLOAD) return result
+        }
         val archive = downloadsDir.resolve(pkg.path.replace(';', '_').replace('/', '_') + ".zip")
         val installDir = pkg.installDir(sdkRoot)
         val marker = markerFor(installDir)
@@ -148,10 +215,63 @@ object AndroidSdkInstaller {
         }
     }
 
+    /**
+     * The slim platform install: list the archive over Range requests, fetch the [SLIM_PLATFORM_FILES]
+     * entries into a per-package staging dir under [downloadsDir] (kept across attempts, so a retry skips
+     * what already arrived), then place them. Returns null on success, an error message on failure, or
+     * [FULL_DOWNLOAD] when the archive cannot be listed over ranges.
+     */
+    private fun installSlim(
+        pkg: RepoPackage, url: String, sdkRoot: Path, downloadsDir: Path, fetcher: SdkNetFetcher,
+        onProgress: (Long, Long) -> Unit, onStage: (String) -> Unit,
+    ): String? {
+        onStage("DOWNLOADING")
+        val all = RemoteZip.entries(url, pkg.sizeBytes, fetcher) ?: return FULL_DOWNLOAD
+        val wanted = all.filter { e -> !e.name.endsWith("/") && isSlimPlatformFile(e.name.substringAfter('/', "")) }
+        if (wanted.none { it.name.endsWith("/android.jar") }) return "The archive has no android.jar."
+        val staging = downloadsDir.resolve(pkg.path.replace(';', '_').replace('/', '_') + ".slim")
+        RemoteZip.extract(url, wanted, staging, fetcher, onProgress)
+        onStage("INSTALLING")
+        val installDir = pkg.installDir(sdkRoot)
+        val marker = markerFor(installDir)
+        Files.createDirectories(installDir.parent)
+        runCatching { if (!Files.exists(marker)) Files.createFile(marker) }
+        placeInto(staging, installDir)
+        Files.deleteIfExists(marker)
+        deleteRecursively(staging)
+        return null
+    }
+
+    private const val FULL_DOWNLOAD = "\u0000full-download"
+
+    /** True for a path inside a platform archive's root dir that a [slim][install] install keeps. */
+    internal fun isSlimPlatformFile(relative: String): Boolean =
+        relative in SLIM_PLATFORM_FILES || (relative.startsWith("optional/") && relative.count { it == '/' } == 1 &&
+            (relative.endsWith(".jar") || relative.endsWith(".json")))
+
+    /**
+     * What a slim platform install keeps: the jar compiled against, the API database, the AIDL framework
+     * parcelables, the version files, and the `optional/` library jars (`useLibrary`). Leaves out the stub
+     * sources, layoutlib data, skins and templates.
+     */
+    val SLIM_PLATFORM_FILES = setOf(
+        "android.jar", "framework.aidl", "build.prop", "source.properties", "sdk.properties", "data/api-versions.xml",
+    )
+
     // ---- XML helpers ----
 
-    internal fun categoryOf(path: String): Category =
-        if (path.startsWith("sources;")) Category.SOURCES else Category.OTHER
+    /** `platforms;android-34` or `platforms;android-36.1`: stable releases only (no -ext, beta or canary). */
+    private val PLATFORM_PATH = Regex("""platforms;android-(\d+)(?:\.\d+)?""")
+    private val PLATFORM_DIR = Regex("""android-(\d+)(?:\.(\d+))?""")
+
+    fun categoryOf(path: String): Category = when {
+        path.startsWith("sources;") -> Category.SOURCES
+        PLATFORM_PATH.matchEntire(path)?.groupValues?.get(1)?.toInt()?.let { it >= MIN_PLATFORM } == true -> Category.PLATFORMS
+        else -> Category.OTHER
+    }
+
+    /** The API level of a platform package id (`platforms;android-36.1` → 36), or null. */
+    fun platformLevel(path: String): Int? = PLATFORM_PATH.matchEntire(path)?.groupValues?.get(1)?.toInt()
 
     private fun revisionOf(pkg: Element): String {
         val rev = firstChild(pkg, "revision") ?: return ""
@@ -250,6 +370,13 @@ object AndroidSdkInstaller {
 interface SdkNetFetcher {
     fun fetchText(url: String): String?
     fun download(url: String, dest: Path, onProgress: (read: Long, total: Long) -> Unit): Boolean
+
+    /** Bytes [start]..[endInclusive] of [url] as a stream, or null when the server does not honor Range. */
+    fun openRange(url: String, start: Long, endInclusive: Long): InputStream? = null
+
+    /** Bytes [start]..[endInclusive] of [url], or null when the server does not honor Range. */
+    fun readRange(url: String, start: Long, endInclusive: Long): ByteArray? =
+        openRange(url, start, endInclusive)?.use { it.readBytes() }
 }
 
 /** Default [SdkNetFetcher] over `HttpURLConnection` (works on desktop and ART). */
@@ -260,6 +387,18 @@ object HttpSdkNetFetcher : SdkNetFetcher {
         }
         conn.inputStream.use { it.readBytes().decodeToString() }
     }.getOrNull()
+
+    override fun openRange(url: String, start: Long, endInclusive: Long): InputStream? {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15_000; readTimeout = 60_000; instanceFollowRedirects = true
+            setRequestProperty("Range", "bytes=$start-$endInclusive")
+        }
+        return try {
+            if (conn.responseCode != HttpURLConnection.HTTP_PARTIAL) { conn.disconnect(); null } else conn.inputStream
+        } catch (e: IOException) {
+            conn.disconnect(); null
+        }
+    }
 
     override fun download(url: String, dest: Path, onProgress: (Long, Long) -> Unit): Boolean = runCatching {
         // Resume a partial download: ask for the remaining bytes (HTTP Range) and append. If the server

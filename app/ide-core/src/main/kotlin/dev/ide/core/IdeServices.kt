@@ -790,6 +790,8 @@ class IdeServices private constructor(
         // Provision kotlin-stdlib as a real project dependency (bundled jar, never the host runtime) before
         // anything reads a Kotlin module's classpath.
         runCatching { ensureKotlinStdlib() }
+        // Register the downloaded Android platforms before any analyzer resolves its module's SDK.
+        if (!buildOnly) runCatching { syncPlatformSdks() }
         // App-log capture (the Logcat tab): tell the channel which app applicationIds this project can run, so a
         // running debug app is recognized whether launched from the IDE or the device launcher — decoupled from
         // the Run button. UI engine only; the headless :build daemon never hosts the sink. Re-run on any config
@@ -1048,7 +1050,30 @@ class IdeServices private constructor(
      *  engine has no editor analyzers to refresh, so it doesn't subscribe (and doesn't build the SDK manager).
      *  Initialized as a property (not in [registerScopedServices]) so it runs after the engine's other fields. */
     private val sdkChangeSubscription: Disposable? =
-        if (buildOnly) null else sdkManager.addChangeListener { events.librariesChanged() }
+        if (buildOnly) null else sdkManager.addChangeListener {
+            runCatching { syncPlatformSdks() }
+            events.librariesChanged()
+        }
+
+    /**
+     * Mirror the installed Android platforms into the workspace SDK table as `android-<level>` entries, so a
+     * module whose compileSdk has one resolves it ([AndroidFacet.preferredSdkName]) in the editor and the
+     * build alike; without one it keeps the default Android SDK (the bundled `android.jar` on device). Each
+     * entry carries the default Android SDK's extra boot jars (desugar stubs, the Swing API). Entries whose
+     * platform is gone are dropped. Saved, so the separate build process reads the same table.
+     */
+    private fun syncPlatformSdks() {
+        val current = store.data.sdks
+        val primary = current.firstOrNull { it.kind == PlatformKind.ANDROID && !PLATFORM_SDK_NAME.matches(it.name) }
+        val extras = primary?.bootClasspath?.drop(1) ?: emptyList()
+        val platforms = sdkManager.installedPlatforms().map { (level, jar) ->
+            SdkData(AndroidFacet.platformSdkName(level), listOf(jar.toString()) + extras, primary?.buildToolsPath, kind = PlatformKind.ANDROID)
+        }
+        val next = current.filterNot { PLATFORM_SDK_NAME.matches(it.name) } + platforms
+        if (next == current) return
+        store.replaceSdks(next)
+        runCatching { store.save() }
+    }
 
     /**
      * The compile bootclasspath. On-device ([androidTools] non-null) ecj has no readable JRE, so every compile
@@ -1926,7 +1951,8 @@ class IdeServices private constructor(
     /**
      * The minSdk check's inputs for the module [id] as the model holds it NOW (so editing minSdk in Module
      * Settings applies on the next analysis pass), or null for a module without an Android facet or when the
-     * API-level table is not bundled.
+     * API-level table is not bundled. The table is the bundled one unless the module compiles against a newer
+     * installed platform, whose own `api-versions.xml` then answers.
      */
     private fun androidApiContext(id: ModuleId): AndroidApiContext? {
         val module = store.workspace.projects.firstNotNullOfOrNull { p -> p.modules.firstOrNull { it.id == id } }
@@ -4693,6 +4719,9 @@ class IdeServices private constructor(
             ensureSdks(store, defaultDesktopSdk(), root)
             return IdeServices(platform, store, env = env)
         }
+        /** The SDK-table names [syncPlatformSdks] owns: `android-34`, one per installed platform. */
+        private val PLATFORM_SDK_NAME = Regex("""android-\d+""")
+
 
         private fun openStore(
             root: Path,
