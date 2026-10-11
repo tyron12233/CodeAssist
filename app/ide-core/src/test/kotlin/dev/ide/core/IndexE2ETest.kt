@@ -4,7 +4,9 @@ import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.launch
 
 /**
  * End-to-end check of the disk-backed index through the **real [IdeServices]** (the object both launchers
@@ -81,6 +83,35 @@ class IndexE2ETest {
                 val again = awaitReport(ide) { it.trigger == IndexPassTrigger.REINDEX }
                 assertTrue((again.status.stats?.artifactsBuilt ?: 0) >= 1, "a re-index rebuilds: ${again.status.stats}")
                 assertTrue(again.rekeyed.isEmpty(), "a wiped cache rebuilds under the same keys: ${again.rekeyed}")
+            }
+        }
+    }
+
+    /**
+     * A burst of classpath-change notifications (a reconcile loop committing module after module) used to queue
+     * one full pass each. Now they coalesce into one pass, and since nothing on the classpath actually changed,
+     * that pass is quiet: no build announced, nothing reopened.
+     */
+    @Test
+    fun aBurstOfResyncRequestsBecomesOneQuietPass() {
+        withTempDir("ide-index-coalesce") { dir ->
+            IdeServices.bootstrapJavaDemo(dir).use { ide ->
+                awaitIndexed(ide)
+                awaitReport(ide) { it.trigger == IndexPassTrigger.OPEN }
+                val seen = java.util.concurrent.CopyOnWriteArrayList<IndexPassReport>()
+                kotlinx.coroutines.runBlocking {
+                    val collector = launch(kotlinx.coroutines.Dispatchers.Default) {
+                        ide.indexPasses.collect { if (it.trigger == IndexPassTrigger.LIBRARIES) seen.add(it) }
+                    }
+                    repeat(10) { ide.events.librariesChanged() }
+                    val deadline = System.currentTimeMillis() + 60_000
+                    while (seen.isEmpty() && System.currentTimeMillis() < deadline) kotlinx.coroutines.delay(50)
+                    kotlinx.coroutines.delay(1_000) // long enough for a second, wrongly queued pass to show up
+                    collector.cancel()
+                }
+                assertEquals(1, seen.size, "ten requests must make one pass, got ${seen.map { it.coalesced }}")
+                assertEquals(9, seen.single().coalesced)
+                assertEquals(false, seen.single().libraryChanged, "an unchanged classpath makes a quiet pass")
             }
         }
     }

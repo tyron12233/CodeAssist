@@ -502,6 +502,9 @@ class IdeServices private constructor(
             // 32-bit ARM ART: build on ONE thread so the index never allocates wide alongside the editor's
             // ide-engine thread (the 32-bit torn-reference SIGSEGV mitigation; see dev.ide.platform.RuntimeInfo).
             singleThreadedBuild = dev.ide.platform.RuntimeInfo.is32Bit,
+            // Library source archives feed only parameter names and javadoc; build them after each pass so they
+            // never hold up readiness or the next pass (they were the costliest artifacts in the field).
+            deferSourceArchives = true,
         )
     }
 
@@ -999,6 +1002,15 @@ class IdeServices private constructor(
         )
     }
 
+    /** How long a resync waits before starting, so a burst of commits (a reconcile loop) becomes one pass. */
+    private val resyncDebounceMs = 200L
+
+    /** A resync is scheduled and has not taken [indexSyncMutex] yet; requests meanwhile join it. */
+    private val resyncPending = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Requests that joined the pending resync, reported as `index_perf.coalesced`. */
+    private val resyncCoalesced = java.util.concurrent.atomic.AtomicInteger(0)
+
     // Serializes the background ensureUpToDate passes: the event hub triggers a re-sync per model commit,
     // so back-to-back triggers (a reconcile loop's per-module commits) must queue, not interleave. The
     // project-open pass takes it too, so a resync fired during open cannot run alongside it.
@@ -1018,9 +1030,11 @@ class IdeServices private constructor(
      * here, under [indexSyncMutex]. [invalidate] wipes this project's segments first (the "Re-index" action).
      * Never throws: a failed pass is reported with the failure status it ended on.
      */
-    private suspend fun runIndexPass(trigger: String, invalidate: Boolean = false) {
+    private suspend fun runIndexPass(trigger: String, invalidate: Boolean = false, onLocked: () -> Int = { 0 }) {
         val asked = System.nanoTime()
         indexSyncMutex.withLock {
+            // From here on a new request must start a pass of its own: the scope below is read after this point.
+            val coalesced = onLocked()
             val start = System.nanoTime()
             val scope = runCatching { buildIndexScope() }.getOrElse { return }
             val scoped = System.nanoTime()
@@ -1042,6 +1056,8 @@ class IdeServices private constructor(
                     buildPermits = pass?.buildPermits,
                     built = kinds.groupingBy { it.second }.eachCount(),
                     rekeyed = kinds.filter { it.first.rekeyed }.groupingBy { it.second }.eachCount(),
+                    libraryChanged = pass?.libraryChanged,
+                    coalesced = coalesced,
                 )
             )
         }
@@ -1061,8 +1077,19 @@ class IdeServices private constructor(
      */
     private fun resyncIndex(reason: String) {
         invalidateSyntheticClasses()
+        // Coalesce: while a resync is waiting to start, further requests ride on it. It reads the scope only once
+        // it holds the mutex, so it covers every change made before then. A reconcile loop's burst of per-module
+        // commits used to queue one full pass per commit.
+        if (!resyncPending.compareAndSet(false, true)) {
+            resyncCoalesced.incrementAndGet()
+            return
+        }
         indexScope.launch {
-            runIndexPass(reason)
+            delay(resyncDebounceMs.milliseconds)
+            runIndexPass(reason) {
+                resyncPending.set(false)
+                resyncCoalesced.getAndSet(0)
+            }
             // A full resync may have added/removed source declarations — refresh source-index snapshots.
             bumpSourceIndexGeneration()
         }

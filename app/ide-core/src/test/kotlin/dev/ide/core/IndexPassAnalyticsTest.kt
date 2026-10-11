@@ -62,9 +62,13 @@ class IndexPassAnalyticsTest {
             buildPermits = 2,
             built = mapOf("jar.project_build" to 1),
             rekeyed = mapOf("jar.project_build" to 1),
+            libraryChanged = true,
+            coalesced = 4,
         )
         val props = indexPerfProps(pass)
         assertEquals("model", props["trigger"])
+        assertEquals("1", props["lib_changed"])
+        assertEquals("4", props["coalesced"])
         assertEquals("1200", props["duration_ms"])
         assertEquals("40", props["scope_ms"])
         assertEquals("300", props["queued_ms"])
@@ -92,5 +96,7 @@ class IndexPassAnalyticsTest {
         assertEquals("900000", props["duration_ms"])
         assertNull(props["artifacts"])
         assertNull(props["par_io"])
+        assertNull(props["lib_changed"], "an unfinished pass does not claim either way")
+        assertNull(props["coalesced"], "zero is left out")
     }
 }

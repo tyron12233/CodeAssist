@@ -582,4 +582,147 @@ class IndexEngineTest {
             cache.toFile().deleteRecursively(); srcCache.toFile().deleteRecursively(); src.toFile().deleteRecursively()
         }
     }
+
+    /** Every status a service publishes while [block] runs. */
+    private fun statusesDuring(svc: IndexServiceImpl, block: () -> Unit): List<dev.ide.index.IndexStatus> {
+        val seen = java.util.concurrent.CopyOnWriteArrayList<dev.ide.index.IndexStatus>()
+        val sub = svc.observeStatus { seen.add(it) }
+        seen.clear() // observeStatus replays the current status; only the new ones count
+        try { block() } finally { sub.dispose() }
+        return seen
+    }
+
+    /**
+     * A resync over an unchanged classpath used to close and reopen every segment and announce a build, which
+     * made the editor drop its classpath caches and re-run its passes. Now it keeps the segments open, never
+     * reports `building`, stays ready, and still brings the source side up to date.
+     */
+    @Test
+    fun aResyncWithAnUnchangedClasspathIsQuietButStillUpdatesSource() = withTempDir("lib") { dir ->
+        val cache = Files.createTempDirectory("idxQuiet")
+        val src = Files.createTempDirectory("src")
+        try {
+            val jar = dir.resolve("a.jar").also { storedJar(it, "com/x/Foo.class", byteArrayOf(1)) }
+            Files.writeString(src.resolve("A.java"), "class A {}")
+            val svc = IndexServiceImpl(listOf(CountingClassIndex(AtomicInteger(0)), CountingSourceIndex(AtomicInteger(0))), cache)
+            val scope = IndexScope(libraryJars = listOf(jar), sourceRoots = listOf(src))
+            runBlocking { svc.ensureUpToDate(scope) }
+            assertTrue(svc.status.ready)
+
+            Files.writeString(src.resolve("B.java"), "class B {}")
+            val during = statusesDuring(svc) { runBlocking { svc.ensureUpToDate(scope) } }
+            assertTrue(during.none { it.building }, "an unchanged classpath must not announce a build: $during")
+            assertTrue(during.all { it.ready }, "the index stays ready throughout")
+            assertEquals(false, svc.lastPass!!.libraryChanged)
+            assertTrue(svc.prefix<ClassNameValue>(CLASS, "Foo", 10).any(), "library segment still answers")
+            assertTrue(svc.prefix<ClassNameValue>(SRC, "B", 10).any { it.value.fqn == "B" }, "the new source file is indexed")
+            assertEquals(1, svc.status.stats!!.sourceParsed, "only the new file was parsed")
+        } finally {
+            cache.toFile().deleteRecursively(); src.toFile().deleteRecursively()
+        }
+    }
+
+    /** Removing a dependency leaves the index complete for the new classpath, so it stays ready mid-pass. */
+    @Test
+    fun removingAJarKeepsTheIndexReadyAndDropsItsClasses() = withTempDir("lib") { dir ->
+        val cache = Files.createTempDirectory("idxRemove")
+        try {
+            val a = dir.resolve("a.jar").also { storedJar(it, "com/x/Alpha.class", byteArrayOf(1)) }
+            val b = dir.resolve("b.jar").also { storedJar(it, "com/x/Beta.class", byteArrayOf(2)) }
+            val svc = IndexServiceImpl(listOf(CountingClassIndex(AtomicInteger(0))), cache)
+            runBlocking { svc.ensureUpToDate(IndexScope(libraryJars = listOf(a, b))) }
+
+            val during = statusesDuring(svc) { runBlocking { svc.ensureUpToDate(IndexScope(libraryJars = listOf(a))) } }
+            assertTrue(during.all { it.ready }, "a removal-only pass never withdraws ready: $during")
+            assertTrue(svc.prefix<ClassNameValue>(CLASS, "Beta", 10).none(), "the removed jar's classes are gone")
+            assertTrue(svc.prefix<ClassNameValue>(CLASS, "Alpha", 10).any(), "the kept jar still answers")
+        } finally {
+            cache.toFile().deleteRecursively()
+        }
+    }
+
+    /** Adding a dependency withdraws ready until it is indexed: a miss on it is not authoritative yet. */
+    @Test
+    fun addingAJarWithdrawsReadyUntilItIsIndexed() = withTempDir("lib") { dir ->
+        val cache = Files.createTempDirectory("idxAdd")
+        try {
+            val a = dir.resolve("a.jar").also { storedJar(it, "com/x/Alpha.class", byteArrayOf(1)) }
+            val b = dir.resolve("b.jar").also { storedJar(it, "com/x/Beta.class", byteArrayOf(2)) }
+            val svc = IndexServiceImpl(listOf(CountingClassIndex(AtomicInteger(0))), cache)
+            runBlocking { svc.ensureUpToDate(IndexScope(libraryJars = listOf(a))) }
+
+            val during = statusesDuring(svc) { runBlocking { svc.ensureUpToDate(IndexScope(libraryJars = listOf(a, b))) } }
+            assertTrue(during.any { it.building && !it.ready }, "an addition must report a non-ready build: $during")
+            assertTrue(svc.status.ready, "ready again once the new jar is indexed")
+            assertTrue(svc.prefix<ClassNameValue>(CLASS, "Beta", 10).any(), "the added jar answers")
+            assertTrue(svc.prefix<ClassNameValue>(CLASS, "Alpha", 10).any(), "the kept jar still answers")
+        } finally {
+            cache.toFile().deleteRecursively()
+        }
+    }
+
+    /** Segments are kept open between passes, so a cache cleared underneath must be noticed and rebuilt. */
+    @Test
+    fun aCacheClearedBetweenPassesIsRebuiltNotTrusted() = withTempDir("lib") { dir ->
+        val cache = Files.createTempDirectory("idxCleared")
+        try {
+            val a = dir.resolve("a.jar").also { storedJar(it, "com/x/Alpha.class", byteArrayOf(1)) }
+            val svc = IndexServiceImpl(listOf(CountingClassIndex(AtomicInteger(0))), cache)
+            val scope = IndexScope(libraryJars = listOf(a))
+            runBlocking { svc.ensureUpToDate(scope) }
+
+            Files.walk(cache).use { s -> s.sorted(Comparator.reverseOrder()).forEach { if (it != cache) Files.delete(it) } }
+            runBlocking { svc.ensureUpToDate(scope) }
+            assertEquals(1, svc.status.stats!!.artifactsBuilt, "the vanished segment is rebuilt")
+            assertTrue(svc.prefix<ClassNameValue>(CLASS, "Alpha", 10).any())
+        } finally {
+            cache.toFile().deleteRecursively()
+        }
+    }
+
+    /** A source-doc index over library SOURCE archives, like `java.sourceDoc`. */
+    private object TestDocIndex : IndexExtension<String, ClassNameValue> {
+        override val id = IndexId("test.sourceDoc")
+        override val version = 1
+        override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
+        override val valueExternalizer: Externalizer<ClassNameValue> = ClassNameExternalizer
+        override val matching = MatchingMode.PREFIX_ONLY
+        override val inputFilter = InputFilter { it.origin == IndexOrigin.LIBRARY_SOURCE && it.unitName?.endsWith(".java") == true }
+        override fun index(input: IndexInput): Map<String, Collection<ClassNameValue>> {
+            val name = input.unitName!!.substringAfterLast('/').removeSuffix(".java")
+            return mapOf(name to listOf(ClassNameValue(name, input.origin, "doc")))
+        }
+    }
+
+    /**
+     * With deferral on, source archives build after the pass: the pass ends ready without waiting for them,
+     * and their docs arrive in the background without another status change.
+     */
+    @Test
+    fun deferredSourceArchivesBuildAfterThePassWithoutTouchingStatus() = withTempDir("lib") { dir ->
+        val cache = Files.createTempDirectory("idxDocs")
+        try {
+            val jar = dir.resolve("a.jar").also { storedJar(it, "com/x/Alpha.class", byteArrayOf(1)) }
+            val sources = dir.resolve("a-sources.jar").also { storedJar(it, "com/x/Alpha.java", "class Alpha {}".toByteArray()) }
+            val svc = IndexServiceImpl(listOf(CountingClassIndex(AtomicInteger(0)), TestDocIndex), cache, deferSourceArchives = true)
+            val scope = IndexScope(libraryJars = listOf(jar), sourceArchives = listOf(sources))
+
+            val during = statusesDuring(svc) {
+                runBlocking {
+                    svc.ensureUpToDate(scope)
+                    assertTrue(svc.status.ready, "the pass is ready without the source archive")
+                    assertEquals(1, svc.status.stats!!.artifacts, "the source archive is not part of the pass")
+                    svc.awaitDeferredWork()
+                }
+            }
+            assertTrue(svc.prefix<ClassNameValue>(TestDocIndex.id, "Alpha", 10).any(), "docs arrive in the background")
+            assertTrue(during.last() == svc.status && !svc.status.building, "the background build sets no status")
+
+            // A later pass keeps the built archive open rather than rebuilding it.
+            runBlocking { svc.ensureUpToDate(scope); svc.awaitDeferredWork() }
+            assertEquals(false, svc.lastPass!!.libraryChanged, "an unchanged scope with docs built is quiet")
+        } finally {
+            cache.toFile().deleteRecursively()
+        }
+    }
 }

@@ -25,6 +25,11 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.yield
 import java.io.BufferedInputStream
@@ -89,6 +94,14 @@ class IndexServiceImpl(
      */
     private val readOnly: Boolean = false,
     /**
+     * Build library SOURCE archives (`-sources.jar`, JDK `src.zip`, Android `sources/`) in the background after
+     * each pass instead of inside it. They feed only the source-doc indexes (parameter names, javadoc), yet
+     * were the costliest artifacts in the field; deferred, they no longer delay readiness or the next pass.
+     * Off by default so a caller that queries docs right after [ensureUpToDate] keeps that guarantee; such a
+     * caller can also [awaitDeferredWork].
+     */
+    private val deferSourceArchives: Boolean = false,
+    /**
      * Collapse the parallel index build to a SINGLE background thread. Set on 32-bit ARM ART devices (via
      * [dev.ide.platform.RuntimeInfo.is32Bit]), where a wide (4-8 coroutine) library/SDK index build allocating
      * heavily WHILE the editor parses/resolves on the `ide-engine` thread provokes a native torn-reference
@@ -105,9 +118,24 @@ class IndexServiceImpl(
         /** Static (SDK + library) partitions, read from disk on demand. CopyOnWrite ⇒ lock-free query reads. */
         val segments = CopyOnWriteArrayList<Segment>()
 
-        /** Content hashes whose segment is already open, so a repeated build doesn't open it twice. Concurrent
-         *  because artifacts are indexed in parallel (each adds its OWN distinct key, so no key races). */
-        val openHashes: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        /** The open segment for each artifact key. A pass keeps these open across passes and closes only the
+         *  keys that left the scope. Concurrent because artifacts are indexed in parallel (each adds its OWN
+         *  distinct key, so no key races). Always mutated together with [segments]. */
+        val open = ConcurrentHashMap<String, Segment>()
+
+        /** Keys whose segment is open, for the reuse checks. */
+        val openHashes: Set<String> get() = open.keys
+
+        fun addOpen(key: String, seg: Segment) {
+            open[key] = seg; segments.add(seg)
+        }
+
+        /** Close and forget the segment for [key], if open. */
+        fun closeOpen(key: String) {
+            val seg = open.remove(key) ?: return
+            segments.remove(seg)
+            runCatching { seg.close() }
+        }
 
         /** Project source: in-memory + incremental, the SINGLE store (no separate per-file value map). It is
          *  file-partitioned internally by the interned integer file id (see [FileIdTable]), so an edit updates
@@ -310,8 +338,14 @@ class IndexServiceImpl(
         enum class Kind { JDK, JAR, STABLE_JAR, SOURCE_ARCHIVE, RESOURCE_DIR }
     }
 
-    /** What the last finished pass built, and the parallelism it ran with. */
-    class PassReport(val built: List<BuiltArtifact>, val ioConcurrency: Int, val buildPermits: Int)
+    /** What the last finished pass built, and the parallelism it ran with. [libraryChanged] is false for a quiet
+     *  pass: the classpath was unchanged, so only the source side was brought up to date. */
+    class PassReport(
+        val built: List<BuiltArtifact>,
+        val ioConcurrency: Int,
+        val buildPermits: Int,
+        val libraryChanged: Boolean = true,
+    )
 
     /** The report of the last [ensureUpToDate] that ran to the end; null before one has, and after a pass that
      *  timed out or failed. */
@@ -340,51 +374,95 @@ class IndexServiceImpl(
         }
     }
 
+    /** An artifact of this pass with its content key, computed once (a resource dir's key walks the dir). */
+    private class Keyed(val art: Artifact, val hash: ContentHash, val key: String)
+
     private suspend fun buildIndex(scope: IndexScope) {
         lastPass = null
-        setStatus(
-            IndexStatus(
-                building = true, message = "Indexing…", fraction = -1.0, phase = "Starting…"
-            )
-        )
+        // A new pass supersedes the previous pass's background source-doc work; it restarts at the end.
+        docsJob?.cancelAndJoin()
+        val buildStart = System.nanoTime()
+        val previous = status
         try {
-            // Soft reset: drop the in-memory open segments (but KEEP the on-disk `.seg` files) so this call
-            // re-syncs to the current scope — segments for artifacts no longer on the classpath fall out, and
-            // unchanged artifacts are RE-OPENED from disk (cheap) rather than rebuilt. This is what makes a
-            // model-change re-index cheap: a 40k-class android.jar is segmented once and reopened thereafter,
-            // not re-scanned every time. invalidate() still forces a from-scratch rebuild by deleting THIS
-            // service's segments (it leaves other projects' segments in the shared store untouched).
-            closeSegments()
-            val artifacts = buildList {
+            val all = buildList {
                 scope.jdkHome?.let { add(Artifact.Jrt(it)) }
                 scope.libraryJars.forEach { add(Artifact.Jar(it, scope.stableJarIds[it])) }
                 scope.sourceArchives.forEach { if (Files.exists(it)) add(Artifact.SourceArchive(it)) }
                 // Immutable dependency/AAR res dirs index to content-addressed disk segments (parsed once,
                 // reopened thereafter), not into the resident source side.
-                scope.libraryResourceRoots.forEach {
-                    if (Files.isDirectory(it)) add(
-                        Artifact.ResourceDir(
-                            it
-                        )
-                    )
-                }
+                scope.libraryResourceRoots.forEach { if (Files.isDirectory(it)) add(Artifact.ResourceDir(it)) }
+            }.map { a -> a.contentHash().let { h -> Keyed(a, h, sanitize(h.value)) } }
+            // Library SOURCE archives feed only the source-doc indexes (parameter names, javadoc). When deferred,
+            // they build in the background after this pass, never holding up readiness or the next pass.
+            val docs = if (deferSourceArchives) all.filter { it.art is Artifact.SourceArchive } else emptyList()
+            val keyed = if (docs.isEmpty()) all else all.filter { it.art !is Artifact.SourceArchive }
+
+            // Segments stay open across passes, so a pass touches only what changed. Three corrections first:
+            //  - a kept artifact whose files vanished (a cleared cache) must reopen or rebuild, not be trusted;
+            //  - artifacts that left the scope close;
+            //  - anything not open yet is what this pass has to open or build.
+            val probeState = states.values.firstOrNull()
+            for (k in all) {
+                if (probeState != null && k.key in probeState.openHashes &&
+                    !Files.exists(segmentFile(probeState.ext, k.hash))
+                ) states.values.forEach { it.closeOpen(k.key) }
             }
-            val total = artifacts.size + 1
+            val wanted = all.mapTo(HashSet()) { it.key }
+            val removed = states.values.flatMapTo(HashSet()) { st -> st.openHashes.filter { it !in wanted } }
+            val toOpen = keyed.filter { k -> states.values.any { k.key !in it.openHashes } }
+
+            // Nothing on the classpath changed and the last pass was complete: the index already holds exactly
+            // this scope. Don't announce a build (that would clear the editor's classpath caches and re-run its
+            // passes for nothing); bring the source side up to date quietly, the way a save does.
+            if (removed.isEmpty() && toOpen.isEmpty() && previous.ready) {
+                val timer = BuildTimer()
+                val libMs = elapsedMs(buildStart)
+                val srcProbe = indexSource(scope.sourceRoots, scope.resourceRoots, timer = timer)
+                lastPass = PassReport(emptyList(), 0, 0, libraryChanged = false)
+                perfLog.info(
+                    "resync: classpath unchanged (${keyed.size} artifacts kept open, ${libMs}ms); source " +
+                        "${srcProbe.walked} files (${srcProbe.parsed} parsed, ${srcProbe.removed} removed) ${srcProbe.ms}ms"
+                )
+                setStatus(
+                    IndexStatus(
+                        false, "Indexed", 1.0, ready = true,
+                        breakdown = timer.snapshot(),
+                        stats = IndexBuildStats(
+                            libMs = libMs, sourceMs = srcProbe.ms, artifacts = keyed.size,
+                            artifactsBuilt = 0, artifactsReused = keyed.size,
+                            sourceFiles = srcProbe.walked, sourceParsed = srcProbe.parsed,
+                        ),
+                    )
+                )
+                launchDeferredDocs(docs)
+                return
+            }
+
+            // The index stays complete for the new scope through a pass that only REMOVES artifacts, so it can
+            // stay ready; one that adds any must not claim misses are authoritative until they are open.
+            val passReady = previous.ready && toOpen.isEmpty()
+            removed.forEach { key -> states.values.forEach { it.closeOpen(key) } }
+            setStatus(
+                IndexStatus(
+                    building = true, message = "Indexing…", fraction = -1.0, phase = "Starting…", ready = passReady
+                )
+            )
+            val total = keyed.size + 1
             // Index artifacts in parallel. Each artifact is independent — it scans its own jar and writes its
             // own per-(ext,hash) segment file; the only shared state is each State's `segments` (CopyOnWrite)
-            // and `openHashes` (concurrent set, distinct key per artifact). Sequential, this was the dominant
+            // and `open` (concurrent map, distinct key per artifact). Sequential, this was the dominant
             // first-load cost gating the first completion/diagnostics on a `.kt` file.
             //
             // TWO different limits, because the two paths cost differently:
             //  - REOPEN (cache hit): just opens each extension's prebuilt `.seg` (a FileChannel + footer read),
-            //    holds no accumulator, is pure I/O. A warm re-open is ~all cache hits — 156 artifacts × ~10
-            //    extension segments = ~1.5k tiny file opens — so it is bounded by I/O parallelism, not memory.
+            //    holds no accumulator, is pure I/O. Bounded by I/O parallelism, not memory. An artifact still
+            //    open from the previous pass skips even that.
             //  - BUILD (cache miss): streams a whole artifact's entries through per-(ext) SegmentWriters, so N
             //    concurrent builds keep N big-jar accumulators live; on a constrained (tight-heap) host that
             //    peak is what must be bounded.
             // So run the artifact coroutines at a HIGH I/O width but gate the build section with a small
-            // semaphore. On a warm cache nothing takes a permit and all opens run wide (the ~10s reopen the
-            // old flat concurrency=2 caused drops ~I/O-parallelism-fold); a cold build stays memory-bounded.
+            // semaphore. On a warm cache nothing takes a permit and all opens run wide; a cold build stays
+            // memory-bounded.
             val cores = Runtime.getRuntime().availableProcessors()
             // On a 32-bit ARM process, run the whole build on ONE thread so nothing allocates concurrently with
             // the editor's `ide-engine` thread (see [singleThreadedBuild]); otherwise fan out across cores.
@@ -403,7 +481,7 @@ class IndexServiceImpl(
             // Per-artifact worklist for the index-status dialog (PENDING → ACTIVE → DONE). Mutated from the
             // parallel builders under [worklistLock]; each status emit publishes an immutable snapshot.
             val worklist =
-                artifacts.mapTo(ArrayList()) { IndexItem(it.label, IndexItemState.PENDING) }
+                keyed.mapTo(ArrayList()) { IndexItem(it.art.label, IndexItemState.PENDING) }
             val worklistLock = Any()
             // Per-indexer time/entry accumulator for this build. Snapshotted into every status emit so the
             // detail view watches each index's cost grow live (and keeps the final breakdown when idle).
@@ -416,10 +494,11 @@ class IndexServiceImpl(
                         true,
                         message,
                         d.toDouble() / total,
+                        ready = passReady,
                         phase = "Libraries & SDK",
                         items = items,
                         processed = d,
-                        total = artifacts.size,
+                        total = keyed.size,
                         breakdown = timer.snapshot(),
                     )
                 )
@@ -429,7 +508,6 @@ class IndexServiceImpl(
             // build-time heap peak (sampled as each artifact finishes), so a device run on a large project
             // shows whether the shared cache is reused or rebuilt and where memory peaks. See the summary
             // emitted after the source phase below.
-            val buildStart = System.nanoTime()
             val probes = ConcurrentLinkedQueue<ArtifactProbe>()
             val peakHeap = AtomicLong(usedHeapBytes())
             fun samplePeak() {
@@ -437,14 +515,15 @@ class IndexServiceImpl(
             }
             val buildDispatcher = Dispatchers.IO.limitedParallelism(ioConcurrency)
             kotlinx.coroutines.coroutineScope {
-                for ((i, art) in artifacts.withIndex()) {
+                for ((i, k) in keyed.withIndex()) {
+                    val art = k.art
                     launch(buildDispatcher) {
                         synchronized(worklistLock) {
                             worklist[i] = worklist[i].copy(state = IndexItemState.ACTIVE)
                         }
                         emitArtifacts("Indexing ${art.label}")
                         try {
-                            val probe = indexArtifact(art, buildGate, timer)
+                            val probe = indexArtifact(art, buildGate, timer, k.hash)
                             probes.add(probe)
                             samplePeak()
                             // Surface the costly artifacts (built, or a slow open) at INFO; quiet otherwise, so a
@@ -483,7 +562,8 @@ class IndexServiceImpl(
                 IndexStatus(
                     true,
                     "Indexing project source",
-                    artifacts.size.toDouble() / total,
+                    keyed.size.toDouble() / total,
+                    ready = passReady,
                     phase = "Project source"
                 )
             )
@@ -494,7 +574,8 @@ class IndexServiceImpl(
                     IndexStatus(
                         true,
                         "Indexing project source",
-                        artifacts.size.toDouble() / total,
+                        keyed.size.toDouble() / total,
+                        ready = passReady,
                         phase = "Project source",
                         items = listOf(IndexItem(current, IndexItemState.ACTIVE)),
                         processed = processed,
@@ -510,27 +591,29 @@ class IndexServiceImpl(
             val reused = probes.count { it.isHit }
             val mb = 1024L * 1024L
             perfLog.info(
-                "build done: ${artifacts.size} artifacts ($built built, $reused reused), " + "${probes.sumOf { it.entries }} entries; source ${srcProbe.walked} files " + "(${srcProbe.parsed} parsed, ${srcProbe.removed} removed); lib ${libMs}ms, src ${srcProbe.ms}ms, " + "total ${
-                    elapsedMs(
-                        buildStart
-                    )
-                }ms; io=$ioConcurrency build=$buildPermits; " + "heap peak ${peakHeap.get() / mb}MB / max ${
-                    Runtime.getRuntime().maxMemory() / mb
-                }MB" + if (skipped.get() > 0) "; skipped=${skipped.get()}" else ""
+                "build done: ${keyed.size} artifacts ($built built, $reused reused, ${removed.size} closed), " +
+                    "${probes.sumOf { it.entries }} entries; source ${srcProbe.walked} files " +
+                    "(${srcProbe.parsed} parsed, ${srcProbe.removed} removed); lib ${libMs}ms, src ${srcProbe.ms}ms, " +
+                    "total ${elapsedMs(buildStart)}ms; io=$ioConcurrency build=$buildPermits; " +
+                    "heap peak ${peakHeap.get() / mb}MB / max ${Runtime.getRuntime().maxMemory() / mb}MB" +
+                    (if (skipped.get() > 0) "; skipped=${skipped.get()}" else "") +
+                    (if (docs.isNotEmpty()) "; ${docs.size} source archive(s) deferred" else "")
             )
-            // ready=true tells the JDT name environment it may trust the index as a complete superset of the
-            // classpath (authoritative negatives, no probing — see JdtEnvironmentCache.libraryBytes). Only
-            // claim that when EVERY artifact indexed: a skipped jar's classes are absent, so resolving them
-            // would be a false "not found". A partial index stays usable (segments are open and queried), the
-            // name environment just keeps probing instead of trusting misses. A read-only service's missing
-            // (not-yet-built-by-the-owner) segments withhold ready the same way.
             lastPass = PassReport(
                 built = probes.filter { !it.isHit }.mapNotNull { p ->
                     p.artifact?.let { BuiltArtifact(it.kind, it.location, p.rekeyed, p.ms) }
                 },
                 ioConcurrency = ioConcurrency,
                 buildPermits = buildPermits,
+                libraryChanged = true,
             )
+            // ready=true tells the JDT name environment it may trust the index as a complete superset of the
+            // classpath (authoritative negatives, no probing — see JdtEnvironmentCache.libraryBytes). Only
+            // claim that when EVERY artifact indexed: a skipped jar's classes are absent, so resolving them
+            // would be a false "not found". A partial index stays usable (segments are open and queried), the
+            // name environment just keeps probing instead of trusting misses. A read-only service's missing
+            // (not-yet-built-by-the-owner) segments withhold ready the same way. Deferred source archives are
+            // not classpath and never affect it.
             val missing = probes.sumOf { it.missing }
             val complete = skipped.get() == 0 && missing == 0
             val msg = when {
@@ -548,7 +631,7 @@ class IndexServiceImpl(
                     stats = IndexBuildStats(
                         libMs = libMs,
                         sourceMs = srcProbe.ms,
-                        artifacts = artifacts.size,
+                        artifacts = keyed.size,
                         artifactsBuilt = built,
                         artifactsReused = reused,
                         sourceFiles = srcProbe.walked,
@@ -556,14 +639,56 @@ class IndexServiceImpl(
                     ),
                 )
             )
+            launchDeferredDocs(docs)
         } catch (t: Throwable) {
             setStatus(IndexStatus(false, "Indexing failed: ${t.message}", 1.0))
             throw t
         }
     }
 
+    /** Background work for library source archives, started at the end of each pass (see [deferSourceArchives]).
+     *  One thread on a tight heap, two otherwise: it is never urgent, and it must not crowd the editor. */
+    private val docsScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO.limitedParallelism(if (constrainedHeap || singleThreadedBuild) 1 else 2)
+    )
+
+    @Volatile
+    private var docsJob: Job? = null
+
+    /**
+     * Open or build the source-archive segments in [docs] in the background. Each one's segments join the
+     * queries as they finish, so parameter names and javadoc fill in progressively. Status is never touched:
+     * readiness is about the classpath, which these are not. The next pass cancels this and starts it again
+     * with its own list; a segment finished before that is reused.
+     */
+    private fun launchDeferredDocs(docs: List<Keyed>) {
+        if (docs.isEmpty() || readOnly) return
+        docsJob = docsScope.launch {
+            val t0 = System.nanoTime()
+            val gate = kotlinx.coroutines.sync.Semaphore(1)
+            var built = 0
+            for (k in docs) {
+                try {
+                    if (!indexArtifact(k.art, gate, null, k.hash).isHit) built++
+                } catch (c: kotlinx.coroutines.CancellationException) {
+                    throw c
+                } catch (t: Throwable) {
+                    dev.ide.platform.log.Log.logger("index")
+                        .warn("indexing ${k.art.label} failed, skipped: ${t.javaClass.simpleName}: ${t.message}")
+                }
+            }
+            if (built > 0) perfLog.info("source docs: built $built of ${docs.size} archive(s) in the background, ${elapsedMs(t0)}ms")
+        }
+    }
+
+    /** Wait for the background source-doc work the last pass started, if any (tests; a host that needs it). */
+    suspend fun awaitDeferredWork() {
+        docsJob?.join()
+    }
+
     override suspend fun invalidate() {
         check(!readOnly) { "read-only index: invalidate() belongs to the owning (IDE) process" }
+        docsJob?.cancelAndJoin()
         // [cacheRoot] holds the STATIC (SDK + library) segments and may be SHARED across projects. Each
         // artifact is content-addressed to one `.seg`, so two projects depending on the same jar reuse it.
         // So invalidate must NOT blind-wipe [cacheRoot] (that would delete other projects' segments): it drops
@@ -603,11 +728,12 @@ class IndexServiceImpl(
         states.values.forEach { st ->
             st.segments.forEach { runCatching { it.close() } }
             st.segments.clear()
-            st.openHashes.clear()
+            st.open.clear()
         }
     }
 
     override fun close() {
+        docsScope.cancel()
         closeSegments()
         blockCache.clear()
     }
@@ -654,9 +780,13 @@ class IndexServiceImpl(
         val rt = Runtime.getRuntime(); return rt.totalMemory() - rt.freeMemory()
     }
 
-    private suspend fun indexArtifact(art: Artifact, buildGate: kotlinx.coroutines.sync.Semaphore, timer: BuildTimer? = null): ArtifactProbe {
+    private suspend fun indexArtifact(
+        art: Artifact,
+        buildGate: kotlinx.coroutines.sync.Semaphore,
+        timer: BuildTimer? = null,
+        hash: ContentHash = art.contentHash(),
+    ): ArtifactProbe {
         val t0 = System.nanoTime()
-        val hash = art.contentHash()
         val key = sanitize(hash.value)
         val previousKey = lastKeyByArtifact.put(art.location.toString(), key)
         val rekeyed = previousKey != null && previousKey != key
@@ -675,7 +805,7 @@ class IndexServiceImpl(
                         blockCache,
                         segIds.getAndIncrement()
                     )
-                }.onSuccess { st.segments.add(it); st.openHashes.add(key); reused++ }
+                }.onSuccess { st.addOpen(key, it); reused++ }
             }
         }
         val needBuild = states.values.filter { key !in it.openHashes }
@@ -741,8 +871,7 @@ class IndexServiceImpl(
                 // falsely "ready" index that the name environment would then trust for authoritative negatives.
                 w.finish()
                 val seg = Segment.open(segmentFile(st.ext, hash).toString(), st.ext, blockCache, segIds.getAndIncrement())
-                st.segments.add(seg)
-                st.openHashes.add(key)
+                st.addOpen(key, seg)
             }
             return ArtifactProbe(art.label, reused, needBuild.size, entries, elapsedMs(t0))
         } finally {

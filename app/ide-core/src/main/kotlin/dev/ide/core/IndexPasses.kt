@@ -54,6 +54,10 @@ class IndexPassReport(
     val built: Map<String, Int>,
     /** Of [built], those rebuilt under a different key than earlier this session (a cache that cannot hit). */
     val rekeyed: Map<String, Int>,
+    /** False for a quiet pass (classpath unchanged, only the source side updated); null if it did not finish. */
+    val libraryChanged: Boolean? = null,
+    /** Resync requests that joined this pass instead of queuing their own. */
+    val coalesced: Int = 0,
 )
 
 /**

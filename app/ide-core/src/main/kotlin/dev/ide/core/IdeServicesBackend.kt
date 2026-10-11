@@ -856,6 +856,8 @@ internal fun indexPerfProps(pass: IndexPassReport): Map<String, String> = buildM
         put("src_files", s.sourceFiles.toString())
         put("src_parsed", s.sourceParsed.toString())
     }
+    pass.libraryChanged?.let { put("lib_changed", if (it) "1" else "0") }
+    if (pass.coalesced > 0) put("coalesced", pass.coalesced.toString())
     pass.ioConcurrency?.let { put("par_io", it.toString()) }
     pass.buildPermits?.let { put("par_build", it.toString()) }
     for ((kind, n) in pass.built) put("built.$kind", n.toString())
