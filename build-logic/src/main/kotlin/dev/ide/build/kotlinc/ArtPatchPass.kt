@@ -79,6 +79,9 @@ object ArtPatchPasses {
                                   // non-SDK field) fails on a strict device → NoClassDefFoundError: BoundedBuffer
                                   // from every bounded cache; first hit by KSP2's standalone AA. Reaches the
                                   // separate caffeine jar (scope = ALL), unlike the merged-jar passes above.
+        FastutilInterfaceDispatchArtPass(), // Android 12 ART dispatches PsiBuilder's IntSet.contains(int) to
+                                  // AbstractIntCollection.removeAll(Collection) -> SIGSEGV in instance-of (the
+                                  // top native crash, api 31/32 only) → shim the calls onto vtable dispatch
     )
 
     /** True if any registered pass rewrites [classFqn]. */
