@@ -14,6 +14,7 @@ import dev.ide.lang.kotlin.KotlinPerf
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
+import dev.ide.platform.EngineCancellation
 
 /**
  * Lowers a parsed Kotlin file into the [ResolvedTree] program the Compose-preview interpreter runs (see
@@ -192,10 +193,10 @@ class KotlinPreviewLowering(
     // carry over between generations while `fileSigHash` (the file text with all top-level function bodies
     // stripped) is unchanged. Any signature/import/class edit moves it (→ re-lower everything, conservative). A
     // classpath change disposes the analyzer (host's invalidateAnalyzers), dropping this with it. Cross-file
-    // source edits are best-effort (unchanged from the prior per-file cache). textHash + startOffset gate each
-    // carried function: it is reused only if its text AND its position are unchanged, keeping the lowered
-    // tree's SourceSpans valid — an edit that SHIFTS a sibling (typing in an earlier function) moves its
-    // offset, so it re-lowers with fresh spans rather than serving stale ones. With a [diskCache], a fresh
+    // source edits are best-effort (unchanged from the prior per-file cache). textHash gates each carried
+    // function: it is reused only if its text is unchanged, and startOffset keeps the lowered tree's SourceSpans
+    // valid — an edit that SHIFTS a sibling (typing in an earlier function) moves its offset, so the carried tree
+    // is span-shifted to the new position ([shiftedBy]) rather than served stale or re-lowered. With a [diskCache], a fresh
     // instance (project reopen / IDE restart) prefills the carried entries from disk under the SAME validity
     // rules, and every fresh lower schedules an async write-through snapshot.
     /** One materialized declaration: the lowered function plus the anonymous `object : Foo {}` classes its
@@ -254,7 +255,12 @@ class KotlinPreviewLowering(
             val base = classesLazy.value
             if (fresh && carriedClasses == null) scheduleStore()
             val anons = fns.values.flatMap { it.anons }
-            return if (anons.isEmpty()) base else (base + anons).distinctBy { it.fqn }
+            if (anons.isEmpty()) return base
+            // The copy that travels with its function wins: a carried class list keeps the generation it was
+            // lowered in, so its copy of an object literal holds that generation's spans, while the function's own
+            // copy was re-lowered or shifted along with the function.
+            val own = anons.associateBy { it.fqn }
+            return base.map { own[it.fqn] ?: it } + anons.filter { a -> base.none { it.fqn == a.fqn } }.distinctBy { it.fqn }
         }
 
         fun classesIfMaterialized(): List<ResolvedClass>? =
@@ -267,8 +273,19 @@ class KotlinPreviewLowering(
             val decl = decls[key] ?: return null
             val ownHash = decl.text.hashCode()
             val start = decl.textRange.startOffset
-            val reused = carried[key]?.takeIf { it.textHash == ownHash && it.startOffset == start }
+            // Same text is enough: an edit ABOVE the declaration only moves it, and a moved declaration lowers to
+            // the same tree with its spans shifted (see [shiftedBy]) — far cheaper than lowering it again.
+            val reused = carried[key]?.takeIf { it.textHash == ownHash }?.let { e ->
+                val d = start - e.startOffset
+                if (d == 0) e else FnEntry(e.textHash, start, e.fn.shiftedBy(d), e.anons.map { it.shiftedBy(d) })
+            }
             val entry = reused ?: run {
+                // The one safe point to give the engine back: between declarations, every finished one already
+                // cached in [fns] and nothing half-built, so the retry resumes here instead of starting over. A
+                // poll INSIDE the resolver could be caught by [lowerOneFunction]'s catch-all and cached as a
+                // "lowering failed" diagnostic, so there are none. A full re-lower (a signature edit, a cold
+                // file) otherwise held the worker for its whole length while completion waited behind it.
+                EngineCancellation.checkCanceled()
                 val mark = resolver.anonymousClassMark()
                 val fn = KotlinPerf.span("lowerFn") { lowerDecl(decl) }
                 FnEntry(ownHash, start, fn, resolver.anonymousClassesSince(mark))

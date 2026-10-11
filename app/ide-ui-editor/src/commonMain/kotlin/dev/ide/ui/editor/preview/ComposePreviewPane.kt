@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.ComposePreviewHost
+import dev.ide.ui.LocalPreviewBufferStale
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.components.CaDropdownMenu
@@ -108,6 +110,13 @@ fun ComposePreviewPane(
         if (!literal) delay(PREVIEW_DEBOUNCE_MS.milliseconds)
         renderText = text
     }
+    // The host's pass works on `renderText`; once the editor moves past it (typing resumed, and the next copy is
+    // still in the debounce), that pass is lowering a buffer nobody will see and re-parsing the file at it. The
+    // host stands down while this is true (see [LocalPreviewBufferStale]). Paused, nothing re-lowers anyway, and a
+    // Rebuild must finish even if the user types on.
+    val liveText = rememberUpdatedState(text)
+    val liveNow = rememberUpdatedState(live)
+    val bufferStale = remember(path) { derivedStateOf { liveNow.value && liveText.value != renderText } }
     // Gate rendering on the workspace index being ready to resolve LIBRARY composables. Interpreting a preview
     // while the index is still building resolves library calls (e.g. material3's `lightColorScheme`) to zero
     // candidates and latches a "unresolved call" failure that never self-heals on its own.
@@ -344,7 +353,10 @@ fun ComposePreviewPane(
                     // surface's pan/zoom graphicsLayer scales the result. A @Preview(fontScale=...) multiplies
                     // the font scale. Night drives the host's uiMode; the host reports problems back to the chip.
                     val fontScale = base.fontScale * (current.config.fontScale ?: 1f)
-                    CompositionLocalProvider(LocalDensity provides Density(density, fontScale)) {
+                    CompositionLocalProvider(
+                        LocalDensity provides Density(density, fontScale),
+                        LocalPreviewBufferStale provides bufferStale,
+                    ) {
                         val preview = @Composable {
                             host.Preview(
                                 path,

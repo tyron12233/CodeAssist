@@ -41,6 +41,8 @@ import dev.ide.interp.compose.VmLibraryExecutor
 import dev.ide.jvm.AsmPeerFactory
 import dev.ide.platform.log.Log
 import dev.ide.ui.ComposePreviewHost
+import dev.ide.ui.LocalPreviewBufferStale
+import dev.ide.ui.whileBufferCurrent
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.editor.preview.PreviewIssue
 import dev.ide.ui.editor.preview.PreviewIssueLevel
@@ -129,6 +131,8 @@ class DesktopComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         // debounced re-lower returns null for it, and we keep this last good render on screen instead of blanking
         // (or churning a half-formed tree that corrupts the shared composer).
         val lastGood = remember(path, preview.variantId) { arrayOfNulls<LoweredComposePreview>(1) }
+        // Stand down while the pane's buffer is already outdated (see LocalPreviewBufferStale).
+        val stale = LocalPreviewBufferStale.current
         val state by produceState<PreviewState>(PreviewState.Loading, path, preview.functionName, preview.arity, text) {
             // First-run resilience: while the workspace index is still building, library composables (`Text`,
             // `Column`, `remember`) resolve to 0 candidates and the lower fails. Rather than latch that transient
@@ -138,36 +142,38 @@ class DesktopComposePreviewHost(private val backend: IdeServicesBackend) : Compo
             // Every engine call goes through [previewAttempt] and every publish through
             // [ensurePreviewPassCurrent], so a pass superseded by the next keystroke dies where it stands
             // instead of racing the live pass — see those two for the stale-tree race they close.
-            var attempts = 0
-            while (true) {
-                val lowered = previewAttempt { backend.lowerComposePreview(path, preview.functionName, preview.arity, text) }
-                if (lowered != null) {
-                    ensurePreviewPassCurrent()
-                    lastGood[0] = lowered
-                    value = PreviewState.Ready(lowered)
-                    break
-                }
-                val ready = previewAttempt { backend.composePreviewReady(path) } ?: true
-                if (ready || attempts++ >= PREVIEW_READY_MAX_ATTEMPTS) {
-                    // Broken / not-yet-lowerable buffer: keep the last good render (a broken tree must never reach
-                    // Compose); only when nothing ever rendered do we surface WHY (the unsupported constructs +
-                    // offending source). Even a thrown error becomes a visible reason.
-                    val outcome = resolvePreviewOutcome(null, lastGood[0]) {
-                        // composePreviewDiagnostics reports its own failures as a reason, so a null here means
-                        // the call was cancelled — which previewAttempt has already rethrown.
-                        previewAttempt { backend.composePreviewDiagnostics(path, preview.functionName, preview.arity, text) }
-                            ?.ifEmpty { listOf("no reason reported (analysis returned nothing)") }
-                            ?: emptyList()
+            whileBufferCurrent(stale) {
+                var attempts = 0
+                while (true) {
+                    val lowered = previewAttempt { backend.lowerComposePreview(path, preview.functionName, preview.arity, text) }
+                    if (lowered != null) {
+                        ensurePreviewPassCurrent()
+                        lastGood[0] = lowered
+                        value = PreviewState.Ready(lowered)
+                        break
                     }
-                    ensurePreviewPassCurrent()
-                    value = when (outcome) {
-                        is PreviewOutcome.Render -> PreviewState.Ready(outcome.lowered)
-                        is PreviewOutcome.Unavailable -> PreviewState.NotInterpretable(outcome.reasons)
+                    val ready = previewAttempt { backend.composePreviewReady(path) } ?: true
+                    if (ready || attempts++ >= PREVIEW_READY_MAX_ATTEMPTS) {
+                        // Broken / not-yet-lowerable buffer: keep the last good render (a broken tree must never reach
+                        // Compose); only when nothing ever rendered do we surface WHY (the unsupported constructs +
+                        // offending source). Even a thrown error becomes a visible reason.
+                        val outcome = resolvePreviewOutcome(null, lastGood[0]) {
+                            // composePreviewDiagnostics reports its own failures as a reason, so a null here means
+                            // the call was cancelled — which previewAttempt has already rethrown.
+                            previewAttempt { backend.composePreviewDiagnostics(path, preview.functionName, preview.arity, text) }
+                                ?.ifEmpty { listOf("no reason reported (analysis returned nothing)") }
+                                ?: emptyList()
+                        }
+                        ensurePreviewPassCurrent()
+                        value = when (outcome) {
+                            is PreviewOutcome.Render -> PreviewState.Ready(outcome.lowered)
+                            is PreviewOutcome.Unavailable -> PreviewState.NotInterpretable(outcome.reasons)
+                        }
+                        break
                     }
-                    break
+                    value = PreviewState.Loading
+                    delay(PREVIEW_READY_POLL_MS)
                 }
-                value = PreviewState.Loading
-                delay(PREVIEW_READY_POLL_MS)
             }
         }
         var renderError by remember(path, preview.variantId, text) { mutableStateOf<Throwable?>(null) }

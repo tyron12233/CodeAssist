@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
@@ -42,6 +43,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.ide.core.preview.previewAttempt
@@ -61,6 +63,8 @@ import dev.ide.interp.compose.ComposePreviewRenderer
 import dev.ide.interp.compose.PreviewParameterBinding
 import dev.ide.interp.compose.VmLibraryExecutor
 import dev.ide.ui.ComposePreviewHost
+import dev.ide.ui.LocalPreviewBufferStale
+import dev.ide.ui.whileBufferCurrent
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.editor.preview.PreviewDevices
 import dev.ide.ui.editor.preview.PreviewIssue
@@ -106,6 +110,8 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         // debounced re-lower returns null for it, and we keep this last good render on screen instead of blanking
         // (or, worse, churning a half-formed tree that corrupts the shared composer with "Missed endGroup").
         val lastGood = remember(path, preview.variantId) { arrayOfNulls<LoweredComposePreview>(1) }
+        // Stand down while the pane's buffer is already outdated (see LocalPreviewBufferStale).
+        val stale = LocalPreviewBufferStale.current
         val state by produceState<PreviewState>(PreviewState.Loading, path, preview.functionName, preview.arity, text) {
             // First-run resilience: while the workspace index is still building, library composables (`Text`,
             // `Column`, `remember`) resolve to 0 candidates and the lower fails. Rather than latch that transient
@@ -115,36 +121,38 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
             // Every engine call goes through [previewAttempt] and every publish through
             // [ensurePreviewPassCurrent], so a pass superseded by the next keystroke dies where it stands
             // instead of racing the live pass — see those two for the stale-tree race they close.
-            var attempts = 0
-            while (true) {
-                val lowered = previewAttempt { backend.lowerComposePreview(path, preview.functionName, preview.arity, text) }
-                if (lowered != null) {
-                    ensurePreviewPassCurrent()
-                    lastGood[0] = lowered
-                    value = PreviewState.Ready(lowered)
-                    break
-                }
-                val ready = previewAttempt { backend.composePreviewReady(path) } ?: true
-                if (ready || attempts++ >= PREVIEW_READY_MAX_ATTEMPTS) {
-                    // Broken / not-yet-lowerable buffer: keep the last good render (a broken tree must never reach
-                    // Compose); only when nothing ever rendered do we surface WHY (the unsupported constructs +
-                    // offending source, so a gap is investigable). Even a thrown error becomes a visible reason.
-                    val outcome = resolvePreviewOutcome(null, lastGood[0]) {
-                        // composePreviewDiagnostics reports its own failures as a reason, so a null here means
-                        // the call was cancelled — which previewAttempt has already rethrown.
-                        previewAttempt { backend.composePreviewDiagnostics(path, preview.functionName, preview.arity, text) }
-                            ?.ifEmpty { listOf("no reason reported (analysis returned nothing)") }
-                            ?: emptyList()
+            whileBufferCurrent(stale) {
+                var attempts = 0
+                while (true) {
+                    val lowered = previewAttempt { backend.lowerComposePreview(path, preview.functionName, preview.arity, text) }
+                    if (lowered != null) {
+                        ensurePreviewPassCurrent()
+                        lastGood[0] = lowered
+                        value = PreviewState.Ready(lowered)
+                        break
                     }
-                    ensurePreviewPassCurrent()
-                    value = when (outcome) {
-                        is PreviewOutcome.Render -> PreviewState.Ready(outcome.lowered)
-                        is PreviewOutcome.Unavailable -> PreviewState.NotInterpretable(outcome.reasons)
+                    val ready = previewAttempt { backend.composePreviewReady(path) } ?: true
+                    if (ready || attempts++ >= PREVIEW_READY_MAX_ATTEMPTS) {
+                        // Broken / not-yet-lowerable buffer: keep the last good render (a broken tree must never reach
+                        // Compose); only when nothing ever rendered do we surface WHY (the unsupported constructs +
+                        // offending source, so a gap is investigable). Even a thrown error becomes a visible reason.
+                        val outcome = resolvePreviewOutcome(null, lastGood[0]) {
+                            // composePreviewDiagnostics reports its own failures as a reason, so a null here means
+                            // the call was cancelled — which previewAttempt has already rethrown.
+                            previewAttempt { backend.composePreviewDiagnostics(path, preview.functionName, preview.arity, text) }
+                                ?.ifEmpty { listOf("no reason reported (analysis returned nothing)") }
+                                ?: emptyList()
+                        }
+                        ensurePreviewPassCurrent()
+                        value = when (outcome) {
+                            is PreviewOutcome.Render -> PreviewState.Ready(outcome.lowered)
+                            is PreviewOutcome.Unavailable -> PreviewState.NotInterpretable(outcome.reasons)
+                        }
+                        break
                     }
-                    break
+                    value = PreviewState.Loading
+                    delay(PREVIEW_READY_POLL_MS)
                 }
-                value = PreviewState.Loading
-                delay(PREVIEW_READY_POLL_MS)
             }
         }
         // Heavy in-process render inputs (the bytecode VM executor over the module jars + the parsed resource
@@ -611,31 +619,32 @@ private fun RemoteComposePreview(
     }
 
     // A wrap-to-content preview renders into the fixed device-sized surface with the composable measured at its
-    // intrinsic size, top-left. Crop the streamed frame to the reported content size so the card shows just the
-    // content (at its own aspect) instead of the full device surface with empty space below/right.
+    // intrinsic size, top-left. Show only the reported content rect so the card shows just the content (at its own
+    // aspect) instead of the full device surface with empty space below/right. Cropped at DRAW time (a painter
+    // with a source rect): copying each streamed frame into a new cropped Bitmap cost a GPU copy + an allocation
+    // on the UI thread per frame, i.e. 60 a second while the preview animates.
     val full = frame
     val cs = contentSize
-    val bmp = remember(full, cs, wrapContent) {
-        if (full == null) null
-        else if (wrapContent && cs != null && (cs.width < full.width || cs.height < full.height) && cs.width > 0 && cs.height > 0) {
-            runCatching {
-                Bitmap.createBitmap(full, 0, 0, cs.width.coerceAtMost(full.width), cs.height.coerceAtMost(full.height))
-            }.getOrDefault(full)
-        } else full
+    val crop = if (full != null && wrapContent && cs != null && cs.width > 0 && cs.height > 0 &&
+        (cs.width < full.width || cs.height < full.height)
+    ) IntSize(cs.width.coerceAtMost(full.width), cs.height.coerceAtMost(full.height)) else null
+    val image = remember(full) { full?.asImageBitmap() }
+    val painter = remember(image, crop) {
+        image?.let { BitmapPainter(it, IntOffset.Zero, crop ?: IntSize(it.width, it.height)) }
     }
     Box(modifier, contentAlignment = Alignment.Center) {
-        if (bmp != null) {
+        if (painter != null) {
             // The frame is drawn scaled to the pane width (ContentScale.FillWidth). Forward each pointer event to
             // the remote session, mapped to the off-screen canvas px. We use a NATIVE pointerInput (not
             // pointerInteropFilter): PointerInputScope guarantees `change.position` lies within (0,0)..`size`, so
             // the fraction position/size is exact regardless of the preview surface's graphicsLayer fit/zoom
             // SCALE and the previewed density — pointerInteropFilter reported coordinates in a scale-mismatched
             // space, so taps landed increasingly above the touch toward the bottom of the preview.
-            val bw = bmp.width
-            val bh = bmp.height
+            val bw = painter.intrinsicSize.width.toInt()
+            val bh = painter.intrinsicSize.height.toInt()
             val focusRequester = remember { FocusRequester() }
             Image(
-                bitmap = bmp.asImageBitmap(),
+                painter = painter,
                 contentDescription = null,
                 contentScale = ContentScale.FillWidth,
                 modifier = Modifier

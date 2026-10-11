@@ -43,6 +43,75 @@ class LiveLiteralState(
         val start = s.start + shift
         return start until start + (lengths[s] ?: (s.end - s.start))
     }
+
+    /**
+     * Every patchable literal of [editableKeys], placed where it sits in [text]. Built once per state, so the
+     * keystrokes that are NOT literal edits (nearly all of them while typing, and each one asks) cost a binary
+     * search instead of a walk over the whole lowered program.
+     */
+    internal val literals: LiteralIndex by lazy { LiteralIndex.of(this) }
+}
+
+/** The literals of a [LiveLiteralState] sorted by their current start, for [find]. */
+internal class LiteralIndex private constructor(
+    private val starts: IntArray,
+    /** Exclusive end of each literal's current range. */
+    private val ends: IntArray,
+    /** `maxEnds[i]` = the largest end among entries `0..i`, so a backward scan knows when nothing earlier can
+     *  still reach the edit. */
+    private val maxEnds: IntArray,
+    private val spans: Array<SourceSpan>,
+    private val values: Array<Any>,
+    private val inTemplate: BooleanArray,
+) {
+    class Hit(val span: SourceSpan, val value: Any, val inTemplate: Boolean, val range: IntRange)
+
+    /** The one literal whose range holds `[from, oldTo)`, or null when none does or two different literals
+     *  both do (an edit that isn't confined to one literal). Desugaring can repeat a constant, so entries with
+     *  the SAME span count as one. */
+    fun find(from: Int, oldTo: Int): Hit? {
+        var lo = 0
+        var hi = starts.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (starts[mid] <= from) lo = mid + 1 else hi = mid
+        }
+        var i = lo - 1
+        var hit = -1
+        while (i >= 0 && maxEnds[i] >= oldTo) {
+            if (ends[i] >= oldTo) {
+                if (hit < 0) hit = i else if (spans[hit] != spans[i]) return null
+            }
+            i--
+        }
+        if (hit < 0) return null
+        return Hit(spans[hit], values[hit], inTemplate[hit], starts[hit] until ends[hit])
+    }
+
+    companion object {
+        fun of(state: LiveLiteralState): LiteralIndex {
+            class E(val start: Int, val end: Int, val span: SourceSpan, val value: Any, val inTemplate: Boolean)
+            val all = ArrayList<E>()
+            for (key in state.editableKeys) {
+                val fn = state.program[key] ?: continue
+                fn.forEachConst { c, inTemplate ->
+                    val v = c.value
+                    if (v == null || v !is Number && v !is String && v !is Char && v !is Boolean) return@forEachConst
+                    val range = state.currentRange(c.source)
+                    all += E(range.first, range.last + 1, c.source, v, inTemplate)
+                }
+            }
+            all.sortBy { it.start }
+            val maxEnds = IntArray(all.size)
+            var max = Int.MIN_VALUE
+            for ((i, e) in all.withIndex()) { max = maxOf(max, e.end); maxEnds[i] = max }
+            return LiteralIndex(
+                IntArray(all.size) { all[it].start }, IntArray(all.size) { all[it].end }, maxEnds,
+                Array(all.size) { all[it].span }, Array(all.size) { all[it].value },
+                BooleanArray(all.size) { all[it].inTemplate },
+            )
+        }
+    }
 }
 
 object LiveLiterals {
@@ -65,23 +134,9 @@ object LiveLiterals {
         val delta = newText.length - oldText.length
 
         // The literal the edit falls inside. Desugaring can repeat a constant (one source literal, several
-        // nodes), so collect by span; two different spans both claiming the edit means it isn't a literal edit.
-        var target: Target? = null
-        for (key in state.editableKeys) {
-            val fn = state.program[key] ?: continue
-            fn.forEachConst { c, inTemplate ->
-                if (c.value == null || c.value !is Number && c.value !is String && c.value !is Char && c.value !is Boolean) return@forEachConst
-                val range = state.currentRange(c.source)
-                if (from < range.first || oldTo > range.last + 1) return@forEachConst
-                val t = target
-                if (t != null) {
-                    if (t.span != c.source) target = Target.AMBIGUOUS
-                    return@forEachConst
-                }
-                target = Target(c.source, c.value, inTemplate, range)
-            }
-        }
-        val t = target?.takeIf { it !== Target.AMBIGUOUS } ?: return null
+        // nodes), so the index counts entries by span; two different spans both claiming the edit means it isn't a
+        // literal edit.
+        val t = state.literals.find(from, oldTo) ?: return null
         val oldToken = oldText.substring(t.range.first, t.range.last + 1)
         val newToken = newText.substring(t.range.first, t.range.last + 1 + delta)
         // Proof the constant really came from this literal: its source text reads back as its value.
@@ -97,12 +152,6 @@ object LiveLiterals {
             if (patched !== fn) program[key] = patched
         }
         return LiveLiteralState(newText, program, state.editableKeys, state.lengths + (t.span to newToken.length))
-    }
-
-    private class Target(val span: SourceSpan, val value: Any, val inTemplate: Boolean, val range: IntRange) {
-        companion object {
-            val AMBIGUOUS = Target(SourceSpan(-1, -1), Unit, false, IntRange.EMPTY)
-        }
     }
 
     /**
@@ -209,7 +258,7 @@ private fun integerLiteralValue(value: Long, isLong: Boolean): Pair<Any, String>
 
 /** Visit every [RNode.Const] in this function (body and parameter defaults); `inTemplate` is true for a
  *  fragment of a string template (a direct part of an [RNode.StringConcat]). */
-private fun ResolvedFunction.forEachConst(visit: (RNode.Const, inTemplate: Boolean) -> Unit) {
+internal fun ResolvedFunction.forEachConst(visit: (RNode.Const, inTemplate: Boolean) -> Unit) {
     fun go(n: RNode, inTemplate: Boolean) {
         if (n is RNode.Const) { visit(n, inTemplate); return }
         val template = n is RNode.StringConcat

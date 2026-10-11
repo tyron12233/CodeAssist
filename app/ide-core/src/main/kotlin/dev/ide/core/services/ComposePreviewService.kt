@@ -252,7 +252,17 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
     /** The last lowering of each preview (`path#name/arity`), the base a live-literal edit is patched against. */
     private val liveLiterals = java.util.concurrent.ConcurrentHashMap<String, LiveLiteralBase>()
 
-    private class LiveLiteralBase(val state: LiveLiteralState, val lowered: LoweredComposePreview)
+    private class LiveLiteralBase(val state: LiveLiteralState, val lowered: LoweredComposePreview) {
+        /** The last answer for a buffer: [isLiveLiteralEdit] asks first on every keystroke, and the render that
+         *  follows a yes reuses this patch instead of computing it again. */
+        @Volatile
+        var lastPatch: Pair<String, LiveLiteralState?>? = null
+
+        fun patch(text: String): LiveLiteralState? {
+            lastPatch?.let { (t, next) -> if (t == text) return next }
+            return LiveLiterals.patch(state, text).also { lastPatch = text to it }
+        }
+    }
 
     private fun liveLiteralKey(file: Path, functionName: String, arity: Int) = "${file.normalize()}#$functionName/$arity"
 
@@ -268,7 +278,7 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
     fun liveLiteralPreview(file: Path, text: String, functionName: String, arity: Int): LoweredComposePreview? {
         val key = liveLiteralKey(file, functionName, arity)
         val base = liveLiterals[key] ?: return null
-        val next = LiveLiterals.patch(base.state, text) ?: return null
+        val next = base.patch(text) ?: return null
         val old = base.lowered
         val entryKey = old.program.entries.firstOrNull { it.value === old.entry }?.key
         val lowered = old.copy(entry = entryKey?.let { next.program[it] } ?: old.entry, program = next.program)
@@ -280,7 +290,7 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
      *  an edit at once instead of waiting out its typing debounce. */
     fun isLiveLiteralEdit(file: Path, text: String): Boolean {
         val prefix = "${file.normalize()}#"
-        return liveLiterals.entries.any { (k, base) -> k.startsWith(prefix) && LiveLiterals.patch(base.state, text) != null }
+        return liveLiterals.entries.any { (k, base) -> k.startsWith(prefix) && base.patch(text) != null }
     }
 
     /** The lowered preview function for [functionName] at [arity] (a `@PreviewParameter` preview has arity > 0);

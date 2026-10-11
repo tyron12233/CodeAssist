@@ -4,8 +4,10 @@
 package dev.ide.platform
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -15,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Behavioural tests for [EngineScheduler] — the editor engine's priority lanes. These run on REAL threads
@@ -27,6 +30,36 @@ import kotlin.test.assertTrue
  * test (and a human) can see exactly what blocked what.
  */
 class EngineSchedulerTest {
+
+    /**
+     * The editor's daemon runs its passes as separate back-to-back background calls. A preview lowering slipped
+     * into the instant between two of them would hold the worker to its end (lowering does not poll), so the
+     * passes after it would wait. The preview lane waits for a quiet spell instead, which lands it after the run.
+     */
+    @Test
+    fun previewStartsOnlyAfterABackToBackBackgroundRun() {
+        runBlocking {
+            val events = CopyOnWriteArrayList<String>()
+            val sched = EngineScheduler(
+                observer = { _, phase, label -> if (phase == EnginePhase.RUNNING || phase == EnginePhase.DONE) events += "$label:$phase" },
+                previewRetryDelay = 10.milliseconds,
+            )
+            // The preview is asked for in the gap after the first pass, where the real daemon hops back to the UI
+            // thread to apply that pass's result before queuing the next one.
+            val preview = CompletableDeferred<Deferred<String>>()
+            val daemon = launch(Dispatchers.Default) {
+                repeat(6) { i ->
+                    sched.background("pass$i") { Thread.sleep(25) }
+                    if (i == 0) preview.complete(async(Dispatchers.Default) { sched.preview("lower") { "lowered" } })
+                    delay(5)
+                }
+            }
+            assertEquals("lowered", withTimeout(5_000) { preview.await().await() })
+            daemon.join()
+            val lowered = events.indexOf("lower:RUNNING")
+            assertTrue(lowered > events.indexOf("pass5:DONE"), "the preview ran in the middle of the run: $events")
+        }
+    }
 
     /** A preemptible "busy for [ms]" block: polls cancellation like the real engine does between AST nodes. */
     private fun busy(ms: Long) {

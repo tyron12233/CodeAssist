@@ -16,7 +16,9 @@ import dev.ide.ui.backend.UiPreviewResult
 import dev.ide.ui.backend.UiTextEdit
 import dev.ide.lang.kotlin.interp.PreviewInfo
 import dev.ide.platform.EngineCanceledException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 import java.nio.file.Paths
 
@@ -52,8 +54,12 @@ internal class PreviewBackend(private val ctx: BackendContext) : PreviewService 
     override suspend fun composePreviewReady(path: String): Boolean =
         ctx.background { ctx.services.composePreviewReady(Paths.get(path)) }
 
+    // Asked on every keystroke, from the pane's effect on the UI thread: the diff against the last lowering reads
+    // the whole buffer, so it runs off the caller's thread. Pure data work, no engine lane.
     override suspend fun isLiveLiteralEdit(path: String, text: String): Boolean =
-        runCatching { ctx.services.isLiveLiteralEdit(Paths.get(path), text) }.getOrDefault(false)
+        withContext(Dispatchers.Default) {
+            runCatching { ctx.services.isLiveLiteralEdit(Paths.get(path), text) }.getOrDefault(false)
+        }
 
     override suspend fun drawablePreview(path: String, text: String): UiDrawable? =
         ctx.services.drawablePreview(Paths.get(path), text)?.let(DrawableMapping::toUi)

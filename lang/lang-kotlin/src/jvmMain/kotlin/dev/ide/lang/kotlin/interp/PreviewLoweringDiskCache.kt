@@ -14,6 +14,8 @@ import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 
 /**
  * Disk persistence for [KotlinPreviewLowering]'s per-file cache, so a project reopen (or IDE restart) serves
@@ -38,7 +40,11 @@ import java.util.concurrent.Executors
  * the in-memory cache already does (documented on [KotlinPreviewLowering]).
  *
  * Writes are asynchronous and coalesced per path (latest snapshot wins) on a shared daemon thread, so storing
- * never blocks the engine thread; a torn/failed write is self-healing (the next load discards it).
+ * never blocks the engine thread; a torn/failed write is self-healing (the next load discards it). They are
+ * also DELAYED until the path has been quiet for [WRITE_QUIET_MS]: the cache only serves the next cold start,
+ * and while the user types every settled pause re-lowers and stores the file again, so writing each snapshot
+ * encoded and wrote the whole file's program once per pause (measured on a 1.3k-line Compose file on an
+ * emulator: ~2s of CPU in 27s of typing, plus the garbage).
  */
 class PreviewLoweringDiskCache(private val dir: Path, private val salt: String) : PreviewLoweringStore {
 
@@ -47,7 +53,9 @@ class PreviewLoweringDiskCache(private val dir: Path, private val salt: String) 
     // Per-instance: two modules' analyzers can see the SAME absolute source path with different classpaths
     // (a shared dependency-module file); a shared pending map would let one instance drain — and mis-file —
     // the other's snapshot.
-    private val pending = ConcurrentHashMap<String, Entry>()
+    private val pending = ConcurrentHashMap<String, Pending>()
+
+    private class Pending(val entry: Entry, val at: Long)
 
     /** Load the stored entry for source [path], or null when absent/stale/corrupt (all self-healing misses). */
     override fun load(path: String): Entry? = runCatching {
@@ -71,20 +79,44 @@ class PreviewLoweringDiskCache(private val dir: Path, private val salt: String) 
         null
     }
 
-    /** Persist [entry] as the snapshot for [path] — asynchronous, coalesced (the latest store wins). */
+    /** Persist [entry] as the snapshot for [path] — asynchronous, coalesced (the latest store wins), and written
+     *  once [path] has had no store for [WRITE_QUIET_MS]. */
     override fun store(path: String, entry: Entry) {
-        pending[path] = entry
-        writer.execute {
-            val e = pending.remove(path) ?: return@execute
-            runCatching { write(path, e) }
-                .onFailure { log.warn("preview-lowering cache write failed for $path: ${it.message}") }
+        // Only the store that finds nothing pending starts a drain; later ones just replace the snapshot, and the
+        // running drain waits out the quiet spell from the latest of them.
+        if (pending.put(path, Pending(entry, System.nanoTime())) == null) {
+            writer.schedule({ drain(path) }, WRITE_QUIET_MS, TimeUnit.MILLISECONDS)
         }
     }
 
-    /** Block until every store scheduled so far is on disk (the writer is serial, so an empty task is a
-     *  barrier). For tests and orderly shutdown; production writes stay fire-and-forget. */
+    private fun drain(path: String) {
+        val p = pending[path] ?: return
+        val wait = TimeUnit.MILLISECONDS.toNanos(WRITE_QUIET_MS) - (System.nanoTime() - p.at)
+        if (wait > 0) {
+            writer.schedule({ drain(path) }, wait, TimeUnit.NANOSECONDS)
+            return
+        }
+        // A store landed between the read and here: go round again for the newer snapshot.
+        if (!pending.remove(path, p)) {
+            writer.execute { drain(path) }
+            return
+        }
+        writeLogged(path, p.entry)
+    }
+
+    private fun writeLogged(path: String, entry: Entry) {
+        runCatching { write(path, entry) }
+            .onFailure { log.warn("preview-lowering cache write failed for $path: ${it.message}") }
+    }
+
+    /** Write every pending snapshot now, without waiting out the quiet spell, and block until they are on disk.
+     *  For tests and orderly shutdown; production writes stay fire-and-forget. */
     fun flush() {
-        runCatching { writer.submit { }.get() }
+        runCatching {
+            writer.submit {
+                for (path in pending.keys.toList()) pending.remove(path)?.let { writeLogged(path, it.entry) }
+            }.get()
+        }
     }
 
     private fun write(path: String, entry: Entry) {
@@ -121,8 +153,11 @@ class PreviewLoweringDiskCache(private val dir: Path, private val salt: String) 
     private companion object {
         const val MAGIC = 0x504C4331 // "PLC1"
 
-        /** Shared across instances/process: writes are tiny and rare, and a daemon thread needs no disposal. */
-        val writer = Executors.newSingleThreadExecutor { r ->
+        /** How long a path must go without a store before its snapshot is written. */
+        const val WRITE_QUIET_MS = 3_000L
+
+        /** Shared across instances/process: one write per settled file, and a daemon thread needs no disposal. */
+        val writer: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r ->
             Thread(r, "preview-lowering-cache").apply { isDaemon = true }
         }
     }
