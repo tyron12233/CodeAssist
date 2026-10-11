@@ -303,7 +303,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -613,7 +616,7 @@ class IdeServices private constructor(
             this@IdeServices.setActiveVariant(module, variantName)
 
         override fun invalidateAnalyzers() = this@IdeServices.invalidateAnalyzers()
-        override fun resyncIndex() = this@IdeServices.resyncIndex()
+        override fun resyncIndex() = this@IdeServices.resyncIndex(IndexPassTrigger.MODULE)
         override val events get() = this@IdeServices.events
     }
 
@@ -639,7 +642,7 @@ class IdeServices private constructor(
             override fun invalidateSyntheticClasses() =
                 this@IdeServices.invalidateSyntheticClasses()
 
-            override fun resyncIndex() = this@IdeServices.resyncIndex()
+            override fun resyncIndex(reason: String) = this@IdeServices.resyncIndex(reason)
             override fun reindexSourceAsync(path: Path) {
                 indexScope.launch {
                     runCatching {
@@ -860,7 +863,7 @@ class IdeServices private constructor(
                 }
                 try {
                     memLog.info("project open (before index): ${MemSample.now().fmt()} tier=${DeviceMemory.tier}")
-                    runCatching { indexService.ensureUpToDate(buildIndexScope()) }
+                    runIndexPass(IndexPassTrigger.OPEN)
                     memLog.info("after index build: ${MemSample.now().fmt()}")
                 } finally {
                     sampler.cancel()
@@ -870,7 +873,7 @@ class IdeServices private constructor(
             }
         } else {
             openJob = indexScope.launch {
-                runCatching { indexService.ensureUpToDate(buildIndexScope()) }
+                runIndexPass(IndexPassTrigger.OPEN)
                 memLog.info("after index build: ${MemSample.now().fmt()}")
             }
         }
@@ -997,20 +1000,57 @@ class IdeServices private constructor(
     }
 
     // Serializes the background ensureUpToDate passes: the event hub triggers a re-sync per model commit,
-    // so back-to-back triggers (a reconcile loop's per-module commits) must queue, not interleave.
+    // so back-to-back triggers (a reconcile loop's per-module commits) must queue, not interleave. The
+    // project-open pass takes it too, so a resync fired during open cannot run alongside it.
     private val indexSyncMutex = Mutex()
+
+    // Replays the latest report, so a collector that subscribes after a fast project-open pass finished still
+    // sees it (a collector dedupes by identity on re-subscribe).
+    private val _indexPasses = MutableSharedFlow<IndexPassReport>(
+        replay = 1, extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /** One [IndexPassReport] per finished full index pass (open, resync, re-index), for the index analytics. */
+    val indexPasses: SharedFlow<IndexPassReport> get() = _indexPasses
+
+    /**
+     * Run one full index pass for [trigger] and publish its [IndexPassReport]. Every full pass goes through
+     * here, under [indexSyncMutex]. [invalidate] wipes this project's segments first (the "Re-index" action).
+     * Never throws: a failed pass is reported with the failure status it ended on.
+     */
+    private suspend fun runIndexPass(trigger: String, invalidate: Boolean = false) {
+        val asked = System.nanoTime()
+        indexSyncMutex.withLock {
+            val start = System.nanoTime()
+            val scope = runCatching { buildIndexScope() }.getOrElse { return }
+            val scoped = System.nanoTime()
+            runCatching {
+                if (invalidate) indexService.invalidate()
+                indexService.ensureUpToDate(scope)
+            }
+            val end = System.nanoTime()
+            val pass = (indexService as? IndexServiceImpl)?.lastPass
+            val kinds = pass?.built.orEmpty().map { it to builtKind(it, store.rootPath, sharedCachesRoot) }
+            _indexPasses.tryEmit(
+                IndexPassReport(
+                    trigger = trigger,
+                    durationMs = (end - scoped) / 1_000_000,
+                    scopeMs = (scoped - start) / 1_000_000,
+                    queuedMs = (start - asked) / 1_000_000,
+                    status = indexService.status,
+                    ioConcurrency = pass?.ioConcurrency,
+                    buildPermits = pass?.buildPermits,
+                    built = kinds.groupingBy { it.second }.eachCount(),
+                    rekeyed = kinds.filter { it.first.rekeyed }.groupingBy { it.second }.eachCount(),
+                )
+            )
+        }
+    }
 
     /** Re-invalidate and rebuild the workspace indexes from scratch (the UI's "Re-index" action). */
     fun reindex() {
         invalidateSyntheticClasses()
-        indexScope.launch {
-            indexSyncMutex.withLock {
-                runCatching {
-                    indexService.invalidate()
-                    indexService.ensureUpToDate(buildIndexScope())
-                }
-            }
-        }
+        indexScope.launch { runIndexPass(IndexPassTrigger.REINDEX, invalidate = true) }
     }
 
     /**
@@ -1019,10 +1059,10 @@ class IdeServices private constructor(
      * removed dependencies fall out. Used for automatic model-change triggers — on device this is the difference
      * between reopening the android.jar segment and re-scanning its ~40k classes on every dependency/facet edit.
      */
-    private fun resyncIndex() {
+    private fun resyncIndex(reason: String) {
         invalidateSyntheticClasses()
         indexScope.launch {
-            indexSyncMutex.withLock { runCatching { indexService.ensureUpToDate(buildIndexScope()) } }
+            runIndexPass(reason)
             // A full resync may have added/removed source declarations — refresh source-index snapshots.
             bumpSourceIndexGeneration()
         }

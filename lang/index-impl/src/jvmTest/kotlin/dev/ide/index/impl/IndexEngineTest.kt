@@ -15,6 +15,7 @@ import dev.ide.index.MatchingMode
 import dev.ide.index.StringKeyDescriptor
 import dev.ide.index.classEntryToFqn
 import dev.ide.testkit.withTempDir
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
@@ -511,6 +512,74 @@ class IndexEngineTest {
                 time = 1_600_000_000_000L // fixed, so both jars differ only in name/data bytes, not size
             }
             z.putNextEntry(e); z.write(data); z.closeEntry()
+        }
+    }
+
+    /**
+     * A jar rewritten between two passes of one session (a build output, an unstable-mtime file) misses the
+     * segment cache every time. The pass report names that as `rekeyed`, so the fleet can tell a cache that can
+     * never hit from an ordinary first build or a dependency update.
+     */
+    @Test
+    fun aJarRebuiltUnderANewKeyThisSessionIsReportedAsRekeyed() = withTempDir("lib") { dir ->
+        val cache = Files.createTempDirectory("idxRekey")
+        try {
+            val jar = dir.resolve("app-classes.jar").also { storedJar(it, "com/x/Foo.class", byteArrayOf(1, 2)) }
+            val svc = IndexServiceImpl(listOf(CountingClassIndex(AtomicInteger(0))), cache)
+            val scope = IndexScope(libraryJars = listOf(jar))
+
+            runBlocking { svc.ensureUpToDate(scope) }
+            val first = svc.lastPass!!.built.single()
+            assertEquals(IndexServiceImpl.BuiltArtifact.Kind.JAR, first.kind)
+            assertEquals(false, first.rekeyed, "a first build is not a re-key")
+
+            runBlocking { svc.ensureUpToDate(scope) }
+            assertTrue(svc.lastPass!!.built.isEmpty(), "an unchanged jar is reopened, not rebuilt")
+
+            bumpMtime(jar)
+            runBlocking { svc.ensureUpToDate(scope) }
+            val again = svc.lastPass!!.built.single()
+            assertEquals(true, again.rekeyed, "the same jar built again under a new key must be flagged")
+            assertEquals(jar, again.path)
+        } finally {
+            cache.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * A save re-indexes its file on its own coroutine, so it can land while a full pass is applying files to
+     * the same source index. Both write [IndexData] and the file-id table; interleaved, they corrupted the
+     * store (lost or duplicated entries, or an exception out of a postings list). Every write now takes the
+     * source mutex, so after any mix of passes and saves each file is indexed exactly once.
+     */
+    @Test
+    fun savesRacingAFullPassLeaveEachFileIndexedExactlyOnce() {
+        val cache = Files.createTempDirectory("idx")
+        val srcCache = Files.createTempDirectory("idxsrc")
+        val src = Files.createTempDirectory("src")
+        try {
+            val n = 300
+            val files = (0 until n).map { i -> src.resolve("F$i.java").also { Files.writeString(it, "class F$i {}") } }
+            val svc = IndexServiceImpl(listOf(CountingSourceIndex(AtomicInteger(0))), cache, sourceCacheRoot = srcCache)
+            val scope = IndexScope(sourceRoots = listOf(src))
+            runBlocking { svc.ensureUpToDate(scope) }
+            repeat(3) { round ->
+                // Every file changes on disk, so the next pass re-parses and re-applies all of them...
+                files.forEach { bumpMtime(it) }
+                runBlocking {
+                    val pass = launch(kotlinx.coroutines.Dispatchers.Default) { svc.ensureUpToDate(scope) }
+                    // ...while saves of the same files apply concurrently from other threads.
+                    files.forEachIndexed { i, f ->
+                        launch(kotlinx.coroutines.Dispatchers.Default) { svc.reindexSource(f, "class F$i { int r$round; }") }
+                    }
+                    pass.join()
+                }
+            }
+            for (i in 0 until n) {
+                assertEquals(1, svc.exact<ClassNameValue>(SRC, "F$i").count(), "F$i must be indexed exactly once")
+            }
+        } finally {
+            cache.toFile().deleteRecursively(); srcCache.toFile().deleteRecursively(); src.toFile().deleteRecursively()
         }
     }
 }

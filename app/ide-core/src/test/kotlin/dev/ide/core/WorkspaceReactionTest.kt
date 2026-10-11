@@ -33,7 +33,7 @@ class WorkspaceReactionTest {
         var fileSystemChanges = 0
         override fun invalidateAnalyzers() { analyzerInvalidations++ }
         override fun invalidateSyntheticClasses() { syntheticInvalidations++ }
-        override fun resyncIndex() { resyncs++ }
+        override fun resyncIndex(reason: String) { resyncs++ }
         override fun reindexSourceAsync(path: Path) { reindexed.add(path); calls.add("reindex:$path") }
         override fun dropJavaBindingCaches() { bindingCacheDrops++ }
         override fun dropOverlaysUnder(root: Path) {}

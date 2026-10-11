@@ -64,4 +64,33 @@ class IndexE2ETest {
             }
         }
     }
+
+    /**
+     * Every full pass publishes one [IndexPassReport] naming why it ran: the project-open pass reports `open`,
+     * and a later resync reports its own trigger with the cached artifacts reused rather than rebuilt.
+     */
+    @Test
+    fun eachFullPassPublishesAReportWithItsTrigger() {
+        withTempDir("ide-index-passes") { dir ->
+            IdeServices.bootstrapJavaDemo(dir).use { ide ->
+                awaitIndexed(ide)
+                val open = awaitReport(ide) { it.trigger == IndexPassTrigger.OPEN }
+                assertTrue(open.status.stats != null, "the open pass ran to the end: ${open.status}")
+
+                ide.reindex()
+                val again = awaitReport(ide) { it.trigger == IndexPassTrigger.REINDEX }
+                assertTrue((again.status.stats?.artifactsBuilt ?: 0) >= 1, "a re-index rebuilds: ${again.status.stats}")
+                assertTrue(again.rekeyed.isEmpty(), "a wiped cache rebuilds under the same keys: ${again.rekeyed}")
+            }
+        }
+    }
+
+    private fun awaitReport(ide: IdeServices, timeoutMs: Long = 180_000, match: (IndexPassReport) -> Boolean): IndexPassReport {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            ide.indexPasses.replayCache.lastOrNull()?.takeIf(match)?.let { return it }
+            Thread.sleep(50)
+        }
+        error("no matching index pass report; last=${ide.indexPasses.replayCache.lastOrNull()?.trigger}")
+    }
 }

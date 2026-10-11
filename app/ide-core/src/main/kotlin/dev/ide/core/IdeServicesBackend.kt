@@ -521,49 +521,34 @@ class IdeServicesBackend(
         Log.addSink(errorDialogSink)
         followFileSystem(activeServices)
 
-        // index_perf: time each index build (building → not building) and emit its duration + a per-indexer
-        // breakdown, so the fleet reveals WHICH index (and which phase) dominates. Low-volume (once per
-        // build/reindex). Re-subscribes per project (collectLatest on the epoch).
+        // The index-in-flight crash breadcrumb follows the status edges: a native crash this session is then
+        // attributed to concurrent index churn (the leading hypothesis for the residual SIGSEGV).
         analyticsScope.launch {
             projectEpoch.collectLatest {
                 val svc = activeServices ?: return@collectLatest
-                var startNs = 0L
                 var building = false
                 svc.indexStatus.collectLatest { st ->
-                    if (st.building && !building) {
-                        building = true; startNs = System.nanoTime()
-                        // Mark the index as in flight so a native crash this session is attributed to
-                        // concurrent index churn (the leading hypothesis for the residual SIGSEGV).
-                        EngineBreadcrumb.noteIndexBuilding(true)
-                    } else if (!st.building && building) {
-                        building = false
-                        EngineBreadcrumb.noteIndexBuilding(false)
-                        val props = buildMap {
-                            put("duration_ms", ((System.nanoTime() - startNs) / 1_000_000).toString())
-                            // Phase split + cache effectiveness + source-diff counts: is the wall time in the
-                            // library phase or the source phase, and how much came from the on-disk segment
-                            // cache vs. a fresh build. All counts/times — no names or paths.
-                            st.stats?.let { s ->
-                                put("lib_ms", s.libMs.toString())
-                                put("src_ms", s.sourceMs.toString())
-                                put("artifacts", s.artifacts.toString())
-                                put("artifacts_built", s.artifactsBuilt.toString())
-                                put("artifacts_reused", s.artifactsReused.toString())
-                                put("src_files", s.sourceFiles.toString())
-                                put("src_parsed", s.sourceParsed.toString())
-                            }
-                            // Per-indexer time (the "which index is slow" signal), keyed by the stable index
-                            // id (e.g. idx.java.classNames.ms) — never a file/artifact/project name. Skip the
-                            // trivially-fast ones (<1ms) to keep the row bounded.
-                            for (b in st.breakdown) if (b.indexMs >= 1) {
-                                put("idx.${b.id}.ms", b.indexMs.toString())
-                            }
-                            // Heap at index completion (Phase-0 build-isolation instrumentation) so the index
-                            // phase's memory footprint is comparable to a build's peak across the fleet.
-                            putAll(MemSample.now().props())
-                        }
-                        track(dev.ide.analytics.Events.INDEX_PERF, props)
+                    if (st.building != building) {
+                        building = st.building
+                        EngineBreadcrumb.noteIndexBuilding(building)
                     }
+                }
+            }
+        }
+        // index_perf: one row per finished full index pass (open, resync, re-index), from the engine's own
+        // pass reports, so a pass that finishes between two samples of the status flow is still counted. Carries
+        // WHY it ran, the phase split, cache effectiveness, which kinds of artifact had to be rebuilt (and
+        // whether one keeps being rebuilt), and a per-indexer breakdown. Times, counts and kinds only: no
+        // names or paths. Re-subscribes per project (collectLatest on the epoch).
+        analyticsScope.launch {
+            // The flow replays its latest report to each new subscriber; never count one pass twice.
+            var lastTracked: IndexPassReport? = null
+            projectEpoch.collectLatest {
+                val svc = activeServices ?: return@collectLatest
+                svc.indexPasses.collect { pass ->
+                    if (pass === lastTracked) return@collect
+                    lastTracked = pass
+                    track(dev.ide.analytics.Events.INDEX_PERF, indexPerfProps(pass))
                 }
             }
         }
@@ -854,3 +839,31 @@ private fun renderStandaloneLayout(
 
 /** Frames per [IdeServicesBackend.recordFrame] summary event. */
 private const val FRAME_WINDOW = 600
+
+/** The `index_perf` event for one finished index pass. See [IndexPassReport] for what each part means. */
+internal fun indexPerfProps(pass: IndexPassReport): Map<String, String> = buildMap {
+    val st = pass.status
+    put("duration_ms", pass.durationMs.toString())
+    put("trigger", pass.trigger)
+    put("scope_ms", pass.scopeMs.toString())
+    put("queued_ms", pass.queuedMs.toString())
+    st.stats?.let { s ->
+        put("lib_ms", s.libMs.toString())
+        put("src_ms", s.sourceMs.toString())
+        put("artifacts", s.artifacts.toString())
+        put("artifacts_built", s.artifactsBuilt.toString())
+        put("artifacts_reused", s.artifactsReused.toString())
+        put("src_files", s.sourceFiles.toString())
+        put("src_parsed", s.sourceParsed.toString())
+    }
+    pass.ioConcurrency?.let { put("par_io", it.toString()) }
+    pass.buildPermits?.let { put("par_build", it.toString()) }
+    for ((kind, n) in pass.built) put("built.$kind", n.toString())
+    for ((kind, n) in pass.rekeyed) put("rekeyed.$kind", n.toString())
+    // Per-indexer time, keyed by the stable index id (e.g. idx.java.classNames.ms), never a file/artifact/
+    // project name. Summed across the threads that ran it (compare with lib_ms and par_io, not as wall time).
+    // Skip the trivially-fast ones (<1ms) to keep the row bounded.
+    for (b in st.breakdown) if (b.indexMs >= 1) put("idx.${b.id}.ms", b.indexMs.toString())
+    // Heap at index completion, comparable to a build's peak across the fleet.
+    putAll(MemSample.now().props())
+}

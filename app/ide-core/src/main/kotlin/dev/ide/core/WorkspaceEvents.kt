@@ -78,7 +78,10 @@ internal class WorkspaceEventHub(
     internal interface Reactions {
         fun invalidateAnalyzers()
         fun invalidateSyntheticClasses()
-        fun resyncIndex()
+
+        /** Re-sync the index to the current classpath. [reason] is one of the [IndexPassTrigger] values; it
+         *  says which change asked for the pass, for the index analytics. */
+        fun resyncIndex(reason: String)
 
         /** Incrementally re-index one source file (async, off the caller's thread). */
         fun reindexSourceAsync(path: Path)
@@ -205,7 +208,9 @@ internal class WorkspaceEventHub(
         configStamp.incrementAndGet()
         reactions.invalidateAnalyzers()
         reactions.invalidateSyntheticClasses()
-        reactions.resyncIndex()
+        reactions.resyncIndex(
+            if (events.any { it is LibrariesChanged }) IndexPassTrigger.LIBRARIES else IndexPassTrigger.MODEL
+        )
         reactions.configurationChanged()
     }
 
@@ -215,7 +220,7 @@ internal class WorkspaceEventHub(
         if (events.any { it.key.startsWith(VARIANT_KEY_PREFIX) }) {
             reactions.invalidateAnalyzers()
             reactions.invalidateSyntheticClasses()
-            reactions.resyncIndex()
+            reactions.resyncIndex(IndexPassTrigger.VARIANT)
         }
         reactions.configurationChanged()
     }
@@ -318,7 +323,7 @@ internal class WorkspaceEventHub(
                 synthetic = true
             }
             if (synthetic) reactions.invalidateSyntheticClasses()
-            if (resync) reactions.resyncIndex()
+            if (resync) reactions.resyncIndex(IndexPassTrigger.FILES)
             if (external) reactions.fileSystemChanged()
             if (membershipChanged) onMembershipChanged()
         }
